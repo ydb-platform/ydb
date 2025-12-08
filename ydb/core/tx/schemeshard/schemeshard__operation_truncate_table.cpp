@@ -15,6 +15,156 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 
+/*
+The meaning of the function is that in the code below, you need to iterate through
+all the DataShards that relate to the children of the main table several times.
+*/
+template<typename F>
+concept TDoFunc = requires(F f, TOperationContext& context, TString implTableChildName, TPathId implTableChildPathId) {
+    { f(context, implTableChildName, implTableChildPathId) } -> std::same_as<void>;
+};
+
+void DoFuncOnTableChilds(TOperationContext& context, const TPath& tablePath, TDoFunc auto&& doFunc) {
+    for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
+        TPath childPath = tablePath.Child(childName);
+
+        if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
+            continue;
+        }
+
+        for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+            if (!context.SS->Tables.contains(implTablePathId)) {
+                continue;
+            }
+
+            doFunc(context, implTableName, implTablePathId);
+        }
+    }
+}
+
+class TConfigureParts: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TTruncateTable TConfigureParts"
+            << " operationId# " << OperationId;
+    }
+
+public:
+    TConfigureParts(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {});
+    }
+
+    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvProposeTransactionResult"
+                               << " at tabletId# " << ssId);
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint() << " HandleReply TEvProposeTransactionResult"
+                                << " message# " << ev->Get()->Record.ShortDebugString());
+
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxTruncateTable);
+
+        if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " UpdatePartitioningForTableModification");
+            NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
+        }
+
+        txState->ClearShardsInProgress();
+
+        TPath tablePath = TPath::Init(txState->TargetPathId, context.SS);
+        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+        TTableInfo::TPtr mainTable = context.SS->Tables.at(tablePath.Base()->PathId);
+
+        TSet<TShardIdx> mainTableShards;
+        for (auto& partition : mainTable->GetPartitions()) {
+            mainTableShards.insert(partition.ShardIdx);
+        }
+
+        struct TShardIdxHash {
+            size_t operator()(const TShardIdx& idx) const {
+                return idx.Hash();
+            }
+        };
+
+        absl::flat_hash_map<TShardIdx, TPathId, TShardIdxHash> childPathIdByShardIdx;
+
+        { // Fill childPathIdByShardIdx
+            size_t sumSize = 0;
+
+            auto countSum = [&](TOperationContext& context, TString, TPathId implTablePathId) {
+                TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
+                sumSize += indexTable->GetPartitions().size();
+            };
+
+            DoFuncOnTableChilds(context, tablePath, std::move(countSum));
+
+            childPathIdByShardIdx.max_load_factor(0.25);
+            childPathIdByShardIdx.reserve(sumSize);
+
+            auto fillChildPathIdByShardIdx = [&](TOperationContext& context, TString, TPathId implTablePathId) {
+                TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
+                for (const auto& partition : indexTable->GetPartitions()) {
+                    childPathIdByShardIdx[partition.ShardIdx] = implTablePathId;
+                }
+            };
+
+            DoFuncOnTableChilds(context, tablePath, std::move(fillChildPathIdByShardIdx));
+        }
+
+        Y_ABORT_UNLESS(txState->Shards.size());
+        for (ui32 i = 0; i < txState->Shards.size(); ++i) {
+            auto idx = txState->Shards[i].Idx;
+            auto datashardId = context.SS->ShardInfos[idx].TabletID;
+
+            auto it = childPathIdByShardIdx.find(idx);
+
+            TPathId targetPathId = txState->TargetPathId;
+            if (it != childPathIdByShardIdx.end()) { // means that target is index
+                targetPathId = it->second;
+            }
+
+            TString txBody;
+            {
+                auto seqNo = context.SS->StartRound(*txState);
+
+                NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                context.SS->FillSeqNo(tx, seqNo);
+                auto truncateTable = tx.MutableTruncateTable();
+                targetPathId.ToProto(truncateTable->MutablePathId());
+
+                Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+            }
+
+            auto event = context.SS->MakeDataShardProposal(targetPathId, OperationId, txBody, context.Ctx);
+            context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
+        }
+
+        txState->UpdateShardsInProgress(TTxState::ConfigureParts);
+        return false;
+    }
+};
+
 class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -70,103 +220,15 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply ProgressState"
-                     << " at tablet: " << ssId);
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxTruncateTable);
 
-        txState->ClearShardsInProgress();
-
         TPath tablePath = TPath::Init(txState->TargetPathId, context.SS);
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-        TTableInfo::TPtr mainTable = context.SS->Tables.at(tablePath.Base()->PathId);
-
-        TSet<TShardIdx> mainTableShards;
-        for (auto& partition : mainTable->GetPartitions()) {
-            mainTableShards.insert(partition.ShardIdx);
-        }
-
-        struct TShardIdxHash {
-            size_t operator()(const TShardIdx& idx) const {
-                return idx.Hash();
-            }
-        };
-
-        absl::flat_hash_map<TShardIdx, TPathId, TShardIdxHash> childPathIdByShardIdx;
-
-        { // Fill childPathIdByShardIdx
-            size_t sumSize = 0;
-            for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-                TPath childPath = tablePath.Child(childName);
-
-                if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
-                    continue;
-                }
-
-                for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
-                    if (!context.SS->Tables.contains(implTablePathId)) {
-                        continue;
-                    }
-
-                    TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
-                    sumSize += indexTable->GetPartitions().size();
-                }
-            }
-
-            childPathIdByShardIdx.max_load_factor(0.25);
-            childPathIdByShardIdx.reserve(sumSize);
-
-            for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-                TPath childPath = tablePath.Child(childName);
-
-                if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
-                    continue;
-                }
-
-                for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
-                    if (!context.SS->Tables.contains(implTablePathId)) {
-                        continue;
-                    }
-
-                    TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
-                    for (const auto& partition : indexTable->GetPartitions()) {
-                        childPathIdByShardIdx[partition.ShardIdx] = implTablePathId;
-                    }
-                }
-            }
-        }
-
-        Y_ABORT_UNLESS(txState->Shards.size());
-        for (ui32 i = 0; i < txState->Shards.size(); ++i) {
-            auto idx = txState->Shards[i].Idx;
-            auto datashardId = context.SS->ShardInfos[idx].TabletID;
-
-            auto it = childPathIdByShardIdx.find(idx);
-
-            TPathId targetPathId = txState->TargetPathId;
-            if (it != childPathIdByShardIdx.end()) { // means that target is index
-                targetPathId = it->second;
-            }
-
-            TString txBody;
-            {
-                auto seqNo = context.SS->StartRound(*txState);
-
-                NKikimrTxDataShard::TFlatSchemeTransaction tx;
-                context.SS->FillSeqNo(tx, seqNo);
-                auto truncateTable = tx.MutableTruncateTable();
-                targetPathId.ToProto(truncateTable->MutablePathId());
-
-                Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
-            }
-
-            auto event = context.SS->MakeDataShardProposal(targetPathId, OperationId, txBody, context.Ctx);
-            context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
-        }
-
-        txState->UpdateShardsInProgress(TTxState::Propose);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -180,17 +242,18 @@ public:
     }
 };
 
-
 class TTruncateTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
     static TTxState::ETxState NextState() {
-        return TTxState::Propose;
+        return TTxState::ConfigureParts;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Waiting:
+        case TTxState::ConfigureParts:
+            return TTxState::Propose;
         case TTxState::Propose:
             return TTxState::ProposedWaitParts;
         case TTxState::ProposedWaitParts:
@@ -203,6 +266,8 @@ public:
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Waiting:
+        case TTxState::ConfigureParts:
+            return MakeHolder<TConfigureParts>(OperationId);
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::ProposedWaitParts:
@@ -288,85 +353,55 @@ public:
         }
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxTruncateTable, tablePath.Base()->PathId);
+        txState.MinStep = TStepId(1);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
         Y_ABORT_UNLESS(table->GetPartitions().size());
 
+        NIceDb::TNiceDb db(context.GetDB());
+        
+        tablePath.Base()->PathState = TPathElement::EPathState::EPathStateNoChanges;
+        tablePath.Base()->LastTxId = OperationId.GetTxId();
+        
+        context.SS->PersistTxState(db, OperationId);
+        context.SS->PersistPath(db, tablePath.Base()->PathId);
+        
         for (auto& shard : table->GetPartitions()) {
             auto shardIdx = shard.ShardIdx;
             context.MemChanges.GrabShard(context.SS, shardIdx);
             context.DbChanges.PersistShard(shardIdx);
 
             Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
-            txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::Propose);
+            txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
 
             context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
+
+            auto tabletType = context.SS->ShardInfos[shardIdx].TabletType;
+            context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, tablePath.Base()->PathId, OperationId.GetTxId(), tabletType);
         }
 
-        for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-            Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
-            TPath childPath = tablePath.Child(childName);
+        auto persistShards = [&](TOperationContext& context, TString, TPathId implTablePathId) {
+            TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
+            for (auto& shard : indexTable->GetPartitions()) {
+                auto shardIdx = shard.ShardIdx;
+                context.MemChanges.GrabShard(context.SS, shardIdx);
+                context.DbChanges.PersistShard(shardIdx);
 
-            if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
-                continue;
+                txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
+                context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
+
+                auto tabletType = context.SS->ShardInfos[shardIdx].TabletType;
+                context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, implTablePathId, OperationId.GetTxId(), tabletType);
             }
+        };
 
-            for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
-                if (!context.SS->Tables.contains(implTablePathId)) {
-                    continue;
-                }
-
-                TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
-                for (auto& shard : indexTable->GetPartitions()) {
-                    auto shardIdx = shard.ShardIdx;
-                    context.MemChanges.GrabShard(context.SS, shardIdx);
-                    context.DbChanges.PersistShard(shardIdx);
-
-                    txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::Propose);
-                    context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
-                }
-            }
-        }
-
-        tablePath.Base()->PathState = TPathElement::EPathState::EPathStateNoChanges;
-        tablePath.Base()->LastTxId = OperationId.GetTxId();
-
-        NIceDb::TNiceDb db(context.GetDB());
-        
-        context.SS->PersistTxState(db, OperationId);
-        context.SS->PersistPath(db, tablePath.Base()->PathId);
-        
-        for (const auto& shard : table->GetPartitions()) {
-            auto shardIdx = shard.ShardIdx;
-            context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, tablePath.Base()->PathId, OperationId.GetTxId(), ETabletType::DataShard);
-        }
-        
-        for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-            Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
-            TPath childPath = tablePath.Child(childName);
-
-            if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
-                continue;
-            }
-
-            for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
-                if (!context.SS->Tables.contains(implTablePathId)) {
-                    continue;
-                }
-
-                TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
-                for (const auto& shard : indexTable->GetPartitions()) {
-                    auto shardIdx = shard.ShardIdx;
-                    context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, implTablePathId, OperationId.GetTxId(), ETabletType::DataShard);
-                }
-            }
-        }
-
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        context.OnComplete.ActivateTx(OperationId);
+        DoFuncOnTableChilds(context, tablePath, std::move(persistShards));
 
         result->SetPathId(tablePath.Base()->PathId.LocalPathId);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
+        context.OnComplete.ActivateTx(OperationId);
 
         SetState(NextState());
         return result;
@@ -384,7 +419,7 @@ public:
     }
 };
 
-}
+} // anonymous namespace
 
 namespace NKikimr::NSchemeShard {
 
@@ -393,8 +428,9 @@ ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& t
 }
 
 ISubOperation::TPtr CreateTruncateTable(TOperationId id, TTxState::ETxState state) {
-    Y_ABORT_UNLESS(state == TTxState::Invalid || state == TTxState::Propose || state == TTxState::ProposedWaitParts);
+    Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TTruncateTable>(id, state);
 }
 
 }
+

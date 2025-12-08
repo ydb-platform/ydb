@@ -2,9 +2,8 @@ import threading
 import random
 import time
 import logging
-from typing import Dict, List, Tuple, Any, Optional, Callable, Union, Type
+from typing import Dict, List, Tuple, Any, Optional, Union
 from enum import Enum
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 import ydb
 from ydb.tests.stress.common.common import WorkloadBase
@@ -540,7 +539,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
 
         # Combine all DECLARE statements at the beginning, followed by all operations
         query = '\n'.join(declare_statements + operation_queries)
-        logger.debug(f"Executing operations")
+        logger.debug("Executing operations")
         self._execute_query_with_retry(query, is_ddl=False, parameters=all_parameters)
 
     def _execute_query_with_retry(self, query: str, is_ddl: bool, parameters: Dict[str, Any] = None) -> Any:
@@ -561,7 +560,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
                     time.sleep(self.config.retry_delay * (2**attempt))  # Exponential backoff
                 else:
                     logger.error(f"Query failed after {self.config.max_retries} attempts: {e}")
-            except Exception as e:
+            except Exception:
                 # Don't retry on non-transient errors
                 raise
 
@@ -709,7 +708,6 @@ class WorkloadSecondaryIndex(WorkloadBase):
         pk_size = table_info.primary_key_size
         batch_rows = self._get_batch(pk_size, True, table_info)
 
-        pk_columns = self._column_names[:pk_size]
         pk_column_types = table_info.column_types[:pk_size]
         pk_batch_rows = [[row[i] for i in range(pk_size)] for row in batch_rows]
 

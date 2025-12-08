@@ -171,13 +171,11 @@ public:
 class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
-
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TCopyTable TPropose"
                 << " operationId# " << OperationId;
     }
-
 public:
     TPropose(TOperationId id)
         : OperationId(id)
@@ -188,12 +186,10 @@ public:
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvDataShard::TEvSchemaChanged"
                                << " triggers early, save it"
                                << ", at schemeshard: " << ssId);
-
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
     }
@@ -201,98 +197,97 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
-
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvOperationPlan"
                                << ", stepId: " << step
                                << ", at schemeshard" << ssId);
-
+        
         TTxState* txState = context.SS->FindTx(OperationId);
-
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-
         NIceDb::TNiceDb db(context.GetDB());
-
+        
+        // 1. Finalize Target Table Creation
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
-
+        
         TTableInfo::TPtr table = context.SS->Tables[pathId];
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
         context.SS->PersistTableCreated(db, pathId);
-
+        
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
-
         if (table->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(pathId)) {
             context.SS->TTLEnabledTables[pathId] = table;
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
-
             const auto now = context.Ctx.Now();
             for (auto& shard : table->GetPartitions()) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
-
                 lag = now - shard.LastCondErase;
                 context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
             }
         }
-
-        auto parentDir = context.SS->PathsById.at(path->ParentPathId); // TargetPathId has been created
+        
+        auto parentDir = context.SS->PathsById.at(path->ParentPathId); 
         ++parentDir->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDir);
         context.SS->ClearDescribePathCaches(parentDir);
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
+        // 2. Finalize Source Table (Unlock & CDC Logic)
         TPathId srcPathId = txState->SourcePathId;
         if (srcPathId != InvalidPathId && context.SS->PathsById.contains(srcPathId)) {
             auto srcPath = context.SS->PathsById.at(srcPathId);
-            
+
+            // Unlock source path (remove Copying state)
             srcPath->PathState = TPathElement::EPathState::EPathStateNoChanges;
             srcPath->LastTxId = InvalidTxId;
             context.SS->PersistPath(db, srcPathId);
-
             context.SS->ClearDescribePathCaches(srcPath);
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
+            // CDC Logic (Incremental Backup / Rotation)
             if (txState->CdcPathId != InvalidPathId) {
+                // A. Bump Table Version & Sync Indexes (Main Branch Logic)
                 if (context.SS->Tables.contains(srcPathId)) {
                     auto srcTable = context.SS->Tables.at(srcPathId);
                     srcTable->AlterVersion += 1;
                     context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
+
+                    // Sync child indexes to match the new version
+                    NCdcStreamState::SyncChildIndexes(srcPath, srcTable->AlterVersion, OperationId, context, db);
                 }
 
+                // B. Finalize New Stream (Your Logic)
                 if (context.SS->CdcStreams.contains(txState->CdcPathId)) {
                     context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
-            context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
-
-            // Sync child indexes to match the new version
-            NCdcStreamState::SyncChildIndexes(srcPath, srcTable->AlterVersion, OperationId, context, db);
-
                     auto stream = context.SS->CdcStreams.at(txState->CdcPathId);
                     if (stream->AlterData) {
-                        context.SS->PersistCdcStream(db, txState->CdcPathId);
-                        stream->FinishAlter(); 
+                        stream->FinishAlter(); // ! Update memory FIRST
+                        context.SS->PersistCdcStream(db, txState->CdcPathId); // ! Then persist
                     }
                 }
 
+                // C. Finalize Old Streams Rotation (Your Logic)
                 for (const auto& [name, id] : srcPath->GetChildren()) {
                     if (id == txState->CdcPathId) continue;
 
                     if (context.SS->CdcStreams.contains(id)) {
                         auto stream = context.SS->CdcStreams.at(id);
                         auto streamPath = context.SS->PathsById.at(id);
-                        
+
+                        // If this stream was altered in this Tx (rotated)
                         if (stream->AlterData && streamPath->LastTxId == OperationId.GetTxId()) {
                             LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                                 "TCopyTable HandleReply: Finalizing rotation for OLD stream " << name << " id " << id);
 
-                            context.SS->PersistCdcStream(db, id);
-                            stream->FinishAlter();
-                            
+                            stream->FinishAlter(); // ! Update memory FIRST
+                            context.SS->PersistCdcStream(db, id); // ! Then persist
+
                             streamPath->PathState = TPathElement::EPathState::EPathStateNoChanges;
                             streamPath->LastTxId = InvalidTxId; 
-                            
+
                             context.SS->PersistPath(db, streamPath->PathId);
                             context.SS->ClearDescribePathCaches(streamPath);
                             context.OnComplete.PublishToSchemeBoard(OperationId, id);
@@ -304,28 +299,23 @@ public:
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
     }
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
-
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", at schemeshard: " << ssId);
-
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
             TShardIdx idx = shard.Idx;
             TTabletId tablet = context.SS->ShardInfos.at(idx).TabletID;
             shardSet.insert(tablet);
         }
-
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, shardSet);
         return false;
     }

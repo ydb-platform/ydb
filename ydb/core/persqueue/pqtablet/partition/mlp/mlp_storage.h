@@ -201,7 +201,7 @@ private:
     ui64 NormalizeDeadline(TInstant deadline);
 
     ui64 DoLock(ui64 offset, TMessage& message, TInstant& deadline);
-    bool DoCommit(ui64 offset);
+    bool DoCommit(ui64 offset, size_t& totalMetrics);
     bool DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
     bool DoUndelay(ui64 offset);

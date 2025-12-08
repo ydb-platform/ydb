@@ -99,16 +99,12 @@ const TVector<std::pair<ui64, TString>> SIZE_KB_INTERVALS = {
     {999'999'999, "99999999kb"}
 };
 
-const TTabletPercentileCounter::TRangeDef MLP_LOCKS_INTERVALS[10] = {
+const TTabletPercentileCounter::TRangeDef MLP_LOCKS_INTERVALS[6] = {
+    {0, "0"},
     {1, "1"},
-    {2, "2"},
     {4, "4"},
-    {8, "8"},
     {16, "16"},
-    {32, "32"},
     {64, "64"},
-    {128, "128"},
-    {256, "256"},
     {512, "512"}
 };
 

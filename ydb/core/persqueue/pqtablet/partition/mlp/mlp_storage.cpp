@@ -25,7 +25,7 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     , Batch(this)
 {
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
-    Metrics.MessageLocks.Initialize(MLP_LOCKS_INTERVALS, 10, true);
+    Metrics.MessageLocks.Initialize(MLP_LOCKS_INTERVALS, 6, true);
 }
 
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
@@ -49,7 +49,7 @@ void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDe
             break;
         case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
             for (auto [offset, _] : std::exchange(DLQMessages, {})) {
-                Commit(offset);
+                DoCommit(offset, Metrics.TotalDeletedByDeadlinePolicyMessageCount);
             }
             DLQQueue = {};
             break;
@@ -129,7 +129,7 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
 }
 
 bool TStorage::Commit(ui64 messageId) {
-    return DoCommit(messageId);
+    return DoCommit(messageId, Metrics.TotalCommittedMessageCount);
 }
 
 bool TStorage::Unlock(ui64 messageId) {
@@ -291,17 +291,11 @@ void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
     AFL_ENSURE(Metrics.InflightMessageCount > 0);
     --Metrics.InflightMessageCount;
 
-    auto updateMessageLocksMetric = [&](const auto& message) {
-        if (message.ProcessingCount > 0) {
-            Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
-        }
-    };
-
     switch(message.GetStatus()) {
         case EMessageStatus::Unprocessed:
             AFL_ENSURE(Metrics.UnprocessedMessageCount > 0);
             --Metrics.UnprocessedMessageCount;
-            updateMessageLocksMetric(message);
+            Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
             break;
         case EMessageStatus::Locked:
             AFL_ENSURE(Metrics.LockedMessageCount > 0);
@@ -310,7 +304,7 @@ void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
                 AFL_ENSURE(Metrics.LockedMessageGroupCount > 0);
                 --Metrics.LockedMessageGroupCount;
             }
-            updateMessageLocksMetric(message);
+            Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
             break;
         case EMessageStatus::Delayed:
             AFL_ENSURE(Metrics.DelayedMessageCount > 0);
@@ -398,6 +392,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     } else {
         ++Metrics.UnprocessedMessageCount;
     }
+    Metrics.MessageLocks.IncrementFor(0);
 
     return true;
 }
@@ -429,7 +424,7 @@ bool TStorage::MarkDLQMoved(TDLQMessage message) {
     }
 
     if (it != DLQMessages.end() && it->second == message.SeqNo) {
-        Commit(message.Offset);
+        DoCommit(message.Offset, Metrics.TotalMovedToDLQMessageCount);
         return true;
     }
 
@@ -577,10 +572,10 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     message.SetStatus(EMessageStatus::Locked);
     message.DeadlineDelta = NormalizeDeadline(deadline);
     if (message.ProcessingCount < MAX_PROCESSING_COUNT) {
-        if (message.ProcessingCount > 0) {
-            Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
-        }
+        Cerr << ">>>> Decrement for " << message.ProcessingCount << Endl;
+        Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
         ++message.ProcessingCount;
+        Cerr << ">>>> Increment for " << message.ProcessingCount << Endl;
         Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
     }
 
@@ -599,17 +594,11 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     return offset;
 }
 
-bool TStorage::DoCommit(ui64 offset) {
+bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
     auto [message, slowZone] = GetMessageInt(offset);
     if (!message) {
         return false;
     }
-
-    auto updateMessageLocksMetric = [&]() {
-        if (message->ProcessingCount > 0) {
-            Metrics.MessageLocks.DecrementFor(message->ProcessingCount);
-        }
-    };
 
     switch(message->GetStatus()) {
         case EMessageStatus::Unprocessed:
@@ -620,8 +609,8 @@ bool TStorage::DoCommit(ui64 offset) {
 
             AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
             --Metrics.UnprocessedMessageCount;
-            ++Metrics.TotalCommittedMessageCount;
-            updateMessageLocksMetric();
+            ++totalMetrics;
+            Metrics.MessageLocks.DecrementFor(message->ProcessingCount);
             break;
         case EMessageStatus::Locked:
             if (!slowZone) {
@@ -638,8 +627,8 @@ bool TStorage::DoCommit(ui64 offset) {
                 }
             }
 
-            ++Metrics.TotalCommittedMessageCount;
-            updateMessageLocksMetric();
+            ++totalMetrics;
+            Metrics.MessageLocks.DecrementFor(message->ProcessingCount);
 
             break;
         case EMessageStatus::Delayed:
@@ -650,7 +639,7 @@ bool TStorage::DoCommit(ui64 offset) {
 
             AFL_ENSURE(Metrics.DelayedMessageCount > 0)("o", offset);
             --Metrics.DelayedMessageCount;
-            ++Metrics.TotalCommittedMessageCount;
+            ++totalMetrics;
             break;
         case EMessageStatus::Committed:
             return false;
@@ -730,7 +719,7 @@ void TStorage::DoUnlock(ui64 offset, TMessage& message) {
                     return;
                 }
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
-                    DoCommit(offset);
+                    DoCommit(offset, Metrics.TotalDeletedByDeadlinePolicyMessageCount);
                     return;
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
                     break;

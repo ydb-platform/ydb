@@ -31,11 +31,15 @@ def check_for_fail(paths: List[str], output_path: str):
                     status = result.get("status", "")
                     error_type = result.get("error_type", "")
                     path_str = result.get("path", "")
+                    name = result.get("name", "")
                     subtest_name = result.get("subtest_name", "")
                     
-                    test_name = f"{path_str}"
+                    # Format: path/name/subtest_name
+                    test_name = path_str
+                    if name:
+                        test_name = f"{path_str}/{name}"
                     if subtest_name:
-                        test_name = f"{path_str}/{subtest_name}"
+                        test_name = f"{path_str}/{name}/{subtest_name}" if name else f"{path_str}/{subtest_name}"
                     
                     # Check for failures and errors
                     if status == "FAILED":

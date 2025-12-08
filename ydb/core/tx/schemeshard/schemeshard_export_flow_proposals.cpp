@@ -246,11 +246,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                         idx = parentDescription.GetTable().CdcStreamsSize() + 1;
 
                         for (const auto& index : parentDescription.GetTable().GetTableIndexes()) {
-                            if (index.GetName() != indexName) {
-                                ++idx;
-                                continue;
-                            }
-
                             const TVector<TString> indexColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
                             std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout;
                             if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalFulltext) {
@@ -258,13 +253,24 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                                 layout = settings.has_layout() ? settings.layout() : Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
                             }
 
-                            for (const auto& implTable : NTableIndex::GetImplTables(index.GetType(), indexColumns, layout)) {
+                            const auto implTables = NTableIndex::GetImplTables(index.GetType(), indexColumns, layout);
+                            if (index.GetName() != indexName) {
+                                idx += implTables.size();
+                                continue;
+                            }
+
+                            for (const auto& implTable : implTables) {
                                 if (implTable != implTableName) {
                                     ++idx;
                                     continue;
                                 }
 
                                 found = true;
+                                break;
+                            }
+
+                            if (found) {
+                                break;
                             }
                         }
                     }

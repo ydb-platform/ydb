@@ -10,48 +10,43 @@ def check_for_fail(paths: List[str], output_path: str):
     error_list = []
     
     for path in paths:
-        if os.path.isfile(path):
-            files = [path]
-        else:
-            # If it's a directory, look for report.json files
-            import glob
-            files = glob.glob(os.path.join(path, "**/report.json"), recursive=True)
-            if not files:
-                files = glob.glob(os.path.join(path, "report.json"))
+        if not os.path.isfile(path):
+            print(f"Warning: Expected a file, but got: {path}", file=__import__('sys').stderr)
+            continue
         
-        for fn in files:
-            try:
-                with open(fn, 'r') as f:
-                    report = json.load(f)
+        fn = path
+        try:
+            with open(fn, 'r') as f:
+                report = json.load(f)
+            
+            for result in report.get("results", []):
+                if result.get("type") != "test":
+                    continue
                 
-                for result in report.get("results", []):
-                    if result.get("type") != "test":
-                        continue
-                    
-                    status = result.get("status", "")
-                    error_type = result.get("error_type", "")
-                    path_str = result.get("path", "")
-                    name = result.get("name", "")
-                    subtest_name = result.get("subtest_name", "")
-                    
-                    # Format: path/name/subtest_name
-                    test_name = path_str
-                    if name:
-                        test_name = f"{path_str}/{name}"
-                    if subtest_name:
-                        test_name = f"{path_str}/{name}/{subtest_name}" if name else f"{path_str}/{subtest_name}"
-                    
-                    # Check for failures and errors
-                    if status == "FAILED":
-                        if error_type == "REGULAR":
-                            failed_list.append((test_name, fn))
-                        else:
-                            error_list.append((test_name, fn))
-                    elif status == "ERROR":
+                status = result.get("status", "")
+                error_type = result.get("error_type", "")
+                path_str = result.get("path", "")
+                name = result.get("name", "")
+                subtest_name = result.get("subtest_name", "")
+                
+                # Format: path/name/subtest_name
+                test_name = path_str
+                if name:
+                    test_name = f"{path_str}/{name}"
+                if subtest_name:
+                    test_name = f"{path_str}/{name}/{subtest_name}" if name else f"{path_str}/{subtest_name}"
+                
+                # Check for failures and errors
+                if status == "FAILED":
+                    if error_type == "REGULAR":
+                        failed_list.append((test_name, fn))
+                    else:
                         error_list.append((test_name, fn))
-            except (json.JSONDecodeError, KeyError) as e:
-                print(f"Warning: Unable to parse {fn}: {e}", file=__import__('sys').stderr)
-                continue
+                elif status == "ERROR":
+                    error_list.append((test_name, fn))
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"Warning: Unable to parse {fn}: {e}", file=__import__('sys').stderr)
+            continue
     
     failed_test_count = 0
 
@@ -81,7 +76,7 @@ def main():
             "Output file with count of failed tests"
         ),
     )
-    parser.add_argument("path", nargs="+", help="build-results-report JSON files or directories")
+    parser.add_argument("path", nargs="+", help="build-results-report JSON files")
     args = parser.parse_args()
     check_for_fail(args.path, args.output_path)
 

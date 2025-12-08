@@ -180,8 +180,9 @@ class WorkloadVectorIndex(WorkloadBase):
             prefixed=prefixed,
         )
         if len(result_set) == 0:
-            raise Exception("KNN query returned an empty set")
-
+            raise Exception(
+                f"KNN query returned an empty set for vector_type={vector_type}, distance={distance}, similarity={similarity}, prefixed={prefixed}"
+            )
         rows = result_set[0].rows
         logger.info(f"KNN search returned {len(rows)} rows")
 

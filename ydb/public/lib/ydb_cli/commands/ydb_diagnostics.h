@@ -10,14 +10,14 @@
 
 namespace NYdb::NConsoleClient {
 
-class TCommandClusterState : public TClientCommandTree {
+class TCommandClusterDiagnostics : public TClientCommandTree {
 public:
-    TCommandClusterState();
+    TCommandClusterDiagnostics();
 };
 
-class TCommandClusterStateFetch : public TYdbReadOnlyCommand, public TCommandWithOutput {
+class TCommandClusterDiagnosticsCollect : public TYdbReadOnlyCommand, public TCommandWithOutput {
 public:
-    TCommandClusterStateFetch();
+    TCommandClusterDiagnosticsCollect();
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -26,6 +26,7 @@ private:
     ui32 DurationSeconds = 0;
     ui32 PeriodSeconds = 0;
     TString FileName;
+    bool NoSanitize = false;
 };
 
 }

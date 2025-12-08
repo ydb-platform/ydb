@@ -3686,7 +3686,7 @@ message TReqListQueries
     optional uint64 limit = 10 [default = 100];
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 11;
     optional bool search_by_token_prefix = 12 [default = false];
-    optional bool use_full_text_search = 13 [default = true];
+    optional bool use_full_text_search = 13 [default = false];
     optional EListQueriesSortOrder sort_order = 14 [default = LQSO_CURSOR];
     optional bool tutorial_filter = 15 [default = false];
 }

@@ -308,6 +308,10 @@ ids {
   severity: S_ERROR
 }
 ids {
+  code: KIKIMR_STATUS_DISK_GROUP_OUT_OF_SPACE
+  severity: S_ERROR
+}
+ids {
   code: YQL_PRAGMA_WARNING_MSG
   severity: S_WARNING
 }

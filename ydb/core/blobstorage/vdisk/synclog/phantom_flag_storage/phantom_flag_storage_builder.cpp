@@ -38,7 +38,9 @@ private:
         using TIndexForwardIterator = TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob>::TIndexForwardIterator;
         TIndexForwardIterator it(ev->Get()->Snap.HullCtx, &ev->Get()->Snap.LogoBlobsSnap);
         for (it.Seek(TLogoBlobID(0, 0, 0)); it.Valid(); it.Next()) {
-            Thresholds.AddBlob(it.GetCurKey().LogoBlobID());
+            if (it.GetMemRec().GetIngress().IsKeep(SlCtx->VCtx->Top->GType)) {
+                Thresholds.AddBlob(it.GetCurKey().LogoBlobID());
+            }
         }
         // to release snapshots
         ev.Reset();

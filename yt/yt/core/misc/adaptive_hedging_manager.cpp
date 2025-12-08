@@ -1,4 +1,4 @@
-#include "new_hedging_manager.h"
+#include "adaptive_hedging_manager.h"
 #include "config.h"
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
@@ -13,24 +13,23 @@ static constexpr int MaxSimultaneouslyProcessedRequestCount = 5;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_STRUCT(TNewHedgingRequest)
+DECLARE_REFCOUNTED_STRUCT(THedgingRequest)
 
-struct TNewHedgingRequest final
-    : public TRefTracked<TNewHedgingRequest>
+struct THedgingRequest final
+    : public TRefTracked<THedgingRequest>
 {
-    TNewHedgingRequest(
+    THedgingRequest(
         TFuture<void> requestFuture,
-        ISecondaryRequestGeneratorPtr secondaryRequestGenerator)
+        TClosure startSecondaryRequest)
         : PrimaryRequestFuture(std::move(requestFuture))
-        , SecondaryRequestGenerator(std::move(secondaryRequestGenerator))
+        , StartSecondaryRequest(std::move(startSecondaryRequest))
     { }
 
     TFuture<void> PrimaryRequestFuture;
-
-    ISecondaryRequestGeneratorPtr SecondaryRequestGenerator;
+    TClosure StartSecondaryRequest;
 };
 
-DEFINE_REFCOUNTED_TYPE(TNewHedgingRequest)
+DEFINE_REFCOUNTED_TYPE(THedgingRequest)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -45,11 +44,11 @@ DEFINE_REFCOUNTED_TYPE(TNewHedgingRequest)
 //! exceed the abovementioned secondary to primary request ratio. Each request's contributes to this delay value.
 //! If primary request is finished before the delay has passed the delay value is decreased by HedgingDelayTuneFactor.
 //! Otherwise it is increased by HedgingDelayTuneFactor * SecondaryRequestRatio.
-class TNewAdaptiveHedgingManager
-    : public INewHedgingManager
+class TAdaptiveHedgingManager
+    : public IAdaptiveHedgingManager
 {
 public:
-    TNewAdaptiveHedgingManager(TAdaptiveHedgingManagerConfigPtr config)
+    TAdaptiveHedgingManager(TAdaptiveHedgingManagerConfigPtr config)
         : Config_(std::move(config))
     {
         YT_VERIFY(Config_->SecondaryRequestRatio);
@@ -60,13 +59,13 @@ public:
 
     void RegisterRequest(
         TFuture<void> requestFuture,
-        ISecondaryRequestGeneratorPtr secondaryRequestGenerator) override
+        TClosure startSecondaryRequest) override
     {
         PrimaryRequestCount_.fetch_add(1, std::memory_order::relaxed);
 
-        auto hedgingRequest = New<TNewHedgingRequest>(
+        auto hedgingRequest = New<THedgingRequest>(
             std::move(requestFuture),
-            std::move(secondaryRequestGenerator));
+            std::move(startSecondaryRequest));
 
         auto hedgingDelay = HedgingDelay_.load(std::memory_order::relaxed);
 
@@ -91,27 +90,27 @@ public:
         auto isQueueEmpty = IsQueueEmpty();
 
         while (!isQueueEmpty && tokenCount >= 1.) {
-            std::vector<TNewHedgingRequestPtr> requestsForHedging;
-            // Will be destroyed at end of cycle.
-            std::vector<TNewHedgingRequestPtr> requestsForRemoval;
+            std::vector<TClosure> secondaryRequestGenerators;
+            // Will be destroyed at the end of cycle.
+            std::vector<THedgingRequestPtr> requestsForRemoval;
 
             DequeueRequests(
-                &requestsForHedging,
+                &secondaryRequestGenerators,
                 &requestsForRemoval,
                 &isQueueEmpty,
                 &tokenCount);
 
-            for (const auto& request : requestsForHedging) {
-                request->SecondaryRequestGenerator->GenerateSecondaryRequest();
+            for (const auto& requestGenerator : secondaryRequestGenerators) {
+                requestGenerator.Run();
             }
 
-            SecondaryRequestCount_.fetch_add(std::ssize(requestsForHedging), std::memory_order::relaxed);
+            SecondaryRequestCount_.fetch_add(std::ssize(secondaryRequestGenerators), std::memory_order::relaxed);
         }
     }
 
-    TNewHedgingManagerStatistics CollectStatistics() override
+    TAdaptiveHedgingManagerStatistics CollectStatistics() override
     {
-        TNewHedgingManagerStatistics statistics;
+        TAdaptiveHedgingManagerStatistics statistics;
 
         statistics.PrimaryRequestCount = PrimaryRequestCount_.exchange(0, std::memory_order::relaxed);
         statistics.SecondaryRequestCount = SecondaryRequestCount_.exchange(0, std::memory_order::relaxed);
@@ -130,7 +129,7 @@ private:
     std::atomic<double> TokenCount_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DequeLock_);
-    std::deque<TNewHedgingRequestPtr> RequestDeque_;
+    std::deque<THedgingRequestPtr> RequestDeque_;
 
     std::atomic<int> PrimaryRequestCount_ = 0;
     std::atomic<int> SecondaryRequestCount_ = 0;
@@ -138,15 +137,12 @@ private:
     std::atomic<int> MaxQueueSize_ = 0;
 
 
-    void TryRunSecondaryRequest(TNewHedgingRequestPtr request)
+    void TryRunSecondaryRequest(THedgingRequestPtr request)
     {
-        auto isQueueEmpty = IsQueueEmpty();
-
-        if (isQueueEmpty && TryDeductToken() >= 1.) {
+        if (IsQueueEmpty() && TryDeductToken() >= 1.) {
             SecondaryRequestCount_.fetch_add(1, std::memory_order::relaxed);
-
             // NB: We don't need this request object anymore.
-            request->SecondaryRequestGenerator->GenerateSecondaryRequest();
+            request->StartSecondaryRequest.Run();
         } else {
             EnqueueRequest(std::move(request));
         }
@@ -197,7 +193,7 @@ private:
         return RequestDeque_.empty();
     }
 
-    void EnqueueRequest(TNewHedgingRequestPtr request)
+    void EnqueueRequest(THedgingRequestPtr request)
     {
         QueuedRequestCount_.fetch_add(1, std::memory_order::relaxed);
 
@@ -215,34 +211,34 @@ private:
     }
 
     void DequeueRequests(
-        std::vector<TNewHedgingRequestPtr>* requestsForHedging,
-        std::vector<TNewHedgingRequestPtr>* requestsForRemoval,
+        std::vector<TClosure>* secondaryRequestGenerators,
+        std::vector<THedgingRequestPtr>* requestsForRemoval,
         bool* isQueueEmpty,
         double* tokenCount)
     {
-        requestsForHedging->reserve(MaxSimultaneouslyProcessedRequestCount);
+        secondaryRequestGenerators->reserve(MaxSimultaneouslyProcessedRequestCount);
         requestsForRemoval->reserve(MaxSimultaneouslyProcessedRequestCount);
 
         auto writerGuard = WriterGuard(DequeLock_);
 
         while (
             !RequestDeque_.empty() &&
-            requestsForRemoval->size() + requestsForHedging->size() < MaxSimultaneouslyProcessedRequestCount)
+            requestsForRemoval->size() + secondaryRequestGenerators->size() < MaxSimultaneouslyProcessedRequestCount)
         {
             auto& currentRequest = RequestDeque_.front();
 
             if (currentRequest->PrimaryRequestFuture.IsSet()) {
                 requestsForRemoval->push_back(std::move(currentRequest));
-                RequestDeque_.pop_front();
             } else {
                 *tokenCount = TryDeductToken();
                 if (*tokenCount < 1.) {
                     break;
                 }
 
-                requestsForHedging->push_back(std::move(currentRequest));
-                RequestDeque_.pop_front();
+                secondaryRequestGenerators->push_back(std::move(currentRequest->StartSecondaryRequest));
             }
+
+            RequestDeque_.pop_front();
         }
 
         *isQueueEmpty = RequestDeque_.empty();
@@ -251,10 +247,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-INewHedgingManagerPtr CreateNewAdaptiveHedgingManager(
+IAdaptiveHedgingManagerPtr CreateAdaptiveHedgingManager(
     TAdaptiveHedgingManagerConfigPtr config)
 {
-    return New<TNewAdaptiveHedgingManager>(std::move(config));
+    return New<TAdaptiveHedgingManager>(std::move(config));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

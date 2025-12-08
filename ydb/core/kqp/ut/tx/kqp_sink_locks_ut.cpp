@@ -538,12 +538,12 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             }
 
             {
-                result = session2.ExecuteQuery(Q1_(R"(
+                result = session1.ExecuteQuery(Q1_(R"(
                     UPDATE KV ON (Key, Value) VALUES (0u, "TEST"); -- exists
-                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
 
                 // TODO: Must be ABORTED.
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), GetIsOlap() ? EStatus::ABORTED : EStatus::SUCCESS, result.GetIssues().ToString());
             }
 
             {
@@ -554,8 +554,13 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
                 // TODO: Must be "OTHER" for both rows.
-                CompareYson(R"([[0u;["TEST"]]])", FormatResultSetYson(result.GetResultSet(0)));
-                CompareYson(R"([[0u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(1)));
+                if (GetIsOlap()) {
+                    CompareYson(R"([[0u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(0)));
+                    CompareYson(R"([[0u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(1)));
+                } else {
+                    CompareYson(R"([[0u;["TEST"]]])", FormatResultSetYson(result.GetResultSet(0)));
+                    CompareYson(R"([[0u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(1)));
+                }
             }
         }
     };
@@ -598,12 +603,12 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             }
 
             {
-                result = session2.ExecuteQuery(Q1_(R"(
+                result = session1.ExecuteQuery(Q1_(R"(
                     UPDATE KV ON (Key, Value) VALUES (0u, "TEST"); -- exists
-                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
 
                 // TODO: Must be ABORTED.
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), GetIsOlap() ? EStatus::ABORTED : EStatus::SUCCESS, result.GetIssues().ToString());
             }
 
             {
@@ -614,8 +619,13 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
                 // TODO: Must be "OTHER" for both rows.
-                CompareYson(R"([[0u;["TEST"]]])", FormatResultSetYson(result.GetResultSet(0)));
-                CompareYson(R"([[4u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(1)));
+                if (GetIsOlap()) {
+                    CompareYson(R"([[0u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(0)));
+                    CompareYson(R"([[4u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(1)));
+                } else {
+                    CompareYson(R"([[0u;["TEST"]]])", FormatResultSetYson(result.GetResultSet(0)));
+                    CompareYson(R"([[4u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(1)));
+                }
             }
         }
     };
@@ -658,12 +668,11 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             }
 
             {
-                result = session2.ExecuteQuery(Q1_(R"(
+                result = session1.ExecuteQuery(Q1_(R"(
                     UPDATE KV ON (Key, Value) VALUES (0u, "TEST"); -- exists
-                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
 
-                // TODO: Must be ABORTED.
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             }
 
             {
@@ -673,8 +682,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                 )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-                // TODO: Must be "OTHER" for both rows.
-                CompareYson(R"([[0u;["TEST"]]])", FormatResultSetYson(result.GetResultSet(0)));
+                CompareYson(R"([[0u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(0)));
                 CompareYson(R"([[1u;["OTHER"]]])", FormatResultSetYson(result.GetResultSet(1)));
             }
         }

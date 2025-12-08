@@ -19,9 +19,23 @@ public:
     std::shared_ptr<TPrivateEndpointInfo> Endpoint;
     SocketAddressType Address;
     TList<THttpIncomingRequestPtr> Requests;
-    THashMap<THttpIncomingRequestPtr, THttpOutgoingResponsePtr> Responses;
+
+    struct TResponseState {
+        THttpOutgoingResponsePtr Response;
+        NActors::TActorId ProgressNotificationActor; // The actor to send progress notifications to
+        ui64 ProgressNotificationCookie = 0; // Cookie for progress notifications
+        ui64 ProgressNotificationBytes = 0; // The byte interval for progress notifications
+        ui64 ProgressBytes = 0; // Total bytes sent so far
+        ui64 ProgressChunks = 0; // Total data chunks sent so far
+
+        operator bool() const {
+            return Response != nullptr;
+        }
+    };
+
+    THashMap<THttpIncomingRequestPtr, TResponseState> Responses;
     THttpIncomingRequestPtr CurrentRequest;
-    THttpOutgoingResponsePtr CurrentResponse;
+    TResponseState CurrentResponse;
     TDeque<THttpIncomingRequestPtr> RecycledRequests;
 
     THPTimer InactivityTimer;
@@ -158,7 +172,9 @@ protected:
                                 Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
                                 CurrentRequest = nullptr;
                             } else {
-                                bool success = Respond(CurrentRequest->CreateResponseTooManyRequests());
+                                bool success = Respond({
+                                    .Response = CurrentRequest->CreateResponseTooManyRequests()
+                                });
                                 if (!success) {
                                     return;
                                 }
@@ -166,7 +182,9 @@ protected:
                             }
                         } else if (CurrentRequest->IsError()) {
                             ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << GetRequestDebugText() << ")");
-                            bool success = Respond(CurrentRequest->CreateResponseBadRequest());
+                            bool success = Respond({
+                                .Response = CurrentRequest->CreateResponseBadRequest()
+                            });
                             if (!success) {
                                 return;
                             }
@@ -218,7 +236,12 @@ protected:
         if (event->Get()->Response->IsDone()) {
             CancelSubscriber = nullptr;
         }
-        Respond(event->Get()->Response);
+        Respond({
+            .Response = event->Get()->Response,
+            .ProgressNotificationActor = event->Get()->ProgressNotificationBytes > 0 ? event->Sender : TActorId(),
+            .ProgressNotificationCookie = event->Cookie,
+            .ProgressNotificationBytes = event->Get()->ProgressNotificationBytes,
+        });
     }
 
     static TString GetChunkDebugText(THttpOutgoingDataChunkPtr chunk) {
@@ -251,12 +274,12 @@ protected:
             ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - DataChunk error: " << event->Get()->Error);
             return PassAway();
         }
-        if (CurrentResponse != nullptr && CurrentResponse == event->Get()->DataChunk->GetResponse()) {
-            CurrentResponse->AddDataChunk(event->Get()->DataChunk);
+        if (CurrentResponse && CurrentResponse.Response == event->Get()->DataChunk->GetResponse()) {
+            CurrentResponse.Response->AddDataChunk(event->Get()->DataChunk);
         } else {
             auto itResponse = Responses.find(event->Get()->DataChunk->GetRequest());
-            if (itResponse != Responses.end() && itResponse->second == event->Get()->DataChunk->GetResponse()) {
-                itResponse->second->AddDataChunk(event->Get()->DataChunk);
+            if (itResponse != Responses.end() && itResponse->second.Response == event->Get()->DataChunk->GetResponse()) {
+                itResponse->second.Response->AddDataChunk(event->Get()->DataChunk);
             } else {
                 ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - DataChunk request not found");
                 return PassAway();
@@ -274,7 +297,8 @@ protected:
         CancelSubscriber = std::move(event);
     }
 
-    bool Respond(THttpOutgoingResponsePtr response) {
+    bool Respond(TResponseState state) {
+        THttpOutgoingResponsePtr response = state.Response;
         THttpIncomingRequestPtr request = response->GetRequest();
         ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- ("
             << GetResponseDebugText(response) << (response->IsDone() ? ")" : ") (incomplete)"));
@@ -304,30 +328,31 @@ protected:
             PassAway();
             return false; // no request to respond to
         }
-        if (request == Requests.front() && CurrentResponse == nullptr) {
-            CurrentResponse = response;
+        if (request == Requests.front() && !CurrentResponse) {
+            CurrentResponse = std::move(state);
             return FlushOutput();
         } else {
             // we are ahead of our pipeline
-            Responses.emplace(request, response);
+            Responses.emplace(request, std::move(state));
             return true;
         }
     }
 
     bool FlushOutput() {
-        while (CurrentResponse != nullptr) {
-            auto* buffer = CurrentResponse->GetActiveBuffer();
+        while (CurrentResponse) {
+            auto& response = CurrentResponse.Response;
+            auto* buffer = response->GetActiveBuffer();
             size_t size = buffer->Size();
             if (size == 0) {
-                if (CurrentResponse->IsDone()) {
-                    Y_ABORT_UNLESS(Requests.front() == CurrentResponse->GetRequest());
-                    bool close = CurrentResponse->IsConnectionClose();
+                if (response->IsDone()) {
+                    Y_ABORT_UNLESS(Requests.front() == response->GetRequest());
+                    bool close = response->IsConnectionClose();
                     Requests.pop_front();
-                    CleanupResponse(CurrentResponse);
+                    CleanupResponse(response);
                     if (!Requests.empty()) {
                         auto it = Responses.find(Requests.front());
                         if (it != Responses.end()) {
-                            CurrentResponse = it->second;
+                            CurrentResponse = std::move(it->second);
                             Responses.erase(it);
                             continue;
                         } else {
@@ -353,6 +378,30 @@ protected:
             if (res > 0) {
                 InactivityTimer.Reset();
                 buffer->ChopHead(res);
+                if (CurrentResponse.ProgressNotificationBytes > 0) {
+                    bool needToNotify = false;
+                    ui64 progressBefore = CurrentResponse.ProgressBytes / CurrentResponse.ProgressNotificationBytes;
+                    CurrentResponse.ProgressBytes += res;
+                    if (buffer->Size() == 0) { // end of headers / chunk
+                        needToNotify = true;
+                        if (buffer != response) {
+                            // If buffer != response, this means we are at the end of a data chunk (not headers).
+                            // This comparison distinguishes between the headers buffer (buffer == response)
+                            // and data chunk buffers (buffer != response).
+                            CurrentResponse.ProgressChunks++;
+                        }
+                    } else {
+                        ui64 progressAfter = CurrentResponse.ProgressBytes / CurrentResponse.ProgressNotificationBytes;
+                        if (progressAfter != progressBefore) {
+                            needToNotify = true;
+                        }
+                    }
+                    if (needToNotify) {
+                        Send(CurrentResponse.ProgressNotificationActor,
+                            new TEvHttpProxy::TEvHttpOutgoingResponseProgress(CurrentResponse.ProgressBytes, CurrentResponse.ProgressChunks),
+                            0, CurrentResponse.ProgressNotificationCookie);
+                    }
+                }
             } else if (-res == EINTR) {
                 continue;
             } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
@@ -366,7 +415,7 @@ protected:
                 }
                 break;
             } else {
-                CleanupResponse(CurrentResponse);
+                CleanupResponse(response);
                 ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in FlushOutput: " << strerror(-res));
                 PassAway();
                 return false;

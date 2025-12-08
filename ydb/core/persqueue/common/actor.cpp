@@ -5,6 +5,12 @@
 
 namespace NKikimr::NPQ {
 
+void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStringBuf prefix, const std::exception& exc) {
+    LOG_CRIT_S(*NActors::TlsActivationContext, service,
+        prefix << "unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+        << TBackTrace::FromCurrentException().PrintToString());
+}
+
 const TString& TConstantLogPrefix::GetLogPrefix() const {
     if (!LogPrefix_.Defined()) {
         LogPrefix_ = BuildLogPrefix();

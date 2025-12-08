@@ -124,6 +124,9 @@ using namespace NYql;
 using namespace NNodes;
 
 TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx) {
+    if (expr->IsLambda()) {
+        expr = expr->Child(1);
+    }
     try {
         TConvertToAstSettings settings;
         settings.AllowFreeArgs = true;
@@ -529,6 +532,8 @@ bool TOpMap::HasRenames() const {
     return false;
 }
 
+// Returns explicit renames as pairs of <to, from>
+
 TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
     TVector<std::pair<TInfoUnit, TInfoUnit>> result;
     for (auto &[iu, body] : MapElements) {
@@ -538,6 +543,34 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
     }
     return result;
 }
+
+// Add simple transformations that preserve both key and column statistics properties
+// Currently only pg transformations FromPg and ToPg are supported
+// Return pairs of renames <to, from>
+
+TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenamesWithTransforms(TPlanProps& props) const {
+    auto result = GetRenames();
+
+    for (auto &[iu, body] : MapElements) {
+        if (std::holds_alternative<TExprNode::TPtr>(body)) {
+            auto lambda = TCoLambda(std::get<TExprNode::TPtr>(body));
+            auto expr = lambda.Body().Ptr();
+
+            if (expr->IsCallable("ToPg") || expr->IsCallable("FromPg")) {
+                if (expr->ChildPtr(0)->IsCallable("Member")) {
+                    TVector<TInfoUnit> transformIUs;
+                    GetAllMembers(expr, transformIUs, props, true);
+                    if (transformIUs.size()==1) {
+                        result.push_back(std::make_pair(iu, transformIUs[0]));
+                    }
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
 
 void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
     TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> newMapElements;
@@ -708,44 +741,47 @@ TConjunctInfo TOpFilter::GetConjunctInfo(TPlanProps& props) const {
         lambdaBody = lambdaBody->ChildPtr(0);
     }
 
+    TVector<TExprNode::TPtr> conjuncts;
     if (lambdaBody->IsCallable("And")) {
         for (auto conj : lambdaBody->Children()) {
-            auto conjObj = conj;
-            bool fromPg = false;
-
-            if (conj->IsCallable("FromPg")) {
-                conjObj = conj->ChildPtr(0);
-                fromPg = true;
-            }
-
-            TExprNode::TPtr leftArg;
-            TExprNode::TPtr rightArg;
-            if (TestAndExtractEqualityPredicate(conjObj, leftArg, rightArg)) {
-                TVector<TInfoUnit> conjIUs;
-                GetAllMembers(conj, conjIUs, props);
-
-                if (leftArg->IsCallable("Member") && rightArg->IsCallable("Member") && conjIUs.size() >= 2) {
-                    TVector<TInfoUnit> leftIUs;
-                    TVector<TInfoUnit> rightIUs;
-                    GetAllMembers(leftArg, leftIUs, props);
-                    GetAllMembers(rightArg, rightIUs, props);
-                    res.JoinConditions.push_back(TJoinConditionInfo(conjObj, leftIUs[0], rightIUs[0]));
-                }
-                else {
-                    TVector<TInfoUnit> conjIUs;
-                    GetAllMembers(conj, conjIUs);
-                    res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
-                }
-            } else {
-                TVector<TInfoUnit> conjIUs;
-                GetAllMembers(conj, conjIUs, props);
-                res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
-            }
+            conjuncts.push_back(conj);
         }
     } else {
-        TVector<TInfoUnit> filterIUs;
-        GetAllMembers(lambdaBody, filterIUs, props);
-        res.Filters.push_back(TFilterInfo(lambdaBody, filterIUs));
+        conjuncts.push_back(lambdaBody);
+    }
+
+    for (auto conj : conjuncts) {
+        auto conjObj = conj;
+        bool fromPg = false;
+
+        if (conj->IsCallable("FromPg")) {
+            conjObj = conj->ChildPtr(0);
+            fromPg = true;
+        }
+
+        TExprNode::TPtr leftArg;
+        TExprNode::TPtr rightArg;
+        if (TestAndExtractEqualityPredicate(conjObj, leftArg, rightArg)) {
+            TVector<TInfoUnit> conjIUs;
+            GetAllMembers(conj, conjIUs, props);
+
+            if (leftArg->IsCallable("Member") && rightArg->IsCallable("Member") && conjIUs.size() >= 2) {
+                TVector<TInfoUnit> leftIUs;
+                TVector<TInfoUnit> rightIUs;
+                GetAllMembers(leftArg, leftIUs, props);
+                GetAllMembers(rightArg, rightIUs, props);
+                res.JoinConditions.push_back(TJoinConditionInfo(conjObj, leftIUs[0], rightIUs[0]));
+            }
+            else {
+                TVector<TInfoUnit> conjIUs;
+                GetAllMembers(conj, conjIUs);
+                res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
+            }
+        } else {
+            TVector<TInfoUnit> conjIUs;
+            GetAllMembers(conj, conjIUs, props);
+            res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
+        }
     }
 
     return res;
@@ -785,10 +821,20 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 }
 
+const THashMap<EJoinAlgoType,TString> AlgoNames = {
+    {EJoinAlgoType::LookupJoin, "Lookup"},
+    {EJoinAlgoType::LookupJoinReverse, "ReverseLookup"},
+    {EJoinAlgoType::MapJoin, "Map"},
+    {EJoinAlgoType::GraceJoin, "Shuffle"}};
+
 TString TOpJoin::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     TStringBuilder res;
-    res << "Join [";
+    res << "Join, Kind: " << JoinKind;
+    if (Props.JoinAlgo.has_value()) {
+        res << ", Algo: " << AlgoNames.at(*Props.JoinAlgo);
+    }
+    res << " [";
     for (size_t i = 0; i < JoinKeys.size(); i++) {
         auto [x,y] = JoinKeys[i];
         res << x.GetFullName() + "=" + y.GetFullName();
@@ -898,6 +944,52 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     strBuilder << ")";
     return strBuilder;
 }
+
+/***
+ * OpCBOTree operator methods
+ */
+TOpCBOTree::TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TPositionHandle pos) :
+    IOperator(EOperator::CBOTree, pos),
+    TreeRoot(treeRoot),
+    TreeNodes({treeRoot}) 
+{
+    Children = treeRoot->Children;
+}
+
+TOpCBOTree::TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TVector<std::shared_ptr<IOperator>> treeNodes, TPositionHandle pos) :
+    IOperator(EOperator::CBOTree, pos),
+    TreeRoot(treeRoot),
+    TreeNodes({treeNodes}) 
+{
+    for (auto & n : treeNodes) {
+        for (auto & c : n->Children) {
+            if (std::find(treeNodes.begin(), treeNodes.end(), c) == treeNodes.end()) {
+                Children.push_back(c);
+            }
+        }
+    }
+}
+
+void TOpCBOTree::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    for (auto op : TreeNodes) {
+        op->RenameIUs(renameMap, ctx, stopList);
+    }
+}
+
+TString TOpCBOTree::ToString(TExprContext& ctx) {
+    TStringBuilder res;
+    res << "CBO Tree: [";
+    for (size_t i=0; i < TreeNodes.size(); i++) {
+        res << TreeNodes[i]->ToString(ctx);
+        if (i != TreeNodes.size()-1) {
+            res << ", ";
+        }
+    }
+    res << "]";
+    return res;
+}
+
+
 
 /**
  * OpRoot operator methods

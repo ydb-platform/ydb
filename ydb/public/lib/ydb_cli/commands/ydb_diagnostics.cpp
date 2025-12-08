@@ -1,4 +1,4 @@
-#include "ydb_state.h"
+#include "ydb_diagnostics.h"
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -11,40 +11,43 @@
 
 namespace NYdb::NConsoleClient {
 
-TCommandClusterState::TCommandClusterState()
-    : TClientCommandTree("state", {}, "Manage cluster internal state")
+TCommandClusterDiagnostics::TCommandClusterDiagnostics()
+    : TClientCommandTree("diagnostics", {}, "Manage cluster internal state")
 {
-    AddCommand(std::make_unique<TCommandClusterStateFetch>());
+    AddCommand(std::make_unique<TCommandClusterDiagnosticsCollect>());
 }
 
-TCommandClusterStateFetch::TCommandClusterStateFetch()
-    : TYdbReadOnlyCommand("fetch", {},
+TCommandClusterDiagnosticsCollect::TCommandClusterDiagnosticsCollect()
+    : TYdbReadOnlyCommand("collect", {},
         "Fetch aggregated cluster node state and metrics over a time period.\n"
         "Sends a cluster-wide request to collect state as a set of metrics from all nodes.\n"
         "One of the nodes gathers metrics from all others over the specified duration, then returns an aggregated result.")
 {}
 
-void TCommandClusterStateFetch::Config(TConfig& config) {
+void TCommandClusterDiagnosticsCollect::Config(TConfig& config) {
     TYdbReadOnlyCommand::Config(config);
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("duration",
-        "Total time in seconds during which metrics should be collected on the server.\n"
+        "Total time in seconds during which metrics should be collected on the server."
         "Defines how long the server-side node will keep polling other nodes. "
         "If --period is unset or zero, only one snapshot is collected and the server waits up to --duration for all responses.")
     .DefaultValue(60)
         .OptionalArgument("NUM").StoreResult(&DurationSeconds);
     config.Opts->AddLongOption("period",
-        "Interval in seconds between metric collections during the --duration period.\n"
+        "Interval in seconds between metric collections during the --duration period."
         "If set to zero or omitted, only a single collection is done.")
     .DefaultValue(0)
         .OptionalArgument("NUM").StoreResult(&PeriodSeconds);
     config.Opts->AddLongOption('o', "output", "Path to the output .tar.bz2 file")
     .DefaultValue("out.tar.bz2")
         .OptionalArgument("PATH").StoreResult(&FileName);
+    config.Opts->AddLongOption("no-sanitize", "Disable sanitization and preserve sensitive data in the output, including table names, "
+        "authentication information, and other personally identifiable information")
+        .StoreTrue(&NoSanitize);
     config.AllowEmptyDatabase = true;
 }
 
-void TCommandClusterStateFetch::Parse(TConfig& config) {
+void TCommandClusterDiagnosticsCollect::Parse(TConfig& config) {
     TYdbReadOnlyCommand::Parse(config);
     ParseOutputFormats();
 }
@@ -101,11 +104,12 @@ struct TARFile {
     }
 };
 
-int TCommandClusterStateFetch::Run(TConfig& config) {
+int TCommandClusterDiagnosticsCollect::Run(TConfig& config) {
     NMonitoring::TMonitoringClient client(CreateDriver(config));
     NMonitoring::TClusterStateSettings settings;
     settings.DurationSeconds(DurationSeconds);
     settings.PeriodSeconds(PeriodSeconds);
+    settings.NoSanitize(NoSanitize);
     NMonitoring::TClusterStateResult result = client.ClusterState(settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     const auto& proto = NYdb::TProtoAccessor::GetProto(result);

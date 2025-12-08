@@ -2565,7 +2565,7 @@ private:
                 }
 
                 auto ytDst = TRichYPath(dstPath);
-                if ((EYtWriteMode::Append == mode && !appendToSorted) || EYtWriteMode::Upsert == mode) {
+                if ((EYtWriteMode::Append == mode && !appendToSorted) || EYtWriteMode::Replace == mode) {
                     ytDst.Append(true);
                 } else if (!dstIsDynamic) {
                     NYT::TNode fullSpecYson;

@@ -601,7 +601,7 @@ public:
             const TTabletInfo& tablet = pr.second;
             ui64 index = EqualRange(tabletIdIndex.begin(), tabletIdIndex.end(), id).first - tabletIdIndex.begin();
 
-            out << "<tr title='" << tablet.GetResourceValues().DebugString() << "'>";
+            out << "<tr>";
             out << "<td data-text='" << index << "'><a href='../tablets?TabletID=" << id << "'>" << id << "</a></td>";
             out << GetResourceValuesHtml(tablet.GetResourceValues());
             out << "<td>" << tablet.UsageImpact << "</td>";
@@ -3790,8 +3790,30 @@ public:
         return result;
     }
 
-    static NJson::TJsonValue MakeFrom(const NKikimrTabletBase::TMetrics& metrics) {
-        return MakeFrom((const NProtoBuf::Message&)metrics);
+    static NJson::TJsonValue MakeFrom(const NKikimrTabletBase::TThroughputRecord& record) {
+        return MakeFrom((const NProtoBuf::Message&)record);
+    }
+
+    static NJson::TJsonValue MakeFrom(const NKikimrTabletBase::TIopsRecord& record) {
+        return MakeFrom((const NProtoBuf::Message&)record);
+    }
+
+    static NJson::TJsonValue MakeFrom(const TMetrics& metrics) {
+        NJson::TJsonValue result;
+        result["CPU"] = metrics.CPU;
+        result["Memory"] = metrics.Memory;
+        result["Network"] = metrics.Network;
+        result["Counter"] = metrics.Counter;
+        result["Storage"] = metrics.Storage;
+        result["ReadThroughput"] = metrics.ReadThroughput;
+        result["WriteThroughput"] = metrics.WriteThroughput;
+        result["ReadIops"] = metrics.ReadIops;
+        result["WriteIops"] = metrics.WriteIops;
+        result["GroupReadThroughput"] = MakeFrom(metrics.GroupReadThroughput);
+        result["GroupWriteThroughput"] = MakeFrom(metrics.GroupWriteThroughput);
+        result["GroupReadIops"] = MakeFrom(metrics.GroupReadIops);
+        result["GroupWriteIops"] = MakeFrom(metrics.GroupWriteIops);
+        return result;
     }
 
     static NJson::TJsonValue MakeFrom(const TTabletMetricsAggregates& aggregates) {

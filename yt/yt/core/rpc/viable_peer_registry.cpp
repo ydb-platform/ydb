@@ -285,7 +285,7 @@ public:
         }
 
         IChannelPtr channel;
-        if (hedgingOptions && hedgingOptions->HedgingManager && ActivePeerToPriority_.Size() >= 2) {
+        if (hedgingOptions && ActivePeerToPriority_.Size() >= 2) {
             auto peers = PickRandomPeers(/*peerCount*/ 2);
             const auto& primaryPeer = peers[0];
             const auto& backupPeer = peers[1];

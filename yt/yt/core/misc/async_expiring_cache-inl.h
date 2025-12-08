@@ -72,7 +72,7 @@ void TAsyncExpiringCache<TKey, TValue>::EnsureStarted()
         if (Started_.load(std::memory_order::relaxed)) {
             return;
         }
-        auto startedWithAnotherThread = Started_.exchange(true, std::memory_order::relaxed);
+        auto startedWithAnotherThread = Started_.exchange(true);
         if (startedWithAnotherThread) {
             return;
         }

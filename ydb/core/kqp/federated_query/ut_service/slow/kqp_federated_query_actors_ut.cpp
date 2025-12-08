@@ -15,18 +15,18 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
     Y_UNIT_TEST(SchemeCacheRecoverAfterLookupErrorFails) {
         TKikimrSettings settings;
         // SchemeCache will return only retry errors, so secrets retrieval will be slow due to retries and never succeed
-        auto modifier = MakeHolder<TTestSchemeCacheResponseModifier>(
-            TTestSchemeCacheResponseModifier::EFailProbablity::FailProbabilityAlways);
+        auto schemeCacheStatusGetter = MakeHolder<TTestSchemeCacheStatusGetter>(
+            TTestSchemeCacheStatusGetter::EFailProbablity::Always);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
             /* secretUpdateListener */ nullptr,
-            modifier.Get());
+            schemeCacheStatusGetter.Get());
         settings.SetDescribeSchemaSecretsServiceFactory(factory);
         TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        static const auto SECRETS_CNT = 10;
+        static const auto SECRETS_CNT = 20;
         std::vector<std::pair<TString, TString>> secrets;
         for (int i = 0; i < SECRETS_CNT; ++i) {
             secrets.push_back({"/Root/secret-name-" + ToString(i), "secret-value-" + ToString(i)});
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
         }
 
         // SchemeCache will return OK responses, so secrets retrieval should be fast and succeeded
-        modifier->SetFailProbablitity(TTestSchemeCacheResponseModifier::EFailProbablity::FailProbabilityNever);
+        schemeCacheStatusGetter->SetFailProbablitity(TTestSchemeCacheStatusGetter::EFailProbablity::None);
         promises.clear();
         for (const auto& [secretName, secretValue] : secrets) {
             promises.push_back(ResolveSecret(secretName, kikimr));

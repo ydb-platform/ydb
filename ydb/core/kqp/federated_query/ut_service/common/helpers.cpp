@@ -62,52 +62,48 @@ namespace NKikimr::NKqp {
 
     TTestDescribeSchemaSecretsServiceFactory::TTestDescribeSchemaSecretsServiceFactory(
         TDescribeSchemaSecretsService::ISecretUpdateListener* secretUpdateListener,
-        TDescribeSchemaSecretsService::ISchemeCacheResponseModifier* schemeCacheResponseModifier
+        TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter
     )
         : SecretUpdateListener(secretUpdateListener)
-        , SchemeCacheResponseModifier(schemeCacheResponseModifier)
+        , SchemeCacheStatusGetter(schemeCacheStatusGetter)
     {
     }
 
     NActors::IActor* TTestDescribeSchemaSecretsServiceFactory::CreateService() {
         auto* service = new TDescribeSchemaSecretsService();
         service->SetSecretUpdateListener(SecretUpdateListener);
-        service->SetSchemeCacheResponseModifier(SchemeCacheResponseModifier);
+        service->SetSchemeCacheStatusGetter(SchemeCacheStatusGetter);
         return service;
     }
 
-    TTestSchemeCacheResponseModifier::TTestSchemeCacheResponseModifier(EFailProbablity failProbablitity)
+    TTestSchemeCacheStatusGetter::TTestSchemeCacheStatusGetter(EFailProbablity failProbablitity)
         : FailProbablitity(failProbablitity)
     {
     }
 
-    void TTestSchemeCacheResponseModifier::Modify(NSchemeCache::TSchemeCacheNavigate& result) {
-        for (auto& entry: result.ResultSet) {
-            switch (FailProbablitity) {
-                case EFailProbablity::FailProbabilityNever:
-                    return;
-                case EFailProbablity::FailProbabilityQuoter: {
-                    if (rand() % 4 == 0) {
-                        entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
-                    }
-                    break;
-                }
-                case EFailProbablity::FailProbabilityHalf: {
-                    if (rand() % 2 == 0) {
-                        entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
-                    }
-                    break;
-                }
-                case EFailProbablity::FailProbabilityAlways:
+   NSchemeCache::TSchemeCacheNavigate::EStatus TTestSchemeCacheStatusGetter::GetStatus(
+            NSchemeCache::TSchemeCacheNavigate::TEntry& entry) const {
+        switch (FailProbablitity) {
+            case EFailProbablity::None:
+                return entry.Status;
+            case EFailProbablity::OneTenth: {
+                if (rand() % 10 == 0) {
                     entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
-                    break;
-                default:
-                    Y_ENSURE(false, "Unexpected value");
+                }
+                break;
             }
+            case EFailProbablity::Always:
+                entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
+                break;
+            default:
+                Y_ENSURE(false, "Unexpected value");
         }
+
+        // unreachable
+        return entry.Status;
     }
 
-    void TTestSchemeCacheResponseModifier::SetFailProbablitity(EFailProbablity failProbablitity) {
+    void TTestSchemeCacheStatusGetter::SetFailProbablitity(EFailProbablity failProbablitity) {
         FailProbablitity = failProbablitity;    
     }
 

@@ -33,28 +33,28 @@ namespace NKikimr::NKqp {
     public:
         TTestDescribeSchemaSecretsServiceFactory(
             TDescribeSchemaSecretsService::ISecretUpdateListener* secretUpdateListener,
-            TDescribeSchemaSecretsService::ISchemeCacheResponseModifier* schemeCacheResponseModifier
+            TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter
         );
 
         NActors::IActor* CreateService() override;
 
     private:
         TDescribeSchemaSecretsService::ISecretUpdateListener* SecretUpdateListener;
-        TDescribeSchemaSecretsService::ISchemeCacheResponseModifier* SchemeCacheResponseModifier;
+        TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* SchemeCacheStatusGetter;
     };
 
-    class TTestSchemeCacheResponseModifier : public TDescribeSchemaSecretsService::ISchemeCacheResponseModifier {
+    class TTestSchemeCacheStatusGetter : public TDescribeSchemaSecretsService::ISchemeCacheStatusGetter {
     public:
         enum class EFailProbablity {
-            FailProbabilityNever = 0,
-            FailProbabilityQuoter = 1,
-            FailProbabilityHalf = 2,
-            FailProbabilityAlways = 3,
+            None = 0,
+            OneTenth = 1,
+            Always = 2,
         };
 
-        TTestSchemeCacheResponseModifier(EFailProbablity failProbablitity);
+        TTestSchemeCacheStatusGetter(EFailProbablity failProbablitity);
 
-        void Modify(NSchemeCache::TSchemeCacheNavigate& result) override;
+        NSchemeCache::TSchemeCacheNavigate::EStatus GetStatus(
+            NSchemeCache::TSchemeCacheNavigate::TEntry& entry) const override;
 
         void SetFailProbablitity(EFailProbablity failProbablitity);
 

@@ -110,6 +110,17 @@ IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector
     return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
 }
 
+// It's a hack so we can simulate Scheme Cache retryable errors
+NSchemeCache::TSchemeCacheNavigate::EStatus GetSchemeCacheEntryStatus(
+    const TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter,
+    NSchemeCache::TSchemeCacheNavigate::TEntry& entry)
+{
+    if (schemeCacheStatusGetter) {
+        return schemeCacheStatusGetter->GetStatus(entry);
+    }
+    return entry.Status;
+}
+
 }  // anonymous namespace
 
 void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
@@ -139,9 +150,6 @@ void TDescribeSchemaSecretsService::HandleIncomingRetryRequest(TEvResolveSecretR
 void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     const auto requestId = ev->Cookie;
     LOG_D(GetLogLabel("TEvNavigateKeySetResult", requestId));
-    if (SchemeCacheResponseModifier) {
-        SchemeCacheResponseModifier->Modify(*ev->Get()->Request);
-    }
 
     auto respIt = ResolveInFlight.find(requestId);
     Y_ENSURE(respIt != ResolveInFlight.end(), "such requestId is not registered");
@@ -280,8 +288,8 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
 
     bool retryableError = false;
     TString unresolvedSecretPath;
-    for (const auto& entry: result.ResultSet) {
-        switch (entry.Status) {
+    for (auto& entry: result.ResultSet) {
+        switch (GetSchemeCacheEntryStatus(SchemeCacheStatusGetter, entry)) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError: {
                 retryableError = true;
                 unresolvedSecretPath = CanonizePath(entry.Path);

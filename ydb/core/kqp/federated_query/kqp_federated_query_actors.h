@@ -128,17 +128,21 @@ public:
         virtual void HandleNotifyDelete(const TString& secretName) = 0;
         virtual ~ISecretUpdateListener() = default;
     };
+    // For tests only
     void SetSecretUpdateListener(ISecretUpdateListener* secretUpdateListener) {
         SecretUpdateListener = secretUpdateListener;
     }
 
-    class ISchemeCacheResponseModifier : public TThrRefBase {
+    // For tests only
+    class ISchemeCacheStatusGetter : public TThrRefBase {
     public:
-        virtual void Modify(NSchemeCache::TSchemeCacheNavigate& result) = 0;
-        virtual ~ISchemeCacheResponseModifier() = default;
+        virtual NSchemeCache::TSchemeCacheNavigate::EStatus GetStatus(
+            NSchemeCache::TSchemeCacheNavigate::TEntry& entry) const = 0;
+        virtual ~ISchemeCacheStatusGetter() = default;
     };
-    void SetSchemeCacheResponseModifier(ISchemeCacheResponseModifier* modifier) {
-        SchemeCacheResponseModifier = modifier;
+    // For tests only
+    void SetSchemeCacheStatusGetter(ISchemeCacheStatusGetter* schemeCacheStatusGetter) {
+        SchemeCacheStatusGetter = schemeCacheStatusGetter;
     }
 
 private:
@@ -147,8 +151,8 @@ private:
     THashMap<ui64, TResponseContext> ResolveInFlight;
     THashMap<TString, TVersionedSecret> VersionedSecrets;
     THashMap<TString, TActorId> SchemeBoardSubscribers;
-    ISecretUpdateListener* SecretUpdateListener;
-    ISchemeCacheResponseModifier* SchemeCacheResponseModifier;
+    ISecretUpdateListener* SecretUpdateListener = nullptr;
+    ISchemeCacheStatusGetter* SchemeCacheStatusGetter = nullptr;
 };
 
 void RegisterDescribeSecretsActor(

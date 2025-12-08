@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import logging
-import copy
 
 import pytest
 
@@ -47,13 +46,6 @@ CLUSTER_CONFIG = dict(
     # make all bootstrap and setup under this user
     default_clusteradmin='root@builtin',
 )
-
-
-# fixtures.ydb_cluster_configuration local override
-@pytest.fixture(scope='module')
-def ydb_cluster_configuration():
-    conf = copy.deepcopy(CLUSTER_CONFIG)
-    return conf
 
 
 @pytest.fixture(scope='module')

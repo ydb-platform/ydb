@@ -7,8 +7,12 @@ TInteractiveLogger::TEntry::TEntry(std::shared_ptr<TLog> log, ELogPriority prior
     , Log(log)
 {}
 
+bool TInteractiveLogger::TEntry::LogEnabled() const {
+    return Log && Log->IsOpen() && Log->FiltrationLevel() >= Priority;
+}
+
 TInteractiveLogger::TEntry::~TEntry() {
-    if (Log && Log->IsOpen() && Log->FiltrationLevel() >= Priority) {
+    if (LogEnabled()) {
         Log->Write(Priority, *this);
     }
 }

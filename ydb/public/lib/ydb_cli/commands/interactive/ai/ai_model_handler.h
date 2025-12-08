@@ -15,6 +15,7 @@ class TModelHandler {
 public:
     struct TSettings {
         TInteractiveConfigurationManager::TAiProfile::TPtr Profile;
+        TString Prompt; // Current interactive CLI prompt
         TString Database;
         TDriver Driver;
     };

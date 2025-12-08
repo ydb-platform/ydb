@@ -1,6 +1,7 @@
 #include "ai_model_handler.h"
 
 #include <ydb/core/base/validation.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_anthropic.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_openai.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_query_tool.h>
@@ -76,25 +77,34 @@ void TModelHandler::HandleLine(const TString& input) {
             Cout << Endl << StripStringRight(output.Text) << Endl;
         }
 
+        std::vector<TString> userMessages;
         for (const auto& toolCall : output.ToolCalls) {
             NAi::IModel::TToolResponse response = {.ToolCallId = toolCall.Id};
 
             if (const auto it = Tools.find(toolCall.Name); it != Tools.end()) {
-                const auto& result = it->second->Execute(toolCall.Parameters);
+                auto result = it->second->Execute(toolCall.Parameters);
+                if (result.UserMessage) {
+                    YDB_CLI_LOG(Debug, "User message during tool call: " << result.ToolResult);
+                    userMessages.emplace_back(std::move(result.UserMessage));
+                }
                 if (!result.IsSuccess) {
-                    Log.Warning() << "Tool call failed: " << result.Text;
+                    YDB_CLI_LOG(Warning, "Tool call failed: " << result.ToolResult);
                 }
                 response.IsSuccess = result.IsSuccess;
-                response.Text = result.Text;
+                response.Text = std::move(result.ToolResult);
             } else {
-                Log.Warning() << "Call to unknown tool: " << toolCall.Name;
+                YDB_CLI_LOG(Warning, "Call to unknown tool: " << toolCall.Name);
                 response.IsSuccess = false;
                 response.Text = TStringBuilder() << "Call to unknown tool: " << toolCall.Name << ". Only allowed tools: " << PrintToolsNames(Tools);
-                messages.push_back(response);
             }
 
             messages.emplace_back(std::move(response));
         }
+
+        for (auto& message : userMessages) {
+            messages.emplace_back(IModel::TUserMessage{.Text = std::move(message)});
+        }
+        userMessages.clear();
     }
 
     Cout << Endl;
@@ -137,7 +147,7 @@ void TModelHandler::SetupTools(const TSettings& settings) {
 
     Tools = {
         {"list_directory", NAi::CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
-        {"exec_query", NAi::CreateExecQueryTool({.Driver = settings.Driver}, Log)},
+        {"exec_query", NAi::CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver}, Log)},
     };
 
     for (const auto& [name, tool] : Tools) {

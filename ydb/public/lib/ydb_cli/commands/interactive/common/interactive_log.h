@@ -11,6 +11,8 @@ class TInteractiveLogger {
     public:
         TEntry(std::shared_ptr<TLog> log, ELogPriority priority);
 
+        bool LogEnabled() const;
+
         ~TEntry();
 
     private:

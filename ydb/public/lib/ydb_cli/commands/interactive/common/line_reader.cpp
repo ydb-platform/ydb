@@ -1,10 +1,10 @@
 #include "line_reader.h"
 
 #include <ydb/core/base/validation.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
-#include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
 #include <yql/essentials/sql/v1/complete/text/word.h>
@@ -82,11 +82,11 @@ public:
         , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
     {}
 
-    void Setup(const TSessionSettings& settings) final {
+    void Setup(const TSettings& settings) final {
         Prompt = settings.Prompt;
         HelpMessage = settings.HelpMessage;
 
-        InitReplxx(settings.EnableYqlCompletion);
+        InitReplxx(settings.EnableYqlCompletion, settings.EnableSwitchMode);
         Y_DEBUG_VERIFY(Rx);
 
         for (const auto& [key, action] : settings.KeyHandlers) {
@@ -97,7 +97,7 @@ public:
             KeyHandlers.erase(key);
         }
         for (const auto& [key, action] : KeyHandlers) {
-            Rx->bind_key(replxx::Replxx::KEY::control(key), [&, action](char32_t) { return replxx::Replxx::ACTION_RESULT::CONTINUE; });
+            Rx->bind_key(replxx::Replxx::KEY::control(key), [](char32_t) { return replxx::Replxx::ACTION_RESULT::CONTINUE; });
         }
         KeyHandlers = settings.KeyHandlers;
 
@@ -106,23 +106,27 @@ public:
             if (const auto fileLockGuard = TFileHandlerLockGuard::Lock(History->GetHandle())) {
                 Rx->set_unique_history(true);
                 if (!Rx->history_load(History->GetPath())) {
-                    Log.Error() << "Loading history failed: " << strerror(errno);
+                    YDB_CLI_LOG(Error, "Loading history failed: " << strerror(errno));
                 }
             } else {
-                Log.Error() << "Lock of history file failed: " << strerror(errno);
+                YDB_CLI_LOG(Error, "Lock of history file failed: " << strerror(errno));
             }
         }
     }
 
-    std::optional<std::variant<TLine, TSwitch>> ReadLine() final {
+    std::optional<std::variant<TLine, TSwitch>> ReadLine(const TString& defaultValue) final {
         Y_DEBUG_VERIFY(Rx, "Can not read lines before Setup call");
+
+        if (defaultValue) {
+            Rx->set_preload_buffer(defaultValue);
+        }
 
         while (true) {
             const char* input = nullptr;
             try {
                 input = Rx->input(Prompt.c_str());
             } catch (const std::exception& e) {
-                Log.Error() << "Failed to read line: " << e.what();
+                YDB_CLI_LOG(Error, "Failed to read line: " << e.what());
                 continue;
             }
 
@@ -152,7 +156,7 @@ public:
     }
 
 private:
-    void InitReplxx(bool enableCompletion) {
+    void InitReplxx(bool enableCompletion, bool enableSwitchMode) {
         if (Rx) {
             Finish();
             Rx.reset();
@@ -181,29 +185,43 @@ private:
         Rx->bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) {
             return Rx->invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code);
         });
+
         Rx->bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) {
             return Rx->invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code);
         });
+
         Rx->bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) {
             return replxx::Replxx::ACTION_RESULT::BAIL;
         });
+
         Rx->bind_key(replxx::Replxx::KEY::control('J'), [&](char32_t code) {
             return Rx->invoke(replxx::Replxx::ACTION::COMMIT_LINE, code);
         });
+
         Rx->bind_key(replxx::Replxx::KEY::control('O'), [&](char32_t) {
             Rx->invoke(replxx::Replxx::ACTION::INSERT_CHARACTER, '\n');
             return replxx::Replxx::ACTION_RESULT::CONTINUE;
         });
-        Rx->bind_key(replxx::Replxx::KEY::control('K'), [&](char32_t code) {
-            ClearScreen();
-            Cout << Endl << HelpMessage << Endl;
-            return Rx->invoke(replxx::Replxx::ACTION::ABORT_LINE, code);
-        });
-        Rx->bind_key(replxx::Replxx::KEY::control('T'), [&](char32_t) {
-            SwitchRequested = true;
-            ClearScreen();
-            return replxx::Replxx::ACTION_RESULT::BAIL;
-        });
+
+        if (HelpMessage) {
+            Rx->bind_key(replxx::Replxx::KEY::control('K'), [&](char32_t code) {
+                ClearScreen();
+                Cout << Endl << HelpMessage << Endl;
+                return Rx->invoke(replxx::Replxx::ACTION::ABORT_LINE, code);
+            });
+        } else {
+            ResetKeyHandler('K');
+        }
+
+        if (enableSwitchMode) {
+            Rx->bind_key(replxx::Replxx::KEY::control('T'), [&](char32_t) {
+                SwitchRequested = true;
+                ClearScreen();
+                return replxx::Replxx::ACTION_RESULT::BAIL;
+            });
+        } else {
+            ResetKeyHandler('T');
+        }
 
         for (const auto [lhs, rhs] : THashMap<char, char>{
             {'(', ')'},
@@ -222,11 +240,21 @@ private:
         Rx->enable_bracketed_paste();
     }
 
-    void UpdateHistoryPath(const TString& path) {
+    void ResetKeyHandler(char key) {
+        Y_DEBUG_VERIFY(Rx, "Replxx is not initialized");
+        Rx->bind_key(replxx::Replxx::KEY::control(key), [](char32_t) { return replxx::Replxx::ACTION_RESULT::CONTINUE; });
+    }
+
+    void UpdateHistoryPath(const std::optional<TString>& path) {
+        if (!path) {
+            History.reset();
+            return;
+        }
+
         try {
-            History = THistory(path);
+            History = THistory(*path);
         } catch (const std::exception& e) {
-            Log.Error() << "Failed to setup history path '" << path << "': " << e.what();
+            YDB_CLI_LOG(Error, "Failed to setup history path '" << path << "': " << e.what());
         }
     }
 
@@ -234,16 +262,16 @@ private:
         Rx->history_add(line);
 
         if (!History) {
-            Log.Notice() << "Skip save line '" << line << "' to history, history storage is not set.";
+            YDB_CLI_LOG(Notice, "Skip save line '" << line << "' to history, history storage is not set.");
             return;
         }
 
         if (const auto fileLockGuard = TFileHandlerLockGuard::Lock(History->GetHandle())) {
             if (!Rx->history_save(History->GetPath())) {
-                Log.Error() << "Save history failed: " << strerror(errno);
+                YDB_CLI_LOG(Error, "Save history failed: " << strerror(errno));
             }
         } else {
-            Log.Error() << "Lock of history file failed: " << strerror(errno);
+            YDB_CLI_LOG(Error, "Lock of history file failed: " << strerror(errno));
         }
     }
 
@@ -258,7 +286,7 @@ private:
     std::optional<replxx::Replxx> Rx;
 
     TString Prompt;
-    TString HelpMessage;
+    std::optional<TString> HelpMessage;
     std::optional<THistory> History;
     std::unordered_map<char, std::function<void()>> KeyHandlers;
     bool SwitchRequested = false;

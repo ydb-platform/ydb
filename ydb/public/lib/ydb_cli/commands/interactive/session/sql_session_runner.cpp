@@ -130,7 +130,7 @@ private:
             << Endl << "By default, any input is treated as an YQL query and sent directly to the YDB server." << Endl;
     }
 
-    static TSessionSettings CreateSessionSettings(const TSqlSessionSettings& settings) {
+    static ILineReader::TSettings CreateSessionSettings(const TSqlSessionSettings& settings) {
         return {
             .Prompt = TStringBuilder() << Colors.LightGreen() << (settings.ProfileName ? settings.ProfileName : "ydb") << Colors.OldColor() << "> ",
             .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_sql_history.txt",

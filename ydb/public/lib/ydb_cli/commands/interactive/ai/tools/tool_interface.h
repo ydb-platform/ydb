@@ -13,12 +13,14 @@ public:
     virtual ~ITool() = default;
 
     struct TResponse {
-        TString Text;
+        // Response will be sent into API in order ToolResult -> UserMessage
+        TString UserMessage;
+        TString ToolResult;
         bool IsSuccess = true;
 
-        explicit TResponse(const TString& error);
+        explicit TResponse(const TString& error, const TString& userMessage = "");
 
-        explicit TResponse(const NJson::TJsonValue& result);
+        explicit TResponse(const NJson::TJsonValue& result, const TString& userMessage = "");
     };
 
     virtual const NJson::TJsonValue& GetParametersSchema() const = 0;

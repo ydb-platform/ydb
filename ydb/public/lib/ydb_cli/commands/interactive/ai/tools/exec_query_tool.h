@@ -7,6 +7,8 @@
 namespace NYdb::NConsoleClient::NAi {
 
 struct TExecQueryToolSettings {
+    TString Prompt; // Current interactive CLI prompt
+    TString Database;
     TDriver Driver;
 };
 

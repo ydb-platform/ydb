@@ -1,6 +1,7 @@
 #include "model_base.h"
 
 #include <ydb/core/base/validation.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 
@@ -48,14 +49,14 @@ TModelBase::TModelBase(const TString& apiUrl, const TString& authToken, const TI
     , HttpGateway(NYql::IHTTPGateway::Make())
 {
     Y_DEBUG_VERIFY(apiUrl, "Internal error. Url should not be empty for model API");
-    Log.Notice() << "Using model API url: \"" << apiUrl << "\" with " << (authToken ? TStringBuilder() << "auth token " << BlurSecret(authToken) : TStringBuilder() << "anonymous access");
+    YDB_CLI_LOG(Notice, "Using model API url: \"" << apiUrl << "\" with " << (authToken ? TStringBuilder() << "auth token " << BlurSecret(authToken) : TStringBuilder() << "anonymous access"));
 }
 
 TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& messages) {
     Y_DEBUG_VERIFY(!messages.empty(), "Internal error. Messages should not be empty for advance conversation");
 
     AdvanceConversation(messages);
-    Log.Debug() << "Request to model API body:\n" << FormatJsonValue(ChatCompletionRequest);
+    YDB_CLI_LOG(Debug, "Request to model API body:\n" << FormatJsonValue(ChatCompletionRequest));
 
     NJsonWriter::TBuf requestJsonWriter;
     requestJsonWriter.WriteJsonValue(&ChatCompletionRequest);
@@ -80,8 +81,8 @@ TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& me
     HttpGateway->Upload(ApiUrl, ApiHeaders, std::move(request), std::move(httpCallback));
     const auto response = responsePromise.GetFuture().ExtractValueSync();
 
-    Log.Info() << "Model API response http code: " << response.HttpCode;
-    Log.Debug() << "Model API response:" << Endl << FormatJsonValue(response.Content);
+    YDB_CLI_LOG(Info, "Model API response http code: " << response.HttpCode);
+    YDB_CLI_LOG(Debug, "Model API response:" << Endl << FormatJsonValue(response.Content));
     if (!response.IsSuccess()) {
         throw yexception() << HandleErrorResponse(response.HttpCode, response.Content);
     }

@@ -4,13 +4,15 @@
 
 namespace NYdb::NConsoleClient::NAi {
 
-ITool::TResponse::TResponse(const TString& error)
-    : Text(error)
+ITool::TResponse::TResponse(const TString& error, const TString& userMessage)
+    : UserMessage(userMessage)
+    , ToolResult(error)
     , IsSuccess(false)
 {}
 
-ITool::TResponse::TResponse(const NJson::TJsonValue& result)
-    : Text(FormatJsonValue(result))
+ITool::TResponse::TResponse(const NJson::TJsonValue& result, const TString& userMessage)
+    : UserMessage(userMessage)
+    , ToolResult(FormatJsonValue(result))
     , IsSuccess(true)
 {}
 

@@ -1,5 +1,6 @@
 #include "tool_base.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -22,19 +23,19 @@ TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
     try {
         ParseParameters(parameters);
     } catch (const std::exception& e) {
-        Log.Warning() << "Failed to parse parameters of tool: " << e.what();
+        YDB_CLI_LOG(Warning, "Failed to parse parameters of tool: " << e.what());
         return TResponse(TStringBuilder() << "Failed to parse parameters of tool: " << e.what() << "\n" << "Parameters schema: " << FormatJsonValue(ParametersSchema));
     }
 
     if (!AskPermissions()) {
-        Log.Notice() << "Tool execution cancelled by user";
+        YDB_CLI_LOG(Notice, "Tool execution cancelled by user");
         return TResponse(TStringBuilder() << "Tool execution request was rejected by the user (execution is not permited)");
     }
 
     try {
         return DoExecute();
     } catch (const std::exception& e) {
-        Log.Warning() << "Failed to execute tool: " << e.what();
+        YDB_CLI_LOG(Warning, "Failed to execute tool: " << e.what());
         return TResponse(TStringBuilder() << "Failed to execute tool: " << e.what());
     }
 }

@@ -4,7 +4,7 @@
 
 namespace NYdb::NConsoleClient {
 
-TSessionRunnerBase::TSessionRunnerBase(const TSessionSettings& settings, const TInteractiveLogger& log)
+TSessionRunnerBase::TSessionRunnerBase(const ILineReader::TSettings& settings, const TInteractiveLogger& log)
     : Log(log)
     , Settings(settings)
 {}

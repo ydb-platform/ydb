@@ -2,7 +2,8 @@
 
 #include <ydb/core/base/validation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/line_reader.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/ai_session_runner.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/sql_session_runner.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
@@ -36,7 +37,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     try {
         cliVersion = StripString(NResource::Find(TStringBuf(VersionResourceName)));
     } catch (const std::exception& e) {
-        Log.Error() << "Couldn't read version from resource: " << e.what();
+        YDB_CLI_LOG(Error, "Couldn't read version from resource: " << e.what());
         cliVersion.clear();
     }
 
@@ -63,7 +64,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
             Cerr << Endl << colors.Red() << "Couldn't parse server version: " << colors.OldColor() << e.what() << Endl;
         }
     } else {
-        Log.Error() << "Couldn't read version from YDB server:" << Endl << TStatus(selectVersionResult);
+        YDB_CLI_LOG(Error, "Couldn't read version from YDB server:" << Endl << TStatus(selectVersionResult));
     }
 
     if (!serverVersion.empty()) {
@@ -103,7 +104,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     const auto lineReader = CreateLineReader(driver, config.Database, Log);
     if (!sessions[activeSession]->Setup(lineReader)) {
-        Log.Error() << "Failed to perform initial setup in " << (activeSession ? "AI" : "SQL") << " mode";
+        YDB_CLI_LOG(Error, "Failed to perform initial setup in " << (activeSession ? "AI" : "SQL") << " mode");
         Y_DEBUG_VERIFY(sessions[activeSession ^= 1]->Setup(lineReader));
     }
 
@@ -112,9 +113,9 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         if (std::holds_alternative<ILineReader::TSwitch>(input)) {
             activeSession ^= 1;
             if (sessions[activeSession]->Setup(lineReader)) {
-                Log.Info() << "Switching to " << (activeSession ? "AI" : "SQL") << " mode";
+                YDB_CLI_LOG(Info, "Switching to " << (activeSession ? "AI" : "SQL") << " mode");
             } else {
-                Log.Error() << "Failed to switch to " << (activeSession ? "AI" : "SQL") << " mode";
+                YDB_CLI_LOG(Error, "Failed to switch to " << (activeSession ? "AI" : "SQL") << " mode");
                 Y_DEBUG_VERIFY(sessions[activeSession ^= 1]->Setup(lineReader));
             }
             continue;

@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/validation.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/ai_model_handler.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
 namespace NYdb::NConsoleClient {
@@ -33,7 +34,7 @@ public:
             try {
                 Controller->Setup(Settings);
             } catch (...) {
-                Log.Critical() << "Failed to reset line reader controller: " << CurrentExceptionMessage();
+                YDB_CLI_LOG(Critical, "Failed to reset line reader controller: " << CurrentExceptionMessage());
             }
         }
     }
@@ -59,7 +60,7 @@ public:
 
         if (!ModelHandler) {
             try {
-                ModelHandler = TModelHandler({.Profile = AiModel, .Database = Database, .Driver = Driver}, Log);
+                ModelHandler = TModelHandler({.Profile = AiModel, .Prompt = Settings.Prompt, .Database = Database, .Driver = Driver}, Log);
             } catch (const std::exception& e) {
                 ModelHandler = std::nullopt;
                 Cerr << Colors.Red() << "Failed to setup AI model session. "
@@ -88,7 +89,7 @@ private:
             << Colors.Cyan() << (aiProfile ? aiProfile : "ai") << Colors.OldColor() << "> ";
     }
 
-    static TSessionSettings CreateSessionSettings(const TAiSessionSettings& settings) {
+    static ILineReader::TSettings CreateSessionSettings(const TAiSessionSettings& settings) {
         return {
             .Prompt = CreatePromptPrefix(settings.ProfileName, settings.ConfigurationManager->GetActiveAiProfileName()),
             .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_ai_history.txt",

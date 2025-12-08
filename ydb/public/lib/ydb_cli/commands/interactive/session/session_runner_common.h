@@ -15,7 +15,7 @@ protected:
     inline const static NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
 
 public:
-    TSessionRunnerBase(const TSessionSettings& settings, const TInteractiveLogger& log);
+    TSessionRunnerBase(const ILineReader::TSettings& settings, const TInteractiveLogger& log);
 
     virtual bool Setup(ILineReaderController::TPtr controller) override;
 
@@ -29,7 +29,7 @@ protected:
 protected:
     TInteractiveLogger Log;
     ILineReaderController::TPtr Controller;
-    TSessionSettings Settings;
+    ILineReader::TSettings Settings;
 };
 
 } // namespace NYdb::NConsoleClient

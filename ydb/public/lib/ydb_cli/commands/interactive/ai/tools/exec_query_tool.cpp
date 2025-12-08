@@ -4,6 +4,7 @@
 #include <ydb/core/base/validation.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
@@ -116,13 +117,17 @@ public:
     TExecQueryTool(const TExecQueryToolSettings& settings, const TInteractiveLogger& log)
         : TBase(CreateParametersSchema(), DESCRIPTION, log)
         , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
+        , Prompt(settings.Prompt)
+        , Database(settings.Database)
+        , Driver(settings.Driver)
         , ExecuteRunner(settings.Driver, Log)
     {}
 
-private:
+protected:
     void ParseParameters(const NJson::TJsonValue& parameters) final {
         TJsonParser parser(parameters);
         Query = Strip(parser.GetKey(QUERY_PROPERTY).GetString());
+        UserMessage = "";
     }
 
     bool AskPermissions() final {
@@ -157,23 +162,52 @@ private:
             return true;
         }, Log.IsVerbose(), /* exitOnError */ false);
 
+        if (action == EAction::Edit) {
+            return RequestQueryText();
+        }
+
+        Cout << Endl;
         return action == EAction::Approve;
     }
 
     TResponse DoExecute() final {
-        Cout << Endl;
-
         try {
             if (ExecuteRunner.Execute(Query, {}) != EXIT_SUCCESS) {
                 Log.Notice() << "Query execution was interrupted by user";
-                return TResponse(TStringBuilder() << "Query execution was interrupted by user");
+                return TResponse(TStringBuilder() << "Query execution was interrupted by user", UserMessage);
             }
         } catch (const std::exception& e) {
             Cout << Colors.Red() << "Query execution failed:\n" << Colors.OldColor() << e.what() << Endl;
-            return TResponse(TStringBuilder() << "Query execution failed with error:\n" << e.what());
+            return TResponse(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
-        return TResponse(ExecuteRunner.ExtractResults());
+        return TResponse(ExecuteRunner.ExtractResults(), UserMessage);
+    }
+
+private:
+    bool RequestQueryText() {
+        Cout << Endl;
+
+        const auto lineReader = CreateLineReader({.Driver = Driver, .Database = Database, .ContinueAfterCancel = false}, Log);
+        lineReader->Setup({
+            .Prompt = TStringBuilder() << Prompt << Colors.Yellow() << "YQL" << Colors.OldColor() << "> ",
+            .EnableSwitchMode = false,
+        });
+
+        auto response = lineReader->ReadLine(Query);
+        lineReader->Finish();
+        if (!response) {
+            return false;
+        }
+
+        Y_DEBUG_VERIFY(std::holds_alternative<ILineReader::TLine>(*response));
+        TString newText = std::move(std::get<ILineReader::TLine>(*std::move(response)).Data);
+        UserMessage = TStringBuilder()
+            << "I decided to change query text manually to:\n" << newText << "\nPrevious query text:\n" << Query
+            << "\n I already get query results (they connected to your tool call), so there is no need to execute query twice, you can continue task";
+
+        Query = std::move(newText);
+        return true;
     }
 
     static NJson::TJsonValue CreateParametersSchema() {
@@ -188,9 +222,13 @@ private:
 
 private:
     const IYQLHighlighter::TPtr YQLHighlighter;
+    const TString Prompt;
+    const TString Database;
+    const TDriver Driver;
     TQueryRunner ExecuteRunner;
 
     TString Query;
+    TString UserMessage;
 };
 
 } // anonymous namespace

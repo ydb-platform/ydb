@@ -2,6 +2,7 @@
 #include "api_utils.h"
 
 #include <ydb/core/base/validation.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 
@@ -47,14 +48,14 @@ std::optional<TInteractiveConfigurationManager::TAiProfile::EApiType> TInteracti
     if (auto apiTypeNode = Config["api_type"]) {
         auto apiType = apiTypeNode.as<ui64>(static_cast<ui64>(EApiType::Invalid));
         if (apiType >= static_cast<ui64>(EMode::Invalid)) {
-            Log.Debug() << "AI profile \"" << Name << "\" has invalid API type: " << apiType << ", API type will be removed";
+            YDB_CLI_LOG(Debug, "AI profile \"" << Name << "\" has invalid API type: " << apiType << ", API type will be removed");
             return std::nullopt;
         }
 
         return static_cast<EApiType>(apiType);
     }
 
-    Log.Debug() << "AI profile \"" << Name << "\" has no API type";
+    YDB_CLI_LOG(Debug, "AI profile \"" << Name << "\" has no API type");
     return std::nullopt;
 }
 
@@ -62,13 +63,13 @@ TString TInteractiveConfigurationManager::TAiProfile::GetApiEndpoint() const {
     if (auto apiEndpoint = Config["api_endpoint"]) {
         auto endpoint = apiEndpoint.as<TString>("");
         if (!endpoint) {
-            Log.Debug() << "AI profile \"" << Name << "\" has invalid or empty API endpoint";
+            YDB_CLI_LOG(Debug, "AI profile \"" << Name << "\" has invalid or empty API endpoint");
         }
 
         return endpoint;
     }
 
-    Log.Debug() << "AI profile \"" << Name << "\" has no API endpoint";
+    YDB_CLI_LOG(Debug, "AI profile \"" << Name << "\" has no API endpoint");
     return "";
 }
 
@@ -79,7 +80,7 @@ TString TInteractiveConfigurationManager::TAiProfile::GetApiToken() const {
     }
 
     if (!token) {
-        Log.Debug() << "AI profile \"" << Name << "\" has no API token";
+        YDB_CLI_LOG(Debug, "AI profile \"" << Name << "\" has no API token");
     }
 
     return token;
@@ -92,7 +93,7 @@ TString TInteractiveConfigurationManager::TAiProfile::GetModelName() const {
     }
 
     if (!modelName) {
-        Log.Debug() << "AI profile \"" << Name << "\" has no model name";
+        YDB_CLI_LOG(Debug, "AI profile \"" << Name << "\" has no model name");
     }
 
     return modelName;
@@ -100,25 +101,25 @@ TString TInteractiveConfigurationManager::TAiProfile::GetModelName() const {
 
 bool TInteractiveConfigurationManager::TAiProfile::SetupProfile() {
     if (!SetupApiType()) {
-        Log.Notice() << "AI profile \"" << Name << "\" is not configured, no API type provided";
+        YDB_CLI_LOG(Notice, "AI profile \"" << Name << "\" is not configured, no API type provided");
         return false;
     }
 
     Cout << Endl;
     if (!SetupApiEndpoint()) {
-        Log.Notice() << "AI profile \"" << Name << "\" is not configured, no API endpoint provided";
+        YDB_CLI_LOG(Notice, "AI profile \"" << Name << "\" is not configured, no API endpoint provided");
         return false;
     }
 
     Cout << Endl;
     if (!SetupApiToken()) {
-        Log.Notice() << "AI profile \"" << Name << "\" is not configured, no API token provided";
+        YDB_CLI_LOG(Notice, "AI profile \"" << Name << "\" is not configured, no API token provided");
         return false;
     }
 
     Cout << Endl;
     if (!SetupModelName()) {
-        Log.Notice() << "AI profile \"" << Name << "\" is not configured, no model name provided";
+        YDB_CLI_LOG(Notice, "AI profile \"" << Name << "\" is not configured, no model name provided");
         return false;
     }
 
@@ -180,7 +181,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiType() {
 bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint() {
     const auto apiType = GetApiType();
     if (!apiType) {
-        Log.Warning() << "Can not setup API endpoint for AI profile \"" << Name << "\", there is no API type";
+        YDB_CLI_LOG(Warning, "Can not setup API endpoint for AI profile \"" << Name << "\", there is no API type");
         return false;
     }
 
@@ -330,7 +331,7 @@ TInteractiveConfigurationManager::EMode TInteractiveConfigurationManager::GetDef
     if (Config["interactive_settings"] && Config["interactive_settings"]["default_mode"]) {
         auto defaultMode = Config["interactive_settings"]["default_mode"].as<ui64>(static_cast<ui64>(EMode::Invalid));
         if (defaultMode >= static_cast<ui64>(EMode::Invalid)) {
-            Log.Warning() << "Interactive config has invalid default mode: " << defaultMode << ", falling back to YQL mode";
+            YDB_CLI_LOG(Warning, "Interactive config has invalid default mode: " << defaultMode << ", falling back to YQL mode");
             defaultMode = static_cast<ui64>(EMode::YQL);
         }
 
@@ -346,7 +347,7 @@ TString TInteractiveConfigurationManager::GetActiveAiProfileName() const {
             return activeProfile;
         }
 
-        Log.Warning() << "Current active profile has empty name, profile disabled";
+        YDB_CLI_LOG(Warning, "Current active profile has empty name, profile disabled");
     }
 
     return "";
@@ -368,24 +369,24 @@ std::unordered_map<TString, TInteractiveConfigurationManager::TAiProfile::TPtr> 
     for (const auto& profile : interactiveSettings["ai_profiles"]) {
         const auto& name = profile.first.as<TString>("");
         if (!name) {
-            Log.Warning() << "AI profile has no name, profile skipped";
+            YDB_CLI_LOG(Warning, "AI profile has no name, profile skipped");
             continue;
         }
 
         const auto& settings = profile.second;
         if (!settings.IsMap()) {
-            Log.Warning() << "AI profile \"" << name << "\" has unexpected type " << static_cast<ui64>(settings.Type()) << " instead of map, profile skipped";
+            YDB_CLI_LOG(Warning, "AI profile \"" << name << "\" has unexpected type " << static_cast<ui64>(settings.Type()) << " instead of map, profile skipped");
             continue;
         }
 
         auto aiProfile = std::make_shared<TAiProfile>(name, settings, shared_from_this(), Log);
         if (TString error; !aiProfile->IsValid(error)) {
-            Log.Warning() << "AI profile \"" << name << "\" is invalid: " << error << ", profile skipped";
+            YDB_CLI_LOG(Warning, "AI profile \"" << name << "\" is invalid: " << error << ", profile skipped");
             continue;
         }
 
         if (!existingAiProfiles.emplace(name, std::move(aiProfile)).second) {
-            Log.Warning() << "AI profile \"" << name << "\" already exists, profile skipped";
+            YDB_CLI_LOG(Warning, "AI profile \"" << name << "\" already exists, profile skipped");
         }
     }
 
@@ -473,14 +474,14 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
         ChangeActiveAiProfile(profileName);
     }
 
-    Log.Notice() << "AI profile \"" << profileName << "\" was created";
+    YDB_CLI_LOG(Notice, "AI profile \"" << profileName << "\" was created");
     return aiProfile;
 }
 
 void TInteractiveConfigurationManager::RemoveAiModelProfile(const TString& name) {
     if (Config["interactive_settings"] && Config["interactive_settings"]["ai_profiles"]) {
         if (!Config["interactive_settings"]["ai_profiles"].remove(name)) {
-            Log.Warning() << "AI profile \"" << name << "\" doesn't exist, profile removal skipped";       
+            YDB_CLI_LOG(Warning, "AI profile \"" << name << "\" doesn't exist, profile removal skipped");       
         }
         ConfigChanged = true;
     }
@@ -489,13 +490,13 @@ void TInteractiveConfigurationManager::RemoveAiModelProfile(const TString& name)
 void TInteractiveConfigurationManager::ChangeDefaultMode(EMode mode) {
     Config["interactive_settings"]["default_mode"] = static_cast<ui64>(mode);
     ConfigChanged = true;
-    Log.Info() << "Default interactive mode was changed to " << mode;
+    YDB_CLI_LOG(Info, "Default interactive mode was changed to " << mode);
 }
 
 void TInteractiveConfigurationManager::ChangeActiveAiProfile(const TString& name) {
     Config["interactive_settings"]["active_ai_profile"] = name;
     ConfigChanged = true;
-    Log.Info() << "Active AI profile was changed to \"" << name << "\"";
+    YDB_CLI_LOG(Info, "Active AI profile was changed to \"" << name << "\"");
 }
 
 void TInteractiveConfigurationManager::LoadProfile() {
@@ -507,7 +508,7 @@ void TInteractiveConfigurationManager::LoadProfile() {
             Config = YAML::LoadFile(configFilePath.GetPath());
         }
     } catch (...) {
-        Log.Critical() << "Couldn't load configuration from file \"" << ConfigurationPath << "\": " << CurrentExceptionMessage();
+        YDB_CLI_LOG(Critical, "Couldn't load configuration from file \"" << ConfigurationPath << "\": " << CurrentExceptionMessage());
     }
 }
 
@@ -518,14 +519,14 @@ void TInteractiveConfigurationManager::CanonizeStructure() {
     }
 
     if (!interactiveSettings.IsMap()) {
-        Log.Error() << "$.interactive_settings section has unexpected type " << static_cast<ui64>(interactiveSettings.Type()) << ", changed to map and cleared";
+        YDB_CLI_LOG(Error, "$.interactive_settings section has unexpected type " << static_cast<ui64>(interactiveSettings.Type()) << ", changed to map and cleared");
         Config["interactive_settings"] = YAML::Node();
         interactiveSettings = Config["interactive_settings"];
         ConfigChanged = true;
     }
 
     if (auto aiProfiles = interactiveSettings["ai_profiles"]; aiProfiles && !aiProfiles.IsMap()) {
-        Log.Error() << "$.interactive_settings.ai_profiles section has unexpected type " << static_cast<ui64>(interactiveSettings.Type()) << ", changed to map and cleared";
+        YDB_CLI_LOG(Error, "$.interactive_settings.ai_profiles section has unexpected type " << static_cast<ui64>(interactiveSettings.Type()) << ", changed to map and cleared");
         Config["interactive_settings"]["ai_profiles"] = YAML::Node();
         ConfigChanged = true;
     }
@@ -549,7 +550,7 @@ void TInteractiveConfigurationManager::SaveConfig() {
         TFileOutput resultConfigFile(TFile(configFilePath, CreateAlways | WrOnly | AWUser | ARUser));
         resultConfigFile << YAML::Dump(Config);
     } catch (...) {
-        Log.Critical() << "Couldn't save configuration to file \"" << ConfigurationPath << "\": " << CurrentExceptionMessage();
+        YDB_CLI_LOG(Critical, "Couldn't save configuration to file \"" << ConfigurationPath << "\": " << CurrentExceptionMessage());
     }
 }
 

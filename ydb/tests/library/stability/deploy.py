@@ -107,7 +107,7 @@ class StressUtilDeployer:
             deploy_futures = []
 
             processed_binaries = defaultdict(list)
-            with ThreadPoolExecutor(max_workers=10) as tpe:
+            with ThreadPoolExecutor(max_workers=30) as tpe:
                 for workload_name, workload_info in workload_params.items():
                     if workload_info['local_path'] in processed_binaries:
                         processed_binaries[workload_info['local_path']].append(workload_name)

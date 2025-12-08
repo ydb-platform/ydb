@@ -1023,6 +1023,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         {
             auto status = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
+                PRAGMA kikimr.OptEnableOlapPushdownProjections="true";
                 SELECT JSON_VALUE(json_payload, "$.f.g.h") FROM `/Root/olapTable` WHERE id = 1;
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
@@ -1036,6 +1037,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         {
             auto status = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
+                PRAGMA kikimr.OptEnableOlapPushdownProjections="true";
                 SELECT json_payload FROM `/Root/olapTable` WHERE id = 1;
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
@@ -1049,6 +1051,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         {
             auto status = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
+                PRAGMA kikimr.OptEnableOlapPushdownProjections="true";
                 SELECT JSON_VALUE(json_payload, "$.j") FROM `/Root/olapTable` WHERE id = 1;
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
@@ -1077,6 +1080,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         {
             auto status = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
+                PRAGMA kikimr.OptEnableOlapPushdownProjections="true";
                 SELECT JSON_VALUE(json_payload, "$.c") FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.a") = 'b"b"';
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
@@ -1090,6 +1094,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         {
             auto status = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
+                PRAGMA kikimr.OptEnableOlapPushdownProjections="true";
                 SELECT CAST(JSON_VALUE(json_payload, "$.c") AS Int32) FROM `/Root/olapTable` WHERE id = 1;
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());

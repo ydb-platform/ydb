@@ -162,6 +162,22 @@ def load_user_properties(test_dir):
     return all_properties
 
 
+def strip_rich_markup(text):
+    """Remove rich formatting tags like [[bad]], [[rst]], [[good]], etc. from text.
+    
+    Only removes known markup tags: imp, unimp, bad, warn, good, alt1, alt2, alt3, path, rst
+    to avoid breaking error messages that might contain square brackets.
+    """
+    if not text:
+        return text
+    # List of known markup tags from app.display
+    known_tags = ['imp', 'unimp', 'bad', 'warn', 'good', 'alt1', 'alt2', 'alt3', 'path', 'rst']
+    # Replace only known tags, preserving any other square bracket content
+    for tag in known_tags:
+        text = text.replace(f'[[{tag}]]', '')
+    return text
+
+
 def mute_test_result(result):
     """Mute a test result - set muted flag and change status to SKIPPED"""
     if result.get("status") in ("FAILED", "ERROR"):
@@ -255,6 +271,10 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                     if "properties" not in result:
                         result["properties"] = {}
                     result["properties"].update(user_properties[path_str][subtest_name])
+            
+            # Strip rich markup from rich-snippet (remove tags like [[bad]], [[rst]], etc.)
+            if "rich-snippet" in result and result["rich-snippet"]:
+                result["rich-snippet"] = strip_rich_markup(result["rich-snippet"])
 
         # Add logsdir for failed tests
         if has_fail_tests:

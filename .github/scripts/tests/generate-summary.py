@@ -125,24 +125,14 @@ class TestResult:
         Required fields: path, status
         Optional fields: name, subtest_name, error_type, rich-snippet, properties, links, metrics
         """
-        # Validate required fields
-        path_str = result.get("path")
-        if path_str is None:
-            raise ValueError(f"Missing required field 'path' in result: {result}")
-        
-        status_str = result.get("status")
-        if status_str is None:
-            raise ValueError(f"Missing required field 'status' in result: {result}")
-        
-        # Extract fields
+        # Extract fields with defaults (main's approach - more lenient)
+        path_str = result.get("path", "")
         name_part = result.get("name")
-        subtest_name = result.get("subtest_name")
-        error_type = result.get("error_type")
-        status_description = result.get("rich-snippet")
-        properties = result.get("properties")
-        metrics = result.get("metrics")
-        is_muted = bool(result.get("muted"))
+        subtest_name = result.get("subtest_name", "")
+        error_type = result.get("error_type", "")
+        status_description = result.get("rich-snippet", "")
         
+        # classname is the test path, name is constructed from name_part and subtest_name (HEAD's approach)
         classname = path_str
         if subtest_name and subtest_name.strip():
             if name_part:
@@ -152,46 +142,72 @@ class TestResult:
         else:
             name = name_part or ""
         
+        # Status can be "OK" or "PASSED" for passed tests
+        status_str = result.get("status", "OK")
         if status_str == "OK":
             status_str = "PASSED"
         
         # Map status to TestStatus enum
-        if is_muted:
+        # Check for timeout - this information is available in build-results-report but not in junit (main's logic)
+        is_timeout = error_type == "TIMEOUT" or "timeout" in error_type.lower() or "timeout" in (status_description or "").lower()
+        
+        if result.get("muted", False):
             status = TestStatus.MUTE
         elif status_str == "FAILED":
-            status = TestStatus.FAIL
+            if is_timeout:
+                # Timeout is a special case - mark as ERROR with timeout info
+                status = TestStatus.ERROR
+                if status_description and "timeout" not in status_description.lower():
+                    status_description = f"Timeout: {status_description}"
+            elif error_type == "REGULAR":
+                status = TestStatus.FAIL
+            else:
+                status = TestStatus.ERROR
         elif status_str == "ERROR":
             status = TestStatus.ERROR
+            if is_timeout and status_description and "timeout" not in status_description.lower():
+                status_description = f"Timeout: {status_description}"
         elif status_str == "SKIPPED":
             status = TestStatus.SKIP
         else:
             status = TestStatus.PASS
         
-        # Extract log URLs from links (updated by transform_build_results.py with URLs)
-        # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
-        links = result.get("links", {})
+        # Extract log URLs from properties or links (main's approach)
+        # In build-results-report, links is an object with arrays: {"stdout": ["/path"], "stderr": ["/path"]}
+        # Properties are added later by transform_build_results.py with URL format
+        log_urls = {}
+        properties = result.get("properties") or {}  # properties can be None
+        links = result.get("links") or {}  # links can be None
         
-        def get_link_url(link_type):
-            if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
-                return links[link_type][0]  # Take first URL from array
-            return None
+        # Check properties first (added by transform_build_results.py with URLs)
+        if isinstance(properties, dict):
+            for key in ['Log', 'log', 'logsdir', 'stdout', 'stderr']:
+                url = properties.get(f"url:{key}") or properties.get(key)
+                if url:
+                    log_urls[key] = url
         
-        log_urls = {
-            'Log': get_link_url("Log"),
-            'log': get_link_url("log"),
-            'logsdir': get_link_url("logsdir"),
-            'stdout': get_link_url("stdout"),
-            'stderr': get_link_url("stderr"),
-        }
-        log_urls = {k: v for k, v in log_urls.items() if v}
+        # Fallback to links if not in properties (HEAD's approach - check links as fallback)
+        if not log_urls and isinstance(links, dict):
+            def get_link_url(link_type):
+                if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
+                    return links[link_type][0]  # Take first URL from array
+                return None
+            
+            for key in ['Log', 'log', 'logsdir', 'stdout', 'stderr']:
+                url = get_link_url(key)
+                if url and key not in log_urls:
+                    log_urls[key] = url
         
-        # Get duration from result (same as upload_tests_results.py)
-        duration = result.get("duration", 0)
+        # Get elapsed time from metrics (main's approach)
+        metrics = result.get("metrics", {})
+        elapsed = metrics.get("elapsed_time", 0)
+        
         try:
-            elapsed = float(duration)
+            elapsed = float(elapsed)
         except (TypeError, ValueError):
             elapsed = 0.0
         
+        # Use keyword arguments (HEAD's approach) to ensure all fields are set correctly
         return cls(
             classname=classname,
             name=name,
@@ -488,11 +504,9 @@ def iter_build_results_files(path):
             with open(fn, 'r') as f:
                 report = json.load(f)
             
-            for result in report.get("results") or []:
+            # Use main's approach - don't skip suite entries (main's logic)
+            for result in report.get("results", []):
                 if result.get("type") == "test":
-                    # Skip suite-level entries (they are aggregates, not individual tests)
-                    if result.get("suite") is True:
-                        continue
                     yield fn, result
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)

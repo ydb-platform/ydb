@@ -34,6 +34,8 @@ def get_column_types():
         .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("test_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("error_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("metrics", ydb.OptionalType(ydb.PrimitiveType.Json))
     )
 
 def get_table_schema(table_path):
@@ -88,60 +90,61 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
             continue
         
         suite_folder = result.get("path", "")
-        name_part = result.get("name", "")
         subtest_name = result.get("subtest_name", "")
+        test_name = subtest_name if subtest_name else ""
         
-        # Format test_name: name.subtest_name (same as generate-summary.py)
-        # This matches the format used in generate-summary.py and other scripts
-        if subtest_name:
-            if name_part:
-                test_name = f"{name_part}.{subtest_name}"
-            else:
-                test_name = subtest_name
-        else:
-            test_name = name_part
-        
-        # Get duration from result
-        duration = result.get("duration", 0)
+        # Get duration from metrics
+        metrics = result.get("metrics", {})
+        duration = metrics.get("elapsed_time", 0)
         
         # Determine status
+        # Status can be "OK" or "PASSED" for passed tests
         status_str = result.get("status", "OK")
+        if status_str == "OK":
+            status_str = "PASSED"
         error_type = result.get("error_type", "")
-        status_description = result.get("rich-snippet", "")  # Already cleaned by transform_build_results.py
+        status_description = result.get("rich-snippet", "")
+        
+        # Check for timeout - this information is available in build-results-report but not in junit
+        is_timeout = error_type == "TIMEOUT" or "timeout" in error_type.lower() or "timeout" in (status_description or "").lower()
         
         if result.get("muted", False):
             status = "mute"
         elif status_str == "FAILED":
-            status = "failure"
+            if is_timeout:
+                # Timeout is a special case
+                status = "error"
+                if status_description and "timeout" not in status_description.lower():
+                    status_description = f"Timeout: {status_description}"
+            elif error_type == "REGULAR":
+                status = "failure"
+            else:
+                status = "error"
         elif status_str == "ERROR":
             status = "error"
+            if is_timeout and status_description and "timeout" not in status_description.lower():
+                status_description = f"Timeout: {status_description}"
         elif status_str == "SKIPPED":
             status = "skipped"
         else:
-            # OK, PASSED, or any other status -> "passed"
             status = "passed"
         
-        # Extract log URLs from links (updated by transform_build_results.py with URLs)
-        # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
-        links = result.get("links", {})
+        # Extract log URLs from properties or links
+        # In build-results-report, links is an object with arrays: {"stdout": ["/path"], "stderr": ["/path"]}
+        # Properties are added later by transform_build_results.py with URL format
+        properties = result.get("properties") or {}  # properties can be None
+        links = result.get("links") or {}  # links can be None
         
-        def get_link_url(link_type):
-            if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
-                return links[link_type][0]  # Take first URL from array
-            return ""
-        
-        log_url = get_link_url("log")
-        logsdir_url = get_link_url("logsdir")
-        stderr_url = get_link_url("stderr")
-        stdout_url = get_link_url("stdout")
-
-        # Determine entity_type: suite, chunk, or test
-        if result.get("suite"):
-            entity_type = "suite"
-        elif result.get("chunk"):
-            entity_type = "chunk"
+        # Check properties first (added by transform_build_results.py with URLs)
+        if isinstance(properties, dict):
+            log_url = properties.get("url:log") or properties.get("log") or ""
+            logsdir_url = properties.get("url:logsdir") or properties.get("logsdir") or ""
+            stderr_url = properties.get("url:stderr") or properties.get("stderr") or ""
+            stdout_url = properties.get("url:stdout") or properties.get("stdout") or ""
         else:
-            entity_type = "test"
+            log_url = logsdir_url = stderr_url = stdout_url = ""
+        
+        # If not in properties, links contain file paths (arrays), will be converted by transform_build_results.py
 
         # Build metadata JSON from available fields
         metadata = {
@@ -153,7 +156,6 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
             "name": result.get("name"),
             "id": result.get("id"),
             "hid": result.get("hid"),
-            "entity_type": entity_type,
         }
         # Remove None values from metadata
         metadata = {k: v for k, v in metadata.items() if v is not None}
@@ -220,12 +222,17 @@ def check_table_schema(wrapper, table_path):
     """Check table schema and return which columns exist (single table path)."""
     schema_check_query = f"SELECT * FROM `{table_path}` LIMIT 1"
     try:
-        _, column_metadata = wrapper.execute_scan_query_with_metadata(schema_check_query)
-        existing_columns = {col_name for col_name, _ in (column_metadata or [])}
-        has_full_name = 'full_name' in existing_columns
-        has_metadata = 'metadata' in existing_columns
-        has_error_type = 'error_type' in existing_columns
-        has_metrics = 'metrics' in existing_columns
+        schema_results, column_metadata = wrapper.execute_scan_query_with_metadata(schema_check_query)
+        has_full_name = False
+        has_metadata = False
+        has_error_type = False
+        has_metrics = False
+        if column_metadata:
+            existing_columns = {col_name for col_name, _ in column_metadata}
+            has_full_name = 'full_name' in existing_columns
+            has_metadata = 'metadata' in existing_columns
+            has_error_type = 'error_type' in existing_columns
+            has_metrics = 'metrics' in existing_columns
         return has_full_name, has_metadata, has_error_type, has_metrics
     except Exception as e:
         # Table doesn't exist or error - assume old schema
@@ -257,7 +264,6 @@ def prepare_rows_for_upload(results_with_owners):
             'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
             'test_name': row['test_name'],
             'error_type': row.get('error_type'),
-            # Format: path/name.subtest_name (same as generate-summary.py)
             'full_name': f"{row['suite_folder']}/{row['test_name']}",
             'metadata': row.get('metadata'),  # JSON string from parse_build_results_report
             'metrics': row.get('metrics'),  # JSON string from parse_build_results_report
@@ -278,12 +284,8 @@ def filter_rows_for_schema(rows, has_full_name, has_metadata, has_error_type, ha
         if not has_full_name:
             filtered_row.pop('full_name', None)
         
-        # Ensure error_type is present if table has it, otherwise remove it
-        if has_error_type:
-            # Make sure error_type key exists in row (set to None if missing)
-            if 'error_type' not in filtered_row:
-                filtered_row['error_type'] = None
-        else:
+        # Remove error_type if table doesn't have it
+        if not has_error_type:
             filtered_row.pop('error_type', None)
         
         # Handle metadata: remove if table doesn't have it, or convert empty JSON to None
@@ -294,12 +296,8 @@ def filter_rows_for_schema(rows, has_full_name, has_metadata, has_error_type, ha
             if filtered_row['metadata'] == "{}":
                 filtered_row['metadata'] = None
         
-        # Ensure metrics is present if table has it, otherwise remove it
-        if has_metrics:
-            # Make sure metrics key exists in row (set to None if missing)
-            if 'metrics' not in filtered_row:
-                filtered_row['metrics'] = None
-        else:
+        # Handle metrics: remove if table doesn't have it
+        if not has_metrics:
             filtered_row.pop('metrics', None)
         
         filtered_rows.append(filtered_row)
@@ -371,8 +369,7 @@ def main():
             
             # Parse build-results-report JSON with test results
             results = parse_build_results_report(
-                args.test_results_file, args.build_type, args.job_name, args.job_id,
-                args.commit, args.branch, args.pull, args.run_timestamp
+                test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp
             )
 
             # Add owner information

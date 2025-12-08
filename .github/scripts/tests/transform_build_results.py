@@ -36,6 +36,7 @@ class YTestReportTrace:
             log_print(f"Directory {test_results_dir} doesn't exist")
             return
 
+        # find the test result
         for folder in os.listdir(test_results_dir):
             fn = os.path.join(self.out_root, test_results_dir, folder, "ytest.report.trace")
 
@@ -102,7 +103,7 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
                 log_print(f"truncate {out_fn} to {trunc_size}")
                 with open(out_fn, "wb") as out_fp:
                     while 1:
-                        buf = in_fp.read(1024 * 1024)  # 1MB buffer for faster copying
+                        buf = in_fp.read(8192)
                         if not buf:
                             break
                         out_fp.write(buf)
@@ -120,6 +121,7 @@ def save_zip(suite_name, out_dir, url_prefix, logs_dir: Set[str]):
     zf = zipfile.ZipFile(arc_fn, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=9)
 
     for path in logs_dir:
+        # path is .../test-results/black/testing_out_stuff
         log_print(f"put {path} into {arc_name}")
         test_type = os.path.basename(os.path.dirname(path))
         for root, dirs, files in os.walk(path):
@@ -148,6 +150,7 @@ def load_user_properties(test_dir):
                     with open(properties_file_path, "r") as upf:
                         properties = json.load(upf)
 
+                    # Merge properties into all_properties
                     for key, value in properties.items():
                         if key not in all_properties:
                             all_properties[key] = value
@@ -159,25 +162,12 @@ def load_user_properties(test_dir):
     return all_properties
 
 
-def strip_rich_markup(text):
-    """Remove rich formatting tags like [[bad]], [[rst]], [[good]], etc. from text.
-    
-    Only removes known markup tags: imp, unimp, bad, warn, good, alt1, alt2, alt3, path, rst
-    to avoid breaking error messages that might contain square brackets.
-    """
-    if not text:
-        return text
-    known_tags = ['imp', 'unimp', 'bad', 'warn', 'good', 'alt1', 'alt2', 'alt3', 'path', 'rst']
-    for tag in known_tags:
-        text = text.replace(f'[[{tag}]]', '')
-    return text
-
-
 def mute_test_result(result):
     """Mute a test result - set muted flag and change status to SKIPPED"""
     if result.get("status") in ("FAILED", "ERROR"):
-        result["muted"] = True
-        result["status"] = "SKIPPED"
+            result["muted"] = True
+            result["status"] = "SKIPPED"
+            # Preserve error information in rich-snippet if it exists
         return True
     return False
 
@@ -187,8 +177,10 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
     with open(report_file, 'r') as f:
         report = json.load(f)
 
+    # Load user properties
     user_properties = load_user_properties(test_dir)
 
+    # Group results by suite (path)
     suites = {}
     for result in report.get("results", []):
         if result.get("type") != "test":
@@ -199,118 +191,89 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             suites[suite_name] = []
         suites[suite_name].append(result)
 
+    # Process each suite
     for suite_name, results in suites.items():
+        traces = YTestReportTrace(ya_out_dir)
+        traces.load(suite_name)
+
         has_fail_tests = False
-        suite_logsdirs = set()
-        results_with_logsdir = []
-        processed_files_cache = {}
-        results_file_links = []
 
         for result in results:
             path_str = result.get("path", "")
-            name = result.get("name", "")
             subtest_name = result.get("subtest_name", "")
             
-            if name:
-                name = name.replace(".py::", ".py.")
-                result["name"] = name
-            
-            test_name_for_mute = ""
+            # Construct full test name for mute check
+            test_name = f"{path_str}"
             if subtest_name:
-                if name:
-                    test_name_for_mute = f"{name}.{subtest_name}"
-                else:
-                    test_name_for_mute = subtest_name
-            else:
-                test_name_for_mute = name
+                test_name = f"{path_str}/{subtest_name}"
 
-            if result.get("status") == "ERROR":
-                result["status"] = "FAILED"
-                log_print(f"Converted ERROR to FAILED for {suite_name}/{test_name_for_mute}")
+            # Check if test should be muted
+            if mute_check(suite_name, test_name):
+                log_print("mute", suite_name, test_name)
+                mute_test_result(result)
 
+            # Check if test failed
             status = result.get("status", "")
             is_fail = status in ("FAILED", "ERROR")
             has_fail_tests |= is_fail
 
-            if "links" not in result:
-                result["links"] = {}
-            
-            original_links = result.get("links", {}).copy()
-            
-            for link_type, paths in original_links.items():
-                if not isinstance(paths, list):
-                    continue
-                if link_type == "logsdir":
-                    for file_path in paths:
-                        if os.path.isdir(file_path):
-                            suite_logsdirs.add(file_path)
-                            if result not in results_with_logsdir:
-                                results_with_logsdir.append(result)
-                    break
-            
-            if is_fail:
-                for link_type, paths in original_links.items():
-                    if not isinstance(paths, list):
-                        continue
-                    if link_type == "logsdir":
-                        continue
+            # Add logs for failed tests
+            # First, try to get logs from ytest.report.trace
+            if is_fail and subtest_name and "." in subtest_name:
+                test_cls, test_method = subtest_name.rsplit(".", maxsplit=1)
+                logs = filter_empty_logs(traces.get_logs(test_cls, test_method))
+
+                if logs:
+                    log_print(f"add {list(logs.keys())!r} properties for {test_cls}.{test_method}")
+                    if "properties" not in result:
+                        result["properties"] = {}
                     
-                    for i, file_path in enumerate(paths):
-                        if os.path.isfile(file_path) and os.stat(file_path).st_size > 0:
-                            results_file_links.append((result, link_type, file_path))
-                        else:
-                            try:
-                                rel_path = os.path.relpath(file_path, ya_out_dir)
-                                quoted_path = urllib.parse.quote(rel_path)
-                                url = f"{log_url_prefix}{quoted_path}"
-                                result["links"][link_type] = [url]
+                    for name, fn in logs.items():
+                        url = save_log(ya_out_dir, fn, log_out_dir, log_url_prefix, log_truncate_size)
+                        result["properties"][f"url:{name}"] = url
+            
+            # Also process existing links from build-results-report (they are arrays with file paths)
+            if is_fail:
+                if "properties" not in result:
+                    result["properties"] = {}
+                original_links = result.get("links", {})
+                # links is an object with arrays: {"stdout": ["/path"], "stderr": ["/path"]}
+                for link_type in ["stdout", "stderr", "log"]:
+                    if link_type in original_links and isinstance(original_links[link_type], list):
+                        for file_path in original_links[link_type]:
+                            if os.path.isfile(file_path):
+                                url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
+                                result["properties"][f"url:{link_type}"] = url
                                 break
-                            except ValueError:
-                                pass
 
-            if mute_check(suite_name, test_name_for_mute):
-                log_print("mute", suite_name, test_name_for_mute)
-                mute_test_result(result)
-
+            # Add user properties
             if test_dir and path_str in user_properties:
                 if subtest_name and subtest_name in user_properties[path_str]:
                     if "properties" not in result:
                         result["properties"] = {}
                     result["properties"].update(user_properties[path_str][subtest_name])
 
-        for result, link_type, file_path in results_file_links:
-            if file_path not in processed_files_cache:
-                url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
-                processed_files_cache[file_path] = url
-            else:
-                url = processed_files_cache[file_path]
-            
-            if "links" not in result:
-                result["links"] = {}
-            result["links"][link_type] = [url]
+        # Add logsdir for failed tests
+        if has_fail_tests:
+            if not traces.logs_dir:
+                log_print(f"no logsdir for {suite_name}")
+                continue
 
-        if has_fail_tests and suite_logsdirs:
-            url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, suite_logsdirs)
+            url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, traces.logs_dir)
+
             for result in results:
-                if "links" not in result:
-                    result["links"] = {}
-                result["links"]["logsdir"] = [url]
-        
-        for result in results:
-            status = result.get("status", "")
-            is_fail = status in ("FAILED", "ERROR")
-            is_muted = result.get("muted", False)
-            # Keep all logs for muted tests (they were failed before muting)
-            if not is_fail and not is_muted:
-                processed_link_types = set()
+                if "properties" not in result:
+                    result["properties"] = {}
+                result["properties"]["url:logsdir"] = url
+                # Also update links if it exists (for consistency)
                 if "links" in result:
-                    processed_link_types.add("logsdir")
-                    result["links"] = {k: v for k, v in result["links"].items() if k in processed_link_types}
+                    if "logsdir" not in result["links"]:
+                        result["links"]["logsdir"] = []
+                    # Add URL to links array (though properties is the primary source)
+                    if url not in result["links"]["logsdir"]:
+                        result["links"]["logsdir"].append(url)
 
-    for result in report.get("results", []):
-        if "rich-snippet" in result and result["rich-snippet"]:
-            result["rich-snippet"] = strip_rich_markup(result["rich-snippet"])
-
+    # Save updated report
     with open(report_file, 'w') as f:
         json.dump(report, f, indent=2)
 
@@ -327,15 +290,15 @@ def main():
     parser.add_argument('--public_dir', help='root directory for publication')
     parser.add_argument("--public_dir_url", help="url prefix for root directory")
     parser.add_argument("--test_dir", help="directory with user properties JSON files")
-    parser.add_argument("--log_out_dir", required=True, help="out dir to store logs (symlinked), relative to public_dir")
+    parser.add_argument("--log_out_dir", help="out dir to store logs (symlinked), relative to public_dir")
     parser.add_argument(
         "--log_truncate_size",
         type=int,
-        default=134217728,  # 128 MB
+        default=134217728,  # 128 kb
         help="truncate log after specific size, 0 disables truncation",
     )
     parser.add_argument("--ya_out", help="ya make output dir (for searching logs and artifacts)")
-    parser.add_argument('--test_stuff_out', required=True, help='output dir for archive testing_out_stuff, relative to public_dir')
+    parser.add_argument('--test_stuff_out', help='output dir for archive testing_out_stuff, relative to public_dir"')
 
     args = parser.parse_args()
 

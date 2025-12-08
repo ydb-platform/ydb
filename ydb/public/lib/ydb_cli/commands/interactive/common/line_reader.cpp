@@ -119,7 +119,7 @@ public:
         Y_DEBUG_VERIFY(Rx, "Can not read lines before Setup call");
 
         if (defaultValue) {
-            Rx->set_preload_buffer(defaultValue);
+            Rx->set_preload_buffer_without_changes(defaultValue);
         }
 
         while (true) {

@@ -108,7 +108,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         Y_DEBUG_VERIFY(sessions[activeSession ^= 1]->Setup(lineReader));
     }
 
-    while (const auto inputOptional = lineReader->ReadLine("Тестовая\nСтрока\nДа, да!")) {
+    while (const auto inputOptional = lineReader->ReadLine()) {
         const auto& input = *inputOptional;
         if (std::holds_alternative<ILineReader::TSwitch>(input)) {
             activeSession ^= 1;

@@ -143,6 +143,60 @@ class WorkloadVectorIndex(WorkloadBase):
         """
         return self.client.query(select_sql, False)
 
+    def _knn_search(self, table_path, vector_type, vector_dimension, distance, similarity, prefixed=False):
+        """KNN search without vector index (brute force with pushdown)."""
+        if distance is not None:
+            target = targets["distance"][distance]
+        else:
+            target = targets["similarity"][similarity]
+        order = "ASC" if distance is not None else "DESC"
+        vector = self._get_random_vector(vector_type, vector_dimension)
+        converter = to_binary_string_converters[vector_type]
+        name = converter.name
+        data_type = converter.data_type
+        if prefixed:
+            where = "WHERE user=1"
+        else:
+            where = ""
+        select_sql = f"""
+            $Target = {name}(Cast([{vector}] AS List<{data_type}>));
+            SELECT pk, embedding, {target}(embedding, $Target) as target
+            FROM `{table_path}`
+            {where}
+            ORDER BY {target}(embedding, $Target) {order}
+            LIMIT {self.limit};
+        """
+        return self.client.query(select_sql, False)
+
+    def _knn_search_check(self, table_path, vector_type, vector_dimension, distance, similarity, prefixed=False):
+        """Perform KNN search and verify results are ordered correctly."""
+        logger.info(f"KNN search: vector_type={vector_type}, distance={distance}, similarity={similarity}")
+        result_set = self._knn_search(
+            table_path=table_path,
+            vector_type=vector_type,
+            vector_dimension=vector_dimension,
+            distance=distance,
+            similarity=similarity,
+            prefixed=prefixed,
+        )
+        if len(result_set) == 0:
+            raise Exception("KNN query returned an empty set")
+
+        rows = result_set[0].rows
+        logger.info(f"KNN search returned {len(rows)} rows")
+
+        if len(rows) > 1:
+            prev = rows[0]['target']
+            for row in rows[1:]:
+                cur = row['target']
+                condition = prev <= cur if distance is not None else prev >= cur
+                if not condition:
+                    raise Exception(
+                        f"KNN results not properly ordered: prev={prev}, cur={cur}"
+                    )
+                prev = cur
+        logger.info("KNN search completed successfully")
+
     def _select_top(self, index_name, table_path, vector_type, vector_dimension, distance, similarity, prefixed=False):
         logger.info("Select values from table")
         result_set = self._select(
@@ -196,6 +250,15 @@ class WorkloadVectorIndex(WorkloadBase):
         raise Exception("Error getting index status")
 
     def _check_loop(self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None, prefixed=False):
+        self._knn_search_check(
+            table_path=table_path,
+            vector_type=vector_type,
+            vector_dimension=vector_dimension,
+            distance=distance,
+            similarity=similarity,
+            prefixed=prefixed,
+        )
+
         index_name = f"{self.index_name_prefix}_{vector_type}_{vector_dimension}_{levels}_{clusters}_{distance}_{similarity}_{str(prefixed)}"
         self._create_index(
             index_name=index_name,

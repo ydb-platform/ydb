@@ -229,8 +229,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-        // FIXME: Temporarily disabled cost-based optimizer, it break on this query
-        //appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();

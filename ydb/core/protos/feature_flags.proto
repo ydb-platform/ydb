@@ -234,4 +234,5 @@ message TFeatureFlags {
     optional bool EnableMetricsLevel = 208 [default = false];
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = false];
     optional bool EnableReplication = 217 [default = true];
+    optional bool UseYdsTopicStorageMetering = 220 [default = false];
 }

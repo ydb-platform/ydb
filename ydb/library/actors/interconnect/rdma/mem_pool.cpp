@@ -458,7 +458,7 @@ namespace NInterconnect::NRdma {
 
         struct TLockFreeChain {
             TLockFreeChain() = default;
-            void Init(ui32 slotSize) {
+            void Init(ui32 slotSize) noexcept {
                 SlotSize = slotSize;
                 SlotsInBatch = GetSlotsInBatch(slotSize);
             }
@@ -578,9 +578,18 @@ namespace NInterconnect::NRdma {
         };
         friend struct TSlotMemPoolCache;
 
+        static size_t CalcChunksLimit(const std::optional<TMemPoolSettings>& settings) noexcept {
+            if (!settings.has_value())
+                return 128; //default
+
+            if (settings->SizeLimitMb * 1024 * 1024 < BatchSizeBytes)
+                return 1; //Do not allow zerro limit
+
+            return settings->SizeLimitMb * 1024 * 1024 / BatchSizeBytes;
+        }
     public:
-        TSlotMemPool(NMonitoring::TDynamicCounterPtr counter)
-            : TMemPoolBase(128, counter)
+        TSlotMemPool(NMonitoring::TDynamicCounterPtr counter, const std::optional<TMemPoolSettings>& settings)
+            : TMemPoolBase(CalcChunksLimit(settings), counter)
         {
             for (ui32 i = GetPowerOfTwo(MinAllocSz); i <= GetPowerOfTwo(MaxAllocSz); ++i) {
                 Chains[GetChainIndex(1 << i)].Init(1 << i);
@@ -623,9 +632,13 @@ namespace NInterconnect::NRdma {
         return std::shared_ptr<TDummyMemPool>(pool, [](TDummyMemPool*) {});
     }
 
-    std::shared_ptr<IMemPool> CreateSlotMemPool(TDynamicCounters* counters) noexcept {
-        //auto* pool = HugeSingleton<TSlotMemPool>(MakeCounters(counters));
-        static TSlotMemPool pool(MakeCounters(counters));
+    std::shared_ptr<IMemPool> CreateSlotMemPool(TDynamicCounters* counters, std::optional<TMemPoolSettings> settings) noexcept {
+        static TSlotMemPool pool(MakeCounters(counters), settings);
         return std::shared_ptr<TSlotMemPool>(&pool, [](TSlotMemPool*) {});
+    }
+
+    // Just for UT
+    std::shared_ptr<IMemPool> CreateNonStaticSlotMemPool(TDynamicCounters* counters, std::optional<TMemPoolSettings> settings) noexcept {
+        return std::make_shared<TSlotMemPool>(MakeCounters(counters), settings);
     }
 }

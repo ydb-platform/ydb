@@ -171,7 +171,7 @@ def strip_rich_markup(text):
     if not text:
         return text
     # List of known markup tags from app.display
-    known_tags = ['imp', 'unimp', 'bad', 'warn', 'good', 'alt1', 'alt2', 'alt3', 'path', 'rst']
+    known_tags = ['imp', 'unimp', 'bad', 'warn', 'good', 'alt1', 'alt2', 'alt3', 'path', 'rst', 'unimp']
     # Replace only known tags, preserving any other square bracket content
     for tag in known_tags:
         text = text.replace(f'[[{tag}]]', '')

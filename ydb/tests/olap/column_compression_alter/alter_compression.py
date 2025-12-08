@@ -94,7 +94,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == expected_raw // 8
 
     @pytest.mark.parametrize("suffix, compression_settings", COMPRESSION_CASES)
-    def test_all_supported_compression(self, suffix: str, compression_settings: str):
+    def test_alter_to_compression(self, suffix: str, compression_settings: str):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13640 '''
         self.create_table_without_compression(suffix)
 
@@ -114,3 +114,23 @@ class TestAlterColumnCompression(TestCompressionBase):
             f"compression in `{table.path}` {self.volumes_without_compression[1]} / {volumes[1]}: {koef}"
         )
         assert koef > 1
+
+    def test_alter_to_default(self):
+        self.create_table_without_compression("default")
+
+        self.ydb_client.query(
+            f"""
+                ALTER TABLE `{self.table_path}`
+                    ALTER COLUMN `value` SET COMPRESSION(),
+                    ALTER COLUMN `value1` SET COMPRESSION();
+                """
+        )
+        logger.info(f"Table {self.table_path} altered")
+        table = ColumnTableHelper(self.ydb_client, self.table_path)
+
+        volumes: tuple[int, int] = table.get_volumes_column("value")
+        koef: float = self.volumes_without_compression[1] / volumes[1]
+        logging.info(
+            f"compression in `{table.path}` {self.volumes_without_compression[1]} / {volumes[1]}: {koef}"
+        )
+        assert koef >= 1

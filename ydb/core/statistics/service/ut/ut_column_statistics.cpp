@@ -21,6 +21,21 @@ TTableInfo PrepareTable(TTestEnv& env, const TString& databaseName, const TStrin
     return tableInfo;
 }
 
+void ValidateCountMinSketch(TTestActorRuntime& runtime, const TPathId& pathId) {
+    std::vector<TCountMinSketchProbes> expected = {
+        {
+            .Tag = 1, // Key column
+            .Probes = std::nullopt,
+        },
+        {
+            .Tag = 2, // Value column
+            .Probes = { { {"1", 100}, {"2", 100}, {"10", 0} } }
+        }
+    };
+
+    CheckCountMinSketch(runtime, pathId, expected);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(ColumnStatistics) {
@@ -32,13 +47,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         const auto tableInfo = PrepareTable(env, "Database", "Table1");
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
 
-        std::vector<TCountMinSketchProbes> expected = {
-            {
-                .Tag = 2, // Value column
-                .Probes{ {"1", 100}, {"2", 100} }
-            }
-        };
-        CheckCountMinSketch(runtime, tableInfo.PathId, expected);
+        ValidateCountMinSketch(runtime, tableInfo.PathId);
     }
 
     Y_UNIT_TEST(CountMinSketchServerlessStatistics) {
@@ -55,15 +64,8 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         Analyze(runtime, table1.SaTabletId, {table1.PathId}, "opId1", "/Root/Serverless1");
         Analyze(runtime, table2.SaTabletId, {table2.PathId}, "opId1", "/Root/Serverless2");
 
-        std::vector<TCountMinSketchProbes> expected = {
-            {
-                .Tag = 2, // Value column
-                .Probes{ {"1", 100}, {"2", 100} }
-            }
-        };
-
-        CheckCountMinSketch(runtime, table1.PathId, expected);
-        CheckCountMinSketch(runtime, table2.PathId, expected);
+        ValidateCountMinSketch(runtime, table1.PathId);
+        ValidateCountMinSketch(runtime, table2.PathId);
     }
 }
 

@@ -455,29 +455,6 @@ std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, con
     return stat.CountMin;
 }
 
-void ValidateCountMinAbsence(TTestActorRuntime& runtime, TPathId pathId) {
-    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
-
-    NStat::TRequest req;
-    req.PathId = pathId;
-    req.ColumnTag = 1;
-
-    auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
-    evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;
-    evGet->StatRequests.push_back(req);
-
-    auto sender = runtime.AllocateEdgeActor(1);
-    runtime.Send(statServiceId, sender, evGet.release(), 1, true);
-    auto evResult = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
-
-    UNIT_ASSERT(evResult);
-    UNIT_ASSERT(evResult->Get());
-    UNIT_ASSERT(evResult->Get()->StatResponses.size() == 1);
-
-    auto rsp = evResult->Get()->StatResponses[0];
-    UNIT_ASSERT(!rsp.Success);
-}
-
 void CheckCountMinSketch(
         TTestActorRuntime& runtime, const TPathId& pathId,
         const std::vector<TCountMinSketchProbes>& expected) {
@@ -498,19 +475,23 @@ void CheckCountMinSketch(
     auto res = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
     auto msg = res->Get();
 
-    UNIT_ASSERT(msg->Success);
-    UNIT_ASSERT( msg->StatResponses.size() == expected.size());
+    UNIT_ASSERT_VALUES_EQUAL(msg->StatResponses.size(), expected.size());
 
     for (size_t i = 0; i < msg->StatResponses.size(); ++i) {
         const auto& stat = msg->StatResponses[i];
-        UNIT_ASSERT(stat.Success);
+        const auto& probes = expected[i].Probes;
+        if (probes) {
+            UNIT_ASSERT(stat.Success);
 
-        auto countMin = stat.CountMinSketch.CountMin.get();
-        UNIT_ASSERT(countMin != nullptr);
+            auto countMin = stat.CountMinSketch.CountMin.get();
+            UNIT_ASSERT(countMin != nullptr);
 
-        for (const auto& item : expected[i].Probes) {
-            auto probe = countMin->Probe(item.Value.data(), item.Value.size());
-            UNIT_ASSERT_VALUES_EQUAL(item.Expected, probe);
+            for (const auto& item : *probes) {
+                auto probe = countMin->Probe(item.Value.data(), item.Value.size());
+                UNIT_ASSERT_VALUES_EQUAL(item.Expected, probe);
+            }
+        } else {
+            UNIT_ASSERT(!stat.Success);
         }
     }
 }

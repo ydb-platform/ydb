@@ -19,6 +19,14 @@ TTestEnv CreateTestEnv() {
     });
 }
 
+void ValidateCountMinAbsence(TTestActorRuntime& runtime, TPathId pathId) {
+    std::vector<TCountMinSketchProbes> expected = {
+        { .Tag = 1, .Probes = std::nullopt },
+        { .Tag = 2, .Probes = std::nullopt },
+    };
+    CheckCountMinSketch(runtime, pathId, expected);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(TraverseDatashard) {

@@ -20,8 +20,12 @@ void PrepareTable(TTestEnv& env, const TString& tableName) {
 void ValidateCountMinSketch(TTestActorRuntime& runtime, const TPathId& pathId) {
     std::vector<TCountMinSketchProbes> expected = {
         {
+            .Tag = 1, // Key column
+            .Probes = std::nullopt,
+        },
+        {
             .Tag = 2, // Value column
-            .Probes{ {"1", 100}, {"2", 100}, {"10", 0} }
+            .Probes = { { {"1", 100}, {"2", 100}, {"10", 0} } }
         }
     };
 
@@ -84,7 +88,11 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
             runtime, saTabletId, {pathId},
             "operationId", {}, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
 
-        ValidateCountMinAbsence(runtime, pathId);
+        std::vector<TCountMinSketchProbes> expected = {
+            { .Tag = 1, .Probes = std::nullopt },
+            { .Tag = 2, .Probes = std::nullopt },
+        };
+        CheckCountMinSketch(runtime, pathId, expected);
     }
 }
 

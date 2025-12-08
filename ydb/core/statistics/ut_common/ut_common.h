@@ -116,8 +116,6 @@ void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableN
 
 std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag = 1);
 
-void ValidateCountMinAbsence(TTestActorRuntime& runtime, TPathId pathId);
-
 struct TCountMinSketchProbes {
     struct TProbe {
         TString Value;
@@ -125,7 +123,8 @@ struct TCountMinSketchProbes {
     };
 
     ui16 Tag;
-    std::vector<TProbe> Probes;
+    // If nullopt, absence of count-min sketch is expected.
+    std::optional<std::vector<TProbe>> Probes;
 };
 
 void CheckCountMinSketch(

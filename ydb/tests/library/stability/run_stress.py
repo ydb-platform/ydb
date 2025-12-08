@@ -125,7 +125,7 @@ class StressRunExecutor:
 
             # Parallel execution on all nodes
             with allure.step(
-                f"Execute workload in parallel on {preparation_result['total_hosts']} nodes"
+                f"Execute workload in parallel on {len(preparation_result['total_hosts'])} nodes"
             ):
                 workload_start_time = time_module.time()
 
@@ -164,60 +164,63 @@ class StressRunExecutor:
                     run_duration = duration_value
                     current_iteration = 0
                     # Execute plan for this node
-                    while time_module.time() < planned_end_time:
+                    with allure.step(
+                        f"Execute workload {stress_name} on {node_host}"
+                    ):
+                        while time_module.time() < planned_end_time:
 
-                        # Use iter_N format without adding iter_ prefix in _execute_single_workload_run
-                        # since it will be added there
-                        run_name = f"{stress_name}_{node_host}_iter_{current_iteration}"
+                            # Use iter_N format without adding iter_ prefix in _execute_single_workload_run
+                            # since it will be added there
+                            run_name = f"{stress_name}_{node_host}_iter_{current_iteration}"
 
-                        # Set flag that iter_ prefix is already added
-                        run_config_copy = {}
-                        run_config_copy["iteration_num"] = current_iteration
-                        run_config_copy["node_host"] = node_host
-                        run_config_copy["duration"] = round(run_duration)
-                        run_config_copy["node_role"] = node['node'].role
-                        run_config_copy["thread_id"] = (
-                            node_host  # Thread identifier - node host
-                        )
-
-                        # Execute one run
-                        success, execution_time, stdout, stderr, is_timeout = (
-                            self._execute_single_workload_run(
-                                deployed_binary_path,
-                                node['node'],
-                                run_name,
-                                ' '.join(workload_config['args']),
-                                '--duration',
-                                run_config_copy,
+                            # Set flag that iter_ prefix is already added
+                            run_config_copy = {}
+                            run_config_copy["iteration_num"] = current_iteration
+                            run_config_copy["node_host"] = node_host
+                            run_config_copy["duration"] = round(run_duration)
+                            run_config_copy["node_role"] = node['node'].role
+                            run_config_copy["thread_id"] = (
+                                node_host  # Thread identifier - node host
                             )
-                        )
 
-                        # Save run result
-                        run_result = StressUtilRunResult()
-                        run_result.run_config = run_config_copy
-                        run_result.iteration_number = current_iteration
-                        run_result.is_success = success
-                        run_result.is_timeout = is_timeout
-                        run_result.execution_time = execution_time
-                        run_result.start_time = start_time
-                        run_result.end_time = time_module.time()
-                        run_result.stdout = stdout
-                        run_result.stderr = stderr
-
-                        start_time = time_module.time()
-                        node_result.runs.append(run_result)
-
-                        # Update node statistics
-                        node_result.total_execution_time += execution_time
-                        if success:
-                            logging.info(
-                                f"Run {current_iteration} on {node_host} completed successfully"
+                            # Execute one run
+                            success, execution_time, stdout, stderr, is_timeout = (
+                                self._execute_single_workload_run(
+                                    deployed_binary_path,
+                                    node['node'],
+                                    run_name,
+                                    ' '.join(workload_config['args']),
+                                    '--duration',
+                                    run_config_copy,
+                                )
                             )
-                        else:
-                            logging.warning(
-                                f"Run {current_iteration} on {node_host} failed")
-                        current_iteration += 1
-                        run_duration = planned_end_time - time_module.time()
+
+                            # Save run result
+                            run_result = StressUtilRunResult()
+                            run_result.run_config = run_config_copy
+                            run_result.iteration_number = current_iteration
+                            run_result.is_success = success
+                            run_result.is_timeout = is_timeout
+                            run_result.execution_time = execution_time
+                            run_result.start_time = start_time
+                            run_result.end_time = time_module.time()
+                            run_result.stdout = stdout
+                            run_result.stderr = stderr
+
+                            start_time = time_module.time()
+                            node_result.runs.append(run_result)
+
+                            # Update node statistics
+                            node_result.total_execution_time += execution_time
+                            if success:
+                                logging.info(
+                                    f"Run {current_iteration} on {node_host} completed successfully"
+                                )
+                            else:
+                                logging.warning(
+                                    f"Run {current_iteration} on {node_host} failed")
+                            current_iteration += 1
+                            run_duration = planned_end_time - time_module.time()
                     node_result.end_time = time_module.time()
                     logging.info(
                         f"Execution on {node_host} completed: "

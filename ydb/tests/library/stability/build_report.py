@@ -189,7 +189,7 @@ def __create_parallel_test_table(execution_result: StressUtilTestResults) -> str
                 table_html += f'<td style="background-color: {color};">{host_successes}/{host_total}</td>'
 
         if execution_result.recoverability_result:
-            result_for_util = execution_result.recoverability_result[stress_name]
+            result_for_util = execution_result.recoverability_result.stress_util_runs[stress_name]
             color = '#ccffcc'
             text = 'Recovered'
             if result_for_util.get_successful_runs() == 0:

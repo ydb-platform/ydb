@@ -369,7 +369,7 @@ class ParallelWorkloadTestBase:
                                           workload_params: dict[str, dict],
                                           preparation_result: dict[str, StressUtilDeployResult]) -> None:
         with allure.step("Stop nemesis and check recoverability"):
-            stress_deployer._manage_nemesis(False, workload_params.keys())
+            stress_deployer._manage_nemesis(False, workload_params.keys(), 'RecoverabilityCheck')
             # TODO replace with health polling
             time_module.sleep(1)
             recoverability_execution_result = stress_executor.execute_stress_runs(

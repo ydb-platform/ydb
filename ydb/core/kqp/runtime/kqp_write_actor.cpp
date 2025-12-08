@@ -256,6 +256,7 @@ struct TKqpTableWriterStatistics {
         }
 
         LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+        LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
     }
 
     static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim) {
@@ -947,7 +948,6 @@ public:
                     << getIssues().ToOneLineString());
 
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Stats.LocksBrokenAsVictim++;
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
@@ -4181,7 +4181,6 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            LocksBrokenAsVictim++;
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
@@ -4291,6 +4290,7 @@ public:
 
         if (ev->Get()->Record.HasTxStats()) {
             LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
+            LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
         }
 
         OnCommitted(ev->Get()->Record.GetOrigin(), 0);

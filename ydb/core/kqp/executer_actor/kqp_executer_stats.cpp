@@ -1179,6 +1179,9 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
 void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
 //    Cerr << (TStringBuilder() << "::AddDatashardPrepareStats " << txStats.DebugString() << Endl);
 
+    LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+    LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+
     ui64 cpuUs = txStats.GetComputeCpuTimeUsec();
     for (const auto& perShard : txStats.GetPerShardStats()) {
         AffectedShards.emplace(perShard.GetShardId());
@@ -1258,6 +1261,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
 //    Cerr << (TStringBuilder() << "::AddDatashardStats " << stats.DebugString() << ", " << txStats.DebugString() << Endl);
 
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+    LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
 
     ui64 datashardCpuTimeUs = 0;
     for (const auto& perShard : txStats.GetPerShardStats()) {
@@ -1334,6 +1338,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
 
 void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats) {
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+    LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
 
     ui64 datashardCpuTimeUs = 0;
     for (const auto& perShard : txStats.GetPerShardStats()) {

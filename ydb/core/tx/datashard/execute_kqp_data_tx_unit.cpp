@@ -177,6 +177,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
                 op->SetAbortedFlag();
                 BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+                op->Result()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
                 return EExecutionStatus::Executed;
             };
 
@@ -231,6 +232,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 txId,
                 NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN
             );
+            tx->Result()->Record.MutableTxStats()->SetLocksBrokenAsVictim(brokenLocks.size());
 
             for (auto& brokenLock : brokenLocks) {
                 tx->Result()->Record.MutableTxLocks()->Add()->Swap(&brokenLock);
@@ -300,6 +302,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             // it's just that actually breaking this (potentially persistent)
             // lock and rolling back changes will be unnecessarily complicated.
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+            op->Result()->Record.MutableTxStats()->SetLocksBrokenAsVictim(guardLocks.AffectedTables.Size());
 
             // Add a list of "broken" table locks to the result. It may be the
             // case that the lock is not even set yet (write + read with conflicts),

@@ -155,6 +155,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
                     // Lock cannot be created and we must abort
                     op->SetAbortedFlag();
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+                    op->Result()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
                     return EExecutionStatus::Executed;
             }
         }

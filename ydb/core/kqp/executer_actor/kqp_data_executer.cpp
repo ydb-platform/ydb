@@ -312,12 +312,10 @@ public:
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues) override
     {
-        // Set locks broken counts before calling base implementation
+        // Fill lock stats from Stats before calling base implementation
         if (Stats) {
             ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
-            ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim + LocksBrokenAsVictim;
-        } else {
-            ResponseEv->LocksBrokenAsVictim = LocksBrokenAsVictim;
+            ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
         }
         TBase::ReplyErrorAndDie(status, issues);
     }
@@ -329,9 +327,7 @@ public:
         ResponseEv->Snapshot = GetSnapshot();
         if (Stats) {
             ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
-            ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim + LocksBrokenAsVictim;
-        } else {
-            ResponseEv->LocksBrokenAsVictim = LocksBrokenAsVictim;
+            ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
         }
 
         if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
@@ -601,7 +597,6 @@ private:
                 YQL_ENSURE(shardState->State == TShardState::EState::Preparing);
                 Counters->TxProxyMon->TxResultAborted->Inc();
                 LocksBroken = true;
-                LocksBrokenAsVictim++;
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
@@ -1329,7 +1324,6 @@ private:
                 shardState->State = TShardState::EState::Finished;
                 Counters->TxProxyMon->TxResultAborted->Inc();
                 LocksBroken = true;
-                LocksBrokenAsVictim++;
                 ResponseEv->BrokenLockShardId = shardId;
 
                 if (!res->Record.GetTxLocks().empty()) {
@@ -1399,7 +1393,6 @@ private:
 
                 Counters->TxProxyMon->TxResultAborted->Inc(); // TODO: dedicated counter?
                 LocksBroken = true;
-                LocksBrokenAsVictim++;
                 ResponseEv->BrokenLockShardId = shardId; // todo: without responseEv
 
                 if (!res->Record.GetTxLocks().empty()) {
@@ -2994,7 +2987,6 @@ private:
     bool ImmediateTx = false;
     bool TxPlanned = false;
     bool LocksBroken = false;
-    ui64 LocksBrokenAsVictim = 0;
 
     TInstant FirstPrepareReply;
     TInstant LastPrepareReply;

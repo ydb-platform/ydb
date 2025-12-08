@@ -10,6 +10,7 @@ RECURSE_FOR_TESTS(
     indexes
     idx_test
     join
+    knn
     olap
     opt
     perf

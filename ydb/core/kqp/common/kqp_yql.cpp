@@ -182,7 +182,18 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             for(const auto& kv: lv) {
                 settings.IndexSelectionInfo.emplace(kv.Name().Value(), kv.Value().Cast<TCoAtom>().Value());
             }
-
+        } else if (name == TKqpReadTableSettings::VectorTopKColumnSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.VectorTopKColumn = tuple.Value().Cast<TCoAtom>().Value();
+        } else if (name == TKqpReadTableSettings::VectorTopKMetricSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.VectorTopKMetric = tuple.Value().Cast<TCoAtom>().Value();
+        } else if (name == TKqpReadTableSettings::VectorTopKTargetSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.VectorTopKTarget = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableSettings::VectorTopKLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.VectorTopKLimit = tuple.Value().Cast().Ptr();
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
@@ -314,6 +325,38 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Value<TCoNameValueTupleList>()
                     .Add(isi)
                     .Build()
+                .Done());
+    }
+
+    if (VectorTopKColumn) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopKColumnSettingName)
+                .Value<TCoAtom>().Build(VectorTopKColumn)
+                .Done());
+    }
+
+    if (VectorTopKMetric) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopKMetricSettingName)
+                .Value<TCoAtom>().Build(VectorTopKMetric)
+                .Done());
+    }
+
+    if (VectorTopKTarget) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopKTargetSettingName)
+                .Value(VectorTopKTarget)
+                .Done());
+    }
+
+    if (VectorTopKLimit) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopKLimitSettingName)
+                .Value(VectorTopKLimit)
                 .Done());
     }
 

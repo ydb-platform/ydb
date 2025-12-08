@@ -131,7 +131,6 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         }
 
         try {
-            Y_VALIDATE(1 + 1 - 1 + 10 < -5, "Test validate failure");
             sessions[activeSession]->HandleLine(line);
         } catch (NStatusHelpers::TYdbErrorException& error) {
             Cerr << colors.Red() << "Failed to handle command:" << colors.OldColor() << Endl << error << Endl;

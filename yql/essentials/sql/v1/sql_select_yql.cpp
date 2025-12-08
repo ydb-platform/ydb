@@ -661,6 +661,10 @@ private:
     }
 };
 
+NYql::TLangVersion YqlSelectLangVersion() {
+    return NYql::GetMaxLangVersion();
+}
+
 std::unexpected<ESQLError> YqlSelectUnsupported(TContext& ctx, TStringBuf message) {
     if (ctx.GetYqlSelectMode() == EYqlSelectMode::Force) {
         ctx.Error() << "YqlSelect unsupported: " << message;

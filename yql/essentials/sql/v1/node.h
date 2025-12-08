@@ -1315,6 +1315,8 @@ struct TAlterDatabaseParameters {
     THashMap<TString, TNodePtr> DatabaseSettings;
 };
 
+struct TTruncateTableParameters {};
+
 struct TTableRef;
 struct TAnalyzeParams {
     std::shared_ptr<TTableRef> Table;

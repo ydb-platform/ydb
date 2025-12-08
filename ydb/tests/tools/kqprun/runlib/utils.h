@@ -47,7 +47,7 @@ public:
 
         const auto it = ChoicesMap.find(choice);
         if (it == ChoicesMap.end()) {
-            auto error = yexception() << "Value '" << choice << "' is not allowed " << (OptionName ? TStringBuilder() << "for option " << OptionName : TStringBuilder()) << ", available variants:";
+            auto error = yexception() << "Value '" << choice << "' is not allowed" << (OptionName ? TStringBuilder() << " for option " << OptionName : TStringBuilder()) << ", available variants:";
             for (const auto& [value, _] : ChoicesMap) {
                 error << " " << value;
             }

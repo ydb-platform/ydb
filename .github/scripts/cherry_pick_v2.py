@@ -124,7 +124,7 @@ def create_pr_source(pull: Any, allow_unmerged: bool, logger) -> Source:
     return Source(
         type='pr',
         commit_shas=commit_shas,
-        title=f'PR {pull.number}: {pull.title}',
+        title=f'PR #{pull.number}: {pull.title}',
         body_item=f"* PR {pull.html_url}",
         author=pull.user.login,
         pull_requests=[pull]

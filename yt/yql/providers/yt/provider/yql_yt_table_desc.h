@@ -28,7 +28,7 @@ enum class TYtTableIntent: ui32 {
     Create      = 1 << 4,
     Drop        = 1 << 5,
     Flush       = 1 << 6, // Untransactional write
-    Upsert      = 1 << 7,
+    Replace     = 1 << 7,
 };
 
 Y_DECLARE_FLAGS(TYtTableIntents, TYtTableIntent);
@@ -39,11 +39,11 @@ inline bool HasReadIntents(TYtTableIntents intents) {
 }
 
 inline bool HasModifyIntents(TYtTableIntents intents) {
-    return intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create | TYtTableIntent::Upsert);
+    return intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create | TYtTableIntent::Replace);
 }
 
 inline bool HasExclusiveModifyIntents(TYtTableIntents intents) {
-    return intents & (TYtTableIntent::Override | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create | TYtTableIntent::Upsert);
+    return intents & (TYtTableIntent::Override | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create | TYtTableIntent::Replace);
 }
 
 struct TYtViewDescription {

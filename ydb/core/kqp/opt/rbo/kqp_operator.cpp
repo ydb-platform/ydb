@@ -19,7 +19,7 @@ void DFS(int vertex, TVector<int> &sortedStages, THashSet<int> &visited, const T
     sortedStages.push_back(vertex);
 }
 
-TExprNode::TPtr AddRenames(TExprNode::TPtr input, const TStageGraph::TSourceStageTraits& sourceStagesTraits, TExprContext &ctx) {
+TExprNode::TPtr AddRenames(TExprNode::TPtr input, const TStageGraph::TSourceStageTraits& sourceStagesTraits, TExprContext& ctx) {
     if (sourceStagesTraits.Renames.empty()) {
         return input;
     }
@@ -124,6 +124,9 @@ using namespace NYql;
 using namespace NNodes;
 
 TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx) {
+    if (expr->IsLambda()) {
+        expr = expr->Child(1);
+    }
     try {
         TConvertToAstSettings settings;
         settings.AllowFreeArgs = true;
@@ -197,7 +200,8 @@ TInfoUnit::TInfoUnit(TString name, bool scalarContext) : ScalarContext(scalarCon
 
 TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
                                                       TExprContext &ctx) {
-    if (FromSourceStage) {
+    // FIXME: This code is the same for all connection, put it in base class.
+    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
@@ -213,7 +217,8 @@ TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage
 
 TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
                                                 TExprContext &ctx) {
-    if (FromSourceStage) {
+    // FIXME: This code is the same for all connection, put it in base class.
+    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
@@ -229,7 +234,8 @@ TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TPos
 
 TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
                                                      TExprContext &ctx) {
-    if (FromSourceStage) {
+    // FIXME: This code is the same for all connection, put it in base class.
+    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
@@ -243,18 +249,18 @@ TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage,
     // clang-format on
 }
 
-TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                                    TExprContext &ctx) {
-    TVector<TCoAtom> keyColumns;
-
-    if (FromSourceStage) {
+TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                                    TExprContext& ctx) {
+    // FIXME: This code is the same for all connection, put it in base class.
+    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
 
-    for (auto k : Keys) {
+    TVector<TCoAtom> keyColumns;
+    for (const auto& k : Keys) {
         TString columnName;
-        if (FromSourceStage || k.Alias == "") {
+        if (FromSourceStageStorageType != NYql::EStorageType::NA || k.Alias == "") {
             columnName = k.ColumnName;
         } else {
             columnName = "_alias_" + k.Alias + "." + k.ColumnName;
@@ -276,9 +282,9 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
     // clang-format on
 }
 
-TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr &newStage,
-                                                TExprContext &ctx) {
-    if (FromSourceStage) {
+TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
+                                                  TExprContext& ctx) {
+    if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
         inputStage = BuildSourceStage(inputStage, ctx);
         newStage = inputStage;
     }
@@ -312,8 +318,8 @@ TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, T
     return inputStage;
 }
 
-std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(int &stageInputCounter, TExprNode::TPtr &node,
-                                                                            TExprContext &ctx, int fromStage) {
+std::pair<TExprNode::TPtr, TExprNode::TPtr> TStageGraph::GenerateStageInput(int& stageInputCounter, TExprNode::TPtr& node,
+                                                                            TExprContext& ctx, int fromStage) {
     TString inputName = "input_arg" + std::to_string(stageInputCounter++);
     YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
     auto arg = Build<TCoArgument>(ctx, node->Pos()).Name(inputName).Done().Ptr();
@@ -417,7 +423,7 @@ TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node->Pos(
     }
 
     Alias = alias;
-    SourceType = opSource.SourceType().StringValue() == "Row" ? ETableSourceType::Row : ETableSourceType::Column;
+    StorageType = opSource.SourceType().StringValue() == "Row" ? NYql::EStorageType::RowStorage : NYql::EStorageType::ColumnStorage;
     TableCallable = opSource.Table().Ptr();
     Pos = node->Pos();
 }
@@ -446,6 +452,10 @@ void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 }
 
+NYql::EStorageType TOpRead::GetTableStorageType() {
+    return StorageType;
+}
+
 TString TOpRead::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     auto res = TStringBuilder();
@@ -458,8 +468,8 @@ TString TOpRead::ToString(TExprContext& ctx) {
         }
     }
     res << "])";
-    TString sourceType = SourceType == ETableSourceType::Row ? "Row" : "Column";
-    res << " (SourceType: " << sourceType << ")";
+    const TString storageType = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
+    res << " (StorageType: " << storageType << ")";
     return res;
 }
 
@@ -522,6 +532,8 @@ bool TOpMap::HasRenames() const {
     return false;
 }
 
+// Returns explicit renames as pairs of <to, from>
+
 TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
     TVector<std::pair<TInfoUnit, TInfoUnit>> result;
     for (auto &[iu, body] : MapElements) {
@@ -531,6 +543,34 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
     }
     return result;
 }
+
+// Add simple transformations that preserve both key and column statistics properties
+// Currently only pg transformations FromPg and ToPg are supported
+// Return pairs of renames <to, from>
+
+TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenamesWithTransforms(TPlanProps& props) const {
+    auto result = GetRenames();
+
+    for (auto &[iu, body] : MapElements) {
+        if (std::holds_alternative<TExprNode::TPtr>(body)) {
+            auto lambda = TCoLambda(std::get<TExprNode::TPtr>(body));
+            auto expr = lambda.Body().Ptr();
+
+            if (expr->IsCallable("ToPg") || expr->IsCallable("FromPg")) {
+                if (expr->ChildPtr(0)->IsCallable("Member")) {
+                    TVector<TInfoUnit> transformIUs;
+                    GetAllMembers(expr, transformIUs, props, true);
+                    if (transformIUs.size()==1) {
+                        result.push_back(std::make_pair(iu, transformIUs[0]));
+                    }
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
 
 void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
     TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> newMapElements;
@@ -701,44 +741,47 @@ TConjunctInfo TOpFilter::GetConjunctInfo(TPlanProps& props) const {
         lambdaBody = lambdaBody->ChildPtr(0);
     }
 
+    TVector<TExprNode::TPtr> conjuncts;
     if (lambdaBody->IsCallable("And")) {
         for (auto conj : lambdaBody->Children()) {
-            auto conjObj = conj;
-            bool fromPg = false;
-
-            if (conj->IsCallable("FromPg")) {
-                conjObj = conj->ChildPtr(0);
-                fromPg = true;
-            }
-
-            TExprNode::TPtr leftArg;
-            TExprNode::TPtr rightArg;
-            if (TestAndExtractEqualityPredicate(conjObj, leftArg, rightArg)) {
-                TVector<TInfoUnit> conjIUs;
-                GetAllMembers(conj, conjIUs, props);
-
-                if (leftArg->IsCallable("Member") && rightArg->IsCallable("Member") && conjIUs.size() >= 2) {
-                    TVector<TInfoUnit> leftIUs;
-                    TVector<TInfoUnit> rightIUs;
-                    GetAllMembers(leftArg, leftIUs, props);
-                    GetAllMembers(rightArg, rightIUs, props);
-                    res.JoinConditions.push_back(TJoinConditionInfo(conjObj, leftIUs[0], rightIUs[0]));
-                }
-                else {
-                    TVector<TInfoUnit> conjIUs;
-                    GetAllMembers(conj, conjIUs);
-                    res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
-                }
-            } else {
-                TVector<TInfoUnit> conjIUs;
-                GetAllMembers(conj, conjIUs, props);
-                res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
-            }
+            conjuncts.push_back(conj);
         }
     } else {
-        TVector<TInfoUnit> filterIUs;
-        GetAllMembers(lambdaBody, filterIUs, props);
-        res.Filters.push_back(TFilterInfo(lambdaBody, filterIUs));
+        conjuncts.push_back(lambdaBody);
+    }
+
+    for (auto conj : conjuncts) {
+        auto conjObj = conj;
+        bool fromPg = false;
+
+        if (conj->IsCallable("FromPg")) {
+            conjObj = conj->ChildPtr(0);
+            fromPg = true;
+        }
+
+        TExprNode::TPtr leftArg;
+        TExprNode::TPtr rightArg;
+        if (TestAndExtractEqualityPredicate(conjObj, leftArg, rightArg)) {
+            TVector<TInfoUnit> conjIUs;
+            GetAllMembers(conj, conjIUs, props);
+
+            if (leftArg->IsCallable("Member") && rightArg->IsCallable("Member") && conjIUs.size() >= 2) {
+                TVector<TInfoUnit> leftIUs;
+                TVector<TInfoUnit> rightIUs;
+                GetAllMembers(leftArg, leftIUs, props);
+                GetAllMembers(rightArg, rightIUs, props);
+                res.JoinConditions.push_back(TJoinConditionInfo(conjObj, leftIUs[0], rightIUs[0]));
+            }
+            else {
+                TVector<TInfoUnit> conjIUs;
+                GetAllMembers(conj, conjIUs);
+                res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
+            }
+        } else {
+            TVector<TInfoUnit> conjIUs;
+            GetAllMembers(conj, conjIUs, props);
+            res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
+        }
     }
 
     return res;
@@ -778,10 +821,20 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 }
 
+const THashMap<EJoinAlgoType,TString> AlgoNames = {
+    {EJoinAlgoType::LookupJoin, "Lookup"},
+    {EJoinAlgoType::LookupJoinReverse, "ReverseLookup"},
+    {EJoinAlgoType::MapJoin, "Map"},
+    {EJoinAlgoType::GraceJoin, "Shuffle"}};
+
 TString TOpJoin::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     TStringBuilder res;
-    res << "Join [";
+    res << "Join, Kind: " << JoinKind;
+    if (Props.JoinAlgo.has_value()) {
+        res << ", Algo: " << AlgoNames.at(*Props.JoinAlgo);
+    }
+    res << " [";
     for (size_t i = 0; i < JoinKeys.size(); i++) {
         auto [x,y] = JoinKeys[i];
         res << x.GetFullName() + "=" + y.GetFullName();
@@ -892,6 +945,52 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     return strBuilder;
 }
 
+/***
+ * OpCBOTree operator methods
+ */
+TOpCBOTree::TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TPositionHandle pos) :
+    IOperator(EOperator::CBOTree, pos),
+    TreeRoot(treeRoot),
+    TreeNodes({treeRoot}) 
+{
+    Children = treeRoot->Children;
+}
+
+TOpCBOTree::TOpCBOTree(std::shared_ptr<IOperator> treeRoot, TVector<std::shared_ptr<IOperator>> treeNodes, TPositionHandle pos) :
+    IOperator(EOperator::CBOTree, pos),
+    TreeRoot(treeRoot),
+    TreeNodes({treeNodes}) 
+{
+    for (auto & n : treeNodes) {
+        for (auto & c : n->Children) {
+            if (std::find(treeNodes.begin(), treeNodes.end(), c) == treeNodes.end()) {
+                Children.push_back(c);
+            }
+        }
+    }
+}
+
+void TOpCBOTree::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    for (auto op : TreeNodes) {
+        op->RenameIUs(renameMap, ctx, stopList);
+    }
+}
+
+TString TOpCBOTree::ToString(TExprContext& ctx) {
+    TStringBuilder res;
+    res << "CBO Tree: [";
+    for (size_t i=0; i < TreeNodes.size(); i++) {
+        res << TreeNodes[i]->ToString(ctx);
+        if (i != TreeNodes.size()-1) {
+            res << ", ";
+        }
+    }
+    res << "]";
+    return res;
+}
+
+
+
 /**
  * OpRoot operator methods
  */
@@ -932,19 +1031,34 @@ TString TOpRoot::ToString(TExprContext& ctx) {
     return "Root"; 
 }
 
-TString TOpRoot::PlanToString(TExprContext& ctx) {
+TString TOpRoot::PlanToString(TExprContext& ctx, ui32 printOptions) {
     auto builder = TStringBuilder();
-    PlanToStringRec(GetInput(), ctx, builder, 0);
+    PlanToStringRec(GetInput(), ctx, builder, 0, printOptions);
     return builder;
 }
 
-void TOpRoot::PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int tabs) {
+void TOpRoot::PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int tabs, ui32 printOptions) {
+    TStringBuilder tabString;
     for (int i = 0; i < tabs; i++) {
-        builder << "  ";
+        tabString << "  ";
     }
-    builder << op->ToString(ctx) << "\n";
+
+    builder << tabString << op->ToString(ctx) << "\n";
+    if (printOptions & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata) &&
+            op->Props.Metadata.has_value()) {
+        builder << tabString << " ";
+        builder << op->Props.Metadata->ToString(printOptions) << "\n";
+    }
+
+    if (printOptions & (EPrintPlanOptions::PrintBasicStatistics | EPrintPlanOptions::PrintFullStatistics) &&
+            op->Props.Statistics.has_value()) {
+        builder << tabString << " ";
+        builder << op->Props.Statistics->ToString(printOptions);
+        builder << ", Cost: " << (op->Props.Cost.has_value() ? std::to_string(*op->Props.Cost) : "None") << "\n";
+    }
+    
     for (auto c : op->Children) {
-        PlanToStringRec(c, ctx, builder, tabs + 1);
+        PlanToStringRec(c, ctx, builder, tabs + 1, printOptions);
     }
 }
 

@@ -25,6 +25,7 @@ PY3TEST()
             ydb/apps/ydb
             ydb/tests/stress/backup
             ydb/tests/stress/simple_queue
+            ydb/tests/stress/backup
             ydb/tests/stress/topic
             ydb/tests/stress/log
             ydb/tests/stress/mixedpy

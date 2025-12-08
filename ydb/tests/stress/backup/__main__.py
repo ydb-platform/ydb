@@ -16,4 +16,3 @@ if __name__ == "__main__":
     client.wait_connection()
     with WorkloadRunnerBackup(client, args.duration, args.backup_interval) as runner:
         runner.run()
-

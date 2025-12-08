@@ -1,7 +1,10 @@
 #include "schema_serialization_helpers.h"
 #include "comparator.h"
+#include "constrained_schema.h"
 
 #include <yt/yt/core/ytree/fluent.h>
+
+#include <yt/yt/library/heavy_schema_validation/schema_validation.h>
 
 namespace NYT::NTableClient {
 
@@ -57,7 +60,10 @@ void TSerializableColumnSchema::Register(TRegistrar registrar)
         .Default();
     registrar.BaseClassParameter("max_inline_hunk_size", &TThis::MaxInlineHunkSize_)
         .Default();
-    registrar.BaseClassParameter("deleted", &TThis::Deleted_).Default(std::nullopt);
+    registrar.BaseClassParameter("deleted", &TThis::Deleted_)
+        .Default(std::nullopt);
+    registrar.BaseClassParameter("constraint", &TThis::Constraint_)
+        .Default(std::nullopt);
 
     registrar.Postprocessor([] (TSerializableColumnSchema* schema) {
         schema->RunPostprocessor();
@@ -109,6 +115,9 @@ void TSerializableColumnSchema::DeserializeFromCursor(TYsonPullParserCursor* cur
         } else if (key == TStringBuf("deleted")) {
             cursor->Next();
             Deleted_ = ExtractTo<bool>(cursor);
+        } else if (key == TStringBuf("constraint")) {
+            cursor->Next();
+            Constraint_ = ExtractTo<std::optional<std::string>>(cursor);
         } else {
             cursor->Next();
             cursor->SkipComplexValue();
@@ -118,7 +127,7 @@ void TSerializableColumnSchema::DeserializeFromCursor(TYsonPullParserCursor* cur
     RunPostprocessor();
 }
 
-void TSerializableColumnSchema::SetColumnSchema(const TColumnSchema& columnSchema)
+void TSerializableColumnSchema::SetColumnSchema(const TColumnSchema& columnSchema, std::optional<std::string> constraint)
 {
     static_cast<TColumnSchema&>(*this) = columnSchema;
     if (IsRenamed()) {
@@ -127,6 +136,7 @@ void TSerializableColumnSchema::SetColumnSchema(const TColumnSchema& columnSchem
     LogicalTypeV1_ = columnSchema.CastToV1Type();
     RequiredV1_ = columnSchema.Required();
     LogicalTypeV3_ = TTypeV3LogicalTypeWrapper{columnSchema.LogicalType()};
+    Constraint_ = std::move(constraint);
 }
 
 void TSerializableColumnSchema::SetDeletedColumnSchema(
@@ -209,6 +219,11 @@ void TSerializableColumnSchema::RunPostprocessor()
         if (Group() && Group()->empty()) {
             THROW_ERROR_EXCEPTION("Group name cannot be empty");
         }
+
+        // Constraint
+        if (Constraint_ && Constraint_->empty()) {
+            THROW_ERROR_EXCEPTION("Constraint cannot be empty");
+        }
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error validating column %Qv in table schema",
             GetDiagnosticNameString())
@@ -221,7 +236,14 @@ void TSerializableColumnSchema::RunPostprocessor()
 void Serialize(const TColumnSchema& schema, IYsonConsumer* consumer)
 {
     TSerializableColumnSchema wrapper;
-    wrapper.SetColumnSchema(schema);
+    wrapper.SetColumnSchema(schema, std::nullopt);
+    Serialize(static_cast<const TYsonStructLite&>(wrapper), consumer);
+}
+
+void Serialize(const TColumnSchema& schema, std::optional<std::string> constraint, IYsonConsumer* consumer)
+{
+    TSerializableColumnSchema wrapper;
+    wrapper.SetColumnSchema(schema, std::move(constraint));
     Serialize(static_cast<const TYsonStructLite&>(wrapper), consumer);
 }
 
@@ -235,7 +257,25 @@ void Serialize(const TDeletedColumn& schema, IYsonConsumer* consumer)
     consumer->OnEndMap();
 }
 
-void Serialize(const TTableSchema& schema, IYsonConsumer* consumer)
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ThrowDuplicateConstraintsForColumn(
+    const std::string& column,
+    const std::string& firstConstraint,
+    const std::string& secondConstraint)
+{
+    THROW_ERROR_EXCEPTION(
+        "Received duplicate constraints for column %Qv",
+        column)
+        << TErrorAttribute("first_conflicting_constraint", firstConstraint)
+        << TErrorAttribute("second_conflicting_constraint", secondConstraint);
+}
+
+void Serialize(const TTableSchema& schema, const TColumnNameToConstraintMap& columnNameToConstraint, IYsonConsumer* consumer)
 {
     auto position = BuildYsonFluently(consumer)
         .BeginAttributes()
@@ -248,7 +288,12 @@ void Serialize(const TTableSchema& schema, IYsonConsumer* consumer)
         .BeginList();
 
     for (const auto& column : schema.Columns()) {
-        Serialize(column, position.Item().GetConsumer());
+        std::optional<std::string> constraint;
+        auto it = columnNameToConstraint.find(column.Name());
+        if (it != columnNameToConstraint.end()) {
+            constraint = it->second;
+        }
+        Serialize(column, constraint, position.Item().GetConsumer());
     }
     for (const auto& deletedColumn : schema.DeletedColumns()) {
         Serialize(deletedColumn, position.Item().GetConsumer());
@@ -257,7 +302,7 @@ void Serialize(const TTableSchema& schema, IYsonConsumer* consumer)
     position.EndList();
 }
 
-void Deserialize(TTableSchema& schema, INodePtr node)
+void Deserialize(TTableSchema& schema, TColumnNameToConstraintMap& columnNameToConstraint, INodePtr node)
 {
     auto childNodes = node->AsList()->GetChildren();
 
@@ -272,6 +317,12 @@ void Deserialize(TTableSchema& schema, INodePtr node)
         } else {
             columns.push_back(wrapper);
         }
+        if (wrapper.Constraint()) {
+            auto [it, emplaced] = columnNameToConstraint.emplace(wrapper.Name(), *wrapper.Constraint());
+            if (!emplaced) {
+                ThrowDuplicateConstraintsForColumn(wrapper.Name(), *wrapper.Constraint(), it->second);
+            }
+        }
     }
 
     schema = TTableSchema(
@@ -284,7 +335,7 @@ void Deserialize(TTableSchema& schema, INodePtr node)
         deletedColumns);
 }
 
-void Deserialize(TTableSchema& schema, TYsonPullParserCursor* cursor)
+void Deserialize(TTableSchema& schema, TColumnNameToConstraintMap& columnNameToConstraint, TYsonPullParserCursor* cursor)
 {
     auto strict = true;
     auto uniqueKeys = false;
@@ -322,10 +373,39 @@ void Deserialize(TTableSchema& schema, TYsonPullParserCursor* cursor)
             deletedColumns.push_back(maybeDeletedColumn.GetDeletedColumnSchema());
         } else {
             columns.push_back(static_cast<TColumnSchema>(maybeDeletedColumn));
+            if (maybeDeletedColumn.Constraint()) {
+                auto [it, emplaced] = columnNameToConstraint.emplace(maybeDeletedColumn.Name(), *maybeDeletedColumn.Constraint());
+                if (!emplaced) {
+                    ThrowDuplicateConstraintsForColumn(maybeDeletedColumn.Name(), *maybeDeletedColumn.Constraint(), it->second);
+                }
+            }
         }
     }
 
     schema = TTableSchema(columns, strict, uniqueKeys, modification, deletedColumns);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TTableSchema& schema, IYsonConsumer* consumer)
+{
+    NDetail::Serialize(schema, /*columnNameToConstraint*/ {}, consumer);
+}
+
+void Deserialize(TTableSchema& schema, INodePtr node)
+{
+    TColumnNameToConstraintMap columnNameToConstraint;
+    NDetail::Deserialize(schema, columnNameToConstraint, node);
+}
+
+void Deserialize(TTableSchema& schema, TYsonPullParserCursor* cursor)
+{
+    TColumnNameToConstraintMap columnNameToConstraint;
+    NDetail::Deserialize(schema, columnNameToConstraint, cursor);
 }
 
 void Serialize(const TTableSchemaPtr& schema, IYsonConsumer* consumer)
@@ -345,6 +425,29 @@ void Deserialize(TTableSchemaPtr& schema, TYsonPullParserCursor* cursor)
     TTableSchema actualSchema;
     Deserialize(actualSchema, cursor);
     schema = New<TTableSchema>(std::move(actualSchema));
+}
+
+void Serialize(const TConstrainedTableSchema& constrainSchema, IYsonConsumer* consumer)
+{
+    NDetail::Serialize(constrainSchema.TableSchema(), constrainSchema.ColumnToConstraint(), consumer);
+}
+
+void Deserialize(TConstrainedTableSchema& schema, INodePtr node)
+{
+    TTableSchema actualSchema;
+    TColumnNameToConstraintMap columnNameToConstraint;
+    NDetail::Deserialize(actualSchema, columnNameToConstraint, node);
+
+    schema = TConstrainedTableSchema(std::move(actualSchema), std::move(columnNameToConstraint));
+}
+
+void Deserialize(TConstrainedTableSchema& schema, TYsonPullParserCursor* cursor)
+{
+    TTableSchema actualSchema;
+    TColumnNameToConstraintMap columnNameToConstraint;
+    NDetail::Deserialize(actualSchema, columnNameToConstraint, cursor);
+
+    schema = TConstrainedTableSchema(std::move(actualSchema), std::move(columnNameToConstraint));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

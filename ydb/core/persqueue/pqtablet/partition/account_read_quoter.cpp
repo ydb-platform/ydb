@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
@@ -195,9 +196,7 @@ void TAccountReadQuoter::InitCountersImpl(const TActorContext& ctx) {
                 {"sensor", "ConsumerReadQuotaWait"}
             },
             "Interval",
-            TVector<std::pair<ui64, TString>>{{0, "0ms"}, {1, "1ms"}, {5, "5ms"}, {10, "10ms"},
-                {20, "20ms"}, {50, "50ms"}, {100, "100ms"}, {500, "500ms"},
-                {1000, "1000ms"}, {2500, "2500ms"}, {5000, "5000ms"}, {10000, "10000ms"}, {9999999, "999999ms"}},
+            FAST_LATENCY_MS_INTERVALS,
             true
         ));
     }

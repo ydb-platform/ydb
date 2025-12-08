@@ -99,6 +99,7 @@ void TPqIoTestFixture::InitAsyncOutput(
             &actor.GetAsyncOutputCallbacks(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(std::move(pqServices)),
+            true,
             freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);

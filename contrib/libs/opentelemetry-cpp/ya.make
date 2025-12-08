@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.23.0)
+VERSION(1.24.0)
 
-ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.23.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.24.0.tar.gz)
 
 PEERDIR(
     contrib/libs/curl
@@ -123,6 +123,7 @@ SRCS(
     sdk/src/metrics/meter_provider.cc
     sdk/src/metrics/meter_provider_factory.cc
     sdk/src/metrics/metric_reader.cc
+    sdk/src/metrics/multi_observer_result.cc
     sdk/src/metrics/provider.cc
     sdk/src/metrics/state/filtered_ordered_attribute_map.cc
     sdk/src/metrics/state/metric_collector.cc

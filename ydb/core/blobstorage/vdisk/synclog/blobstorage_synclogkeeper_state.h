@@ -168,6 +168,8 @@ namespace NKikimr {
             TPhantomFlagStorageSnapshot GetPhantomFlagStorageSnapshot() const;
             void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
+            void UpdateMetrics();
+
         private:
             // VDisk Context
             TIntrusivePtr<TSyncLogCtx> SlCtx;
@@ -210,6 +212,8 @@ namespace NKikimr {
             TPhantomFlagStorageState PhantomFlagStorageState;
             TMemorizableControlWrapper EnablePhantomFlagStorage;
             TMemorizableControlWrapper PhantomFlagStorageLimit;
+
+            ui32 SelfOrderNumber;
 
         private:
             // Fix Disk overflow, i.e. remove some chunks from SyncLog

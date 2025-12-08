@@ -32,6 +32,7 @@ namespace {
         return IsIn({
             NScheme::ESchemeEntryType::Table,
             NScheme::ESchemeEntryType::View,
+            NScheme::ESchemeEntryType::Topic,
         }, entry.Type);
     }
 

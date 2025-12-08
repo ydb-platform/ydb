@@ -64,6 +64,24 @@ void TPhantomFlagThresholds::TTabletThresholds::Merge(TBlobStorageGroupType grou
     }
 }
 
+TString TPhantomFlagThresholds::TTabletThresholds::ToString(TBlobStorageGroupType groupType) const {
+    TStringStream str;
+    str << "{";
+    str << " DisksWithThreshold# " << static_cast<ui32>(DisksWithThreshold);
+    str << " Thresholds# [ ";
+    for (ui32 orderNumber = 0; orderNumber < groupType.BlobSubgroupSize(); ++orderNumber) {
+        const std::optional<TGenStep>& genstep = Thresholds[orderNumber];
+        str << orderNumber << "#";
+        if (genstep) {
+            str << "[" << genstep->first << ":" << genstep->second << "] ";
+        } else {
+            str << "<none> ";
+        }
+    }
+    str << "] }";
+    return str.Str();
+}
+
 TPhantomFlagThresholds::TPhantomFlagThresholds(const TBlobStorageGroupType& gtype)
     : GType(gtype)
 {}
@@ -118,6 +136,21 @@ void TPhantomFlagThresholds::Merge(TPhantomFlagThresholds&& other) {
             it->second.Merge(GType, std::move(thresholds));
         }
     }
+}
+
+void TPhantomFlagThresholds::Clear() {
+    TabletThresholds.clear();
+}
+
+TString TPhantomFlagThresholds::ToString() const {
+    TStringStream str;
+    str << "TPhantomFlagThresholds# { ";
+    for (const auto& [tabletChannel, thresholds] : TabletThresholds) {
+        str << "[" << tabletChannel.first << ":" << static_cast<ui32>(tabletChannel.second) << "] ";
+        str << thresholds.ToString(GType) << " ";
+    }
+    str << "}";
+    return str.Str();
 }
 
 } // namespace NSyncLog

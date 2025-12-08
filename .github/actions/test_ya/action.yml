@@ -75,6 +75,10 @@ inputs:
     type: boolean
     default: false
     description: "Collect coredumps via enabling ulimit -c unlimited"
+  pull_number:
+    type: string
+    required: false
+    description: "Pull request number (for workflow_call events)"
 
 outputs:
   success:
@@ -153,6 +157,7 @@ runs:
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
         GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
         GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
+        PR_NUMBER: ${{ inputs.pull_number }}
       run: |
         set -ex
         
@@ -182,6 +187,7 @@ runs:
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
+          --add-peerdirs-tests all
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}

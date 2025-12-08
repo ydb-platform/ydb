@@ -31,6 +31,9 @@ public:
     TPhantomFlags Sift(const TPhantomFlags& flags, const TSyncedMask& syncedMask);
     ui64 EstimatedMemoryConsumption() const;
     void Merge(TPhantomFlagThresholds&& other);
+    void Clear();
+
+    TString ToString() const;
 
 private:
     using TGenStep = std::pair<ui32, ui32>;
@@ -56,6 +59,7 @@ private:
         bool IsBehindThresholdOnUnsynced(TBlobStorageGroupType groupType, TGenStep genStep,
                 const TSyncedMask& syncedMask) const;
         void Merge(TBlobStorageGroupType groupType, TTabletThresholds&& other);
+        TString ToString(TBlobStorageGroupType groupType) const;
 
     private:
         TStackVec<std::optional<TGenStep>, MaxExpectedDisksInGroup> Thresholds;

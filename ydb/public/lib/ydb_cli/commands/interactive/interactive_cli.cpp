@@ -127,7 +127,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         }
 
         if (const auto input = to_lower(line); input == "quit" || input == "exit") {
-            return EXIT_SUCCESS;
+            break;
         }
 
         try {
@@ -141,7 +141,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     // Clear line (hints can be still present)
     lineReader->Finish();
-    Cout << "Exiting." << Endl;
+    Cout << "Bye!" << Endl;
 
     return EXIT_SUCCESS;
 }

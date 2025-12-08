@@ -18,6 +18,7 @@ import "yt_proto/yt/client/node_tracker_client/proto/node.proto";
 import "yt_proto/yt/client/scheduler/proto/spec_patch.proto";
 import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
+import "yt_proto/yt/client/table_chunk_format/proto/chunk_meta.proto";
 
 ////////////////////////////////////////////////////////////////////////////////
 // Scalars
@@ -2078,6 +2079,9 @@ message TReqAlterTable
     optional NYT.NProto.TGuid schema_id = 7;
     optional uint64 clip_timestamp = 8;
 
+    optional bytes constrained_schema = 9; // YSON
+    optional NYT.NTableClient.NProto.TColumnNameToConstraintMap constraints = 10;
+
     optional TTransactionalOptions transactional_options = 100;
     optional TMutatingOptions mutating_options = 103;
     // XXX(sandello): Prerequisite?
@@ -2192,7 +2196,6 @@ message TColumnarStatistics
 
 message TRspGetColumnarStatistics
 {
-
     repeated TColumnarStatistics statistics = 1;
 }
 
@@ -2633,6 +2636,28 @@ message TReqListJobTraces
 message TRspListJobTraces
 {
     repeated TJobTrace traces = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqCheckOperationPermission
+{
+    required string user = 1;
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 2;
+        string operation_alias = 3;
+    }
+    required int32 permission = 4;
+}
+
+message TCheckOperationPermissionResult
+{
+    required ESecurityAction action = 1;
+}
+
+message TRspCheckOperationPermission
+{
+    required TCheckOperationPermissionResult result = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3661,7 +3686,7 @@ message TReqListQueries
     optional uint64 limit = 10 [default = 100];
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 11;
     optional bool search_by_token_prefix = 12 [default = false];
-    optional bool use_full_text_search = 13 [default = true];
+    optional bool use_full_text_search = 13 [default = false];
     optional EListQueriesSortOrder sort_order = 14 [default = LQSO_CURSOR];
     optional bool tutorial_filter = 15 [default = false];
 }

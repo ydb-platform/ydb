@@ -1276,8 +1276,10 @@ public:
                     MakeAtomFromExpression(Pos_, ctx, Args_[i]->GetTupleElement(0)).Build(),
                     Args_[i]->GetTupleElement(1)));
             } else {
-                ctx.Error(Pos_) << OpName_ << " requires arguments to be tuples of size 2: prefix and struct";
-                return false;
+                auto tuple = Y("EnsureTupleSize", Args_[i], Q("2"));
+                Args_[i] = Q(Y(
+                    MakeAtomFromExpression(Pos_, ctx, Y("Nth", tuple, Q("0"))).Build(),
+                    Y("Nth", tuple, Q("1"))));
             }
         }
         return TCallNode::DoInit(ctx, src);
@@ -3838,6 +3840,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             break;
     }
 
+    bool checkFilter = true;
     if (ns == "yql" || ns == "@yql") {
         if (warnOnYqlNameSpace && GetEnv("YQL_DETERMINISTIC_MODE").empty()) {
             if (!ctx.Warning(pos, TIssuesIds::YQL_S_EXPRESSIONS_CALL, [](auto& out) {
@@ -4342,6 +4345,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     if (ns == "simplepg") {
+        checkFilter = false;
         auto simplePgFunc = simplePgFuncs.find(lowerName);
         if (simplePgFunc == simplePgFuncs.end()) {
             return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown function: SimplePg::" << name);
@@ -4353,6 +4357,19 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 out << "Consider using function " << simplePgFunc->second.NativeFuncName << " instead to avoid performance overhead";
             })) {
             return nullptr;
+        }
+    }
+
+    if (checkFilter && ctx.Settings.UdfFilter) {
+        if (ns == "yson2") {
+            ns = "yson";
+        } else if (ns == "datetime2") {
+            ns = "datetime";
+        }
+
+        auto ptr = ctx.Settings.UdfFilter->FindPtr(ns);
+        if (ptr && !ptr->contains(lowerName)) {
+            return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown function: " << originalNameSpace << "::" << name);
         }
     }
 

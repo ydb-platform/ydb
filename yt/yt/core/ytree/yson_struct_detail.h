@@ -117,6 +117,8 @@ struct IYsonStructParameter
         const TYsonStructWriteSchemaOptions& options) const = 0;
     virtual void WriteTypeSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const = 0;
 
+    virtual void TraverseParameter(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path) const = 0;
+
     virtual bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const = 0;
 
     virtual int GetFieldIndex() const = 0;
@@ -124,8 +126,7 @@ struct IYsonStructParameter
     virtual bool HoldsField(ITypeErasedYsonStructFieldPtr erasedField) const = 0;
 };
 
-DECLARE_REFCOUNTED_STRUCT(IYsonStructParameter)
-DEFINE_REFCOUNTED_TYPE(IYsonStructParameter)
+using IYsonStructParameterPtr = TIntrusivePtr<IYsonStructParameter>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -162,9 +163,13 @@ struct IYsonStructMeta
 
     virtual void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const = 0;
 
+    virtual void Traverse(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path = {}) const = 0;
+
     virtual bool CompareStructs(
         const TYsonStructBase* lhs,
         const TYsonStructBase* rhs) const = 0;
+
+    virtual const std::type_info& GetStructType() const = 0;
 
     virtual ~IYsonStructMeta() = default;
 };
@@ -210,12 +215,15 @@ public:
     void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy) override;
 
     void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const override;
+    void Traverse(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path = {}) const override;
 
     void FinishInitialization(const std::type_info& structType);
 
     bool CompareStructs(
         const TYsonStructBase* lhs,
         const TYsonStructBase* rhs) const override;
+
+    const std::type_info& GetStructType() const override;
 
 private:
     friend class TYsonStructRegistry;
@@ -334,7 +342,7 @@ public:
         const TYsonStructWriteSchemaOptions& options) const override;
     // Write schema of parameter type.
     void WriteTypeSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const override;
-
+    void TraverseParameter(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path) const override;
     bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const override;
 
     virtual int GetFieldIndex() const override;

@@ -1,4 +1,5 @@
 RECURSE(
+    backup
     cdc
     common
     ctas
@@ -21,4 +22,5 @@ RECURSE(
     topic_kafka
     transfer
     viewer
+    streaming
 )

@@ -25,7 +25,7 @@ enum class EYtWriteMode: ui32 {
     Create          /* "create" */,
     CreateIfNotExists /* "create_if_not_exists" */,
     Alter           /* "alter" */,
-    Upsert          /* "upsert" */,
+    Replace         /* "replace" */,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -168,7 +168,7 @@ public:
 
     friend EYtSettingTypes operator&(EYtSettingTypes, const EYtSettingTypes&);
 
-    bool HasFlags(const EYtSettingTypes& other) {
+    bool HasFlags(const EYtSettingTypes& other) const {
         return *this & other;
     }
 

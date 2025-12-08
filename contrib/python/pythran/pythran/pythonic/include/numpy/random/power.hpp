@@ -14,8 +14,7 @@ namespace numpy
   {
     template <class pS>
     types::ndarray<double, pS> power(double a, pS const &shape);
-    auto power(double a, long size)
-        -> decltype(power(a, types::array_tuple<long, 1>{{size}}));
+    auto power(double a, long size) -> decltype(power(a, types::array_tuple<long, 1>{{size}}));
 
     double power(double a, types::none_type size = {});
 

@@ -1,5 +1,6 @@
 from collections import namedtuple
 from typing import List, Sequence, Collection, Any
+from urllib.parse import unquote
 
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
 from clickhouse_connect.datatypes.registry import get_from_name
@@ -20,6 +21,13 @@ _JSON_NULL_STR = 'null'
 json_serialization_format = 0x1
 
 VariantState = namedtuple('VariantState', 'discriminator_node element_states')
+
+
+def _json_path_segments(path: str) -> List[str]:
+    segments = path.split('.')
+    if '%' in path:
+        return [unquote(segment) for segment in segments]
+    return segments
 
 
 class Variant(ClickHouseType):
@@ -255,7 +263,7 @@ class JSON(ClickHouseType):
             for ix, field in enumerate(self.typed_paths):
                 value = typed_columns[ix][row_num]
                 item = top
-                chain = field.split('.')
+                chain = _json_path_segments(field)
                 for key in chain[:-1]:
                     child = item.get(key)
                     if child is None:
@@ -268,7 +276,7 @@ class JSON(ClickHouseType):
                 if value is None:
                     continue
                 item = top
-                chain = field.split('.')
+                chain = _json_path_segments(field)
                 for key in chain[:-1]:
                     child = item.get(key)
                     if child is None:

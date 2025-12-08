@@ -15,10 +15,9 @@ bool GetSdkDisabled()
 {
   constexpr char kEnv[] = "OTEL_SDK_DISABLED";
 
-  bool exists;
-  bool value;
+  bool value{};
 
-  exists = GetBoolEnvironmentVariable(kEnv, value);
+  const bool exists = GetBoolEnvironmentVariable(kEnv, value);
   if (!exists)
   {
     value = false;

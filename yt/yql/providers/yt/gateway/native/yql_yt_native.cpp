@@ -10,6 +10,7 @@
 #include <yt/yql/providers/yt/gateway/lib/yt_attrs.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
+#include <yt/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <yt/yql/providers/yt/lib/log/yt_logger.h>
 
 #include <yt/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
@@ -65,6 +66,7 @@
 #include <util/stream/str.h>
 #include <util/stream/input.h>
 #include <util/stream/file.h>
+#include <util/string/hex.h>
 #include <util/string/type.h>
 #include <util/system/execpath.h>
 #include <util/system/guard.h>
@@ -216,316 +218,12 @@ TString DebugPath(NYT::TRichYPath path) {
     return NYT::NodeToCanonicalYsonString(NYT::PathToNode(path), NYT::NYson::EYsonFormat::Text) + " (" + std::to_string(numColumns) + " columns)";
 }
 
-void GetIntegerConstraints(const TExprNode::TPtr& column, bool& isSigned, ui64& minValueAbs, ui64& maxValueAbs, bool& isOptional) {
-    const TDataExprType* dataType = nullptr;
-    const bool columnHasDataType = IsDataOrOptionalOfData(column->GetTypeAnn(), isOptional, dataType);
-    YQL_ENSURE(columnHasDataType, "YtQLFilter: unsupported type of column " << column->Dump());
-    YQL_ENSURE(dataType);
-    const EDataSlot dataSlot = dataType->Cast<TDataExprType>()->GetSlot();
-
-    // looks like AllowIntegralConversion (may consider some refactoring)
-    if (dataSlot == EDataSlot::Uint8) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui8>();
-    }
-    else if (dataSlot == EDataSlot::Uint16) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui16>();
-    }
-    else if (dataSlot == EDataSlot::Uint32) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui32>();
-    }
-    else if (dataSlot == EDataSlot::Uint64) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui64>();
-    }
-    else if (dataSlot == EDataSlot::Int8) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i8>() + 1;
-        maxValueAbs = (ui64)Max<i8>();
-    }
-    else if (dataSlot == EDataSlot::Int16) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i16>() + 1;
-        maxValueAbs = (ui64)Max<i16>();
-    }
-    else if (dataSlot == EDataSlot::Int32) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i32>() + 1;
-        maxValueAbs = (ui64)Max<i32>();
-    }
-    else if (dataSlot == EDataSlot::Int64) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i64>() + 1;
-        maxValueAbs = (ui64)Max<i64>();
-    } else {
-        YQL_ENSURE(false, "unexpected integer node type");
-    }
-}
-
-void QuoteColumnForQL(const TStringBuf& columnName, TStringBuilder& result) {
-    result << '`';
-    if (!columnName.Contains('`')) {
-        result << columnName;
-    } else {
-        for (const auto c : columnName) {
-            if (c == '`') {
-                result << "\\`";
-            } else {
-                result << c;
-            }
-        }
-    }
-    result << '`';
-}
-
-void ConvertComparisonForQL(const TStringBuf& opName, TStringBuilder& result) {
-    if (opName == "==") {
-        result << '=';
-    } else {
-        result << opName;
-    }
-}
-
-void GenerateInputQueryIntegerComparison(const TStringBuf& opName, const TExprNode::TPtr& intColumn, const TExprNode::TPtr& intValue, const std::optional<bool>& nullValue, TStringBuilder& result) {
-    if (TMaybeNode<TCoNull>(intValue) || TMaybeNode<TCoNothing>(intValue)) {
-        YQL_ENSURE(nullValue.has_value(), "YtQLFilter: optional type without coalesce is not supported");
-        if (nullValue.value()) {
-            result << "TRUE";
-        } else {
-            result << "FALSE";
-        }
+void PreparePathInputQuerySpec(NYT::TNode& spec, const TVector<TRichYPath>& paths) {
+    if (AllOf(paths, [] (const auto& path) { return !path.InputQuery_; })) {
         return;
     }
-
-    TMaybeNode<TCoIntegralCtor> maybeIntValue;
-    if (auto maybeJustValue = TMaybeNode<TCoJust>(intValue)) {
-        maybeIntValue = TMaybeNode<TCoIntegralCtor>(maybeJustValue.Cast().Input().Ptr());
-    } else {
-        maybeIntValue = TMaybeNode<TCoIntegralCtor>(intValue);
-    }
-    YQL_ENSURE(maybeIntValue);
-
-    bool columnsIsSigned;
-    ui64 minValueAbs;
-    ui64 maxValueAbs;
-    bool columnIsOptional;
-    GetIntegerConstraints(intColumn, columnsIsSigned, minValueAbs, maxValueAbs, columnIsOptional);
-    YQL_ENSURE(!columnIsOptional || columnIsOptional && nullValue.has_value(), "YtQLFilter: optional type without coalesce is not supported");
-
-    bool hasSign;
-    bool isSigned;
-    ui64 valueAbs;
-    ExtractIntegralValue(maybeIntValue.Ref(), false, hasSign, isSigned, valueAbs);
-
-    std::optional<bool> constantFilter;
-    if (!hasSign && valueAbs > maxValueAbs) {
-        // Value is greater than maximum.
-        if (opName == ">" || opName == ">=" || opName == "==") {
-            constantFilter = false;
-        } else {
-            constantFilter = true;
-        }
-    } else if (hasSign && valueAbs > minValueAbs) {
-        // Value is less than minimum.
-        if (opName == "<" || opName == "<=" || opName == "==") {
-            constantFilter = false;
-        } else {
-            constantFilter = true;
-        }
-    }
-
-    const auto columnName = intColumn->ChildPtr(1)->Content();
-    if (!constantFilter.has_value()) {
-        // Value is in the range, comparison is not constant.
-        if (columnIsOptional) {
-            const bool isLess = opName == "<" || opName == "<=";
-            if (isLess && !nullValue.value()) {
-                // QL will handle 'x [operation] NULL' as TRUE here, but we need FALSE.
-                QuoteColumnForQL(columnName, result);
-                result << " != NULL AND ";
-            } else if (!isLess && nullValue.value()) {
-                // QL will handle 'x [operation] NULL' as FALSE here, but we need TRUE.
-                QuoteColumnForQL(columnName, result);
-                result << " = NULL OR ";
-            }
-        }
-        QuoteColumnForQL(columnName, result);
-        result << " ";
-        ConvertComparisonForQL(opName, result);
-        const auto valueStr = maybeIntValue.Cast().Literal().Value();
-        result << " " << valueStr;
-    } else if (constantFilter.value()) {
-        // Value is out of the range, comparison is always TRUE.
-        if (columnIsOptional && !nullValue.value()) {
-            // Handle comparison with NULL as FALSE.
-            QuoteColumnForQL(columnName, result);
-            result << " IS NOT NULL";
-        } else {
-            result << "TRUE";
-        }
-    } else {
-        // Value is out of the range, comparison is always FALSE.
-        if (columnIsOptional && nullValue.value()) {
-            // Handle comparison with NULL as TRUE.
-            QuoteColumnForQL(columnName, result);
-            result << " IS NULL";
-        } else {
-            result << "FALSE";
-        }
-    }
-}
-
-void GenerateInputQueryComparison(const TCoCompare& op, const std::optional<bool>& nullValue, TStringBuilder& result) {
-    YQL_ENSURE(op.Ref().IsCallable({"<", "<=", ">", ">=", "==", "!="}));
-    const auto left = op.Left().Ptr();
-    const auto right = op.Right().Ptr();
-
-    if (left->IsCallable("Member")) {
-        GenerateInputQueryIntegerComparison(op.CallableName(), left, right, nullValue, result);
-    } else {
-        YQL_ENSURE(right->IsCallable("Member"));
-        auto invertedOp = op.CallableName();
-        if (invertedOp == "<") {
-            invertedOp = ">";
-        } else if (invertedOp == "<=") {
-            invertedOp = ">=";
-        } else if (invertedOp == ">") {
-            invertedOp = "<";
-        } else if (invertedOp == ">=") {
-            invertedOp = "<=";
-        }
-        GenerateInputQueryIntegerComparison(invertedOp, right, left, nullValue, result);
-    }
-}
-
-void GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuilder& result) {
-    if (const auto maybeCompare = TMaybeNode<TCoCompare>(node)) {
-        GenerateInputQueryComparison(maybeCompare.Cast(), {}, result);
-    } else if (node->IsCallable("Not")) {
-        const auto child = node->ChildPtr(0);
-        if (child->IsCallable("Exists")) {
-            // Do not generate NOT (x IS NOT NULL).
-            result << "(";
-            GenerateInputQueryWhereExpression(child->ChildPtr(0), result);
-            result << ") IS NULL";
-        } else {
-            result << "NOT (";
-            GenerateInputQueryWhereExpression(child, result);
-            result << ")";
-        }
-    } else if (node->IsCallable("Exists")) {
-        result << "(";
-        GenerateInputQueryWhereExpression(node->ChildPtr(0), result);
-        result << ") IS NOT NULL";
-    } else if (node->IsCallable({"And", "Or"})) {
-        const TStringBuf op = node->IsCallable("And") ? "AND" : "OR";
-
-        result << "(";
-        GenerateInputQueryWhereExpression(node->Child(0), result);
-        result << ")";
-
-        const auto size = node->ChildrenSize();
-        for (TExprNode::TListType::size_type i = 1U; i < size; ++i) {
-            result << " " << op << " (";
-            GenerateInputQueryWhereExpression(node->Child(i), result);
-            result << ")";
-        };
-    } else if (node->IsCallable("Coalesce")) {
-        YQL_ENSURE(node->ChildrenSize() == 2);
-        const auto op = TMaybeNode<TCoCompare>(node->Child(0)).Cast();
-        const auto nullValueStr = TMaybeNode<TCoBool>(node->Child(1)).Cast().Literal().Value();
-        const std::optional<bool> nullValue(IsTrue(nullValueStr));
-        GenerateInputQueryComparison(op, nullValue, result);
-    } else if (const auto maybeBool = TMaybeNode<TCoBool>(node)) {
-        result << maybeBool.Cast().Literal().Value();
-    } else if (node->IsCallable("Member")) {
-        const auto columnName = node->ChildPtr(1)->Content();
-        QuoteColumnForQL(columnName, result);
-    } else {
-        YQL_ENSURE(false, "unexpected node type");
-    }
-}
-
-TString GenerateInputQueryWhereExpression(const TExprNode& settings) {
-    auto qlFilterNode = NYql::GetSetting(settings, EYtSettingType::QLFilter);
-    if (!qlFilterNode) {
-        return "";
-    }
-
-    qlFilterNode = qlFilterNode->ChildPtr(1);
-    YQL_ENSURE(qlFilterNode && qlFilterNode->IsCallable("YtQLFilter"));
-    const TYtQLFilter qlFilter(qlFilterNode);
-    const auto predicate = qlFilter.Predicate().Body();
-
-    TStringBuilder result;
-    GenerateInputQueryWhereExpression(predicate.Ptr(), result);
-    YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": " << result;
-    return result;
-}
-
-TString GenerateInputQuery(const TRichYPath& path, const TString& whereExpression, bool useSystemColumns) {
-    YQL_ENSURE(whereExpression);
-    TStringBuilder result;
-    if (!path.Columns_ || !path.Columns_->Parts_) {
-        result << "*";
-    } else {
-        bool first = true;
-        for (const auto& column: path.Columns_->Parts_) {
-            if (!first) {
-                result << ", ";
-            }
-            QuoteColumnForQL(column, result);
-            first = false;
-        }
-        if (useSystemColumns) {
-            result << ", `$row_index`, `$range_index`";
-        }
-    }
-    result << " WHERE " << whereExpression;
-    YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": " << result;
-    return result;
-}
-
-void SetInputQuerySpec(NYT::TNode& spec, const TString& inputQuery, const TYtSettings::TConstPtr& config, bool useSystemColumns) {
-    spec["input_query"] = inputQuery;
     spec["input_query_filter_options"]["enable_chunk_filter"] = true;
-    spec["input_query_filter_options"]["enable_row_filter"] = config->PruneQLFilterLambda.Get().GetOrElse(DEFAULT_PRUNE_QL_FILTER_LAMBDA);
-    if (useSystemColumns) {
-        spec["input_query_options"]["use_system_columns"] = true;
-    }
-}
-
-void PrepareInputQueryForMerge(NYT::TNode& spec, TVector<TRichYPath>& paths, const TString& whereExpression, const TYtSettings::TConstPtr& config) {
-    // YQL-19382
-    if (whereExpression) {
-        YQL_ENSURE(paths.size() == 1, "YtQLFilter: multiple inputs are not supported");
-        auto& path = paths[0];
-        const TString inputQuery = GenerateInputQuery(path, whereExpression, /*useSystemColumns*/ false);
-        path.Columns_.Clear();
-        SetInputQuerySpec(spec, inputQuery, config, /*useSystemColumns*/ false);
-    }
-}
-
-template <typename T>
-void PrepareInputQueryForMap(NYT::TNode& spec, T& specWithPaths, const TString& whereExpression, const TYtSettings::TConstPtr& config, bool useSystemColumns) {
-    // YQL-19382
-    if (whereExpression) {
-        const auto& inputs = specWithPaths.GetInputs();
-        YQL_ENSURE(inputs.size() == 1, "YtQLFilter: multiple inputs are not supported");
-        auto path = inputs[0];
-        const TString inputQuery = GenerateInputQuery(path, whereExpression, useSystemColumns);
-        if (path.Columns_) {
-            path.Columns_.Clear();
-            specWithPaths.SetInput(0, path);
-        }
-        SetInputQuerySpec(spec, inputQuery, config, useSystemColumns);
-    }
+    spec["input_query_filter_options"]["enable_row_filter"] = false;
 }
 
 struct TSrcTable {
@@ -1056,7 +754,10 @@ public:
                     f.GetValue(); // rethrow error if any
                     execCtx->StoreQueryCache();
                     execCtx->SetNodeExecProgress("Fetching attributes of output tables");
-                    return MakeRunResult(execCtx->OutTables_, execCtx->GetEntry());
+                    return MakeRunResult(
+                        execCtx->OutTables_,
+                        execCtx->GetEntry(),
+                        execCtx->Options_.Config());
                 } catch (...) {
                     return ResultFromCurrentException<TRunResult>(pos);
                 }
@@ -1604,7 +1305,10 @@ public:
                 try {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                     if (f.GetValue()) {
-                        return MakeRunResult(execCtx->OutTables_, execCtx->GetEntry());
+                        return MakeRunResult(
+                            execCtx->OutTables_,
+                            execCtx->GetEntry(),
+                            execCtx->Options_.Config());
                     } else {
                         TRunResult res;
                         res.SetSuccess();
@@ -1775,9 +1479,9 @@ public:
             TVector<TFuture<void>> futures;
             for (auto& [cluster, entries] : options.Entries()) {
                 auto execCtx = MakeExecCtx(std::move(entries), session, cluster, nullptr, nullptr);
-                futures.push_back(execCtx->Session_->Queue_->Async([execCtx]() {
+                futures.push_back(execCtx->Session_->Queue_->Async([execCtx, config = options.Config()]() {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
-                    return ExecDump(execCtx);
+                    return ExecDump(execCtx, config);
                 }));
             }
 
@@ -2861,7 +2565,7 @@ private:
                 }
 
                 auto ytDst = TRichYPath(dstPath);
-                if ((EYtWriteMode::Append == mode && !appendToSorted) || EYtWriteMode::Upsert == mode) {
+                if ((EYtWriteMode::Append == mode && !appendToSorted) || EYtWriteMode::Replace == mode) {
                     ytDst.Append(true);
                 } else if (!dstIsDynamic) {
                     NYT::TNode fullSpecYson;
@@ -3046,6 +2750,40 @@ private:
         const TVector<TTableReq>& tables,
         TTableInfoResult& result)
     {
+        const auto requestOnlyRequiredAttrs = execCtx->Options_.Config()->_RequestOnlyRequiredAttrs.Get().GetOrElse(DEFAULT_REQUEST_ONLY_REQUIRED_ATTRS);
+        const auto cacheSchemaBySchemaId = execCtx->Options_.Config()->_CacheSchemaBySchemaId.Get().GetOrElse(DEFAULT_CACHE_SCHEMA_BY_SCHEMA_ID);
+
+        auto attributeFilter = TAttributeFilter()
+            .AddAttribute("chunk_count")
+            .AddAttribute("chunk_row_count")
+            .AddAttribute("compression_codec")
+            .AddAttribute("content_revision")
+            .AddAttribute("data_weight")
+            .AddAttribute("dynamic")
+            .AddAttribute("enable_dynamic_store_read")
+            .AddAttribute("erasure_codec")
+            .AddAttribute("id")
+            .AddAttribute("media")
+            .AddAttribute("modification_time")
+            .AddAttribute("optimize_for")
+            .AddAttribute("primary_medium")
+            .AddAttribute("revision")
+            .AddAttribute("row_count")
+            .AddAttribute("schema_mode")
+            .AddAttribute("security_tags")
+            .AddAttribute("type")
+            .AddAttribute("uncompressed_data_size")
+            .AddAttribute("user_attributes")
+            .AddAttribute("_format")
+            .AddAttribute("_qb2_premapper")
+            .AddAttribute("_read_schema");
+        if (cacheSchemaBySchemaId) {
+            attributeFilter.AddAttribute(TString("schema_id"));
+        } else {
+            attributeFilter.AddAttribute(TString("schema"));
+        }
+
+        THashMap<TString, std::vector<size_t>> schemas;
         TVector<NYT::TNode> attributes(tables.size());
         NSorted::TSimpleMap<size_t, TString> requestSchemasIdxs;
         {
@@ -3053,14 +2791,50 @@ private:
             auto batchGet = tx->CreateBatchRequest();
             TVector<TFuture<void>> batchRes(Reserve(idxs.size()));
             for (auto& idx: idxs) {
-                batchRes.push_back(batchGet->Get(idx.second + "/@").Apply([&attributes, &requestSchemasIdxs, &lock, idx] (const TFuture<NYT::TNode>& res) {
-                    attributes[idx.first] = res.GetValue();
-                    if (attributes[idx.first].HasKey("schema") && attributes[idx.first]["schema"].IsEntity()) {
-                        with_lock (lock) {
-                            requestSchemasIdxs.push_back(idx);
+                batchRes.push_back(batchGet->Get(
+                    idx.second + "/@",
+                    requestOnlyRequiredAttrs
+                        ? TGetOptions().AttributeFilter(attributeFilter)
+                        : TGetOptions()
+                    ).Apply([&attributes, &requestSchemasIdxs, &lock, &schemas, &entry, idx, requestOnlyRequiredAttrs, cacheSchemaBySchemaId] (const TFuture<NYT::TNode>& res) {
+                        attributes[idx.first] = res.GetValue();
+                        if (cacheSchemaBySchemaId && attributes[idx.first].HasKey("schema_id") && attributes[idx.first]["schema_id"].IsString()) {
+                            auto schema_id = attributes[idx.first]["schema_id"].AsString();
+
+                            if (!attributes[idx.first].HasKey("schema") || attributes[idx.first]["schema"].IsEntity()) {
+                                with_lock (entry->Lock_) {
+                                    if (entry->SchemasBySchemaId.contains(schema_id)) {
+                                        attributes[idx.first]["schema"] = entry->SchemasBySchemaId[schema_id];
+                                    }
+                                }
+                            }
+
+                            if (!attributes[idx.first].HasKey("schema") || attributes[idx.first]["schema"].IsEntity()) {
+                                with_lock (lock) {
+                                    if (!schemas.contains(schema_id)) {
+                                        requestSchemasIdxs.push_back(idx);
+                                    }
+                                    schemas[schema_id].push_back(idx.first);
+                                }
+                            }
+                        } else {
+                            if (attributes[idx.first].HasKey("schema") && attributes[idx.first]["schema"].IsEntity()) {
+                                with_lock (lock) {
+                                    requestSchemasIdxs.push_back(idx);
+                                }
+                            }
                         }
-                    }
-                }));
+                        if (requestOnlyRequiredAttrs
+                            && attributes[idx.first].HasKey("user_attributes")
+                            && attributes[idx.first]["user_attributes"].IsMap()) {
+                            for (const auto& [attrName, attrValue]: attributes[idx.first]["user_attributes"].AsMap()) {
+                                if (attrName.StartsWith(TStringBuf("_yql"))) {
+                                    attributes[idx.first][attrName] = attrValue;
+                                }
+                            }
+                        }
+                    })
+                );
             }
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
@@ -3074,8 +2848,22 @@ private:
                     .AddAttribute("schema")
                 );
             for (auto& idx: requestSchemasIdxs) {
-                batchRes.push_back(batchGet->Get(idx.second + "/@", getOpts).Apply([&attributes, idx] (const TFuture<NYT::TNode>& res) {
-                    attributes[idx.first]["schema"] = res.GetValue().At("schema");
+                batchRes.push_back(batchGet->Get(idx.second + "/@", getOpts).Apply([&attributes, &schemas, &entry, idx, cacheSchemaBySchemaId] (const TFuture<NYT::TNode>& res) {
+                    if (cacheSchemaBySchemaId && attributes[idx.first].HasKey("schema_id") && attributes[idx.first]["schema_id"].IsString()) {
+                        auto schema_id = attributes[idx.first]["schema_id"].AsString();
+                        auto schema = res.GetValue().At("schema");
+                        for (const auto id : schemas[schema_id]) {
+                            attributes[id]["schema"] = schema;
+                        }
+
+                        with_lock (entry->Lock_) {
+                            entry->SchemasBySchemaId[schema_id] = schema;
+                        }
+
+                    } else {
+                        attributes[idx.first]["schema"] = res.GetValue().At("schema");
+                    }
+
                 }));
             }
             batchGet->ExecuteBatch();
@@ -3918,10 +3706,9 @@ private:
         }
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
-        const TString inputQueryExpr = GenerateInputQueryWhereExpression(merge.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, inputQueryExpr, execCtx]() {
-            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, inputQueryExpr, execCtx] (const auto& f) {
+        return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, execCtx]() {
+            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 execCtx->SetNodeExecProgress("Preparing");
                 auto entry = execCtx->GetEntry();
@@ -3968,7 +3755,8 @@ private:
                     spec["schema_inference_mode"] = "from_output"; // YTADMINREQ-17692
                 }
 
-                PrepareInputQueryForMerge(spec, mergeOpSpec.Inputs_, inputQueryExpr, execCtx->Options_.Config());
+                PreparePathInputQuerySpec(spec, mergeOpSpec.Inputs_);
+
                 CheckSpecForSecrets(spec, execCtx);
 
                 return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
@@ -3986,13 +3774,12 @@ private:
         const TVector<TString>& sortLimitBy,
         TString mapLambda,
         const TExpressionResorceUsage& extraUsage,
-        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([job, ordered, jobCount, limit, sortLimitBy, mapLambda,
-            extraUsage, inputQueryExpr, execCtx, testRun] (const auto& f) mutable
+            extraUsage, execCtx, testRun] (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->SetNodeExecProgress("Preparing");
@@ -4104,7 +3891,8 @@ private:
                 spec["job_count"] = static_cast<i64>(*jobCount);
             }
 
-            PrepareInputQueryForMap(spec, mapOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            PreparePathInputQuerySpec(spec, mapOpSpec.GetInputs());
+
             CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
@@ -4139,12 +3927,11 @@ private:
             limit.Clear();
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(map.Mapper().Body().Ref(), true);
-        const TString inputQueryExpr = GenerateInputQueryWhereExpression(map.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, inputQueryExpr, execCtx]() {
+        return execCtx->Session_->Queue_->Async([mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
-            return ExecMap(mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, inputQueryExpr, execCtx);
+            return ExecMap(mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, execCtx);
         });
     }
 
@@ -4377,14 +4164,13 @@ private:
         NYT::TNode intermediateMeta,
         const NYT::TNode& intermediateSchema,
         const NYT::TNode& intermediateStreams,
-        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs,
                           mapExtraUsage, mapBlockInput, reduceLambda, reduceInputType, reduceExtraUsage,
-                          intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx, testRun]
+                          intermediateMeta, intermediateSchema, intermediateStreams, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4608,7 +4394,8 @@ private:
                 spec["mapper"]["output_streams"] = intermediateStreams;
             }
 
-            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            PreparePathInputQuerySpec(spec, mapReduceOpSpec.GetInputs());
+
             CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
@@ -4632,13 +4419,12 @@ private:
         const TExpressionResorceUsage& reduceExtraUsage,
         const NYT::TNode& intermediateSchema,
         bool useIntermediateStreams,
-        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType,
-                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, inputQueryExpr, execCtx, testRun]
+                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4759,7 +4545,8 @@ private:
                 spec["reducer"]["enable_input_table_index"] = true;
             }
 
-            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
+            PreparePathInputQuerySpec(spec, mapReduceOpSpec.GetInputs());
+
             CheckSpecForSecrets(spec, execCtx);
 
             TOperationOptions opOpts;
@@ -4884,19 +4671,17 @@ private:
             limit.Clear();
         }
 
-        const TString inputQueryExpr = GenerateInputQueryWhereExpression(mapReduce.Settings().Ref());
-
         return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
-            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, inputQueryExpr, execCtx]()
+            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, execCtx]()
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             if (mapLambda) {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
-                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx);
+                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, execCtx);
             } else {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema,
-                    useIntermediateStreams, inputQueryExpr, execCtx);
+                    useIntermediateStreams, execCtx);
             }
         });
     }
@@ -5266,6 +5051,8 @@ private:
             TVector<size_t> pathMap;
             bool extended = execCtx->Options_.Extended();
 
+            const auto cacheSchemaBySchemaId = execCtx->Options_.Config()->_CacheSchemaBySchemaId.Get().GetOrElse(DEFAULT_CACHE_SCHEMA_BY_SCHEMA_ID);
+
             auto extractSysColumns = [] (NYT::TRichYPath& ytPath) -> TVector<TString> {
                 TVector<TString> res;
                 if (ytPath.Columns_) {
@@ -5342,14 +5129,21 @@ private:
                     YQL_ENSURE(p, "Table " << tablePath << " (epoch=" << req.Epoch() << ") has no snapshot");
                     ytPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
                     NYT::TNode attrs;
+                    auto attributeFilter = NYT::TAttributeFilter()
+                        .AddAttribute(TString("uncompressed_data_size"))
+                        .AddAttribute(TString("optimize_for"))
+                        .AddAttribute(TString("chunk_row_count"));
+
+                    if (cacheSchemaBySchemaId) {
+                        attributeFilter.AddAttribute(TString("schema_id"));
+                    } else {
+                        attributeFilter.AddAttribute(TString("schema"));
+                    }
+
                     if (auto sysColumns = extractSysColumns(ytPath)) {
-                        attrs = entry->Client->AttachTransaction(std::get<1>(*p))->Get(std::get<0>(*p) + "/@", NYT::TGetOptions().AttributeFilter(
-                            NYT::TAttributeFilter()
-                                .AddAttribute(TString("uncompressed_data_size"))
-                                .AddAttribute(TString("optimize_for"))
-                                .AddAttribute(TString("chunk_row_count"))
-                                .AddAttribute(TString("schema"))
-                        ));
+                        attrs = entry->Client->AttachTransaction(std::get<1>(*p))->Get(
+                            std::get<0>(*p) + "/@",
+                            NYT::TGetOptions().AttributeFilter(attributeFilter));
                         auto records = attrs["chunk_row_count"].IntCast<ui64>();
                         records = GetUsedRows(ytPath, records).GetOrElse(records);
                         for (auto col: sysColumns) {
@@ -5382,14 +5176,29 @@ private:
                         return res;
                     } else {
                         if (attrs.IsUndefined()) {
-                            attrs = entry->Client->AttachTransaction(std::get<1>(*p))->Get(std::get<0>(*p) + "/@", NYT::TGetOptions().AttributeFilter(
-                                NYT::TAttributeFilter()
-                                    .AddAttribute(TString("uncompressed_data_size"))
-                                    .AddAttribute(TString("optimize_for"))
-                                    .AddAttribute(TString("chunk_row_count"))
-                                    .AddAttribute(TString("schema"))
-                            ));
+                            attrs = entry->Client->AttachTransaction(std::get<1>(*p))->Get(
+                                std::get<0>(*p) + "/@",
+                                NYT::TGetOptions().AttributeFilter(attributeFilter));
                         }
+
+                        if (cacheSchemaBySchemaId && attrs.HasKey("schema_id") && attrs["schema_id"].IsString()
+                            && !extended && attrs.HasKey("optimize_for") && attrs["optimize_for"] == "scan") {
+                            auto schema_id = attrs["schema_id"].AsString();
+
+                            with_lock (entry->Lock_) {
+                                if (entry->SchemasBySchemaId.contains(schema_id)) {
+                                    attrs["schema"] = entry->SchemasBySchemaId[schema_id];
+                                }
+                            }
+
+                            if (!attrs.HasKey("schema")) {
+                                attrs["schema"] = entry->Client->AttachTransaction(std::get<1>(*p))->Get(std::get<0>(*p) + "/@schema");
+                                with_lock (entry->Lock_) {
+                                    entry->SchemasBySchemaId[schema_id] = attrs["schema"];
+                                }
+                            }
+                        }
+
                         if (extended ||
                             (attrs.HasKey("optimize_for") && attrs["optimize_for"] == "scan" &&
                             AllPathColumnsAreInSchema(req.Path(), attrs)))
@@ -5438,45 +5247,78 @@ private:
         }
     }
 
-    static TRunResult MakeRunResult(const TVector<TOutputInfo>& outTables, const TTransactionCache::TEntry::TPtr& entry) {
+    static TRunResult MakeRunResult(const TVector<TOutputInfo>& outTables, const TTransactionCache::TEntry::TPtr& entry, const TYtSettings::TConstPtr& config) {
         TRunResult res;
         res.SetSuccess();
 
         if (outTables.empty()) {
             return res;
         }
+        const auto cacheSchemaBySchemaId = config->_CacheSchemaBySchemaId.Get().GetOrElse(DEFAULT_CACHE_SCHEMA_BY_SCHEMA_ID);
 
         auto batchGet = entry->Tx->CreateBatchRequest();
         TVector<TFuture<TYtTableStatInfo::TPtr>> batchRes(Reserve(outTables.size()));
-        for (auto& out: outTables) {
+        THashMap<TString, std::vector<size_t>> uniqueSchemas;
+        TMutex lock;
+
+        auto checkSchema = [] (const TOutputInfo& out, const NYT::TNode& attrs) {
+            TString expectedSortedBy = ToColumnList(out.SortedBy.Parts_);
+            TString realSortedBy = TString("[]");
+            if (attrs.HasKey("schema")) {
+                auto keyColumns = KeyColumnsFromSchema(attrs["schema"]);
+                realSortedBy = ToColumnList(keyColumns.Keys);
+            }
+            YQL_ENSURE(expectedSortedBy == realSortedBy, "Output table " << out.Path
+                << " has unexpected \"sorted_by\" value. Expected: " << expectedSortedBy
+                << ", actual: " << realSortedBy);
+        };
+
+        auto attributeFilter = TAttributeFilter()
+            .AddAttribute(TString("id"))
+            .AddAttribute(TString("dynamic"))
+            .AddAttribute(TString("row_count"))
+            .AddAttribute(TString("chunk_row_count"))
+            .AddAttribute(TString("uncompressed_data_size"))
+            .AddAttribute(TString("data_weight"))
+            .AddAttribute(TString("chunk_count"))
+            .AddAttribute(TString("modification_time"))
+            .AddAttribute(TString("revision"))
+            .AddAttribute(TString("content_revision"));
+
+        if (cacheSchemaBySchemaId) {
+            attributeFilter.AddAttribute("schema_id");
+        } else {
+            attributeFilter.AddAttribute("schema");
+        }
+
+        for (size_t index = 0; index < outTables.size(); index++) {
+            auto& out = outTables[index];
+
             batchRes.push_back(
-                batchGet->Get(out.Path + "/@", TGetOptions()
-                    .AttributeFilter(TAttributeFilter()
-                        .AddAttribute(TString("id"))
-                        .AddAttribute(TString("dynamic"))
-                        .AddAttribute(TString("row_count"))
-                        .AddAttribute(TString("chunk_row_count"))
-                        .AddAttribute(TString("uncompressed_data_size"))
-                        .AddAttribute(TString("data_weight"))
-                        .AddAttribute(TString("chunk_count"))
-                        .AddAttribute(TString("modification_time"))
-                        .AddAttribute(TString("schema"))
-                        .AddAttribute(TString("revision"))
-                        .AddAttribute(TString("content_revision"))
-                    )
-                ).Apply([out](const TFuture<NYT::TNode>& f) {
+                batchGet->Get(out.Path + "/@", TGetOptions().AttributeFilter(attributeFilter))
+                .Apply([&uniqueSchemas, &checkSchema, &lock, &entry, cacheSchemaBySchemaId, index, out](const TFuture<NYT::TNode>& f) {
 
                     auto attrs = f.GetValue();
 
-                    TString expectedSortedBy = ToColumnList(out.SortedBy.Parts_);
-                    TString realSortedBy = TString("[]");
-                    if (attrs.HasKey("schema")) {
-                        auto keyColumns = KeyColumnsFromSchema(attrs["schema"]);
-                        realSortedBy = ToColumnList(keyColumns.Keys);
+                    if (cacheSchemaBySchemaId && attrs.HasKey("schema_id") && attrs["schema_id"].IsString()) {
+                        auto schema_id = attrs["schema_id"].AsString();
+
+                        with_lock (entry->Lock_) {
+                            if (entry->SchemasBySchemaId.contains(schema_id)) {
+                                attrs["schema"] = entry->SchemasBySchemaId[schema_id];
+                            }
+                        }
+
+                        if (attrs.HasKey("schema")) {
+                            checkSchema(out, attrs);
+                        } else {
+                            with_lock (lock) {
+                                uniqueSchemas[schema_id].push_back(index);
+                            }
+                        }
+                    } else {
+                        checkSchema(out, attrs);
                     }
-                    YQL_ENSURE(expectedSortedBy == realSortedBy, "Output table " << out.Path
-                        << " has unexpected \"sorted_by\" value. Expected: " << expectedSortedBy
-                        << ", actual: " << realSortedBy);
 
                     auto statInfo = MakeIntrusive<TYtTableStatInfo>();
                     statInfo->Id = attrs["id"].AsString();
@@ -5493,6 +5335,28 @@ private:
         }
 
         batchGet->ExecuteBatch();
+
+        if (cacheSchemaBySchemaId) {
+            auto schemasBatchGet = entry->Tx->CreateBatchRequest();
+            for (auto& [schema_id, indexes] : uniqueSchemas) {
+                YQL_ENSURE(!indexes.empty());
+                schemasBatchGet->Get(outTables[indexes[0]].Path + "/@schema").Apply([&indexes, &outTables, &checkSchema, &entry, &schema_id](const TFuture<NYT::TNode>& f) {
+                    auto attrs = NYT::TNode::CreateMap();
+                    attrs["schema"] = f.GetValue();
+
+                    with_lock (entry->Lock_) {
+                        entry->SchemasBySchemaId[schema_id] = f.GetValue();
+                    }
+
+                    for (auto index : indexes) {
+                        auto& out = outTables[index];
+                        checkSchema(out, attrs);
+                    }
+                });
+            }
+
+            schemasBatchGet->ExecuteBatch();
+        }
 
         for (size_t i: xrange(outTables.size())) {
             res.OutTableStats.emplace_back(outTables[i].Name, batchRes[i].GetValue());
@@ -5810,10 +5674,19 @@ private:
             });
     }
 
-    static void ExecDump(const TExecContext<TDumpOptions::TEntries>::TPtr& execCtx) {
+    static void ExecDump(const TExecContext<TDumpOptions::TEntries>::TPtr& execCtx, const TYtSettings::TConstPtr& config) {
+        TString tmpFolder = GetTablesTmpFolder(*config, execCtx->Cluster_);
+
         auto entry = execCtx->GetEntry();
         YQL_ENSURE(entry->DumpTx);
+
+        auto queryDumpAccount = config->_QueryDumpAccount.Get(execCtx->Cluster_);
+        YQL_ENSURE(queryDumpAccount.Defined());
+
         for (auto& [srcPath, dstPath] : execCtx->Options_) {
+            auto dstPathHash = HexEncode((THashBuilder() << dstPath).Finish());
+            auto tmpPath = NYql::TransformPath(tmpFolder, "tmp/" + dstPathHash, true, execCtx->Session_->UserName_);
+
             NYT::TRichYPath srcRichYPath;
             NYT::ITransactionPtr srcTx;
             auto snapshot = entry->Snapshots.FindPtr(std::make_pair(srcPath, 0));
@@ -5843,12 +5716,14 @@ private:
             auto userAttrs = GetUserAttributes(srcTx, srcRichYPath.Path_, true);
             NYT::MergeNodes(attrs, userAttrs);
 
-            entry->DumpTx->Create(dstPath, srcType, TCreateOptions().Recursive(true).Attributes(attrs));
+            attrs["account"] = *queryDumpAccount;
+            entry->DumpTx->Create(tmpPath, srcType, TCreateOptions().Recursive(true).Attributes(attrs));
             entry->DumpTx->Concatenate(
                 { srcRichYPath },
-                NYT::TRichYPath(dstPath),
+                NYT::TRichYPath(tmpPath),
                 TConcatenateOptions()
             );
+            entry->DumpTx->Move(tmpPath, dstPath, TMoveOptions().Recursive(true));
         }
     }
 

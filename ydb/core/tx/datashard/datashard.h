@@ -356,6 +356,9 @@ namespace TEvDataShard {
         EvPrefixKMeansRequest,
         EvPrefixKMeansResponse,
 
+        EvFilterKMeansRequest,
+        EvFilterKMeansResponse,
+
         EvRecomputeKMeansRequest,
         EvRecomputeKMeansResponse,
 
@@ -368,6 +371,9 @@ namespace TEvDataShard {
 
         EvBuildFulltextIndexRequest,
         EvBuildFulltextIndexResponse,
+
+        EvBuildFulltextDictRequest,
+        EvBuildFulltextDictResponse,
 
         EvEnd
     };
@@ -1578,6 +1584,18 @@ namespace TEvDataShard {
                           TEvDataShard::EvPrefixKMeansResponse> {
     };
 
+    struct TEvFilterKMeansRequest
+        : public TEventPB<TEvFilterKMeansRequest,
+                          NKikimrTxDataShard::TEvFilterKMeansRequest,
+                          TEvDataShard::EvFilterKMeansRequest> {
+    };
+
+    struct TEvFilterKMeansResponse
+        : public TEventPB<TEvFilterKMeansResponse,
+                          NKikimrTxDataShard::TEvFilterKMeansResponse,
+                          TEvDataShard::EvFilterKMeansResponse> {
+    };
+
     struct TEvBuildFulltextIndexRequest
         : public TEventPB<TEvBuildFulltextIndexRequest,
                           NKikimrTxDataShard::TEvBuildFulltextIndexRequest,
@@ -1588,6 +1606,18 @@ namespace TEvDataShard {
         : public TEventPB<TEvBuildFulltextIndexResponse,
                           NKikimrTxDataShard::TEvBuildFulltextIndexResponse,
                           TEvDataShard::EvBuildFulltextIndexResponse> {
+    };
+
+    struct TEvBuildFulltextDictRequest
+        : public TEventPB<TEvBuildFulltextDictRequest,
+                          NKikimrTxDataShard::TEvBuildFulltextDictRequest,
+                          TEvDataShard::EvBuildFulltextDictRequest> {
+    };
+
+    struct TEvBuildFulltextDictResponse
+        : public TEventPB<TEvBuildFulltextDictResponse,
+                          NKikimrTxDataShard::TEvBuildFulltextDictResponse,
+                          TEvDataShard::EvBuildFulltextDictResponse> {
     };
 
     struct TEvIncrementalRestoreResponse

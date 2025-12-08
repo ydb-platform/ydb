@@ -48,11 +48,10 @@ enum class EDeadLetterAction {
     Move = 2,
 };
 
-// 0 - unspecified
-// 1 - disabeld
-// 2 - database level metrics
-// 3 - object level metrics
-// 4 - detailed metrics
+// 0 - disabled
+// 1 - database level metrics
+// 2 - object level metrics
+// 3 - detailed metrics
 using EMetricsLevel = uint32_t;
 
 class TDeadLetterPolicyCondition {

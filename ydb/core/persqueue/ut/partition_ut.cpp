@@ -94,7 +94,7 @@ void TPartitionTestWrapper::LoadMeta(const NKikimrPQ::TPartitionCounterData& cou
     UNIT_ASSERT(ok);
 
     txRead->SetValue(strMeta);
-    MetaStep->LoadMeta(kvResponse, Nothing());
+    MetaStep->LoadMeta(kvResponse);
 
     UNIT_ASSERT_VALUES_EQUAL(counters.GetMessagesWrittenTotal(), MetaStep->Partition()->MsgsWrittenTotal.Value());
     UNIT_ASSERT_VALUES_EQUAL(counters.GetMessagesWrittenGrpc(), MetaStep->Partition()->MsgsWrittenGrpc.Value());
@@ -258,6 +258,8 @@ protected:
                                ui64 begin, ui64 end, bool isHead);
     void WaitDataReadRequest();
     void SendDataReadResponse();
+    void WaitDeduplicatorRangeRequest();
+    void SendDeduplicatorRangeResponse(ui32 partition);
 
     void SendProposeTransactionRequest(ui32 partition,
                                        ui64 begin, ui64 end,
@@ -441,6 +443,11 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         if (params.FillHead) {
             WaitBlobReadRequest();
             SendBlobReadResponse(params.Begin, params.End);
+        }
+
+        if (!params.Partition.IsSupportivePartition()) {
+            WaitDeduplicatorRangeRequest();
+            SendDeduplicatorRangeResponse(params.Partition.InternalPartitionId);
         }
 
         Ctx->Runtime->SimulateSleep(TDuration::Seconds(1));
@@ -970,6 +977,27 @@ void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
     pair->SetKey(key.Data(), key.Size());
     pair->SetValueSize(684);
     pair->SetCreationUnixTime(TInstant::Now().Seconds());
+
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::WaitDeduplicatorRangeRequest()
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
+    UNIT_ASSERT(event != nullptr);
+
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadRangeSize(), 1);
+}
+
+void TPartitionFixture::SendDeduplicatorRangeResponse(ui32 partitionId)
+{
+    Y_UNUSED(partitionId);
+
+    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+
+    auto read = event->Record.AddReadRangeResult();
+    read->SetStatus(NKikimrProto::OK);
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }

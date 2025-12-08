@@ -122,6 +122,7 @@ public:
         void InitClientCert();
 
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
+        bool UseAllNodes = false;
         bool EnableSsl = false;
         bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
@@ -273,22 +274,26 @@ public:
                 .SetDatabase(Database)
                 .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
                 .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
-        
+
+            if (UseAllNodes) {
+                driverConfig.SetBalancingPolicy(TBalancingPolicy::UseAllNodes());
+            }
+
             if (EnableSsl) {
                 driverConfig.UseSecureConnection(CaCerts);
             }
-        
+
             if (IsNetworkIntensive) {
                 size_t networkThreadNum = GetNetworkThreadNum();
                 driverConfig.SetNetworkThreadsNum(networkThreadNum);
             }
-        
+
             if (SkipDiscovery) {
                 driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
             }
-        
+
             driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
-        
+
             return driverConfig;
         }
 

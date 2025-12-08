@@ -265,6 +265,20 @@ namespace NLWTrace {
             });
         }
 
+        template <class TFunc>
+        void ForEachShuttle(TFunc&& func)
+        {
+            NotConcurrent(
+                [&](TShuttlePtr& head)
+                {
+                    TShuttlePtr* ref = &head;
+                    while (IShuttle* s = ref->Get()) {
+                        func(s);
+                        ref = &s->GetNext();
+                    }
+                });
+        }
+
         void Serialize(ui64 traceIdx, TShuttleTrace& msg) {
             ForEachShuttle(traceIdx, [&] (NLWTrace::IShuttle* shuttle) {
                 shuttle->Serialize(msg);

@@ -20,7 +20,7 @@ namespace builtins
   }
 
   template <class T>
-  typename std::enable_if<types::has_size<T>::value, long>::type len(T const &t)
+  std::enable_if_t<types::has_size<T>::value, long> len(T const &t)
   {
     return t.size();
   }

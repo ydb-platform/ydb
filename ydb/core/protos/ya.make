@@ -119,6 +119,7 @@ SRCS(
     pqconfig.proto
     profiler.proto
     query_stats.proto
+    recoveryshard_config.proto
     replication.proto
     resource_broker.proto
     s3_settings.proto

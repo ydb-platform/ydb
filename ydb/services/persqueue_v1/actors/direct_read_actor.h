@@ -36,6 +36,7 @@ struct TFormedDirectReadResponse: public TSimpleRefCount<TFormedDirectReadRespon
 class TDirectReadSessionActor
     : public TActorBootstrapped<TDirectReadSessionActor>
     , private NPQ::TRlHelpers
+    , public NActors::IActorExceptionHandler
 {
     using TClientMessage = Topic::StreamDirectReadMessage::FromClient;
 
@@ -54,6 +55,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx);
 
+    bool OnUnhandledException(const std::exception& exc) override;
     void Die(const TActorContext& ctx) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

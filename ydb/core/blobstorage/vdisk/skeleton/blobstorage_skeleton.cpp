@@ -2021,13 +2021,15 @@ namespace NKikimr {
                     PDiskCtx,
                     Db->LoggerID,
                     Db->LogCutterID,
+                    Db->SkeletonID,
                     Config->SyncLogMaxDiskAmount,
                     Config->SyncLogMaxEntryPointSize,
                     Config->SyncLogMaxMemAmount,
                     Config->MaxResponseSize,
                     Db->SyncLogFirstLsnToKeep,
                     Config->BaseInfo.ReadOnly,
-                    Config->EnablePhantomFlagStorage);
+                    Config->EnablePhantomFlagStorage,
+                    Config->PhantomFlagStorageLimit);
             Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
             ActiveActors.Insert(Db->SyncLogID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 

@@ -660,6 +660,7 @@ message TEvStartKqpTasksRequest {
     optional NKikimrDataEvents.ELockMode LockMode = 19;
     optional string UserToken = 20;
     optional bool SupportShuttingDown = 21 [default = true];
+    optional bool EnableWatermarks = 22 [default = false];
 
     reserved 15;
     reserved 16;
@@ -876,6 +877,7 @@ message TReadVectorTopK {
     optional Ydb.Table.VectorIndexSettings Settings = 2;
     optional string TargetVector = 3;
     optional uint32 Limit = 4;
+    repeated uint32 DistinctColumns = 5;
 }
 
 message TKqpStreamLookupSettings {

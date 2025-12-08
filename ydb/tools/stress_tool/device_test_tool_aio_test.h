@@ -34,7 +34,7 @@ namespace NKikimr {
 
 struct TAlignedDataBuffers {
     static constexpr ui64 Alignment = 4096;
-    static constexpr ui64 PoolTotalSizeBytes = 2ull << 20;
+    static constexpr ui64 PoolTotalSizeBytes = 2ull << 30;
 
     ui32 Size;
     ui32 BuffersPerPool;

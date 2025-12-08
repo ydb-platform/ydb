@@ -17,7 +17,7 @@ namespace NYdb::NTPCC {
 //  * terminal stats: TPC-C related statistics like per transaction type latencies, tpmC.
 //  * thread stats: load, Queue
 
-constexpr double ThreadSaturatedLoadThreshold = 0.8;
+constexpr double ThreadSaturatedLoadThreshold = 0.6;
 
 struct TAllStatistics {
 
@@ -119,6 +119,8 @@ struct TRunDisplayData {
     TRunDisplayData(size_t threadCount, Clock::time_point ts)
         : Statistics(threadCount, ts)
     {}
+
+    size_t WarehouseCount = 0;
 
     TAllStatistics Statistics;
     TRunStatusData StatusData;

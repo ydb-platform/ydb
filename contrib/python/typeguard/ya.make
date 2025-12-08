@@ -2,17 +2,30 @@
 
 PY3_LIBRARY()
 
-VERSION(2.13.3)
+VERSION(4.4.4)
 
 LICENSE(MIT)
+
+PEERDIR(
+    contrib/python/typing-extensions
+)
 
 NO_LINT()
 
 PY_SRCS(
     TOP_LEVEL
     typeguard/__init__.py
-    typeguard/importhook.py
-    typeguard/pytest_plugin.py
+    typeguard/_checkers.py
+    typeguard/_config.py
+    typeguard/_decorators.py
+    typeguard/_exceptions.py
+    typeguard/_functions.py
+    typeguard/_importhook.py
+    typeguard/_memo.py
+    typeguard/_pytest_plugin.py
+    typeguard/_suppression.py
+    typeguard/_transformer.py
+    typeguard/_utils.py
 )
 
 RESOURCE_FILES(

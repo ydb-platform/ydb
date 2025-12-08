@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <iterator>
 #include <limits>
-#include <set>
+#include <unordered_set>
 #include <utility>
 
 PYTHONIC_NS_BEGIN
@@ -106,14 +106,12 @@ struct __combined<pythonic::types::set<V>, indexable<K>> {
 
 template <class K, class V1, class V2>
 struct __combined<indexable_container<K, V1>, pythonic::types::set<V2>> {
-  using type =
-      pythonic::types::set<decltype(std::declval<V1>() + std::declval<V2>())>;
+  using type = pythonic::types::set<decltype(std::declval<V1>() + std::declval<V2>())>;
 };
 
 template <class K, class V1, class V2>
 struct __combined<pythonic::types::set<V2>, indexable_container<K, V1>> {
-  using type =
-      pythonic::types::set<decltype(std::declval<V1>() + std::declval<V2>())>;
+  using type = pythonic::types::set<decltype(std::declval<V1>() + std::declval<V2>())>;
 };
 
 template <class T0, class T1>
@@ -133,10 +131,9 @@ namespace types
   {
 
     // data holder
-    using _type =
-        typename std::remove_cv<typename std::remove_reference<T>::type>::type;
+    using _type = std::remove_cv_t<std::remove_reference_t<T>>;
     using container_type =
-        std::set<_type, std::less<_type>, utils::allocator<_type>>;
+        std::unordered_set<_type, std::hash<_type>, std::equal_to<_type>, utils::allocator<_type>>;
     utils::shared_ref<container_type> data;
 
   public:
@@ -146,19 +143,14 @@ namespace types
     // types
     using reference = typename container_type::reference;
     using const_reference = typename container_type::const_reference;
-    using iterator =
-        utils::comparable_iterator<typename container_type::iterator>;
-    using const_iterator =
-        utils::comparable_iterator<typename container_type::const_iterator>;
+    using iterator = typename container_type::iterator;
+    using const_iterator = typename container_type::const_iterator;
     using size_type = typename container_type::size_type;
     using difference_type = typename container_type::difference_type;
     using value_type = typename container_type::value_type;
     using allocator_type = typename container_type::allocator_type;
     using pointer = typename container_type::pointer;
     using const_pointer = typename container_type::const_pointer;
-    using reverse_iterator = typename container_type::reverse_iterator;
-    using const_reverse_iterator =
-        typename container_type::const_reverse_iterator;
 
     // constructors
     set();
@@ -175,10 +167,6 @@ namespace types
     const_iterator begin() const;
     iterator end();
     const_iterator end() const;
-    reverse_iterator rbegin();
-    const_reverse_iterator rbegin() const;
-    reverse_iterator rend();
-    const_reverse_iterator rend() const;
 
     // modifiers
     T pop();
@@ -213,8 +201,7 @@ namespace types
     set<T> union_() const;
 
     template <typename U, typename... Types>
-    typename __combined<set<T>, U, Types...>::type
-    union_(U &&other, Types &&...others) const;
+    typename __combined<set<T>, U, Types...>::type union_(U &&other, Types &&...others) const;
 
     template <typename... Types>
     none_type update(Types &&...others);
@@ -222,8 +209,8 @@ namespace types
     set<T> intersection() const;
 
     template <typename U, typename... Types>
-    typename __combined<set<T>, U, Types...>::type
-    intersection(U const &other, Types const &...others) const;
+    typename __combined<set<T>, U, Types...>::type intersection(U const &other,
+                                                                Types const &...others) const;
 
     template <typename... Types>
     void intersection_update(Types const &...others);
@@ -240,12 +227,10 @@ namespace types
     void difference_update(Types const &...others);
 
     template <typename U>
-    set<typename __combined<T, U>::type>
-    symmetric_difference(set<U> const &other) const;
+    set<typename __combined<T, U>::type> symmetric_difference(set<U> const &other) const;
 
     template <typename U>
-    typename __combined<U, set<T>>::type
-    symmetric_difference(U const &other) const;
+    typename __combined<U, set<T>>::type symmetric_difference(U const &other) const;
 
     template <typename U>
     void symmetric_difference_update(U const &other);

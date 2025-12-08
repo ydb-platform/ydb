@@ -581,6 +581,51 @@ protected:
         static_cast<TDerived*>(this)->CheckExecutionComplete();
     }
 
+    void HandleHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream str;
+        HTML(str) {
+            PRE() {
+                str << "KQP Executer, SelfId=" << SelfId() << Endl;
+
+                TABLE_SORTABLE_CLASS("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                            TABLEH() {str << "StageId";}
+                            TABLEH() {str << "TaskId";}
+                            TABLEH() {str << "NodeId";}
+                            TABLEH() {str << "ActorId";}
+                            TABLEH() {str << "Completed";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (const auto& task : TasksGraph.GetTasks()) {
+                            TABLER() {
+                                TABLED() {str << task.StageId.TxId;}
+                                TABLED() {str << task.StageId.StageId;}
+                                TABLED() {str << task.Id;}
+                                TABLED() {str << task.Meta.NodeId;}
+                                TABLED() {
+                                    if (task.ComputeActorId) {
+                                        HREF(TStringBuilder() << "/node/" << task.ComputeActorId.NodeId() << "/actors/kqp_node?ca=" << task.ComputeActorId)  {
+                                            str << task.ComputeActorId;
+                                        }
+                                    } else {
+                                        str << "N/A";
+                                    }
+                                    str << Endl;
+                                }
+                                TABLED() {str << task.Meta.Completed;}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        this->Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+    }
+
     STATEFN(ReadyState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpExecuter::TEvTxRequest, HandleReady);
@@ -800,6 +845,13 @@ protected:
                     break;
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
+                    if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
+                        LOG_D("Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled");
+                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                                "Compute node is unavailable"));
+                        break;
+                    }
                     for (auto& task : record.GetNotStartedTasks()) {
                         if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN
                               and ev->Sender.NodeId() != SelfId().NodeId()) {
@@ -925,7 +977,8 @@ protected:
             .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
             .Query = Query,
-            .CheckpointCoordinator = CheckpointCoordinatorId
+            .CheckpointCoordinator = CheckpointCoordinatorId,
+            .EnableWatermarks = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks(),
         });
 
         auto err = Planner->PlanExecution();

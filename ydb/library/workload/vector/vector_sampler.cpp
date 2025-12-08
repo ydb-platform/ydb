@@ -51,8 +51,14 @@ void TVectorSampler::SelectPredefinedVectors() {
         vectorQueryBuilder << ", Unwrap(" << Params.PrefixColumn << ") as prefix_value";
     }
     vectorQueryBuilder << " FROM " << Params.QueryTableName
-        << " ORDER BY " << Params.QueryTableKeyColumn
-        << " LIMIT " << Params.Targets;
+        << " ORDER BY ";
+    for (size_t i = 0; i < Params.QueryTableKeyColumns.size(); i++) {
+        if (i > 0) {
+            vectorQueryBuilder << ", ";
+        }
+        vectorQueryBuilder << Params.QueryTableKeyColumns[i];
+    }
+    vectorQueryBuilder << " LIMIT " << Params.Targets;
 
     std::string vectorQuery = vectorQueryBuilder;
     std::optional<NYdb::TResultSet> vectorResultSet;

@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
@@ -31,6 +32,7 @@ namespace {
         return IsIn({
             NScheme::ESchemeEntryType::Table,
             NScheme::ESchemeEntryType::View,
+            NScheme::ESchemeEntryType::Topic,
         }, entry.Type);
     }
 
@@ -85,7 +87,7 @@ TCommandExport::TCommandExport(bool useExportToYt)
 TCommandExportToYt::TCommandExportToYt()
     : TYdbOperationCommand("yt", {}, "Create export to YT")
 {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
         {"Destination", {{"destination", "dst", "d"}, "Path to a table or a directory in YT", true}},
@@ -214,7 +216,7 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    auto colors = NColorizer::AutoColors(Cout);
+    auto colors = NConsoleClient::AutoColors(Cout);
     config.Opts->AddLongOption("scheme", TStringBuilder()
             << "S3 endpoint scheme - "
             << colors.BoldColor() << "http" << colors.OldColor()

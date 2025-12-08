@@ -187,7 +187,9 @@ namespace NKikimr {
                     [[fallthrough]];
                 case NKikimrBlobStorage::PhantomFlags:
                     pres = ProcessPhantomFlags(data);
-                    if (pres & LongProcessing) {
+                    if (pres & MsgFullFlag) {
+                        break;
+                    } else if (pres & LongProcessing) {
                         return false;
                     }
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);

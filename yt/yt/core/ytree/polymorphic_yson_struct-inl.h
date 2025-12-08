@@ -202,6 +202,16 @@ TPolymorphicYsonStruct<TMapping>::operator bool() const
 
 template <class T>
     requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
+void TraverseYsonStruct(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path)
+{
+    static constexpr auto enumValues = TEnumTraits<typename T::TKey>::GetDomainValues();
+    [&]<auto... Is> (std::index_sequence<Is...>) {
+        (TraverseYsonStruct<typename T::template TEnumToDerived<enumValues[Is]>>(visitor, path + "/" + FormatEnum(enumValues[Is])), ...);
+    } (std::make_index_sequence<std::size(enumValues)>());
+}
+
+template <class T>
+    requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
 void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
     BuildYsonFluently(consumer)

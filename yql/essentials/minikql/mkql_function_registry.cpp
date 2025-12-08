@@ -115,7 +115,8 @@ public:
     }
 
     TMutableFunctionRegistry(const TMutableFunctionRegistry& rhs)
-        : Builtins_(rhs.Builtins_)
+        : IMutableFunctionRegistry(rhs)
+        , Builtins_(rhs.Builtins_)
         , LoadedLibraries_(rhs.LoadedLibraries_)
         , UdfModules_(rhs.UdfModules_)
         , SupportsSizedAllocators_(rhs.SupportsSizedAllocators_)

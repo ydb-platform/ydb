@@ -25,6 +25,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 3
 
+
 class Param(object):
     def __init__(
         self,
@@ -1238,6 +1239,17 @@ class TestPqRowDispatcher(TestYdsBase):
             if count > 0:
                 break
             assert time.time() < deadline, f"Waiting sensor ParsingErrors value failed, current count {count}"
+            time.sleep(1)
+
+        while True:
+            count = 0
+            for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+                value = kikimr.compute_plane.get_sensors(node_index, "yq").find_sensor(
+                    {"subsystem": "row_dispatcher", "topic": f"{self.input_topic}", "sensor": "JsonParsingErrors"})
+                count += value if value is not None else 0
+            if count > 0:
+                break
+            assert time.time() < deadline, f"Waiting sensor JsonParsingErrors value failed, current count {count}"
             time.sleep(1)
         stop_yds_query(client, query_id)
 

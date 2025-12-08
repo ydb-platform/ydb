@@ -264,6 +264,10 @@ public:
 
                 if (context.SS->CdcStreams.contains(txState->CdcPathId)) {
                     context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
+            context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
+
+            // Sync child indexes to match the new version
+            NCdcStreamState::SyncChildIndexes(srcPath, srcTable->AlterVersion, OperationId, context, db);
 
                     auto stream = context.SS->CdcStreams.at(txState->CdcPathId);
                     if (stream->AlterData) {
@@ -471,6 +475,7 @@ public:
         }
 
         TPath srcPath = TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS);
+
         {
             TPath::TChecker checks = srcPath.Check();
             checks
@@ -478,15 +483,22 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsTable()
-                .NotUnderTheSameOperation(OperationId.GetTxId())
-                .NotUnderOperation();
+                .IsTable();
+
+            if (!Transaction.GetCreateTable().GetAllowUnderSameOperation()) {
+                checks
+                    .NotUnderTheSameOperation(OperationId.GetTxId())
+                    .NotUnderOperation();
+            }
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
                     checks.IsInsideTableIndexPath(); //copy imp index table as index index table, not a separate one
                 } else {
-                    checks.IsCommonSensePath();
+                    // Allow copying index impl tables when feature flag is enabled
+                    if (!srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {
+                        checks.IsCommonSensePath();
+                    }
                 }
             }
 
@@ -926,6 +938,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
     auto cdcPeerOp = tx.HasCreateCdcStream() ? &tx.GetCreateCdcStream() : nullptr;
 
     TPath srcPath = TPath::Resolve(copying.GetCopyFromTable(), context.SS);
+
     {
         TPath::TChecker checks = srcPath.Check();
         checks.NotEmpty()
@@ -934,8 +947,12 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .IsResolved()
             .NotDeleted()
             .NotUnderDeleting()
-            .IsTable()
-            .IsCommonSensePath(); //forbid copy impl index tables directly
+            .IsTable();
+
+        // Allow copying index impl tables when feature flag is enabled
+        if (checks && !srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {
+            checks.IsCommonSensePath();
+        }
 
         if (!copying.GetAllowUnderSameOperation()) {
             checks.NotUnderOperation();
@@ -969,6 +986,8 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
     }
 
+    // Process indexes: always create index structure, but skip impl table copies if OmitIndexes is set
+    // (impl tables are handled separately by CreateConsistentCopyTables for incremental backups with CDC)
     for (auto& child: srcPath.Base()->GetChildren()) {
         auto name = child.first;
         auto pathId = child.second;
@@ -1023,6 +1042,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             }
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+        }
+
+        // Skip impl table copies if OmitIndexes is set (handled by CreateConsistentCopyTables for incremental backups)
+        if (copying.GetOmitIndexes()) {
+            continue;
         }
 
         for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {

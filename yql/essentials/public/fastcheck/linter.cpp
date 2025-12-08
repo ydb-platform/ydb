@@ -104,7 +104,16 @@ TChecksResponse RunChecks(const TChecksRequest& request) {
     for (const auto& c : enabledChecks) {
         auto checkRunner = GetCheckRunnerFactory().MakeRunner(c);
         if (checkRunner) {
-            res.Checks.push_back(checkRunner->Run(request));
+            try {
+                res.Checks.push_back(checkRunner->Run(request));
+            } catch (const std::exception& e) {
+                TCheckResponse r;
+                r.CheckName = c;
+                r.Success = false;
+                r.Issues.AddIssue(ExceptionToIssue(e));
+                CheckFatalIssues(r.Issues);
+                res.Checks.push_back(std::move(r));
+            }
         }
     }
 

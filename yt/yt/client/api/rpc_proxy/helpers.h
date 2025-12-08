@@ -132,6 +132,14 @@ void FromProto(
     NApi::TJobTraceMeta* result,
     const NProto::TJobTrace& proto);
 
+void ToProto(
+    NProto::TCheckOperationPermissionResult* proto,
+    const NApi::TCheckOperationPermissionResult& result);
+
+void FromProto(
+    NApi::TCheckOperationPermissionResult* result,
+    const NProto::TCheckOperationPermissionResult& proto);
+
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema);
 void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
 

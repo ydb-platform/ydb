@@ -116,6 +116,7 @@ public:
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockOutputSupportedDataTypes;
     NCommon::TConfSetting<bool, StaticPerCluster> ValidatePool;
     NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpFolder;
+    NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpAccount;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableDynamicTablesWrite;
 
     // static global
@@ -352,6 +353,8 @@ public:
     NCommon::TConfSetting<bool, Static> UseColumnGroupsFromInputTables;
     NCommon::TConfSetting<bool, Static> UseNativeDynamicTableRead;
     NCommon::TConfSetting<bool, Static> DontForceTransformForInputTables;
+    NCommon::TConfSetting<bool, Static> _RequestOnlyRequiredAttrs;
+    NCommon::TConfSetting<bool, Static> _CacheSchemaBySchemaId;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

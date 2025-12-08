@@ -6,6 +6,10 @@
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
+
+#include <ydb/core/protos/counters_pq.pb.h>
+#include <ydb/core/protos/msgbus.pb.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -13,14 +17,12 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/quoter/public/quoter.h>
-#include <ydb/core/persqueue/writer/source_id_encoding.h>
-#include <ydb/core/protos/counters_pq.pb.h>
-#include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
+
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
@@ -322,6 +324,8 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 }
             }
 
+            already = already || writeResponse.DeduplicatedByMessageId;
+
             if (!already) {
                 if (wrOffset) {
                     PQ_ENSURE(*wrOffset >= offset);
@@ -424,10 +428,6 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
     BlobEncoder.SyncHeadKeys();
-
-    // New blocks have been recorded. You can now delete the keys of the repackaged blocks.
-    DefferedKeysForDeletion.clear();
-
     BlobEncoder.SyncNewHeadKey();
 
     if (BlobEncoder.IsNothingWritten()) { //Nothing writed at all
@@ -479,6 +479,8 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();
+
+    MessageIdDeduplicator.Commit();
 
     if (DeletePartitionState == DELETION_IN_PROCESS) {
         DestroyActor(ctx);
@@ -1288,6 +1290,20 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             return false;
         }
         curOffset = poffset;
+    }
+
+    auto deduplicationResult = DeduplicateByMessageId(p.Msg, curOffset);
+    if (deduplicationResult) {
+        LOG_D("Deduplicate message " << p.Msg.SeqNo << " by MessageDeduplicationId");
+        p.DeduplicatedByMessageId = true;
+        p.Offset = deduplicationResult.value();
+
+        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
+        MsgsDiscarded.Inc();
+        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
+        BytesDiscarded.Inc(p.Msg.Data.size());
+
+        return true;
     }
 
     if (p.Msg.PartNo == 0) { //create new PartitionedBlob

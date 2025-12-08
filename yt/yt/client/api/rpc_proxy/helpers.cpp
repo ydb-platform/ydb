@@ -494,6 +494,20 @@ void FromProto(
     }
 }
 
+void ToProto(
+    NProto::TCheckOperationPermissionResult* proto,
+    const NApi::TCheckOperationPermissionResult& result)
+{
+    proto->set_action(static_cast<NProto::ESecurityAction>(result.Action));
+}
+
+void FromProto(
+    NApi::TCheckOperationPermissionResult* result,
+    const NProto::TCheckOperationPermissionResult& proto)
+{
+    result->Action = static_cast<NSecurityClient::ESecurityAction>(proto.action());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // MISC
 ////////////////////////////////////////////////////////////////////////////////

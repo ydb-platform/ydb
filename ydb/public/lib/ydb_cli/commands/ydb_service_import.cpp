@@ -8,6 +8,7 @@
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
@@ -49,7 +50,7 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    auto colors = NColorizer::AutoColors(Cout);
+    auto colors = NConsoleClient::AutoColors(Cout);
     config.Opts->AddLongOption("scheme", TStringBuilder()
             << "S3 endpoint scheme - "
             << colors.BoldColor() << "http" << colors.OldColor()
@@ -167,7 +168,8 @@ void TCommandImportFromS3::ExtractParams(TConfig& config) {
 
 bool IsSupportedObject(TStringBuf& key) {
     return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
-        || key.ChopSuffix(NDump::NFiles::CreateView().FileName);
+        || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
+        || key.ChopSuffix(NDump::NFiles::CreateTopic().FileName);
 }
 
 void TCommandImportFromS3::FillItems(NYdb::NImport::TImportFromS3Settings& settings) const {
@@ -178,6 +180,10 @@ void TCommandImportFromS3::FillItems(NYdb::NImport::TImportFromS3Settings& setti
     }
 
     ExcludeItems(settings, ExclusionPatterns);
+
+    if (settings.Item_.empty()) {
+        throw TMisuseException() << "No objects to import: the list of objects is empty after applying all filters";
+    }
 }
 
 void TCommandImportFromS3::FillItemsFromItemParam(NYdb::NImport::TImportFromS3Settings& settings) const {
@@ -487,7 +493,7 @@ void TCommandImportFromCsv::Config(TConfig& config) {
         .StoreTrue(&NewlineDelimited);
     TStringStream description;
     description << "Format that data will be serialized to before sending to YDB. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     description << "\n  " << colors.BoldColor() << "tvalue" << colors.OldColor()
         << "\n    " << "A default YDB protobuf format";
     description << "\n  " << colors.BoldColor() << "arrow" << colors.OldColor()

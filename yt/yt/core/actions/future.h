@@ -187,12 +187,8 @@ struct TFutureTimeoutOptions
 /*!
  *  The resulting value can be accessed by either subscribing (#Subscribe)
  *  for it or retrieving it explicitly (#Get, #TryGet). Also it is possible
- *  to move the value out of the future state (#SubscribeUnique, #GetUnique, #TryGetUnique).
- *  In the latter case, however, at most one extraction is possible;
- *  further attempts to access the value will result in UB.
- *  In particular, at most one call to #SubscribeUnique, #GetUnique, and #TryGetUnique (expect
- *  for calls returning null) must happen to any future state (possibly shared by multiple
- *  TFuture instances).
+ *  to move the value out of the future state
+ *  (by converting to TUniqueFuture via #AsUnique and invoking #Subscribe, #Get, #TryGet).
  */
 template <class T>
 class TFutureBase
@@ -276,13 +272,6 @@ public:
      */
     void Unsubscribe(TFutureCallbackCookie cookie) const;
 
-    //! Similar to #Subscribe but enables moving the value to the handler.
-    /*!
-     *  Normally at most one such handler could be attached.
-     */
-    // TODO(babenko): deprecated, see YT-26319
-    void SubscribeUnique(TCallback<void(TErrorOr<T>&&)> handler) const;
-
     //! Notifies the producer that the promised value is no longer needed.
     //! Returns |true| if succeeded, |false| is the promise was already set or canceled.
     bool Cancel(const TError& error) const;
@@ -318,17 +307,6 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>(const TErrorOr<T>&)> callback) const;
 
-    //! Same as #Apply but assumes that this chaining will be the only subscriber.
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<R(TErrorOr<T>&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
-
     //! Converts (successful) result to |U|; propagates errors as is.
     template <class U>
     TFuture<U> As() const;
@@ -338,8 +316,11 @@ public:
     TFuture<void> AsVoid() &&;
 
     //! Converts to TCancelable interface.
-    TCancelable AsCancelable() const&;
-    TCancelable AsCancelable() &&;
+    TCancelable AsCancelable() const;
+
+    //! Converts to TUniqueFuture interface.
+    TUniqueFuture<T> AsUnique() const&;
+    TUniqueFuture<T> AsUnique() &&;
 
 protected:
     explicit TFutureBase(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
@@ -378,20 +359,8 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>(T)> callback) const;
 
-    //! Same as #Apply but assumes that this chaining will be the only subscriber.
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<R(T&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TFuture<R>(T&&)> callback) const;
-
-    //! Converts to TUniqueFuture interface.
-    TUniqueFuture<T> AsUnique() const&;
-    TUniqueFuture<T> AsUnique() &&;
 
     using TFutureBase<T>::Apply;
-    using TFutureBase<T>::ApplyUnique;
 
 private:
     explicit TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
@@ -445,13 +414,19 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Provides the unique-value semantics interface.
+/*!
+ *  Note that at most one value extraction is ever possible;
+ *  further attempts to access the value will result in UB.
+ *  In particular, at most one call to #Subscribe, #Get, and #TryGet (expect
+ *  for calls returning null) must happen to any future state
+ *  (possibly shared by multiple future references).
+ */
 template <class T>
-class [[nodiscard]] TUniqueFuture
+class TUniqueFutureBase
     : public TFutureBase<T>
 {
 public:
-    TUniqueFuture() = default;
-    TUniqueFuture(std::nullopt_t);
+    using TFutureBase<T>::TFutureBase;
 
     //! Similar to #TFuture::Get but extracts the value by moving it out of the future state.
     /*!
@@ -481,6 +456,22 @@ public:
     TFuture<R> Apply(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>(TErrorOr<T>&&)> callback) const;
+
+private:
+    template <class U>
+    friend class TFutureBase;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+class [[nodiscard]] TUniqueFuture
+    : public TUniqueFutureBase<T>
+{
+public:
+    using TUniqueFutureBase<T>::TUniqueFutureBase;
+
+    //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
     template <class R>
     TFuture<R> Apply(TCallback<R(T&&)> callback) const;
     template <class R>
@@ -488,11 +479,27 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>(T&&)> callback) const;
 
-private:
-    explicit TUniqueFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
+    using TUniqueFutureBase<T>::Apply;
+};
 
-    template <class U>
-    friend class TFuture;
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+class [[nodiscard]] TUniqueFuture<void>
+    : public TUniqueFutureBase<void>
+{
+public:
+    using TUniqueFutureBase<void>::TUniqueFutureBase;
+
+    //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
+    template <class R>
+    TFuture<R> Apply(TCallback<R()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>()> callback) const;
+
+    using TUniqueFutureBase<void>::Apply;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

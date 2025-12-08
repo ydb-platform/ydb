@@ -35,8 +35,10 @@ namespace NKikimr {
             void Bootstrap(const TActorContext &ctx) {
                 KeepState.Init(
                     std::make_shared<TActorNotify>(ctx.ActorSystem(), ctx.SelfID),
-                    std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()));
+                    std::make_shared<TActorSystemLoggerCtx>(ctx.ActorSystem()),
+                    ctx.SelfID);
                 PerformActions(ctx);
+                UpdateCounters();
                 Become(&TThis::StateFunc);
             }
 
@@ -239,7 +241,10 @@ namespace NKikimr {
             // for tests/debug purposes only, remove almost all log
             void Handle(TEvBlobStorage::TEvVBaldSyncLog::TPtr &ev, const TActorContext &ctx) {
                 Y_UNUSED(ev);
-                KeepState.BaldLogEvent();
+                bool dropChunksExplicitly = ev->Get()->Record.HasDropChunksExplicitly()
+                        ? ev->Get()->Record.GetDropChunksExplicitly()
+                        : false;
+                KeepState.BaldLogEvent(dropChunksExplicitly);
                 PerformActions(ctx);
             }
 
@@ -249,8 +254,9 @@ namespace NKikimr {
                 ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
             }
 
-            void Handle(TEvPhantomFlagStorageAddFlagsFromSnapshot::TPtr ev) {
-                KeepState.AddFlagsToPhantomFlagStorage(std::move(ev->Get()->Flags));
+            void Handle(TEvPhantomFlagStorageFinishBuilder::TPtr ev) {
+                KeepState.FinishPhantomFlagStorageBuilder(std::move(ev->Get()->Flags),
+                        std::move(ev->Get()->Thresholds));
             }
 
             void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
@@ -267,6 +273,11 @@ namespace NKikimr {
                 KeepState.UpdateNeighbourSyncedLsn(ev->Get()->OrderNumber, ev->Get()->SyncedLsn);
             }
 
+            void UpdateCounters() {
+                KeepState.UpdateMetrics();
+                Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -279,10 +290,11 @@ namespace NKikimr {
                 HFunc(NPDisk::TEvCutLog, Handle)
                 HFunc(TEvents::TEvPoisonPill, Handle)
                 HFunc(TEvListChunks, Handle)
-                hFunc(TEvPhantomFlagStorageAddFlagsFromSnapshot, Handle)
+                hFunc(TEvPhantomFlagStorageFinishBuilder, Handle)
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
                 hFunc(TEvLocalSyncData, Handle)
                 hFunc(TEvSyncLogUpdateNeighbourSyncedLsn, Handle)
+                cFunc(TEvents::TEvWakeup::EventType, UpdateCounters)
             )
 
         public:
@@ -296,7 +308,7 @@ namespace NKikimr {
                 : TActorBootstrapped<TSyncLogKeeperActor>()
                 , SlCtx(std::move(slCtx))
                 , KeepState(SlCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount,
-                    SlCtx->SyncLogMaxEntryPointSize, SelfId())
+                    SlCtx->SyncLogMaxEntryPointSize)
             {}
         };
 

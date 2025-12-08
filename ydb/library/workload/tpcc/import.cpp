@@ -866,6 +866,9 @@ public:
         , StartTime(Clock::now())
         , LoadState(GetGlobalInterruptSource().get_token())
     {
+        ConnectionConfig.IsNetworkIntensive = true;
+        ConnectionConfig.UsePerChannelTcpConnection = true;
+        ConnectionConfig.UseAllNodes = true;
     }
 
     void ImportSync() {
@@ -921,6 +924,10 @@ public:
             TImportDisplayData dataToDisplay(LoadState);
             Tui = std::make_unique<TImportTui>(Log, Config, *LogBackend, dataToDisplay);
         }
+
+#ifndef NDEBUG
+        LOG_W("You're running a CLI binary built without NDEBUG defined, import will take much longer than expected");
+#endif
 
         // TODO: calculate optimal number of drivers (but per thread looks good)
         size_t driverCount = threadCount;

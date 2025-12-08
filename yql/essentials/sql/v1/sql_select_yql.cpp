@@ -53,7 +53,49 @@ public:
         return TNonNull(BuildYqlValues(Ctx_.Pos(), std::move(values)));
     }
 
+    TNodeResult Build(const TRule_select_subexpr& rule, EColumnRefState state) {
+        const auto& intersect = rule.GetRule_select_subexpr_intersect1();
+        if (!rule.GetBlock2().empty()) {
+            return Unsupported("(union_op select_subexpr_intersect)*");
+        }
+
+        const auto& select_or_expr = intersect.GetRule_select_or_expr1();
+        if (!intersect.GetBlock2().empty()) {
+            return Unsupported("(intersect_op select_or_expr)*");
+        }
+
+        return Build(select_or_expr, state);
+    }
+
+    TNodeResult Build(const TRule_exists_expr& rule) {
+        return Build(rule.GetBlock3()).transform([](auto x) {
+            return TNonNull(BuildYqlExistsSubquery(std::move(x)));
+        });
+    }
+
 private:
+    TNodeResult Build(const TRule_exists_expr::TBlock3& block) {
+        switch (block.GetAltCase()) {
+            case TRule_exists_expr_TBlock3::kAlt1:
+                return Build(block.GetAlt1().GetRule_select_stmt1());
+            case TRule_exists_expr_TBlock3::kAlt2:
+                return Build(block.GetAlt2().GetRule_values_stmt1());
+            case TRule_exists_expr_TBlock3::ALT_NOT_SET:
+                Y_UNREACHABLE();
+        }
+    }
+
+    TNodeResult Build(const TRule_select_or_expr& rule, EColumnRefState state) {
+        switch (rule.GetAltCase()) {
+            case TRule_select_or_expr::kAltSelectOrExpr1:
+                return Build(rule.GetAlt_select_or_expr1().GetRule_select_kind_partial1());
+            case TRule_select_or_expr::kAltSelectOrExpr2:
+                return Build(rule.GetAlt_select_or_expr2().GetRule_tuple_or_expr1(), state);
+            case TRule_select_or_expr::ALT_NOT_SET:
+                Y_UNREACHABLE();
+        }
+    }
+
     TNodeResult Build(const TRule_select_kind_partial& rule) {
         TYqlSelectArgs select;
 
@@ -556,21 +598,15 @@ private:
         return new TSortSpecification(std::move(*expr), isAscending);
     }
 
-    TNodeResult Build(const TRule_expr& rule, EColumnRefState state) {
+    template <class TRule>
+        requires std::same_as<TRule, TRule_expr> ||
+                 std::same_as<TRule, TRule_tuple_or_expr>
+    TNodeResult Build(const TRule& rule, EColumnRefState state) {
         TColumnRefScope scope(Ctx_, state);
         TSqlExpression sqlExpr(Ctx_, Mode_);
-        sqlExpr.ProduceYqlColumnRef();
+        sqlExpr.ProduceYqlSelect();
 
-        TNodeResult expr = sqlExpr.BuildSourceOrNode(rule);
-        if (!expr) {
-            return std::unexpected(expr.error());
-        }
-
-        if (TSourcePtr source = MoveOutIfSource(*expr)) {
-            return Unsupported("select_subexpr");
-        }
-
-        return expr;
+        return sqlExpr.Build(rule);
     }
 
     TMaybe<TString> Label(const TRule_result_column::TAlt2& rule) {
@@ -621,24 +657,53 @@ private:
     }
 
     std::unexpected<ESQLError> Unsupported(TStringBuf message) {
-        if (Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force) {
-            Error() << "YqlSelect unsupported: " << message;
-        }
-
-        return std::unexpected(ESQLError::Basic);
+        return YqlSelectUnsupported(Ctx_, message);
     }
 };
+
+NYql::TLangVersion YqlSelectLangVersion() {
+    return NYql::GetMaxLangVersion();
+}
+
+std::unexpected<ESQLError> YqlSelectUnsupported(TContext& ctx, TStringBuf message) {
+    if (ctx.GetYqlSelectMode() == EYqlSelectMode::Force) {
+        ctx.Error() << "YqlSelect unsupported: " << message;
+    }
+
+    return std::unexpected(ESQLError::UnsupportedYqlSelect);
+}
 
 TNodeResult BuildYqlSelect(
     TContext& ctx,
     NSQLTranslation::ESqlMode mode,
     const NSQLv1Generated::TRule_select_stmt& rule)
 {
-    if (auto result = TYqlSelect(ctx, mode).Build(rule)) {
-        return TNonNull(BuildYqlStatement(std::move(*result)));
-    } else {
-        return std::unexpected(result.error());
-    }
+    return TYqlSelect(ctx, mode)
+        .Build(rule)
+        .transform([](auto x) {
+            return TNonNull(BuildYqlStatement(std::move(x)));
+        });
+}
+
+TNodeResult BuildYqlSelectSubExpr(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_select_subexpr& rule,
+    EColumnRefState state)
+{
+    return TYqlSelect(ctx, mode)
+        .Build(rule, state)
+        .transform([](auto x) {
+            return TNonNull(WrapYqlSelectSubExpr(std::move(x)));
+        });
+}
+
+TNodeResult BuildYqlExists(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_exists_expr& rule)
+{
+    return TYqlSelect(ctx, mode).Build(rule);
 }
 
 TNodeResult BuildYqlSelect(
@@ -646,11 +711,11 @@ TNodeResult BuildYqlSelect(
     NSQLTranslation::ESqlMode mode,
     const NSQLv1Generated::TRule_values_stmt& rule)
 {
-    if (auto result = TYqlSelect(ctx, mode).Build(rule)) {
-        return TNonNull(BuildYqlStatement(std::move(*result)));
-    } else {
-        return std::unexpected(result.error());
-    }
+    return TYqlSelect(ctx, mode)
+        .Build(rule)
+        .transform([](auto x) {
+            return TNonNull(BuildYqlStatement(std::move(x)));
+        });
 }
 
 } // namespace NSQLTranslationV1

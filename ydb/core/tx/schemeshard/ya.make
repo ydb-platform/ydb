@@ -12,6 +12,7 @@ RECURSE_FOR_TESTS(
     ut_cdc_stream_reboots
     ut_column_build
     ut_compaction
+    ut_consistent_copy_tables
     ut_continuous_backup
     ut_continuous_backup_reboots
     ut_shred
@@ -272,6 +273,7 @@ SRCS(
     schemeshard_impl.cpp
     schemeshard_impl.h
     schemeshard_import.cpp
+    schemeshard_import_helpers.cpp
     schemeshard_import__cancel.cpp
     schemeshard_import__create.cpp
     schemeshard_import__forget.cpp

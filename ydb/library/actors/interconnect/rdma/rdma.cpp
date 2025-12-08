@@ -11,6 +11,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/system/thread.h>
+#include <util/system/yield.h>
 
 namespace NInterconnect::NRdma {
 
@@ -22,23 +23,133 @@ NMonitoring::TDynamicCounterPtr MakeCounters(NMonitoring::TDynamicCounters* coun
     return counters;
 }
 
-TCqCommon::~TCqCommon() {
-    if (Cq) {
-            ibv_destroy_cq(Cq);
-    }
+static void SigHandler(int) noexcept {
+    // Empty handler. We just need to interrupt read syscall
+}
+
+void SetSigHandler() noexcept {
+    struct sigaction sigActionData;
+    sigemptyset(&sigActionData.sa_mask);
+    sigActionData.sa_handler = &SigHandler;
+    sigActionData.sa_flags = 0;
+    sigaction(SIGUSR1, &sigActionData, nullptr);
 }
 
 class TSimpleCq: public TSimpleCqBase {
 public:
-    using TSimpleCqBase::TSimpleCqBase;
+    TSimpleCq(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c) noexcept
+        : TSimpleCqBase(as, sz, c, true)
+    {}
+
+    int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
+        return TSimpleCqBase::Init(ctx, maxCqe, nullptr);
+    }
 
     virtual ~TSimpleCq() {
-        Stop();
+        // For simple polling mode CQ, we just can destroy ibv CQ without any issues just aftre joining to the thread
+        Cont.store(false, std::memory_order_relaxed);
+        if (Thread.Running())
+            Thread.Join();
+
+        DestroyCq();
     }
+};
+
+class TSimpleEventDrivenCq: public TSimpleCqBase {
+public:
+    TSimpleEventDrivenCq(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c) noexcept
+        : TSimpleCqBase(as, sz, c, false)
+    {}
+
+    int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
+        CompChannel = ibv_create_comp_channel(ctx->GetContext());
+        if (!CompChannel) {
+            return errno;
+        }
+
+        int err = TSimpleCqBase::Init(ctx, maxCqe, CompChannel);
+        if (err) {
+            return err;
+        }
+
+        err = ibv_req_notify_cq(Cq, 0);
+        if (err) {
+            return errno;
+        }
+
+        return 0;
+    }
+
+    void Idle() noexcept override final {
+        struct ibv_cq *evCq = nullptr;
+        void *evCtx = nullptr;
+
+        int err = ibv_get_cq_event(CompChannel, &evCq, &evCtx);
+        if (err) {
+            if (errno != EINTR) {
+                NotifyErr();
+                return;
+            }
+        }
+
+        if (!evCq) {
+            return;
+        }
+        // TODO: batch ack
+        ibv_ack_cq_events(evCq, 1);
+        err = ibv_req_notify_cq(evCq, 0);
+        if (err) {
+            Cerr << "Couldn't request CQ notification\n" << Endl;
+            NotifyErr();
+            Y_DEBUG_ABORT_UNLESS(false);
+        }
+    }
+
+    virtual ~TSimpleEventDrivenCq() {
+        // For event driven CQ stopping is a bit complicated
+
+        // 1. Lock the verbs builder. This prevents possibility to add new WR. Not nessesearly but just to be sure
+        // No deadlock here - the builder routine is protected by TryLock semantic.
+        VerbsBuildingState.Lock.Acquire();
+
+        // 2. Set flag to exit from loop
+        Cont.store(false, std::memory_order_relaxed);
+
+        // 3. Send signal to the thread to interrupt waiting on the read syscall ()
+        // NOTE: There is a tiny chanse the signal was send before thread blocked on the read syscall
+        // so in this case repeat send signal until cq thread finished
+        while (!Finished.load(std::memory_order_relaxed)) {
+            Awake();
+            if (Finished.load(std::memory_order_relaxed)) {
+                break;
+            }
+            ThreadYield();
+        }
+
+        // 4. As usual, join and destroy CQ
+        if (Thread.Running())
+            Thread.Join();
+
+        DestroyCq();
+
+        // 5. Destroy completion event channel
+        if (ibv_destroy_comp_channel(CompChannel)) {
+            // https://www.rdmamojo.com/2012/10/26/ibv_destroy_comp_channel
+            Cerr << "Unable to destroy completion event channel, errno: " << errno << Endl;
+            // it should not happen, but if it happens it is not a fatal error for production
+            Y_DEBUG_ABORT_UNLESS(false);
+        }
+    }
+private:
+    ibv_comp_channel* CompChannel;
 };
 
 ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept {
     return CreateCq<TSimpleCq>(ctx, as, maxCqe, maxWr, counter);
+}
+
+ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept {
+    return CreateCq<TSimpleEventDrivenCq>(ctx, as, maxCqe, maxWr, counter);
 }
 
 const int TQueuePair::UnknownQpState = IBV_QPS_UNKNOWN;
@@ -179,6 +290,9 @@ void TQueuePair::Output(IOutputStream& os) const noexcept {
     } else {
         os << attr.qp_state;
     }
+    if (Ctx) {
+        os << ", ctx: " << *Ctx;
+    }
 }
 
 TQueuePair::TQpState TQueuePair::GetState(bool forseUpdate) const noexcept {
@@ -213,7 +327,7 @@ size_t TQueuePair::GetDeviceIndex() const noexcept {
     return Ctx->GetDeviceIndex();
 }
 
-bool TQueuePair::IsRtsState(TQpS state) {
+bool TQueuePair::IsRtsState(TQpS state) noexcept {
      enum ibv_qp_state qpState = static_cast<enum ibv_qp_state>(state.State);
      return qpState == IBV_QPS_RTS;
 }

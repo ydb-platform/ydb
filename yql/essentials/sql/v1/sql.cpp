@@ -186,6 +186,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore66: // create secret
         case TRule_sql_stmt_core::kAltSqlStmtCore67: // alter secret
         case TRule_sql_stmt_core::kAltSqlStmtCore68: // drop secret
+        case TRule_sql_stmt_core::kAltSqlStmtCore69: // truncate table
             return false;
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Y_UNREACHABLE();
@@ -227,7 +228,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TLexers& lexers, const T
                 }
                 SqlASTsToYqlsImpl(result.back(), {statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2()}, ctx);
                 result.back().Issues = std::move(issues);
-                issues.Clear();
+                issues = {};
             }
             for (auto block : statements.GetBlock3()) {
                 if (NeedUseForAllStatements(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2().Alt_case())) {
@@ -243,7 +244,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TLexers& lexers, const T
                 statementResult.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
                 SqlASTsToYqlsImpl(result.back(), statementResult, ctx);
                 result.back().Issues = std::move(issues);
-                issues.Clear();
+                issues = {};
             }
         }
     } else {

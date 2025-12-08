@@ -142,16 +142,16 @@ void Rename(const TString& source, const TString& destination)
     }
 }
 
-TString GetFileName(const TString& path)
+TString GetFileName(std::string_view path)
 {
     size_t slashPosition = path.find_last_of(LOCSLASH_C);
     if (slashPosition == TString::npos) {
-        return path;
+        return TString(path);
     }
-    return path.substr(slashPosition + 1);
+    return TString(path.substr(slashPosition + 1));
 }
 
-TString GetDirectoryName(const TString& path)
+TString GetDirectoryName(std::string_view path)
 {
     auto absPath = CombinePaths(NFs::CurrentWorkingDirectory(), path);
     size_t slashPosition = absPath.find_last_of(LOCSLASH_C);
@@ -163,10 +163,10 @@ TString GetDirectoryName(const TString& path)
     }
 }
 
-TString GetRealPath(const TString& path)
+TString GetRealPath(std::string_view path)
 {
     auto curPath = CombinePaths(NFs::CurrentWorkingDirectory(), path);
-    std::vector<TString> parts;
+    std::vector<std::string> parts;
     while (!Exists(curPath)) {
         auto filename = GetFileName(curPath);
         if (filename == ".") {
@@ -191,7 +191,7 @@ TString GetRealPath(const TString& path)
     return CombinePaths(parts);
 }
 
-bool IsPathRelativeAndInvolvesNoTraversal(const TString& path)
+bool IsPathRelativeAndInvolvesNoTraversal(std::string_view path)
 {
     auto normalizedPath = NormalizePathSeparators(path);
     if (normalizedPath.StartsWith(LOCSLASH_C)) {
@@ -225,7 +225,7 @@ bool IsPathRelativeAndInvolvesNoTraversal(const TString& path)
     return true;
 }
 
-TString GetFileExtension(const TString& path)
+TString GetFileExtension(std::string_view path)
 {
     size_t dotPosition = path.find_last_of('.');
     if (dotPosition == TString::npos) {
@@ -235,10 +235,10 @@ TString GetFileExtension(const TString& path)
     if (slashPosition != TString::npos && dotPosition < slashPosition) {
         return "";
     }
-    return path.substr(dotPosition + 1);
+    return TString(path.substr(dotPosition + 1));
 }
 
-TString GetFileNameWithoutExtension(const TString& path)
+TString GetFileNameWithoutExtension(std::string_view path)
 {
     auto fileName = GetFileName(path);
     size_t dotPosition = fileName.find_last_of('.');
@@ -292,7 +292,7 @@ std::vector<TString> EnumerateDirectories(const TString& path, int depth)
     return result;
 }
 
-TString GetRelativePath(const TString& from, const TString& to)
+TString GetRelativePath(std::string_view from, std::string_view to)
 {
     std::vector<TString> tokensFrom;
     StringSplitter(GetRealPath(from)).Split(LOCSLASH_C).Collect(&tokensFrom);
@@ -306,7 +306,7 @@ TString GetRelativePath(const TString& from, const TString& to)
         ++commonPrefixLength;
     }
 
-    std::vector<TString> relativePathTokens;
+    std::vector<std::string> relativePathTokens;
     relativePathTokens.reserve(tokensFrom.size() + tokensTo.size() - 2 * commonPrefixLength);
     for (int index = 0; index < std::ssize(tokensFrom) - commonPrefixLength; ++index) {
         relativePathTokens.push_back("..");
@@ -322,12 +322,12 @@ TString GetRelativePath(const TString& from, const TString& to)
     return CombinePaths(relativePathTokens);
 }
 
-TString GetRelativePath(const TString& path)
+TString GetRelativePath(std::string_view path)
 {
     return GetRelativePath(NFs::CurrentWorkingDirectory(), path);
 }
 
-TString GetShortestPath(const TString& path)
+TString GetShortestPath(std::string_view path)
 {
     auto absolutePath = GetRealPath(path);
     auto relativePath = GetRelativePath(path);
@@ -494,7 +494,7 @@ namespace {
     const char PATH_DELIM2 = 0;
 #endif
 
-bool IsAbsolutePath(const TString& path)
+bool IsAbsolutePath(std::string_view path)
 {
     if (path.empty())
         return false;
@@ -503,7 +503,7 @@ bool IsAbsolutePath(const TString& path)
 #ifdef _win_
     if (path[0] == PATH_DELIM2)
         return true;
-    if (path[0] > 0 && isalpha(path[0]) && path[1] == ':')
+    if (path[0] > 0 && isalpha(path[0]) && path.size() > 1 && path[1] == ':')
         return true;
 #endif
     return false;
@@ -511,16 +511,16 @@ bool IsAbsolutePath(const TString& path)
 
 } // namespace
 
-TString CombinePaths(const TString& path1, const TString& path2)
+TString CombinePaths(std::string_view path1, std::string_view path2)
 {
     return IsAbsolutePath(path2) ? NormalizePathSeparators(path2) : JoinPaths(path1, path2);
 }
 
-TString CombinePaths(const std::vector<TString>& paths)
+TString CombinePaths(const std::vector<std::string>& paths)
 {
     YT_VERIFY(!paths.empty());
     if (paths.size() == 1) {
-        return paths[0];
+        return TString(paths[0]);
     }
     auto result = CombinePaths(paths[0], paths[1]);
     for (int index = 2; index < std::ssize(paths); ++index) {
@@ -529,14 +529,14 @@ TString CombinePaths(const std::vector<TString>& paths)
     return result;
 }
 
-TString JoinPaths(const TString& path1, const TString& path2)
+TString JoinPaths(std::string_view path1, std::string_view path2)
 {
     if (path1.empty())
-        return path2;
+        return TString(path2);
     if (path2.empty())
-        return path1;
+        return TString(path1);
 
-    auto path = path1;
+    TString path(path1);
     int delim = 0;
     if (path1.back() == PATH_DELIM || path1.back() == PATH_DELIM2)
         ++delim;
@@ -548,7 +548,7 @@ TString JoinPaths(const TString& path1, const TString& path2)
     return NormalizePathSeparators(path);
 }
 
-TString NormalizePathSeparators(const TString& path)
+TString NormalizePathSeparators(std::string_view path)
 {
 #ifdef _unix_
     constexpr char platformPathSeparator = '/';

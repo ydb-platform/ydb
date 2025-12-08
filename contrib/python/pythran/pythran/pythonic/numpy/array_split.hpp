@@ -11,8 +11,8 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  types::list<typename assignable<
-      decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>
+  types::list<
+      typename assignable<decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>
   array_split(E const &a, long nb_split)
   {
     long sz = a.template shape<0>();
@@ -21,8 +21,8 @@ namespace numpy
     long nb_full_split = nb_split;
     if (end != sz)
       nb_full_split -= (end - sz);
-    types::list<typename assignable<
-        decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>
+    types::list<
+        typename assignable<decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>
         out(nb_split);
 
     long index = 0;
@@ -35,16 +35,14 @@ namespace numpy
   }
 
   template <class E, class I>
-  typename std::enable_if<
-      types::is_iterable<I>::value,
-      types::list<typename assignable<
-          decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>>::
-      type
-      array_split(E const &a, I const &split_mask)
+  std::enable_if_t<types::is_iterable<I>::value,
+                   types::list<typename assignable<
+                       decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>>
+  array_split(E const &a, I const &split_mask)
   {
     long sz = a.template shape<0>();
-    types::list<typename assignable<
-        decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>
+    types::list<
+        typename assignable<decltype(std::declval<E>()[types::fast_contiguous_slice()])>::type>
         out(1 + split_mask.flat_size());
     long index = 0;
     auto inserter = out.begin();

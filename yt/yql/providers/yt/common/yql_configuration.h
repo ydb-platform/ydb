@@ -123,7 +123,6 @@ constexpr bool DEFAULT_ENABLE_FUSE_MAP_TO_MAPREDUCE = false;
 constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 
 constexpr bool DEFAULT_USE_QL_FILTER = false;
-constexpr bool DEFAULT_PRUNE_QL_FILTER_LAMBDA = true;
 
 constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
 
@@ -146,6 +145,9 @@ constexpr bool DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER = false;
 constexpr bool DEFAULT_EARLY_PARTITION_PRUNING = false;
 
 constexpr bool DEFAULT_VALIDATE_CLUSTERS = false;
+
+constexpr bool DEFAULT_REQUEST_ONLY_REQUIRED_ATTRS = false;
+constexpr bool DEFAULT_CACHE_SCHEMA_BY_SCHEMA_ID = false;
 
 constexpr ui64 DEFAULT_QUERY_DUMP_TABLE_SIZE_LIMIT = 100_GB;
 constexpr ui64 DEFAULT_QUERY_DUMP_TABLE_COUNT_PER_CLUSTER_LIMIT = 5;

@@ -1441,7 +1441,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     addPort->SslCertificatePem = Config.Certificate;
     addPort->CertificateFile = Config.CertificateFile;
     addPort->PrivateKeyFile = Config.PrivateKeyFile;
-    addPort->Secure = !Config.Certificate.empty() || !Config.CertificateFile.empty() || !Config.PrivateKeyFile.empty();
+    addPort->Secure = !Config.Certificate.empty() || !Config.CertificateFile.empty();
     addPort->MaxRequestsPerSecond = Config.MaxRequestsPerSecond;
 
     std::promise<void> promise;

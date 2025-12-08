@@ -88,7 +88,6 @@ TString ToSubcolumnName(TStringBuf path) {
     if (pathItemsResult.IsFail()) {
         pathItemsResult = SplitJsonPath(ToJsonPath(path), NSubColumns::TJsonPathSplitSettings{.FillTypes = true, .FillStartPositions = false});
         if (pathItemsResult.IsFail()) {
-            Cerr << "Conversion is not possible" << Endl;
             return TString(path);
         }
     }
@@ -179,15 +178,16 @@ void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
                     visitor(std::nullopt);
                     continue;
                 }
-                switch (nodes[0].GetType()) {
+                const auto& node = nodes[0];
+                switch (node.GetType()) {
                     case NYql::NJsonPath::EValueType::Bool:
-                        visitor(nodes[i].GetBool() ? "true" : "false");
+                        visitor(node.GetBool() ? "true" : "false");
                         break;
                     case NYql::NJsonPath::EValueType::Number:
-                        visitor(::ToString(nodes[i].GetNumber()));
+                        visitor(::ToString(node.GetNumber()));
                         break;
                     case NYql::NJsonPath::EValueType::String:
-                        visitor(nodes[i].GetString());
+                        visitor(node.GetString());
                         break;
                     case NYql::NJsonPath::EValueType::Null:
                     case NYql::NJsonPath::EValueType::Object:

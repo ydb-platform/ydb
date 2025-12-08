@@ -23,13 +23,13 @@
 - сохранения [порядковых номеров сообщений](../topic#seqno) для дедупликации в выходных топиках,
 - сохранения стейтов агрегаций для тасок, содержащих потоковую агрегацию (таких как `GROUP BY HOP` / `MATCH_RECOGNIZE`).
 
-### Использование [читателя](../datamodel/topic#consumer)
+## Использование [читателя](../datamodel/topic#consumer)
 
 По умолчанию чтение из топика происходит [без использования читателя](../../reference/ydb-sdk/topic.md#no-consumer).
 Чтобы использовать читателя необходимо предварительно его создать через [CLI](../../reference/ydb-cli/topic-consumer-add) или при создании топика с помощью [CREATE TOPIC](../../yql/reference/syntax/create-topic.md).
 Далее указать его имя в тексте запроса через `PRAGMA pq.Consumer=my_consumer` (см. пример в [CREATE STREAMING QUERY](../../../yql/reference/syntax/create-streaming-query)).
 
-### Состояние запроса
+## Состояние запроса
 
 Запросы могут быть в 2-х состояних: запущен или остановлен. При этом в запущенном состоянии запрос может быть в нескольких статусах.
 Подробную информацию о запросе можно получить через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries).
@@ -39,11 +39,11 @@
 SELECT Path, Status, Text, Run FROM `.sys/streaming_queries`;
 ```
 
-### Поддерживаемые типы данных
+## Поддерживаемые типы данных
 
 Топики {{ ydb-short-name }} хранят неструктурированные данные. Поэтому при чтении необоходимо указывать формат и схему данных (см. [Форматы данных](formats.md)). Запись можно выполнять только в виде неструктурированных данных (например как строка или JSON).
 
-### Конфигурирование
+## Конфигурирование
 
 Функциональность включается установкой флагов `enable_external_data_sources` и `enable_streaming_queries` в конфигурации кластера.
 Пример:
@@ -54,7 +54,7 @@ feature_flags:
   enable_streaming_queries: true
 ```
 
-### Синтаксис
+## Синтаксис
 
 Чтение реализовано через [внешние источники данных](../datamodel/external_data_source), поэтому предварительно необходимо создать источник через [CREATE EXTERNAL DATA SOURCE](../../../yql/reference/syntax/create-external-data-source).
 
@@ -75,8 +75,9 @@ CREATE EXTERNAL DATA SOURCE source_name WITH (
 - [ALTER STREAMING QUERY](../../../yql/reference/syntax/alter-streaming-query),
 - [DROP STREAMING QUERY](../../../yql/reference/syntax/drop-streaming-query).
 
-### См. также
+## См. также
 
 - [Форматы данных](formats.md)
 - [Чекпойнты](checkpoints.md)
+- [Водяные знаки](watermarks.md)
 - [Рецепты работы с потоковыми запросами](../../recipes/streaming.md)

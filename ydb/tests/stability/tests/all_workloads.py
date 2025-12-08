@@ -16,17 +16,6 @@ def _init_stress_utils():
         return
 
     _all_stress_utils = {
-        'Show_Create': {
-            'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--path-prefix", "workload_show_create_{node_host}_iter_{iteration_num}_{uuid}"],
-            'local_path': 'ydb/tests/stress/show_create/view/show_create_view'
-        },
-        'Viewer': {
-            'args': [
-                "--mon_endpoint", "http://{node_host}:8765",
-            ],
-            'local_path': 'ydb/tests/stress/viewer/viewer'
-        },
         'IncrementalBackup': {
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
@@ -35,14 +24,6 @@ def _init_stress_utils():
             'local_path': 'ydb/tests/stress/backup/backup_stress'
         },
     }
-
-    for table_type in ['row', 'column']:
-        _all_stress_utils[f'Mixed_{table_type}'] = {
-            'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--store_type", table_type,
-                     "--mixed_prefix", f"mixed_{table_type}_{{node_host}}_iter_{{iteration_num}}_{{uuid}}"],
-            'local_path': 'ydb/tests/stress/mixedpy/workload_mixed'
-        }
 
 
 # Initialize on import

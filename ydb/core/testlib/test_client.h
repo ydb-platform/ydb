@@ -709,7 +709,7 @@ namespace Tests {
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
 
         template <typename... TArgs>
-        TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs... args);
+        TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs&&... args);
         TString MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up);
         TString KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx);
         bool WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout);

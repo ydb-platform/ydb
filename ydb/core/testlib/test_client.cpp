@@ -3121,7 +3121,7 @@ namespace Tests {
     }
 
     template <typename... TArgs>
-    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs... args) {
+    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs&&... args) {
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(args...), 0);
         TAutoPtr<IEventHandle> handle;
@@ -3149,7 +3149,7 @@ namespace Tests {
     TString TClient::KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx) {
         ui32 nodeId = runtime->GetNodeId(nodeIdx);
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
-        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId));
+        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId), HTTP_METHOD_POST);
     }
 
     bool TClient::WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {

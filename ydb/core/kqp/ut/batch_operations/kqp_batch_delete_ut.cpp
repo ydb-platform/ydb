@@ -594,11 +594,10 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
                     WHERE Key >= 3;
             )");
 
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             if (UseSink && UseBatchUpdates) {
-                auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             } else {
-                auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
                 UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operations are not supported at the current time.", result.GetIssues().ToString());
             }

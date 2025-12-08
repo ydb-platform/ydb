@@ -859,9 +859,10 @@ protected:
                     LOG_D("Received NODE_SHUTTING_DOWN, attempting run tasks locally");
                     
                     ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
-                    auto targetNode = MakeKqpNodeServiceID(SelfId().NodeId());
-                    
-                    if (!Planner->SendStartKqpTasksRequest(requestId, targetNode, true)) {
+                    auto localNode = MakeKqpNodeServiceID(SelfId().NodeId());
+
+                    // changes requests nodeId when redirect tasks on local node: used to check on disconnected
+                    if (!Planner->SendStartKqpTasksRequest(requestId, localNode, true)) {
                         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
                             MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE,
                                 "Compute node is unavailable"));

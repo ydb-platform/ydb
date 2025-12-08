@@ -219,20 +219,26 @@ private:
             requestTaskIds.push_back(dqTask.GetId());
         }
 
+        bool isLocalRequest = (ev->Sender.NodeId() == SelfId().NodeId());
+        
         if (State_->HasRequest(txId)) {
             if (State_->IsRequestCancelled(txId, executerId)) {
-                LOG_D("TxId: " << txId << ", rejecting tasks for cancelled request");
                 co_return ReplyError(txId, executerId, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, 
                     ev->Cookie, "Request was cancelled");
             }
-            if (State_->AddTasksToRequest(txId, executerId, requestTaskIds)) {
+            if (isLocalRequest && State_->AddTasksToRequest(txId, executerId, requestTaskIds)) {
+                LOG_D("TxId: " << txId << ", added " << requestTaskIds.size() 
+                    << " tasks to existing local request from " << executerId);
             } else {
+                LOG_D("TxId: " << txId << ", creating new request, isLocal: " << isLocalRequest << ", executer: " << executerId);
                 for (ui64 taskId : requestTaskIds) {
                     request.Tasks.emplace(taskId, std::nullopt);
                 }
                 State_->AddRequest(std::move(request));
             }
         } else {
+            LOG_D("TxId: " << txId << ", creating new request with " << requestTaskIds.size() 
+                << " tasks from " << executerId << ", isLocal: " << isLocalRequest);
             for (ui64 taskId : requestTaskIds) {
                 request.Tasks.emplace(taskId, std::nullopt);
             }
@@ -432,12 +438,8 @@ private:
         }
     }
 
-    void HandleShuttingDown(TEvents::TEvWakeup::TPtr&) {
-        LOG_D("Received TEvWakeup in ShuttingDownState, not rescheduling timer");
-        auto expiredRequests = State_->ClearExpiredRequests();
-        for (auto& txId : expiredRequests) {
-            TerminateTx(txId, "reached execution deadline during shutdown", NYql::NDqProto::StatusIds::TIMEOUT);
-        }
+    void HandleShuttingDown(TEvents::TEvWakeup::TPtr& ev) {
+        HandleWork(ev);
     }
     void HandleShuttingDown(TEvents::TEvPoison::TPtr&) {
         PassAway();

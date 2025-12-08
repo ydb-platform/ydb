@@ -162,22 +162,19 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
 
     if (isShutdown) {
         requestData.RetryNumber = ExecuterRetriesConfig.GetMaxRetryNumber();
-        if (requestData.NodeId == target.NodeId()) {
-            LOG_D("Request was originally on local node which is shutting down" << requestId);
-        } else {
-            LOG_D("Try to retry after NODE_SHUTTING_DOWN, run tasks locally, requestId: " << requestId);
-            requestData.NodeId = target.NodeId();
-            TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.release(),
-                CalcSendMessageFlagsForNode(target.NodeId()), requestId, nullptr, ExecuterSpan.GetTraceId()));
-            return true;
-        }
+        YQL_ENSURE(requestData.NodeId != target.NodeId());
+        LOG_D("Try to retry after NODE_SHUTTING_DOWN, run tasks locally, requestId: " << requestId);
+        requestData.NodeId = target.NodeId();
+        TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(target, ExecuterId, ev.release(),
+            CalcSendMessageFlagsForNode(target.NodeId()), requestId, nullptr, ExecuterSpan.GetTraceId()));
+        return true;
     }
 
     if (requestData.RetryNumber == ExecuterRetriesConfig.GetMaxRetryNumber()) {
         LOG_E("Retry failed by retries limit, requestId: " << requestId);
         TMaybe<ui32> targetNode;
         for (size_t i = 0; i < ResourcesSnapshot.size(); ++i) {
-            if (!TrackingNodes.contains(ResourcesSnapshot[i].nodeid())) {
+            if (!TrackingNodes.contains(ResourcesSnapshot[i].GetNodeId())) {
                 targetNode = ResourcesSnapshot[i].GetNodeId();
                 break;
             }

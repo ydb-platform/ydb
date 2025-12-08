@@ -12,6 +12,7 @@
 #include <util/stream/file.h>
 #include <util/stream/format.h>
 #include <util/system/hostname.h>
+#include <util/folder/path.h>
 #include <util/string/printf.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
@@ -305,6 +306,20 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
 }
 
 void TRunCommandConfigParser::ApplyParsedOptions() {
+    auto ensureFileExists = [](const TString& path, TStringBuf optName) {
+        if (path.empty()) {
+            return;
+        }
+        TFsPath fspath(path);
+        TFileStat filestat;
+        if (!fspath.Stat(filestat) || !filestat.IsFile()) {
+            ythrow yexception() << "File passed to --" << optName << " does not exist: " << path;
+        }
+    };
+
+    ensureFileExists(RunOpts.MonitoringCertificateFile, "mon-cert");
+    ensureFileExists(RunOpts.MonitoringPrivateKeyFile, "mon-key");
+
     // apply global options
     Config.AppConfig.MutableInterconnectConfig()->SetStartTcp(GlobalOpts.StartTcp);
     auto logConfig = Config.AppConfig.MutableLogConfig();

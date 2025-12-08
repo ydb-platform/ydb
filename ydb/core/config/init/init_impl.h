@@ -35,6 +35,7 @@
 #include <util/system/hostname.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
+#include <util/folder/path.h>
 #include <util/generic/maybe.h>
 #include <util/generic/map.h>
 #include <util/generic/string.h>
@@ -1218,6 +1219,7 @@ public:
         Option(nullptr, TCfg::TTracingConfigFieldTag{});
         Option(nullptr, TCfg::TFailureInjectionConfigFieldTag{});
 
+        ValidateCertPaths();
         CommonAppOptions.ApplyFields(AppConfig, Env, ConfigUpdateTracer);
 
        // MessageBus options.
@@ -1670,6 +1672,28 @@ public:
 
         Logger.Out() << "Successfully applied dynamic config from seed nodes" << Endl;
         ApplyConfigForNode(yamlConfig);
+    }
+
+    void ValidateCertPaths() const {
+        auto ensureFileExists = [](const TString& path, TStringBuf optName) {
+            if (path.empty()) {
+                return;
+            }
+            TFsPath fspath(path);
+            TFileStat filestat;
+            if (!fspath.Stat(filestat) || !filestat.IsFile()) {
+                ythrow yexception() << "File passed to --" << optName << " does not exist: " << path;
+            }
+        };
+
+        ensureFileExists(CommonAppOptions.PathToInterconnectCertFile, "cert/ic-cert");
+        ensureFileExists(CommonAppOptions.PathToInterconnectPrivateKeyFile, "key/ic-key");
+        ensureFileExists(CommonAppOptions.PathToInterconnectCaFile, "ca/ic-ca");
+        ensureFileExists(CommonAppOptions.GrpcSslSettings.PathToGrpcCertFile, "grpc-cert");
+        ensureFileExists(CommonAppOptions.GrpcSslSettings.PathToGrpcPrivateKeyFile, "grpc-key");
+        ensureFileExists(CommonAppOptions.GrpcSslSettings.PathToGrpcCaFile, "grpc-ca");
+        ensureFileExists(CommonAppOptions.MonitoringCertificateFile, "mon-cert");
+        ensureFileExists(CommonAppOptions.MonitoringPrivateKeyFile, "mon-key");
     }
 };
 

@@ -5840,6 +5840,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
     Y_UNIT_TEST(BadRequest) {
         TTestHelper helper;
         TVector<TShardedTableOptions::TColumn> columns = {
+            {"parent", "Uint32", true, false},
             {"key", "Uint32", true, false},
             {"emb", "String", false, false}};
         helper.CreateCustomTable("table-vector", columns);
@@ -5848,9 +5849,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             auto request1 = helper.GetBaseReadRequest("table-vector", 1, NKikimrDataEvents::FORMAT_CELLVEC);
             AddRangeQuery<ui32>(*request1, { 1 }, true, { 20 }, true);
             auto topK = request1->Record.MutableVectorTopK();
-            topK->SetColumn(1);
+            topK->SetColumn(2);
             topK->SetTargetVector("\xE4\x16\x02");
             topK->SetLimit(3);
+            topK->AddDistinctColumns(1);
             auto idx = topK->MutableSettings();
             idx->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
             idx->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
@@ -5866,7 +5868,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("limit is 0"));
 
         request1 = createRequest();
-        request1->Record.MutableVectorTopK()->SetColumn(2);
+        request1->Record.MutableVectorTopK()->SetColumn(3);
         readResult1 = helper.SendRead("table-vector", request1.release());
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
@@ -5892,57 +5894,68 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
         UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("either distance or similarity"));
+
+        request1 = createRequest();
+        request1->Record.MutableVectorTopK()->AddDistinctColumns(3);
+        readResult1 = helper.SendRead("table-vector", request1.release());
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
+        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("Too large unique column index"));
     }
 
     Y_UNIT_TEST_TWIN(Simple, Batch) {
         TTestHelper helper;
         TVector<TShardedTableOptions::TColumn> columns = {
+            {"parent", "Uint32", true, false},
             {"key", "Uint32", true, false},
             {"emb", "String", false, false}};
         helper.CreateCustomTable("table-vector", columns);
 
         // Insert initial data
-        ExecSQL(helper.Server, helper.Sender, R"(UPSERT INTO `/Root/table-vector` (key, emb) VALUES
-            ( 1, "\x00\xFF\x02"),
-            ( 2, "\x10\xF0\x02"),
-            ( 3, "\x20\xE0\x02"),
-            ( 4, "\x30\xD0\x02"),
-            ( 5, "\x40\xC0\x02"),
-            ( 6, "\x50\xB0\x02"),
-            ( 7, "\x60\xA0\x02"),
-            ( 8, "\x70\x90\x02"),
-            ( 9, "\x80\x80\x02"),
-            (10, "\x90\x70\x02"),
-            (11, "\xA0\x60\x02"),
-            (12, "\xB0\x50\x02"),
-            (13, "\xC0\x40\x02"),
-            (14, "\xD0\x30\x02"),
-            (15, "\xE0\x20\x02"),
-            (16, "\xF0\x10\x02"),
-            (17, "\xFF\x00\x02");)");
+        ExecSQL(helper.Server, helper.Sender, R"(UPSERT INTO `/Root/table-vector` (parent, key, emb) VALUES
+            (1,  1, "\x00\xFF\x02"),
+            (1,  2, "\x10\xF0\x02"),
+            (1,  3, "\x20\xE0\x02"),
+            (1,  4, "\x30\xD0\x02"),
+            (1,  5, "\x40\xC0\x02"),
+            (1,  6, "\x50\xB0\x02"),
+            (1,  7, "\x60\xA0\x02"),
+            (1,  8, "\x70\x90\x02"),
+            (1,  9, "\x80\x80\x02"),
+            (1, 10, "\x90\x70\x02"),
+            (1, 11, "\xA0\x60\x02"),
+            (1, 12, "\xB0\x50\x02"),
+            (1, 13, "\xC0\x40\x02"),
+            (1, 14, "\xD0\x30\x02"),
+            (1, 15, "\xE0\x20\x02"),
+            (1, 16, "\xF0\x10\x02"),
+            (2, 16, "\xF0\x10\x02"),
+            (1, 17, "\xFF\x00\x02");)");
 
         auto request1 = helper.GetBaseReadRequest("table-vector", 1, NKikimrDataEvents::FORMAT_CELLVEC);
         if (Batch) {
             request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
         }
-        AddRangeQuery<ui32>(*request1, { 1 }, true, { 20 }, true);
+        AddRangeQuery<ui32>(*request1, { 1, 1 }, true, { 2, 20 }, true);
         auto topK = request1->Record.MutableVectorTopK();
-        topK->SetColumn(1);
+        topK->SetColumn(2);
         topK->SetTargetVector("\xE4\x16\x02");
         topK->SetLimit(3);
+        topK->AddDistinctColumns(1);
         auto idx = topK->MutableSettings();
         idx->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
         idx->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
         idx->set_vector_dimension(2);
         auto readResult1 = helper.SendRead("table-vector", request1.release());
         UNIT_ASSERT(readResult1->Record.GetFinished());
-        UNIT_ASSERT(readResult1->Record.GetStats().GetRows() == 17);
-        UNIT_ASSERT(readResult1->Record.GetStats().GetBytes() == 544);
+        UNIT_ASSERT_C(readResult1->Record.GetStats().GetRows() == 18, TStringBuilder() << "Rows: " << readResult1->Record.GetStats().GetRows());
+        UNIT_ASSERT_C(readResult1->Record.GetStats().GetBytes() == 864, TStringBuilder() << "Bytes: " << readResult1->Record.GetStats().GetBytes());
         CheckResult(helper.Tables.at("table-vector").UserTable, *readResult1, {
-            {TCell::Make(16), TCell("\xF0\x10\x02", 3)},
-            {TCell::Make(15), TCell("\xE0\x20\x02", 3)},
-            {TCell::Make(17), TCell("\xFF\x00\x02", 3)},
+            {TCell::Make(1), TCell::Make(16), TCell("\xF0\x10\x02", 3)},
+            {TCell::Make(1), TCell::Make(15), TCell("\xE0\x20\x02", 3)},
+            {TCell::Make(1), TCell::Make(17), TCell("\xFF\x00\x02", 3)},
         }, {
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
             NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
             NScheme::TTypeInfo(NScheme::NTypeIds::String)
         });

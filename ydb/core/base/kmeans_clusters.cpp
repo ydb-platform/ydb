@@ -3,6 +3,7 @@
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/yql/udfs/common/knn/knn-defines.h>
 
 #include <span>
 

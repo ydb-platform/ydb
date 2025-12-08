@@ -43,6 +43,9 @@ PY3TEST()
 END()
 
 RECURSE(
+    column_compression
+    column_compression_alter
+    column_compression_fast
     common
     docs
     high_load

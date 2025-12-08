@@ -11,7 +11,6 @@ from enum import Enum
 from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
-from junit_utils import get_property_value, iter_xml_files
 from get_test_history import get_test_history
 
 
@@ -114,45 +113,74 @@ class TestResult:
         return f"{self.classname}/{self.name}"
 
     @classmethod
-    def from_junit(cls, testcase):
-        classname, name = testcase.get("classname"), testcase.get("name")
-        status_description = None
-        if testcase.find("failure") is not None:
-            status = TestStatus.FAIL
-            if testcase.find("failure").text is not None:
-                status_description = testcase.find("failure").text
-        elif testcase.find("error") is not None:
-            status = TestStatus.ERROR
-            if testcase.find("error").text is not None:
-                status_description = testcase.find("error").text
-        elif get_property_value(testcase, "mute") is not None:
+    def from_build_results_report(cls, result):
+        """Create TestResult from build-results-report JSON result"""
+        path_str = result.get("path", "")
+        subtest_name = result.get("subtest_name", "")
+        
+        # classname is the test path, name is the subtest name or empty
+        classname = path_str
+        name = subtest_name if subtest_name else ""
+        
+        # Status can be "OK" or "PASSED" for passed tests
+        status_str = result.get("status", "OK")
+        if status_str == "OK":
+            status_str = "PASSED"
+        error_type = result.get("error_type", "")
+        status_description = result.get("rich-snippet", "")
+        
+        # Map status to TestStatus enum
+        # Check for timeout - this information is available in build-results-report but not in junit
+        is_timeout = error_type == "TIMEOUT" or "timeout" in error_type.lower() or "timeout" in (status_description or "").lower()
+        
+        if result.get("muted", False):
             status = TestStatus.MUTE
-            if testcase.find("skipped").text is not None:
-                status_description = testcase.find("skipped").text
-        elif testcase.find("skipped") is not None:
+        elif status_str == "FAILED":
+            if is_timeout:
+                # Timeout is a special case - mark as ERROR with timeout info
+                status = TestStatus.ERROR
+                if status_description and "timeout" not in status_description.lower():
+                    status_description = f"Timeout: {status_description}"
+            elif error_type == "REGULAR":
+                status = TestStatus.FAIL
+            else:
+                status = TestStatus.ERROR
+        elif status_str == "ERROR":
+            status = TestStatus.ERROR
+            if is_timeout and status_description and "timeout" not in status_description.lower():
+                status_description = f"Timeout: {status_description}"
+        elif status_str == "SKIPPED":
             status = TestStatus.SKIP
-            if testcase.find("skipped").text is not None:
-                status_description = testcase.find("skipped").text
         else:
             status = TestStatus.PASS
-
-        log_urls = {
-            'Log': get_property_value(testcase, "url:Log"),
-            'log': get_property_value(testcase, "url:log"),
-            'logsdir': get_property_value(testcase, "url:logsdir"),
-            'stdout': get_property_value(testcase, "url:stdout"),
-            'stderr': get_property_value(testcase, "url:stderr"),
-        }
-        log_urls = {k: v for k, v in log_urls.items() if v}
-
-        elapsed = testcase.get("time")
-
+        
+        # Extract log URLs from properties or links
+        # In build-results-report, links is an object with arrays: {"stdout": ["/path"], "stderr": ["/path"]}
+        # Properties are added later by transform_build_results.py with URL format
+        log_urls = {}
+        properties = result.get("properties") or {}  # properties can be None
+        links = result.get("links") or {}  # links can be None
+        
+        # Check properties first (added by transform_build_results.py with URLs)
+        if isinstance(properties, dict):
+            for key in ['Log', 'log', 'logsdir', 'stdout', 'stderr']:
+                url = properties.get(f"url:{key}") or properties.get(key)
+                if url:
+                    log_urls[key] = url
+        
+        # If not in properties, check links (original format with file paths)
+        # links contains arrays, but URLs will be added by transform_build_results.py
+        # We don't extract file paths here as they need to be converted to URLs
+        
+        # Get elapsed time from metrics
+        metrics = result.get("metrics", {})
+        elapsed = metrics.get("elapsed_time", 0)
+        
         try:
             elapsed = float(elapsed)
         except (TypeError, ValueError):
             elapsed = 0
-            print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
-
+        
         return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, is_sanitizer_issue(status_description))
 
 
@@ -420,14 +448,39 @@ def get_codeowners_for_tests(codeowners_file_path, tests_data):
             tests_data_with_owners.append(test)
 
 
+def iter_build_results_files(path):
+    """Iterate over build-results-report JSON files"""
+    import glob
+    
+    if os.path.isfile(path):
+        files = [path]
+    else:
+        # If it's a directory, look for report.json files
+        files = glob.glob(os.path.join(path, "**/report.json"), recursive=True)
+        if not files:
+            files = glob.glob(os.path.join(path, "report.json"))
+    
+    for fn in files:
+        try:
+            with open(fn, 'r') as f:
+                report = json.load(f)
+            
+            for result in report.get("results", []):
+                if result.get("type") == "test":
+                    yield fn, result
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)
+            continue
+
+
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
     summary = TestSummary(is_retry=is_retry)
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
 
-        for fn, suite, case in iter_xml_files(path):
-            test_result = TestResult.from_junit(case)
+        for fn, result in iter_build_results_files(path):
+            test_result = TestResult.from_build_results_report(result)
             summary_line.add(test_result)
         
         if os.path.isabs(html_fn):
@@ -502,7 +555,7 @@ def main():
     parser.add_argument('--comment_text_file', required=True)
     parser.add_argument('--pr_number', required=False, type=int, help="Pull request number")
     parser.add_argument('--workflow_run_id', required=False, help="GitHub workflow run ID")
-    parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
+    parser.add_argument("args", nargs="+", metavar="TITLE html_out build-results-report-path")
     args = parser.parse_args()
 
     if len(args.args) % 3 != 0:

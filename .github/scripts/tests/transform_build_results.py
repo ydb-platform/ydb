@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
-# Tool used to transform junit report. Performs the following:
-# - adds classname with relative path to test in 'testcase' node
-# - add 'url:logsdir' and other links with in 'testcase' node
+# Tool used to transform build-results-report. Performs the following:
+# - adds links to logs in test results
 # - mutes tests
+# - adds user properties from test_dir
 
 import argparse
-import re
 import json
 import os
 import shutil
@@ -14,9 +13,6 @@ import sys
 import urllib.parse
 import zipfile
 from typing import Set
-from xml.etree import ElementTree as ET
-from mute_utils import mute_target
-from junit_utils import add_junit_link_property, is_faulty_testcase
 from mute_check import YaMuteCheck
 
 
@@ -138,42 +134,126 @@ def save_zip(suite_name, out_dir, url_prefix, logs_dir: Set[str]):
     return f"{url_prefix}{quoted_fpath}"
 
 
-def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_prefix, log_out_dir, log_truncate_size,
-              test_stuff_out, test_stuff_prefix):
-    tree = ET.parse(fp)
-    root = tree.getroot()
+def load_user_properties(test_dir):
+    """Load user properties from test_dir JSON files"""
+    all_properties = {}
 
-    for suite in root.findall("testsuite"):
-        suite_name = suite.get("name")
+    if not test_dir or not os.path.isdir(test_dir):
+        return all_properties
+
+    for dirpath, _, filenames in os.walk(test_dir):
+        for filename in filenames:
+            properties_file_path = os.path.abspath(os.path.join(dirpath, filename))
+
+            if os.path.isfile(properties_file_path):
+                try:
+                    with open(properties_file_path, "r") as upf:
+                        properties = json.load(upf)
+
+                    # Merge properties into all_properties
+                    for key, value in properties.items():
+                        if key not in all_properties:
+                            all_properties[key] = value
+                        else:
+                            all_properties[key].update(value)
+                except (json.JSONDecodeError, IOError) as e:
+                    log_print(f"Warning: Unable to load properties from {properties_file_path}: {e}")
+
+    return all_properties
+
+
+def mute_test_result(result):
+    """Mute a test result - set muted flag and change status to SKIPPED"""
+    if result.get("status") in ("FAILED", "ERROR"):
+            result["muted"] = True
+            result["status"] = "SKIPPED"
+            # Preserve error information in rich-snippet if it exists
+        return True
+    return False
+
+
+def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, log_out_dir, log_truncate_size,
+              test_stuff_out, test_stuff_prefix, test_dir):
+    with open(report_file, 'r') as f:
+        report = json.load(f)
+
+    # Load user properties
+    user_properties = load_user_properties(test_dir)
+
+    # Group results by suite (path)
+    suites = {}
+    for result in report.get("results", []):
+        if result.get("type") != "test":
+            continue
+        
+        suite_name = result.get("path", "")
+        if suite_name not in suites:
+            suites[suite_name] = []
+        suites[suite_name].append(result)
+
+    # Process each suite
+    for suite_name, results in suites.items():
         traces = YTestReportTrace(ya_out_dir)
         traces.load(suite_name)
 
         has_fail_tests = False
 
-        for case in suite.findall("testcase"):
-            test_name = case.get("name")
-            test_classname = case.get("classname") + '.' + test_name
-            case.set("name", test_classname)
-            case.set("classname", suite_name)
-            test_name = test_classname
+        for result in results:
+            path_str = result.get("path", "")
+            subtest_name = result.get("subtest_name", "")
+            
+            # Construct full test name for mute check
+            test_name = f"{path_str}"
+            if subtest_name:
+                test_name = f"{path_str}/{subtest_name}"
 
-            is_fail = is_faulty_testcase(case)
-            has_fail_tests |= is_fail
-
+            # Check if test should be muted
             if mute_check(suite_name, test_name):
                 log_print("mute", suite_name, test_name)
-                mute_target(case)
+                mute_test_result(result)
 
-            if is_fail and "." in test_name:
-                test_cls, test_method = test_name.rsplit(".", maxsplit=1)
+            # Check if test failed
+            status = result.get("status", "")
+            is_fail = status in ("FAILED", "ERROR")
+            has_fail_tests |= is_fail
+
+            # Add logs for failed tests
+            # First, try to get logs from ytest.report.trace
+            if is_fail and subtest_name and "." in subtest_name:
+                test_cls, test_method = subtest_name.rsplit(".", maxsplit=1)
                 logs = filter_empty_logs(traces.get_logs(test_cls, test_method))
 
                 if logs:
                     log_print(f"add {list(logs.keys())!r} properties for {test_cls}.{test_method}")
+                    if "properties" not in result:
+                        result["properties"] = {}
+                    
                     for name, fn in logs.items():
                         url = save_log(ya_out_dir, fn, log_out_dir, log_url_prefix, log_truncate_size)
-                        add_junit_link_property(case, name, url)
+                        result["properties"][f"url:{name}"] = url
+            
+            # Also process existing links from build-results-report (they are arrays with file paths)
+            if is_fail:
+                if "properties" not in result:
+                    result["properties"] = {}
+                original_links = result.get("links", {})
+                # links is an object with arrays: {"stdout": ["/path"], "stderr": ["/path"]}
+                for link_type in ["stdout", "stderr", "log"]:
+                    if link_type in original_links and isinstance(original_links[link_type], list):
+                        for file_path in original_links[link_type]:
+                            if os.path.isfile(file_path):
+                                url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
+                                result["properties"][f"url:{link_type}"] = url
+                                break
 
+            # Add user properties
+            if test_dir and path_str in user_properties:
+                if subtest_name and subtest_name in user_properties[path_str]:
+                    if "properties" not in result:
+                        result["properties"] = {}
+                    result["properties"].update(user_properties[path_str][subtest_name])
+
+        # Add logsdir for failed tests
         if has_fail_tests:
             if not traces.logs_dir:
                 log_print(f"no logsdir for {suite_name}")
@@ -181,25 +261,35 @@ def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_pre
 
             url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, traces.logs_dir)
 
-            for case in suite.findall("testcase"):
-                add_junit_link_property(case, 'logsdir', url)
+            for result in results:
+                if "properties" not in result:
+                    result["properties"] = {}
+                result["properties"]["url:logsdir"] = url
+                # Also update links if it exists (for consistency)
+                if "links" in result:
+                    if "logsdir" not in result["links"]:
+                        result["links"]["logsdir"] = []
+                    # Add URL to links array (though properties is the primary source)
+                    if url not in result["links"]["logsdir"]:
+                        result["links"]["logsdir"].append(url)
 
-    if save_inplace:
-        tree.write(fp.name)
-    else:
-        ET.indent(root)
-        print(ET.tostring(root, encoding="unicode"))
+    # Save updated report
+    with open(report_file, 'w') as f:
+        json.dump(report, f, indent=2)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-i", action="store_true", dest="save_inplace", default=False, help="modify input file in-place"
+        "--build-results-report",
+        dest="build_results_report",
+        required=True,
+        help="path to build-results-report JSON file"
     )
     parser.add_argument("-m", help="muted test list")
     parser.add_argument('--public_dir', help='root directory for publication')
     parser.add_argument("--public_dir_url", help="url prefix for root directory")
-
+    parser.add_argument("--test_dir", help="directory with user properties JSON files")
     parser.add_argument("--log_out_dir", help="out dir to store logs (symlinked), relative to public_dir")
     parser.add_argument(
         "--log_truncate_size",
@@ -209,7 +299,6 @@ def main():
     )
     parser.add_argument("--ya_out", help="ya make output dir (for searching logs and artifacts)")
     parser.add_argument('--test_stuff_out', help='output dir for archive testing_out_stuff, relative to public_dir"')
-    parser.add_argument("in_file", type=argparse.FileType("r"))
 
     args = parser.parse_args()
 
@@ -218,7 +307,7 @@ def main():
     if args.m:
         mute_check.load(args.m)
 
-    log_out_dir =  os.path.join(args.public_dir, args.log_out_dir)
+    log_out_dir = os.path.join(args.public_dir, args.log_out_dir)
     os.makedirs(log_out_dir, exist_ok=True)
     log_url_prefix = os.path.join(args.public_dir_url, args.log_out_dir)
 
@@ -227,16 +316,18 @@ def main():
     test_stuff_prefix = os.path.join(args.public_dir_url, args.test_stuff_out)
 
     transform(
-        args.in_file,
+        args.build_results_report,
         mute_check,
         args.ya_out,
-        args.save_inplace,
         log_url_prefix,
         log_out_dir,
         args.log_truncate_size,
         test_stuff_out,
         test_stuff_prefix,
+        args.test_dir,
     )
+
 
 if __name__ == "__main__":
     main()
+

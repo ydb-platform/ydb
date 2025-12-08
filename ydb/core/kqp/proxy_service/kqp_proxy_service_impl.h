@@ -467,12 +467,14 @@ public:
     }
 
     TString GetPoolId(const TString& databaseId, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
-        if (!userToken || userToken->GetUserSID().empty()) {
+        if (userToken && userToken->IsSystemUser()) {
             return NResourcePool::DEFAULT_POOL_ID;
         }
 
+        const auto userSID = userToken ? userToken->GetUserSID() : NACLib::TSID();
+
         TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(databaseId);
-        auto [resultPoolId, resultRank] = GetPoolIdFromClassifiers(databaseId, userToken->GetUserSID(), databaseInfo, userToken, actorContext);
+        auto [resultPoolId, resultRank] = GetPoolIdFromClassifiers(databaseId, userSID, databaseInfo, userToken, actorContext);
         for (const auto& userSID : userToken->GetGroupSIDs()) {
             const auto& [poolId, rank] = GetPoolIdFromClassifiers(databaseId, userSID, databaseInfo, userToken, actorContext);
             if (poolId && (!resultPoolId || resultRank > rank)) {

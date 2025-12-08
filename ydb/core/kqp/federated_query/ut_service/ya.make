@@ -1,5 +1,5 @@
 RECURSE_FOR_TESTS(
-    common    
+    common
     fast
     slow
 )

@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
         }
 
         // SchemeCache will return OK responses, so secrets retrieval should be fast and succeeded
-        schemeCacheStatusGetter->SetFailProbablitity(TTestSchemeCacheStatusGetter::EFailProbablity::None);
+        schemeCacheStatusGetter->SetFailProbability(TTestSchemeCacheStatusGetter::EFailProbablity::None);
         promises.clear();
         for (const auto& [secretName, secretValue] : secrets) {
             promises.push_back(ResolveSecret(secretName, kikimr));

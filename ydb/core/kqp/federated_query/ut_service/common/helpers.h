@@ -51,15 +51,15 @@ namespace NKikimr::NKqp {
             Always = 2,
         };
 
-        TTestSchemeCacheStatusGetter(EFailProbablity failProbablitity);
+        TTestSchemeCacheStatusGetter(EFailProbablity failProbabitity);
 
         NSchemeCache::TSchemeCacheNavigate::EStatus GetStatus(
             NSchemeCache::TSchemeCacheNavigate::TEntry& entry) const override;
 
-        void SetFailProbablitity(EFailProbablity failProbablitity);
+        void SetFailProbability(EFailProbablity failProbabitity);
 
     private:
-        EFailProbablity FailProbablitity;
+        EFailProbablity FailProbabitity;
     };
 
 } // NKikimr::NKqp

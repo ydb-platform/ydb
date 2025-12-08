@@ -16,7 +16,6 @@
 
 #include <util/generic/hash_multi_map.h>
 
-
 namespace NKikimr::NKqp {
 
 class TDescribeSchemaSecretsService: public NActors::TActorBootstrapped<TDescribeSchemaSecretsService> {

@@ -284,7 +284,10 @@ TVector<TSecretSetting> GetSecretSettings(const TString& query) {
         if (secretSettingValue.EndsWith("'")) {
             secretSettingValue.resize(secretSettingValue.size() - 1);
         }
-        result.push_back(TSecretSetting{.Name = settingName, .Value = secretSettingValue});
+        result.push_back(TSecretSetting{
+            .Name = settingName,
+            .Value = secretSettingValue,
+        });
     }
 
     return result;

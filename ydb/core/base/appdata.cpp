@@ -28,6 +28,7 @@
 #include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/recoveryshard_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/core/protos/stream.pb.h>
@@ -81,6 +82,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TStatisticsConfig StatisticsConfig;
     TMetricsConfig MetricsConfig;
     NKikimrConfig::TSystemTabletBackupConfig SystemTabletBackupConfig;
+    NKikimrConfig::TRecoveryShardConfig RecoveryShardConfig;
 };
 
 TAppData::TAppData(
@@ -146,6 +148,7 @@ TAppData::TAppData(
     , StatisticsConfig(Impl->StatisticsConfig)
     , MetricsConfig(Impl->MetricsConfig)
     , SystemTabletBackupConfig(Impl->SystemTabletBackupConfig)
+    , RecoveryShardConfig(Impl->RecoveryShardConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

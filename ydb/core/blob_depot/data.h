@@ -479,6 +479,7 @@ namespace NKikimr::NBlobDepot {
 
         THashMultiMap<void*, TLogoBlobID> InFlightTrashBlobs; // being committed, but not yet confirmed
         THashMultiMap<void*, TS3Locator> InFlightTrashS3; // being committed, but not yet confirmed
+        THashSet<TLogoBlobID> AllInFlightTrashBlobs;
 
         class TTxIssueGC;
         class TTxConfirmGC;

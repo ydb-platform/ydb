@@ -4108,6 +4108,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             }
         }
 
+        if (IsIdentityLambda(*node->Child(1))) {
+            YQL_CLOG(DEBUG, Core) << "Trivial lambda: " << node->Content();
+            return node->HeadPtr();
+        }
+
         return node;
     };
 

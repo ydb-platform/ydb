@@ -113,7 +113,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     TPath child = sPath.Child(childName);
                     if (!child.IsDeleted() && child.IsCdcStream()) {
                         oldStreamName = childName;
-                        break;
                     }
                 }
             }
@@ -231,17 +230,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         
         auto streamPath = tablePath.Child(streamName);
         if (!streamPath.IsResolved()) continue;
-
-        // for (const auto& [childName, childPathId] : streamPath.Base()->GetChildren()) {
-        //     auto childPath = context.SS->PathsById.at(childPathId);
-        //     if (childPath->Dropped()) continue;
-            
-        //     if (childPath->IsPQGroup()) {
-        //         auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
-        //         outTx.MutableDrop()->SetName(childName);
-        //         result.push_back(CreateDropPQ(NextPartId(opId, result), outTx));
-        //     }
-        // }
 
         auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);
         outTx.MutableDrop()->SetName(streamName);

@@ -2934,34 +2934,77 @@ public:
 
 class TTxMonEvent_ReassignTablet : public TTransactionBase<THive> {
 public:
+    struct TTabletFilter {
+        struct TAllTablets {};
+
+        std::variant<std::monostate, TTabletId, TAllTablets> TabletId;
+        TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
+
+        TTabletFilter(const TCgiParameters& cgi) {
+            auto tablet = cgi.Get("tablet");
+            if (tablet == "all") {
+                TabletId = TAllTablets();
+            } else if (auto tabletId = TryFromString<TTabletId>(tablet)) {
+                TabletId = *tabletId;
+            }
+
+            TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(cgi.Get("type"), TabletType);
+        }
+
+        bool CheckTabletId(const TLeaderTabletInfo* tablet) const {
+            if (auto* tabletId = std::get_if<TTabletId>(&TabletId)) {
+                return tablet->Id == *tabletId;
+            }
+            return true;
+        }
+
+        bool CheckTabletType(const TLeaderTabletInfo* tablet) const {
+            return TabletType == TTabletTypes::TypeInvalid || TabletType == tablet->Type;
+        }
+
+        bool operator()(const TLeaderTabletInfo* tablet) const {
+            return CheckTabletId(tablet) && CheckTabletType(tablet);
+        }
+
+        bool IsValidFilter(TString& error) const {
+            if (std::holds_alternative<std::monostate>(TabletId)) {
+                error = "must specify tablet";
+                return false;
+            }
+            return true;
+        }
+
+        bool AllowsEverything() const {
+            return std::holds_alternative<TAllTablets>(TabletId) && TabletType == TTabletTypes::TypeInvalid;
+        }
+
+    };
+
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
-    std::optional<TTabletId> TabletId; // nullopt for all, 0 for invalid
-    TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
+    TTabletFilter TabletFilter;
     TVector<ui32> TabletChannels;
     ui32 GroupId = 0;
     TVector<ui32> ForcedGroupIds;
     TString Error;
     bool Wait = true;
     bool Async = false;
+    bool BypassLimit = false;
+
+    static constexpr size_t REASSIGN_SOFT_LIMIT = 500;
 
     TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
         , Event(ev->Release())
         , Source(source)
+        , TabletFilter(Event->Cgi())
     {
-        auto tablet = Event->Cgi().Get("tablet");
-        if (tablet == "all") {
-            TabletId = std::nullopt;
-        } else {
-            TabletId = FromStringWithDefault<TTabletId>(tablet, 0);
-        }
-        TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(Event->Cgi().Get("type"), TabletType);
         TabletChannels = Scan<ui32>(SplitString(Event->Cgi().Get("channel"), ","));
         GroupId = FromStringWithDefault(Event->Cgi().Get("group"), GroupId);
         ForcedGroupIds = Scan<ui32>(SplitString(Event->Cgi().Get("forcedGroup"), ","));
         Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
         Async = FromStringWithDefault(Event->Cgi().Get("async"), Async);
+        BypassLimit = FromStringWithDefault(Event->Cgi().Get("bypassLimit"), BypassLimit);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
@@ -2995,30 +3038,16 @@ public:
             Error = "cannot provide force groups in async mode";
             return true;
         }
-        if (TabletId == 0) {
-            Error = "must specify tablet";
+        if (!TabletFilter.IsValidFilter(Error)) {
             return true;
         }
-        TVector<TLeaderTabletInfo*> tablets;
-        if (!TabletId && TabletType != TTabletTypes::TypeInvalid) {
-            for (auto& [_, tablet] : Self->Tablets) {
-                if (tablet.Type == TabletType) {
-                    tablets.push_back(&tablet);
-                }
-            }
-        } else if (!TabletId && GroupId != 0) {
-            for (auto& [_, tablet] : Self->Tablets) {
-                tablets.push_back(&tablet);
-            }
-        } else if (TabletId) {
-            auto* tablet = Self->FindTablet(*TabletId);
-            if (tablet != nullptr) {
-                tablets.push_back(tablet);
-            } else {
-                Error = "no such tablet";
-                return true;
-            }
+        if (TabletFilter.AllowsEverything() && GroupId == 0) {
+            Error = "cannot reassign all tablets";
+            return true;
         }
+        auto tablets= Self->Tablets
+            | std::views::transform([](auto&& p) -> TLeaderTabletInfo* { return &p.second; })
+            | std::views::filter(TabletFilter);
 
         TVector<THolder<TEvHive::TEvReassignTablet>> operations;
         TActorId waitActorId;
@@ -3058,6 +3087,9 @@ public:
                 waitActor->AddTablet(tablet);
             }
             operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds, Async));
+            if (!BypassLimit && operations.size() >= REASSIGN_SOFT_LIMIT) {
+                break;
+            }
         }
         if (Wait) {
             waitActor->CheckCompletion();

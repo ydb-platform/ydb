@@ -1406,6 +1406,17 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         Cerr << "...writing little bit more data to changelog" << Endl;
         env.WriteValue(1000, 10);
+
+        env.WaitChangelogFlush();
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1001);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
     }
 }
 

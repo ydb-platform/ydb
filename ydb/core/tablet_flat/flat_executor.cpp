@@ -5151,8 +5151,6 @@ void TExecutor::StartNewBackup() {
         tabletId, Generation0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
-        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
-
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
             if (exclusion && exclusion->HasTable(tableId)) {
@@ -5162,6 +5160,7 @@ void TExecutor::StartNewBackup() {
             auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
             QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
         }
+        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
     }
 }
 

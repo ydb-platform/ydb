@@ -58,7 +58,7 @@ public:
         common->OutgoingHandshakeInflightLimit = 3;
 
         #if !defined(_msan_enabled_)
-        common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr);
+        common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
         #endif
 
         if (withTls) {

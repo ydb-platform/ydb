@@ -513,6 +513,7 @@ message TInterconnectConfig {
     optional uint32 RdmaMaxWr = 53 [default = 4096];
     optional bool RdmaChecksum = 54 [default = true];
     optional ERdmaCqMode RdmaCqMode = 55;
+    optional uint32 RdmaMemPoolSizeLimitMb = 56 [default = 4096];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;

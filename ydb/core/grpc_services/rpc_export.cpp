@@ -515,8 +515,9 @@ public:
         InitCommonSourcePath();
 
         if constexpr (IsFsExport) {
-            if (!AppData()->FeatureFlags.GetEnableFsBackups()) { // The feature flag is disabled by default
-                return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Export to FS is not supported in current configuration");
+            if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
+                return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "The feature flag \"EnableFsBackups\" is disabled. \
+                    The operation cannot be performed.");
             }
             if (!settings.base_path().StartsWith("/")) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 

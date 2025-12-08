@@ -49,6 +49,10 @@ namespace NInterconnect::NRdma {
         const uint32_t OrigSize;
     };
 
+    struct TMemPoolSettings {
+        uint32_t SizeLimitMb = 0;
+    };
+
     class TMemRegionSlice {
     public:
         TMemRegionSlice() = default;
@@ -97,5 +101,5 @@ namespace NInterconnect::NRdma {
     };
 
     std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;
-    std::shared_ptr<IMemPool> CreateSlotMemPool(NMonitoring::TDynamicCounters* counters) noexcept;
+    std::shared_ptr<IMemPool> CreateSlotMemPool(NMonitoring::TDynamicCounters* counters, std::optional<TMemPoolSettings> settings) noexcept;
 }

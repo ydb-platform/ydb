@@ -237,6 +237,7 @@ class YDBWrapper:
         self._setup_credentials()
         
         with ydb.Driver(
+            driver_config=ydb.DriverConfig(self.database_endpoint, discovery_request_timeout=self._connection_timeout),
             endpoint=self.database_endpoint,
             database=self.database_path,
             credentials=ydb.credentials_from_env_variables(),
@@ -278,6 +279,7 @@ class YDBWrapper:
             
             # Connect to statistics database
             driver = ydb.Driver(
+                driver_config=ydb.DriverConfig(self.stats_endpoint, discovery_request_timeout=self._stats_connection_timeout),
                 endpoint=self.stats_endpoint,
                 database=self.stats_path,
                 credentials=ydb.credentials_from_env_variables()
@@ -351,6 +353,7 @@ class YDBWrapper:
             self._setup_credentials()
             
             driver = ydb.Driver(
+                driver_config=ydb.DriverConfig(self.stats_endpoint, discovery_request_timeout=self._stats_connection_timeout),
                 endpoint=self.stats_endpoint,
                 database=self.stats_path,
                 credentials=ydb.credentials_from_env_variables()

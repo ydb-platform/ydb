@@ -1325,11 +1325,8 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
             res.Settings.DiscardPos = settings.DiscardPos;
         } else if (settings.Discard) {
             auto discardPos = Ctx_.TokenPosition(node.GetBlock1().GetToken1());
-            Ctx_.Warning(discardPos, TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
-                out << "DISCARD within UNION ALL is only allowed before first subquery";
-            });
+            Ctx_.Error(discardPos) << "DISCARD within UNION ALL is only allowed before first subquery";
         }
-
         if (placement->IsLastInSelectOp) {
             res.Settings.Label = settings.Label;
         } else if (!settings.Label.Empty()) {
@@ -1366,19 +1363,14 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
     if (node.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis1) {
         return SelectKind(node.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1(), selectPos, placement);
     } else {
-        // For parenthesized subqueries, reset placement to preserve backward compatibility
-        // with ORDER BY/LIMIT in subqueries. But first check DISCARD separately.
         const auto& partial = node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
         const auto& selectKind = partial.GetRule_select_kind1();
-        
-        // Check DISCARD in parentheses - it should generate warning if not first in UNION ALL
         if (selectKind.HasBlock1() && placement.Defined() && !placement->IsFirstInSelectOp) {
             auto discardPos = Ctx_.TokenPosition(selectKind.GetBlock1().GetToken1());
             Ctx_.Warning(discardPos, TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
                 out << "DISCARD within UNION ALL is only allowed before first subquery";
             });
         }
-        
         return SelectKind(partial, selectPos, {});
     }
 }

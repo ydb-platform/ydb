@@ -2627,17 +2627,7 @@ TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
         result = SelectOrExpr(node.GetRule_select_subexpr_intersect1()
                                   .GetRule_select_or_expr1());
     } else {
-        auto subSelect = TSqlSelect(Ctx_, Mode_).BuildSubSelect(node);
-        if (subSelect) {
-            auto writeSettings = subSelect->GetWriteSettings();
-            if (writeSettings.Discard) {
-                Ctx_.Warning(subSelect->GetPos(), TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
-                    out << "DISCARD can only be used at the top level, not inside subqueries";
-                });
-            }
-        }
-        result = Wrap(LangVersionedSubSelect(std::move(subSelect)));
-
+        result = Wrap(LangVersionedSubSelect(std::move(TSqlSelect(Ctx_, Mode_).BuildSubSelect(node))));
     }
 
     if (!result) {

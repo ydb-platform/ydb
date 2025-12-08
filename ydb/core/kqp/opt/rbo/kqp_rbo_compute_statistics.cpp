@@ -222,7 +222,7 @@ void TOpMap::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     if (Project) {
         Props.Metadata->ColumnsCount = MapElements.size();
     } else {
-        Props.Metadata->ColumnsCount += MapElements.size();
+        Props.Metadata->ColumnsCount += inputMetadata.ColumnsCount + MapElements.size();
     }
 
     auto renames = GetRenamesWithTransforms(planProps);
@@ -282,7 +282,14 @@ void TOpMap::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
     int inputColumnsCount = GetInput()->Props.Metadata->ColumnsCount;
     if (Props.Metadata->ColumnsCount != inputColumnsCount) {
         double inputDataSize = Props.Statistics->DataSize;
-        Props.Statistics->DataSize = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
+        if (inputColumnsCount!=0) {
+            Props.Statistics->DataSize = inputDataSize * Props.Metadata->ColumnsCount / (double)inputColumnsCount;
+        }
+        // Input may have 0 columns (e.g. EmptySource), in such case the data size depends on the number of records
+        // and the number of columns in the output. We just assume each column contains 8 bytes
+        else {
+            Props.Statistics->DataSize = Props.Statistics->RecordsCount * Props.Metadata->ColumnsCount * 8;
+        }
     }
 }
 

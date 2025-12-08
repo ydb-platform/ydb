@@ -3418,7 +3418,8 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
         TVector<TString> invalidQueries = {
             "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)",
             "SELECT * FROM `/Root/EightShard` WHERE Key IN (DISCARD SELECT 1)",
-            "SELECT 1 UNION ALL (DISCARD SELECT 2)"
+            "SELECT 1 UNION ALL (DISCARD SELECT 2)",
+            "SELECT (DISCARD SELECT 1) as result"
         };
         // todo: "SELECT 1 UNION ALL (DISCARD SELECT 2)" breaks on backward compability test in this code, but in old all is okay
         TVector<TString> invalidQueriesForDml = {
@@ -3648,12 +3649,25 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
             )", 2, "Data Executor only");
         }
         {
-            auto result = ExecuteQueryAndCheckResultSets(db, "SELECT 1; DISCARD SELECT 2; SELECT 3; DISCARD SELECT 4; SELECT 5; DISCARD SELECT 6; SELECT 7", 4, "Many transactions (> 2)");
+            auto result = ExecuteQueryAndCheckResultSets(db, R"(SELECT 1; DISCARD SELECT 2; SELECT 3; 
+                                                                DISCARD SELECT 4; SELECT 5; DISCARD SELECT 6; 
+                                                                SELECT 7)", 4, "Many transactions (> 2)");
             auto resultValues = std::vector{1, 3, 5, 7};
             for (auto&& [i, value] : Enumerate(resultValues)) {
                 verifyResultValue(result, i, value);
             }
         }
+        {
+            auto query = R"(sub = (DISCARD SELECT 1);
+                                            SELECT * FROM $sub)";
+            auto result = db.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query should fail: " << query);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "DISCARD");
+        }
+
     }
 }
 

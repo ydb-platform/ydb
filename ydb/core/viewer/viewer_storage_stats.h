@@ -575,7 +575,7 @@ public:
                 typeAccumulated.IndexSize += tabletStorageInfo.IndexSize;
                 for (const auto& [groupId, groupStorageInfo] : tabletStorageInfo.Groups) {
                     typeAccumulated.Groups[groupId].StorageSize += groupStorageInfo.StorageSize;
-                    typeAccumulated.Groups[groupId].StorageCount += groupStorageInfo.StorageCount;    
+                    typeAccumulated.Groups[groupId].StorageCount += groupStorageInfo.StorageCount;
                 }
             }
             for (const auto& [tabletType, tabletStorageInfo] : tabletTypeAccumulated) {

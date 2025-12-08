@@ -35,7 +35,8 @@ TENANT_NAME_1 = '/Root/Tenant1'
 TENANT_NAME_2 = '/Root/Tenant2'
 
 
-def test_allowed_paths_lookup(ydb_cluster):
+def test_allowed_paths_lookup(ydb_cluster_with_encryption_parametrized):
+    ydb_cluster = ydb_cluster_with_encryption_parametrized
     ydb_cluster.create_database(TENANT_NAME_1, storage_pool_units_count={'hdd': 1}, timeout_seconds=20)
     tenant_nodes_1 = ydb_cluster.register_and_start_slots(TENANT_NAME_1)
     ydb_cluster.wait_tenant_up(TENANT_NAME_1)

@@ -83,7 +83,8 @@ selector_config: []
     '''
 
 
-def test_create_drop_and_alter_database(ydb_cluster):
+def test_create_drop_and_alter_database(ydb_cluster_with_encryption_parametrized):
+    ydb_cluster = ydb_cluster_with_encryption_parametrized
     capture_audit_create_console = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['console'])
     capture_audit_create_schemeshard = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['schemeshard'])
     capture_audit_drop_console = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path, ['console'])

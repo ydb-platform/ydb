@@ -21,7 +21,8 @@ def metering_file_path(ydb_configurator):
 
 
 @contextlib.contextmanager
-def ydb_hostel_db_ctx(ydb_cluster, ydb_root, timeout_seconds=100):
+def ydb_hostel_db_ctx(ydb_cluster_with_encryption_parametrized, ydb_root, timeout_seconds=100):
+    ydb_cluster = ydb_cluster_with_encryption_parametrized
     database = os.path.join(ydb_root, "hostel_db")
     logger.info("setup ydb_hostel_db %s", database)
 
@@ -128,7 +129,8 @@ def ydb_disk_small_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, yd
 
 
 @contextlib.contextmanager
-def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster, database, hostel_db, timeout_seconds=100):
+def ydb_serverless_db_with_exclusive_nodes_ctx(ydb_cluster_with_encryption_parametrized, database, hostel_db, timeout_seconds=100):
+    ydb_cluster = ydb_cluster_with_encryption_parametrized
     logger.info("setup ydb_serverless_db_with_exclusive_nodes %s using hostel %s", database, hostel_db)
 
     ydb_cluster.remove_database(

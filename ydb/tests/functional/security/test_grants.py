@@ -89,7 +89,8 @@ def _test_grants(admin_config, user_config, user_name, query, object_name, requi
     run_with_assert(user_config, query)
 
 
-def test_granular_grants_for_tables(ydb_cluster):
+def test_granular_grants_for_tables(ydb_cluster_with_encryption_parametrized):
+    ydb_cluster = ydb_cluster_with_encryption_parametrized
     ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
     database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
     ydb_cluster.wait_tenant_up(DATABASE)
@@ -203,7 +204,8 @@ def test_granular_grants_for_tables(ydb_cluster):
     ydb_cluster.unregister_and_stop_slots(database_nodes)
 
 
-def test_cdc_grants(ydb_cluster):
+def test_cdc_grants(ydb_cluster_with_encryption_parametrized):
+    ydb_cluster = ydb_cluster_with_encryption_parametrized
     ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
     database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
     ydb_cluster.wait_tenant_up(DATABASE)
@@ -268,7 +270,8 @@ def test_cdc_grants(ydb_cluster):
     ydb_cluster.unregister_and_stop_slots(database_nodes)
 
 
-def test_pq_grants(ydb_cluster):
+def test_pq_grants(ydb_cluster_with_encryption_parametrized):
+    ydb_cluster = ydb_cluster_with_encryption_parametrized
     ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
     database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
     ydb_cluster.wait_tenant_up(DATABASE)
@@ -308,7 +311,8 @@ def test_pq_grants(ydb_cluster):
     ydb_cluster.unregister_and_stop_slots(database_nodes)
 
 
-def test_secret_grants(ydb_cluster):
+def test_secret_grants(ydb_cluster_with_encryption_parametrized):
+    ydb_cluster = ydb_cluster_with_encryption_parametrized
     ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
     database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
     ydb_cluster.wait_tenant_up(DATABASE)

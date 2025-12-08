@@ -437,7 +437,8 @@ def test_broken_dynconfig(ydb_cluster, prepared_test_env, pool_fixture, config_f
     assert cfg in capture_audit.captured
 
 
-def test_create_and_remove_tenant(ydb_cluster):
+def test_create_and_remove_tenant(ydb_cluster_with_encryption_parametrized):
+    ydb_cluster = ydb_cluster_with_encryption_parametrized
     capture_audit = CaptureFileOutput(ydb_cluster.config.audit_file_path)
     print('AAA', capture_audit.filename, file=sys.stderr)
 

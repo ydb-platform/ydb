@@ -12,7 +12,8 @@ DROP_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.remove_schem
 
 
 @pytest.fixture
-def db_fixture(ydb_cluster):
+def db_fixture(ydb_cluster_with_encryption_parametrized):
+    ydb_cluster = ydb_cluster_with_encryption_parametrized
     ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
     database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
     ydb_cluster.wait_tenant_up(DATABASE)

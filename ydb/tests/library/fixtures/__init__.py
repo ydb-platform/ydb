@@ -182,3 +182,22 @@ def ydb_cluster_configuration_with_encryption_parametrized(ydb_cluster_configura
     config = copy.deepcopy(ydb_cluster_configuration)
     config['enable_pool_encryption'] = encryption_enabled
     return config
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_encryption_parametrized(ydb_cluster_configuration_with_encryption_parametrized, request):
+    module_name = request.module.__name__
+
+    logger.info("setup ydb_cluster_with_encryption_parametrized for %s", module_name)
+
+    logger.info("setup ydb_cluster_with_encryption_parametrized as local")
+    configurator=KikimrConfigGenerator(**ydb_cluster_configuration_with_encryption_parametrized)
+    cluster = KiKiMR(configurator=configurator)
+    cluster.is_local_test = True
+
+    cluster.start()
+
+    yield cluster
+
+    logger.info("destroy ydb_cluster_with_encryption_parametrized for %s", module_name)
+    cluster.stop()

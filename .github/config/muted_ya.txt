@@ -1,4 +1,6 @@
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
@@ -23,6 +25,7 @@ ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query KqpStats.CreateTableAsStats+IsOlap
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
@@ -45,7 +48,6 @@ ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/statistics/service/ut [*/*] chunk chunk
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_ColumnTable
-ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_RowTable_TopicAutoPartitioning
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
@@ -113,6 +115,7 @@ ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[last_stabl
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[mixed-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[last_stable-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[mixed-row]
+ydb/tests/functional/config test_distconf.py.TestDistConfWithAuth.test_auth_v2_initialization
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/coalesce-and-join.test]

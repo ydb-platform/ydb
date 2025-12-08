@@ -578,6 +578,7 @@ public:
 
         const TString& parentPath = Transaction.GetWorkingDir();
         const TString name = TKind::GetTableName(Transaction);
+        const bool internal = Transaction.HasInternal() && Transaction.GetInternal();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      TKind::Name() << " Propose"
@@ -618,9 +619,13 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .NotUnderOperation()
-                .IsCommonSensePath() //forbid alter impl index tables
-                .CanBackupTable(); //forbid backup table with indexes
+                .NotUnderOperation();
+
+            if (!internal) {
+                checks
+                    .IsCommonSensePath() // forbid alter impl index tables
+                    .CanBackupTable(); // forbid backup table with indexes
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

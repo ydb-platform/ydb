@@ -1414,6 +1414,7 @@ public:
     void FromXxportInfo(NKikimrImport::TImport& exprt, const TImportInfo& importInfo);
 
     static void PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
+    static void PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
     static void PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& importInfo);

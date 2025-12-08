@@ -85,6 +85,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<ui32>, DataShardStatsReportIntervalSeconds, std::nullopt);
         OPTION(bool, EnableAlterDatabase, false);
         OPTION(std::optional<bool>, EnableAccessToIndexImplTables, std::nullopt);
+        OPTION(std::optional<bool>, EnableIndexMaterialization, std::nullopt);
 
         #undef OPTION
     };

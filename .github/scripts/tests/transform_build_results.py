@@ -171,7 +171,7 @@ def strip_rich_markup(text):
     if not text:
         return text
     # List of known markup tags from app.display
-    known_tags = ['imp', 'unimp', 'bad', 'warn', 'good', 'alt1', 'alt2', 'alt3', 'path', 'rst', 'unimp']
+    known_tags = ['imp', 'unimp', 'bad', 'warn', 'good', 'alt1', 'alt2', 'alt3', 'path', 'rst']
     # Replace only known tags, preserving any other square bracket content
     for tag in known_tags:
         text = text.replace(f'[[{tag}]]', '')
@@ -181,9 +181,9 @@ def strip_rich_markup(text):
 def mute_test_result(result):
     """Mute a test result - set muted flag and change status to SKIPPED"""
     if result.get("status") in ("FAILED", "ERROR"):
-            result["muted"] = True
-            result["status"] = "SKIPPED"
-            # Preserve error information in rich-snippet if it exists
+        result["muted"] = True
+        result["status"] = "SKIPPED"
+        # Preserve error information in rich-snippet if it exists
         return True
     return False
 
@@ -271,10 +271,6 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                     if "properties" not in result:
                         result["properties"] = {}
                     result["properties"].update(user_properties[path_str][subtest_name])
-            
-            # Strip rich markup from rich-snippet (remove tags like [[bad]], [[rst]], etc.)
-            if "rich-snippet" in result and result["rich-snippet"]:
-                result["rich-snippet"] = strip_rich_markup(result["rich-snippet"])
 
         # Add logsdir for failed tests
         if has_fail_tests:
@@ -295,6 +291,11 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                     # Add URL to links array (though properties is the primary source)
                     if url not in result["links"]["logsdir"]:
                         result["links"]["logsdir"].append(url)
+
+    # Strip rich markup from all results (not just test results) to ensure cleanup
+    for result in report.get("results", []):
+        if "rich-snippet" in result and result["rich-snippet"]:
+            result["rich-snippet"] = strip_rich_markup(result["rich-snippet"])
 
     # Save updated report
     with open(report_file, 'w') as f:

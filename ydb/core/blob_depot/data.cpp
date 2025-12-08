@@ -213,6 +213,8 @@ namespace NKikimr::NBlobDepot {
                 Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
 
                 InFlightTrashBlobs.emplace(cookie, id);
+                const bool inserted = AllInFlightTrashBlobs.insert(id).second;
+                Y_ABORT_UNLESS(inserted);
                 db.Table<Schema::Trash>().Key(id.AsBinaryString()).Update();
                 return false; // keep this blob in deletion queue
             };
@@ -486,7 +488,11 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::AddTrashOnLoad(TLogoBlobID id) {
+        if (AllInFlightTrashBlobs.contains(id)) {
+            return; // we're trying to add just inserted item, ignore it
+        }
         auto& record = GetRecordsPerChannelGroup(id);
+<<<<<<< HEAD
 <<<<<<< HEAD
         record.Trash.insert(id);
 =======
@@ -495,6 +501,11 @@ namespace NKikimr::NBlobDepot {
         }
         ++LoadedTrashRecords;
 >>>>>>> 03a13e22718 (Fix trash OOM on blob depot load (#39798))
+=======
+        if (const auto [it, inserted] = record.Trash.insert(id); !inserted) {
+            return; // the same situation: this item has just been inserted into the set
+        }
+>>>>>>> 357aebf69e6 (Fix Trash table loading (#30273))
         AccountBlob(id, true);
         TotalStoredTrashSize += id.BlobSize();
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = TotalStoredTrashSize;
@@ -678,12 +689,17 @@ namespace NKikimr::NBlobDepot {
         const auto usedIt = Used.find(id);
         Y_ABORT_UNLESS(usedIt != Used.end());
 <<<<<<< HEAD
+<<<<<<< HEAD
         Trash.insert(Used.extract(usedIt));
 =======
         const bool inserted = Trash.insert(Used.extract(usedIt)).inserted;
         Y_DEBUG_ABORT_UNLESS(inserted);
         ++self->LoadedTrashRecords;
 >>>>>>> 03a13e22718 (Fix trash OOM on blob depot load (#39798))
+=======
+        const bool inserted = Trash.insert(Used.extract(usedIt)).inserted;
+        Y_DEBUG_ABORT_UNLESS(inserted);
+>>>>>>> 357aebf69e6 (Fix Trash table loading (#30273))
         self->TotalStoredTrashSize += id.BlobSize();
         self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
     }
@@ -831,6 +847,7 @@ namespace NKikimr::NBlobDepot {
         for (const auto& [cookie, id] : InFlightTrashBlobs) {
             const bool inserted = refcountBlobs.try_emplace(id).second;
             Y_ABORT_UNLESS(inserted);
+            Y_ABORT_UNLESS(AllInFlightTrashBlobs.contains(id));
         }
 
         for (const auto& [cookie, locator] : InFlightTrashS3) {

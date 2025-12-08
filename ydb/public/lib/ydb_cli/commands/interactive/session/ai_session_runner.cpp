@@ -1,7 +1,7 @@
 #include "ai_session_runner.h"
 #include "session_runner_common.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/ai_model_handler.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
@@ -23,7 +23,7 @@ public:
         , Database(settings.Database)
         , Driver(settings.Driver)
     {
-        Y_DEBUG_VERIFY(ConfigurationManager, "ConfigurationManager is not initialized");
+        Y_VALIDATE(ConfigurationManager, "ConfigurationManager is not initialized");
         Settings.KeyHandlers = {{'G', [&]() { ChangeSessionSettings(); }}};
     }
 
@@ -48,15 +48,15 @@ public:
         }
 
         TString validationError;
-        Y_DEBUG_VERIFY(AiModel->IsValid(validationError), "AI profile is not valid %s", validationError.c_str());
+        Y_VALIDATE(AiModel->IsValid(validationError), "AI profile is not valid: " << validationError);
 
         Settings.Prompt = CreatePromptPrefix(ProfileName, AiModel->GetName());
         return TBase::Setup(std::move(controller));
     }
 
     void HandleLine(const TString& line) final {
-        Y_DEBUG_VERIFY(AiModel, "Can not handle input while AiModel is not initialized");
-        Y_DEBUG_VERIFY(ConfigurationManager->GetActiveAiProfileName() == AiModel->GetName(), "Unexpected active AI profile");
+        Y_VALIDATE(AiModel, "Can not handle input while AiModel is not initialized");
+        Y_VALIDATE(ConfigurationManager->GetActiveAiProfileName() == AiModel->GetName(), "Unexpected active AI profile");
 
         if (!ModelHandler) {
             try {
@@ -132,7 +132,7 @@ private:
                     });
                     break;
                 case TInteractiveConfigurationManager::EMode::Invalid:
-                    Y_DEBUG_VERIFY(false, "Invalid default mode: %s", ToString(ConfigurationManager->GetDefaultMode()).c_str());
+                    Y_VALIDATE(false, "Invalid default mode: " << ConfigurationManager->GetDefaultMode());
             }
 
             picker.AddOption("Don't do anything, just exit", [&]() { exit = true; });
@@ -195,8 +195,8 @@ private:
     }
 
     void ChangeAiProfile(TInteractiveConfigurationManager::TAiProfile::TPtr profile) {
-        Y_DEBUG_VERIFY(profile, "Profile is not set");
-        Y_DEBUG_VERIFY(AiModel && Controller, "AI session is not initialized");
+        Y_VALIDATE(profile, "Profile is not set");
+        Y_VALIDATE(AiModel && Controller, "AI session is not initialized");
 
         const auto& newProfileName = profile->GetName();
         if (ModelHandler) {

@@ -14,7 +14,7 @@ PEERDIR(
     library/cpp/json/writer
     library/cpp/logger
     library/cpp/string_utils/url
-    ydb/core/base
+    ydb/library/yverify_stream
     ydb/public/lib/ydb_cli/commands/interactive/complete
     ydb/public/lib/ydb_cli/commands/interactive/highlight
     ydb/public/lib/ydb_cli/common

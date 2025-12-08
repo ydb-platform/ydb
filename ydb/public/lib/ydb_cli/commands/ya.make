@@ -53,6 +53,7 @@ PEERDIR(
     ydb/library/formats/arrow/csv/table
     ydb/library/workload
     ydb/library/yaml_config/public
+    ydb/library/yverify_stream
     ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/commands/command_base
     ydb/public/lib/ydb_cli/commands/interactive

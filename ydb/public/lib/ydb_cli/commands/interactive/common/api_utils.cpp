@@ -1,6 +1,6 @@
 #include "api_utils.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
@@ -11,7 +11,7 @@
 namespace NYdb::NConsoleClient::NAi {
 
 TString CreateApiUrl(const TString& baseUrl, const TString& uri) {
-    Y_DEBUG_VERIFY(uri, "Internal error. Uri should not be empty for model API");
+    Y_VALIDATE(uri, "Uri should not be empty for model API");
 
     TStringBuf sanitizedUrl;
     TStringBuf query;

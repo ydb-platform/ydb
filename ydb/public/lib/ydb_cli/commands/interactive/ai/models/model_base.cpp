@@ -1,6 +1,6 @@
 #include "model_base.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
@@ -48,12 +48,12 @@ TModelBase::TModelBase(const TString& apiUrl, const TString& authToken, const TI
     , ApiHeaders(CreateApiHeaders(authToken))
     , HttpGateway(NYql::IHTTPGateway::Make())
 {
-    Y_DEBUG_VERIFY(apiUrl, "Internal error. Url should not be empty for model API");
+    Y_VALIDATE(apiUrl, "Url should not be empty for model API");
     YDB_CLI_LOG(Notice, "Using model API url: \"" << apiUrl << "\" with " << (authToken ? TStringBuilder() << "auth token " << BlurSecret(authToken) : TStringBuilder() << "anonymous access"));
 }
 
 TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& messages) {
-    Y_DEBUG_VERIFY(!messages.empty(), "Internal error. Messages should not be empty for advance conversation");
+    Y_VALIDATE(!messages.empty(), "Messages should not be empty for advance conversation");
 
     AdvanceConversation(messages);
     YDB_CLI_LOG(Debug, "Request to model API body:\n" << FormatJsonValue(ChatCompletionRequest));

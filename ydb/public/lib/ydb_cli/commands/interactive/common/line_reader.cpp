@@ -1,6 +1,6 @@
 #include "line_reader.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.h>
@@ -28,7 +28,7 @@ class TLineReader final : public ILineReader {
         explicit TFileHandlerLockGuard(TFileHandle* handle)
             : Handle(handle)
         {
-            Y_DEBUG_VERIFY(Handle);
+            Y_VALIDATE(Handle, "File handle is not initialized");
         }
 
         ~TFileHandlerLockGuard() {
@@ -88,7 +88,7 @@ public:
         HelpMessage = settings.HelpMessage;
 
         InitReplxx(settings.EnableYqlCompletion, settings.EnableSwitchMode);
-        Y_DEBUG_VERIFY(Rx);
+        Y_VALIDATE(Rx, "Replxx is not initialized");
 
         for (const auto& [key, action] : settings.KeyHandlers) {
             Rx->bind_key(replxx::Replxx::KEY::control(key), [&, action](char32_t code) {
@@ -116,7 +116,7 @@ public:
     }
 
     std::optional<std::variant<TLine, TSwitch>> ReadLine(const TString& defaultValue) final {
-        Y_DEBUG_VERIFY(Rx, "Can not read lines before Setup call");
+        Y_VALIDATE(Rx, "Can not read lines before Setup call");
 
         if (defaultValue) {
             Rx->set_preload_buffer_without_changes(defaultValue);
@@ -242,7 +242,7 @@ private:
     }
 
     void ResetKeyHandler(char key) {
-        Y_DEBUG_VERIFY(Rx, "Replxx is not initialized");
+        Y_VALIDATE(Rx, "Replxx is not initialized");
         Rx->bind_key(replxx::Replxx::KEY::control(key), [](char32_t) { return replxx::Replxx::ACTION_RESULT::CONTINUE; });
     }
 

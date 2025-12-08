@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base
+    ydb/library/yverify_stream
     ydb/public/lib/ydb_cli/commands/interactive/ai/models
     ydb/public/lib/ydb_cli/commands/interactive/ai/tools
     ydb/public/lib/ydb_cli/commands/interactive/common

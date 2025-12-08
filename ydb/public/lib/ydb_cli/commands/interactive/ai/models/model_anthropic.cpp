@@ -1,7 +1,7 @@
 #include "model_anthropic.h"
 #include "model_base.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/api_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 
@@ -33,7 +33,7 @@ public:
     }
 
     void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) final {
-        Y_DEBUG_VERIFY(ValidateToolName(name), "Internal error. Invalid tool name: %s", name.c_str());
+        Y_VALIDATE(ValidateToolName(name), "Invalid tool name: " << name);
 
         auto& tool = Tools.emplace_back();
         tool["name"] = name;

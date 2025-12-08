@@ -1,6 +1,6 @@
 #include "json_utils.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json.h>
@@ -25,12 +25,12 @@ TJsonParser::TJsonParser(std::shared_ptr<NJson::TJsonValue> jsonHolder, const NJ
     , State(state)
     , FieldName(fieldName)
 {
-    Y_DEBUG_VERIFY(JsonHolder, "Internal error. JsonHolder should not be null");
-    Y_DEBUG_VERIFY(State, "Internal error. State should not be null");
+    Y_VALIDATE(JsonHolder, "JsonHolder should not be null");
+    Y_VALIDATE(State, "State should not be null");
 }
 
 bool TJsonParser::Parse(const TString& value) {
-    Y_DEBUG_VERIFY(JsonHolder.get() == State, "Internal error. Parse should be called on root JSON");
+    Y_VALIDATE(JsonHolder.get() == State, "Parse should be called on root JSON");
     return NJson::ReadJsonTree(value, JsonHolder.get());
 }
 
@@ -132,24 +132,24 @@ void TJsonParser::Fail(const TString& message) const {
 TJsonSchemaBuilder::TJsonSchemaBuilder(TJsonSchemaBuilder* parent)
     : Parent(parent)
 {
-    Y_DEBUG_VERIFY(Parent, "Internal error. Parent should not be null");
+    Y_VALIDATE(Parent, "Parent should not be null");
 }
 
 TJsonSchemaBuilder& TJsonSchemaBuilder::Type(EType type) {
-    Y_DEBUG_VERIFY(TypeValue == EType::Undefined, "Internal error. Type should be defined only once");
-    Y_DEBUG_VERIFY(type != EType::Undefined, "Internal error. Type should not be undefined");
+    Y_VALIDATE(TypeValue == EType::Undefined, "Type should be defined only once");
+    Y_VALIDATE(type != EType::Undefined, "Type should not be undefined");
     TypeValue = type;
     return *this;
 }
 
 TJsonSchemaBuilder& TJsonSchemaBuilder::Description(const TString& description) {
-    Y_DEBUG_VERIFY(!DescriptionValue, "Internal error. Description should be defined only once");
+    Y_VALIDATE(!DescriptionValue, "Description should be defined only once");
     DescriptionValue = description;
     return *this;
 }
 
 TJsonSchemaBuilder& TJsonSchemaBuilder::Done() const {
-    Y_DEBUG_VERIFY(Parent, "Internal error. Done should be called only on child objects");
+    Y_VALIDATE(Parent, "Done should be called only on child objects");
     return *Parent;
 }
 
@@ -163,7 +163,7 @@ NJson::TJsonValue TJsonSchemaBuilder::Build() const {
     auto& type = result["type"];
     switch (TypeValue) {
         case EType::Undefined: {
-            Y_DEBUG_VERIFY(false, "Internal error. Type should not be defined before building");
+            Y_VALIDATE(false, "Type should not be defined before building");
             break;
         }
         case EType::String: {
@@ -197,7 +197,7 @@ NJson::TJsonValue TJsonSchemaBuilder::Build() const {
 
 TJsonSchemaBuilder& TJsonSchemaBuilder::Property(const TString& name, bool required) {
     const auto [it, inserted] = Properties.emplace(name, std::make_shared<TJsonSchemaBuilder>(this));
-    Y_DEBUG_VERIFY(inserted, "Internal error. Property should not be defined twice");
+    Y_VALIDATE(inserted, "Property should not be defined twice");
 
     if (required) {
         RequiredProperties.emplace_back(name);

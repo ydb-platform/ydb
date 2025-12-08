@@ -11,6 +11,7 @@ PEERDIR(
     library/cpp/colorizer
     library/cpp/json/writer
     ydb/core/base
+    ydb/library/yverify_stream
     ydb/public/lib/json_value
     ydb/public/lib/ydb_cli/commands/interactive/common
     ydb/public/lib/ydb_cli/commands/interactive/highlight

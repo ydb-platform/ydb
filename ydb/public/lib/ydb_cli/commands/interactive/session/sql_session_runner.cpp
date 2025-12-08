@@ -1,7 +1,7 @@
 #include "sql_session_runner.h"
 #include "session_runner_common.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
@@ -154,7 +154,7 @@ private:
 
     void TrySetCollectStatsMode(const std::vector<TLexer::TToken>& tokens) {
         size_t tokensSize = tokens.size();
-        Y_DEBUG_VERIFY(tokensSize >= 4, "Not enough tokens for \"SET stats\" special command.");
+        Y_VALIDATE(tokensSize >= 4, "Not enough tokens for \"SET stats\" special command.");
 
         if (tokensSize > 4) {
             Cerr << "Variable value for \"SET stats\" special command should contain exactly one token." << Endl;

@@ -1,6 +1,6 @@
 #include "ai_model_handler.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_anthropic.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_openai.h>
@@ -49,7 +49,7 @@ TModelHandler::TModelHandler(const TSettings& settings, const TInteractiveLogger
 }
 
 void TModelHandler::HandleLine(const TString& input) {
-    Y_DEBUG_VERIFY(Model, "Model must be initialized before handling input");
+    Y_VALIDATE(Model, "Model must be initialized before handling input");
 
     if (!input) {
         return;
@@ -111,21 +111,21 @@ void TModelHandler::HandleLine(const TString& input) {
 }
 
 void TModelHandler::ClearContext() {
-    Y_DEBUG_VERIFY(Model, "Model must be initialized before handling clearing context");
+    Y_VALIDATE(Model, "Model must be initialized before handling clearing context");
     Model->ClearContext();
 }
 
 void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPtr profile) {
-    Y_DEBUG_VERIFY(profile, "AI profile must be initialized");
+    Y_VALIDATE(profile, "AI profile must be initialized");
 
     TString ValidationError;
-    Y_DEBUG_VERIFY(profile->IsValid(ValidationError), "AI profile must be valid, but got: %s", ValidationError.c_str());
+    Y_VALIDATE(profile->IsValid(ValidationError), "AI profile must be valid, but got: " << ValidationError);
 
     const auto apiType = profile->GetApiType();
-    Y_DEBUG_VERIFY(apiType, "AI profile must have API type");
+    Y_VALIDATE(apiType, "AI profile must have API type");
 
     const auto& endpoint = profile->GetApiEndpoint();
-    Y_DEBUG_VERIFY(endpoint, "AI profile must have API endpoint");
+    Y_VALIDATE(endpoint, "AI profile must have API endpoint");
 
     const auto& apiKey = profile->GetApiToken();
     const auto& modelName = profile->GetModelName();
@@ -138,12 +138,12 @@ void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPt
             Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey}, Log);
             break;
         case TInteractiveConfigurationManager::TAiProfile::EApiType::Invalid:
-            Y_DEBUG_VERIFY(false, "Invalid API type: %s", ToString(*apiType).c_str());
+            Y_VALIDATE(false, "Invalid API type: " << *apiType);
     }
 }
 
 void TModelHandler::SetupTools(const TSettings& settings) {
-    Y_DEBUG_VERIFY(Model, "Model must be initialized before initializing tools");
+    Y_VALIDATE(Model, "Model must be initialized before initializing tools");
 
     Tools = {
         {"list_directory", NAi::CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},

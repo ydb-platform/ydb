@@ -1,7 +1,7 @@
 #include "interactive_config.h"
 #include "api_utils.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
@@ -18,7 +18,7 @@ TInteractiveConfigurationManager::TAiProfile::TAiProfile(const TString& name, YA
     , Log(log)
     , Config(config)
 {
-    Y_DEBUG_VERIFY(Config.IsNull() || Config.IsMap());
+    Y_VALIDATE(Config.IsNull() || Config.IsMap(), "Unexpected config type: " << static_cast<ui64>(Config.Type()));
 }
 
 bool TInteractiveConfigurationManager::TAiProfile::IsValid(TString& error) const {
@@ -202,7 +202,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint() {
             break;
         }
         case EApiType::Invalid:
-            Y_DEBUG_VERIFY(false, "Invalid API type: %s", ToString(*apiType).c_str());
+            Y_VALIDATE(false, "Invalid API type: " << *apiType);
     }
 
     picker.AddOption("Set a new endpoint value", [&]() {
@@ -453,7 +453,7 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
         return nullptr;
     }
 
-    Y_DEBUG_VERIFY(profileName, "Profiles with empty names are not allowed");
+    Y_VALIDATE(profileName, "Profiles with empty names are not allowed");
     Cout << "Configuring new AI profile \"" << profileName << "\"." << Endl << Endl;
 
     Config["interactive_settings"]["ai_profiles"][profileName] = YAML::Node();

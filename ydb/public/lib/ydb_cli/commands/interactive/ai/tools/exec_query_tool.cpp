@@ -1,7 +1,7 @@
 #include "exec_query_tool.h"
 #include "tool_base.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
@@ -52,7 +52,7 @@ protected:
         while (parser.TryNextRow()) {
             try {
                 TJsonParser row;
-                Y_DEBUG_VERIFY(row.Parse(FormatResultRowJson(parser, resultSet.GetColumnsMeta(), EBinaryStringEncoding::Unicode)), "Internal error. Invalid serialized JSON row value.");
+                Y_VALIDATE(row.Parse(FormatResultRowJson(parser, resultSet.GetColumnsMeta(), EBinaryStringEncoding::Unicode)), "Invalid serialized JSON row value");
                 rows.emplace_back(row.GetValue());
             } catch (const std::exception& e) {
                 Log.Warning() << "Error parsing result #" << resultSetIndex << " row #" << rows.size() << ": " << e.what() << Endl;
@@ -200,7 +200,7 @@ private:
             return false;
         }
 
-        Y_DEBUG_VERIFY(std::holds_alternative<ILineReader::TLine>(*response));
+        Y_VALIDATE(std::holds_alternative<ILineReader::TLine>(*response), "Unexpected response alternative");
         TString newText = std::move(std::get<ILineReader::TLine>(*std::move(response)).Data);
         UserMessage = TStringBuilder()
             << "I decided to change query text manually to:\n" << newText << "\nPrevious query text:\n" << Query

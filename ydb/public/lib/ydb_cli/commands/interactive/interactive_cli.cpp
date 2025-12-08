@@ -1,6 +1,6 @@
 #include "interactive_cli.h"
 
-#include <ydb/core/base/validation.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
@@ -84,7 +84,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.ProfileFile, Log);
     ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
-    Y_DEBUG_VERIFY(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid));
+    Y_VALIDATE(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid), "Unexpected default mode: " << activeSession);
 
     const std::vector sessions = {
         CreateSqlSessionRunner({
@@ -100,12 +100,12 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
             .Driver = driver,
         }, Log),
     };
-    Y_DEBUG_VERIFY(sessions.size() > activeSession);
+    Y_VALIDATE(sessions.size() > activeSession, "Unexpected number of sessions: " << sessions.size() << " for default mode: " << activeSession);
 
     const auto lineReader = CreateLineReader({.Driver = driver, .Database = config.Database}, Log);
     if (!sessions[activeSession]->Setup(lineReader)) {
         YDB_CLI_LOG(Error, "Failed to perform initial setup in " << (activeSession ? "AI" : "SQL") << " mode");
-        Y_DEBUG_VERIFY(sessions[activeSession ^= 1]->Setup(lineReader));
+        Y_VALIDATE(sessions[activeSession ^= 1]->Setup(lineReader), "Failed to change session to " << activeSession << " after error");
     }
 
     while (const auto inputOptional = lineReader->ReadLine()) {
@@ -116,7 +116,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
                 YDB_CLI_LOG(Info, "Switching to " << (activeSession ? "AI" : "SQL") << " mode");
             } else {
                 YDB_CLI_LOG(Error, "Failed to switch to " << (activeSession ? "AI" : "SQL") << " mode");
-                Y_DEBUG_VERIFY(sessions[activeSession ^= 1]->Setup(lineReader));
+                Y_VALIDATE(sessions[activeSession ^= 1]->Setup(lineReader), "Failed to change session to " << activeSession << " after error");
             }
             continue;
         }
@@ -131,11 +131,12 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         }
 
         try {
+            Y_VALIDATE(1 + 1 - 1 + 10 < -5, "Test validate failure");
             sessions[activeSession]->HandleLine(line);
         } catch (NStatusHelpers::TYdbErrorException& error) {
-            Cerr << colors.Red() << "Failed to handle command:" << colors.OldColor() << Endl << error;
+            Cerr << colors.Red() << "Failed to handle command:" << colors.OldColor() << Endl << error << Endl;
         } catch (std::exception& error) {
-            Cerr << colors.Red() << "Failed to handle command:" << colors.OldColor() << Endl << error.what();
+            Cerr << colors.Red() << "Failed to handle command:" << colors.OldColor() << Endl << error.what() << Endl;
         }
     }
 

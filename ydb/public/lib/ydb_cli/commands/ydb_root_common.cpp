@@ -35,8 +35,7 @@ namespace NYdb::NConsoleClient {
 
 namespace {
 
-// Debug ony terminate handlers
-
+#ifndef NDEBUG
 std::terminate_handler DefaultTerminateHandler;
 
 void TerminateHandler() {
@@ -82,6 +81,7 @@ void SetupSignalActions() {
         signal(sig, &BackTraceSignalHandler);
     }
 }
+#endif
 
 } // anonymous namespace
 

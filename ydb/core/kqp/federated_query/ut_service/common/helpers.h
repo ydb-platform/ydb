@@ -60,6 +60,7 @@ namespace NKikimr::NKqp {
 
     private:
         EFailProbablity FailProbabitity;
+        mutable std::mt19937 RandomGen;
     };
 
 } // NKikimr::NKqp

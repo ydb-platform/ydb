@@ -88,7 +88,8 @@ namespace NKikimr::NKqp {
             case EFailProbablity::None:
                 return entry.Status;
             case EFailProbablity::OneTenth: {
-                if (rand() % 10 == 1) {
+                static const int MOD = 10;
+                if ((std::uniform_int_distribution<int>(0, MOD - 1))(RandomGen) % MOD == 0) {
                     return NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
                 }
                 return entry.Status;

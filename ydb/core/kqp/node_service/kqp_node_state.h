@@ -61,9 +61,8 @@ public:
 
     // Returns only started tasks
     std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId) const;
-    
+
     void MarkRequestAsCancelled(ui64 txId);
-    
     void DumpInfo(TStringStream& str) const;
     bool ValidateComputeActorId(const TString& computeActorId, TActorId& id) const;
     bool ValidateKqpExecuterId(const TString& kqpExecuterId, ui32 nodeId, TActorId& id) const;

@@ -81,11 +81,13 @@ bool TNodeState::OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, 
             if (auto taskIt = request.Tasks.find(taskId); taskIt != request.Tasks.end()) {
                 taskIt->second = computeActorId;
                 return true;
+            } else {
+                // If request has more tasks, then this one may already be finished and not exist.
+                return false;
             }
-            // If request has more tasks, then this one may already be finished and not exist.
-            return false;
         }
     }
+
     // If request(s) had a single task, then the task may already be finished - and request(s) may not exist.
     return false;
 }

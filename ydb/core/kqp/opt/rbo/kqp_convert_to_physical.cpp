@@ -1215,8 +1215,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                 columns.push_back(ctx.NewAtom(op->Pos, c));
             }
 
-            switch (opSource->SourceType) {
-                case ETableSourceType::Row: {
+            switch (opSource->GetTableStorageType()) {
+                case NYql::EStorageType::RowStorage: {
                     // clang-format off
                     currentStageBody = Build<TDqSource>(ctx, op->Pos)
                         .DataSource(source)
@@ -1231,7 +1231,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                     // clang-format on
                     break;
                 }
-                case ETableSourceType::Column: {
+                case NYql::EStorageType::ColumnStorage: {
                     // clang-format off
                     auto olapRead = Build<TKqpBlockReadOlapTableRanges>(ctx, op->Pos)
                             .Table(opSource->TableCallable)

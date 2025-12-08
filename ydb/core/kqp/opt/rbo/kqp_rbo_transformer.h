@@ -48,7 +48,12 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
               { std::make_shared<TRuleBasedStage>(RuleStage1),
                 std::make_shared<TRenameStage>(),
                 std::make_shared<TConstantFoldingStage>(),
-                std::make_shared<TRuleBasedStage>(RuleStage2), std::make_shared<TRuleBasedStage>(RuleStage3)},
+                std::make_shared<TRuleBasedStage>(RuleStage2), 
+                std::make_shared<TRuleBasedStage>(RuleStage3),
+                std::make_shared<TRuleBasedStage>(RuleStage4),
+                std::make_shared<TRuleBasedStage>(RuleStage5),
+                std::make_shared<TRuleBasedStage>(RuleStage6)
+              },
               kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole, funcRegistry) {}
 
     // Main method of the transformer

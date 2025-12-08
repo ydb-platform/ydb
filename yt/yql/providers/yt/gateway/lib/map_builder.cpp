@@ -9,11 +9,6 @@ using namespace NYT;
 using namespace NNodes;
 using namespace NThreading;
 
-TMapJobBuilder::TMapJobBuilder(const TString& jobPrefix)
-    : Prefix_(jobPrefix)
-{
-}
-
 void TMapJobBuilder::SetBlockInput(TYqlUserJobBase* mapJob, NNodes::TYtMap map) {
     const bool blockInput = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied);
     mapJob->SetUseBlockInput(blockInput);

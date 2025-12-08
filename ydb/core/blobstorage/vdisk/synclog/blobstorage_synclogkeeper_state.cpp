@@ -46,14 +46,14 @@ namespace NKikimr {
             , PhantomFlagStorageState(SlCtx)
             , EnablePhantomFlagStorage(SlCtx->EnablePhantomFlagStorage)
             , PhantomFlagStorageLimit(SlCtx->PhantomFlagStorageLimit)
+            , SelfOrderNumber(SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk))
         {
             Y_VERIFY_S(SlCtx->VCtx->Top->GetTotalVDisksNum() <= MaxPossibleDisksInGroup,
                     "Bad erasure# " << TBlobStorageGroupType::ErasureSpeciesName(SlCtx->VCtx->Top->GType.GetErasure()));
             SyncedLsns.resize(SlCtx->VCtx->Top->GetTotalVDisksNum());
-            ui32 selfOrderNum = SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk);
-            SyncedLsns[selfOrderNum] = Max<ui64>();
+            SyncedLsns[SelfOrderNumber] = Max<ui64>();
             SyncedMask.reset();
-            SyncedMask.set(selfOrderNum, true);
+            SyncedMask.set(SelfOrderNumber, true);
         }
 
         // Calculate first lsn in recovery log we must keep
@@ -484,7 +484,8 @@ namespace NKikimr {
         void TSyncLogKeeperState::DropUnsyncedChunks(const TVector<ui32>& chunks) {
             ui64 firstStoredLsn = SyncLogPtr->GetFirstLsn();
             for (ui32 orderNumber = 0; orderNumber < SlCtx->VCtx->Top->GType.BlobSubgroupSize(); ++orderNumber) {
-                SyncedMask.set(orderNumber, SyncedLsns[orderNumber] >= firstStoredLsn);
+                bool synced = (orderNumber == SelfOrderNumber) || (SyncedLsns[orderNumber] + 1 >= firstStoredLsn);
+                SyncedMask.set(orderNumber, synced);
             }
 
             if (EnablePhantomFlagStorage) {
@@ -500,6 +501,7 @@ namespace NKikimr {
 
         void TSyncLogKeeperState::UpdateMetrics() {
             PhantomFlagStorageState.UpdateMetrics();
+            SlCtx->PhantomFlagStorageGroup.SyncedMask() = SyncedMask.to_ullong();
         }
 
     } // NSyncLog

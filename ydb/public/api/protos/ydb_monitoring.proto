@@ -240,6 +240,7 @@ message ClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1; // basic operation params, including timeout
     uint32 duration_seconds = 2;
     uint32 period_seconds = 3;
+    bool no_sanitize = 4;
 }
 
 message ClusterStateResponse {

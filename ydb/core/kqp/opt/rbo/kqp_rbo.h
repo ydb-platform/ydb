@@ -13,9 +13,8 @@ enum ERuleProperties: ui32 {
     RequireParents = 0x01,
     RequireTypes = 0x02,
     RequireMetadata = 0x04,
-    RequireStatistics = 0x08,
-    RequireMetataAndStatistics = 0xC
-};
+    RequireStatistics = 0x08
+  };
 
 /**
  * Interface for transformation rule:
@@ -27,14 +26,15 @@ enum ERuleProperties: ui32 {
 class IRule {
   public:
     IRule(TString name) : RuleName(name) {}
-    IRule(TString name, ui32 props) : RuleName(name), Props(props) {}
+    IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
 
     virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;
 
     TString RuleName;
-    ui32 Props;
+    ui32 Props{0x00};
+    bool LogRule = false;
 };
 
 /**
@@ -44,7 +44,7 @@ class IRule {
 class ISimplifiedRule : public IRule {
   public:
     ISimplifiedRule(TString name) : IRule(name) {}
-    ISimplifiedRule(TString name, ui32 props) : IRule(name, props) {}
+    ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
@@ -59,9 +59,13 @@ class ISimplifiedRule : public IRule {
  */
 class IRBOStage {
   public:
+    IRBOStage(TString stageName) : StageName(stageName) {}
+    
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) = 0;
     virtual ~IRBOStage() = default;
     ui32 Props = 0x00;
+
+    TString StageName;
 };
 
 /**
@@ -69,7 +73,7 @@ class IRBOStage {
  */
 class TRuleBasedStage : public IRBOStage {
   public:
-    TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules);
+    TRuleBasedStage(TString stageName, TVector<std::shared_ptr<IRule>> rules);
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 
     TVector<std::shared_ptr<IRule>> Rules;

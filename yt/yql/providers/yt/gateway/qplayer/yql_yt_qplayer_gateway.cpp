@@ -1138,7 +1138,7 @@ private:
         YQL_ENSURE(FullCapture_);
 
         try {
-            TDumpOptions dumpOptions(options.SessionId());
+            auto dumpOptions = TDumpOptions(options.SessionId()).Config(options.Config());
             size_t tableDataSize = 0;
 
             ui64 generation = SessionGenerations_[options.SessionId()];

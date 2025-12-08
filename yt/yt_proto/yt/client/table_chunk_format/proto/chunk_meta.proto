@@ -1,5 +1,7 @@
 package NYT.NTableClient.NProto;
 
+option go_package = "a.yandex-team.ru/yt/go/proto/client/table_client";
+
 import "yt_proto/yt/client/table_chunk_format/proto/column_meta.proto";
 import "yt_proto/yt/core/misc/proto/guid.proto";
 
@@ -365,6 +367,17 @@ message TCompressionDictionaryExt
     // References to fragments that store dictionaries used for compression
     // of values of a column corresponding to stable_name.
     repeated TColumnInfo column_infos = 1;
+}
+
+message TColumnNameToConstraintMap
+{
+    message TColumnNameToConstraintEntry
+    {
+        required string name = 1;
+        required string constraint = 2;
+    }
+
+    repeated TColumnNameToConstraintEntry entries = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

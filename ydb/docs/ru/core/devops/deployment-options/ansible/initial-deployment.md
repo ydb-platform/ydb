@@ -1,6 +1,5 @@
 # Развёртывание {{ ydb-short-name }} кластера с помощью Ansible
 
-<!-- markdownlint-disable blanks-around-fences -->
 {% note warning %}
 
 Данная инструкция предназначена только для развёртывания кластеров с [конфигурацией V1](../../configuration-management/configuration-v1/index.md). Развёртывание кластеров с [конфигурацией V2](../../configuration-management/configuration-v2/index.md) с помощью Ansible в настоящий момент находится в разработке.
@@ -59,12 +58,25 @@
 * Обновите пакеты командой `sudo apt-get upgrade`.
 * Установите пакет `software-properties-common` для управления источниками программного обеспечения вашего дистрибутива — `sudo apt install software-properties-common`.
 * Добавьте новый PPA в apt — `sudo add-apt-repository --yes --update ppa:ansible/ansible`.
-* Установите Ansible — `sudo apt-get install ansible-core=2.16.3-0ubuntu2` (обратите внимание, что установка просто `ansible` приведёт к неподходящей устаревшей версии).
-* Проверьте версию Ansible core — `ansible --version`
-
-Подробнее см. [руководство по установке Ansible](https://docs.ansible.com/ansible/latest/installation_guide/index.html) для получения дополнительной информации и других вариантов установки.
+* Установите Ansible — `sudo apt-get install ansible-core` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.15.2; установка пакета просто `ansible` приведёт к устаревшей и неподходящей версии).
+* Проверьте версию Ansible core — `ansible --version`.
 
 {% endcut %}
+
+{% cut "Установка Ansible в виртуальное окружение Python" %}
+
+На примере Ubuntu 22.04 LTS:
+
+* Обновите список доступных deb пакетов — `sudo apt-get update`.
+* Установите пакет `python3-venv` для управления Python виртуальными окружениями — `sudo apt-get install venv`.
+* Создайте директорию, где будет создано виртуальное окружение. Например, `mkdir venv-ansible`.
+* Создайте виртуальное окружение Python — `python3 -m venv venv-ansible`, где `venv-ansible` - путь к директории созданной на предыдущем шаге.
+* Активируйте виртуальное окружение — `source venv-ansible/bin/activate`. Все дальнейшие действия с Ansible выполняются внутри виртуального окружения. Выйти из него можно командой `deactivate`.
+* Установите рекомендуемую версию Ansible с помощью команды `pip3 install "ansible-core>=2.15.2,<2.19"` (убедитесь, что устанавливаемая версия не выше 2.18 и не меньше 2.15.2). Проверьте установленную версию Ansible — `ansible --version`.
+
+{% endcut %}
+
+Подробнее см. [руководство по установке Ansible](https://docs.ansible.com/ansible/latest/installation_guide/index.html) для получения дополнительной информации и других вариантов установки.
 
 ## Настройка проекта Ansible {#ansible-project-setup}
 
@@ -75,20 +87,20 @@
 - Через requirements.yaml
 
   ```bash
-  $ cat <<EOF > requirements.yaml
+  cat <<EOF > requirements.yaml
   roles: []
   collections:
     - name: git+https://github.com/ydb-platform/ydb-ansible
       type: git
       version: latest
   EOF
-  $ ansible-galaxy install -r requirements.yaml
+  ansible-galaxy install -r requirements.yaml
   ```
 
 - Однократно
 
   ```bash
-  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
+  ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
   ```
 
 {% endlist %}
@@ -203,7 +215,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 Рекомендуемые настройки для адаптации:
 
 * `ydb_domain`. Это будет первый компонент пути для всех [объектов схемы](../../../concepts/glossary.md#scheme-object) в кластере. Например, вы можете поместить туда название своей компании, регион кластера и т.д.
-* `ydb_database_name`. Это будет второй компонент пути для всех [объектов схемы](../../../concepts/glossary.md#scheme-object) в базе данных. Например, вы можете поместить туда название сценария использования или проекта.
+* `ydb_dbname`. Это будет второй компонент пути для всех [объектов схемы](../../../concepts/glossary.md#scheme-object) в базе данных. Например, вы можете поместить туда название сценария использования или проекта.
 
 {% cut "Дополнительные настройки" %}
 
@@ -233,12 +245,12 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
       - static-node-3.ydb-cluster.com
   ```
 
-Оптимальное значение настройки `ydb_database_storage_groups` в разделе `vars` зависит от доступных дисков. Предполагая только одну базу данных в кластере, используйте следующую логику:
+Оптимальное значение настройки `ydb_database_groups` в разделе `vars` зависит от доступных дисков. Предполагая только одну базу данных в кластере, используйте следующую логику:
 
 * Для промышленных развёртываний используйте диски ёмкостью более 800 ГБ с высокой производительностью IOPS, затем выберите значение для этой настройки на основе топологии кластера:
-  * Для `block-4-2` установите `ydb_database_storage_groups` на 95% от общего количества дисков, округляя вниз.
-  * Для `mirror-3-dc` установите `ydb_database_storage_groups` на 84% от общего количества дисков, округляя вниз.
-* Для тестирования {{ ydb-short-name }} на небольших дисках установите `ydb_database_storage_groups` в 1 независимо от топологии кластера.
+  * Для `block-4-2` установите `ydb_database_groups` на 95% от общего количества дисков, округляя вниз.
+  * Для `mirror-3-dc` установите `ydb_database_groups` на 84% от общего количества дисков, округляя вниз.
+* Для тестирования {{ ydb-short-name }} на небольших дисках установите `ydb_database_groups` в 1 независимо от топологии кластера.
 
 Значения переменных `system_timezone` и `system_ntp_servers` зависят от свойств инфраструктуры, на которой развёртывается кластер {{ ydb-short-name }}. По умолчанию `system_ntp_servers` включает набор NTP-серверов без учёта географического расположения инфраструктуры, на которой будет развёрнут кластер {{ ydb-short-name }}. Мы настоятельно рекомендуем использовать локальный NTP-сервер для on-premise инфраструктуры и следующие NTP-серверы для облачных провайдеров:
 
@@ -270,7 +282,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 Создайте файл `ansible_vault_password_file` с содержимым:
 
-```
+```bash
 password
 ```
 
@@ -442,8 +454,6 @@ all:
           subject_terms:
           - short_name: "O"
             values: ["YDB"]
-          - short_name: "CN"
-            values: ["YDB CA"]
   query_service_config:
     generic:
       connector:
@@ -525,7 +535,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать [домен](../../../concepts/glossary.md#domain) с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../concepts/glossary.md#database) с именем из настройки `ydb_database_name` (по умолчанию `database`) и начального [пользователя](../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
+В результате выполнения плейбука `ydb_platform.ydb.initial_setup` будет создан кластер {{ ydb-short-name }}. Он будет содержать [домен](../../../concepts/glossary.md#domain) с именем из настройки `ydb_domain` (по умолчанию `Root`), [базу данных](../../../concepts/glossary.md#database) с именем из настройки `ydb_dbname` (по умолчанию `database`) и начального [пользователя](../../../concepts/glossary.md#access-user) с именем из настройки `ydb_user` (по умолчанию `root`).
 
 ## Дополнительные шаги
 

@@ -35,6 +35,86 @@ struct TNonAssignable
     const int Value = 0;
 };
 
+TEST_F(TFutureTest, UniqueVoidOK)
+{
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+    auto uniqueFuture = future.AsUnique();
+    EXPECT_FALSE(uniqueFuture.IsSet());
+    promise.Set();
+    EXPECT_TRUE(uniqueFuture.IsSet());
+    EXPECT_TRUE(uniqueFuture.Get().IsOK());
+}
+
+TEST_F(TFutureTest, UniqueVoidError)
+{
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+    auto uniqueFuture = future.AsUnique();
+    EXPECT_FALSE(uniqueFuture.IsSet());
+    promise.Set(TError("oops"));
+    EXPECT_TRUE(uniqueFuture.IsSet());
+    EXPECT_EQ(uniqueFuture.Get().GetCode(), NYT::EErrorCode::Generic);
+}
+
+TEST_F(TFutureTest, VoidUniqueApply)
+{
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+    // Try various chaining scenarios.
+    auto chainedFuture = future
+        .AsUnique()
+        .Apply(BIND([] (TError&& error) {
+            EXPECT_TRUE(error.IsOK());
+        }))
+        .AsUnique()
+        .Apply(BIND([] {
+        }))
+        .AsUnique()
+        .Apply(BIND([] {
+            return 123;
+        }))
+        .AsVoid()
+        .AsUnique()
+        .Apply(BIND([] {
+            return MakeFuture<int>(456);
+        }))
+        .AsVoid()
+        .AsUnique()
+        .Apply(BIND([] {
+            return MakeFuture<int>(888).AsUnique();
+        }));
+    EXPECT_FALSE(chainedFuture.IsSet());
+    promise.Set();
+    EXPECT_TRUE(chainedFuture.IsSet());
+    EXPECT_EQ(chainedFuture.Get().ValueOrThrow(), 888);
+}
+
+TEST_F(TFutureTest, WellKnownUniqueFuture)
+{
+    auto future = VoidFuture.AsUnique();
+    // Multiple subscriptions are fine.
+    EXPECT_TRUE(future.IsSet());
+    EXPECT_TRUE(future.Get().IsOK());
+    EXPECT_TRUE(future.Get().IsOK());
+    {
+        bool invoked = false;
+        future.Subscribe(BIND([&] (const TError& error) {
+            EXPECT_TRUE(error.IsOK());
+            invoked = true;
+        }));
+        EXPECT_TRUE(invoked);
+    }
+    {
+        bool invoked = false;
+        future.Subscribe(BIND([&] (TError&& error) {
+            EXPECT_TRUE(error.IsOK());
+            invoked = true;
+        }));
+        EXPECT_TRUE(invoked);
+    }
+}
+
 TEST_F(TFutureTest, NoncopyableGet)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));

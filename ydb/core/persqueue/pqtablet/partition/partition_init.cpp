@@ -895,7 +895,7 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
             Done(ctx);
             break;
         default:
-            AFL_ENSURE("bad status")("status", range->GetStatus());
+            AFL_ENSURE(false && "bad status")("status", range->GetStatus());
     };
 }
 

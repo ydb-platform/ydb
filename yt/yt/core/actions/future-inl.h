@@ -231,6 +231,8 @@ public:
     using TVoidResultHandler = TCallback<void(const TError&)>;
     using TVoidResultHandlers = TFutureCallbackList<TVoidResultHandler, 0, (1ULL << 30) - 1>;
 
+    using TUniqueVoidResultHandler = TCallback<void(TError&&)>;
+
     using TCancelHandler = TCallback<void(const TError&)>;
     using TCancelHandlers = TCompactVector<TCancelHandler, 8>;
 
@@ -330,6 +332,8 @@ public:
     }
 
     TFutureCallbackCookie Subscribe(TVoidResultHandler handler);
+    TFutureCallbackCookie SubscribeUnique(TUniqueVoidResultHandler handler);
+
     void Unsubscribe(TFutureCallbackCookie cookie);
 
     TCancelable AsCancelable()
@@ -1246,27 +1250,6 @@ TFuture<R> TFutureBase<T>::Apply(TCallback<TFuture<R>(const TErrorOr<T>&)> callb
 }
 
 template <class T>
-template <class R>
-TFuture<R> TFutureBase<T>::ApplyUnique(TCallback<R(TErrorOr<T>&&)> callback) const
-{
-    return NYT::NDetail::ApplyUniqueHelper<R>(Impl_, std::move(callback));
-}
-
-template <class T>
-template <class R>
-TFuture<R> TFutureBase<T>::ApplyUnique(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const
-{
-    return NYT::NDetail::ApplyUniqueHelper<R>(Impl_, std::move(callback));
-}
-
-template <class T>
-template <class R>
-TFuture<R> TFutureBase<T>::ApplyUnique(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const
-{
-    return NYT::NDetail::ApplyUniqueHelper<R>(Impl_, std::move(callback));
-}
-
-template <class T>
 template <class U>
 TFuture<U> TFutureBase<T>::As() const
 {
@@ -1310,6 +1293,18 @@ template <class T>
 TCancelable TFutureBase<T>::AsCancelable() const
 {
     return TCancelable(Impl_);
+}
+
+template <class T>
+TUniqueFuture<T> TFutureBase<T>::AsUnique() const&
+{
+    return TUniqueFuture<T>(this->Impl_);
+}
+
+template <class T>
+TUniqueFuture<T> TFutureBase<T>::AsUnique() &&
+{
+    return TUniqueFuture<T>(std::move(this->Impl_));
 }
 
 template <class T>
@@ -1366,32 +1361,6 @@ TFuture<R> TFuture<T>::Apply(TCallback<TUniqueFuture<R>(T)> callback) const
 }
 
 template <class T>
-template <class R>
-TFuture<R> TFuture<T>::ApplyUnique(TCallback<R(T&&)> callback) const
-{
-    return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, callback);
-}
-
-template <class T>
-template <class R>
-TFuture<R> TFuture<T>::ApplyUnique(TCallback<TFuture<R>(T&&)> callback) const
-{
-    return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, callback);
-}
-
-template <class T>
-TUniqueFuture<T> TFuture<T>::AsUnique() const&
-{
-    return TUniqueFuture<T>(this->Impl_);
-}
-
-template <class T>
-TUniqueFuture<T> TFuture<T>::AsUnique() &&
-{
-    return TUniqueFuture<T>(std::move(this->Impl_));
-}
-
-template <class T>
 TFuture<T>::TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl)
     : TFutureBase<T>(std::move(impl))
 { }
@@ -1426,25 +1395,21 @@ inline TFuture<void>::TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<void>> im
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-TUniqueFuture<T>::TUniqueFuture(std::nullopt_t)
-{ }
-
-template <class T>
-TErrorOr<T> TUniqueFuture<T>::Get() const
+TErrorOr<T> TUniqueFutureBase<T>::Get() const
 {
     YT_ASSERT(this->Impl_);
     return this->Impl_->GetUnique();
 }
 
 template <class T>
-std::optional<TErrorOr<T>> TUniqueFuture<T>::TryGet() const
+std::optional<TErrorOr<T>> TUniqueFutureBase<T>::TryGet() const
 {
     YT_ASSERT(this->Impl_);
     return this->Impl_->TryGetUnique();
 }
 
 template <class T>
-void TUniqueFuture<T>::Subscribe(TCallback<void(TErrorOr<T>&&)> handler) const
+void TUniqueFutureBase<T>::Subscribe(TCallback<void(TErrorOr<T>&&)> handler) const
 {
     YT_ASSERT(this->Impl_);
     this->Impl_->SubscribeUnique(std::move(handler));
@@ -1452,31 +1417,33 @@ void TUniqueFuture<T>::Subscribe(TCallback<void(TErrorOr<T>&&)> handler) const
 
 template <class T>
 template <class R>
-TFuture<R> TUniqueFuture<T>::Apply(TCallback<R(TErrorOr<T>&&)> callback) const
+TFuture<R> TUniqueFutureBase<T>::Apply(TCallback<R(TErrorOr<T>&&)> callback) const
 {
     return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, std::move(callback));
 }
 
 template <class T>
 template <class R>
-TFuture<R> TUniqueFuture<T>::Apply(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const
+TFuture<R> TUniqueFutureBase<T>::Apply(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const
 {
     return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, std::move(callback));
 }
 
 template <class T>
 template <class R>
-TFuture<R> TUniqueFuture<T>::Apply(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const
+TFuture<R> TUniqueFutureBase<T>::Apply(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const
 {
     return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, std::move(callback));
 }
 
 template <class T>
 template <class R>
-TFuture<R> TUniqueFuture<T>::Apply(TCallback<TUniqueFuture<R>(TErrorOr<T>&&)> callback) const
+TFuture<R> TUniqueFutureBase<T>::Apply(TCallback<TUniqueFuture<R>(TErrorOr<T>&&)> callback) const
 {
     return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, std::move(callback));
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
 template <class R>
@@ -1499,10 +1466,25 @@ TFuture<R> TUniqueFuture<T>::Apply(TCallback<TUniqueFuture<R>(T&&)> callback) co
     return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, callback);
 }
 
-template <class T>
-TUniqueFuture<T>::TUniqueFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl)
-    : TFutureBase<T>(std::move(impl))
-{ }
+////////////////////////////////////////////////////////////////////////////////
+
+template <class R>
+TFuture<R> TUniqueFuture<void>::Apply(TCallback<R()> callback) const
+{
+    return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, callback);
+}
+
+template <class R>
+TFuture<R> TUniqueFuture<void>::Apply(TCallback<TFuture<R>()> callback) const
+{
+    return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, callback);
+}
+
+template <class R>
+TFuture<R> TUniqueFuture<void>::Apply(TCallback<TUniqueFuture<R>()> callback) const
+{
+    return NYT::NDetail::ApplyUniqueHelper<R>(this->Impl_, callback);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

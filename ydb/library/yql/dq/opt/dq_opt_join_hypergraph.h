@@ -148,10 +148,12 @@ public:
 
     /* Add node to the hypergraph and returns its id */
     size_t AddNode(const std::shared_ptr<IBaseOptimizerNode>& relationNode) {
-        Y_ASSERT(relationNode->Labels().size() == 1);
+        Y_ASSERT(relationNode->Labels().size() >= 1);
 
         size_t nodeId = Nodes_.size();
-        NodeIdByRelationName_.insert({relationNode->Labels()[0], nodeId});
+        for (auto label : relationNode->Labels()) {
+            NodeIdByRelationName_.insert({label, nodeId});
+        }
 
         Nodes_.push_back({});
         Nodes_.back().RelationOptimizerNode = relationNode;

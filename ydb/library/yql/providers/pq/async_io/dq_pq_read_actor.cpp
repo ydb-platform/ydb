@@ -153,7 +153,7 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
                 for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
                     SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
                 }
-                source = source->GetSubgroup("tx_id", TxId);
+                source = SubGroup->GetSubgroup("tx_id", TxId);
                 task = source->GetSubgroup("task_id", ToString(taskId));
             }
             InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");

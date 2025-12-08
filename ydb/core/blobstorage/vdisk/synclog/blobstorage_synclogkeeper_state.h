@@ -213,6 +213,8 @@ namespace NKikimr {
             TMemorizableControlWrapper EnablePhantomFlagStorage;
             TMemorizableControlWrapper PhantomFlagStorageLimit;
 
+            ui32 SelfOrderNumber;
+
         private:
             // Fix Disk overflow, i.e. remove some chunks from SyncLog
             TVector<ui32> FixDiskOverflow(ui32 numChunksToAdd);

@@ -101,6 +101,13 @@ def _init_stress_utils():
             ],
             'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard'
         },
+        'IntrementalBackup': {
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--backup-interval", "20"
+            ],
+            'local_path': 'ydb/tests/stress/backup/backup_stress'
+        },
     }
 
     for table_type in ['row', 'column']:

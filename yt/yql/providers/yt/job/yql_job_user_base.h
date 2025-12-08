@@ -93,8 +93,6 @@ protected:
 
     virtual TIntrusivePtr<NYT::IReaderImplBase> MakeMkqlJobReader() = 0;
 
-    virtual TString GetJobFactoryPrefix() const = 0;
-
     void Do();
 
 protected:

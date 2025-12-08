@@ -307,17 +307,6 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>(const TErrorOr<T>&)> callback) const;
 
-    //! Same as #Apply but assumes that this chaining will be the only subscriber.
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<R(TErrorOr<T>&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
-
     //! Converts (successful) result to |U|; propagates errors as is.
     template <class U>
     TFuture<U> As() const;
@@ -328,6 +317,10 @@ public:
 
     //! Converts to TCancelable interface.
     TCancelable AsCancelable() const;
+
+    //! Converts to TUniqueFuture interface.
+    TUniqueFuture<T> AsUnique() const&;
+    TUniqueFuture<T> AsUnique() &&;
 
 protected:
     explicit TFutureBase(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
@@ -366,20 +359,8 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>(T)> callback) const;
 
-    //! Same as #Apply but assumes that this chaining will be the only subscriber.
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<R(T&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TFuture<R>(T&&)> callback) const;
-
-    //! Converts to TUniqueFuture interface.
-    TUniqueFuture<T> AsUnique() const&;
-    TUniqueFuture<T> AsUnique() &&;
 
     using TFutureBase<T>::Apply;
-    using TFutureBase<T>::ApplyUnique;
 
 private:
     explicit TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
@@ -441,12 +422,11 @@ private:
  *  (possibly shared by multiple future references).
  */
 template <class T>
-class [[nodiscard]] TUniqueFuture
+class TUniqueFutureBase
     : public TFutureBase<T>
 {
 public:
-    TUniqueFuture() = default;
-    TUniqueFuture(std::nullopt_t);
+    using TFutureBase<T>::TFutureBase;
 
     //! Similar to #TFuture::Get but extracts the value by moving it out of the future state.
     /*!
@@ -476,6 +456,22 @@ public:
     TFuture<R> Apply(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>(TErrorOr<T>&&)> callback) const;
+
+private:
+    template <class U>
+    friend class TFutureBase;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+class [[nodiscard]] TUniqueFuture
+    : public TUniqueFutureBase<T>
+{
+public:
+    using TUniqueFutureBase<T>::TUniqueFutureBase;
+
+    //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
     template <class R>
     TFuture<R> Apply(TCallback<R(T&&)> callback) const;
     template <class R>
@@ -483,11 +479,27 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>(T&&)> callback) const;
 
-private:
-    explicit TUniqueFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
+    using TUniqueFutureBase<T>::Apply;
+};
 
-    template <class U>
-    friend class TFuture;
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+class [[nodiscard]] TUniqueFuture<void>
+    : public TUniqueFutureBase<void>
+{
+public:
+    using TUniqueFutureBase<void>::TUniqueFutureBase;
+
+    //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
+    template <class R>
+    TFuture<R> Apply(TCallback<R()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>()> callback) const;
+
+    using TUniqueFutureBase<void>::Apply;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

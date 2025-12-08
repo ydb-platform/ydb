@@ -416,7 +416,8 @@ class ConnectionPool(IConnectionPool):
         :return: None
         """
         connection.close()
-        self._discovery_thread.notify_disconnected()
+        if self._discovery_thread:
+            self._discovery_thread.notify_disconnected()
 
     def discovery_debug_details(self):
         """

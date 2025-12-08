@@ -81,7 +81,7 @@ def _set_node_errors(node_errors: list[NodeErrors]) -> str:
             core_version = 'v2'
             if len(core_info) == 3:
                 core_version = core_info[2]
-                        
+
             color = hex(0xFF0000 + hash(str(core_hash)) % 0xFFFF).split('x')[-1]
             if core_version == 'v2':
                 host_cores[node.node.host] += f'{node.node.slot.split(' @ ')[0]} - \

@@ -307,6 +307,18 @@ TStatus ComputeTypes(std::shared_ptr<TOpLimit> limit, TRBOContext & ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProps& props);
+
+TStatus ComputeTypes(std::shared_ptr<TOpCBOTree> cboTree, TRBOContext &ctx, TPlanProps& props) {
+    for (auto op : cboTree->TreeNodes) {
+        if (auto status = ComputeTypes(op, ctx, props); status != TStatus::Ok) {
+            return status;
+        }
+    }
+    cboTree->Type = cboTree->TreeRoot->Type;
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProps& props) {
     if (MatchOperator<TOpEmptySource>(op)) {
         return ComputeTypes(CastOperator<TOpEmptySource>(op), ctx);
@@ -331,6 +343,9 @@ TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProp
     }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);
+    }
+    else if (MatchOperator<TOpCBOTree>(op)) {
+        return ComputeTypes(CastOperator<TOpCBOTree>(op), ctx, props);
     }
     else {
         Y_ENSURE(false, "Invalid operator type in RBO type inference");

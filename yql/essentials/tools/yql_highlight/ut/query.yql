@@ -27,6 +27,10 @@ SELECT "foo"u, '[1;2]'y, @@{"a":null}@@j;
 
 SELECT @@xX{"json":"json"}Xx@@
 
+SELECT `singline
+but \`
+multiline`
+
 SELECT 'singleline
 but \'
 multiline';

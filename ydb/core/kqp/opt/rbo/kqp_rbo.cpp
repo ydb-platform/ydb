@@ -56,6 +56,8 @@ void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
 void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     bool fired = true;
     int nMatches = 0;
+    bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
+
 
     while (fired && nMatches < 1000) {
         fired = false;
@@ -75,7 +77,7 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                         root.SetInput(op);
                     }
 
-                    if (rule->LogRule) {
+                    if (needToLog && rule->LogRule) {
                         YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
                     }
 
@@ -96,7 +98,11 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 }
 
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {
-    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
+    bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
+
+    if (needToLog) {
+        YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
+    }
 
     auto context = TRBOContext(KqpCtx, ctx, TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
 
@@ -104,15 +110,22 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
         auto stage = Stages[idx];
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
         ComputeRequiredProps(root, stage->Props, context);
+        if (needToLog) {
+            YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+        }
         stage->RunStage(root, context);
-        YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
+        if (needToLog) {
+            YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+        }
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
     auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics;
     ComputeRequiredProps(root, convertProps, context);
-    YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+    if (needToLog) {
+        YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+    }
 
     return ConvertToPhysical(root, context, TypeAnnTransformer, PeepholeTransformer);
 }

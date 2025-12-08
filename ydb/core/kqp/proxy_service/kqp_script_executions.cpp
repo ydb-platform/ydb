@@ -185,23 +185,20 @@ class TScriptExecutionsTablesCreator : public NTableCreator::TMultiTableCreator 
     using TBase = NTableCreator::TMultiTableCreator;
 
 public:
-    explicit TScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags)
+    explicit TScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags, ui64 generation)
         : TBase({
             GetScriptExecutionsCreator(featureFlags),
             GetScriptExecutionLeasesCreator(featureFlags),
             GetScriptResultSetsCreator(featureFlags)
         })
+        , Generation(generation)
     {}
 
 private:
     static TMaybe<NACLib::TDiffACL> GetTableACL(const NKikimrConfig::TFeatureFlags& featureFlags) {
-        if (!featureFlags.GetEnableSecureScriptExecutions()) {
-            return Nothing();
-        }
-
         NACLib::TDiffACL acl;
         acl.ClearAccess();
-        acl.SetInterruptInheritance(true);
+        acl.SetInterruptInheritance(featureFlags.GetEnableSecureScriptExecutions());
         return acl;
     }
 
@@ -297,9 +294,12 @@ private:
     }
 
     void OnTablesCreated(bool success, NYql::TIssues issues) override  {
-        Send(Owner, new TEvScriptExecutionsTablesCreationFinished(success, std::move(issues)));
+        Send(Owner, new TEvScriptExecutionsTablesCreationFinished(success, std::move(issues)), 0, Generation);
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvStartScriptExecutionBackgroundChecks());
     }
+
+private:
+    const ui64 Generation = 0;
 };
 
 Ydb::Query::ExecMode GetExecModeFromAction(NKikimrKqp::EQueryAction action) {
@@ -376,8 +376,8 @@ public:
             DECLARE $lease_state AS Int32;
             DECLARE $execution_meta_ttl AS Interval;
             DECLARE $retry_state AS JsonDocument;
-            DECLARE $user_sid AS Text;
-            DECLARE $user_group_sids AS JsonDocument;
+            DECLARE $user_sid AS Optional<Text>;
+            DECLARE $user_group_sids AS Optional<JsonDocument>;
             DECLARE $parameters AS String;
             DECLARE $graph_compressed AS Optional<String>;
             DECLARE $graph_compression_method AS Optional<Text>;
@@ -404,7 +404,13 @@ public:
             );
         )";
 
-        const auto token = NACLib::TUserToken(Request.GetUserToken());
+        std::optional<TString> userSID;
+        std::optional<TString> userGroupSIDs;
+        if (Request.HasUserToken()) {
+            const NACLib::TUserToken token(Request.GetUserToken());
+            userSID = token.GetUserSID();
+            userGroupSIDs = SequenceToJsonString(token.GetGroupSIDs());
+        }
 
         std::optional<TString> graphCompressionMethod;
         std::optional<TString> graphCompressed;
@@ -451,10 +457,10 @@ public:
                 .Int32(static_cast<i32>(ELeaseState::ScriptRunning))
                 .Build()
             .AddParam("$user_sid")
-                .Utf8(token.GetUserSID())
+                .OptionalUtf8(userSID)
                 .Build()
             .AddParam("$user_group_sids")
-                .JsonDocument(SequenceToJsonString(token.GetGroupSIDs()))
+                .OptionalJsonDocument(userGroupSIDs)
                 .Build()
             .AddParam("$parameters")
                 .String(SerializeParameters())
@@ -566,6 +572,7 @@ public:
             .PhysicalGraph = ev.QueryPhysicalGraph,
             .DisableDefaultTimeout = ev.DisableDefaultTimeout,
             .CheckpointId = ev.CheckpointId,
+            .StreamingQueryPath = ev.StreamingQueryPath
         }, QueryServiceConfig));
 
         const auto& creatorId = Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, ev.Generation));
@@ -619,6 +626,7 @@ private:
         meta.SetTraceId(eventProto.GetTraceId());
         meta.SetResourcePoolId(request.GetPoolId());
         meta.SetCheckpointId(ev.CheckpointId);
+        meta.SetStreamingQueryPath(ev.StreamingQueryPath);
         meta.SetClientAddress(request.GetClientAddress());
         meta.SetCollectStats(request.GetCollectStats());
         meta.SetSaveQueryPhysicalGraph(ev.SaveQueryPhysicalGraph);
@@ -1010,10 +1018,9 @@ public:
                 }
             }
 
-            queryRequest.SetUserToken(NACLib::TUserToken(
-                result.ColumnParser("user_token").GetOptionalUtf8().value_or(""),
-                userGroupSids
-            ).SerializeAsString());
+            if (const std::optional<TString>& userSID = result.ColumnParser("user_token").GetOptionalUtf8()) {
+                queryRequest.SetUserToken(NACLib::TUserToken(*userSID, userGroupSids).SerializeAsString());
+            }
 
             if (const auto serializedParameters = result.ColumnParser("parameters").GetOptionalString()) {
                 NJson::TJsonValue value;
@@ -1096,6 +1103,7 @@ public:
             .PhysicalGraph = std::move(physicalGraph),
             .DisableDefaultTimeout = meta.GetDisableDefaultTimeout(),
             .CheckpointId = meta.GetCheckpointId(),
+            .StreamingQueryPath = meta.GetStreamingQueryPath()
         }, QueryServiceConfig));
 
         KQP_PROXY_LOG_D("Restart with RunScriptActorId: " << RunScriptActorId << ", has PhysicalGraph: " << hasPhysicalGraph);
@@ -4880,8 +4888,8 @@ IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, c
     return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime, leaseDuration);
 }
 
-IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {
-    return new TScriptExecutionsTablesCreator(featureFlags);
+IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags, ui64 generation) {
+    return new TScriptExecutionsTablesCreator(featureFlags, generation);
 }
 
 IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {

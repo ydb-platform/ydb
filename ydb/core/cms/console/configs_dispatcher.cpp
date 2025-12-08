@@ -896,6 +896,7 @@ try {
     TKikimrScopeId scopeId;
     TString tenantName;
     TBasicKikimrServicesMask servicesMask;
+    bool tinyMode;
     TString clusterName;
     NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
 
@@ -905,8 +906,11 @@ try {
         scopeId,
         tenantName,
         servicesMask,
+        tinyMode,
         clusterName,
         configsDispatcherInitInfo);
+
+    Y_UNUSED(tinyMode);
 
     CandidateStartupConfig = appConfig;
     StartupConfigProcessError = false;

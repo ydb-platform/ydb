@@ -74,7 +74,8 @@ public:
                 actor.GetHolderFactory(),
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 freeSpace,
-                CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()})
+                CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()}),
+                true
             );
 
             actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);
@@ -348,6 +349,13 @@ public:
         auto size = std::accumulate(expected.begin(), expected.end(), 0ull, op);
         auto actual = SourceReadDataUntil<TMessage>(parser, size);
         AssertDataWithWatermarks(expected, actual);
+    }
+
+    void MockCoordinatorDistributionReset(NActors::TActorId coordinatorId) const {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset();
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, coordinatorId, event, 0));
+        });
     }
 
 public:
@@ -887,6 +895,16 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             };
             f.ReadMessages(expected);
         }
+    }
+
+    Y_UNIT_TEST_F(RebalanceAfterDistributionReset, TFixture) {
+        StartSession(Settings);
+        MockCoordinatorDistributionReset(CoordinatorId1);
+
+        auto req = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId2, PartitionId1}}, req->Cookie);
+        ExpectStartSession({}, RowDispatcherId2, 2);
+        MockAck(RowDispatcherId2, 2, PartitionId1);
     }
 }
 

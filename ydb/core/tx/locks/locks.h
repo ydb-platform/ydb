@@ -218,6 +218,7 @@ enum class ELockFlags : ui64 {
     Frozen = 1,
     WholeShard = 2,
     Persistent = 4,
+    Removed = 8,
     PersistentMask = Frozen,
 };
 
@@ -330,6 +331,7 @@ public:
     bool IsShardLock() const { return !!(Flags & ELockFlags::WholeShard); }
     bool IsWriteLock() const { return !WriteTables.empty(); }
     bool IsPersistent() const { return !!(Flags & ELockFlags::Persistent); }
+    bool IsRemoved() const { return !!(Flags & ELockFlags::Removed); }
     bool HasUnpersistedRanges() const { return UnpersistedRanges; }
     //ui64 MemorySize() const { return 1; } // TODO
 
@@ -359,7 +361,7 @@ public:
     bool PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
 
-    void RestoreInMemoryState(const ILocksDb::TLockRow& lockRow);
+    bool RestoreInMemoryState(const ILocksDb::TLockRow& lockRow);
     bool RestoreInMemoryRange(const ILocksDb::TLockRange& rangeRow);
     void RestorePersistentRange(const ILocksDb::TLockRange& rangeRow);
     void RestoreInMemoryConflict(TLockInfo* otherLock);
@@ -680,9 +682,14 @@ public:
         return Locks;
     }
 
+    const THashMap<ui64, TLockInfo::TPtr>& GetRemovedLocks() const {
+        return RemovedLocks;
+    }
+
 private:
     const THolder<TLocksDataShard> Self;
     THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
+    THashMap<ui64, TLockInfo::TPtr> RemovedLocks; // key is LockId
     THashMap<TPathId, TTableLocks::TPtr> Tables;
     THashSet<ui64> ShardLocks;
     // A list of locks that have ranges (from oldest to newest)
@@ -960,6 +967,10 @@ public:
 
     const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
         return Locker.GetLocks();
+    }
+
+    const THashMap<ui64, TLockInfo::TPtr>& GetRemovedLocks() const {
+        return Locker.GetRemovedLocks();
     }
 
 private:

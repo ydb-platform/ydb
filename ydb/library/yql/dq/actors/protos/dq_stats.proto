@@ -467,6 +467,8 @@ message TDqStageStats {
     map<string, TDqOperatorStatsAggr> OperatorFilter = 44;
     map<string, TDqOperatorStatsAggr> OperatorAggregation = 45;
 
+    map<string, TDqStatsAggr> Mkql = 53;
+
     TDqStatsAggr MaxMemoryUsage = 24;
 
     google.protobuf.Any Extra = 100;

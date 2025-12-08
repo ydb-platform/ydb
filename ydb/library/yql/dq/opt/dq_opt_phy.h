@@ -13,7 +13,6 @@ namespace NYql {
 }
 
 namespace NYql::NDq {
-
 NNodes::TMaybeNode<NNodes::TDqStage> DqPushLambdaToStage(const NNodes::TDqStage &stage,
     const NNodes::TCoAtom& outputIndex, const NNodes::TCoLambda& lambda,
     const TVector<NNodes::TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx);
@@ -100,7 +99,7 @@ NNodes::TExprBase DqBuildFinalizeByKeyStage(NNodes::TExprBase node, TExprContext
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
 NNodes::TExprBase DqBuildAggregationResultStage(NNodes::TExprBase node, TExprContext& ctx,
-    IOptimizationContext& optCtx);
+    IOptimizationContext& optCtx, const TBuildAggregationResultStageOptions& options);
 
 NNodes::TExprBase DqBuildTopStageRemoveSort(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     TTypeAnnotationContext& typeCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
@@ -157,7 +156,7 @@ NNodes::TExprBase DqBuildSqlIn(NNodes::TExprBase node, TExprContext& ctx, IOptim
     const TParentsMap& parentsMap, bool allowStageMultiUsage);
 
 NYql::NNodes::TExprBase DqBuildScalarPrecompute(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    NYql::IOptimizationContext& optCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage);
+    NYql::IOptimizationContext& optCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage, const TBuildAggregationResultStageOptions& options);
 
 NYql::NNodes::TExprBase DqPrecomputeToInput(const NYql::NNodes::TExprBase& node, TExprContext& ctx);
 

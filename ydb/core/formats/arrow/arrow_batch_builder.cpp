@@ -3,7 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers_minikql.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/kqp/common/kqp_types.h>
-#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
@@ -22,6 +22,14 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
 }
 
 [[maybe_unused]] arrow::Status AppendCell(arrow::BooleanBuilder& builder, const TCell& cell) {
+    if (cell.IsNull()) {
+        return builder.AppendNull();
+    }
+
+    return builder.Append(cell.AsValue<ui8>());
+}
+
+[[maybe_unused]] arrow::Status AppendCell(arrow::UInt8Builder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -86,7 +94,7 @@ arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, 
 
 arrow::Status AppendValue(arrow::RecordBatchBuilder& builder, const NUdf::TUnboxedValue& value, ui32 colNum, const NKikimr::NMiniKQL::TType* type) {
     try {
-        NYql::NArrow::AppendElement(value, builder.GetField(colNum), type);
+        NKqp::NFormats::AppendElement(value, builder.GetField(colNum), type);
     } catch (const std::exception& e) {
         return arrow::Status::FromArgs(arrow::StatusCode::Invalid, e.what());
     }
@@ -240,7 +248,7 @@ arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NSc
     return arrow::Status::OK();
 }
 
-arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>> yqlColumns) {
+arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& yqlColumns) {
     YqlSchema = yqlColumns;
     auto schema = MakeArrowSchema(yqlColumns, NotNullColumns);
     if (!schema.ok()) {

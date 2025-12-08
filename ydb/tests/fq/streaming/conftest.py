@@ -32,7 +32,7 @@ class YdbClient:
         return self.session_pool.execute_with_retries_async(statement)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def kikimr(request):
 
     class Kikimr:
@@ -45,7 +45,8 @@ def kikimr(request):
             erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_external_data_sources": True,
-                "enable_streaming_queries": True
+                "enable_streaming_queries": True,
+                "enable_streaming_queries_counters": True
             },
             query_service_config={"available_external_data_sources": ["Ydb"]},
             table_service_config={},

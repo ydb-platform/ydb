@@ -60,13 +60,17 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TSimpleOlap) {
-        return;
         TSimple tester;
         tester.SetIsOlap(true);
         tester.Execute();
     }
 
     class TConflictWrite : public TTableDataModificationTester {
+        std::string WriteOperation = "insert";
+
+    public:
+        TConflictWrite(const std::string& writeOperation) : WriteOperation(writeOperation) {}
+
     protected:
         void DoExecute() override {
             auto client = Kikimr->GetQueryClient();
@@ -77,7 +81,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                 SELECT * FROM `/Root/KV`;
             )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
             auto tx1 = result.GetTransaction();
             UNIT_ASSERT(tx1);
 
@@ -87,12 +90,39 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
             )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            result = session1.ExecuteQuery(Q_(R"(
-                UPSERT INTO `/Root/Test` (Group, Name, Comment)
-                VALUES (1U, "Paul", "Changed");
-            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
-            // Keys changed since taking snapshot.
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            if (WriteOperation == "insert") {
+                result = session1.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Comment)
+                    VALUES (1U, "Paul", "Changed");
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            } else if (WriteOperation == "upsert_partial") {
+                result = session1.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/Test` (Group, Name, Comment)
+                    VALUES (1U, "Paul", "Changed");
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            } else if (WriteOperation == "upsert_full") {
+                result = session1.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/Test` (Group, Name, Comment, Amount)
+                    VALUES (1U, "Paul", "Changed", 301ul);
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            } else if (WriteOperation == "replace") {
+                result = session1.ExecuteQuery(Q_(R"(
+                    REPLACE INTO `/Root/Test` (Group, Name, Comment)
+                    VALUES (1U, "Paul", "Changed");
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            } else if (WriteOperation == "delete") {
+                result = session1.ExecuteQuery(Q_(R"(
+                    DELETE FROM `/Root/Test` WHERE Name == "Paul";
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            } else {
+                UNIT_ASSERT(false);
+            }
+
+            if (WriteOperation == "insert") {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            }
 
             result = session2.ExecuteQuery(Q_(R"(
                 SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
@@ -104,22 +134,45 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
 
     Y_UNIT_TEST(TConflictWriteOltp) {
         return;
-        TConflictWrite tester;
+        TConflictWrite tester("upsert_partial");
         tester.SetIsOlap(false);
         tester.Execute();
     }
 
     Y_UNIT_TEST(TConflictWriteOltpNoSink) {
         return;
-        TConflictWrite tester;
+        TConflictWrite tester("upsert_partial");
         tester.SetIsOlap(false);
         tester.SetDisableSinks(true);
         tester.Execute();
     }
 
-    Y_UNIT_TEST(TConflictWriteOlap) {
-        return;
-        TConflictWrite tester;
+    Y_UNIT_TEST(TConflictWriteOlapInsert) {
+        TConflictWrite tester("insert");
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TConflictWriteOlapUpsertPartial) {
+        TConflictWrite tester("upsert_partial");
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TConflictWriteOlapUpsertFull) {
+        TConflictWrite tester("upsert_full");
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TConflictWriteOlapReplace) {
+        TConflictWrite tester("replace");
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TConflictWriteOlapDelete) {
+        TConflictWrite tester("delete");
         tester.SetIsOlap(true);
         tester.Execute();
     }
@@ -175,7 +228,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TConflictReadWriteOlap) {
-        return;
         TConflictReadWrite tester;
         tester.SetIsOlap(true);
         tester.Execute();
@@ -233,8 +285,65 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     Y_UNIT_TEST(TReadOnlyOlap) {
-        return;
         TReadOnly tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    class TReadOwnChanges : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+
+            // tx1 reads KV2
+            auto result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/KV2`;
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+
+            // tx1 upserts a row
+            result = session1.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/KV2` (Key, Value)
+                VALUES (1U, "val1");
+            )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+
+            // tx1 reads KV2 and sees the row
+            result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/KV2`;
+            )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([[1u;["val1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            tx1 = result.GetTransaction();
+
+            // tx1 commits
+            result = tx1->Commit().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(TReadOwnChangesOltp) {
+        return;
+        TReadOwnChanges tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TReadOwnChangesOltpNoSink) {
+        return;
+        TReadOwnChanges tester;
+        tester.SetIsOlap(false);
+        tester.SetDisableSinks(true);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TReadOwnChangesOlap) {
+        TReadOwnChanges tester;
         tester.SetIsOlap(true);
         tester.Execute();
     }

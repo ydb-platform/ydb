@@ -11,7 +11,7 @@ public:
     using TCallback = std::function<void(NActors::TActorId, TQueue<TDataBatch>&&)>;
     struct TMessages {
         TVector<ui64> Offsets;
-        TVector<ui64> Watermark;
+        TMaybe<TInstant> Watermark;
         TBatch Batch;
     };
 
@@ -24,14 +24,14 @@ public:
             NActors::TActorId clientId,
             TVector<TSchemaColumn> columns,
             TString watermarkExpr,
-            TString whereFilter,
+            TString filterExpr,
             TCallback callback,
             ui64 expectedFilteredRows
         )
             : ClientId_(clientId)
             , Columns_(std::move(columns))
             , WatermarkExpr_(std::move(watermarkExpr))
-            , WhereFilter_(std::move(whereFilter))
+            , FilterExpr_(std::move(filterExpr))
             , Callback_(std::move(callback))
             , ExpectedFilteredRows_(expectedFilteredRows)
         {}
@@ -78,8 +78,8 @@ public:
             return WatermarkExpr_;
         }
 
-        const TString& GetWhereFilter() const override {
-            return WhereFilter_;
+        const TString& GetFilterExpr() const override {
+            return FilterExpr_;
         }
 
         TPurecalcCompileSettings GetPurecalcSettings() const override {
@@ -135,7 +135,7 @@ public:
         NActors::TActorId ClientId_;
         TVector<TSchemaColumn> Columns_;
         TString WatermarkExpr_;
-        TString WhereFilter_;
+        TString FilterExpr_;
         TCallback Callback_;
 
         bool Started_ = false;
@@ -176,14 +176,14 @@ public:
         FormatHandler = CreateTestFormatHandler(config, settings);
     }
 
-    [[nodiscard]] TStatus MakeClient(TVector<TSchemaColumn> columns, TString watermarkExpr, TString whereFilter, TCallback callback, ui64 expectedFilteredRows) {
+    [[nodiscard]] TStatus MakeClient(TVector<TSchemaColumn> columns, TString watermarkExpr, TString filterExpr, TCallback callback, ui64 expectedFilteredRows) {
         ClientIds.emplace_back(ClientIds.size(), 0, 0, 0);
 
         auto client = MakeIntrusive<TClientDataConsumer>(
             ClientIds.back(),
             std::move(columns),
             std::move(watermarkExpr),
-            std::move(whereFilter),
+            std::move(filterExpr),
             std::move(callback),
             expectedFilteredRows
         );
@@ -194,14 +194,9 @@ public:
 
         Clients.emplace_back(client);
 
-        if (client->GetWatermarkExpr()) {
+        if (!client->IsStarted()) {
             const auto ev = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(CompileNotifier, TDuration::Seconds(5));
-            UNIT_ASSERT_C(ev, "Compilation is not performed for watermark: " << client->GetWatermarkExpr());
-        }
-
-        if (client->GetWhereFilter()) {
-            const auto ev = Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(CompileNotifier, TDuration::Seconds(5));
-            UNIT_ASSERT_C(ev, "Compilation is not performed for filter: " << client->GetWhereFilter());
+            UNIT_ASSERT_C(ev, "Compilation is not performed for purecalc program");
         }
 
         return TStatus::Success();
@@ -300,7 +295,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[DataType; String]"}, {"column_1", "[DataType; String]"}},
             "",
-            "WHERE FALSE",
+            "FALSE",
             EmptyCheck(),
             0
         ));
@@ -317,7 +312,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[DataType; String]"}, {"column_1", "[DataType; String]"}},
             "",
-            "WHERE TRUE",
+            "TRUE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -353,18 +348,18 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[DataType; String]"}},
             "",
-            R"(WHERE column_0 = "str_first__large__")",
+            R"(column_0 = "str_first__large__")",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
 
         messages = TVector<TMessages>{
-            {{firstOffset}, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second"))},
+            {{firstOffset + 0}, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second"))},
         };
         CheckSuccess(MakeClient(
             {commonColumn, {"column_1", "[DataType; String]"}},
             "",
-            R"(WHERE column_1 = "str_second")",
+            R"(column_1 = "str_second")",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -400,7 +395,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             columns,
             "",
-            "WHERE FALSE",
+            "FALSE",
             EmptyCheck(),
             0
         ));
@@ -412,7 +407,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             columns,
             "",
-            "WHERE TRUE",
+            "TRUE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -446,7 +441,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             columns,
             "",
-            "WHERE FALSE",
+            "FALSE",
             EmptyCheck(),
             0
         ));
@@ -489,7 +484,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[OptionalType; [DataType; Uint8]]"}},
             "",
-            "WHERE TRUE",
+            "TRUE",
             EmptyCheck(),
             0
         ));
@@ -500,7 +495,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_1", "[DataType; String]"}},
             "",
-            R"(WHERE column_1 = "str_second")",
+            R"(column_1 = "str_second")",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -531,7 +526,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {commonColumn, {"column_1", "[DataType; String]"}},
             "",
-            R"(WHERE column_1 = "str_second")",
+            R"(column_1 = "str_second")",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -555,14 +550,14 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         auto messages = TVector<TMessages>{
             {
                 {firstOffset + 2, firstOffset + 3},
-                {39'000'000, 40'000'000},
+                TInstant::Seconds(40),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:44Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:45Z"))
             },
             {
                 {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:47Z"))
@@ -584,17 +579,32 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         messages = TVector<TMessages>{
             {
                 {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:47Z"))
             },
             {
                 {firstOffset + 6, firstOffset + 7},
-                {43'000'000, 44'000'000},
+                TInstant::Seconds(44),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:48Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:49Z"))
+            },
+            {
+                {firstOffset + 60, firstOffset + 70},
+                Nothing(),
+                TBatch()
+                    .AddRow(TRow().AddString("1970-01-01T00:00:01Z")) // watermark = NULL
+                    .AddRow(TRow().AddString("1970-01-01T00:00:02Z")) // watermark = NULL
+            },
+            {
+                {firstOffset + 600, firstOffset + 700, firstOffset + 800},
+                TInstant::Seconds(0),
+                TBatch()
+                    .AddRow(TRow().AddString("1970-01-01T00:00:03Z")) // watermark = NULL
+                    .AddRow(TRow().AddString("1970-01-01T00:00:05Z"))
+                    .AddRow(TRow().AddString("1970-01-01T00:00:04Z")) // watermark = NULL
             },
         };
         CheckSuccess(MakeClient(
@@ -617,6 +627,17 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             GetMessage(firstOffset + 7, R"({"ts": "1970-01-01T00:00:49Z"})"),
         });
 
+        ParseMessages({
+            GetMessage(firstOffset + 60, R"({"ts": "1970-01-01T00:00:01Z"})"),
+            GetMessage(firstOffset + 70, R"({"ts": "1970-01-01T00:00:02Z"})"),
+        });
+
+        ParseMessages({
+            GetMessage(firstOffset + 600, R"({"ts": "1970-01-01T00:00:03Z"})"),
+            GetMessage(firstOffset + 700, R"({"ts": "1970-01-01T00:00:05Z"})"),
+            GetMessage(firstOffset + 800, R"({"ts": "1970-01-01T00:00:04Z"})"),
+        });
+
         RemoveClient(ClientIds[1]);
 
         ParseMessages({
@@ -635,14 +656,14 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         auto messages = TVector<TMessages>{
             {
-                {firstOffset + 2, firstOffset + 3},
-                {39'000'000, 40'000'000},
+                {firstOffset + 2},
+                TInstant::Seconds(40),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:44Z").AddUint64(1))
             },
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                {firstOffset + 4},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z").AddUint64(1))
             },
@@ -650,7 +671,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "WHERE pass > 0",
+            "pass > 0",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -662,14 +683,14 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         messages = TVector<TMessages>{
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                {firstOffset + 4},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z").AddUint64(1))
             },
             {
-                {firstOffset + 6, firstOffset + 7},
-                {43'000'000, 44'000'000},
+                {firstOffset + 6},
+                TInstant::Seconds(44),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:48Z").AddUint64(1))
             },
@@ -677,7 +698,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "WHERE pass > 0",
+            "pass > 0",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -712,20 +733,20 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         auto messages = TVector<TMessages>{
             {
-                {firstOffset + 2, firstOffset + 3},
-                {39'000'000, 40'000'000},
+                {firstOffset + 3},
+                TInstant::Seconds(40),
                 TBatch()
             },
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                {firstOffset + 5},
+                TInstant::Seconds(42),
                 TBatch()
             },
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "WHERE FALSE",
+            "FALSE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -737,20 +758,20 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         messages = TVector<TMessages>{
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                {firstOffset + 5},
+                TInstant::Seconds(42),
                 TBatch()
             },
             {
-                {firstOffset + 6, firstOffset + 7},
-                {43'000'000, 44'000'000},
+                {firstOffset + 7},
+                TInstant::Seconds(44),
                 TBatch()
             },
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
-            "WHERE FALSE",
+            "FALSE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
         ));
@@ -776,4 +797,4 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
     }
 }
 
-}  // namespace NFq::NRowDispatcher::NTests
+} // namespace NFq::NRowDispatcher::NTests

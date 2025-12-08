@@ -2,7 +2,7 @@
 
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/kqp/common/kqp_result_set_format_settings.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_result_set_format_settings.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/grpc_services/base/iface.h>
@@ -83,7 +83,7 @@ public:
         const ::Ydb::Operations::OperationParams* operationParams,
         const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
         const TString& poolId = "",
-        std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings = std::nullopt);
+        std::optional<NFormats::TArrowFormatSettings> arrowFormatSettings = std::nullopt);
 
     TEvQueryRequest() {
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
@@ -388,11 +388,20 @@ public:
     }
 
     bool HasArrowFormatSettings() const {
-        return ArrowFormatSettings.has_value();
+        if (RequestCtx) {
+            return ArrowFormatSettings.has_value();
+        }
+        return Record.GetRequest().HasArrowFormatSettings();
     }
 
-    std::optional<NKqp::TArrowFormatSettings> GetArrowFormatSettings() const {
-        return ArrowFormatSettings;
+    std::optional<NFormats::TArrowFormatSettings> GetArrowFormatSettings() const {
+        if (RequestCtx) {
+            return ArrowFormatSettings;
+        }
+        if (Record.GetRequest().HasArrowFormatSettings()) {
+            return NFormats::TArrowFormatSettings::ImportFromProto(Record.GetRequest().GetArrowFormatSettings());
+        }
+        return std::nullopt;
     }
 
     bool GetSaveQueryPhysicalGraph() const {
@@ -457,7 +466,7 @@ private:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
-    std::optional<NKqp::TArrowFormatSettings> ArrowFormatSettings;
+    std::optional<NFormats::TArrowFormatSettings> ArrowFormatSettings;
     bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     i64 Generation = 0;

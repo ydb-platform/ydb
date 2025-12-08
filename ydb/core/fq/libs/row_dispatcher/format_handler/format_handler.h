@@ -20,7 +20,7 @@ public:
     virtual bool IsStarted() const = 0;
     virtual const TVector<TSchemaColumn>& GetColumns() const = 0;
     virtual const TString& GetWatermarkExpr() const = 0;
-    virtual const TString& GetWhereFilter() const = 0;
+    virtual const TString& GetFilterExpr() const = 0;
     virtual TPurecalcCompileSettings GetPurecalcSettings() const = 0;
     virtual NActors::TActorId GetClientId() const = 0;
     virtual std::optional<ui64> GetNextMessageOffset() const = 0;
@@ -34,8 +34,8 @@ public:
 
 struct TDataBatch {
     TRope SerializedData;
-    TSet<ui64> Offsets;
-    TVector<ui64> WatermarksUs;
+    TVector<ui64> Offsets;
+    TMaybe<TInstant> Watermark;
 };
 
 class ITopicFormatHandler : public TNonCopyable {
@@ -78,7 +78,7 @@ struct TFormatHandlerConfig {
 };
 
 ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
-TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId);
+TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId, bool skipJsonErrors);
 
 namespace NTests {
 

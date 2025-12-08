@@ -127,7 +127,7 @@ public:
         }
 
         if constexpr (IsFsImport) {
-            if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
+            if (!AppData()->FeatureFlags.GetEnableFsBackups()) { // The feature flag is disabled by default
                 return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Import from FS is not supported in current configuration");
             }
             if (!settings.base_path().StartsWith("/")) {

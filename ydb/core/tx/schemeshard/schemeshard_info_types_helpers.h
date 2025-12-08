@@ -39,5 +39,12 @@ TSettings ParseSettings(const TString& serializedSettings) {
     return tmpSettings;
 }
 
+template <typename TSettingsPB>
+TString SerializeSettings(const TSettingsPB& settings) {
+    TString serialized;
+    Y_ABORT_UNLESS(settings.SerializeToString(&serialized));
+    return serialized;
+}
+
 } // namespace NKikimr::NSchemeShard
 

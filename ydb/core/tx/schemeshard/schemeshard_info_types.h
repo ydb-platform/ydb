@@ -3103,15 +3103,6 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     void AddNotifySubscriber(const TActorId& actorId);
 
     TString ToString() const;
-
-private:
-    template <typename TSettingsPB>
-    static TString SerializeSettings(const TSettingsPB& settings) {
-        TString serialized;
-        Y_PROTOBUF_SUPPRESS_NODISCARD settings.SerializeToString(&serialized);
-        return serialized;
-    }
-
 }; // TExportInfo
 // } // NExport
 
@@ -3243,7 +3234,6 @@ public:
         // Backward compatibility.
         // But there can be no paths in settings at all.
         return Visit([i](const auto& settings) -> TString {
-            // using T = std::decay_t<decltype(settings)>;
             return GetItemSource(settings, i);
         });
     }
@@ -3285,7 +3275,6 @@ public:
         , DomainPathId(domainPathId)
         , PeerName(peerName)
     {
-        // Parse settings from serialized string based on import kind.
         switch (kind) {
         case EKind::S3: {
             Settings = ParseSettings<Ydb::Import::ImportFromS3Settings>(serializedSettings);

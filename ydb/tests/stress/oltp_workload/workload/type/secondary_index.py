@@ -25,7 +25,7 @@ class WorkloadConfig:
     NULL_PROBABILITY = 0.05
     
     # Column types
-    ALLOWED_COLUMN_TYPES = ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64", "Utf8", "String", "Bool"]
+    ALLOWED_COLUMN_TYPES = ["Uint32", "Uint64", "Int32", "Int64", "Uint8", "Bool", "Int8", "String", "Utf8"]
     
     # Data generation constants
     MAX_PRIMARY_KEY_VALUE = 100  # update the same rows
@@ -37,8 +37,8 @@ class WorkloadConfig:
     # Workload execution constants
     TABLES_INFLIGHT = 32
     JOBS_PER_TABLE = 1
-    OPERATIONS_PER_JOB = 64
-    CHECK_OPERATIONS_PERIOD = 10
+    OPERATIONS_PER_JOB = 128
+    CHECK_OPERATIONS_PERIOD = 1
     
     # Retry configuration
     MAX_RETRIES = 3
@@ -308,7 +308,9 @@ class WorkloadSecondaryIndex(WorkloadBase):
     def _run_operations(self, table: str, table_info: TableInfo) -> None:
         """Execute a batch of operations on the specified table"""
         operations_count = random.randint(1, WorkloadConfig.MAX_OPERATIONS)
-        queries = []
+        declare_statements = []
+        operation_queries = []
+        all_parameters = {}
         
         for operation_id in range(operations_count):
             operation_type = random.choice(
@@ -318,31 +320,57 @@ class WorkloadSecondaryIndex(WorkloadBase):
                         OperationType)))
             
             if operation_type == OperationType.INSERT:
-                queries.append(self._insert_operation(operation_id, table, table_info))
+                declare, query, parameters = self._insert_operation(operation_id, table, table_info)
+                declare_statements.extend(declare)
+                operation_queries.append(query)
+                all_parameters.update(parameters)
             elif operation_type == OperationType.REPLACE:
-                queries.append(self._replace_operation(operation_id, table, table_info))
+                declare, query, parameters = self._replace_operation(operation_id, table, table_info)
+                declare_statements.extend(declare)
+                operation_queries.append(query)
+                all_parameters.update(parameters)
             elif operation_type == OperationType.UPSERT:
-                queries.append(self._upsert_operation(operation_id, table, table_info))
+                declare, query, parameters = self._upsert_operation(operation_id, table, table_info)
+                declare_statements.extend(declare)
+                operation_queries.append(query)
+                all_parameters.update(parameters)
             elif operation_type == OperationType.UPDATE:
-                queries.append(self._update_operation(operation_id, table, table_info))
+                declare, query, parameters = self._update_operation(operation_id, table, table_info)
+                declare_statements.extend(declare)
+                operation_queries.append(query)
+                all_parameters.update(parameters)
             elif operation_type == OperationType.DELETE:
-                queries.append(self._delete_operation(operation_id, table, table_info))
+                declare, query, parameters = self._delete_operation(operation_id, table, table_info)
+                declare_statements.extend(declare)
+                operation_queries.append(query)
+                all_parameters.update(parameters)
             elif operation_type == OperationType.UPDATE_ON:
-                queries.append(self._update_on_operation(operation_id, table, table_info))
+                declare, query, parameters = self._update_on_operation(operation_id, table, table_info)
+                declare_statements.extend(declare)
+                operation_queries.append(query)
+                all_parameters.update(parameters)
             elif operation_type == OperationType.DELETE_ON:
-                queries.append(self._delete_on_operation(operation_id, table, table_info))
+                declare, query, parameters = self._delete_on_operation(operation_id, table, table_info)
+                declare_statements.extend(declare)
+                operation_queries.append(query)
+                all_parameters.update(parameters)
         
-        query = '\n'.join(queries)
-        logger.debug(f"Executing operations: {query}")
-        self._execute_query_with_retry(query, is_ddl=False)
+        # Combine all DECLARE statements at the beginning, followed by all operations
+        query = '\n'.join(declare_statements + operation_queries)
+        logger.debug(f"Executing operations")
+        self._execute_query_with_retry(query, is_ddl=False, parameters=all_parameters)
     
-    def _execute_query_with_retry(self, query: str, is_ddl: bool) -> Any:
+    def _execute_query_with_retry(self, query: str, is_ddl: bool, parameters: Dict[str, Any] = None) -> Any:
         """Execute a query with retry logic for handling transient failures"""
         last_exception = None
         
         for attempt in range(WorkloadConfig.MAX_RETRIES):
             try:
-                return self.client.query(query, is_ddl)
+                if parameters:
+                    logger.debug(f"Query: {query} Params: {parameters}")
+                    return self.client.query(query, is_ddl, parameters)
+                else:
+                    return self.client.query(query, is_ddl)
             except (ydb.issues.Aborted, ydb.issues.Unavailable, ydb.issues.Undetermined) as e:
                 last_exception = e
                 if attempt < WorkloadConfig.MAX_RETRIES - 1:
@@ -357,164 +385,403 @@ class WorkloadSecondaryIndex(WorkloadBase):
         # If we get here, all retries failed
         raise last_exception
     
-    def _insert_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate INSERT operation SQL"""
+    def _create_parameters(self, operation_id: int, rows: List[List[Any]], column_types: List[str],
+                          prefix: str = "") -> Tuple[List[str], Dict[str, Any]]:
+        """
+        Create parameter declarations and parameter dictionary for the given rows and column types.
+        
+        Args:
+            operation_id: ID of the operation
+            rows: List of rows, each row is a list of values
+            column_types: List of column types
+            prefix: Optional prefix for parameter names
+            
+        Returns:
+            Tuple of (parameter_declarations, parameters_dict)
+        """
+        param_declarations = []
+        parameters = {}
+        
+        # Create a single parameter that is a List of Structs
+        param_name = f"$p{operation_id}_{prefix}rows"
+        
+        # Build the struct type definition with optional types
+        struct_fields = []
+        for i, col_type in enumerate(column_types):
+            struct_fields.append(f"c{i}: Optional<{col_type}>")
+        
+        param_declarations.append(f"DECLARE {param_name} AS List<Struct<{', '.join(struct_fields)}>>;")
+        
+        # Convert rows to list of dicts for the parameter
+        rows_list = []
+        for row in rows:
+            row_dict = {}
+            for i, value in enumerate(row):
+                if value is None:
+                    row_dict[f"c{i}"] = None
+                elif column_types[i] == "Uint8":
+                    row_dict[f"c{i}"] = int(value)
+                elif column_types[i] == "Uint32":
+                    row_dict[f"c{i}"] = int(value)
+                elif column_types[i] == "Uint64":
+                    row_dict[f"c{i}"] = int(value)
+                elif column_types[i] == "Int8":
+                    row_dict[f"c{i}"] = int(value)
+                elif column_types[i] == "Int32":
+                    row_dict[f"c{i}"] = int(value)
+                elif column_types[i] == "Int64":
+                    row_dict[f"c{i}"] = int(value)
+                elif column_types[i] == "Bool":
+                    row_dict[f"c{i}"] = value
+                elif column_types[i] == "Utf8":
+                    row_dict[f"c{i}"] = value.encode()
+                elif column_types[i] == "String":
+                    row_dict[f"c{i}"] = value.encode()
+            rows_list.append(row_dict)
+        
+        # Create the parameter with the list of rows and its type
+        # Define the struct type for a row
+        struct_type = ydb.StructType()
+        for i, column_type in enumerate(column_types):
+            if column_type == "Uint8":
+                struct_type.add_member(f"c{i}", ydb.OptionalType(ydb.PrimitiveType.Uint8))
+            elif column_type == "Uint32":
+                struct_type.add_member(f"c{i}", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+            elif column_type == "Uint64":
+                struct_type.add_member(f"c{i}", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            elif column_type == "Int8":
+                struct_type.add_member(f"c{i}", ydb.OptionalType(ydb.PrimitiveType.Int8))
+            elif column_type == "Int32":
+                struct_type.add_member(f"c{i}", ydb.OptionalType(ydb.PrimitiveType.Int32))
+            elif column_type == "Int64":
+                struct_type.add_member(f"c{i}", ydb.OptionalType(ydb.PrimitiveType.Int64))
+            elif column_type == "Bool":
+                struct_type.add_member(f"c{i}", ydb.OptionalType(ydb.PrimitiveType.Bool))
+            elif column_type == "Utf8":
+                struct_type.add_member(f"c{i}", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            elif column_type == "String":
+                struct_type.add_member(f"c{i}", ydb.OptionalType(ydb.PrimitiveType.String))
+        
+        # Create a list type of the struct
+        list_type = ydb.ListType(struct_type)
+        
+        # Create the parameter with the list of rows and its type
+        parameters[param_name] = ydb.TypedValue(rows_list, list_type)
+        
+        return param_declarations, parameters
+    
+    def _insert_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate INSERT operation SQL with parameters"""
         table_path = self.get_table_path(table)
         batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
         
-        values_list = []
-        for row in batch_rows:
-            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
-            values_list.append(f"({', '.join(values)})")
+        # Create parameter declarations and parameters
+        param_declarations, parameters = self._create_parameters(
+            operation_id, batch_rows, table_info.column_types)
         
-        return f"""
-            INSERT INTO `{table_path}` ({', '.join(self._column_names)})
-            VALUES {', '.join(values_list)};
+        query = f"""
+            INSERT INTO `{table_path}`
+            SELECT * FROM AS_TABLE($p{operation_id}_rows);
         """
+        
+        return param_declarations, query, parameters
     
-    def _upsert_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate UPSERT operation SQL"""
+    def _upsert_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate UPSERT operation SQL with parameters"""
         table_path = self.get_table_path(table)
         batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
         
-        values_list = []
-        for row in batch_rows:
-            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
-            values_list.append(f"({', '.join(values)})")
+        # Create parameter declarations and parameters
+        param_declarations, parameters = self._create_parameters(
+            operation_id, batch_rows, table_info.column_types)
         
-        return f"""
-            UPSERT INTO `{table_path}` ({', '.join(self._column_names)})
-            VALUES {', '.join(values_list)};
+        query = f"""
+            UPSERT INTO `{table_path}`
+            SELECT * FROM AS_TABLE($p{operation_id}_rows);
         """
+        
+        return param_declarations, query, parameters
     
-    def _replace_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate REPLACE operation SQL"""
+    def _replace_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate REPLACE operation SQL with parameters"""
         table_path = self.get_table_path(table)
         batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
         
-        values_list = []
-        for row in batch_rows:
-            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
-            values_list.append(f"({', '.join(values)})")
+        # Create parameter declarations and parameters
+        param_declarations, parameters = self._create_parameters(
+            operation_id, batch_rows, table_info.column_types)
         
-        return f"""
-            REPLACE INTO `{table_path}` ({', '.join(self._column_names)})
-            VALUES {', '.join(values_list)};
+        query = f"""
+            REPLACE INTO `{table_path}`
+            SELECT * FROM AS_TABLE($p{operation_id}_rows);
         """
+        
+        return param_declarations, query, parameters
     
-    def _update_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate UPDATE operation SQL"""
+    def _update_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate UPDATE operation SQL with parameters"""
         table_path = self.get_table_path(table)
         batch = self._get_batch(table_info.primary_key_size, False, table_info)
         pk_size = table_info.primary_key_size
         
         # Generate primary key values
         pk_values = batch[0][:pk_size]
+        pk_types = table_info.column_types[:pk_size]
         
         # Generate update values for non-primary key columns
         update_columns = self._column_names[pk_size:]
         update_values = batch[0][pk_size:]
+        update_types = table_info.column_types[pk_size:]
         
-        # Generate SET clause
+        # Create a single parameter for the update values
+        set_param_name = f"$p{operation_id}_set_values"
+        set_struct_fields = []
+        for i, col_type in enumerate(table_info.column_types[pk_size:]):
+            set_struct_fields.append(f"set_{i}: Optional<{col_type}>")
+        
+        set_param_declarations = [f"DECLARE {set_param_name} AS Struct<{', '.join(set_struct_fields)}>;"]
+        
+        # Create a single parameter for the where values
+        where_param_name = f"$p{operation_id}_where_values"
+        where_struct_fields = []
+        for i, col_type in enumerate(table_info.column_types[:pk_size]):
+            where_struct_fields.append(f"where_{i}: Optional<{col_type}>")
+        
+        where_param_declarations = [f"DECLARE {where_param_name} AS Struct<{', '.join(where_struct_fields)}>;"]
+        
+        # Combine all parameter declarations
+        param_declarations = set_param_declarations + where_param_declarations
+        
+        # Create parameter values - just the values, not tuples
+        set_param_value = {}
+        for i, value in enumerate(update_values):
+            if value is None:
+                set_param_value[f"set_{i}"] = None
+            elif update_types[i] == "Uint8":
+                set_param_value[f"set_{i}"] = int(value)
+            elif update_types[i] == "Uint32":
+                set_param_value[f"set_{i}"] = int(value)
+            elif update_types[i] == "Uint64":
+                set_param_value[f"set_{i}"] = int(value)
+            elif update_types[i] == "Int8":
+                set_param_value[f"set_{i}"] = int(value)
+            elif update_types[i] == "Int32":
+                set_param_value[f"set_{i}"] = int(value)
+            elif update_types[i] == "Int64":
+                set_param_value[f"set_{i}"] = int(value)
+            elif update_types[i] == "Bool":
+                set_param_value[f"set_{i}"] = value
+            elif update_types[i] == "Utf8":
+                set_param_value[f"set_{i}"] = value.encode()
+            elif update_types[i] == "String":
+                set_param_value[f"set_{i}"] = value.encode()
+        
+        where_param_value = {}
+        for i, value in enumerate(pk_values):
+            if value is None:
+                where_param_value[f"where_{i}"] = None
+            elif pk_types[i] == "Uint8":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Uint32":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Uint64":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Int8":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Int32":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Int64":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Bool":
+                where_param_value[f"where_{i}"] = value
+            elif pk_types[i] == "Utf8":
+                where_param_value[f"where_{i}"] = value.encode()
+            elif pk_types[i] == "String":
+                where_param_value[f"where_{i}"] = value.encode()
+        
+        # Create TypedValue objects for parameters
+        # Create struct type for set values
+        set_struct_type = ydb.StructType()
+        for i, column_type in enumerate(table_info.column_types[pk_size:]):
+            if column_type == "Uint8":
+                set_struct_type.add_member(f"set_{i}", ydb.OptionalType(ydb.PrimitiveType.Uint8))
+            elif column_type == "Uint32":
+                set_struct_type.add_member(f"set_{i}", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+            elif column_type == "Uint64":
+                set_struct_type.add_member(f"set_{i}", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            elif column_type == "Int8":
+                set_struct_type.add_member(f"set_{i}", ydb.OptionalType(ydb.PrimitiveType.Int8))
+            elif column_type == "Int32":
+                set_struct_type.add_member(f"set_{i}", ydb.OptionalType(ydb.PrimitiveType.Int32))
+            elif column_type == "Int64":
+                set_struct_type.add_member(f"set_{i}", ydb.OptionalType(ydb.PrimitiveType.Int64))
+            elif column_type == "Bool":
+                set_struct_type.add_member(f"set_{i}", ydb.OptionalType(ydb.PrimitiveType.Bool))
+            elif column_type == "Utf8":
+                set_struct_type.add_member(f"set_{i}", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            elif column_type == "String":
+                set_struct_type.add_member(f"set_{i}", ydb.OptionalType(ydb.PrimitiveType.String))
+        
+        # Create struct type for where values
+        where_struct_type = ydb.StructType()
+        for i, column_type in enumerate(table_info.column_types[:pk_size]):
+            if column_type == "Uint8":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Uint8))
+            elif column_type == "Uint32":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+            elif column_type == "Uint64":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            elif column_type == "Int8":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Int8))
+            elif column_type == "Int32":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Int32))
+            elif column_type == "Int64":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Int64))
+            elif column_type == "Bool":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Bool))
+            elif column_type == "Utf8":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            elif column_type == "String":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.String))
+        
+        parameters = {
+            set_param_name: ydb.TypedValue(set_param_value, set_struct_type),
+            where_param_name: ydb.TypedValue(where_param_value, where_struct_type)
+        }
+        
+        # Generate SET clause with parameters
         set_clause = []
-        for i, (col, val) in enumerate(zip(update_columns, update_values)):
-            col_type = table_info.column_types[pk_size + i]
-            formatted_val = self._format_value_by_type(val, col_type)
-            set_clause.append(f"{col} = {formatted_val}")
+        for i, col in enumerate(update_columns):
+            set_clause.append(f"{col} = {set_param_name}.set_{i}")
         
-        # Generate WHERE clause for primary key
+        # Generate WHERE clause for primary key with parameters
         where_clause = []
         for i in range(pk_size):
-            col_type = table_info.column_types[i]
             if pk_values[i] is None:
                 where_clause.append(f"{self._column_names[i]} IS NULL")
             else:
-                formatted_val = self._format_value_by_type(pk_values[i], col_type)
-                where_clause.append(f"{self._column_names[i]} = {formatted_val}")
+                where_clause.append(f"{self._column_names[i]} = {where_param_name}.where_{i}")
         
-        return f"""
+        query = f"""
             UPDATE `{table_path}`
             SET {', '.join(set_clause)}
             WHERE {' AND '.join(where_clause)};
         """
+        
+        return param_declarations, query, parameters
     
-    def _delete_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate DELETE operation SQL"""
+    def _delete_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate DELETE operation SQL with parameters"""
         table_path = self.get_table_path(table)
         pk_size = table_info.primary_key_size
         pk_values = self._get_batch(pk_size, True, table_info)[0]
+        pk_types = table_info.column_types[:pk_size]
         
-        # Generate WHERE clause for primary key
+        # Create a single parameter for the where values
+        where_param_name = f"$p{operation_id}_where_values"
+        where_struct_fields = []
+        for i, col_type in enumerate(table_info.column_types[:pk_size]):
+            where_struct_fields.append(f"where_{i}: Optional<{col_type}>")
+        
+        param_declarations = [f"DECLARE {where_param_name} AS Struct<{', '.join(where_struct_fields)}>;"]
+        
+        # Create parameter values with explicit type specification
+        where_param_value = {}
+        for i, value in enumerate(pk_values):
+            if value is None:
+                where_param_value[f"where_{i}"] = None
+            elif pk_types[i] == "Uint8":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Uint32":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Uint64":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Int8":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Int32":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Int64":
+                where_param_value[f"where_{i}"] = int(value)
+            elif pk_types[i] == "Bool":
+                where_param_value[f"where_{i}"] = value
+            elif pk_types[i] == "Utf8":
+                where_param_value[f"where_{i}"] = value.encode()
+            elif pk_types[i] == "String":
+                where_param_value[f"where_{i}"] = value.encode()
+        
+        # Create struct type for where values
+        where_struct_type = ydb.StructType()
+        for i, column_type in enumerate(table_info.column_types[:pk_size]):
+            if column_type == "Uint8":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Uint8))
+            elif column_type == "Uint32":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+            elif column_type == "Uint64":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            elif column_type == "Int8":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Int8))
+            elif column_type == "Int32":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Int32))
+            elif column_type == "Int64":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Int64))
+            elif column_type == "Bool":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Bool))
+            elif column_type == "Utf8":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            elif column_type == "String":
+                where_struct_type.add_member(f"where_{i}", ydb.OptionalType(ydb.PrimitiveType.String))
+        
+        parameters = {where_param_name: ydb.TypedValue(where_param_value, where_struct_type)}
+        
+        # Generate WHERE clause for primary key with parameters
         where_clause = []
         for i in range(pk_size):
-            col_type = table_info.column_types[i]
             if pk_values[i] is None:
                 where_clause.append(f"{self._column_names[i]} IS NULL")
             else:
-                formatted_val = self._format_value_by_type(pk_values[i], col_type)
-                where_clause.append(f"{self._column_names[i]} = {formatted_val}")
+                where_clause.append(f"{self._column_names[i]} = {where_param_name}.where_{i}")
         
-        return f"""
+        query = f"""
             DELETE FROM `{table_path}`
             WHERE {' AND '.join(where_clause)};
         """
+        
+        return param_declarations, query, parameters
     
-    def _update_on_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate UPDATE ON operation SQL"""
+    def _update_on_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate UPDATE ON operation SQL with parameters"""
         table_path = self.get_table_path(table)
         batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
         
-        values_list = []
-        for row in batch_rows:
-            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
-            values_list.append(f"({', '.join(values)})")
+        param_declarations, parameters = self._create_parameters(
+            operation_id, batch_rows, table_info.column_types)
         
-        return f"""
-            UPDATE `{table_path}` ON ({', '.join(self._column_names)})
-            VALUES {', '.join(values_list)};
+        query = f"""
+            UPDATE `{table_path}` ON
+            SELECT * FROM AS_TABLE($p{operation_id}_rows);
         """
+        
+        return param_declarations, query, parameters
     
-    def _delete_on_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate DELETE ON operation SQL"""
+    def _delete_on_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate DELETE ON operation SQL with parameters"""
         table_path = self.get_table_path(table)
         pk_size = table_info.primary_key_size
         batch_rows = self._get_batch(pk_size, True, table_info)
         
         pk_columns = self._column_names[:pk_size]
+        pk_column_types = table_info.column_types[:pk_size]
+        pk_batch_rows = [[row[i] for i in range(pk_size)] for row in batch_rows]
+
+        param_declarations, parameters = self._create_parameters(
+            operation_id, pk_batch_rows, pk_column_types)
         
-        values_list = []
-        for row in batch_rows:
-            values = []
-            for i in range(pk_size):
-                col_type = table_info.column_types[i]
-                formatted_val = self._format_value_by_type(row[i], col_type)
-                values.append(formatted_val)
-            values_list.append(f"({', '.join(values)})")
-        
-        return f"""
-            DELETE FROM `{table_path}` ON ({', '.join(pk_columns)})
-            VALUES {', '.join(values_list)};
+        query = f"""
+            DELETE FROM `{table_path}` ON
+            SELECT * FROM AS_TABLE($p{operation_id}_rows);
         """
-    
-    def _format_value_by_type(self, value: Any, column_type: str) -> str:
-        """Format a value based on its column type for SQL queries"""
-
-        # Handle NULL values
-        if value is None:
-            return "NULL"
-
-        formated_value = None
-        if column_type in ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64"]:
-            formated_value = str(value)
-        elif column_type == "Bool":
-            formated_value = "true" if value else "false"
-        elif column_type in ["Utf8", "String"]:
-            formated_value = f"'{value}'"
-        else:
-            raise Exception(f"Unknown type {column_type}")
-
-        return f'CAST({formated_value} AS {column_type})'
-
+        
+        return param_declarations, query, parameters
     
     def verify_table(self, table_name: str, table_info: TableInfo) -> None:
         """Verify data consistency between main table and its index tables"""

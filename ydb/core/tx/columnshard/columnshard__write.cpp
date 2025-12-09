@@ -536,7 +536,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         LWPROBE(EvWriteResult, TabletID(), source.ToString(), record.GetTxId(), cookie, "immediate error", false, "overload data error");
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", false, operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED), "overload data error " + ToString(overloadStatus.Status));
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, TStringBuilder{} << "Сolumn shard " << TabletID() << " is overloaded. Reason: " << overloadStatus.Reason);
+            TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, TStringBuilder{} << "Column shard " << TabletID() << " is overloaded. Reason: " << overloadStatus.Reason);
 
         if ((overloadStatus.Status == EOverloadStatus::ShardWritesSizeInFly || overloadStatus.Status == EOverloadStatus::ShardWritesInFly) && record.HasOverloadSubscribe()) {
             auto seqNo = record.GetOverloadSubscribe();

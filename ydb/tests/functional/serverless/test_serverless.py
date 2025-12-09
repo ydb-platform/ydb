@@ -537,7 +537,7 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             assert False, 'database did not move into Overloaded state'
 
         logger.info("Upsert data whith SQL")
-        with pytest.raises(ydb.issues.Overloaded, match=r'.*overload data error.*'):
+        with pytest.raises(ydb.issues.Overloaded, match=r'.*Column shard.*is overloaded.*'):
             qpool.execute_with_retries(
                 "UPSERT INTO `{}` (ts, value_string) VALUES(Timestamp('2020-01-01T00:00:00.000000Z'), 'xxx')".format(path),
                 retry_settings=RetrySettings(max_retries=0))

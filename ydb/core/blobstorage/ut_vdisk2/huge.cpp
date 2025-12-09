@@ -169,10 +169,9 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
         ui32 step = 1;
 
         for (size_t i = 0; i < 100; i++) {
-            TString& data = blobValue;
-            TLogoBlobID id(1, 1, step++, 0, data.size(), 0, 1);
+            TLogoBlobID id(1, 1, step++, 0, blobValue.size(), 0, 1);
 
-            auto res = env->Put(id, data);
+            auto res = env->Put(id, blobValue);
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrProto::OK);
         }
 

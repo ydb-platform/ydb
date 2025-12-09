@@ -221,17 +221,12 @@ def check_table_schema(wrapper, table_path):
     """Check table schema and return which columns exist (single table path)."""
     schema_check_query = f"SELECT * FROM `{table_path}` LIMIT 1"
     try:
-        schema_results, column_metadata = wrapper.execute_scan_query_with_metadata(schema_check_query)
-        has_full_name = False
-        has_metadata = False
-        has_error_type = False
-        has_metrics = False
-        if column_metadata:
-            existing_columns = {col_name for col_name, _ in column_metadata}
-            has_full_name = 'full_name' in existing_columns
-            has_metadata = 'metadata' in existing_columns
-            has_error_type = 'error_type' in existing_columns
-            has_metrics = 'metrics' in existing_columns
+        _, column_metadata = wrapper.execute_scan_query_with_metadata(schema_check_query)
+        existing_columns = {col_name for col_name, _ in (column_metadata or [])}
+        has_full_name = 'full_name' in existing_columns
+        has_metadata = 'metadata' in existing_columns
+        has_error_type = 'error_type' in existing_columns
+        has_metrics = 'metrics' in existing_columns
         return has_full_name, has_metadata, has_error_type, has_metrics
     except Exception as e:
         # Table doesn't exist or error - assume old schema

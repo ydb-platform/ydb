@@ -20,6 +20,7 @@ protected:
     }
 
     bool HasWorkers() const;
+    bool HasWorker(ui64 id) const;
     void RemoveWorkers(const TActorContext& ctx);
 
 public:
@@ -31,6 +32,7 @@ public:
         ETargetKind GetKind() const override;
         const TString& GetSrcPath() const override;
         const TString& GetDstPath() const override;
+        ui64 GetCountersLevel() const override;
 
     private:
         const ETargetKind Kind;

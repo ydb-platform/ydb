@@ -60,3 +60,4 @@ enum ETxTypes {
     TXTYPE_RESOLVE_RESOURCE_ID_RESULT = 18 [(TxTypeOpts) = {Name: "TxResolveResourceIdResult"}];
     TXTYPE_RESOLVE_DATABASE_RESULT = 19 [(TxTypeOpts) = {Name: "TxResolveDatabaseResult"}];
 }
+

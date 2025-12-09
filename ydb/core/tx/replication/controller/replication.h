@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
@@ -15,6 +16,7 @@
 
 namespace NKikimrReplication {
     class TReplicationConfig;
+    class TWorkerStats;
 }
 
 namespace NKikimr::NReplication::NController {
@@ -55,6 +57,12 @@ public:
         Error = 255
     };
 
+    class ITargetStats {
+    public:
+        virtual void FillToProto(NKikimrReplication::TEvDescribeReplicationResult& destination, bool includeDetailed) const = 0;
+        virtual ~ITargetStats() = default;
+    };
+
     class ITarget {
     public:
         struct IConfig {
@@ -65,6 +73,7 @@ public:
             virtual ETargetKind GetKind() const = 0;
             virtual const TString& GetSrcPath() const = 0;
             virtual const TString& GetDstPath() const = 0;
+            virtual ui64 GetCountersLevel() const = 0;
         };
 
         virtual ~ITarget() = default;
@@ -98,6 +107,9 @@ public:
         virtual void RemoveWorker(ui64 id) = 0;
         virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
+        virtual void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats, NMonitoring::TDynamicCounterPtr counters) = 0;
+        virtual const ITargetStats* GetStats() const = 0;
+
         virtual const TMaybe<TDuration> GetLag() const = 0;
 
         virtual void Progress(const TActorContext& ctx) = 0;

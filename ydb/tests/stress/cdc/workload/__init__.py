@@ -6,7 +6,6 @@ import ydb
 
 from enum import IntEnum, auto
 
-from ydb.tests.stress.common.publish_metrics import assert_exception, report_work_exception
 from ydb.tests.stress.common.common import WorkloadBase
 
 
@@ -23,7 +22,6 @@ class WorkloadRW(WorkloadBase):
         with self.lock:
             return f"Queries: {self.queries}"
 
-    @report_work_exception
     def _loop(self, upsert_key, select_keys):
         while not self.is_stop_requested():
             select_keys_str = ','.join([str(x) for x in select_keys])
@@ -70,7 +68,6 @@ class WorkloadAlterTable(WorkloadBase):
         with self.lock:
             return f"Altered: {self.altered} times"
 
-    @report_work_exception
     def _alter_table(self, state):
         if state == self.State.ADD_COLUMN:
             self.client.query(f"ALTER TABLE `{self.table_path}` ADD COLUMN `extra` Int32;", True)
@@ -101,7 +98,6 @@ class WorkloadRunner:
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
-    @report_work_exception
     def run(self):
         self.client.query(f"""
             CREATE TABLE `{self.table_path}` (

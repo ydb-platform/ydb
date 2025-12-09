@@ -3,7 +3,6 @@ import ydb
 import time
 import threading
 
-from ydb.tests.stress.common.publish_metrics import assert_exception, report_init_exception, report_teardown_exception, report_work_exception
 from ydb.tests.stress.common.common import WorkloadBase
 
 
@@ -120,12 +119,10 @@ class WorkloadRunner:
         self.duration = duration
         ydb.interceptor.monkey_patch_event_handler()
 
-    @report_init_exception
     def __enter__(self):
         self._cleanup()
         return self
 
-    @report_teardown_exception
     def __exit__(self, exc_type, exc_value, traceback):
         self._cleanup()
 
@@ -134,7 +131,6 @@ class WorkloadRunner:
         deleted = self.client.remove_recursively(self.tables_prefix)
         print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 
-    @report_work_exception
     def run(self):
         stop = threading.Event()
         workloads = [

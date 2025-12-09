@@ -13,6 +13,7 @@ import queue
 import traceback
 import ydb
 from library.python.monlib.metric_registry import MetricRegistry
+from ydb.tests.stress.common.publish_metrics import report_init_exception, report_work_exception
 
 BLOB_MIN_SIZE = 128 * 1024
 
@@ -224,6 +225,7 @@ class WorkloadStats(object):
 
 
 class YdbQueue(object):
+    @report_init_exception
     def __init__(self, idx, database, stats, driver, pool, mode, in_memory):
         self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + "_" + str(idx))
         self.copies_dir = os.path.join(self.working_dir, 'copies')
@@ -256,6 +258,7 @@ class YdbQueue(object):
             return os.path.join(working_dir, "queue_" + str(timestamp()))
         return os.path.join(self.working_dir, "queue_" + str(timestamp()))
 
+    @report_init_exception
     def prepare_new_queue(self, table_name=None):
         table_name = self.table_name_with_timestamp() if table_name is None else table_name
         self.send_query(get_table_description(table_name, self.mode, self.in_memory), parameters=None, event_kind=EventKind.CREATE_TABLE)
@@ -299,12 +302,14 @@ class YdbQueue(object):
             self.switch(switch_to)
         self.drop_queue.extend(candidates)
 
+    @report_work_exception
     def list_copies_dir(self):
         response = self.driver.scheme_client.list_directory(self.copies_dir)
         self.process_dir_content(
             self.copies_dir, response, switch=False
         )
 
+    @report_work_exception
     def list_working_dir(self):
         response = self.driver.scheme_client.list_directory(self.working_dir)
         self.process_dir_content(
@@ -318,6 +323,7 @@ class YdbQueue(object):
         self.alter_column_ids.setdefault(self.table_name, set()).add(val)
         return val
 
+    @report_work_exception
     def read_table(self):
         it = self.send_query("SELECT `key` FROM `{}`".format(self.table_name), None, EventKind.READ_TABLE)
         try:
@@ -329,6 +335,7 @@ class YdbQueue(object):
         except StopIteration:
             return
 
+    @report_work_exception
     def remove_outdated(self):
         try:
             keys_set = self.outdated_keys.popleft()
@@ -349,10 +356,12 @@ class YdbQueue(object):
 
         self.send_query(query=query, event_kind=EventKind.REMOVE_OUTDATED, parameters=parameters)
 
+    @report_work_exception
     def update_outdated_keys(self, resp):
         if resp is not None:
             self.outdated_keys.append(resp.rows)
 
+    @report_work_exception
     def find_outdated(self):
         # ensure queue is not large enough
         if len(self.outdated_keys) > self.outdated_keys_max_size:
@@ -370,6 +379,7 @@ class YdbQueue(object):
         response = self.send_query(query=query, event_kind=EventKind.FIND_OUTDATED, parameters=parameters)
         self.update_outdated_keys(response)
 
+    @report_work_exception
     def write(self):
         current_timestamp = timestamp()
         blob = next(self.blobs_iter)
@@ -389,6 +399,7 @@ class YdbQueue(object):
 
         self.send_query(query=query, event_kind=EventKind.WRITE, parameters=parameters)
 
+    @report_work_exception
     def add_column(self):
         query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8".format(
             table_name=self.table_name,
@@ -397,6 +408,7 @@ class YdbQueue(object):
 
         self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN)
 
+    @report_work_exception
     def add_column_default(self):
         query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8 NOT NULL DEFAULT '{default_value}'".format(
             table_name=self.table_name,
@@ -406,6 +418,7 @@ class YdbQueue(object):
 
         self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN_DEFAULT)
 
+    @report_work_exception
     def drop_column(self):
         if len(self.alter_column_ids.get(self.table_name, set())) == 0:
             return
@@ -420,6 +433,7 @@ class YdbQueue(object):
 
         self.send_query(query, parameters=None, event_kind=EventKind.DROP_COLUMN)
 
+    @report_work_exception
     def drop_table(self):
         duplicates = set()
         while len(self.drop_queue) > 0:
@@ -437,6 +451,7 @@ class YdbQueue(object):
             finally:
                 self.pool.release(session)
 
+    @report_work_exception
     def batch_update(self):
         blob = next(self.blobs_iter)
         parameters = {
@@ -445,6 +460,7 @@ class YdbQueue(object):
         }
         self.send_query("BATCH UPDATE `{}` SET value = $value WHERE `timestamp` >= $timestamp;".format(self.table_name), parameters, EventKind.BATCH_UPDATE)
 
+    @report_work_exception
     def batch_delete(self):
         parameters = {
             "$timestamp": timestamp() - 20

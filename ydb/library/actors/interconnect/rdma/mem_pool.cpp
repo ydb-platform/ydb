@@ -323,6 +323,7 @@ namespace NInterconnect::NRdma {
         {
             AllocatedCounter = counter->GetCounter("RdmaPoolAllocatedUserBytes", false);
             AllocatedChunksCounter = counter->GetCounter("RdmaPoolAllocatedChunks", false);
+            MaxAllocated.Counter = counter->GetCounter("RdmaPoolAllocatedUserMaxBytes", false);
 
             Y_ABORT_UNLESS((Alignment & Alignment - 1) == 0, "Alignment must be a power of two %zu", Alignment);
         }
@@ -378,13 +379,39 @@ namespace NInterconnect::NRdma {
             mrs.clear();
         }
 
+        void TrackPeakAlloc(i64 newVal) noexcept {
+            i64 curVal = MaxAllocated.Val.load(std::memory_order_relaxed);
+            while (newVal > curVal) {
+                if (MaxAllocated.Val.compare_exchange_weak(curVal, newVal,
+                    std::memory_order_release, std::memory_order_relaxed)) {
+                    break;
+                }
+            }
+        }
+
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
         const size_t MaxChunk;
         const size_t Alignment;
         ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunksCounter;
+        struct {
+           NMonotonic::TMonotonic Time;
+           std::atomic<i64> Val = 0;
+           ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
+        } MaxAllocated;
         size_t AllocatedChunks = 0;
+    private:
         std::mutex Mutex;
+
+        void Tick(NMonotonic::TMonotonic time) noexcept override {
+            constexpr TDuration holdTime = TDuration::Seconds(15);
+
+            if (time - MaxAllocated.Time > holdTime) {
+                MaxAllocated.Counter->Set(MaxAllocated.Val.load());
+                MaxAllocated.Val.store(AllocatedCounter->Val());
+                MaxAllocated.Time = time;
+            }
+        }
     };
 
     class TDummyMemPool: public TMemPoolBase {
@@ -608,7 +635,10 @@ namespace NInterconnect::NRdma {
         TMemRegion* AllocImpl(int size, ui32 flags) noexcept override {
             if (auto memReg = LocalCache.AllocImpl(size, flags, *this)) {
                 memReg->Resize(size);
-                AllocatedCounter->Add(size);
+                i64 newVal = AllocatedCounter->Add(size);
+
+                TrackPeakAlloc(newVal);
+
                 return memReg;
             }
             return nullptr;

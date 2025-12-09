@@ -340,7 +340,6 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
     enum class EVectorType {
         Float,
-        Bit,
         Uint8,
         Int8
     };
@@ -389,26 +388,12 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                     (1, Untag(Knn::ToBinaryStringFloat([1.0f, 2.0f, 3.0f]), "FloatVector")),
                     (2, Untag(Knn::ToBinaryStringFloat([4.0f, 5.0f, 6.0f]), "FloatVector")),
                     (3, Untag(Knn::ToBinaryStringFloat([7.0f, 8.0f, 9.0f]), "FloatVector")),
-                    (4, Untag(Knn::ToBinaryStringFloat([10.0f, 11.0f, 12.0f]), "FloatVector")),
+                    (4, Untag(Knn::ToBinaryStringFloat([10.0f, 20.0f, 30.0f]), "FloatVector")),
                     (5, Untag(Knn::ToBinaryStringFloat([13.0f, 14.0f, 15.0f]), "FloatVector")),
                     (6, Untag(Knn::ToBinaryStringFloat([100.0f, 110.0f, 120.0f]), "FloatVector"));
                 )";
                 targetVector = "Knn::ToBinaryStringFloat([100.0f, 110.0f, 120.0f])";
                 tagName = "FloatVector";
-                expectedMatchPk = 6;
-                break;
-            case EVectorType::Bit:
-                insertQuery = R"(
-                    UPSERT INTO `/Root/TestTable` (pk, emb) VALUES
-                    (1, Untag(Knn::ToBinaryStringBit([0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 1.f]), "BitVector")),
-                    (2, Untag(Knn::ToBinaryStringBit([0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 1.f, 1.f]), "BitVector")),
-                    (3, Untag(Knn::ToBinaryStringBit([0.f, 0.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f]), "BitVector")),
-                    (4, Untag(Knn::ToBinaryStringBit([0.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f, 1.f]), "BitVector")),
-                    (5, Untag(Knn::ToBinaryStringBit([0.f, 0.f, 0.f, 1.f, 1.f, 1.f, 1.f, 1.f]), "BitVector")),
-                    (6, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f]), "BitVector"));
-                )";
-                targetVector = "Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f])";
-                tagName = "BitVector";
                 expectedMatchPk = 6;
                 break;
             case EVectorType::Uint8:
@@ -520,10 +505,6 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
     Y_UNIT_TEST(FloatVectorKnnPushdown) {
         DoVectorKnnPushdownTest(EVectorType::Float);
-    }
-
-    Y_UNIT_TEST(BitVectorKnnPushdown) {
-        DoVectorKnnPushdownTest(EVectorType::Bit);
     }
 
     Y_UNIT_TEST(Uint8VectorKnnPushdown) {

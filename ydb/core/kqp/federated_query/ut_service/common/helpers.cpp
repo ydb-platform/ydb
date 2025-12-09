@@ -8,21 +8,21 @@ namespace NKikimr::NKqp {
     using TDescriptionPromise = NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>;
 
     void CreateSchemaSecret(const TString& secretName, const TString& secretValue, NYdb::NTable::TSession& session) {
-        auto createSecretQuery = "CREATE SECRET `" + secretName + "` WITH (value = \"" + secretValue + "\");";
-        auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
-        UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
+        auto query = "CREATE SECRET `" + secretName + "` WITH (value = \"" + secretValue + "\");";
+        auto queryResult = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(queryResult.GetStatus() == NYdb::EStatus::SUCCESS, queryResult.GetIssues().ToString());
     }
 
     void AlterSchemaSecret(const TString& secretName, const TString& secretValue, NYdb::NTable::TSession& session) {
-        auto createSecretQuery = "ALTER  SECRET `" + secretName + "` WITH (value = \"" + secretValue + "\");";
-        auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
-        UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
+        auto query = "ALTER SECRET `" + secretName + "` WITH (value = \"" + secretValue + "\");";
+        auto queryResult = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(queryResult.GetStatus() == NYdb::EStatus::SUCCESS, queryResult.GetIssues().ToString());
     }
 
     void DropSchemaSecret(const TString& secretName, NYdb::NTable::TSession& session) {
-        auto createSecretQuery = "DROP  SECRET `" + secretName + "`;";
-        auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
-        UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
+        auto query = "DROP SECRET `" + secretName + "`;";
+        auto queryResult = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(queryResult.GetStatus() == NYdb::EStatus::SUCCESS, queryResult.GetIssues().ToString());
     }
 
     TDescriptionPromise
@@ -40,8 +40,9 @@ namespace NKikimr::NKqp {
     }
 
     void AssertBadRequest(TDescriptionPromise promise, const TString& err, Ydb::StatusIds::StatusCode status) {
-        UNIT_ASSERT_VALUES_EQUAL(status, promise.GetFuture().GetValueSync().Status);
-        UNIT_ASSERT_VALUES_EQUAL(err, promise.GetFuture().GetValueSync().Issues.ToString());
+        const auto& result = promise.GetFuture().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(status, result.Status);
+        UNIT_ASSERT_VALUES_EQUAL(err, result.Issues.ToString());
     }
 
     TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken(const TString& userSid, const TVector<TString>& groupSids) {
@@ -52,8 +53,9 @@ namespace NKikimr::NKqp {
     }
 
     void AssertSecretValues(const TVector<TString>& secretValues, TDescriptionPromise promise) {
-        UNIT_ASSERT_VALUES_EQUAL_C(secretValues.size(), promise.GetFuture().GetValueSync().SecretValues.size(), promise.GetFuture().GetValueSync().Issues.ToOneLineString());
-        UNIT_ASSERT_VALUES_EQUAL(secretValues, promise.GetFuture().GetValueSync().SecretValues);
+        const auto& result = promise.GetFuture().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(secretValues.size(), result.SecretValues.size(), result.Issues.ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(secretValues, result.SecretValues);
     }
 
     void AssertSecretValue(const TString& secretValue, TDescriptionPromise promise) {
@@ -99,9 +101,6 @@ namespace NKikimr::NKqp {
             default:
                 Y_ENSURE(false, "Unexpected value");
         }
-
-        // unreachable
-        return entry.Status;
     }
 
     void TTestSchemeCacheStatusGetter::SetFailProbability(EFailProbability failProbability) {

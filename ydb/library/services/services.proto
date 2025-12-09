@@ -60,7 +60,11 @@ enum EServiceKikimr {
     BS_CLUSTER_BALANCING = 2605;
     BS_BRIDGE_SYNC = 2606;
     BS_PHANTOM_FLAG_STORAGE = 2607;
+<<<<<<< HEAD
     BS_CHUNK_KEEPER = 2608;
+=======
+    BS_COMP_BROKER = 2608;
+>>>>>>> ff41a03f644 (EXT-1313: add compaction token)
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -1158,5 +1162,6 @@ message TActivity {
         SCHEMESHARD_FORCED_COMPACTION = 681;
         BS_LOAD_PERSISTENT_BUFFER_WRITE = 682;
         BS_LOAD_PERSISTENT_BUFFER_READ = 683;
+        BS_COMP_BROKER_ACTOR = 684;
     };
 };

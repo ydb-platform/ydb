@@ -46,6 +46,7 @@ namespace NKikimr {
         HullCompFullCompPeriodSec = 0;
         HullCompThrottlerBytesRate = 0;
         DefragThrottlerBytesRate = 0;
+        EnableCompactionToken = 0;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
         BlobHeaderMode = EBlobHeaderMode::OLD_HEADER;

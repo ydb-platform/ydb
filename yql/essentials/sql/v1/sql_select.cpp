@@ -1364,13 +1364,15 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
         return SelectKind(node.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1(), selectPos, placement);
     } else {
         const auto& partial = node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
-        const auto& selectKind = partial.GetRule_select_kind1();
-        if (selectKind.HasBlock1() && placement.Defined() && !placement->IsFirstInSelectOp) {
-            auto discardPos = Ctx_.TokenPosition(selectKind.GetBlock1().GetToken1());
+        const auto& innerSelectKind = partial.GetRule_select_kind1();
+
+        if (innerSelectKind.HasBlock1() && placement.Defined() && !placement->IsFirstInSelectOp) {
+            auto discardPos = Ctx_.TokenPosition(innerSelectKind.GetBlock1().GetToken1());
             Ctx_.Warning(discardPos, TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
                 out << "DISCARD within UNION ALL is only allowed before first subquery";
             });
         }
+        
         return SelectKind(partial, selectPos, {});
     }
 }

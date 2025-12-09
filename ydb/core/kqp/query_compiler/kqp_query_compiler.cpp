@@ -782,18 +782,6 @@ public:
             }
         }
 
-        if (const auto overridePlanner = Config->OverridePlanner.Get()) {
-            if (const auto& issues = ApplyOverridePlannerSettings(*overridePlanner, queryProto)) {
-                NYql::TIssue rootIssue("Invalid override planner settings");
-                rootIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
-                for (auto issue : issues) {
-                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
-                }
-                ctx.AddError(rootIssue);
-                return false;
-            }
-        }
-
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
             if (result.Maybe<TKqpTxResultBinding>()) {
@@ -812,6 +800,18 @@ public:
         for (ui32 txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
             const auto& tx = query.Transactions().Item(txIdx);
             CompileTransaction(tx, *queryProto.AddTransactions(), ctx, txIdx, createChannel);
+        }
+
+        if (const auto overridePlanner = Config->OverridePlanner.Get()) {
+            if (const auto& issues = ApplyOverridePlannerSettings(*overridePlanner, queryProto)) {
+                NYql::TIssue rootIssue("Invalid override planner settings");
+                rootIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+                for (auto issue : issues) {
+                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
+                }
+                ctx.AddError(rootIssue);
+                return false;
+            }
         }
 
         ui32 resultIdx = 0;

@@ -70,11 +70,7 @@ public:
         }
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
-            if (Sorting == ERequestSorting::DESC) {
-                return l.Finish < r.Finish;
-            } else {
-                return r.Start < l.Start;
-            }
+            return std::make_pair(r.Start, r.SourceId) < std::make_pair(l.Start, l.SourceId);
         }
     };
 };

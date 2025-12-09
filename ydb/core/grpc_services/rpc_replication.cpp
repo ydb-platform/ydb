@@ -271,6 +271,9 @@ private:
     static void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeTransferResult& result) {
         ConvertConnectionParams(record.GetConnectionParams(), *result.mutable_connection_params());
         ConvertState(*record.MutableState(), result);
+        if(record.HasStats()) {
+            result.mutable_stats()->CopyFrom(record.GetStats());
+        }
 
         const auto& transferSpecific = record.GetTransferSpecific();
         result.set_source_path(transferSpecific.GetTarget().GetSrcPath());
@@ -285,8 +288,8 @@ private:
         to.SetIncludeStats(from->include_stats());
     }
 
-    static void BuildRequest(const Replication::DescribeTransferRequest*, NKikimrReplication::TEvDescribeReplication&) {
-        // nop
+    static void BuildRequest(const Replication::DescribeTransferRequest* from, NKikimrReplication::TEvDescribeReplication& to) {
+        to.SetIncludeStats(from->include_stats());
     }
 
 private:

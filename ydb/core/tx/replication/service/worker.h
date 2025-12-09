@@ -11,6 +11,23 @@
 namespace NKikimr::NReplication {
 
 class TTopicMessage;
+struct TTransferReadStats;
+struct TTransferWriteStats;
+
+enum class EWorkerOperation {
+    NONE = 0,
+    READ = 1,
+    DECOMPRESS = 2,
+    PROCESS = 3,
+    WRITE = 4
+};
+
+struct TWorkerDetailedStats {
+    EWorkerOperation CurrentOperation;
+    std::unique_ptr<TTransferReadStats> ReaderStats;
+    std::unique_ptr<TTransferWriteStats> WriterStats;
+};
+
 
 namespace NService {
 
@@ -26,7 +43,6 @@ struct TEvWorker {
         EvDataEnd,
         EvCommit,
         EvTerminateWriter,
-
         EvEnd,
     };
 
@@ -52,6 +68,7 @@ struct TEvWorker {
         ui32 PartitionId;
         TString Source;
         TVector<TTopicMessage> Records;
+        std::unique_ptr<TWorkerDetailedStats> Stats;
 
         explicit TEvData(ui32 partitionId, const TString& source, const TVector<TTopicMessage>& records);
         explicit TEvData(ui32 partitionId, const TString& source, TVector<TTopicMessage>&& records);
@@ -76,9 +93,12 @@ struct TEvWorker {
 
     struct TEvStatus: public TEventLocal<TEvStatus, EvStatus> {
         TDuration Lag;
+        std::unique_ptr<TWorkerDetailedStats> DetailedStats;
 
         explicit TEvStatus(TDuration lag);
+        explicit TEvStatus(std::unique_ptr<TWorkerDetailedStats>&& detailedStats);
         TString ToString() const override;
+        static TEvStatus* FromOperation(EWorkerOperation operation);
     };
 
     struct TEvDataEnd: public TEventLocal<TEvDataEnd, EvDataEnd> {
@@ -96,6 +116,7 @@ struct TEvWorker {
         explicit TEvTerminateWriter(ui64 partitionId);
         TString ToString() const override;
     };
+
 };
 
 IActor* CreateWorker(

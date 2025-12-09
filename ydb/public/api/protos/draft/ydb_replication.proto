@@ -7,6 +7,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 package Ydb.Replication;
 option java_package = "com.yandex.ydb.replication";
@@ -101,11 +102,21 @@ message DescribeTransferRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // Replication path.
     string path = 2 [(required) = true];
+    // include detailed statistics for each worker
+    optional bool include_stats = 3;
 }
 
 message DescribeTransferResponse {
     // Result of request will be inside operation.
     Ydb.Operations.Operation operation = 1;
+}
+
+// message representing sliding window statistics by several windows
+message MultipleWindowsStat {
+    // average per minute
+    int64 per_minute = 1;
+    // average per hour
+    int64 per_hour = 2;
 }
 
 message DescribeTransferResult {
@@ -120,6 +131,72 @@ message DescribeTransferResult {
     }
 
     message PausedState {
+    }
+
+    message TransferStats {
+        enum WorkState {
+            // no reported state
+            STATE_UNSPECIFIED = 0;
+            // reading data from topic
+            STATE_READ = 1;
+            // decompressing read data
+            STATE_DECOMPRESS = 2;
+            // processing data with lambda
+            STATE_PROCESS = 3;
+            // writing data to table
+            STATE_WRITE = 4;
+        }
+        message WorkerStats {
+            // unique worker identifier
+            string worker_id = 1;
+            // last reported work state
+            WorkState state = 2;
+            // timestamp of last state change
+            google.protobuf.Timestamp last_state_change = 3;
+            // partition of the topic that worker is reading
+            int64 partition_id = 4;
+            // current read offset in partition
+            int64 read_offset = 5;
+            // how long this worker is being run for
+            google.protobuf.Duration uptime = 6;
+            // total cumulative number of worker restarts
+            int64 restart_count = 7;
+            // worker restarts per time, sliding window
+            MultipleWindowsStat restarts = 8;
+            // topic read speed in sliding window, bytes
+            MultipleWindowsStat read_bytes = 9;
+            // topic read speed in sliding window, messages
+            MultipleWindowsStat read_messages = 10;
+            // table write speed in sliding window, bytes
+            MultipleWindowsStat write_bytes = 11;
+            // table write speed in sliding window, rows
+            MultipleWindowsStat write_rows = 12;
+
+            // cpu usage time on decompression, milliseconds
+            MultipleWindowsStat decompression_cpu_time_ms = 13;
+            // cpu usage time on processing, milliseconds
+            MultipleWindowsStat processing_cpu_time_ms = 14;
+        }
+        // detailed stats of every worker, only included if DescribeTransferRequest.include_stats flag = true in request
+        repeated WorkerStats workers_stats = 1;
+        // minimal uptime of all current workers
+        google.protobuf.Duration min_worker_uptime = 2;
+
+        // topic read speed in sliding window, overall for transfer, bytes
+        MultipleWindowsStat read_bytes = 3;
+        // topic read speed in sliding window, overall for transfer, messages
+        MultipleWindowsStat read_messages = 4;
+        // table write speed in sliding window, overall for transfer, bytes
+        MultipleWindowsStat write_bytes = 5;
+        // table write speed in sliding window, overall for transfer, rows
+        MultipleWindowsStat write_rows = 6;
+
+        // cpu usage time on decompression, overall for transfer, milliseconds
+        MultipleWindowsStat decompression_cpu_time_ms = 7;
+        // cpu usage time on processing, overall for transfer, milliseconds
+        MultipleWindowsStat processing_cpu_time_ms = 8;
+        // moment when stats collection was last started (or reset)
+        google.protobuf.Timestamp stats_collection_start = 9;
     }
 
     // Description of scheme object.
@@ -145,4 +222,5 @@ message DescribeTransferResult {
     }
 
     optional BatchSettings batch_settings = 11;
+    optional TransferStats stats = 12;
 }

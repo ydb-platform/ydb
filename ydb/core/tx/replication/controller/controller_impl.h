@@ -120,6 +120,7 @@ private:
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
     void ProcessDropStreamQueue(const TActorContext& ctx);
 

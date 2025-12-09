@@ -32,6 +32,10 @@ const TString& TTargetBase::TConfigBase::GetDstPath() const {
     return DstPath;
 }
 
+ui64 TTargetBase::TConfigBase::GetCountersLevel() const {
+    return 0;
+}
+
 TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
         ui64 id, const IConfig::TPtr& config)
     : Replication(replication)
@@ -154,6 +158,10 @@ TVector<ui64> TTargetBase::GetWorkers() const {
 
 bool TTargetBase::HasWorkers() const {
     return !Workers.empty();
+}
+
+bool TTargetBase::HasWorker(ui64 id) const {
+    return Workers.contains(id);
 }
 
 void TTargetBase::RemoveWorkers(const TActorContext& ctx) {

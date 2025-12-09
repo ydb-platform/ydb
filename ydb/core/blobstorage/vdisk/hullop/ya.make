@@ -20,6 +20,8 @@ SRCS(
     blobstorage_hullactor.h
     blobstorage_hullactor.cpp
     blobstorage_hullcommit.h
+    blobstorage_hullcompactbroker.h
+    blobstorage_hullcompactbroker.cpp
     blobstorage_hullcompactdeferredqueue.h
     blobstorage_hullcompact.h
     blobstorage_hullcompactworker.h

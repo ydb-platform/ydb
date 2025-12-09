@@ -1,6 +1,7 @@
 #include "blobstorage_hullactor.h"
 #include "blobstorage_hullcommit.h"
 #include "blobstorage_hullcompact.h"
+#include "blobstorage_hullcompactbroker.h"
 #include "blobstorage_buildslice.h"
 #include "hullop_compactfreshappendix.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_selector.h>
@@ -192,6 +193,11 @@ namespace NKikimr {
         THugeBlobCtxPtr HugeBlobCtx;
         ui32 MinHugeBlobInBytes;
 
+        bool CompactionAllowed = false;
+        bool CompactionStarted = false;
+        bool CompactionRequested = false;
+        ui64 CompactionToken;
+
         friend class TActorBootstrapped<TThis>;
 
         void Bootstrap(const TActorContext &ctx) {
@@ -271,12 +277,12 @@ namespace NKikimr {
             // set up iterator
             TLevelSliceForwardIterator it(HullDs->HullCtx, vec);
             it.SeekToFirst();
-            // set using trottle, enable only for full compaction
-            bool useThrottle = isFullCompaction;
+            // set using throttler, enable only for full compaction
+            bool useThrottler = isFullCompaction;
 
             std::unique_ptr<TLevelCompaction> compaction(new TLevelCompaction(HullDs->HullCtx, RTCtx, HugeBlobCtx,
                 MinHugeBlobInBytes, nullptr, nullptr, std::move(barriersSnap), std::move(levelSnap),
-                it, firstLsn, lastLsn, TDuration::Minutes(2), {}, AllowGarbageCollection, useThrottle));
+                it, firstLsn, lastLsn, TDuration::Minutes(2), {}, AllowGarbageCollection, useThrottler));
             NActors::TActorId actorId = RunInBatchPool(ctx, compaction.release());
             ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
@@ -343,7 +349,19 @@ namespace NKikimr {
                     LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                              VDISKP(HullDs->HullCtx->VCtx, "%s: level scheduled",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
-                    RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
+                    if (CompactionAllowed) {
+                        CompactionAllowed = false;
+                        CompactionRequested = false;
+                        CompactionStarted = true;
+                        LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
+                             VDISKP(HullDs->HullCtx->VCtx, "%s: got compaction token, starting compaction",
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data()));
+                        RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
+                    } else {
+                        TryStartCompaction(ctx, CompactionTask->MaxRatio);
+                        ScheduleCompactionWakeup(ctx);
+                        UpdateStorageRatio(RTCtx->LevelIndex->CurSlice);
+                    }
                     break;
                 }
                 default:
@@ -351,6 +369,29 @@ namespace NKikimr {
             }
 
             RTCtx->LevelIndex->UpdateLevelStat(LevelStat);
+        }
+
+        void TryStartCompaction(const TActorContext &ctx, double maxRatio) {
+            if (CompactionRequested) {
+                ctx.Send(MakeBlobStorageCompBrokerID(), new TEvUpdateCompactionTokenRequest(HullLogCtx->PDiskCtx->PDiskIdString, HullLogCtx->VCtx->ShortSelfVDisk, maxRatio));
+                LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
+                                VDISKP(HullDs->HullCtx->VCtx, "%s: compaction request updated with ratio %f",
+                                    PDiskSignatureForHullDbKey<TKey>().ToString().data(), maxRatio));
+                return;
+
+            }
+            CompactionRequested = true;
+            ctx.Send(MakeBlobStorageCompBrokerID(), new TEvCompactionTokenRequest(HullLogCtx->PDiskCtx->PDiskIdString, HullLogCtx->VCtx->ShortSelfVDisk, maxRatio));
+            LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
+                             VDISKP(HullDs->HullCtx->VCtx, "%s: compaction requested with ratio %f",
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data(), maxRatio));
+        }
+
+        void Handle(typename TEvCompactionTokenResult::TPtr &ev, const TActorContext &ctx) {
+            CompactionAllowed = true;
+            CompactionRequested = false;
+            CompactionToken = ev->Get()->Token;
+            ScheduleCompaction(ctx);
         }
 
         void CalculateStorageRatio(TLevelSlicePtr slice) {
@@ -588,6 +629,13 @@ namespace NKikimr {
 
         void Handle(THullCommitFinished::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
+            if (CompactionStarted) {
+                CompactionStarted = false;
+                ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(HullLogCtx->PDiskCtx->PDiskIdString, HullLogCtx->VCtx->ShortSelfVDisk, CompactionToken));
+                LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
+                             VDISKP(HullDs->HullCtx->VCtx, "%s: compaction token released",
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data()));
+            }
             switch (ev->Get()->Type) {
                 case THullCommitFinished::CommitLevel:
                     Y_VERIFY_DEBUG_S(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitCommit,
@@ -703,6 +751,9 @@ namespace NKikimr {
 
         void HandlePoison(const TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
+            if (CompactionRequested || CompactionStarted) {
+                ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(HullLogCtx->PDiskCtx->PDiskIdString, HullLogCtx->VCtx->ShortSelfVDisk, CompactionToken));
+            }
             ActiveActors.KillAndClear(ctx);
             TThis::Die(ctx);
         }
@@ -728,6 +779,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvPermitGarbageCollection, HandlePermitGarbageCollection)
             HFunc(TEvHugePreCompactResult, Handle)
             HFunc(TEvMinHugeBlobSizeUpdate, Handle)
+            HFunc(TEvCompactionTokenResult, Handle)
         )
 
     public:

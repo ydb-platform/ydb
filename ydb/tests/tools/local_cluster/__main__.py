@@ -26,7 +26,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-
 class LocalCluster:
     def __init__(self, working_dir=None, binary_path=None):
         self.cluster = None
@@ -46,7 +45,7 @@ class LocalCluster:
         logger.info("Using ydbd binary: %s", self.binary_path)
 
         port_allocator = DefaultFirstNodePortAllocator()
-        
+
         configurator = kikimr_config.KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             port_allocator=port_allocator,
@@ -73,9 +72,11 @@ class LocalCluster:
         logger.info("Cluster started successfully!")
         logger.info("Total nodes: %d", len(self.cluster.nodes))
         for node_id, node in sorted(self.cluster.nodes.items()):
-            logger.info("Node %d: GRPC=%s, MON=%s, IC=%s, Endpoint=%s",
-                      node_id, node.grpc_port, node.mon_port, node.ic_port, node.endpoint)
-        
+            logger.info(
+                "Node %d: GRPC=%s, MON=%s, IC=%s, Endpoint=%s",
+                node_id, node.grpc_port, node.mon_port, node.ic_port, node.endpoint
+            )
+
         first_node = self.cluster.nodes[1]
         logger.info("First node working directory: %s", first_node.cwd)
 
@@ -153,11 +154,10 @@ def main():
 
     except Exception as e:
         logger.exception("Error during cluster operation: %s", e)
-        
+
         cluster_manager.stop()
         sys.exit(1)
 
 
 if __name__ == '__main__':
     main()
-

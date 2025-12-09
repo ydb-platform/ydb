@@ -163,7 +163,6 @@ class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
         self.__port_manager.release()
 
 
-
 # Default ports for the first node
 DEFAULT_GRPC_PORT = 2135
 DEFAULT_MON_PORT = 8765
@@ -178,10 +177,21 @@ DEFAULT_PGWIRE_PORT = 5432
 # Fixed port allocator
 #
 
+
 class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
 
-    def __init__(self, base_port_offset, mon_port=DEFAULT_MON_PORT, grpc_port=DEFAULT_GRPC_PORT, mbus_port=DEFAULT_MBUS_PORT, ic_port=DEFAULT_IC_PORT, sqs_port=DEFAULT_SQS_PORT, grpc_ssl_port=DEFAULT_GRPC_SSL_PORT,
-                 public_http_port=DEFAULT_PUBLIC_HTTP_PORT, pgwire_port=DEFAULT_PGWIRE_PORT):
+    def __init__(
+        self,
+        base_port_offset,
+        mon_port=DEFAULT_MON_PORT,
+        grpc_port=DEFAULT_GRPC_PORT,
+        mbus_port=DEFAULT_MBUS_PORT,
+        ic_port=DEFAULT_IC_PORT,
+        sqs_port=DEFAULT_SQS_PORT,
+        grpc_ssl_port=DEFAULT_GRPC_SSL_PORT,
+        public_http_port=DEFAULT_PUBLIC_HTTP_PORT,
+        pgwire_port=DEFAULT_PGWIRE_PORT
+    ):
         super(KikimrFixedNodePortAllocator, self).__init__()
 
         self.base_port_offset = base_port_offset
@@ -249,6 +259,8 @@ class KikimrFixedPortAllocator(KikimrPortAllocatorInterface):
 
 # Port offset for additional nodes (each node gets +10 offset)
 PORT_OFFSET_STEP = 10
+
+
 class DefaultFirstNodePortAllocator(KikimrPortAllocatorInterface):
     """
     Port allocator that uses default ports for the first node

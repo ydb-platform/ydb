@@ -84,17 +84,22 @@ class TestResult:
     count_of_passed: int
     owners: str
     status_description: str
+    error_type: str = ""
     is_sanitizer_issue: bool = False
 
     @property
     def status_display(self):
-        return {
+        base = {
             TestStatus.PASS: "PASS",
             TestStatus.FAIL: "FAIL",
             TestStatus.ERROR: "ERROR",
             TestStatus.SKIP: "SKIP",
             TestStatus.MUTE: "MUTE",
         }[self.status]
+        # For ERROR add error_type suffix if present (e.g., ERROR-TIMEOUT)
+        if self.status == TestStatus.ERROR and self.error_type:
+            return f"{base}-{self.error_type}"
+        return base
 
     @property
     def elapsed_display(self):
@@ -188,7 +193,7 @@ class TestResult:
         except (TypeError, ValueError):
             elapsed = 0
         
-        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, is_sanitizer_issue(status_description))
+        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, error_type, is_sanitizer_issue(status_description))
 
 
 class TestSummaryLine:

@@ -2883,6 +2883,7 @@ public:
     ui32 TabletsTotal = 0;
     ui32 TabletsDone = 0;
     THive* Hive;
+    NJson::TJsonValue Response;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::HIVE_MON_REQUEST;
@@ -2912,9 +2913,14 @@ public:
         ++TabletsTotal;
     }
 
+    void AddContext(const TString& key, const TString& value) {
+        Response[key] = value;
+    }
+
     void CheckCompletion() {
         if (TabletsDone >= TabletsTotal) {
-            Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"total\":" << TabletsDone << "}"));
+            Response["total"] = TabletsDone;
+            Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Response, false)));
             PassAway();
         }
     }
@@ -3088,6 +3094,9 @@ public:
             }
             operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds, Async));
             if (!BypassLimit && operations.size() >= REASSIGN_SOFT_LIMIT) {
+                if (Wait) {
+                    waitActor->AddContext("limit_reached", "true");
+                }
                 break;
             }
         }

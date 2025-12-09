@@ -135,16 +135,15 @@ class TestResult:
         error_type = result.get("error_type", "")
         status_description = result.get("rich-snippet", "")
         
+        # Format: path/name.subtest_name (where . is between name and subtest_name, / is between path and name)
         classname = path_str
-        if name_part:
-            classname = f"{classname}/{name_part}"
+        # Combine name_part and subtest_name with . (not /) if both exist
         if subtest_name:
             if name_part:
                 name = f"{name_part}.{subtest_name}"
             else:
                 name = subtest_name
         else:
-            # If no subtest, keep name_part (so we still show path/name)
             name = name_part
         
         # Status can be "OK" or "PASSED" for passed tests

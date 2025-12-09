@@ -110,7 +110,7 @@ private:
         bool operator<(const TSourceIterator& item) const {
             const auto cmp = SortableRecord->ComparePartial(*item.SortableRecord);
             if (cmp == std::partial_ordering::equivalent) {
-                return item.Source->GetSourceId() < Source->GetSourceId();
+                return item.Source->GetSourceId() < Source->GetSourceId() ^ Reverse;
             }
             return cmp == std::partial_ordering::greater;
         }

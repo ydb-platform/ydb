@@ -2,7 +2,7 @@
 
 This article covers changing cluster configuration after initial deployment.
 
-{% include [new](../_includes/configuration-version-note.md) %}
+{% include [_](../_includes/experimental_v2.md) %}
 
 {{ ydb-short-name }} cluster configuration management is performed using [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/index.md). The standard approach to updating a configuration is to get the current configuration from the cluster using {{ ydb-short-name }} CLI, modify it locally, and then load the updated configuration back to the cluster.
 

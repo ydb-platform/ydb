@@ -1,6 +1,5 @@
 # Перемещение State Storage
 
-{% include [deprecated](_includes/deprecated.md) %}
 
 Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../reference/configuration/index.md#domains-state), необходимо переместить её на другой хост.
 

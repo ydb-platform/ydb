@@ -126,6 +126,13 @@ namespace NKikimr {
             // enter work state, prepare, and kick worker class
             TThis::Become(&TThis::WorkFunc);
             Worker.Prepare(Hmp, brs, &LevelSnap);
+
+            /*LOG_ERROR(ctx, NKikimrServices::BS_HULLCOMP,
+                       VDISKP(HullCtx->VCtx->VDiskLogPrefix,
+                             "%s: START COMPACTION (%" PRIu64 ") fresh# %s",
+                             PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID, (FreshSegment ? "true" : "false")));*/
+
+
             MainCycle(ctx);
         }
 
@@ -307,6 +314,11 @@ namespace NKikimr {
                              PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                              CompactionID, (FreshSegment ? "true" : "false"), ui32(msg->CommitChunks.size()),
                              Worker.Statistics.ToString().data(), IsAborting ? "true" : "false"));
+
+            /*LOG_ERROR(ctx, NKikimrServices::BS_HULLCOMP,
+                VDISKP(HullCtx->VCtx->VDiskLogPrefix,
+                    "%s: FINISH COMPACTION (%" PRIu64 ") fresh# %s",
+                    PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID, (FreshSegment ? "true" : "false")));*/
 
             ctx.Send(LIActor, msg.release());
             TThis::Die(ctx);

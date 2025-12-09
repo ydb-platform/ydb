@@ -135,6 +135,7 @@ namespace NKikimr {
         TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
         TControlWrapper DefragThrottlerBytesRate;
+        TControlWrapper EnableCompactionToken;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
         EBlobHeaderMode BlobHeaderMode;

@@ -1819,6 +1819,13 @@ message TImmediateControlsConfig {
             MaxValue: 100000000000, // 100 GB
             DefaultValue: 10000000, // 10 MB
         }];
+
+        optional uint64 EnableCompactionToken = 40 [(ControlOptions) = {
+            Description: "Enable compaction token",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
     }
 
     message TTabletControls {
@@ -1948,6 +1955,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 70 }];
+        optional uint64 MaxActiveCompactionsPerPDisk = 7 [(ControlOptions) = {
+            Description: "Max active compactions per disk",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 1 }];
     }
 
     message TBlobStorageControllerControls {

@@ -28,6 +28,7 @@ static const THashSet<TString> DATABASE_SERVICES
          TString("storage_pool_stat"),
          TString("tablets"),
          TString("utils"),
+         TString("utils|comp_broker"),
          TString("auth"),
          TString("ydb"),
          TString("pqproxy|writeInfo"),

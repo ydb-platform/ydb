@@ -43,7 +43,7 @@ void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
 void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
     TString topic = "unknown";
 
-    auto it = Topics.find(topicName);
+    auto it = Topics.find(NormalizePath(Context->DatabasePath, topicName));
     if (it != Topics.end() && it->second.Status != ETopicStatus::NOT_FOUND) {
         topic = it->first;
     }

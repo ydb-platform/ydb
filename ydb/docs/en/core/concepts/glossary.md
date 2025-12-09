@@ -239,8 +239,13 @@ For more information, see [{#T}](datamodel/backup-collection.md).
 
 A **backup** is a copy of data at a specific point in time that can be used to restore the data. In the context of [backup collections](#backup-collection), there are two types:
 
-- **Full backup**: A complete snapshot of all data in the collection. Serves as the foundation for [backup chains](#backup-chain) and can be restored independently.
-- **Incremental backup**: Captures only changes (inserts, updates, deletes) since the previous backup. Requires the entire backup chain for restoration.
+#### Full Backup {#full-backup}
+
+A **full backup**: A complete snapshot of all data in the collection. Serves as the foundation for [backup chains](#backup-chain) and can be restored independently.
+
+#### Incremental Backup {#incremental-backup}
+
+A **incremental backup**: Captures only changes (inserts, updates, deletes) since the previous backup. Requires the entire backup chain for restoration.
 
 #### Backup chain {#backup-chain}
 

@@ -1,4 +1,4 @@
-# Full and incremental backups
+# Full and Incremental Backups
 
 A typical production backup setup involves:
 
@@ -80,7 +80,7 @@ RESTORE `production_backups/20250215120000Z_full`;
 
 ## Incremental Backups
 
-If your cluster grows too large for daily full backups, you can take less frequent full backups (e.g., weekly) with daily incremental backups. Incremental backups are storage efficient and faster than full backups for larger clusters.
+If your tables grows too large for daily full backups, you can take less frequent full backups (e.g., weekly) with daily incremental backups. Incremental backups are storage efficient and faster than full backups for larger tables.
 
 An incremental backup captures only the changes (inserts, updates, deletes) that have occurred since the last backup in the collection. Incremental backups are smaller and faster than full backups, but they depend on previous backups in the chain and cannot be restored independently.
 
@@ -90,7 +90,7 @@ An incremental backup captures only the changes (inserts, updates, deletes) that
 - **Large datasets**: For large databases where full backups are time-consuming or resource-intensive, incremental backups provide a more efficient backup strategy.
 - **Production environments**: In production systems with continuous data changes, incremental backups allow you to maintain multiple recovery points without the overhead of full backups.
 
-{% note info %}
+{% note info "Prerequisites" %}
 
 **Prerequisites**: Before creating incremental backups, you must have at least one full backup in the collection. The first backup in any collection is always a full backup.
 

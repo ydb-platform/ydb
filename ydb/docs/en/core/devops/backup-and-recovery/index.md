@@ -59,7 +59,7 @@ When running the export operation, a directory named `export_*` is created in th
 
 ## Backup Collections {#backup-collections}
 
-Backup collections allow the use of the `BACKUP` and `RESTORE` commands to perform full and incremental backups for production workloads. For more information on the concepts and architecture, see [Backup collections](../../concepts/datamodel/backup-collection.md) and for details about full and incremental backup methods, refer to the [Full and Incremental Backups](./full-and-incremental-backups.md) section.
+Backup collections allow the use of the `BACKUP` and `RESTORE` [YQL](../../concepts/glossary.md#yql) commands to perform full and incremental backups for production workloads. For more information on the concepts and architecture, see [Backup collections](../../concepts/datamodel/backup-collection.md) and for details about full and incremental backup methods, refer to the [Full and Incremental Backups](./full-and-incremental-backups.md) section.
 
 Backup collections are best suited for production environments that require scheduled backups, large datasets where incremental backups minimize data transfer, and point-in-time recovery needs.
 

@@ -30,7 +30,7 @@ These terms are essential to understanding backup collections. For detailed defi
 
 Before using backup collections, understand these constraints:
 
-- **Row-oriented tables only**: [Column-oriented tables](table.md#column-oriented-tables) are not supported.
+- **Row-oriented tables only**: [Column-oriented tables](table.md#column-oriented-tables) and [other kinds of schema objects](../glossary.md#scheme-object) are not supported.
 - **One collection per table**: A table can only belong to one backup collection at a time. To back up a table in a different collection, you must first remove it from the existing collection by dropping that collection.
 - **Immutable membership**: Once created, the table list in a collection cannot be modified. To add new tables, create a new collection that includes all desired tables.
 - **No partial restore**: You cannot restore individual tables from a collection; the entire collection is restored together.
@@ -83,7 +83,7 @@ block-beta
 
 {% note warning %}
 
-Schema changes (ALTER TABLE) to tables in a backup collection are not tracked by incremental backups. If you need to modify the schema of a backed-up table, create a new full backup after the schema change to ensure the backup chain reflects the new structure.
+Schema changes (`ALTER TABLE`) to tables in a backup collection are not tracked by incremental backups. If you need to modify the schema of a backed-up table, create a new full backup after the schema change to ensure the backup chain reflects the new structure.
 
 {% endnote %}
 
@@ -124,7 +124,7 @@ By default, backups are stored within the cluster. Cluster-stored backups are de
 
 {% note warning %}
 
-Cluster-stored backups share the same fault domain as the data they protect. If the cluster experiences a failure that exceeds its fault tolerance (such as total cluster loss or catastrophic data center events), both the data and backups may be lost. For protection against such scenarios, use external storage.
+Cluster-stored backups share the same fault domain as the data they protect. If the cluster experiences a large-scale failure beyond its design limits (as defined by the chosen [cluster topology](../topology.md)), both the data and backups may be lost or unavailable. For protection against such scenarios, use external storage for backups.
 
 {% endnote %}
 
@@ -151,7 +151,7 @@ Restoration recovers data from a backup chain to a specified point in time.
 
 1. **Import from external storage** (if applicable): If backups were exported, import the full backup and all incremental backups up to the desired restore point.
 
-2. **Execute restore**: Run `RESTORE collection_name` to restore all tables from the backup collection. The system applies the full backup and all incremental backups in sequence to reach the most recent backup point.
+2. **Execute restore**: Restore all tables from the backup collection. The system applies the full backup and all incremental backups in sequence to reach the most recent backup point.
 
 {% note warning %}
 

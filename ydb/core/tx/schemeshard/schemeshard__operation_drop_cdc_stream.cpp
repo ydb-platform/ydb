@@ -385,6 +385,7 @@ public:
             }
         }
 
+        // Validate all streams exist and are on same table
         TVector<TPath> streamPaths;
         for (const auto& streamName : StreamNames) {
             const auto streamPath = tablePath.Child(streamName);
@@ -461,7 +462,7 @@ public:
                 } else {
                     LOG_N("TDropCdcStreamAtTable: Stream " << streamPath.Base()->Name 
                         << " is busy by txId " << streamPath.Base()->LastTxId);
-                        
+
                     result->SetError(NKikimrScheme::StatusMultipleModifications, 
                         TStringBuilder() << "Stream " << streamPath.Base()->Name << " is busy by another operation");
                     return result;

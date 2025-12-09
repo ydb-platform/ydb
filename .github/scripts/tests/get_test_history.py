@@ -50,7 +50,7 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, b
             status_description,
             job_id,
             job_name,
-            ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS rn
+            ROW_NUMBER() OVER (PARTITION BY suite_folder, test_name ORDER BY run_timestamp DESC) AS rn
         FROM 
             `{test_runs_table}` AS t
         WHERE 

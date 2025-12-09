@@ -6,6 +6,8 @@ import traceback
 import requests
 from concurrent.futures import ThreadPoolExecutor
 
+from ydb.tests.stress.common.publish_metrics import report_verify_exception, report_work_exception
+
 
 class Workload:
     def __init__(self, mon_endpoint, database, duration):
@@ -30,6 +32,7 @@ class Workload:
         finally:
             self.pool_semaphore.release()
 
+    @report_work_exception
     def call_viewer_api_post(self, url, body=None, headers=None):
         if body is None:
             body = {}
@@ -57,6 +60,7 @@ class Workload:
             self.pool.shutdown(wait=True)
             self.pool = None
 
+    @report_verify_exception
     def start(self):
         self.pool = ThreadPoolExecutor(max_workers=100)
         for call in self.loop():

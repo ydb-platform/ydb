@@ -608,7 +608,6 @@ def _setup_eslint(unit: NotsUnitType) -> None:
     if not test_files:
         return
 
-    unit.on_peerdir_ts_resource("eslint")
     user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
     pm = _create_pm(unit)
 
@@ -680,7 +679,6 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if not abs_tsconfig_path:
         raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 
-    unit.on_peerdir_ts_resource("typescript")
     user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
     pm = _create_pm(unit)
 
@@ -729,8 +727,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
     if not test_files:
         return
 
-    unit.on_peerdir_ts_resource("stylelint")
-
     from lib.nots.package_manager import constants
 
     recipes_value = unit.get_subst("TEST_RECIPES_VALUE")
@@ -774,8 +770,6 @@ def _setup_biome(unit: NotsUnitType) -> None:
     test_files = df.TestFiles.ts_biome_srcs(unit, (), {})
     if not test_files:
         return
-
-    unit.on_peerdir_ts_resource("@biomejs/biome")
 
     from lib.nots.package_manager import constants
 

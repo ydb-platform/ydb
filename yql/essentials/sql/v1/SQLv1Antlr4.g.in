@@ -592,7 +592,16 @@ repeatable_clause: REPEATABLE LPAREN expr RPAREN;
 
 join_op:
     COMMA
-  | (NATURAL)? ((LEFT (ONLY | SEMI)? | RIGHT (ONLY | SEMI)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) JOIN
+  | (NATURAL)? (
+      (
+          LEFT  (ONLY | SEMI)?
+        | RIGHT (ONLY | SEMI)?
+        | EXCLUSION
+        | FULL
+      )? (OUTER)?
+      | INNER
+      | CROSS
+    ) JOIN
 ;
 
 join_constraint:

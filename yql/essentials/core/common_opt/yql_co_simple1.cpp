@@ -1,6 +1,7 @@
 #include "yql_co.h"
 #include "yql_co_sqlin.h"
 #include "yql_co_pgselect.h"
+#include "yql_co_yqlselect.h"
 
 #include <yql/essentials/core/sql_types/yql_atom_enums.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -4107,6 +4108,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             }
         }
 
+        if (IsIdentityLambda(*node->Child(1))) {
+            YQL_CLOG(DEBUG, Core) << "Trivial lambda: " << node->Content();
+            return node->HeadPtr();
+        }
+
         return node;
     };
 
@@ -7109,6 +7115,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["YqlSelect"] = &ExpandPgSelect;
     map["YqlIterate"] = &ExpandPgIterate;
+    map["YqlIterateAll"] = &ExpandPgIterate;
 
     map["PgLike"] = &ExpandPgLike;
     map["PgILike"] = &ExpandPgLike;

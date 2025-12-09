@@ -423,6 +423,15 @@ void INode::DoAdd(TNodePtr node) {
     Y_DEBUG_ABORT_UNLESS(false, "Node is not expandable");
 }
 
+bool Init(TContext& ctx, ISource* src, const TVector<TNodePtr>& nodes) {
+    for (const TNodePtr& node : nodes) {
+        if (!node->Init(ctx, src)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 TNodeResult Wrap(TNodePtr node) {
     if (!node) {
         return std::unexpected(ESQLError::Basic);
@@ -1815,6 +1824,10 @@ TNodePtr IAggregation::WrapIfOverState(const TNodePtr& input, bool overState, bo
     }
 
     return Y(ToString("AggOverState"), extractor, BuildLambda(Pos_, Y(), input));
+}
+
+TNodePtr IAggregation::GetExtractor(bool many, TContext& ctx) const {
+    return BuildLambda(Pos_, Y("row"), GetExtractorBody(many, ctx));
 }
 
 void IAggregation::AddFactoryArguments(TNodePtr& apply) const {

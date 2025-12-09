@@ -98,9 +98,11 @@ class LocalCluster:
                 # Check that processes are still alive
                 if self.cluster and self.cluster.nodes:
                     for node_id, node in self.cluster.nodes.items():
-                        if not node.daemon.process.poll() is None:
+                        if node.daemon.process.poll() is not None:
                             logger.error("ydbd process for node %d terminated unexpectedly", node_id)
-                            break
+                            logger.error("Stopping cluster due to unexpected node termination")
+                            self.stop()
+                            return
         except KeyboardInterrupt:
             logger.info("Received interrupt signal")
 
@@ -124,7 +126,7 @@ def main():
         '--working-dir',
         type=str,
         default=None,
-        help='Working directory for cluster data storage (default: temporary directory)'
+        help='Working directory for cluster data storage (default: .ydbd_working_dir in current directory)'
     )
     parser.add_argument(
         '--binary-path',

@@ -97,6 +97,9 @@ class TestResult:
             TestStatus.SKIP: "SKIP",
             TestStatus.MUTE: "MUTE",
         }[self.status]
+        # For ERROR add error_type suffix if present (e.g., ERROR-TIMEOUT)
+        if self.status == TestStatus.ERROR and self.error_type:
+            return f"{base}-{self.error_type}"
         return base
 
     @property
@@ -207,7 +210,7 @@ class TestResult:
         except (TypeError, ValueError):
             elapsed = 0.0
         
-        # Use keyword arguments (HEAD's approach) to ensure all fields are set correctly
+        # Use keyword arguments to ensure all fields are set correctly
         return cls(
             classname=classname,
             name=name,

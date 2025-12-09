@@ -43,16 +43,16 @@ class TestKnn(VectorBase):
 
         cls.pool.execute_with_retries(f"""
             UPSERT INTO `{cls.table_name}` (pk, emb, data) VALUES
-            (0, String::HexDecode("033002"), "0"),
-            (1, String::HexDecode("133102"), "1"),
-            (2, String::HexDecode("233202"), "2"),
-            (3, String::HexDecode("533302"), "3"),
-            (4, String::HexDecode("433402"), "4"),
-            (5, String::HexDecode("506002"), "5"),
-            (6, String::HexDecode("611102"), "6"),
-            (7, String::HexDecode("126202"), "7"),
-            (8, String::HexDecode("757602"), "8"),
-            (9, String::HexDecode("767602"), "9");
+            (0, Unwrap(String::HexDecode("033002")), "0"),
+            (1, Unwrap(String::HexDecode("133102")), "1"),
+            (2, Unwrap(String::HexDecode("233202")), "2"),
+            (3, Unwrap(String::HexDecode("533302")), "3"),
+            (4, Unwrap(String::HexDecode("433402")), "4"),
+            (5, Unwrap(String::HexDecode("506002")), "5"),
+            (6, Unwrap(String::HexDecode("611102")), "6"),
+            (7, Unwrap(String::HexDecode("126202")), "7"),
+            (8, Unwrap(String::HexDecode("757602")), "8"),
+            (9, Unwrap(String::HexDecode("767602")), "9");
         """)
 
         cls.pool.execute_with_retries(f"""

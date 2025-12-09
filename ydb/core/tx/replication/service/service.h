@@ -75,10 +75,23 @@ struct TEvService {
             Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_INFO);
             Record.SetLagMilliSeconds(lag.MilliSeconds());
         }
+
+        explicit TEvWorkerStatus(const TWorkerId& id , ui64 currentOperation, TVector<std::pair<ui64, i64>>&& statsValues) {
+            id.Serialize(*Record.MutableWorker());
+            Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+            Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_STATS);
+            auto* stats = Record.MutableStats();
+            stats->SetCurrentOperation(static_cast<NKikimrReplication::EWorkOperation>(currentOperation));
+            for (auto [k, v] : statsValues) {
+                auto* val = stats->AddValues();
+                val->SetKey(k);
+                val->SetValue(v);
+            }
+        }
     };
 
-    struct TEvWorkerDataEnd: public TEventPB<TEvWorkerDataEnd, NKikimrReplication::TEvWorkerDataEnd, EvWorkerDataEnd> {
-        TEvWorkerDataEnd() = default;
+        struct TEvWorkerDataEnd: public TEventPB<TEvWorkerDataEnd, NKikimrReplication::TEvWorkerDataEnd, EvWorkerDataEnd> {
+            TEvWorkerDataEnd() = default;
     };
 
     struct TEvGetTxId: public TEventPB<TEvGetTxId, NKikimrReplication::TEvGetTxId, EvGetTxId> {

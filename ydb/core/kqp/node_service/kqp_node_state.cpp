@@ -21,11 +21,10 @@ bool TNodeState::AddTasksToRequest(ui64 txId, TActorId executerId, const TVector
     const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
     for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
         if (requestIt->second.ExecuterId == executerId) {
-            if (requestIt->second.ExecutionCancelled) {
-                return false;
-            }
+            YQL_ENSURE(!requestIt->second.ExecutionCancelled, "Request TxId: " << txId << " is already cancelled");
             for (ui64 taskId : taskIds) {
-                requestIt->second.Tasks.emplace(taskId, std::nullopt);
+                auto [_, inserted] = requestIt->second.Tasks.emplace(taskId, std::nullopt);
+                YQL_ENSURE(inserted, "Task " << taskId << " already exists in request TxId: " << txId);
             }
             return true;
         }

@@ -168,8 +168,8 @@ private:
         to.SetIncludeStats(from->include_stats());
     }
 
-    static void BuildRequest(const Replication::DescribeTransferRequest*, NKikimrReplication::TEvDescribeReplication&) {
-        // nop
+    static void BuildRequest(const Replication::DescribeTransferRequest* from, NKikimrReplication::TEvDescribeReplication& to) {
+        to.SetIncludeStats(from->include_stats());
     }
 
 private:

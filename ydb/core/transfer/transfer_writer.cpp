@@ -260,9 +260,9 @@ private:
             Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::DONE));
             return;
         }
+        SendOperationChange(EWorkerOperation::PROCESS);
 
         PollSent = false;
-
         if (!LastWriteTime) {
             LastWriteTime = TInstant::Now();
         }
@@ -304,7 +304,6 @@ private:
                     } else {
                         tablePath = DefaultTablePath;
                     }
-
                     if (!TableState->AddData(std::move(tablePath), m->Data, m->EstimateSize)) {
                         RequiredFlush = true;
                     }
@@ -324,6 +323,7 @@ private:
 
         if (!ProcessingError && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval || RequiredFlush)) {
             if (TableState->Flush()) {
+                SendStats(EWorkerOperation::WRITE);
                 LastWriteTime.reset();
                 return Become(&TThis::StateWrite);
             }
@@ -365,6 +365,7 @@ private:
             << ": worker# " << Worker
             << " status# " << ev->Get()->Status
             << " issues# " << ev->Get()->Issues.ToOneLineString());
+        SendStats(EWorkerOperation::NONE);
 
         const auto status = ev->Get()->Status;
         const auto& error = ev->Get()->Issues.ToOneLineString();
@@ -393,7 +394,6 @@ private:
         if (LastWriteTime) {
             LastWriteTime = TInstant::Now();
         }
-
         return StartWork();
     }
 
@@ -530,6 +530,41 @@ private:
 
     ui32 Attempt = 0;
     TDuration Delay = MinRetryDelay;
+
+    struct TStatsHolder {
+        EWorkerOperation Operation;
+        TInstant StartTime;
+        ui64 StartCpuSec;
+    };
+    TStatsHolder Stats;
+
+private:
+    void ResetStats(EWorkerOperation newState, TTransferWriteStats* dumpTo) {
+        if (dumpTo != nullptr) {
+            if (Stats.Operation == EWorkerOperation::PROCESS) {
+                dumpTo->ProcessCpuMs = (GetElapsedTicksAsSeconds() - Stats.StartCpuSec) * 1000;
+                dumpTo->ProcessDuration = Now() - Stats.StartTime;
+            } else {
+                dumpTo->WriteCpuMs = (GetElapsedTicksAsSeconds() - Stats.StartCpuSec) * 1000;
+                dumpTo->WriteDuration = Now() - Stats.StartTime;
+            }
+        }
+        Stats.StartTime = Now();
+        Stats.StartCpuSec = GetElapsedTicksAsSeconds();
+        Stats.Operation = newState;
+    }
+
+    void SendStats(EWorkerOperation newCurrentOperation) {
+        auto* event = TEvWorker::TEvStatus::FromOperation(Stats.Operation);
+        ResetStats(newCurrentOperation, event->DetailedStats->WriterStats.get());
+        Send(Worker, event);
+    }
+
+    void SendOperationChange(EWorkerOperation currentOperation) {
+        ResetStats(currentOperation, nullptr);
+        auto* event = TEvWorker::TEvStatus::FromOperation(currentOperation);
+        Send(Worker, event);
+    }
 
 }; // TTransferWriter
 

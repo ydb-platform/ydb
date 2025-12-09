@@ -10,6 +10,12 @@ public:
         ui64 id, const IConfig::TPtr& config);
 
     TString GetStreamPath() const override;
+    void UpdateStats(ui64, const NKikimrReplication::TWorkerStats&, NMonitoring::TDynamicCounterPtr) override {
+    }
+
+    const TReplication::ITargetStats* GetStats() const override {
+        return nullptr;
+    }
 
 protected:
     virtual TString BuildStreamPath() const = 0;
@@ -22,7 +28,7 @@ public:
 
         TTableConfig(const TString& srcPath, const TString& dstPath)
             : TConfigBase(ETargetKind::Table, srcPath, dstPath)
-        {}        
+        {}
     };
 
     explicit TTargetTable(TReplication* replication,
@@ -39,7 +45,7 @@ public:
 
         TIndexTableConfig(const TString& srcPath, const TString& dstPath)
             : TConfigBase(ETargetKind::IndexTable, srcPath, dstPath)
-        {}        
+        {}
     };
 
     explicit TTargetIndexTable(TReplication* replication,

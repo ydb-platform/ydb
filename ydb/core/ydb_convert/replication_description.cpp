@@ -119,6 +119,13 @@ void ConvertStats(
     // nop
 }
 
+void ConvertStats(
+    const NKikimrReplication::TReplicationStats& from,
+    Ydb::Replication::DescribeTransferResult& to)
+{
+    to.mutable_stats()->CopyFrom(from);
+}
+
 template<typename T>
 void ConvertState(const NKikimrReplication::TReplicationState& from, T& to) {
     switch (from.GetStateCase()) {
@@ -226,6 +233,9 @@ void FillTransferDescription(
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertState(inDesc.GetState(), out);
     ConvertTransferSpecific(inDesc.GetTransferSpecific(), out);
+    if (inDesc.HasStats()) {
+        ConvertStats(inDesc.GetStats(), out);
+    }
 }
 
 bool FillTransferDescription(

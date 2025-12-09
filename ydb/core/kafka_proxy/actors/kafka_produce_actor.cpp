@@ -487,7 +487,7 @@ bool TKafkaProduceActor::WriterDied(const TActorId& writerId, EKafkaErrors error
             info.Request->WaitAcceptingCookies.erase(cookie);
             info.Request->WaitResultCookies.erase(cookie);
 
-            if (info.Request->WaitAcceptingCookies.empty() && info.Request->WaitResultCookies.empty()) {
+            if (info.Request->WaitResultCookies.empty()) {
                 SendResults(ActorContext());
             }
 

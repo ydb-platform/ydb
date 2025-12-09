@@ -31,6 +31,16 @@ void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NJson::TJs
     db.Table<Schema::OperationsLog>().Key(Index).Update<Schema::OperationsLog::User, Schema::OperationsLog::OperationTimestamp, Schema::OperationsLog::Operation>(User, timestamp.MilliSeconds(), str.Str());
 }
 
+TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev) {
+    auto cgi = ev->Cgi();
+    if (ev->ExtendedQuery) {
+        for (const auto& kv : ev->ExtendedQuery->GetPostParams()) {
+            cgi.emplace(kv.GetKey(), kv.GetValue());
+        }
+    }
+    return cgi;
+}
+
 class TTxMonEvent_DbState : public TTransactionBase<THive> {
 public:
     struct TTabletInfo {
@@ -212,7 +222,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_MEM_STATE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
-        const auto& params(Event->Cgi());
+        const auto& params(GetParams(Event.Get()));
         if (params.contains("bad")) {
             BadOnly = FromStringWithDefault(params.Get("bad"), BadOnly);
         }
@@ -338,7 +348,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
         Y_UNUSED(txc);
         TStringStream str;
-        if (Event->Cgi().Get("format") == "json") {
+        if (GetParams(Event.Get()).Get("format") == "json") {
             RenderJsonPageWithExtraData(str);
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(str.Str()));
         } else {
@@ -729,7 +739,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SETTINGS; }
 
     void UpdateConfig(NIceDb::TNiceDb& db, const TString& param, NJson::TJsonValue& jsonLog, TSchemeIds::State compatibilityParam = TSchemeIds::State::DefaultState) {
-        const auto& params(Event->Cgi());
+        const auto& params(GetParams(Event.Get()));
         if (params.contains(param)) {
             ChangeRequest = true;
             if (Event->GetMethod() != HTTP_METHOD_POST) {
@@ -803,7 +813,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        const auto& params(Event->Cgi());
+        const auto& params(GetParams(Event.Get()));
         NIceDb::TNiceDb db(txc.DB);
 
         NJson::TJsonValue jsonOperation;
@@ -1375,7 +1385,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        NodeId = FromStringWithDefault<TNodeId>(Event->Cgi().Get("node"), 0);
+        NodeId = FromStringWithDefault<TNodeId>(GetParams(Event.Get()).Get("node"), 0);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_TABLET_AVAILABILITY; }
@@ -1399,7 +1409,7 @@ public:
         NJson::TJsonValue jsonOperation;
         jsonOperation["NodeId"] = NodeId;
 
-        const auto& cgi = Event->Cgi();
+        const auto& cgi = GetParams(Event.Get());
         auto changeType = ParseTabletType(cgi.Get("changetype"));
         auto maxCount = TryFromString<ui64>(cgi.Get("maxcount"));
         auto resetType = ParseTabletType(cgi.Get("resettype"));
@@ -1468,7 +1478,7 @@ public:
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
-        , Cgi(Event->Cgi())
+        , Cgi(GetParams(Event.Get()))
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_LANDING; }
@@ -2421,7 +2431,7 @@ public:
         : TBase(hive)
         , Source(source)
         , Event(ev->Release())
-        , Cgi(Event->Cgi())
+        , Cgi(GetParams(Event.Get()))
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_LANDING_DATA; }
@@ -2813,8 +2823,9 @@ public:
         , Event(ev->Release())
         , Source(source)
     {
-        NodeId = FromStringWithDefault<TNodeId>(Event->Cgi().Get("node"), NodeId);
-        Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
+        auto cgi = GetParams(Event.Get());
+        NodeId = FromStringWithDefault<TNodeId>(cgi.Get("node"), NodeId);
+        Wait = FromStringWithDefault(cgi.Get("wait"), Wait);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_DRAIN_NODE; }
@@ -3084,18 +3095,18 @@ public:
 
     static constexpr size_t REASSIGN_SOFT_LIMIT = 500;
 
-    TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+    TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive, const TCgiParameters& params)
         : TBase(hive)
         , Event(ev->Release())
         , Source(source)
-        , TabletFilter(Event->Cgi())
+        , TabletFilter(params)
     {
-        TabletChannels = Scan<ui32>(SplitString(Event->Cgi().Get("channel"), ","));
-        GroupId = FromStringWithDefault(Event->Cgi().Get("group"), GroupId);
-        ForcedGroupIds = Scan<ui32>(SplitString(Event->Cgi().Get("forcedGroup"), ","));
-        Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
-        Async = FromStringWithDefault(Event->Cgi().Get("async"), Async);
-        BypassLimit = FromStringWithDefault(Event->Cgi().Get("bypassLimit"), BypassLimit);
+        TabletChannels = Scan<ui32>(SplitString(params.Get("channel"), ","));
+        GroupId = FromStringWithDefault(params.Get("group"), GroupId);
+        ForcedGroupIds = Scan<ui32>(SplitString(params.Get("forcedGroup"), ","));
+        Wait = FromStringWithDefault(params.Get("wait"), Wait);
+        Async = FromStringWithDefault(params.Get("async"), Async);
+        BypassLimit = FromStringWithDefault(params.Get("bypassLimit"), BypassLimit);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
@@ -3266,7 +3277,7 @@ public:
         , Event(ev->Release())
         , Source(source)
     {
-        Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
+        Wait = FromStringWithDefault(GetParams(Event.Get()).Get("wait"), Wait);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_INIT_MIGRATION; }
@@ -3445,9 +3456,10 @@ public:
         , Event(ev->Release())
         , Source(source)
     {
-        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
-        NodeId = FromStringWithDefault<TNodeId>(Event->Cgi().Get("node"), NodeId);
-        Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
+        auto cgi = GetParams(Event.Get());
+        TabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), TabletId);
+        NodeId = FromStringWithDefault<TNodeId>(cgi.Get("node"), NodeId);
+        Wait = FromStringWithDefault(cgi.Get("wait"), Wait);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_MOVE_TABLET; }
@@ -3539,8 +3551,9 @@ public:
         , Event(ev->Release())
         , Source(source)
     {
-        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
-        Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
+        auto cgi = GetParams(Event.Get());
+        TabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), TabletId);
+        Wait = FromStringWithDefault(cgi.Get("wait"), Wait);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
@@ -3590,10 +3603,11 @@ public:
         , Event(ev->Release())
         , Source(source)
     {
-        ui64 ssId = FromStringWithDefault<ui64>(Event->Cgi().Get("ss"), 0);
-        ui64 pathId = FromStringWithDefault<ui64>(Event->Cgi().Get("path"), 0);
+        auto cgi = GetParams(Event.Get());
+        ui64 ssId = FromStringWithDefault<ui64>(cgi.Get("ss"), 0);
+        ui64 pathId = FromStringWithDefault<ui64>(cgi.Get("path"), 0);
         DomainId = {ssId, pathId};
-        Stop = FromStringWithDefault(Event->Cgi().Get("stop"), Stop);
+        Stop = FromStringWithDefault(cgi.Get("stop"), Stop);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
@@ -3692,8 +3706,9 @@ public:
         , Event(ev->Release())
         , Source(source)
     {
-        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
-        Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
+        auto cgi = GetParams(Event.Get());
+        TabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), TabletId);
+        Wait = FromStringWithDefault(cgi.Get("wait"), Wait);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_STOP_TABLET; }
@@ -3749,13 +3764,14 @@ public:
         , Event(ev->Release())
         , Source(source)
     {
-        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
-        TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(Event->Cgi().Get("type"), TabletType);
-        ChannelFrom = FromStringWithDefault<ui32>(Event->Cgi().Get("channelFrom"), ChannelFrom);
-        ChannelTo = FromStringWithDefault<ui32>(Event->Cgi().Get("channelTo"), ChannelTo);
-        GroupId = FromStringWithDefault(Event->Cgi().Get("group"), GroupId);
-        StoragePool = Event->Cgi().Get("storagePool");
-        TabletPercent = FromStringWithDefault<int>(Event->Cgi().Get("percent"), TabletPercent);
+        auto cgi = GetParams(Event.Get());
+        TabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), TabletId);
+        TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(cgi.Get("type"), TabletType);
+        ChannelFrom = FromStringWithDefault<ui32>(cgi.Get("channelFrom"), ChannelFrom);
+        ChannelTo = FromStringWithDefault<ui32>(cgi.Get("channelTo"), ChannelTo);
+        GroupId = FromStringWithDefault(cgi.Get("group"), GroupId);
+        StoragePool = cgi.Get("storagePool");
+        TabletPercent = FromStringWithDefault<int>(cgi.Get("percent"), TabletPercent);
         TabletPercent = std::min(std::abs(TabletPercent), 100);
     }
 
@@ -3849,7 +3865,7 @@ public:
         , Event(ev->Release())
         , Source(source)
     {
-        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
+        TabletId = FromStringWithDefault<TTabletId>(GetParams(Event.Get()).Get("tablet"), TabletId);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_TABLET_INFO; }
@@ -4215,11 +4231,12 @@ public:
         , Event(ev->Release())
         , Source(source)
     {
-        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
-        SchemeShard = FromStringWithDefault<TTabletId>(Event->Cgi().Get("schemeshard"), SchemeShard);
-        PathId = FromStringWithDefault<TObjectId>(Event->Cgi().Get("pathid"), PathId);
-        OldSchemeShard = FromStringWithDefault<TTabletId>(Event->Cgi().Get("oldSchemeshard"), OldSchemeShard);
-        OldPathId = FromStringWithDefault<TObjectId>(Event->Cgi().Get("oldPathid"), OldPathId);
+        auto cgi = GetParams(Event.Get());
+        TabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), TabletId);
+        SchemeShard = FromStringWithDefault<TTabletId>(cgi.Get("schemeshard"), SchemeShard);
+        PathId = FromStringWithDefault<TObjectId>(cgi.Get("pathid"), PathId);
+        OldSchemeShard = FromStringWithDefault<TTabletId>(cgi.Get("oldSchemeshard"), OldSchemeShard);
+        OldPathId = FromStringWithDefault<TObjectId>(cgi.Get("oldPathid"), OldPathId);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOMAIN; }
@@ -4456,7 +4473,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TStringStream out;
-        const auto& params(Event->Cgi());
+        const auto& params(GetParams(Event.Get()));
         TTabletId filterTabletId = FromStringWithDefault<TTabletId>(params.Get("tablet_id"), (ui64)-1);
         ui64 filterGroupId = FromStringWithDefault<ui64>(params.Get("group_id"), (ui64)-1);
 
@@ -4558,7 +4575,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        Kinds = FromStringWithDefault(Event->Cgi().Get("kinds"), Kinds);
+        Kinds = FromStringWithDefault(GetParams(Event.Get()).Get("kinds"), Kinds);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_STORAGE; }
@@ -4681,7 +4698,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        SubActorToStop = TryFromString<TSubActorId>(Event->Cgi().Get("stop"));
+        SubActorToStop = TryFromString<TSubActorId>(GetParams(Event.Get()).Get("stop"));
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SUBACTORS; }
@@ -4750,7 +4767,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        MaxCount = FromStringWithDefault(Event->Cgi().Get("max"), MaxCount);
+        MaxCount = FromStringWithDefault(GetParams(Event.Get()).Get("max"), MaxCount);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -4871,7 +4888,7 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
         return Execute(new TTxMonEvent_LandingData(ev->Sender, ev, this), ctx);
     }
     if (page == "ReassignTablet") {
-        return Execute(new TTxMonEvent_ReassignTablet(ev->Sender, ev, this), ctx);
+        return Execute(new TTxMonEvent_ReassignTablet(ev->Sender, ev, this, GetParams(ev->Get())), ctx);
     }
     if (page == "InitMigration") {
         return Execute(new TTxMonEvent_InitMigration(ev->Sender, ev, this), ctx);

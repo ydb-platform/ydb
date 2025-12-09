@@ -1,8 +1,12 @@
 # Static Group Move
 
+<<<<<<< HEAD
 {% include [deprecated](_includes/deprecated.md) %}
 
 If you need to decommission a {{ ydb-short-name }} cluster host that contains part of the [static group](../../../reference/configuration/index.md#blob_storage_config), you need to move it to another host.
+=======
+If you need to decommission a {{ ydb-short-name }} cluster host that contains part of the [static group](../../../reference/configuration/blob_storage_config.md#blob_storage_config), you need to move it to another host.
+>>>>>>> e453b431ada ((docs) Mark V2 as experimental feature (#30091))
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}
 

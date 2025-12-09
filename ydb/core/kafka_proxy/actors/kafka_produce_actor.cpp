@@ -43,7 +43,7 @@ void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
 void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
     TString topic = "unknown";
 
-    auto it = Topics.find(topicName);
+    auto it = Topics.find(NormalizePath(Context->DatabasePath, topicName));
     if (it != Topics.end() && it->second.Status != ETopicStatus::NOT_FOUND) {
         topic = it->first;
     }
@@ -415,7 +415,6 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr reque
     expectedCookies.erase(cookie);
 
     if (expectedCookies.empty()) {
-        Become(&TKafkaProduceActor::StateWork);
         ProcessRequests(ctx);
     } else {
         KAFKA_LOG_W("Still in accepting after receive TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << JoinSeq(", ", expectedCookies));
@@ -488,7 +487,7 @@ bool TKafkaProduceActor::WriterDied(const TActorId& writerId, EKafkaErrors error
             info.Request->WaitAcceptingCookies.erase(cookie);
             info.Request->WaitResultCookies.erase(cookie);
 
-            if (info.Request->WaitAcceptingCookies.empty() && info.Request->WaitResultCookies.empty()) {
+            if (info.Request->WaitResultCookies.empty()) {
                 SendResults(ActorContext());
             }
 

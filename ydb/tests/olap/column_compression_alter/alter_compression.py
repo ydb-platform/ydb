@@ -108,11 +108,16 @@ class TestAlterColumnCompression(TestCompressionBase):
         logger.info(f"Table {self.table_path} altered")
         table = ColumnTableHelper(self.ydb_client, self.table_path)
 
-        volumes: tuple[int, int] = table.get_volumes_column("value")
-        koef: float = self.volumes_without_compression[1] / volumes[1]
-        logging.info(
-            f"compression in `{table.path}` {self.volumes_without_compression[1]} / {volumes[1]}: {koef}"
-        )
+        koef: float = 1
+        for _ in range(99):
+            volumes: tuple[int, int] = table.get_volumes_column("value")
+            koef = self.volumes_without_compression[1] / volumes[1]
+            logging.info(
+                f"compression in `{table.path}` {self.volumes_without_compression[1]} / {volumes[1]}: {koef}"
+            )
+            if koef > 1:
+                break
+
         assert koef > 1
 
     def test_alter_to_default(self):

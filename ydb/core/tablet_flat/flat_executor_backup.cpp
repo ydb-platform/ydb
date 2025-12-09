@@ -145,7 +145,7 @@ TFsPath CreateBackupPath(TTabletTypes::EType tabletType, ui64 tabletId, ui32 gen
 
     auto path = TFsPath(tabletTypeName)
         .Child(ToString(tabletId))
-        .Child("backup_" + timestamp + "_g" + ToString(generation) + "_s" + ToString(step));
+        .Child(TStringBuilder() << "backup_" << timestamp << "_g" << generation << "_s" << step);
 
     return path;
 }

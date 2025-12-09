@@ -7278,6 +7278,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Cerr << response << "\n" << res << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         }
+        checkDescribe(4);
         {
             AlterTopicRequest request;
             AlterTopicResponse response;
@@ -7292,7 +7293,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             auto status = pqStub->AlterTopic(&rcontext, request, &response);
 
             UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
+            AlterTopicResult res;
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);

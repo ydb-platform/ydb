@@ -84,12 +84,6 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxTruncateTable);
 
-        if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " UpdatePartitioningForTableModification");
-            NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
-        }
-
         txState->ClearShardsInProgress();
 
         TPath tablePath = TPath::Init(txState->TargetPathId, context.SS);

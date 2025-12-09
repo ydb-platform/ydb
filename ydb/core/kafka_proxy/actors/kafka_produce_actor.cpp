@@ -415,7 +415,6 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr reque
     expectedCookies.erase(cookie);
 
     if (expectedCookies.empty()) {
-        Become(&TKafkaProduceActor::StateWork);
         ProcessRequests(ctx);
     } else {
         KAFKA_LOG_W("Still in accepting after receive TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << JoinSeq(", ", expectedCookies));

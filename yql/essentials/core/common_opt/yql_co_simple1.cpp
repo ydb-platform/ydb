@@ -1668,7 +1668,7 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
     if (isMemberOf(leftArg, topLambdaArg)) {
         // left side of IN is column reference
         result.LeftArgColumns.emplace_back(leftArg->Child(1)->Content());
-    } else if (leftArg->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+    } else if (leftArg->IsList()) {
         // if leftArg is tuple of members then replace tuple with its members
         for (const auto& tupleItem : leftArg->Children()) {
             if (isMemberOf(tupleItem, topLambdaArg)) {
@@ -1714,12 +1714,13 @@ TPredicateChainNode ParsePredicateChainNode(const TExprNode::TPtr& predicate, co
                     .Done()
                     .Ptr();
 
-            if (!result.LeftArgColumns.empty()) {
+            const auto tupleSize = itemType->GetItemType()->Cast<TTupleExprType>()->GetItems().size();
+            if (leftArg->IsList() && result.LeftArgColumns.size() == tupleSize) {
                 auto rowArg = Build<TCoArgument>(ctx, sqlIn.Pos())
                         .Name("row")
                         .Done();
                 auto asStructBuilder = Build<TCoAsStruct>(ctx, sqlIn.Pos());
-                for (size_t i = 0; i < itemType->GetItemType()->Cast<TTupleExprType>()->GetItems().size(); ++i) {
+                for (size_t i = 0; i < tupleSize; ++i) {
                     const TString columnName = TStringBuilder() << "_yql_sqlin_tuple_" << i;
                     asStructBuilder.Add<TCoNameValueTuple>()
                             .Name().Build(columnName)

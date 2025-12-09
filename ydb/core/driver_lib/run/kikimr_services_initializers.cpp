@@ -661,7 +661,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
                 // Interconnect uses rdma mem pool directly
                 const auto counters = GetServiceCounters(appData->Counters, "utils");
-                icCommon->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(counters.Get());
+                NInterconnect::NRdma::TMemPoolSettings memPoolSettings;
+                memPoolSettings.SizeLimitMb = icConfig.GetRdmaMemPoolSizeLimitMb();
+                icCommon->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(counters.Get(), memPoolSettings);
                 // Clients via wrapper to handle allocation fail
                 setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(icCommon->RdmaMemPool);
             }

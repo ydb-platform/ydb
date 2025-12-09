@@ -6,6 +6,9 @@ TYdbException::TYdbException(const std::string& reason) {
     Append(reason);
 }
 
+TAuthenticationError::TAuthenticationError(const std::string& reason)
+    : TYdbException(reason) {}
+
 TContractViolation::TContractViolation(const std::string& reason)
     : TYdbException(reason) {}
 

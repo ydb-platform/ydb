@@ -95,6 +95,7 @@ TExportToS3Response::TExportToS3Response(TStatus&& status, Ydb::Operations::Oper
 
     Metadata_.Settings.Description(metadata.settings().description());
     Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
+    Metadata_.Settings.MaterializeIndexes(metadata.settings().materialize_indexes());
 
     if (!metadata.settings().compression().empty()) {
         Metadata_.Settings.Compression(metadata.settings().compression());
@@ -247,6 +248,7 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     }
 
     request.mutable_settings()->set_disable_virtual_addressing(!settings.UseVirtualAddressing_);
+    request.mutable_settings()->set_materialize_indexes(settings.MaterializeIndexes_);
 
     if (settings.EncryptionAlgorithm_.empty() != settings.SymmetricKey_.empty()) {
         throw TContractViolation("Encryption algorithm and symmetric key must be set together");

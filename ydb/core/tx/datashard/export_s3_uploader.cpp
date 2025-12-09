@@ -6,6 +6,7 @@
 #include "extstorage_usage_config.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/backup/common/checksum.h>
@@ -908,6 +909,9 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
+    NBackup::TMetadata metadata;
+    metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
+
     TVector <TChangefeedExportDescriptions> changefeeds;
     if (AppData()->FeatureFlags.GetEnableChangefeedsExport()) {
         const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
@@ -935,12 +939,24 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         }
     }
 
+    if (scheme) {
+        for (const auto& index : scheme->indexes()) {
+            const auto indexType = NTableIndex::ConvertIndexType(index.type_case());
+            const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
+
+            for (const auto& implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
+                const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
+                metadata.AddIndex(TIndexMetadata{
+                    .ExportPrefix = implTablePrefix,
+                    .ImplTablePrefix = implTablePrefix,
+                });
+            }
+        }
+    }
+
     auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
-
-    NBackup::TMetadata metadata;
-    metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
 
     NBackup::TFullBackupMetadata::TPtr backup = new NBackup::TFullBackupMetadata{
         .SnapshotVts = NBackup::TVirtualTimestamp(

@@ -37,8 +37,8 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
 
     auto operation = scheme.MutableCreateTableIndex();
     operation->SetName(dst.LeafName());
-
     operation->SetType(indexInfo->Type);
+    operation->SetState(indexInfo->State);
 
     for (const auto& keyName: indexInfo->IndexKeys) {
         *operation->MutableKeyColumnNames()->Add() = keyName;
@@ -195,6 +195,7 @@ bool CreateConsistentCopyTables(
                                        TStringBuilder{} << "Consistent copy table doesn't support table with index type " << indexInfo->Type)};
                 return false;
             }
+            scheme->SetInternal(tx.GetInternal());
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
 
             for (const auto& [srcImplTableName, srcImplTablePathId] : srcIndexPath.Base()->GetChildren()) {

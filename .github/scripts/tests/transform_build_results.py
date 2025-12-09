@@ -219,6 +219,11 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             name = result.get("name", "")
             subtest_name = result.get("subtest_name", "")
             
+            # Replace :: with . in name (pytest format uses ::, we use .)
+            if name:
+                name = name.replace(".py::", ".py.")
+                result["name"] = name  # Update the result to normalize the format
+            
             test_name = path_str
             if name:
                 test_name = f"{path_str}/{name}"

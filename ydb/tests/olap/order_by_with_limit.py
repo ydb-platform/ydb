@@ -246,3 +246,37 @@ class TestOrderBy(object):
         )
 
         assert len(result_sets[0].rows) == 1000
+
+    def test_sorting_bug(self):
+        test_dir = f"{self.ydb_client.database}/{self.test_name}"
+        table_path = f"{test_dir}/test_sorting_bug"
+
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                id Int32 NOT NULL,
+                PRIMARY KEY(id),
+            )
+            WITH (
+                STORE = COLUMN,
+                PARTITION_COUNT = 1
+            )
+            """
+        )
+
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("id", ydb.PrimitiveType.Int32)
+
+        portion1 = [{"id": 4}, {"id": 2}]
+        portion2 = [{"id": 3}, {"id": 1}]
+
+        self.ydb_client.bulk_upsert(table_path, column_types, portion1)
+        self.ydb_client.bulk_upsert(table_path, column_types, portion2)
+
+        self.ydb_client.query(f"DELETE FROM `{table_path}`")
+
+        assert len(self.ydb_client.query(
+            f"""
+            SELECT * FROM `{table_path}` ORDER by id DESC LIMIT 100;
+            """
+        )[0].rows) == 0

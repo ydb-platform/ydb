@@ -96,7 +96,14 @@ class TestCreateWithColumnCompression(TestCompressionBase):
 
         volumes = table.get_volumes_column("value")
         assert volumes[0] == expected_raw
-        assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == expected_raw // 8
+
+        actual_rows = 0
+        for _ in range(99):
+            actual_rows = table.get_portion_stat_by_tier()['__DEFAULT']['Rows']
+            if actual_rows == expected_raw // 8:
+                break
+
+        assert actual_rows == expected_raw // 8
 
     @pytest.mark.parametrize("suffix, compression_settings", COMPRESSION_CASES)
     def test_create_with_compression(self, suffix: str, compression_settings: str):

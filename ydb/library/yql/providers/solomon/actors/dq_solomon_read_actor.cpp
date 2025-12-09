@@ -282,10 +282,14 @@ public:
         NThreading::TFuture<NSo::TGetDataResponse> dataRequestFuture;
         
         auto request = std::move(retryDataEvent.Request);
-        if (UseMetricsQueue) {
-            dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
-        } else {
-            dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
+        try {
+            if (UseMetricsQueue) {
+                dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
+            } else {
+                dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
+            }
+        } catch (const std::exception& ex) {
+            dataRequestFuture = NThreading::MakeFuture(NSo::TGetDataResponse(TString(ex.what())));
         }
 
         dataRequestFuture.Subscribe([request = std::move(request), actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](
@@ -502,10 +506,14 @@ private:
         MetricsWithTimeRange.pop_back();
         CurrentInflight++;
 
-        if (UseMetricsQueue) {
-            dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
-        } else {
-            dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
+        try {
+            if (UseMetricsQueue) {
+                dataRequestFuture = SolomonClient->GetData(request.Selectors, request.From, request.To);
+            } else {
+                dataRequestFuture = SolomonClient->GetData(request.Program, request.From, request.To);
+            }
+        } catch (const std::exception& ex) {
+            dataRequestFuture = NThreading::MakeFuture(NSo::TGetDataResponse(TString(ex.what())));
         }
 
         PendingDataRequests_[request] = RetryPolicy->CreateRetryState();

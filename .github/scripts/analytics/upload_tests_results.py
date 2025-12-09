@@ -90,40 +90,39 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
             continue
         
         suite_folder = result.get("path", "")
+        name_part = result.get("name", "")
         subtest_name = result.get("subtest_name", "")
-        test_name = subtest_name if subtest_name else ""
+        
+        # Format test_name: name.subtest_name (same as generate-summary.py)
+        # This matches the format used in generate-summary.py and other scripts
+        if subtest_name:
+            if name_part:
+                test_name = f"{name_part}.{subtest_name}"
+            else:
+                test_name = subtest_name
+        else:
+            test_name = name_part
         
         # Get duration from metrics
         metrics = result.get("metrics", {})
         duration = metrics.get("elapsed_time", 0)
         
         # Determine status
-        # Status can be "OK" or "PASSED" for passed tests
         status_str = result.get("status", "OK")
         if status_str == "OK":
             status_str = "PASSED"
         error_type = result.get("error_type", "")
-        status_description = result.get("rich-snippet", "")
-        
-        # Check for timeout - this information is available in build-results-report but not in junit
-        is_timeout = error_type == "TIMEOUT" or "timeout" in error_type.lower() or "timeout" in (status_description or "").lower()
+        status_description = result.get("rich-snippet", "")  # Already cleaned by transform_build_results.py
         
         if result.get("muted", False):
             status = "mute"
         elif status_str == "FAILED":
-            if is_timeout:
-                # Timeout is a special case
-                status = "error"
-                if status_description and "timeout" not in status_description.lower():
-                    status_description = f"Timeout: {status_description}"
-            elif error_type == "REGULAR":
+            if error_type == "REGULAR":
                 status = "failure"
             else:
                 status = "error"
         elif status_str == "ERROR":
             status = "error"
-            if is_timeout and status_description and "timeout" not in status_description.lower():
-                status_description = f"Timeout: {status_description}"
         elif status_str == "SKIPPED":
             status = "skipped"
         else:
@@ -264,6 +263,7 @@ def prepare_rows_for_upload(results_with_owners):
             'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
             'test_name': row['test_name'],
             'error_type': row.get('error_type'),
+            # Format: path/name.subtest_name (same as generate-summary.py)
             'full_name': f"{row['suite_folder']}/{row['test_name']}",
             'metadata': row.get('metadata'),  # JSON string from parse_build_results_report
             'metrics': row.get('metrics'),  # JSON string from parse_build_results_report

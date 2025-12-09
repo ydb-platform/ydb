@@ -2940,7 +2940,7 @@ public:
         std::variant<std::monostate, TTabletId, TAllTablets> TabletId;
         TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
 
-        TTabletFilter(const TCgiParameters& cgi) {
+        explicit TTabletFilter(const TCgiParameters& cgi) {
             auto tablet = cgi.Get("tablet");
             if (tablet == "all") {
                 TabletId = TAllTablets();
@@ -3045,7 +3045,7 @@ public:
             Error = "cannot reassign all tablets";
             return true;
         }
-        auto tablets= Self->Tablets
+        auto tablets = Self->Tablets
             | std::views::transform([](auto&& p) -> TLeaderTabletInfo* { return &p.second; })
             | std::views::filter(TabletFilter);
 

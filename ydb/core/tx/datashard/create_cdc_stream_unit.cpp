@@ -20,7 +20,6 @@ public:
         return true;
     }
 
-
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         Y_ENSURE(op->IsSchemeTx());
 
@@ -28,7 +27,6 @@ public:
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto& schemeTx = tx->GetSchemeTx();
-        
         if (!schemeTx.HasCreateCdcStreamNotice() && !schemeTx.HasCreateIncrementalBackupSrc()) {
             return EExecutionStatus::Executed;
         }
@@ -87,7 +85,6 @@ public:
             schemeTx.HasCreateCdcStreamNotice() ?
             schemeTx.GetCreateCdcStreamNotice() :
             schemeTx.GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
-            
         const auto& streamDesc = params.GetStreamDescription();
         const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
 

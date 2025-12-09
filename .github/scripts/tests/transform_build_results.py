@@ -219,12 +219,14 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             name = result.get("name", "")
             subtest_name = result.get("subtest_name", "")
             
-            # Construct full test name for mute check: path/name/subtest_name
             test_name = path_str
             if name:
                 test_name = f"{path_str}/{name}"
             if subtest_name:
-                test_name = f"{path_str}/{name}/{subtest_name}" if name else f"{path_str}/{subtest_name}"
+                if name:
+                    test_name = f"{path_str}/{name}.{subtest_name}"
+                else:
+                    test_name = f"{path_str}/{subtest_name}"
 
             # Check if test should be muted
             if mute_check(suite_name, test_name):

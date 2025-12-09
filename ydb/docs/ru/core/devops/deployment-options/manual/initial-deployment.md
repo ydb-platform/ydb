@@ -386,7 +386,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
 - Аутентификация включена
 
-    Для первичного поднятия кластера при включённой авторизации необходимо использовать клиентские сертификаты (mTLS). Сертификаты должны соответствовать правилам, установленным в разделе [`client_certificate_authorization`](../../../reference/configuration/client_certificate_authorization.md) конфигурационного файла кластера.
+    Для первичного поднятия кластера при включённой аутентификации необходимо использовать клиентские сертификаты (mTLS). Сертификаты должны соответствовать правилам, установленным в разделе [`client_certificate_authorization`](../../../reference/configuration/client_certificate_authorization.md) конфигурационного файла кластера.
 
     На одном из серверов хранения в составе кластера выполните команду:
 
@@ -441,21 +441,21 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
     Необходимо получить аутентификационный токен. Может использоваться файл с токеном аутентификации, полученный при выполнении [инициализации кластера](#initialize-cluster), либо подготовлен новый токен.
 
-    Файл токена необходимо скопировать на один из серверов хранения в составе кластера, а затем на выбранном сервере выполнить команды:
+    Файл токена необходимо скопировать на сервер, с которого будет выполняться команда (это может быть любой узел с доступом к кластеру и установленным {{ ydb-short-name }} CLI), а затем выполнить:
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+    /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://<node.ydb.tech>:2135 \
         admin database /Root/testdb create ssd:1
     echo $?
     ```
 - Аутентификация выключена
 
-    На одном из серверов хранения в составе кластера выполните команды:
+    На сервере с доступом к кластеру и установленным {{ ydb-short-name }} CLI выполните:
 
     ```bash
     export LD_LIBRARY_PATH=/opt/ydb/lib
-    /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+    /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://<node.ydb.tech>:2135 \
         admin database /Root/testdb create ssd:1
     echo $?
     ```

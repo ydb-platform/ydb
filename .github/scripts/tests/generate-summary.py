@@ -115,41 +115,53 @@ class TestResult:
 
     @property
     def full_name(self):
-        return f"{self.classname}/{self.name}"
+        if self.classname:
+            return f"{self.classname}/{self.name}"
+        return self.name
 
     @classmethod
     def from_build_results_report(cls, result):
-        """Create TestResult from build-results-report JSON result"""
-        path_str = result.get("path", "")
-        name_part = result.get("name", "")
-        subtest_name = result.get("subtest_name", "")
+        """
+        Create TestResult from build-results-report JSON result.
         
-        # Format: path/name.subtest_name (where . is between name and subtest_name, / is between path and name)
+        Required fields: path, status
+        Optional fields: name, subtest_name, error_type, rich-snippet, properties, links, metrics
+        """
+        # Validate required fields
+        path_str = result.get("path")
+        if path_str is None:
+            raise ValueError(f"Missing required field 'path' in result: {result}")
+        
+        status_str = result.get("status")
+        if status_str is None:
+            raise ValueError(f"Missing required field 'status' in result: {result}")
+        
+        # Extract fields
+        name_part = result.get("name")
+        subtest_name = result.get("subtest_name")
+        error_type = result.get("error_type")
+        status_description = result.get("rich-snippet")
+        properties = result.get("properties")
+        metrics = result.get("metrics")
+        is_muted = bool(result.get("muted"))
+        
         classname = path_str
-        # Combine name_part and subtest_name with . (not /) if both exist
-        if subtest_name:
+        if subtest_name and subtest_name.strip():
             if name_part:
                 name = f"{name_part}.{subtest_name}"
             else:
                 name = subtest_name
         else:
-            name = name_part
+            name = name_part or ""
         
-        # Status can be "OK" or "PASSED" for passed tests
-        status_str = result.get("status", "OK")
         if status_str == "OK":
             status_str = "PASSED"
-        error_type = result.get("error_type", "")
-        status_description = result.get("rich-snippet", "")
         
         # Map status to TestStatus enum
-        if result.get("muted", False):
+        if is_muted:
             status = TestStatus.MUTE
         elif status_str == "FAILED":
-            if error_type == "REGULAR":
-                status = TestStatus.FAIL
-            else:
-                status = TestStatus.ERROR
+            status = TestStatus.FAIL if error_type == "REGULAR" else TestStatus.ERROR
         elif status_str == "ERROR":
             status = TestStatus.ERROR
         elif status_str == "SKIPPED":
@@ -157,34 +169,37 @@ class TestResult:
         else:
             status = TestStatus.PASS
         
-        # Extract log URLs from properties or links
-        # In build-results-report, links is an object with arrays: {"stdout": ["/path"], "stderr": ["/path"]}
-        # Properties are added later by transform_build_results.py with URL format
+        # Extract log URLs from properties
+        # Properties (added by transform_build_results.py) contain URLs in format: {"url:log": "...", "url:stdout": "..."}
         log_urls = {}
-        properties = result.get("properties") or {}  # properties can be None
-        links = result.get("links") or {}  # links can be None
-        
-        # Check properties first (added by transform_build_results.py with URLs)
-        if isinstance(properties, dict):
+        if properties and isinstance(properties, dict):
             for key in ['Log', 'log', 'logsdir', 'stdout', 'stderr']:
                 url = properties.get(f"url:{key}") or properties.get(key)
                 if url:
                     log_urls[key] = url
         
-        # If not in properties, check links (original format with file paths)
-        # links contains arrays, but URLs will be added by transform_build_results.py
-        # We don't extract file paths here as they need to be converted to URLs
+        # Extract elapsed time from metrics
+        elapsed = 0.0
+        if metrics and isinstance(metrics, dict):
+            elapsed_time = metrics.get("elapsed_time")
+            if elapsed_time is not None:
+                try:
+                    elapsed = float(elapsed_time)
+                except (TypeError, ValueError):
+                    elapsed = 0.0
         
-        # Get elapsed time from metrics
-        metrics = result.get("metrics", {})
-        elapsed = metrics.get("elapsed_time", 0)
-        
-        try:
-            elapsed = float(elapsed)
-        except (TypeError, ValueError):
-            elapsed = 0
-        
-        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, error_type, is_sanitizer_issue(status_description))
+        return cls(
+            classname=classname,
+            name=name,
+            status=status,
+            log_urls=log_urls,
+            elapsed=elapsed,
+            count_of_passed=0,
+            owners='',
+            status_description=status_description or '',
+            error_type=error_type or '',
+            is_sanitizer_issue=is_sanitizer_issue(status_description or '')
+        )
 
 
 class TestSummaryLine:
@@ -468,7 +483,7 @@ def iter_build_results_files(path):
             with open(fn, 'r') as f:
                 report = json.load(f)
             
-            for result in report.get("results", []):
+            for result in report.get("results") or []:
                 if result.get("type") == "test":
                     yield fn, result
         except (json.JSONDecodeError, KeyError) as e:

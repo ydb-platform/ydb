@@ -224,18 +224,18 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                 name = name.replace(".py::", ".py.")
                 result["name"] = name  # Update the result to normalize the format
             
-            test_name = path_str
-            if name:
-                test_name = f"{path_str}/{name}"
+            test_name_for_mute = ""
             if subtest_name:
                 if name:
-                    test_name = f"{path_str}/{name}.{subtest_name}"
+                    test_name_for_mute = f"{name}.{subtest_name}"
                 else:
-                    test_name = f"{path_str}/{subtest_name}"
+                    test_name_for_mute = subtest_name
+            else:
+                test_name_for_mute = name
 
             # Check if test should be muted
-            if mute_check(suite_name, test_name):
-                log_print("mute", suite_name, test_name)
+            if mute_check(suite_name, test_name_for_mute):
+                log_print("mute", suite_name, test_name_for_mute)
                 mute_test_result(result)
 
             # Check if test failed

@@ -325,7 +325,7 @@ private:
     void TerminateActorExecution(Ydb::StatusIds::StatusCode replyStatus, const NYql::TIssues& replyIssues) {
         LOG_I("Script execution finalized, cancel response status: " << replyStatus << ", issues: " << replyIssues.ToOneLineString());
         for (auto& req : CancelRequests) {
-            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues));
+            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues), 0, req->Cookie);
         }
         PassAway();
     }
@@ -726,13 +726,13 @@ private:
             CancelRequests.emplace_front(std::move(ev));
             break;
         case ERunState::Cancelled:
-            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already cancelled"));
+            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already cancelled"), 0, ev->Cookie);
             break;
         case ERunState::Finishing:
             CancelRequests.emplace_front(std::move(ev));
             break;
         case ERunState::Finished:
-            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"));
+            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"), 0, ev->Cookie);
             break;
         }
     }

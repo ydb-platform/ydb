@@ -224,6 +224,11 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                 name = name.replace(".py::", ".py.")
                 result["name"] = name  # Update the result to normalize the format
             
+            # Convert FAILED to ERROR for suite results
+            if result.get("suite") and result.get("status") == "FAILED":
+                result["status"] = "ERROR"
+                log_print(f"Converted suite FAILED to ERROR for {suite_name}")
+            
             test_name_for_mute = ""
             if subtest_name:
                 if name:

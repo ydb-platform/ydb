@@ -128,37 +128,42 @@ class TestResult:
         Required fields: path, status
         Optional fields: name, subtest_name, error_type, rich-snippet, properties, links, metrics
         """
-        # Extract fields with defaults (main's approach - more lenient)
-        path_str = result.get("path", "")
+        # Validate required fields
+        path_str = result.get("path")
+        if path_str is None:
+            raise ValueError(f"Missing required field 'path' in result: {result}")
+        
+        status_str = result.get("status")
+        if status_str is None:
+            raise ValueError(f"Missing required field 'status' in result: {result}")
+        
+        # Extract optional fields
         name_part = result.get("name", "")
         subtest_name = result.get("subtest_name", "")
         error_type = result.get("error_type", "")
         status_description = result.get("rich-snippet", "")
+        properties = result.get("properties")
+        metrics = result.get("metrics")
+        links = result.get("links")
+        is_muted = bool(result.get("muted"))
         
-        # Format: path/name.subtest_name (where . is between name and subtest_name, / is between path and name)
         classname = path_str
-        # Combine name_part and subtest_name with . (not /) if both exist
-        if subtest_name:
+        if subtest_name and subtest_name.strip():
             if name_part:
                 name = f"{name_part}.{subtest_name}"
             else:
                 name = subtest_name
         else:
-            name = name_part
+            name = name_part or ""
         
-        # Status can be "OK" or "PASSED" for passed tests
-        status_str = result.get("status", "OK")
         if status_str == "OK":
             status_str = "PASSED"
         
         # Map status to TestStatus enum
-        if result.get("muted", False):
+        if is_muted:
             status = TestStatus.MUTE
         elif status_str == "FAILED":
-            if error_type == "REGULAR":
-                status = TestStatus.FAIL
-            else:
-                status = TestStatus.ERROR
+            status = TestStatus.FAIL if error_type == "REGULAR" else TestStatus.ERROR
         elif status_str == "ERROR":
             status = TestStatus.ERROR
         elif status_str == "SKIPPED":
@@ -166,21 +171,17 @@ class TestResult:
         else:
             status = TestStatus.PASS
         
-        # Extract log URLs from properties or links (main's approach)
+        # Extract log URLs from properties or links
         # In build-results-report, links is an object with arrays: {"stdout": ["/path"], "stderr": ["/path"]}
         # Properties are added later by transform_build_results.py with URL format
         log_urls = {}
-        properties = result.get("properties") or {}  # properties can be None
-        links = result.get("links") or {}  # links can be None
-        
-        # Check properties first (added by transform_build_results.py with URLs)
-        if isinstance(properties, dict):
+        if properties and isinstance(properties, dict):
             for key in ['Log', 'log', 'logsdir', 'stdout', 'stderr']:
                 url = properties.get(f"url:{key}") or properties.get(key)
                 if url:
                     log_urls[key] = url
         
-        # Fallback to links if not in properties (HEAD's approach - check links as fallback)
+        # Fallback to links if not in properties
         if not log_urls and isinstance(links, dict):
             def get_link_url(link_type):
                 if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
@@ -192,16 +193,15 @@ class TestResult:
                 if url and key not in log_urls:
                     log_urls[key] = url
         
-        # Get elapsed time from metrics (main's approach)
-        metrics = result.get("metrics", {})
-        elapsed = metrics.get("elapsed_time", 0)
-        
-        try:
-            elapsed = float(elapsed)
-        except (TypeError, ValueError):
-            elapsed = 0.0
-        
-        # Use keyword arguments to ensure all fields are set correctly
+        # Extract elapsed time from metrics
+        elapsed = 0.0
+        if metrics and isinstance(metrics, dict):
+            elapsed_time = metrics.get("elapsed_time")
+            if elapsed_time is not None:
+                try:
+                    elapsed = float(elapsed_time)
+                except (TypeError, ValueError):
+                    elapsed = 0.0
         return cls(
             classname=classname,
             name=name,
@@ -498,7 +498,6 @@ def iter_build_results_files(path):
             with open(fn, 'r') as f:
                 report = json.load(f)
             
-            # Use main's approach - don't skip suite entries (main's logic)
             for result in report.get("results", []):
                 if result.get("type") == "test":
                     yield fn, result

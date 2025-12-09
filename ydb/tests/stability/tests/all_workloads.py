@@ -97,7 +97,6 @@ def _init_stress_utils():
         'TestShard': {
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
-                "--channels", "dynamic_storage_pool:1,dynamic_storage_pool:1,dynamic_storage_pool:1"
             ],
             'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard'
         },

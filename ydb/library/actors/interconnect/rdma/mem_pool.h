@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/util/rc_buf.h>
 
+#include <library/cpp/time_provider/monotonic.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/vector.h>
 
@@ -86,6 +87,7 @@ namespace NInterconnect::NRdma {
         
         friend class TChunk;
         friend class TMemPoolImpl;
+        friend class TCqActor;
 
         virtual ~IMemPool() = default;
 
@@ -98,6 +100,8 @@ namespace NInterconnect::NRdma {
         virtual TMemRegion* AllocImpl(int size, ui32 flags) noexcept = 0;
         virtual void Free(TMemRegion&& mr, TChunk& chunk) noexcept = 0;
         virtual void DealocateMr(std::vector<ibv_mr*>& mrs) noexcept = 0;
+    private:
+        virtual void Tick(NMonotonic::TMonotonic time) noexcept = 0;
     };
 
     std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;

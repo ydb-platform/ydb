@@ -204,7 +204,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
                         // Lookup for index update
                         ++readPhases;
                     }
-                    
+
                     for (const auto& index : sinkSettings.GetIndexes()) {
                         if (index.GetIsUniq()) {
                             // Unique index check
@@ -291,6 +291,10 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
         for (const auto &stage : tx.GetStages()) {
             for (const auto &source : stage.GetSources()) {
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource){
+                    return true;
+                }
+
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
                     return true;
                 }
             }
@@ -390,6 +394,10 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
             for (const auto& source : stage.GetSources()) {
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     if (modifiedTables.contains(getTable(source.GetReadRangesSource().GetTable()))) {
+                        return true;
+                    }
+                } else if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                    if (modifiedTables.contains(getTable(source.GetFullTextSource().GetTable()))) {
                         return true;
                     }
                 } else {

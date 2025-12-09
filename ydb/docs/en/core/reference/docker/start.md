@@ -44,3 +44,69 @@ For more information about environment variables available when running a Docker
 With the parameters specified in the example above and running Docker locally, [Embedded UI](../embedded-ui/index.md) will be available at [http://localhost:8765](http://localhost:8765).
 
 For more information about stopping and deleting a Docker container with {{ ydb-short-name }}, see [{#T}](cleanup.md).
+
+### Overriding the configuration file
+
+To override the configuration file when starting the container, you can use the `--config-path` parameter, specifying the path to your configuration file, which has been pre-mounted in the container:
+
+```bash
+docker run "${docker_args[@]}" --config-path /path/to/your/config/file
+```
+
+For users who are not experienced with Docker, it's important to understand how to properly mount a configuration file into the container. Below is a step-by-step example:
+
+1. Run the container without specifying a configuration file and without mounting the data directory, so that it generates a default configuration:
+   ```bash
+   docker run -d \
+     --rm \
+     --name ydb-local \
+     -h localhost \
+     -v $(pwd)/ydb_certs:/ydb_certs \
+     -e GRPC_TLS_PORT=2135 \
+     -e GRPC_PORT=2136 \
+     -e MON_PORT=8765 \
+     {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+   ```
+
+2. Create a directory for your configuration files and copy the generated configuration file from the container directly to it:
+  ```bash
+  mkdir ydb_config
+  docker cp ydb-local:/ydb_data/cluster/kikimr_configs/config.yaml ydb_config/my-ydb-config.yaml
+  ```
+
+3. Stop the container if it's still running, and remove the created data directory:
+  ```bash
+  docker stop ydb-local
+  rm -rf ydb_data
+  ```
+
+4. Edit the copied configuration file `ydb_config/my-ydb-config.yaml` as needed.
+
+6. When running the container, use the `-v` flag to mount the directory with your configuration file into the container:
+   ```bash
+   docker_args=(
+       -d
+       --rm
+       --name ydb-local
+       -h localhost
+       -p 2135:2135
+       -p 2136:2136
+       -p 8765:8765
+       -v $(pwd)/ydb_data:/ydb_data
+       -v $(pwd)/ydb_config:/ydb_config
+       -v $(pwd)/ydb_certs:/ydb_certs
+       -e GRPC_TLS_PORT=2135
+       -e GRPC_PORT=2136
+       -e MON_PORT=8765
+       {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+   )
+
+   docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
+   ```
+
+   In this example:
+   - `$(pwd)/ydb_config` - the local directory on your computer with the configuration file
+   - `/ydb_config` - directory inside the container where your local directory will be mounted
+   - `/ydb_config/my-ydb-config.yaml` - path to the configuration file inside the container
+
+This way, your local configuration file becomes accessible inside the container at the specified path.

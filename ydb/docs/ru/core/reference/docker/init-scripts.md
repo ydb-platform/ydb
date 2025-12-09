@@ -38,9 +38,9 @@ Docker-контейнер {{ ydb-short-name }} поддерживает поль
 
 ```
 /init.d/
-├── 01-create-tables.sql
+├── 01-create-tables.sh
 ├── 02-create-indexes.sql
-└── 03-insert-data.sql
+└── 03-insert-data.sql.gz
 ```
 
 ## Переменные окружения

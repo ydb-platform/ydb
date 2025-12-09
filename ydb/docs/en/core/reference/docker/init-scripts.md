@@ -38,9 +38,9 @@ Scripts are executed in alphabetical order within each directory. Use numeric pr
 
 ```
 /init.d/
-├── 01-create-tables.sql
+├── 01-create-tables.sh
 ├── 02-create-indexes.sql
-└── 03-insert-data.sql
+└── 03-insert-data.sql.gz
 ```
 
 ## Environment variables

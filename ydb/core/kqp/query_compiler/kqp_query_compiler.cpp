@@ -1679,7 +1679,7 @@ private:
         vectorTopK.SetColumn(readColumnIndexes.at(settings.VectorTopColumn));
 
         // Unique columns - required when we read from the index posting table and overlap is enabled
-        if (settings.VectorTopUnique) {
+        if (settings.VectorTopDistinct) {
             for (const auto& keyColumn: mainTable->Metadata->KeyColumnNames) {
                 YQL_ENSURE(readColumnIndexes.contains(keyColumn));
                 vectorTopK.AddDistinctColumns(readColumnIndexes.at(keyColumn));

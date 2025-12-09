@@ -663,7 +663,7 @@ void VectorTopMain(TExprContext& ctx, const TCoTopBase& top, TExprNodePtr& read)
 
 // FIXME Most of this rewriting should probably be handled in kqp/opt/physical
 // Logical optimizer should only rewrite it to something like TKqlReadTableVectorIndex
-// This would remove the need for skipping KqpApplyExtractMembersToReadTable based on settings.VectorTopUnique
+// This would remove the need for skipping KqpApplyExtractMembersToReadTable based on settings.VectorTopDistinct
 
 TExprBase DoRewriteTopSortOverKMeansTree(
     const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
@@ -751,7 +751,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    settings.VectorTopUnique = true;
+    settings.VectorTopDistinct = true;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (flatMap) {
@@ -888,7 +888,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    settings.VectorTopUnique = true;
+    settings.VectorTopDistinct = true;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (mainLambda) {

@@ -4,6 +4,7 @@ import time
 import logging
 from typing import Dict, List, Tuple, Any, Optional, Union
 from enum import Enum
+from dataclasses import dataclass, field
 import ydb
 from ydb.tests.stress.common.common import WorkloadBase
 
@@ -11,41 +12,46 @@ from ydb.tests.stress.common.common import WorkloadBase
 logger = logging.getLogger(__name__)
 
 
+@dataclass
 class WorkloadConfig:
     """Configuration constants for the secondary index workload"""
+
     # Table structure constants
-    COLUMNS = 8
-    PRIMARY_KEY_MAX_COLUMNS = 2
-    SECONDARY_KEY_MAX_COLUMNS = 2
-    COVER_MAX_COLUMNS = 2
-    ALLOWED_SECONDARY_INDEXES_COUNT = [1, 2, 3, 8, 16]
-    UNIQUE_INDEXES_ALLOWED = True
-    UNIQUE_INDEX_PROBALITY = 0.1
-    NULL_PROBABILITY = 0.05
+    columns: int = 8
+    primary_key_max_columns: int = 2
+    secondary_key_max_columns: int = 2
+    cover_max_columns: int = 2
+    allowed_secondary_indexes_count: List[int] = field(default_factory=lambda: [1, 2, 3, 8, 16])
+    unique_indexes_allowed: bool = True
+    unique_index_probability: float = 0.1
+    null_probability: float = 0.05
 
     # Column types
-    ALLOWED_COLUMN_TYPES = ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64", "Utf8", "String", "Bool"]
+    allowed_column_types: List[str] = field(
+        default_factory=lambda: ["Uint32", "Uint64", "Int32", "Int64", "Uint8", "Bool", "Int8", "String", "Utf8"]
+    )
 
     # Data generation constants
-    MAX_PRIMARY_KEY_VALUE = 100  # update the same rows
-    MAX_VALUE = 100000
-    MAX_OPERATIONS = 4
-    MAX_ROWS_PER_OPERATION = 4
-    INSERTS_ALLOWED = True
+    max_primary_key_value: int = 100  # update the same rows
+    max_value: int = 100000
+    max_operations: int = 4
+    max_rows_per_operation: int = 4
+    inserts_allowed: bool = True
 
     # Workload execution constants
-    TABLES_INFLIGHT = 32
-    JOBS_PER_TABLE = 1
-    OPERATIONS_PER_JOB = 64
-    CHECK_OPERATIONS_PERIOD = 10
+    tables_inflight: int = 32
+    jobs_per_table: int = 1
+    operations_per_job: int = 128
+    check_operations_period: int = 1
 
     # Retry configuration
-    MAX_RETRIES = 3
-    RETRY_DELAY = 0.5  # seconds
+    max_retries: int = 3
+    retry_delay: float = 0.5  # seconds
 
 
 class OperationType(Enum):
     """Enumeration of supported database operations"""
+
     INSERT = 0
     REPLACE = 1
     UPSERT = 2
@@ -55,24 +61,99 @@ class OperationType(Enum):
     DELETE_ON = 6
 
 
+class YdbTypeError(Exception):
+    """Exception raised for unsupported YDB types"""
+
+    pass
+
+
+class WorkloadError(Exception):
+    """Base exception for workload-related errors"""
+
+    pass
+
+
+class TableVerificationError(WorkloadError):
+    """Exception raised during table verification"""
+
+    pass
+
+
+@dataclass
 class IndexInfo:
     """Index information"""
-    def __init__(self, unique: bool, columns: List[int], cover: Optional[List[int]] = None):
-        self.unique = unique
-        self.columns = columns
-        self.cover = cover if cover is not None else []
+
+    unique: bool
+    columns: List[int]
+    cover: List[int] = field(default_factory=list)
 
 
+@dataclass
 class TableInfo:
     """Table information"""
-    def __init__(self, primary_key_size: int, indexes: List[IndexInfo], column_types: List[str] = None):
-        self.primary_key_size = primary_key_size
-        self.indexes = indexes
-        self.column_types = column_types
+
+    primary_key_size: int
+    indexes: List[IndexInfo]
+    column_types: List[str]
+
+
+class TypeConverter:
+    """Handles conversion between Python types and YDB types"""
+
+    # Mapping from YDB type strings to YDB primitive types
+    TYPE_MAPPING = {
+        "Uint8": ydb.PrimitiveType.Uint8,
+        "Uint32": ydb.PrimitiveType.Uint32,
+        "Uint64": ydb.PrimitiveType.Uint64,
+        "Int8": ydb.PrimitiveType.Int8,
+        "Int32": ydb.PrimitiveType.Int32,
+        "Int64": ydb.PrimitiveType.Int64,
+        "Bool": ydb.PrimitiveType.Bool,
+        "Utf8": ydb.PrimitiveType.Utf8,
+        "String": ydb.PrimitiveType.String,
+    }
+
+    @classmethod
+    def get_ydb_type(cls, type_str: str) -> ydb.PrimitiveType:
+        """Get YDB primitive type from type string"""
+        if type_str not in cls.TYPE_MAPPING:
+            raise YdbTypeError(f"Unknown type: {type_str}")
+        return cls.TYPE_MAPPING[type_str]
+
+    @classmethod
+    def convert_value(cls, value: Any, type_str: str) -> Any:
+        """Convert a Python value to the appropriate YDB format"""
+        if value is None:
+            return None
+
+        if type_str in ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64"]:
+            return int(value)
+        elif type_str == "Bool":
+            return bool(value)
+        elif type_str in ["Utf8", "String"]:
+            if isinstance(value, str):
+                return value.encode()
+            return value
+        else:
+            raise YdbTypeError(f"Unknown type: {type_str}")
+
+    @classmethod
+    def create_optional_type(cls, type_str: str) -> ydb.OptionalType:
+        """Create an optional YDB type from type string"""
+        return ydb.OptionalType(cls.get_ydb_type(type_str))
+
+    @classmethod
+    def create_struct_type(cls, column_types: List[str], field_names: List[str]) -> ydb.StructType:
+        """Create a YDB struct type from column types and field names"""
+        struct_type = ydb.StructType()
+        for field_name, col_type in zip(field_names, column_types):
+            struct_type.add_member(field_name, cls.create_optional_type(col_type))
+        return struct_type
 
 
 class WorkloadStats:
     """Thread-safe statistics tracking for the workload"""
+
     def __init__(self):
         self.operations = 0
         self.precondition_failed = 0
@@ -102,6 +183,130 @@ class WorkloadStats:
             )
 
 
+class ParameterBuilder:
+    """Helper class for building YDB query parameters"""
+
+    @staticmethod
+    def create_list_parameter(
+        operation_id: int, rows: List[List[Any]], column_types: List[str], prefix: str = ""
+    ) -> Tuple[List[str], Dict[str, Any]]:
+        """
+        Create a list parameter for batch operations
+
+        Args:
+            operation_id: ID of the operation
+            rows: List of rows, each row is a list of values
+            column_types: List of column types
+            prefix: Optional prefix for parameter names
+
+        Returns:
+            Tuple of (parameter_declarations, parameters_dict)
+        """
+        param_declarations = []
+        parameters = {}
+
+        # Create a single parameter that is a List of Structs
+        param_name = f"$p{operation_id}_{prefix}rows"
+
+        # Build the struct type definition with optional types
+        struct_fields = [f"c{i}: Optional<{col_type}>" for i, col_type in enumerate(column_types)]
+        param_declarations.append(f"DECLARE {param_name} AS List<Struct<{', '.join(struct_fields)}>>;")
+
+        # Convert rows to list of dicts for the parameter
+        rows_list = []
+        for row in rows:
+            row_dict = {}
+            for i, value in enumerate(row):
+                if value is not None:
+                    row_dict[f"c{i}"] = TypeConverter.convert_value(value, column_types[i])
+                else:
+                    row_dict[f"c{i}"] = None
+            rows_list.append(row_dict)
+
+        # Create the parameter with the list of rows and its type
+        field_names = [f"c{i}" for i in range(len(column_types))]
+        struct_type = TypeConverter.create_struct_type(column_types, field_names)
+        list_type = ydb.ListType(struct_type)
+
+        parameters[param_name] = ydb.TypedValue(rows_list, list_type)
+
+        return param_declarations, parameters
+
+    @staticmethod
+    def create_struct_parameter(
+        operation_id: int, values: List[Any], column_types: List[str], param_name_suffix: str
+    ) -> Tuple[List[str], Dict[str, Any]]:
+        """
+        Create a struct parameter for single row operations
+
+        Args:
+            operation_id: ID of the operation
+            values: List of values
+            column_types: List of column types
+            param_name_suffix: Suffix for the parameter name
+
+        Returns:
+            Tuple of (parameter_declarations, parameters_dict)
+        """
+        param_name = f"$p{operation_id}_{param_name_suffix}"
+
+        # Build the struct type definition with optional types
+        struct_fields = [f"{param_name_suffix}_{i}: Optional<{col_type}>" for i, col_type in enumerate(column_types)]
+        param_declarations = [f"DECLARE {param_name} AS Struct<{', '.join(struct_fields)}>;"]
+
+        # Create parameter values
+        param_value = {}
+        for i, value in enumerate(values):
+            if value is not None:
+                param_value[f"{param_name_suffix}_{i}"] = TypeConverter.convert_value(value, column_types[i])
+            else:
+                param_value[f"{param_name_suffix}_{i}"] = None
+
+        # Create the parameter with its type
+        field_names = [f"{param_name_suffix}_{i}" for i in range(len(column_types))]
+        struct_type = TypeConverter.create_struct_type(column_types, field_names)
+
+        parameters = {param_name: ydb.TypedValue(param_value, struct_type)}
+
+        return param_declarations, parameters
+
+
+class SqlBuilder:
+    """Helper class for building SQL queries"""
+
+    @staticmethod
+    def build_index_description(index_id: int, index_info: IndexInfo, column_names: List[str]) -> str:
+        """Build the SQL description for a secondary index"""
+        parts = [f"INDEX idx{index_id} GLOBAL"]
+
+        if index_info.unique:
+            parts.append("UNIQUE")
+
+        parts.append("SYNC ON")
+        parts.append(f"({','.join(column_names[col] for col in index_info.columns)})")
+
+        if index_info.cover:
+            parts.append(f"COVER ({','.join(column_names[col] for col in index_info.cover)})")
+
+        return " ".join(parts)
+
+    @staticmethod
+    def build_where_clause(column_names: List[str], values: List[Any], param_name: str, field_name: str) -> List[str]:
+        """Build a WHERE clause with parameters"""
+        where_clause = []
+        for i, (col, value) in enumerate(zip(column_names, values)):
+            if value is None:
+                where_clause.append(f"{col} IS NULL")
+            else:
+                where_clause.append(f"{col} = {param_name}.{field_name}_{i}")
+        return where_clause
+
+    @staticmethod
+    def build_set_clause(column_names: List[str], param_name: str, field_name: str) -> List[str]:
+        """Build a SET clause with parameters"""
+        return [f"{col} = {param_name}.{field_name}_{i}" for i, col in enumerate(column_names)]
+
+
 class WorkloadSecondaryIndex(WorkloadBase):
     """
     Workload for testing secondary indexes in YDB.
@@ -110,14 +315,26 @@ class WorkloadSecondaryIndex(WorkloadBase):
     and performs different operations to test index functionality.
     """
 
-    def __init__(self, client, prefix, stop):
+    def __init__(self, client, prefix, stop, config: Optional[WorkloadConfig] = None):
         super().__init__(client, prefix, "secondary_index", stop)
+
+        # Configuration
+        self.config = config or WorkloadConfig()
 
         # Statistics tracking
         self.stats = WorkloadStats()
 
         # Column names cache
-        self._column_names = [f"c{i}" for i in range(WorkloadConfig.COLUMNS)]
+        self._column_names = [f"c{i}" for i in range(self.config.columns)]
+
+        # Type converter
+        self._type_converter = TypeConverter()
+
+        # SQL builder
+        self._sql_builder = SqlBuilder()
+
+        # Parameter builder
+        self._param_builder = ParameterBuilder()
 
     def get_stat(self) -> str:
         """Get workload statistics"""
@@ -125,22 +342,22 @@ class WorkloadSecondaryIndex(WorkloadBase):
 
     def generate_table(self) -> TableInfo:
         """Generate a table with different types of secondary indexes"""
-        primary_key_size = random.randint(1, WorkloadConfig.PRIMARY_KEY_MAX_COLUMNS)
+        primary_key_size = random.randint(1, self.config.primary_key_max_columns)
         indexes = []
 
         # Generate random column types
-        column_types = [random.choice(WorkloadConfig.ALLOWED_COLUMN_TYPES) for _ in range(WorkloadConfig.COLUMNS)]
+        column_types = [random.choice(self.config.allowed_column_types) for _ in range(self.config.columns)]
 
         # Generate secondary indexes
-        for _ in range(random.choice(WorkloadConfig.ALLOWED_SECONDARY_INDEXES_COUNT)):
+        for _ in range(random.choice(self.config.allowed_secondary_indexes_count)):
             columns = self._generate_index_columns(primary_key_size)
             cover = self._generate_cover_columns(primary_key_size, columns)
 
             indexes.append(
                 IndexInfo(
                     unique=(
-                        (random.randint(0, 1000000) < WorkloadConfig.UNIQUE_INDEX_PROBALITY * 1000000)
-                        if WorkloadConfig.UNIQUE_INDEXES_ALLOWED
+                        (random.random() < self.config.unique_index_probability)
+                        if self.config.unique_indexes_allowed
                         else False
                     ),
                     columns=columns,
@@ -159,7 +376,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
             primary_key_size == len(columns) and all(col < primary_key_size for col in columns)
         ):
             columns = random.sample(
-                range(WorkloadConfig.COLUMNS), random.randint(1, WorkloadConfig.SECONDARY_KEY_MAX_COLUMNS)
+                range(self.config.columns), random.randint(1, self.config.secondary_key_max_columns)
             )
 
         return columns
@@ -169,15 +386,13 @@ class WorkloadSecondaryIndex(WorkloadBase):
         if not random.choice([True, False]):
             return []
 
-        available_columns = [
-            x for x in range(WorkloadConfig.COLUMNS) if x >= primary_key_size and x not in index_columns
-        ]
+        available_columns = [x for x in range(self.config.columns) if x >= primary_key_size and x not in index_columns]
 
         if not available_columns:
             return []
 
         return random.sample(
-            available_columns, random.randint(0, min(WorkloadConfig.COVER_MAX_COLUMNS, len(available_columns)))
+            available_columns, random.randint(0, min(self.config.cover_max_columns, len(available_columns)))
         )
 
     def create_table(self, table_name: str, table_info: TableInfo) -> None:
@@ -193,7 +408,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
         # Generate index definitions
         indexes = []
         for i, index_info in enumerate(table_info.indexes):
-            idx_desc = self._build_index_description(i, index_info)
+            idx_desc = self._sql_builder.build_index_description(i, index_info, self._column_names)
             indexes.append(idx_desc)
 
         create_sql = f"""
@@ -215,38 +430,20 @@ class WorkloadSecondaryIndex(WorkloadBase):
 
         self._execute_query_with_retry(drop_sql, is_ddl=True)
 
-    def _build_index_description(self, index_id: int, index_info: IndexInfo) -> str:
-        """Build the SQL description for a secondary index"""
-        idx_desc = f"INDEX idx{index_id} GLOBAL "
-
-        if index_info.unique:
-            idx_desc += "UNIQUE "
-
-        idx_desc += "SYNC ON ("
-        idx_desc += ','.join(self._column_names[col] for col in index_info.columns)
-        idx_desc += ") "
-
-        if index_info.cover:
-            idx_desc += "COVER ("
-            idx_desc += ','.join(self._column_names[col] for col in index_info.cover)
-            idx_desc += ") "
-
-        return idx_desc
-
     def run_job(self, table: str, table_info: TableInfo, job_key: int) -> None:
         """Perform various operations on tables with secondary indexes"""
         logger.info(f"Starting job {job_key} for table {table}")
 
         operations = 0
 
-        while operations < WorkloadConfig.OPERATIONS_PER_JOB and not self.is_stop_requested():
+        while operations < self.config.operations_per_job and not self.is_stop_requested():
             try:
                 self._run_operations(table, table_info)
 
                 self.stats.increment_operations()
                 operations += 1
 
-                if operations % WorkloadConfig.CHECK_OPERATIONS_PERIOD == 0:
+                if operations % self.config.check_operations_period == 0:
                     logger.info(f"Job {job_key} for {table} completed {operations} operations. Run verify.")
                     self.verify_table(table, table_info)
             except ydb.issues.PreconditionFailed as e:
@@ -262,7 +459,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
         self.create_table(table_name, table_info)
 
         threads = []
-        for i in range(WorkloadConfig.JOBS_PER_TABLE):
+        for i in range(self.config.jobs_per_table):
             thread = threading.Thread(
                 target=self.run_job, args=(table_name, table_info, i), name=f"{table_name} job:{i}"
             )
@@ -282,11 +479,11 @@ class WorkloadSecondaryIndex(WorkloadBase):
     def _get_batch(self, pk_size: int, pk_only: bool, table_info: TableInfo = None) -> List[List[Any]]:
         """Generate a batch of rows for operations"""
         batch_rows = []
-        rows_count = random.randint(1, WorkloadConfig.MAX_ROWS_PER_OPERATION)
+        rows_count = random.randint(1, self.config.max_rows_per_operation)
 
         for _ in range(rows_count):
             row = []
-            for i in range(WorkloadConfig.COLUMNS if not pk_only else pk_size):
+            for i in range(self.config.columns if not pk_only else pk_size):
                 row.append(self._generate_value_by_type(table_info.column_types[i], i < pk_size))
             batch_rows.append(row)
 
@@ -294,10 +491,10 @@ class WorkloadSecondaryIndex(WorkloadBase):
 
     def _generate_value_by_type(self, column_type: str, is_pk: bool) -> Union[int, bool, str, None]:
         """Generate a value based on column type"""
-        if random.random() < WorkloadConfig.NULL_PROBABILITY:
+        if random.random() < self.config.null_probability:
             return None
         elif column_type in ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64"]:
-            return random.randint(1, WorkloadConfig.MAX_PRIMARY_KEY_VALUE if is_pk else WorkloadConfig.MAX_VALUE)
+            return random.randint(1, self.config.max_primary_key_value if is_pk else self.config.max_value)
         elif column_type == "Bool":
             return random.choice([True, False])
         elif column_type in ["Utf8", "String"]:
@@ -305,55 +502,64 @@ class WorkloadSecondaryIndex(WorkloadBase):
             length = random.randint(1, 100)
             return ''.join(random.choice([chr(i) for i in range(ord('a'), ord('z'))]) for _ in range(length))
         else:
-            raise Exception(f"Unknown type {column_type}")
+            raise YdbTypeError(f"Unknown type {column_type}")
 
     def _run_operations(self, table: str, table_info: TableInfo) -> None:
         """Execute a batch of operations on the specified table"""
-        operations_count = random.randint(1, WorkloadConfig.MAX_OPERATIONS)
-        queries = []
+        operations_count = random.randint(1, self.config.max_operations)
+        declare_statements = []
+        operation_queries = []
+        all_parameters = {}
+
+        # Get available operation types based on configuration
+        available_operations = list(OperationType)
+        if not self.config.inserts_allowed:
+            available_operations = [op for op in available_operations if op != OperationType.INSERT]
 
         for operation_id in range(operations_count):
-            operation_type = random.choice(
-                list(
-                    filter(
-                        lambda x: True if WorkloadConfig.INSERTS_ALLOWED else x != OperationType.INSERT, OperationType
-                    )
-                )
-            )
+            operation_type = random.choice(available_operations)
 
-            if operation_type == OperationType.INSERT:
-                queries.append(self._insert_operation(operation_id, table, table_info))
-            elif operation_type == OperationType.REPLACE:
-                queries.append(self._replace_operation(operation_id, table, table_info))
-            elif operation_type == OperationType.UPSERT:
-                queries.append(self._upsert_operation(operation_id, table, table_info))
-            elif operation_type == OperationType.UPDATE:
-                queries.append(self._update_operation(operation_id, table, table_info))
-            elif operation_type == OperationType.DELETE:
-                queries.append(self._delete_operation(operation_id, table, table_info))
-            elif operation_type == OperationType.UPDATE_ON:
-                queries.append(self._update_on_operation(operation_id, table, table_info))
-            elif operation_type == OperationType.DELETE_ON:
-                queries.append(self._delete_on_operation(operation_id, table, table_info))
+            # Use a dispatch dictionary to avoid repetitive if-elif chains
+            operation_handlers = {
+                OperationType.INSERT: self._insert_operation,
+                OperationType.REPLACE: self._replace_operation,
+                OperationType.UPSERT: self._upsert_operation,
+                OperationType.UPDATE: self._update_operation,
+                OperationType.DELETE: self._delete_operation,
+                OperationType.UPDATE_ON: self._update_on_operation,
+                OperationType.DELETE_ON: self._delete_on_operation,
+            }
 
-        query = '\n'.join(queries)
-        logger.debug(f"Executing operations: {query}")
-        self._execute_query_with_retry(query, is_ddl=False)
+            handler = operation_handlers.get(operation_type)
+            if handler:
+                declare, query, parameters = handler(operation_id, table, table_info)
+                declare_statements.extend(declare)
+                operation_queries.append(query)
+                all_parameters.update(parameters)
 
-    def _execute_query_with_retry(self, query: str, is_ddl: bool) -> Any:
+        # Combine all DECLARE statements at the beginning, followed by all operations
+        query = '\n'.join(declare_statements + operation_queries)
+        logger.debug("Executing operations")
+        self._execute_query_with_retry(query, is_ddl=False, parameters=all_parameters)
+
+    def _execute_query_with_retry(self, query: str, is_ddl: bool, parameters: Dict[str, Any] = None) -> Any:
         """Execute a query with retry logic for handling transient failures"""
         last_exception = None
 
-        for attempt in range(WorkloadConfig.MAX_RETRIES):
+        for attempt in range(self.config.max_retries):
             try:
-                return self.client.query(query, is_ddl)
+                if parameters:
+                    logger.debug(f"Query: {query} Params: {parameters}")
+                    return self.client.query(query, is_ddl, parameters)
+                else:
+                    return self.client.query(query, is_ddl)
             except (ydb.issues.Aborted, ydb.issues.Unavailable, ydb.issues.Undetermined) as e:
                 last_exception = e
-                if attempt < WorkloadConfig.MAX_RETRIES - 1:
-                    logger.warning(f"Query failed (attempt {attempt + 1}/{WorkloadConfig.MAX_RETRIES}): {e}")
-                    time.sleep(WorkloadConfig.RETRY_DELAY * (2**attempt))  # Exponential backoff
+                if attempt < self.config.max_retries - 1:
+                    logger.warning(f"Query failed (attempt {attempt + 1}/{self.config.max_retries}): {e}")
+                    time.sleep(self.config.retry_delay * (2**attempt))  # Exponential backoff
                 else:
-                    logger.error(f"Query failed after {WorkloadConfig.MAX_RETRIES} attempts: {e}")
+                    logger.error(f"Query failed after {self.config.max_retries} attempts: {e}")
             except Exception:
                 # Don't retry on non-transient errors
                 raise
@@ -361,170 +567,166 @@ class WorkloadSecondaryIndex(WorkloadBase):
         # If we get here, all retries failed
         raise last_exception
 
-    def _insert_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate INSERT operation SQL"""
+    def _insert_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate INSERT operation SQL with parameters"""
         table_path = self.get_table_path(table)
         batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
 
-        values_list = []
-        for row in batch_rows:
-            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
-            values_list.append(f"({', '.join(values)})")
+        # Create parameter declarations and parameters
+        param_declarations, parameters = self._param_builder.create_list_parameter(
+            operation_id, batch_rows, table_info.column_types
+        )
 
-        return f"""
-            INSERT INTO `{table_path}` ({', '.join(self._column_names)})
-            VALUES {', '.join(values_list)};
+        query = f"""
+            INSERT INTO `{table_path}`
+            SELECT * FROM AS_TABLE($p{operation_id}_rows);
         """
 
-    def _upsert_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate UPSERT operation SQL"""
+        return param_declarations, query, parameters
+
+    def _upsert_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate UPSERT operation SQL with parameters"""
         table_path = self.get_table_path(table)
         batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
 
-        values_list = []
-        for row in batch_rows:
-            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
-            values_list.append(f"({', '.join(values)})")
+        # Create parameter declarations and parameters
+        param_declarations, parameters = self._param_builder.create_list_parameter(
+            operation_id, batch_rows, table_info.column_types
+        )
 
-        return f"""
-            UPSERT INTO `{table_path}` ({', '.join(self._column_names)})
-            VALUES {', '.join(values_list)};
+        query = f"""
+            UPSERT INTO `{table_path}`
+            SELECT * FROM AS_TABLE($p{operation_id}_rows);
         """
 
-    def _replace_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate REPLACE operation SQL"""
+        return param_declarations, query, parameters
+
+    def _replace_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate REPLACE operation SQL with parameters"""
         table_path = self.get_table_path(table)
         batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
 
-        values_list = []
-        for row in batch_rows:
-            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
-            values_list.append(f"({', '.join(values)})")
+        # Create parameter declarations and parameters
+        param_declarations, parameters = self._param_builder.create_list_parameter(
+            operation_id, batch_rows, table_info.column_types
+        )
 
-        return f"""
-            REPLACE INTO `{table_path}` ({', '.join(self._column_names)})
-            VALUES {', '.join(values_list)};
+        query = f"""
+            REPLACE INTO `{table_path}`
+            SELECT * FROM AS_TABLE($p{operation_id}_rows);
         """
 
-    def _update_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate UPDATE operation SQL"""
+        return param_declarations, query, parameters
+
+    def _update_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate UPDATE operation SQL with parameters"""
         table_path = self.get_table_path(table)
         batch = self._get_batch(table_info.primary_key_size, False, table_info)
         pk_size = table_info.primary_key_size
 
         # Generate primary key values
         pk_values = batch[0][:pk_size]
+        pk_types = table_info.column_types[:pk_size]
 
         # Generate update values for non-primary key columns
         update_columns = self._column_names[pk_size:]
         update_values = batch[0][pk_size:]
+        update_types = table_info.column_types[pk_size:]
 
-        # Generate SET clause
-        set_clause = []
-        for i, (col, val) in enumerate(zip(update_columns, update_values)):
-            col_type = table_info.column_types[pk_size + i]
-            formatted_val = self._format_value_by_type(val, col_type)
-            set_clause.append(f"{col} = {formatted_val}")
+        # Create parameters for SET and WHERE clauses
+        set_param_decls, set_params = self._param_builder.create_struct_parameter(
+            operation_id, update_values, update_types, "set_values"
+        )
 
-        # Generate WHERE clause for primary key
-        where_clause = []
-        for i in range(pk_size):
-            col_type = table_info.column_types[i]
-            if pk_values[i] is None:
-                where_clause.append(f"{self._column_names[i]} IS NULL")
-            else:
-                formatted_val = self._format_value_by_type(pk_values[i], col_type)
-                where_clause.append(f"{self._column_names[i]} = {formatted_val}")
+        where_param_decls, where_params = self._param_builder.create_struct_parameter(
+            operation_id, pk_values, pk_types, "where_values"
+        )
 
-        return f"""
+        # Combine all parameter declarations and parameters
+        param_declarations = set_param_decls + where_param_decls
+        parameters = {**set_params, **where_params}
+
+        # Generate SET clause with parameters
+        set_clause = self._sql_builder.build_set_clause(update_columns, f"$p{operation_id}_set_values", "set_values")
+
+        # Generate WHERE clause for primary key with parameters
+        where_clause = self._sql_builder.build_where_clause(
+            self._column_names[:pk_size], pk_values, f"$p{operation_id}_where_values", "where_values"
+        )
+
+        query = f"""
             UPDATE `{table_path}`
             SET {', '.join(set_clause)}
             WHERE {' AND '.join(where_clause)};
         """
 
-    def _delete_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate DELETE operation SQL"""
+        return param_declarations, query, parameters
+
+    def _delete_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate DELETE operation SQL with parameters"""
         table_path = self.get_table_path(table)
         pk_size = table_info.primary_key_size
         pk_values = self._get_batch(pk_size, True, table_info)[0]
+        pk_types = table_info.column_types[:pk_size]
 
-        # Generate WHERE clause for primary key
-        where_clause = []
-        for i in range(pk_size):
-            col_type = table_info.column_types[i]
-            if pk_values[i] is None:
-                where_clause.append(f"{self._column_names[i]} IS NULL")
-            else:
-                formatted_val = self._format_value_by_type(pk_values[i], col_type)
-                where_clause.append(f"{self._column_names[i]} = {formatted_val}")
+        # Create parameter for WHERE clause
+        where_param_decls, where_params = self._param_builder.create_struct_parameter(
+            operation_id, pk_values, pk_types, "where_values"
+        )
 
-        return f"""
+        # Generate WHERE clause for primary key with parameters
+        where_clause = self._sql_builder.build_where_clause(
+            self._column_names[:pk_size], pk_values, f"$p{operation_id}_where_values", "where_values"
+        )
+
+        query = f"""
             DELETE FROM `{table_path}`
             WHERE {' AND '.join(where_clause)};
         """
 
-    def _update_on_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate UPDATE ON operation SQL"""
+        return where_param_decls, query, where_params
+
+    def _update_on_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate UPDATE ON operation SQL with parameters"""
         table_path = self.get_table_path(table)
         batch_rows = self._get_batch(table_info.primary_key_size, False, table_info)
 
-        values_list = []
-        for row in batch_rows:
-            values = [self._format_value_by_type(value, table_info.column_types[i]) for i, value in enumerate(row)]
-            values_list.append(f"({', '.join(values)})")
+        param_declarations, parameters = self._param_builder.create_list_parameter(
+            operation_id, batch_rows, table_info.column_types
+        )
 
-        return f"""
-            UPDATE `{table_path}` ON ({', '.join(self._column_names)})
-            VALUES {', '.join(values_list)};
+        query = f"""
+            UPDATE `{table_path}` ON
+            SELECT * FROM AS_TABLE($p{operation_id}_rows);
         """
 
-    def _delete_on_operation(self, operation_id: int, table: str, table_info: TableInfo) -> str:
-        """Generate DELETE ON operation SQL"""
+        return param_declarations, query, parameters
+
+    def _delete_on_operation(self, operation_id: int, table: str, table_info: TableInfo) -> Tuple[str, Dict[str, Any]]:
+        """Generate DELETE ON operation SQL with parameters"""
         table_path = self.get_table_path(table)
         pk_size = table_info.primary_key_size
         batch_rows = self._get_batch(pk_size, True, table_info)
 
-        pk_columns = self._column_names[:pk_size]
+        pk_column_types = table_info.column_types[:pk_size]
+        pk_batch_rows = [[row[i] for i in range(pk_size)] for row in batch_rows]
 
-        values_list = []
-        for row in batch_rows:
-            values = []
-            for i in range(pk_size):
-                col_type = table_info.column_types[i]
-                formatted_val = self._format_value_by_type(row[i], col_type)
-                values.append(formatted_val)
-            values_list.append(f"({', '.join(values)})")
+        param_declarations, parameters = self._param_builder.create_list_parameter(
+            operation_id, pk_batch_rows, pk_column_types
+        )
 
-        return f"""
-            DELETE FROM `{table_path}` ON ({', '.join(pk_columns)})
-            VALUES {', '.join(values_list)};
+        query = f"""
+            DELETE FROM `{table_path}` ON
+            SELECT * FROM AS_TABLE($p{operation_id}_rows);
         """
 
-    def _format_value_by_type(self, value: Any, column_type: str) -> str:
-        """Format a value based on its column type for SQL queries"""
-
-        # Handle NULL values
-        if value is None:
-            return "NULL"
-
-        formated_value = None
-        if column_type in ["Uint8", "Uint32", "Uint64", "Int8", "Int32", "Int64"]:
-            formated_value = str(value)
-        elif column_type == "Bool":
-            formated_value = "true" if value else "false"
-        elif column_type in ["Utf8", "String"]:
-            formated_value = f"'{value}'"
-        else:
-            raise Exception(f"Unknown type {column_type}")
-
-        return f'CAST({formated_value} AS {column_type})'
+        return param_declarations, query, parameters
 
     def verify_table(self, table_name: str, table_info: TableInfo) -> None:
         """Verify data consistency between main table and its index tables"""
         table_path = self.get_table_path(table_name)
         logger.info(f"Verifying table {table_path} and its index tables...")
 
-        table_info = table_info
         indexes = table_info.indexes
 
         # Build query to fetch data from main table and all index tables
@@ -580,7 +782,7 @@ class WorkloadSecondaryIndex(WorkloadBase):
 
         # Check data size consistency
         if len(main_data) != len(index_data):
-            raise Exception(
+            raise TableVerificationError(
                 f"Data size mismatch between main table {table_name} and index {index_id}: "
                 f"main={len(main_data)}, index={len(index_data)}"
             )
@@ -588,12 +790,12 @@ class WorkloadSecondaryIndex(WorkloadBase):
         # Check data consistency
         for key, main_row in main_data.items():
             if key not in index_data:
-                raise Exception(f"Key {key} not found in index {index_id} for table {table_name}")
+                raise TableVerificationError(f"Key {key} not found in index {index_id} for table {table_name}")
 
             index_row = index_data[key]
             for column in index_row.keys():
                 if main_row[column] != index_row[column]:
-                    raise Exception(
+                    raise TableVerificationError(
                         f"Data mismatch between main table {table_name} and index {index_id} "
                         f"for key {key} and column {column}: "
                         f"main={main_row[column]}, index={index_row[column]}"
@@ -613,14 +815,14 @@ class WorkloadSecondaryIndex(WorkloadBase):
             key = tuple(row[f'c{col}'] for col in index_desc.columns)
             # NULL != NULL for secondary index
             if None not in key and key in index_keys:
-                raise Exception(f"Duplicate key {key} found in index {index_id} for table {table_name}")
+                raise TableVerificationError(f"Duplicate key {key} found in index {index_id} for table {table_name}")
             index_keys.add(key)
 
     def _loop(self):
         """Main loop for the workload"""
         while not self.is_stop_requested():
             threads = []
-            for table_name in [f'test{i}' for i in range(WorkloadConfig.TABLES_INFLIGHT)]:
+            for table_name in [f'test{i}' for i in range(self.config.tables_inflight)]:
                 threads.append(
                     threading.Thread(target=lambda t=table_name: self.run_for_table(t), name=f'{table_name}')
                 )

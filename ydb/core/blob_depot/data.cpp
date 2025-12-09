@@ -217,6 +217,7 @@ namespace NKikimr::NBlobDepot {
                 RefCountS3.erase(it);
                 TotalS3DataSize -= locator.Len;
 
+                BDEV(BDEV27, "delete_S3", (BDT, Self->TabletID()), (Key, key), (Locator, locator));
                 AddToS3Trash(locator, txc, cookie);
                 return false; // keep this blob in deletion queue
             };
@@ -255,6 +256,17 @@ namespace NKikimr::NBlobDepot {
                     return true;
 
                 case EUpdateOutcome::CHANGE:
+                    {
+                        auto makeLocators = [&] {
+                            std::vector<TS3Locator> locators;
+                            EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded{
+                                [&](TLogoBlobID, ui32, ui32) {},
+                                [&](TS3Locator locator) { locators.push_back(locator); }
+                            });
+                            return locators;
+                        };
+                        BDEV(BDEV28, "change_key", (BDT, Self->TabletID()), (Key, key), (Locators, makeLocators()));
+                    }
                     row.template Update<Schema::Data::Value>(value.SerializeToString());
                     if (inserted || uncertainWriteBefore != value.UncertainWrite) {
                         if (value.UncertainWrite) {

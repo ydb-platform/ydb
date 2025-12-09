@@ -16,10 +16,9 @@ ui32 TSelectBuilder::AddBuiltinAggregation(std::optional<TString> columnName, TS
     return Columns.back().Seq;
 }
 
-ui32 TSelectBuilder::AddFactory(const TStringBuf& udafName) {
-    // TODO: check UDAF existence, determine paramcount
+ui32 TSelectBuilder::AddFactory(const TStringBuf& udafName, size_t paramCount) {
+    // TODO: check UDAF existence, validate paramcount
     ui32 curId = Udaf2Factory.size();
-    size_t paramCount = 2;
     auto [it, emplaced] = Udaf2Factory.try_emplace(udafName, curId, udafName, paramCount);
     return it->second.Id;
 }

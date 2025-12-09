@@ -21,7 +21,7 @@ public:
     }
 
 private:
-    ui32 AddFactory(const TStringBuf& udafName);
+    ui32 AddFactory(const TStringBuf& udafName, size_t paramCount);
 
 private:
     struct TFactory {
@@ -49,7 +49,7 @@ private:
 
 template<typename... TArgs>
 ui32 TSelectBuilder::AddUDAFAggregation(TString columnName, const TStringBuf& udafName, TArgs&&... params) {
-    auto factory = AddFactory(udafName);
+    auto factory = AddFactory(udafName, sizeof...(params));
 
     // TODO: parameters escaping/binding
     TString paramsStr = Join(',', params...);

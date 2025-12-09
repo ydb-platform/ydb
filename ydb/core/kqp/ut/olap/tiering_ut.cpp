@@ -558,6 +558,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
+    }
 
     Y_UNIT_TEST(TieringBoolToS3) {
         TTieringTestHelper tieringHelper;

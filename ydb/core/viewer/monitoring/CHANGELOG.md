@@ -1,5 +1,45 @@
 # Changelog
 
+## [12.27.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.26.0...v12.27.0) (2025-12-09)
+
+
+### Features
+
+* add read replicas template for row tables ([#3187](https://github.com/ydb-platform/ydb-embedded-ui/issues/3187)) ([7205874](https://github.com/ydb-platform/ydb-embedded-ui/commit/72058747b1cec62a1ff2fa40bb707b00501b40f0))
+
+
+### Bug Fixes
+
+* correct static paths, put fonts in media folder for monaco icons ([#3193](https://github.com/ydb-platform/ydb-embedded-ui/issues/3193)) ([90e1b53](https://github.com/ydb-platform/ydb-embedded-ui/commit/90e1b53de683bbb17d795f34c4705dab0f00d855))
+
+## [12.26.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.25.0...v12.26.0) (2025-12-08)
+
+
+### Features
+
+* add bonus scoring for ":heart: xeno" and "feedback" labels ([#3181](https://github.com/ydb-platform/ydb-embedded-ui/issues/3181)) ([0ded083](https://github.com/ydb-platform/ydb-embedded-ui/commit/0ded083945b66fc0385143c21f7042feb0fb7222))
+* use react-unipika library ([#3186](https://github.com/ydb-platform/ydb-embedded-ui/issues/3186)) ([c8c5241](https://github.com/ydb-platform/ydb-embedded-ui/commit/c8c5241073772e62de7691676af3993c33e221fc))
+
+
+### Bug Fixes
+
+* open cluster page in same tab ([#3179](https://github.com/ydb-platform/ydb-embedded-ui/issues/3179)) ([e5b243a](https://github.com/ydb-platform/ydb-embedded-ui/commit/e5b243a8af45516b400be579182d8b6f2bfd5cb3))
+* success workaround for operations list ([#3176](https://github.com/ydb-platform/ydb-embedded-ui/issues/3176)) ([114d92d](https://github.com/ydb-platform/ydb-embedded-ui/commit/114d92d15542c9eba7aefc8582bb3e65fe65dfd3))
+
+## [12.25.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.24.1...v12.25.0) (2025-12-04)
+
+
+### Features
+
+* save storage type in user settings ([#3160](https://github.com/ydb-platform/ydb-embedded-ui/issues/3160)) ([23e4856](https://github.com/ydb-platform/ydb-embedded-ui/commit/23e48563c04b18f2c93b5369390e3d90b99f0209))
+* support cluster external name ([#3174](https://github.com/ydb-platform/ydb-embedded-ui/issues/3174)) ([d196984](https://github.com/ydb-platform/ydb-embedded-ui/commit/d196984e62f7dc714046292505e453cfa2097c71))
+* use same duration functions ([#3156](https://github.com/ydb-platform/ydb-embedded-ui/issues/3156)) ([0267e23](https://github.com/ydb-platform/ydb-embedded-ui/commit/0267e239373243fe735c3aa549746931432fefa5))
+
+
+### Bug Fixes
+
+* calculateClusterPath ([#3177](https://github.com/ydb-platform/ydb-embedded-ui/issues/3177)) ([91829ad](https://github.com/ydb-platform/ydb-embedded-ui/commit/91829ad29477693cd5d1fe1ee3e3043f61d50350))
+
 ## [12.24.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.24.0...v12.24.1) (2025-12-03)
 
 

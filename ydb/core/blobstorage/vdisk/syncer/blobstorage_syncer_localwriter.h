@@ -12,28 +12,32 @@ namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
     // TEvLocalSyncData
-    // Apply data to hull.
+    // Apply data to hull or write directly to SST
     ////////////////////////////////////////////////////////////////////////////
     struct TEvLocalSyncData :
         public TEventLocal<TEvLocalSyncData, TEvBlobStorage::EvLocalSyncData>
     {
         // NOTES on Extracted field:
         // The Data field of TEvLocalSyncDatafield contains sync data that we got from another VDisk.
-        // TExtracted has this data prepared for being applied to the Hull database. Preparation
-        // takes time and CPU, so it's better to this async
+        // Extracted has this data prepared for being applied to the Hull database. Preparation
+        // takes time and CPU, so it's better to do this async
 
         TVDiskID VDiskID;           // data obtained from this vdisk
         TSyncState SyncState;       // current sync state
         TString Data;               // data from other node to apply
+
         TFreshBatch Extracted;      // upacked Data that is ready to be applied to Hull
 
         TEvLocalSyncData(const TVDiskID &vdisk, const TSyncState &syncState, const TString &data);
         TEvLocalSyncData() = default;
+
         TString Serialize() const;
         void Serialize(IOutputStream &s) const;
         bool Deserialize(IInputStream &s);
+
         // prepare data from the field Data for inserting into Hull database
         void UnpackData(const TIntrusivePtr<TVDiskContext> &vctx);
+
         size_t ByteSize() const {
             return sizeof(TVDiskID) + sizeof(TSyncState) + sizeof(ui32) + Data.size();
         }
@@ -44,6 +48,14 @@ namespace NKikimr {
         static void Squeeze(TFreshAppendixBlocks::TVec &vec);
         static void Squeeze(TFreshAppendixBarriers::TVec &vec);
     };
+
+    struct TEvLocalSyncFinished :
+        public TEventLocal<TEvLocalSyncFinished, TEvBlobStorage::EvLocalSyncFinished>
+    {};
+
+    struct TEvFullSyncFinished :
+        public TEventLocal<TEvFullSyncFinished, TEvBlobStorage::EvFullSyncFinished>
+    {};
 
     ////////////////////////////////////////////////////////////////////////////
     // TEvLocalSyncDataResult

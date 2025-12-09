@@ -153,25 +153,15 @@ class TestResult:
             status_str = "PASSED"
         
         # Map status to TestStatus enum
-        # Check for timeout - this information is available in build-results-report but not in junit (main's logic)
-        is_timeout = error_type == "TIMEOUT" or "timeout" in error_type.lower() or "timeout" in (status_description or "").lower()
-        
         if result.get("muted", False):
             status = TestStatus.MUTE
         elif status_str == "FAILED":
-            if is_timeout:
-                # Timeout is a special case - mark as ERROR with timeout info
-                status = TestStatus.ERROR
-                if status_description and "timeout" not in status_description.lower():
-                    status_description = f"Timeout: {status_description}"
-            elif error_type == "REGULAR":
+            if error_type == "REGULAR":
                 status = TestStatus.FAIL
             else:
                 status = TestStatus.ERROR
         elif status_str == "ERROR":
             status = TestStatus.ERROR
-            if is_timeout and status_description and "timeout" not in status_description.lower():
-                status_description = f"Timeout: {status_description}"
         elif status_str == "SKIPPED":
             status = TestStatus.SKIP
         else:

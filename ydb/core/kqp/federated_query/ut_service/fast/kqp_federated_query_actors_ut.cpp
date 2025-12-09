@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
     Y_UNIT_TEST(SchemeCacheRetryErrors) {
         TKikimrSettings settings;
         auto schemeCacheStatusGetter = MakeHolder<TTestSchemeCacheStatusGetter>(
-            TTestSchemeCacheStatusGetter::EFailProbablity::OneTenth);
+            TTestSchemeCacheStatusGetter::EFailProbability::OneTenth);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
             /* secretUpdateListener */ nullptr,
             schemeCacheStatusGetter.Get());

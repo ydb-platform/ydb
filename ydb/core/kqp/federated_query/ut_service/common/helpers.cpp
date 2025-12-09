@@ -76,25 +76,25 @@ namespace NKikimr::NKqp {
         return service;
     }
 
-    TTestSchemeCacheStatusGetter::TTestSchemeCacheStatusGetter(EFailProbablity failProbability)
-        : FailProbabitity(failProbability)
+    TTestSchemeCacheStatusGetter::TTestSchemeCacheStatusGetter(EFailProbability failProbability)
+        : FailProbability(failProbability)
     {
     }
 
    NSchemeCache::TSchemeCacheNavigate::EStatus TTestSchemeCacheStatusGetter::GetStatus(
         NSchemeCache::TSchemeCacheNavigate::TEntry& entry) const
     {
-        switch (FailProbabitity) {
-            case EFailProbablity::None:
+        switch (FailProbability) {
+            case EFailProbability::None:
                 return entry.Status;
-            case EFailProbablity::OneTenth: {
+            case EFailProbability::OneTenth: {
                 static const int MOD = 10;
-                if ((std::uniform_int_distribution<int>(0, MOD - 1))(RandomGen) % MOD == 0) {
+                if ((std::uniform_int_distribution<int>(0, MOD - 1))(RandomGen) == 0) {
                     return NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
                 }
                 return entry.Status;
             }
-            case EFailProbablity::Always:
+            case EFailProbability::Always:
                 return NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
             default:
                 Y_ENSURE(false, "Unexpected value");
@@ -104,8 +104,8 @@ namespace NKikimr::NKqp {
         return entry.Status;
     }
 
-    void TTestSchemeCacheStatusGetter::SetFailProbability(EFailProbablity failProbabitity) {
-        FailProbabitity = failProbabitity;
+    void TTestSchemeCacheStatusGetter::SetFailProbability(EFailProbability failProbability) {
+        FailProbability = failProbability;
     }
 
 } // NKikimr::NKqp

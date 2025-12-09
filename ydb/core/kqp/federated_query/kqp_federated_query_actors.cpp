@@ -110,7 +110,7 @@ IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector
     return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
 }
 
-// It's a hack so we can simulate Scheme Cache retryable errors
+// It's a hack so we can simulate Scheme Cache retryable errors in tests
 NSchemeCache::TSchemeCacheNavigate::EStatus GetSchemeCacheEntryStatus(
     const TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter,
     NSchemeCache::TSchemeCacheNavigate::TEntry& entry)
@@ -339,7 +339,7 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& request
         )->CreateRetryState();
     }
 
-    if (const auto delay = RequestsInFlight.at(requestId).RetryState->GetNextRetryDelay()) {
+    if (const auto delay = requestIt->second.RetryState->GetNextRetryDelay()) {
         LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId) << "secret `" << unresolvedSecretPath
             << "` not found. Request will be retried in: " << *delay);
         this->Schedule(*delay, new TEvResolveSecretRetry(requestId));

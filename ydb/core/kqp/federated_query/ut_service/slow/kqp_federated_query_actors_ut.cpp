@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
         TKikimrSettings settings;
         // SchemeCache will return only retry errors, so secrets retrieval will be slow due to retries and never succeed
         auto schemeCacheStatusGetter = MakeHolder<TTestSchemeCacheStatusGetter>(
-            TTestSchemeCacheStatusGetter::EFailProbablity::Always);
+            TTestSchemeCacheStatusGetter::EFailProbability::Always);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
             /* secretUpdateListener */ nullptr,
             schemeCacheStatusGetter.Get());
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
         }
 
         // SchemeCache will return OK responses, so secrets retrieval should be fast and succeeded
-        schemeCacheStatusGetter->SetFailProbability(TTestSchemeCacheStatusGetter::EFailProbablity::None);
+        schemeCacheStatusGetter->SetFailProbability(TTestSchemeCacheStatusGetter::EFailProbability::None);
         promises.clear();
         for (const auto& [secretName, secretValue] : secrets) {
             promises.push_back(ResolveSecret(secretName, kikimr));

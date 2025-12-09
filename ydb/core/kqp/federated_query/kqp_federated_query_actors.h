@@ -60,7 +60,7 @@ public:
             : InitialRequestId(initialRequestId)
         {}
 
-        ui64 InitialRequestId = 0;
+        const ui64 InitialRequestId = 0;
     };
 
 private:

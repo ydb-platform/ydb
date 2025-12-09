@@ -45,21 +45,21 @@ namespace NKikimr::NKqp {
 
     class TTestSchemeCacheStatusGetter : public TDescribeSchemaSecretsService::ISchemeCacheStatusGetter {
     public:
-        enum class EFailProbablity {
+        enum class EFailProbability {
             None = 0,
             OneTenth = 1,
             Always = 2,
         };
 
-        TTestSchemeCacheStatusGetter(EFailProbablity failProbabitity);
+        TTestSchemeCacheStatusGetter(EFailProbability failProbability);
 
         NSchemeCache::TSchemeCacheNavigate::EStatus GetStatus(
             NSchemeCache::TSchemeCacheNavigate::TEntry& entry) const override;
 
-        void SetFailProbability(EFailProbablity failProbabitity);
+        void SetFailProbability(EFailProbability failProbability);
 
     private:
-        EFailProbablity FailProbabitity;
+        EFailProbability FailProbability;
         mutable std::mt19937 RandomGen;
     };
 

@@ -1,4 +1,5 @@
 #include "keyvalue_flat_impl.h"
+#include "keyvalue_utils.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/hive.h>
@@ -531,13 +532,8 @@ public:
             NLog::EPriority logPriority = NLog::PRI_ERROR) {
         LOG_LOG_S(ctx, logPriority, NKikimrServices::KEYVALUE, errorDescription);
 
-        THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
-        if (IntermediateResults->HasCookie) {
-            response->Record.SetCookie(IntermediateResults->Cookie);
-        }
-        response->Record.SetErrorReason(errorDescription);
-        response->Record.SetStatus(status);
-        ctx.Send(IntermediateResults->RespondTo, response.Release());
+        std::unique_ptr<IEventBase> response = MakeErrorResponse(IntermediateResults.Get(), status, errorDescription);
+        ctx.Send(IntermediateResults->RespondTo, std::move(response));
         IntermediateResults->IsReplied = true;
 
         IntermediateResults->Stat.YellowStopChannels.reserve(YellowStopChannels.size());
@@ -758,7 +754,7 @@ public:
                     new TEvBlobStorage::TEvPatch(
                         originalGroupId, request.OriginalBlobId, request.PatchedBlobId, TLogoBlobID::MaxCookie,
                         std::move(diffs), request.Diffs.size(), IntermediateResults->Deadline));
-                
+
                 const ui32 groupId = TabletInfo->GroupFor(request.PatchedBlobId.Channel(), request.PatchedBlobId.Generation());
                 Y_VERIFY_S(groupId != Max<ui32>(), "Patch Blob# " << request.PatchedBlobId.ToString() << " is mapped to an invalid group (-1)!");
                 ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletInfo->TabletID

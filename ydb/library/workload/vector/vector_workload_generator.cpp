@@ -59,7 +59,7 @@ TQueryInfoList TVectorWorkloadGenerator::GetInitialData() {
 }
 
 TVector<std::string> TVectorWorkloadGenerator::GetCleanPaths() const {
-    return {"vector"};
+    return {Params.TableOpts.Name};
 }
 
 TQueryInfoList TVectorWorkloadGenerator::GetWorkload(int type) {

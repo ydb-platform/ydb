@@ -11,23 +11,6 @@ void ConfigureTableOpts(NLastGetopt::TOpts& opts, TTableOpts* tableOpts) {
         .StoreResult(&tableOpts->Name);
 }
 
-void ConfigureTablePartitioningOpts(NLastGetopt::TOpts& opts, TTablePartitioningOpts* partitioningOpts) {
-    opts.AddLongOption("min-partitions", "Table min partitions count (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT)")
-        .RequiredArgument("INT")
-        .DefaultValue(partitioningOpts->MinPartitions)
-        .StoreResult(&partitioningOpts->MinPartitions);
-
-    opts.AddLongOption("partition-size", "Table max partition size (AUTO_PARTITIONING_PARTITION_SIZE_MB)")
-        .RequiredArgument("INT")
-        .DefaultValue(partitioningOpts->PartitionSize)
-        .StoreResult(&partitioningOpts->PartitionSize);
-
-    opts.AddLongOption("auto-partition", "Table automatic partitioning by load (AUTO_PARTITIONING_BY_LOAD)")
-        .RequiredArgument("BOOL")
-        .DefaultValue(partitioningOpts->AutoPartitioningByLoad)
-        .StoreResult(&partitioningOpts->AutoPartitioningByLoad);
-}
-
 void ConfigureVectorOpts(NLastGetopt::TOpts& opts, TVectorOpts* vectorOpts) {
     NColorizer::TColors colors = NYdb::NConsoleClient::AutoColors(Cout);
 

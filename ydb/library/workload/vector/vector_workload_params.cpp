@@ -39,7 +39,6 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
         NVector::ConfigureTableOpts(opts, &TableOpts);
-        NVector::ConfigureTablePartitioningOpts(opts, &TablePartitioningOpts);
         break;
     case TWorkloadParams::ECommandType::Import:
         ConfigureCommonOpts(opts);

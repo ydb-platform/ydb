@@ -1,6 +1,5 @@
 # Changing Configurations via CMS
 
-{% include [deprecated](_includes/deprecated.md) %}
 
 {% note info %}
 

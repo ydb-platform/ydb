@@ -6,6 +6,7 @@
 #include "extstorage_usage_config.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/backup/common/checksum.h>
@@ -975,6 +976,36 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
                 .ExportPrefix = descr.Prefix,
                 .Name = descr.Name,
             });
+        }
+    }
+
+    if (scheme) {
+        int idx = changefeeds.size() + 1;
+        for (const auto& index : scheme->indexes()) {
+            const auto indexType = NTableIndex::ConvertIndexType(index.type_case());
+            const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
+            std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout;
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext) {
+                const auto& settings = index.global_fulltext_index().fulltext_settings();
+                layout = settings.has_layout() ? settings.layout() : Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
+            }
+
+            for (const auto& implTable : NTableIndex::GetImplTables(indexType, indexColumns, layout)) {
+                const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
+                TString exportPrefix;
+                if (encrypted) {
+                    std::stringstream prefix;
+                    prefix << std::setfill('0') << std::setw(3) << std::right << idx++;
+                    exportPrefix = prefix.str();
+                } else {
+                    exportPrefix = implTablePrefix;
+                }
+
+                metadata.AddIndex(TIndexMetadata{
+                    .ExportPrefix = exportPrefix,
+                    .ImplTablePrefix = implTablePrefix,
+                });
+            }
         }
     }
 

@@ -24,3 +24,9 @@ void AddIssue(T& response, const TString& message, NYql::TSeverityIds::ESeverity
     issue.set_severity(severity);
     issue.set_message(message);
 }
+
+struct TImportInfo;
+
+bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx);
+
+} // NKikimr::NSchemeShard

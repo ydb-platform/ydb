@@ -127,20 +127,20 @@ class TestResult:
         """
         # Extract fields with defaults (main's approach - more lenient)
         path_str = result.get("path", "")
-        name_part = result.get("name")
+        name_part = result.get("name", "")
         subtest_name = result.get("subtest_name", "")
         error_type = result.get("error_type", "")
         status_description = result.get("rich-snippet", "")
         
-        # classname is the test path, name is constructed from name_part and subtest_name (HEAD's approach)
+        # Build full test name in format path/name/subtest_name (where parts exist)
         classname = path_str
-        if subtest_name and subtest_name.strip():
-            if name_part:
-                name = f"{name_part}.{subtest_name}"
-            else:
-                name = subtest_name
+        if name_part:
+            classname = f"{classname}/{name_part}"
+        if subtest_name:
+            name = subtest_name
         else:
-            name = name_part or ""
+            # If no subtest, keep name_part (so we still show path/name)
+            name = name_part
         
         # Status can be "OK" or "PASSED" for passed tests
         status_str = result.get("status", "OK")

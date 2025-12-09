@@ -2,7 +2,7 @@
 
 To deploy a new {{ ydb-short-name }} cluster, to add new nodes to an existing cluster, or to change parameters, a configuration is required.
 
-{% include [new](../_includes/configuration-version-note.md) %}
+{% include [_](../_includes/experimental_v2.md) %}
 
 {{ ydb-short-name }} cluster configuration V2 is a text file in [YAML](https://en.wikipedia.org/wiki/YAML) format. In its minimal form, it contains a `config` section with various parameters necessary for starting and configuring cluster nodes, as well as a section with `metadata`. Extended capabilities for flexible configuration are described in the article [{#T}](dynamic-config-selectors.md). You can learn more about available parameters in the [configuration reference](config-settings.md).
 

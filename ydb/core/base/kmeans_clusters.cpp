@@ -585,6 +585,18 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
         return false;
     }
 
+    if (settings.has_overlap_clusters() &&
+        settings.overlap_clusters() > settings.clusters()) {
+        error = TStringBuilder() << "overlap_clusters should be less than or equal to clusters";
+        return false;
+    }
+
+    if (settings.has_overlap_ratio() &&
+        settings.overlap_ratio() < 0) {
+        error = TStringBuilder() << "overlap_ratio should be >= 0";
+        return false;
+    }
+
     ui64 clustersPowLevels = 1;
     for (ui64 i = 0; i < settings.levels(); ++i) {
         clustersPowLevels *= settings.clusters();

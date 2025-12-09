@@ -1409,6 +1409,15 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         env.WaitChangelogFlush();
 
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> backupDirs;
+        tabletIdDir.List(backupDirs);
+
+        UNIT_ASSERT_VALUES_EQUAL(backupDirs.size(), 2);
+
         // Check state before and after restore
         auto assertState = [&env]() {
             UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1001);

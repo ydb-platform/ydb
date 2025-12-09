@@ -138,14 +138,14 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
     }
 }
 
-TFsPath CreateBackupPath(TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation) {
+TFsPath CreateBackupPath(TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step) {
     TString tabletTypeName = TTabletTypes::EType_Name(tabletType);
     NProtobufJson::ToSnakeCaseDense(&tabletTypeName);
     TString timestamp = TlsActivationContext->AsActorContext().Now().FormatGmTime("%Y%m%d%H%M%SZ");
 
     auto path = TFsPath(tabletTypeName)
         .Child(ToString(tabletId))
-        .Child("backup_" + timestamp + "_gen_" + ToString(generation));
+        .Child("backup_" + timestamp + "_g" + ToString(generation) + "_s" + ToString(step));
 
     return path;
 }
@@ -805,12 +805,12 @@ private:
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, TScheme::TTableInfo>& tables,
-                             TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
+                             TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,
                              TAutoPtr<TSchemeChanges> schema, TIntrusiveConstPtr<TBackupExclusion> exclusion)
 {
     if (config.HasFilesystem()) {
         auto path = TFsPath(config.GetFilesystem().GetPath())
-            .Child(CreateBackupPath(tabletType, tabletId, generation));
+            .Child(CreateBackupPath(tabletType, tabletId, generation, step));
         return new TSnapshotWriter(owner, path, tables, schema, exclusion);
     } else {
         return nullptr;
@@ -824,12 +824,12 @@ IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<
 }
 
 IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
-                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
+                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,
                               const TScheme& schema, TIntrusiveConstPtr<TBackupExclusion> exclusion)
 {
     if (config.HasFilesystem()) {
         auto path = TFsPath(config.GetFilesystem().GetPath())
-            .Child(CreateBackupPath(tabletType, tabletId, generation));
+            .Child(CreateBackupPath(tabletType, tabletId, generation, step));
         return new TChangelogWriter(owner, path, schema, exclusion);
     } else {
         return nullptr;

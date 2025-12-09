@@ -5128,7 +5128,7 @@ void TExecutor::StartNewBackup() {
         return;
     }
 
-    if (!CommitManager) {
+    if (!CommitManager || !LogicRedo) {
         return;
     }
 
@@ -5140,15 +5140,19 @@ void TExecutor::StartNewBackup() {
         return;
     }
 
+    // Ensure that pending commits are flushed to the old backup changelog,
+    // and the step is incremented before starting a new backup
+    LogicRedo->FlushBatchedLog();
+
     TTabletTypes::EType tabletType = Owner->TabletType();
     const auto& scheme = Database->GetScheme();
     const auto& tables = scheme.Tables;
     auto exclusion = Owner->BackupExclusion();
 
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
-        tabletId, Generation0, scheme.GetSnapshot(), exclusion);
+        tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);
     auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
-        tabletId, Generation0, scheme, exclusion);
+        tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);

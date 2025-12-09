@@ -4,6 +4,13 @@
 
 namespace NYdbWorkload::NVector {
 
+void ConfigureTableOpts(NLastGetopt::TOpts& opts, TTableOpts* tableOpts) {
+    opts.AddLongOption( "table", "Table name")
+        .RequiredArgument("NAME")
+        .DefaultValue(tableOpts->Name)
+        .StoreResult(&tableOpts->Name);
+}
+
 void ConfigureVectorOpts(NLastGetopt::TOpts& opts, TVectorOpts* vectorOpts) {
     NColorizer::TColors colors = NYdb::NConsoleClient::AutoColors(Cout);
 

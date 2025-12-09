@@ -2,6 +2,7 @@
 #include "direct_builder.h"
 #include "signals.h"
 
+#include <util/generic/overloaded.h>
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
@@ -116,14 +117,14 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
 }
 
 TConclusion<NBinaryJson::TBinaryJson> ToBinaryJson(const TJsonRestorer& restorer) {
-    auto bJson = NBinaryJson::SerializeToBinaryJson(restorer.GetResult().GetStringRobust());
-    if (const TString* val = std::get_if<TString>(&bJson)) {
-        return TConclusionStatus::Fail(*val);
-    } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
-        return std::move(*val);
-    } else {
-        return TConclusionStatus::Fail("undefined case for binary json construction");
-    }
+    return std::visit(TOverloaded{
+        [](TString&& val) -> TConclusion<NBinaryJson::TBinaryJson> {
+            return TConclusionStatus::Fail(std::move(val));
+        },
+        [](NBinaryJson::TBinaryJson&& val) -> TConclusion<NBinaryJson::TBinaryJson> {
+            return std::move(val);
+        }},
+        NBinaryJson::SerializeToBinaryJson(restorer.GetResult().GetStringRobust()));
 }
 
 std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnConstructionContext& context) const {

@@ -52,9 +52,7 @@ public:
             AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
         }
         auto accessorResult = jsonPathAccessorTrie->GetAccessor(ToJsonPath(keyName));
-        if (accessorResult.IsFail()) {
-            return std::nullopt;
-        }
+        AFL_VERIFY(accessorResult.IsSuccess());
 
         auto accessor = accessorResult.DetachResult();
         if (!accessor) {

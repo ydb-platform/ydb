@@ -45,19 +45,13 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
         auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
-        if (accessorResult.IsFail()) {
-            // TODO: return failure ?
-            return NAccessor::TTrivialArray::BuildEmpty(std::make_shared<arrow::StringType>());
-        }
+        AFL_VERIFY(accessorResult.IsSuccess());
         accessor = accessorResult.DetachResult();
     } else {
         AFL_VERIFY(jsonAcc->GetType() == IChunkedArray::EType::SubColumnsPartialArray);
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(jsonAcc);
         auto accessorResult = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());
-        if (accessorResult.IsFail()) {
-            // TODO: return failure ?
-            return NAccessor::TTrivialArray::BuildEmpty(std::make_shared<arrow::StringType>());
-        }
+        AFL_VERIFY(accessorResult.IsSuccess());
         accessor = accessorResult.DetachResult();
     }
 

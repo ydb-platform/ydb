@@ -331,6 +331,54 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
     }
 #endif
 
+    // TODO: Remove if top-level arrays and scalars are needed
+    TString scriptNonObjectTopLevelVariants = R"(
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`$$true|false$$`,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
+                    `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+        ------
+        %s
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(NonObjectTopLevelVariants, scriptNonObjectTopLevelVariants) {
+        auto buildArrowString = [](auto&& data){
+            NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
+                { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
+            updates.AddRow().Add<int64_t>(1).Add(std::forward<decltype(data)>(data));
+            return Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
+        };
+
+        auto arrowString1 = buildArrowString(R"([1, 2])");
+        auto arrowString2 = buildArrowString(R"("hello")");
+
+        TString injection = Sprintf(R"(
+            BULK_UPSERT:
+                /Root/ColumnTable
+                %s
+                EXPECT_STATUS:BAD_REQUEST
+            ------
+            BULK_UPSERT:
+                /Root/ColumnTable
+                %s
+                EXPECT_STATUS:BAD_REQUEST
+            )",
+            arrowString1.data(),
+            arrowString2.data());
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
+    }
+
     TString scriptDoubleFilterVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
@@ -1106,6 +1154,15 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
             CompareYson(R"([[[1]]])", result);
+        }
+
+        // ok
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT JSON_VALUE(json_payload, "d $.c") FROM `/Root/olapTable` WHERE id = 1;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!status.IsSuccess());
         }
 
         return;

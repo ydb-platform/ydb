@@ -259,14 +259,12 @@ TConclusion<std::shared_ptr<TJsonPathAccessor>> TOthersData::GetPathAccessor(con
 
     auto accessor = accessorResult.DetachResult();
     if (!accessor) {
-        return accessor;
+        return std::shared_ptr<TJsonPathAccessor>{};
     }
 
     auto idx = accessor->GetCookie();
     if (!idx) {
         return std::shared_ptr<TJsonPathAccessor>{};
-        // TODO: IDK why it is needed, re-check
-        // return std::make_shared<TSparsedArray>(nullptr, arrow::binary(), recordsCount);
     }
     TColumnFilter filter = TColumnFilter::BuildAllowFilter();
     for (TIterator it(Records); it.IsValid(); it.Next()) {

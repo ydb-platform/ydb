@@ -267,6 +267,7 @@ private:
         }
         const auto buffer = std::static_pointer_cast<arrow::StringScalar>(jsonPathScalar)->value;
         std::string_view svPath((const char*)buffer->data(), buffer->size());
+        // Here we should have the valid path (the validation is done in KQP, so do no check it here)
 
         return TDescription(resources.GetAccessorOptional(input.front().GetColumnId()), svPath);
     }

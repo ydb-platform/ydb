@@ -11,22 +11,23 @@
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 TString QuoteJsonItem(TStringBuf item) {
-    TString result;
-    result.push_back('"');
+    TStringBuilder builder;
+
+    builder << '"';
 
     for (char ch : item) {
         if (ch == '"') {
-            result.append("\\\"");
+            builder << "\\\"";
         } else if (ch == '\\') {
-            result.append("\\\\");
+            builder << "\\\\";
         } else {
-            result.push_back(ch);
+            builder << ch;
         }
     }
 
-    result.push_back('"');
+    builder << '"';
 
-    return result;
+    return builder;
 }
 
 TJsonPath ToJsonPath(TStringBuf path) {
@@ -115,11 +116,7 @@ TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TS
     if (!RemainingPath.empty()) {
         NYql::TIssues issues;
         RemainingPathPtr = NYql::NJsonPath::ParseJsonPath(RemainingPath, issues, 5);
-        if (!issues.Empty()) {
-            // Maybe verify
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("warning", "invalid remaining path")("path", remainingPath);
-            RemainingPathPtr.Reset();
-        }
+        AFL_VERIFY(issues.Empty())("RemainingPath", RemainingPath)("issues", issues.ToString());
     }
 }
 

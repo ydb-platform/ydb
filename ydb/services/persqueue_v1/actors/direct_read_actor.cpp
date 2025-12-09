@@ -485,6 +485,9 @@ void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
 }
 
 void TDirectReadSessionActor::HandleDestroyPartitionSession(TEvPQProxy::TEvDirectReadDestroyPartitionSession::TPtr& ev) {
+    const auto& ctx = ActorContext();
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got EvDirectReadDestroyPartitionSession, assignId: " << ev->Get()->ReadKey.PartitionSessionId);
+
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
     auto* stop = result.mutable_stop_direct_read_partition_session();
@@ -500,6 +503,8 @@ void TDirectReadSessionActor::HandleSessionKilled(TEvPQProxy::TEvDirectReadClose
 }
 
 void TDirectReadSessionActor::HandleGotData(TEvPQProxy::TEvDirectReadSendClientData::TPtr& ev) {
+    const auto& ctx = ActorContext();
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got direct read data, message size: " << ev->Get()->Message->ByteSizeLong());
     auto formedResponse = MakeIntrusive<TFormedDirectReadResponse>();
     formedResponse->Response = std::move(ev->Get()->Message);
     ProcessAnswer(formedResponse, ActorContext());

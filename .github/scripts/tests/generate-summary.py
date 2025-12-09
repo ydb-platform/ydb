@@ -116,11 +116,18 @@ class TestResult:
     def from_build_results_report(cls, result):
         """Create TestResult from build-results-report JSON result"""
         path_str = result.get("path", "")
+        name_part = result.get("name", "")
         subtest_name = result.get("subtest_name", "")
         
-        # classname is the test path, name is the subtest name or empty
+        # Build full test name in format path/name/subtest_name (where parts exist)
         classname = path_str
-        name = subtest_name if subtest_name else ""
+        if name_part:
+            classname = f"{classname}/{name_part}"
+        if subtest_name:
+            name = subtest_name
+        else:
+            # If no subtest, keep name_part (so we still show path/name)
+            name = name_part
         
         # Status can be "OK" or "PASSED" for passed tests
         status_str = result.get("status", "OK")

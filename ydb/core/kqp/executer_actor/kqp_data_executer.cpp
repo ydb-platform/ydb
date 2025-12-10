@@ -2835,7 +2835,7 @@ private:
             << ", state load mode " << FederatedQuery::StateLoadMode_Name(stateLoadMode)
             << ", streaming disposition " << streamingDisposition.ShortDebugString()
             << ", has QueryPhysicalGraph " << (Request.QueryPhysicalGraph != nullptr)
-            << ", enabled watermarks " << Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks());
+            << ", enabled watermarks " << (Request.QueryPhysicalGraph->GetPreparedQuery() ? Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks() : false));
     }
 
 private:

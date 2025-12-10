@@ -101,14 +101,11 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
         else:
             test_name = name_part
         
-        # Get duration from metrics
-        metrics = result.get("metrics", {})
-        duration = metrics.get("elapsed_time", 0)
+        # Get duration from result
+        duration = result.get("duration", 0)
         
         # Determine status
         status_str = result.get("status", "OK")
-        if status_str == "OK":
-            status_str = "PASSED"
         error_type = result.get("error_type", "")
         status_description = result.get("rich-snippet", "")  # Already cleaned by transform_build_results.py
         
@@ -124,24 +121,18 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
         elif status_str == "SKIPPED":
             status = "skipped"
         else:
+            # OK, PASSED, or any other status -> "passed"
             status = "passed"
         
-        # Extract log URLs from properties or links
-        # In build-results-report, links is an object with arrays: {"stdout": ["/path"], "stderr": ["/path"]}
-        # Properties are added later by transform_build_results.py with URL format
-        properties = result.get("properties") or {}  # properties can be None
-        links = result.get("links") or {}  # links can be None
+        # Extract log URLs from properties
+        # Properties are added by transform_build_results.py with URL format (converted from links)
+        properties = result.get("properties") or {}
         
-        # Check properties first (added by transform_build_results.py with URLs)
-        if isinstance(properties, dict):
-            log_url = properties.get("url:log") or properties.get("log") or ""
-            logsdir_url = properties.get("url:logsdir") or properties.get("logsdir") or ""
-            stderr_url = properties.get("url:stderr") or properties.get("stderr") or ""
-            stdout_url = properties.get("url:stdout") or properties.get("stdout") or ""
-        else:
-            log_url = logsdir_url = stderr_url = stdout_url = ""
-        
-        # If not in properties, links contain file paths (arrays), will be converted by transform_build_results.py
+        # Get log URLs from properties (added by transform_build_results.py with URLs)
+        log_url = properties.get("url:log") or properties.get("log") or ""
+        logsdir_url = properties.get("url:logsdir") or properties.get("logsdir") or ""
+        stderr_url = properties.get("url:stderr") or properties.get("stderr") or ""
+        stdout_url = properties.get("url:stdout") or properties.get("stdout") or ""
 
         # Build metadata JSON from available fields
         metadata = {
@@ -204,11 +195,11 @@ def sort_codeowners_lines(codeowners_lines):
 def get_codeowners_for_tests(codeowners_file_path, tests_data):
     with open(codeowners_file_path, 'r') as file:
         data = file.readlines()
-        owners_odj = CodeOwners(''.join(sort_codeowners_lines(data)))
+        owners_obj = CodeOwners(''.join(sort_codeowners_lines(data)))
         tests_data_with_owners = []
         for test in tests_data:
-            target_path = f'{test["suite_folder"]}'
-            owners = owners_odj.of(target_path)
+            target_path = test["suite_folder"]
+            owners = owners_obj.of(target_path)
             test["owners"] = ";;".join(
                 [(":".join(x)) for x in owners])
             tests_data_with_owners.append(test)
@@ -290,7 +281,7 @@ def filter_rows_for_schema(rows, has_full_name, has_metadata, has_error_type, ha
             filtered_row.pop('metadata', None)
         elif 'metadata' in filtered_row:
             # If metadata is empty JSON string "{}", convert to None (like export_issues_to_ydb.py)
-            if filtered_row['metadata'] == "{}" or filtered_row['metadata'] == json.dumps({}):
+            if filtered_row['metadata'] == "{}":
                 filtered_row['metadata'] = None
         
         # Ensure metrics is present if table has it, otherwise remove it
@@ -357,15 +348,6 @@ def main():
 
     args = parser.parse_args()
 
-    test_results_file = args.test_results_file
-    build_type = args.build_type
-    commit = args.commit
-    branch = args.branch
-    pull = args.pull
-    run_timestamp = args.run_timestamp
-    job_name = args.job_name
-    job_id = args.job_id
-
     dir_path = os.path.dirname(__file__)
     git_root = f"{dir_path}/../../.."
     codeowners = f"{git_root}/.github/TESTOWNERS"
@@ -379,7 +361,8 @@ def main():
             
             # Parse build-results-report JSON with test results
             results = parse_build_results_report(
-                test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp
+                args.test_results_file, args.build_type, args.job_name, args.job_id,
+                args.commit, args.branch, args.pull, args.run_timestamp
             )
             
             # Add owner information

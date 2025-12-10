@@ -32,10 +32,12 @@ public:
         , Buff_(columns)
         , Pointers_(columns)
         , Converter_(converter)
+        , Columns_(columns)
     {
         for (int index = 0; index < columns; ++index) {
             Pointers_[index] = &Buff_[index];
         }
+        BatchValues_.reserve(static_cast<size_t>(Columns_) * BatchSize_);
     }
 
     bool Finished() const {
@@ -43,32 +45,59 @@ public:
     }
 
     FetchResult<TPackResult> FetchRow() {
-        if (Finished()) {
-            return Finish{};
-        }
-        auto res = Flow_->FetchValues(*Ctx_, Pointers_.data());
-        switch (res) {
-        case EFetchResult::Finish:
-            Finished_ = true;
-            return Finish{};
-        case EFetchResult::Yield:
-            return Yield{};
-        case EFetchResult::One: {
-            TPackResult packed;
-            Converter_->Pack(Buff_.data(), packed);
-            return One<TPackResult>{std::move(packed)};
-        }
+        while (true) {
+            if (Finished_ && BatchCount_ == 0) {
+                return Finish{};
+            }
+            if (BatchCount_ >= BatchSize_) {
+                return FlushBatch();
+            }
+            auto res = Flow_->FetchValues(*Ctx_, Pointers_.data());
+            switch (res) {
+            case EFetchResult::Finish:
+                Finished_ = true;
+                if (BatchCount_ > 0) {
+                    return FlushBatch();
+                }
+                return Finish{};
+            case EFetchResult::Yield:
+                if (BatchCount_ > 0) {
+                    return FlushBatch();
+                }
+                return Yield{};
+            case EFetchResult::One: {
+                for (int i = 0; i < Columns_; ++i) {
+                    BatchValues_.push_back(Buff_[i]);
+                }
+                ++BatchCount_;
+                // loop to accumulate more until batch full or finish
+                break;
+            }
+            }
         }
         MKQL_ENSURE(false, "unreachable");
     }
 
 private:
+    FetchResult<TPackResult> FlushBatch() {
+        MKQL_ENSURE(BatchCount_ > 0, "INTERNAL LOGIC ERROR");
+        TPackResult packed;
+        Converter_->PackBatch(BatchValues_.data(), BatchCount_, packed);
+        BatchValues_.clear();
+        BatchCount_ = 0;
+        return One<TPackResult>{std::move(packed)};
+    }
+
     bool Finished_ = false;
     TComputationContext* Ctx_;
     IComputationWideFlowNode* Flow_;
     TMKQLVector<NYql::NUdf::TUnboxedValue> Buff_;
     TMKQLVector<NYql::NUdf::TUnboxedValue*> Pointers_;
     IScalarLayoutConverter* Converter_;
+    int Columns_;
+    static constexpr int BatchSize_ = 1024;
+    TMKQLVector<NYql::NUdf::TUnboxedValue> BatchValues_;
+    int BatchCount_ = 0;
 };
 
 struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {

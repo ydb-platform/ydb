@@ -1394,7 +1394,7 @@ public:
             return;
         }
 
-        if (QueryState->TxCtx->EnableOltpSink.value_or(false) && isBatchQuery && (!tx || !tx->IsLiteralTx())) {
+        if (isBatchQuery && (!tx || !tx->IsLiteralTx())) {
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
             ExecuteDeferredEffectsImmediately(tx);
@@ -1408,7 +1408,12 @@ public:
     void ExecutePartitioned(const TKqpPhyTxHolder::TConstPtr& tx) {
         if (!Settings.TableService.GetEnableBatchUpdates()) {
             return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                "BATCH operations are disabled by EnableBatchUpdates flag.");
+                "BATCH operations are not supported at the current time.");
+        }
+
+        if (!QueryState->TxCtx->EnableOltpSink.value_or(false)) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                "BATCH operations are not supported at the current time.");
         }
 
         if (QueryState->TxCtx->HasOlapTable) {
@@ -1416,9 +1421,8 @@ public:
                 "BATCH operations are not supported for column tables at the current time.");
         }
 
-        if (QueryState->HasTxControl()) {
-            NYql::TIssues issues;
-            return ReplyQueryError(::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST,
+        if (!QueryState->HasImplicitTx()) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                 "BATCH operation can be executed only in the implicit transaction mode.");
         }
 

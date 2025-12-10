@@ -88,6 +88,7 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
         yaml_dict["table_service_config"]["enable_htap_tx"] = True
         yaml_dict["table_service_config"]["enable_olap_sink"] = True
         yaml_dict["table_service_config"]["enable_create_table_as"] = True
+        yaml_dict["feature_flags"]["enable_table_datetime64"] = True
     return yaml_dict
 
 
@@ -397,6 +398,8 @@ class KikimrConfigGenerator(object):
 
         if datashard_config:
             self.yaml_config["data_shard_config"] = datashard_config
+        if columnshard_config:
+            self.yaml_config["column_shard_config"] = columnshard_config
 
         if column_shard_config:
             self.yaml_config["column_shard_config"] = column_shard_config
@@ -412,6 +415,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
 
         self.__build()
+
         if self.grpc_ssl_enable:
             self.yaml_config["grpc_config"]["ca"] = self.grpc_tls_ca_path
             self.yaml_config["grpc_config"]["cert"] = self.grpc_tls_cert_path

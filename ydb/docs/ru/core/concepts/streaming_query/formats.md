@@ -16,6 +16,30 @@
 | [`parquet`](#parquet)               | ✓      |        |
 | [`raw`](#raw)                       | ✓      | ✓      |
 
+## Форматы при записи данных {#write-formats}
+
+Для записи небходимо указывать одну колонку, поддерживаются типы: String, Json, Yson. При этом колонка должна быть неопциональная. Например:
+
+```sql
+INSERT INTO source_name.output_topic_name
+SELECT
+    CAST(Data as String)
+FROM
+    ...
+```
+
+Чтобы записать значение нескольких колонок в формате Json (одним полем) можно воспользоваться выражением:
+
+```sql
+
+INSERT INTO source_name.output_topic_name
+SELECT
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+FROM
+    ...
+```
+Описание функций вы можете найти в документации: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
+
 ### Формат csv_with_names {#csv_with_names}
 
 Данный формат основан на формате [CSV](https://ru.wikipedia.org/wiki/CSV). Данные размещены в колонках, разделены запятыми, в первой строке находятся имена колонок.
@@ -40,22 +64,15 @@ $input = (SELECT
     FROM source_name.input_topic_name WITH
         (
             FORMAT = "csv_with_names",
-            SCHEMA =(Year Int32, Manufacturer Utf8, Model Utf8, Price Double)
+            SCHEMA =(Year Int32 NOT NULL, Manufacturer String NOT NULL, Model String NOT NULL, Price Double NOT NULL)
         );
-);
-
-$json = (
-    SELECT
-        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-    FROM
-        $input
 );
 
 INSERT INTO source_name.output_topic_name
 SELECT
-    *
+    Model
 FROM
-    $json
+    $input
 ;
 ```
 {% endcut %}
@@ -84,22 +101,15 @@ $input = (SELECT
     FROM source_name.input_topic_name WITH
         (
             FORMAT = "tsv_with_names",
-            SCHEMA =(Year Int32, Manufacturer Utf8, Model Utf8, Price Double)
+            SCHEMA =(Year Int32 NOT NULL, Manufacturer String NOT NULL, Model String NOT NULL, Price Double NOT NULL)
         );
-);
-
-$json = (
-    SELECT
-        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-    FROM
-        $input
 );
 
 INSERT INTO source_name.output_topic_name
 SELECT
-    *
+    Model
 FROM
-    $json
+    $input
 ;
 ```
 

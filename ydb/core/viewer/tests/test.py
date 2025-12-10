@@ -1229,6 +1229,7 @@ def call_viewer_multipart_parsed(path, params=None):
         return {"status_code": 200, "raw_text": raw_text}
 
 
+<<<<<<< HEAD
 def normalize_multipart_response(response):
     """Helper function to normalize multipart responses"""
     if 'multipart_parts' in response:
@@ -1238,6 +1239,40 @@ def normalize_multipart_response(response):
             normalized_parts.append(normalized_part)
         return {"multipart_parts": normalized_parts}
     return response
+=======
+        result['down_node_root'] = cls.post_viewer("/tablets/app", params={
+            'TabletID': '72057594037968897',
+            'page': 'SetDown',
+            'node': '1',
+            'down': '0',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['down_node_monitoring'] = cls.post_viewer("/tablets/app", params={
+            'TabletID': '72057594037968897',
+            'page': 'SetDown',
+            'node': '1',
+            'down': '0',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['down_node_viewer'] = cls.post_viewer("/tablets/app", params={
+            'TabletID': '72057594037968897',
+            'page': 'SetDown',
+            'node': '1',
+            'down': '0',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['down_node_database'] = cls.post_viewer("/tablets/app", params={
+            'TabletID': '72057594037968897',
+            'page': 'SetDown',
+            'node': '1',
+            'down': '0',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+>>>>>>> 94fcb4ae8fb (only accept post requests in hive for effectful http operations (#30038))
 
 
 def test_viewer_query_long_multipart():

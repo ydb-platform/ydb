@@ -1623,15 +1623,11 @@ struct TEvPQ {
     };
 
     struct TEvMLPConsumerState : TEventLocal<TEvMLPConsumerState, EvMLPConsumerState> {
-        TEvMLPConsumerState(ui32 partitionId, const TString& consumerName, NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters&& metrics)
-            : PartitionId(partitionId)
-            , ConsumerName(consumerName)
-            , Metrics(std::move(metrics))
+        TEvMLPConsumerState(NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters&& metrics)
+            : Metrics(std::move(metrics))
         {
         }
 
-        ui32 PartitionId;
-        TString ConsumerName;
         NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
     };
 };

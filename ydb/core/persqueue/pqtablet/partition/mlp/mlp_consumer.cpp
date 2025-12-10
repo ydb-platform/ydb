@@ -816,6 +816,9 @@ void TConsumerActor::UpdateMetrics() {
     auto& metrics = Storage->GetMetrics();
 
     NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters counters;
+    counters.SetConsumerName(Config.GetName());
+    counters.SetPartitionId(PartitionId);
+
     counters.SetInflightMessageCount(metrics.InflightMessageCount);
     counters.SetUnprocessedMessageCount(metrics.UnprocessedMessageCount);
     counters.SetLockedMessageCount(metrics.LockedMessageCount);
@@ -836,7 +839,7 @@ void TConsumerActor::UpdateMetrics() {
         counters.AddMessageLocksValues(metrics.MessageLocks.GetRangeValue(i));
     }
 
-    Send(PartitionActorId, new TEvPQ::TEvMLPConsumerState(PartitionId, Config.GetName(), std::move(counters)));
+    Send(PartitionActorId, new TEvPQ::TEvMLPConsumerState(std::move(counters)));
 }
 
 NActors::IActor* CreateConsumerActor(

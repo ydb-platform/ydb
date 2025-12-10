@@ -762,10 +762,11 @@ message TClientInfo {
 
 message TAggregatedCounters {
     repeated uint64 Values = 1;
+
     repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
     optional TCompactionCounters CompactionCounters = 3;
     optional TExtendedCounters ExtendedCounters = 4;
-    optional TMLPConsumerCounters MLPConsumerCounters = 5;
+    repeated TMLPConsumerCounters MLPConsumerCounters = 5;
 
     message TConsumerAggregatedCounters {
         optional string Consumer = 1;
@@ -780,23 +781,26 @@ message TAggregatedCounters {
     }
 
     message TMLPConsumerCounters {
-        optional uint64 InflightMessageCount = 1;
-        optional uint64 UnprocessedMessageCount = 2;
-        optional uint64 LockedMessageCount = 3;
-        optional uint64 LockedMessageGroupCount = 4;
-        optional uint64 DelayedMessageCount = 5;
-        optional uint64 CommittedMessageCount = 6;
-        optional uint64 DeadlineExpiredMessageCount = 7;
-        optional uint64 DLQMessageCount = 8;
+        optional string ConsumerName = 1;
+        optional uint32 PartitionId = 2;
 
-        optional uint64 TotalCommittedMessageCount = 9;
-        optional uint64 TotalMovedToDLQMessageCount = 10;
-        optional uint64 TotalScheduledToDLQMessageCount = 11;
-        optional uint64 TotalPurgedMessageCount = 12;
-        optional uint64 TotalDeletedByDeadlinePolicyMessageCount = 13;
-        optional uint64 TotalDeletedByRetentionMessageCount = 14;
+        optional uint64 InflightMessageCount = 3;
+        optional uint64 UnprocessedMessageCount = 4;
+        optional uint64 LockedMessageCount = 5;
+        optional uint64 LockedMessageGroupCount = 6;
+        optional uint64 DelayedMessageCount = 7;
+        optional uint64 CommittedMessageCount = 8;
+        optional uint64 DeadlineExpiredMessageCount = 9; // ???
+        optional uint64 DLQMessageCount = 10;
 
-        repeated uint64 MessageLocksValues = 15;
+        optional uint64 TotalCommittedMessageCount = 11;
+        optional uint64 TotalMovedToDLQMessageCount = 12;
+        optional uint64 TotalScheduledToDLQMessageCount = 13;
+        optional uint64 TotalPurgedMessageCount = 14;
+        optional uint64 TotalDeletedByDeadlinePolicyMessageCount = 15;
+        optional uint64 TotalDeletedByRetentionMessageCount = 16;
+
+        repeated uint64 MessageLocksValues = 17;
     }
 }
 

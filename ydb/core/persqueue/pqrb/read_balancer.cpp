@@ -486,7 +486,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
         AggregatedStats.AggrStats(partRes.GetAvgWriteSpeedPerSec(), partRes.GetAvgWriteSpeedPerMin(),
             partRes.GetAvgWriteSpeedPerHour(), partRes.GetAvgWriteSpeedPerDay());
-        AggregatedStats.Stats[partitionId].Counters = partRes.GetAggregatedCounters();
+        AggregatedStats.Stats[partitionId].Counters = std::move(partRes.GetAggregatedCounters());
         AggregatedStats.Stats[partitionId].HasCounters = true;
     }
 
@@ -652,9 +652,20 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
 
     using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
     auto labeledConsumerCounters = std::make_unique<TConsumerLabeledCounters>("topic|x|consumer", 0, DatabasePath);
+
+    using TMLPConsumerLabeledCounters = TProtobufTabletLabeledCounters<EMLPConsumerLabeledCounters_descriptor>;
+    auto labeledMLPConsumerCounters = std::make_unique<TMLPConsumerLabeledCounters>("topic|consumer", 0, DatabasePath);
+
     for (auto& [consumer, info]: Consumers) {
-        ensureCounters(info.AggregatedCounters, labeledConsumerCounters, {{"consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx)}});
+        auto consumerName = NPersQueue::ConvertOldConsumerName(consumer, ctx);
+
+        ensureCounters(info.AggregatedCounters, labeledConsumerCounters, {{"consumer", consumerName}});
         info.Aggr.Reset(new TTabletLabeledCountersBase{});
+
+        //if (consumer == "mlp") {
+        ensureCounters(info.AggregatedMLPConsumerCounters, labeledMLPConsumerCounters, {{"consumer", consumerName}});
+        info.AggrMLP.Reset(new TTabletLabeledCountersBase{});
+        //}
     }
 
     /*** apply counters ****/
@@ -699,6 +710,26 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             setCounters(labeledConsumerCounters, consumerStats);
             consumerInfo.Aggr->AggregateWith(*labeledConsumerCounters);
         }
+
+        for (const auto& consumerStats : partitionStats.Counters.GetMLPConsumerCounters()) {
+            auto jt = Consumers.find(consumerStats.GetConsumerName());
+            if (jt == Consumers.end()) {
+                continue;
+            }
+
+            auto& consumerInfo = jt->second;
+            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGTH_COMMITTED_COUNT].Add(consumerStats.GetCommittedMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGTH_LOCKED_COUNT].Add(consumerStats.GetLockedMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGTH_DELAYED_COUNT].Add(consumerStats.GetDelayedMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGTH_UNLOCKED_COUNT].Add(consumerStats.GetUnprocessedMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGTH_SCHEDULED_TO_DLQ_COUNT].Add(consumerStats.GetDLQMessageCount());
+
+            consumerInfo.AggrMLP->GetCounters()[METRIC_COMMITTED_COUNT].Add(consumerStats.GetTotalCommittedMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_MOVED_TO_DLQ_COUNT].Add(consumerStats.GetTotalMovedToDLQMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_DELETED_BY_RETENTION_COUNT].Add(consumerStats.GetTotalDeletedByRetentionMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_DELETED_BY_DEADLINE_POLICY_COUNT].Add(consumerStats.GetTotalDeletedByDeadlinePolicyMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_PURGED_COUNT].Add(consumerStats.GetTotalPurgedMessageCount());
+        }
     }
 
     auto processAggregators = [milliSeconds](auto& aggregator, auto& counters) {
@@ -722,6 +753,9 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
 
     for (auto& [consumer, info] : Consumers) {
         processAggregators(info.Aggr, info.AggregatedCounters);
+        if (info.AggrMLP) {
+            processAggregators(info.AggrMLP, info.AggregatedMLPConsumerCounters);
+        }
     }
 }
 

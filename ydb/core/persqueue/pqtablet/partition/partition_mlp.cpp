@@ -67,8 +67,8 @@ void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPConsumerState " << ev->Get()->ConsumerName << ":" << ev->Get()->PartitionId);
-    auto it = MLPConsumers.find(ev->Get()->ConsumerName);
+    LOG_D("Handle TEvPQ::TEvMLPConsumerState " << ev->Get()->Metrics.ShortDebugString());
+    auto it = MLPConsumers.find(ev->Get()->Metrics.GetConsumerName());
     if (it == MLPConsumers.end()) {
         return;
     }

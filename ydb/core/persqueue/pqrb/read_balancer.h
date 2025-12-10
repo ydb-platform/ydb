@@ -159,6 +159,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     struct TConsumerInfo {
         std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
         THolder<TTabletLabeledCountersBase> Aggr;
+
+        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedMLPConsumerCounters;
+        THolder<TTabletLabeledCountersBase> AggrMLP;
     };
 
     std::unordered_map<TString, TConsumerInfo> Consumers;

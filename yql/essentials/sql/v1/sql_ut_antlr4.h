@@ -50,7 +50,6 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     settings.Mode = mode;
     settings.Arena = &arena;
     settings.AnsiLexer = ansiLexer;
-    settings.Antlr4Parser = true;
     settings.SyntaxVersion = 1;
 
     NSQLTranslationV1::TLexers lexers;

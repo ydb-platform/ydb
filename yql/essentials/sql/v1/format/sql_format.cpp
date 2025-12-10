@@ -3239,7 +3239,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers_, query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -3248,7 +3248,7 @@ public:
             return Format(visitor.Process(*message), formattedQuery, issues, EFormatMode::Pretty);
         }
 
-        auto lexer = NSQLTranslationV1::MakeLexer(Lexers_, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+        auto lexer = NSQLTranslationV1::MakeLexer(Lexers_, parsedSettings.AnsiLexer);
         TVector<TString> statements;
         if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File)) {
             return false;
@@ -3274,7 +3274,7 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
@@ -3343,7 +3343,7 @@ TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
         throw yexception() << issues.ToString();
     }
 
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer);
     TVector<NSQLTranslation::TParsedToken> allTokens;
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         if (token.Name != "EOF") {

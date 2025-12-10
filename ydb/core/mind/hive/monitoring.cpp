@@ -222,7 +222,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_MEM_STATE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext& ctx) override {
-        const auto& params(GetParams(Event.Get()));
+        const auto params(GetParams(Event.Get()));
         if (params.contains("bad")) {
             BadOnly = FromStringWithDefault(params.Get("bad"), BadOnly);
         }
@@ -739,7 +739,7 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SETTINGS; }
 
     void UpdateConfig(NIceDb::TNiceDb& db, const TString& param, NJson::TJsonValue& jsonLog, TSchemeIds::State compatibilityParam = TSchemeIds::State::DefaultState) {
-        const auto& params(GetParams(Event.Get()));
+        const auto params(GetParams(Event.Get()));
         if (params.contains(param)) {
             ChangeRequest = true;
             if (Event->GetMethod() != HTTP_METHOD_POST) {
@@ -813,7 +813,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        const auto& params(GetParams(Event.Get()));
+        const auto params(GetParams(Event.Get()));
         NIceDb::TNiceDb db(txc.DB);
 
         NJson::TJsonValue jsonOperation;
@@ -1409,7 +1409,7 @@ public:
         NJson::TJsonValue jsonOperation;
         jsonOperation["NodeId"] = NodeId;
 
-        const auto& cgi = GetParams(Event.Get());
+        const auto cgi = GetParams(Event.Get());
         auto changeType = ParseTabletType(cgi.Get("changetype"));
         auto maxCount = TryFromString<ui64>(cgi.Get("maxcount"));
         auto resetType = ParseTabletType(cgi.Get("resettype"));
@@ -4473,7 +4473,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TStringStream out;
-        const auto& params(GetParams(Event.Get()));
+        const auto params(GetParams(Event.Get()));
         TTabletId filterTabletId = FromStringWithDefault<TTabletId>(params.Get("tablet_id"), (ui64)-1);
         ui64 filterGroupId = FromStringWithDefault<ui64>(params.Get("group_id"), (ui64)-1);
 

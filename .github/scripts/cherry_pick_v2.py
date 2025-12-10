@@ -501,51 +501,38 @@ def process_branch(
         result = run_git(repo_path, ['show', '--no-patch', '--format=%P', commit_sha], logger)
         parents = result.stdout.strip().split()
         
-        if len(parents) >= 2:
-            # Merge commit: get commits from fork branch (second parent)
-            base_parent = parents[0]
-            fork_parent = parents[1]
-            run_git(repo_path, ['fetch', 'origin', base_parent, fork_parent], logger)
+        try:
+            if len(parents) >= 2:
+                # Merge commit: use -m 1 to cherry-pick changes from fork branch (second parent)
+                logger.info(f"Merge commit {commit_sha[:7]}: cherry-picking with -m 1")
+                result = run_git(repo_path, ['cherry-pick', '--allow-empty', '-m', '1', commit_sha], logger, check=False)
+            else:
+                # Regular commit
+                result = run_git(repo_path, ['cherry-pick', '--allow-empty', commit_sha], logger, check=False)
             
-            result = run_git(repo_path, ['rev-list', '--reverse', f'{base_parent}..{fork_parent}'], logger)
-            commits_to_pick = [sha.strip() for sha in result.stdout.strip().split('\n') if sha.strip()]
+            output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
             
-            if not commits_to_pick:
-                raise RuntimeError(f"Merge commit {commit_sha[:7]} has no commits in fork branch")
-            
-            logger.info(f"Merge commit {commit_sha[:7]}: cherry-picking {len(commits_to_pick)} commits from fork branch")
-            for commit_to_pick in commits_to_pick:
-                run_git(repo_path, ['fetch', 'origin', commit_to_pick], logger)
-        else:
-            commits_to_pick = [commit_sha]
-        
-        # Cherry-pick commits
-        for commit_to_pick in commits_to_pick:
-            try:
-                result = run_git(repo_path, ['cherry-pick', '--allow-empty', commit_to_pick], logger, check=False)
-                output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
-                
-                if result.returncode != 0:
-                    if "conflict" in output.lower():
-                        conflicts = detect_conflicts(repo_path, logger)
-                        if conflicts:
-                            run_git(repo_path, ['add', '-A'], logger)
-                            commit_desc = f"commit {commit_to_pick[:7]}" + (f" (from merge commit {commit_sha[:7]})" if len(commits_to_pick) > 1 else "")
-                            run_git(repo_path, ['commit', '--allow-empty', '-m', f"BACKPORT-CONFLICT: manual resolution required for {commit_desc}"], logger)
-                            all_conflict_files.extend(conflicts)
-                        else:
-                            run_git(repo_path, ['cherry-pick', '--abort'], logger, check=False)
-                            logger.error(f"Cherry-pick conflict detected but no conflict files found. Output: {output}")
-                            raise RuntimeError(f"Cherry-pick failed for commit {commit_to_pick[:7]}: {output}")
+            if result.returncode != 0:
+                if "conflict" in output.lower():
+                    conflicts = detect_conflicts(repo_path, logger)
+                    if conflicts:
+                        run_git(repo_path, ['add', '-A'], logger)
+                        commit_desc = f"commit {commit_sha[:7]}" + (" (merge commit)" if len(parents) >= 2 else "")
+                        run_git(repo_path, ['commit', '--allow-empty', '-m', f"BACKPORT-CONFLICT: manual resolution required for {commit_desc}"], logger)
+                        all_conflict_files.extend(conflicts)
                     else:
-                        logger.error(f"Cherry-pick error for commit {commit_to_pick[:7]}: {output}")
-                        raise RuntimeError(f"Cherry-pick failed for commit {commit_to_pick[:7]}: {output}")
-                
-                if output:
-                    cherry_pick_logs.append(f"=== Cherry-picking {commit_to_pick[:7]} ===\n{output}")
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Cherry-pick exception for commit {commit_to_pick[:7]}: {e}")
-                raise RuntimeError(f"Cherry-pick failed for commit {commit_to_pick[:7]}: {e}")
+                        run_git(repo_path, ['cherry-pick', '--abort'], logger, check=False)
+                        logger.error(f"Cherry-pick conflict detected but no conflict files found. Output: {output}")
+                        raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {output}")
+                else:
+                    logger.error(f"Cherry-pick error for commit {commit_sha[:7]}: {output}")
+                    raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {output}")
+            
+            if output:
+                cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{output}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Cherry-pick exception for commit {commit_sha[:7]}: {e}")
+            raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {e}")
     
     # Push branch
     run_git(repo_path, ['push', '--set-upstream', 'origin', dev_branch_name], logger)

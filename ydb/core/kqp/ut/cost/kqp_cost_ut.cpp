@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             )", name.c_str()));
 
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
-        
+
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             Cerr << name << ":" << Endl;
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
         auto checkSelect = [&](auto query, TMap<TString, ui64> expectedReadsByTable) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), GetDataQuerySettings()).ExtractValueSync();
-        
+
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
@@ -419,14 +419,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL_C(expectedReadsByTable, readsByTable, query);
         };
 
-        { // 5x. SELECT VIEW PRIMARY KEY
+        { // 5x. SELECT VIEW PRIMARY KEY (with brute force vector search pushdown)
             // SELECT Key
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW PRIMARY KEY
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors", 100} // full scan
+                {"/Root/Vectors", 100} // brute force vector search pushdown returns only 10 rows but scans 100 rows
             });
 
             // SELECT Key, Value --- same stats
@@ -1120,7 +1120,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(lhs.Reads, rhs.Reads);
         UNIT_ASSERT_VALUES_EQUAL(lhs.Deletes, rhs.Deletes);
     }
-    
+
 
     Y_UNIT_TEST_QUAD(WriteRow, isSink, isOlap) {
         if (isOlap) {

@@ -694,11 +694,10 @@ namespace NSQLTranslationV1 {
             , Name(name) {}
     };
 
-    struct TColumnConstraints {
+    struct TColumnOptions {
         TNodePtr DefaultExpr;
         bool Nullable = true;
-
-        TColumnConstraints(TNodePtr defaultExpr, bool nullable);
+        TVector<TIdentifier> Families;
     };
 
     struct TColumnSchema {

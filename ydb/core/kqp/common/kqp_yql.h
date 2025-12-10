@@ -130,6 +130,10 @@ public:
     static constexpr TStringBuf TabletIdName = "TabletId";
     static constexpr TStringBuf PointPrefixLenSettingName = "PointPrefixLen";
     static constexpr TStringBuf IndexSelectionDebugInfoSettingName = "IndexSelectionDebugInfo";
+    static constexpr TStringBuf VectorTopKColumnSettingName = "VectorTopKColumn";
+    static constexpr TStringBuf VectorTopKMetricSettingName = "VectorTopKMetric";
+    static constexpr TStringBuf VectorTopKTargetSettingName = "VectorTopKTarget";
+    static constexpr TStringBuf VectorTopKLimitSettingName = "VectorTopKLimit";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
@@ -138,6 +142,12 @@ public:
     bool ForcePrimary = false;
     ui64 PointPrefixLen = 0;
     THashMap<TString, TString> IndexSelectionInfo;
+
+    // Vector top-K pushdown settings for brute force vector search
+    TString VectorTopKColumn;
+    TString VectorTopKMetric;
+    TExprNode::TPtr VectorTopKTarget;
+    TExprNode::TPtr VectorTopKLimit;
 
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }

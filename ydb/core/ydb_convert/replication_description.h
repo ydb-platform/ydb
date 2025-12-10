@@ -7,7 +7,6 @@ namespace Ydb {
         class DescribeReplicationResult;
         class DescribeTransferResult;
     }
-    class StatusIds;
     enum StatusIds_StatusCode : int;
 }
 
@@ -18,10 +17,6 @@ namespace NKikimrSchemeOp {
 
 namespace NKikimrReplication {
     class TEvDescribeReplicationResult;
-}
-
-namespace NYql {
-    class TIssue;
 }
 
 namespace NKikimr {

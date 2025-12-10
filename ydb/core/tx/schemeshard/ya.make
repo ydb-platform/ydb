@@ -264,6 +264,7 @@ SRCS(
     schemeshard_effective_acl.cpp
     schemeshard_effective_acl.h
     schemeshard_scheme_builders.cpp
+    schemeshard_scheme_builders.h
     schemeshard_export.cpp
     schemeshard_export__cancel.cpp
     schemeshard_export__create.cpp

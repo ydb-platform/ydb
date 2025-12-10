@@ -66,6 +66,12 @@ def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.Co
         text=True,
         check=check
     )
+    if result.stdout:
+        logger.debug(f"stdout: {result.stdout}")
+    if result.stderr:
+        logger.debug(f"stderr: {result.stderr}")
+    if result.returncode != 0:
+        logger.debug(f"exit code: {result.returncode}")
     return result
 
 
@@ -528,13 +534,16 @@ def process_branch(
                             all_conflict_files.extend(conflicts)
                         else:
                             run_git(repo_path, ['cherry-pick', '--abort'], logger, check=False)
-                            raise RuntimeError(f"Cherry-pick failed for commit {commit_to_pick[:7]}")
+                            logger.error(f"Cherry-pick conflict detected but no conflict files found. Output: {output}")
+                            raise RuntimeError(f"Cherry-pick failed for commit {commit_to_pick[:7]}: {output}")
                     else:
+                        logger.error(f"Cherry-pick error for commit {commit_to_pick[:7]}: {output}")
                         raise RuntimeError(f"Cherry-pick failed for commit {commit_to_pick[:7]}: {output}")
                 
                 if output:
                     cherry_pick_logs.append(f"=== Cherry-picking {commit_to_pick[:7]} ===\n{output}")
             except subprocess.CalledProcessError as e:
+                logger.error(f"Cherry-pick exception for commit {commit_to_pick[:7]}: {e}")
                 raise RuntimeError(f"Cherry-pick failed for commit {commit_to_pick[:7]}: {e}")
     
     # Push branch
@@ -683,15 +692,7 @@ def main():
                 logger.error(f"VALIDATION_ERROR: Commit {ref} (expanded to {expanded_sha}) does not exist: {e}")
                 sys.exit(1)
             
-            # Check if commit is linked to PR
-            pulls = commit.get_pulls()
-            if pulls.totalCount > 0:
-                pr = pulls.get_page(0)[0]
-                if not pr.merged and not allow_unmerged:
-                    raise ValueError(f"PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged. Cannot backport unmerged PR. Use --allow-unmerged to allow")
-                if not pr.merged:
-                    logger.info(f"PR #{pr.number} (associated with commit {expanded_sha[:7]}) is not merged, but --allow-unmerged is set, proceeding")
-            
+            # When commit is passed directly, we cherry-pick it regardless of linked PR status
             source = create_commit_source(commit, repo, logger)
             sources.append(source)
     
@@ -781,12 +782,18 @@ def main():
     try:
         repo_url = f"https://{token}@github.com/{repo_name}.git"
         logger.info("Cloning repository: %s to %s", repo_url, repo_dir)
-        subprocess.run(
+        logger.debug(f"Running: git clone https://github.com/{repo_name}.git {repo_dir}")
+        result = subprocess.run(
             ['git', 'clone', repo_url, repo_dir],
             env={**os.environ, 'GIT_PROTOCOL': '2'},
-            check=True,
-            capture_output=True
+            check=False,
+            capture_output=True,
+            text=True
         )
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or "Unknown error"
+            logger.error(f"Git clone failed: {error_msg}")
+            raise RuntimeError(f"Failed to clone repository: {error_msg}")
         
         # Process each target branch
         results = []

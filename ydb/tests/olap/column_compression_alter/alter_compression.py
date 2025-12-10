@@ -24,12 +24,12 @@ class TestCompressionBase(ColumnTestBase):
                 $rows= ListMap(ListFromRange(0, $row_count), ($i) -> {
                     return <|
                         value: $i + $prev_count,
-                        value1: $i + $prev_count,
+                        value1: $i / 3,
                     |>;
                 });
                 UPSERT INTO `%s`
                 SELECT * FROM AS_TABLE($rows);
-            """
+                """
                 % (number_rows_for_insert, current_num_rows, table.path)
             )
             current_num_rows += number_rows_for_insert
@@ -55,7 +55,7 @@ class TestAlterColumnCompression(TestCompressionBase):
     @classmethod
     def setup_class(cls):
         super(TestAlterColumnCompression, cls).setup_class()
-        cls.single_upsert_rows_count: int = 10**3
+        cls.single_upsert_rows_count: int = 1000
         cls.upsert_count: int = 10
         cls.volumes_without_compression: tuple[int, int]
         cls.test_name: str = "all_supported_compression"
@@ -80,7 +80,7 @@ class TestAlterColumnCompression(TestCompressionBase):
                     PRIMARY KEY(value),
                 )
                 WITH (STORE = COLUMN)
-                """
+            """
         )
         logger.info(f"Table {self.table_path} created")
         table = ColumnTableHelper(self.ydb_client, self.table_path)
@@ -103,7 +103,7 @@ class TestAlterColumnCompression(TestCompressionBase):
                 ALTER TABLE `{self.table_path}`
                     ALTER COLUMN `value` SET COMPRESSION({compression_settings}),
                     ALTER COLUMN `value1` SET COMPRESSION({compression_settings});
-                """
+            """
         )
         logger.info(f"Table {self.table_path} altered")
         table = ColumnTableHelper(self.ydb_client, self.table_path)
@@ -128,7 +128,7 @@ class TestAlterColumnCompression(TestCompressionBase):
                 ALTER TABLE `{self.table_path}`
                     ALTER COLUMN `value` SET COMPRESSION(),
                     ALTER COLUMN `value1` SET COMPRESSION();
-                """
+            """
         )
         logger.info(f"Table {self.table_path} altered")
         table = ColumnTableHelper(self.ydb_client, self.table_path)

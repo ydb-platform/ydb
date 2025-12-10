@@ -11,7 +11,8 @@
 Y_UNIT_TEST_SUITE(Deadlines) {
 
     struct TestCtx {
-        TestCtx(const TBlobStorageGroupType& erasure, TDuration vdiskDelay)
+        TestCtx(const TBlobStorageGroupType& erasure, TDuration vdiskDelay,
+                TDuration maxPutTimeout = TDuration::Seconds(60))
             : NodeCount(erasure.BlobSubgroupSize() + 1)
             , Erasure(erasure)
             , VDiskDelay(vdiskDelay)
@@ -23,6 +24,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
                 .Erasure = erasure,
                 .LocationGenerator = [this](ui32 nodeId) { return LocationGenerator(nodeId); },
                 .FeatureFlags = std::move(ff),
+                .MaxPutTimeoutDSProxy = maxPutTimeout,
             }));
             VDiskDelayEmulator.reset(new TVDiskDelayEmulator(Env));
         }
@@ -483,4 +485,35 @@ Y_UNIT_TEST_SUITE(Deadlines) {
     TEST_DEADLINE(Status, Mirror3of4);
 
     #undef TEST_DEADLINE
+
+    Y_UNIT_TEST(TestCustomPutTimeout) {
+        TestCtx ctx(TBlobStorageGroupType::ErasureMirror3dc,
+                /*vdiskDelay=*/TDuration::Seconds(120),
+                /*maxPutTimeout=*/TDuration::Seconds(180));
+        ctx.Initialize();
+
+        ctx.VDiskDelayEmulator->LogUnwrap = true;
+        ctx.VDiskDelayEmulator->AddHandler(TEvBlobStorage::TEvPut::EventType, [&](std::unique_ptr<IEventHandle>& ev) {
+            ui32 nodeId = ev->Sender.NodeId();
+            if (nodeId < ctx.NodeCount) {
+                ctx.VDiskDelayEmulator->DelayMsg(ev);
+                return false;
+            }
+            return true;
+        });
+
+        {
+            TString data = MakeData(10);
+            TLogoBlobID blobId(1, 1, 1, 1, data.size(), 123);
+            ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
+                    SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max(),
+                            NKikimrBlobStorage::TabletLog));
+            });
+        }
+
+        {
+            auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(ctx.Edge, false, TInstant::Max());
+            UNIT_ASSERT(res->Get()->Status == NKikimrProto::OK);
+        }
+    }
 }

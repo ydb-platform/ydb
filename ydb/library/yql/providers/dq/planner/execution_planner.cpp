@@ -448,9 +448,10 @@ namespace NYql::NDqs {
             _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*read, parts, &clusterName, ExprContext, settings));
             TMaybe<::google::protobuf::Any> sourceSettings;
             TString sourceType;
+            IDqIntegration::TSourceWatermarksSettings sourceWatermarksSettings;
             if (dqSource) {
                 sourceSettings.ConstructInPlace();
-                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions, ExprContext);
+                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions, ExprContext, sourceWatermarksSettings);
                 YQL_ENSURE(!sourceSettings->type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
                 YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
             }
@@ -461,6 +462,10 @@ namespace NYql::NDqs {
                 if (dqSource) {
                     task.Inputs[dqSourceInputIndex].SourceSettings = sourceSettings;
                     task.Inputs[dqSourceInputIndex].SourceType = sourceType;
+                    if (sourceWatermarksSettings.Enabled) {
+                        task.Inputs[dqSourceInputIndex].WatermarksMode = NYql::NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT;
+                        task.Inputs[dqSourceInputIndex].WatermarksIdleTimeoutUs = sourceWatermarksSettings.IdleTimeoutUs;
+                    }
                 }
             }
         }

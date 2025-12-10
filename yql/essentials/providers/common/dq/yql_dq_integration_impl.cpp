@@ -58,6 +58,10 @@ bool TDqIntegrationBase::CanFallback() {
 void TDqIntegrationBase::FillSourceSettings(const TExprNode&, ::google::protobuf::Any&, TString&, size_t, TExprContext&) {
 }
 
+void TDqIntegrationBase::FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType, size_t maxPartitions, TExprContext& ctx, TSourceWatermarksSettings&) {
+    FillSourceSettings(node, settings, sourceType, maxPartitions, ctx);
+}
+
 void TDqIntegrationBase::FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) {
     Y_UNUSED(node);
     Y_UNUSED(settings);

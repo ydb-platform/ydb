@@ -329,6 +329,8 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     expected.mutable_settings()->set_vector_dimension(768);
                     expected.set_levels(2);
                     expected.set_clusters(80);
+                    expected.set_overlap_clusters(3);
+                    expected.set_overlap_ratio(1.2);
                     if (!google::protobuf::util::MessageDifferencer::Equals(settings, expected)) {
                         continue;
                     }
@@ -783,7 +785,7 @@ void TestRestoreTableWithIndex(
                     PRIMARY KEY (Key),
                     INDEX {index} GLOBAL USING vector_kmeans_tree
                         ON (Group, Value)
-                        WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+                        WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80, overlap_clusters=3, overlap_ratio="1.2")
                     ) WITH (
                         STORE = {store}
                     );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");
@@ -795,7 +797,7 @@ void TestRestoreTableWithIndex(
                     PRIMARY KEY (Key),
                     INDEX {index} GLOBAL USING vector_kmeans_tree
                         ON (Value)
-                        WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+                        WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80, overlap_clusters=3, overlap_ratio="1.2")
                     ) WITH (
                         STORE = {store}
                     );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");

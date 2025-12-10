@@ -1095,6 +1095,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 }
                 levels: 5
                 clusters: 4
+                overlap_clusters: 3
+                overlap_ratio: 1.2
             )", &proto));
             using T = NYdb::NTable::TKMeansTreeSettings;
             kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));

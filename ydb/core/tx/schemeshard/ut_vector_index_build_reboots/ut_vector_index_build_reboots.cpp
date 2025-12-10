@@ -9,7 +9,7 @@ using namespace NSchemeShardUT_Private;
 
 
 Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
-    Y_UNIT_TEST_WITH_REBOOTS_FLAG(BaseCase, Prefixed) {
+    Y_UNIT_TEST_WITH_REBOOTS_QUAD(BaseCase, Prefixed, Overlap) {
         // Without killOnCommit, the schemeshard doesn't get rebooted on TEvDataShard::Ev***KMeansResponse's,
         // and thus the vector index build process is never interrupted at all because there are no other
         // events to reboot on.
@@ -61,6 +61,13 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
                 });
                 // with too many scan events, the test works infinite time
                 request->Record.MutableSettings()->MutableScanSettings()->Clear();
+                if (Overlap) {
+                    request->Record.MutableSettings()
+                        ->mutable_index()
+                        ->mutable_global_vector_kmeans_tree_index()
+                        ->mutable_vector_settings()
+                        ->set_overlap_clusters(2);
+                }
                 ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
             }
 
@@ -92,7 +99,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
                 {
                     auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/dir/Table/index1/" + TString(PostingTable));
                     Cerr << "... posting table contains " << rows << " rows" << Endl;
-                    UNIT_ASSERT_VALUES_EQUAL(rows, 400);
+                    UNIT_ASSERT_VALUES_EQUAL(rows, (Overlap ? 800 : 400));
                 }
 
             }

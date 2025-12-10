@@ -29,9 +29,9 @@ class TPaddedPtr
                            typename TPtrTransform::T, int64_t,
                            decltype(TPtrTransform::ToPtr(nullptr)),
                            decltype(TPtrTransform::ToRef(nullptr))> {
-    using T = std::iterator_traits<TPaddedPtr>::value_type;
-    using TPtr = std::iterator_traits<TPaddedPtr>::pointer;
-    using TRef = std::iterator_traits<TPaddedPtr>::reference;
+    using T = typename TPtrTransform::T;
+    using TPtr = decltype(TPtrTransform::ToPtr(nullptr));
+    using TRef = decltype(TPtrTransform::ToRef(nullptr));
 
   public:
     TPaddedPtr(TData *ptr)

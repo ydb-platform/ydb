@@ -2,6 +2,7 @@
 #include "utils/dq_setup.h"
 #include "utils/utils.h"
 #include <type_utils.h>
+#include <optional>
 #include <ydb/core/kqp/tools/join_perf/construct_join_graph.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
@@ -149,6 +150,29 @@ TJoinTestData MixedKeysInnerTestData() {
         "c2",
         "d2",
     };
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData OptionalPayloadInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<std::optional<TString>> leftValues = {std::nullopt, TString("a1"), TString("b1")};
+
+    TVector<ui64> rightKeys = {2, 3, 4};
+    TVector<std::optional<TString>> rightValues = {TString("a2"), std::nullopt, TString("c2")};
+
+    TVector<ui64> expectedKeysLeft = {2, 3};
+    TVector<std::optional<TString>> expectedValuesLeft = {TString("a1"), TString("b1")};
+    TVector<ui64> expectedKeysRight = {2, 3};
+    TVector<std::optional<TString>> expectedValuesRight = {TString("a2"), std::nullopt};
 
     td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
     td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
@@ -511,6 +535,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestMixedKeysPassthrough, BlockJoin) {
         Test(MixedKeysInnerTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestOptionalPayloads, BlockJoin) {
+        Test(OptionalPayloadInnerTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {

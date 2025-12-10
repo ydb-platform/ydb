@@ -18,5 +18,7 @@ protected:
     void WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op);
 };
 
+TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev);
+
 }
 }

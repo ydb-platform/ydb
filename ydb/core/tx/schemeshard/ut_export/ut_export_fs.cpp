@@ -9,6 +9,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -44,6 +45,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -75,6 +77,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -99,6 +102,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TableToDelete"
@@ -126,6 +130,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"

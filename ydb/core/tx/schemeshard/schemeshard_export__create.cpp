@@ -145,8 +145,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 if (!settings.scheme()) {
                     settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
                 }
-                exportInfo->MaterializeIndexes = settings.materialize_indexes();
-                if (exportInfo->MaterializeIndexes && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
+                if (settings.materialize_indexes() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
                     return Reply(
                         std::move(response),
                         Ydb::StatusIds::PRECONDITION_FAILED,
@@ -156,6 +155,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 if (processExportSettings(settings, TExportInfo::EKind::S3, true)) {
                     return true;
                 }
+                exportInfo->MaterializeIndexes = settings.materialize_indexes();
             }
             break;
 

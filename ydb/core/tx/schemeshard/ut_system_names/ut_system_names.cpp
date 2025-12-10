@@ -495,6 +495,17 @@ const std::vector<TCreatePathOp> CreatePathOperations({
             return CreateStreamingQueryRequest(/* txId */ 0, workingDir, modifyScheme);
         }
     },
+    {
+        .Type = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShard,
+        .CreateRequest = [](const TString& workingDir, const TString& path) {
+            const TString modifyScheme = Sprintf(R"(
+                Name: "%s"
+            )",
+            path.c_str()
+            );
+            return CreateTestShardRequest(/* txId */ 0, workingDir, modifyScheme);
+        }
+    }
 
     //NOTE: ADD NEW ENTRY ABOVE THIS LINE
 });

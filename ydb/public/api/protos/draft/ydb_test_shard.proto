@@ -55,7 +55,7 @@ message CreateTestShardRequest {
     //   stall_counter: 1000       # Barrier sync every N requests
     //
     // validation:                 # Optional external validation
-    //   server: "host:9999"       # Validation server address
+    //   server: "host:port"       # Validation server address
     //   after_bytes: 1000000      # Start validation after N bytes
     //
     // tracing:                    # Optional request tracing

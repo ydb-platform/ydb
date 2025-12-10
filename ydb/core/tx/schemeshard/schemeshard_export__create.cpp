@@ -35,6 +35,11 @@ bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& it
         || item.SourcePathType == NKikimrSchemeOp::EPathTypeTableIndex;
 }
 
+template <typename T>
+concept HasMaterializeIndexes = requires(const T& t) {
+    { t.materialize_indexes() } -> std::same_as<bool>;
+};
+
 }
 
 namespace NKikimr {
@@ -117,6 +122,9 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         auto processExportSettings = [&]<typename TSettings>(const TSettings& settings, TExportInfo::EKind kind, bool enableFeatureFlags) -> bool {
             exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());
+            if constexpr (HasMaterializeIndexes<TSettings>) {
+                exportInfo->MaterializeIndexes = settings.materialize_indexes();
+            }
             if (enableFeatureFlags) {
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
                 exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
@@ -155,7 +163,6 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 if (processExportSettings(settings, TExportInfo::EKind::S3, true)) {
                     return true;
                 }
-                exportInfo->MaterializeIndexes = settings.materialize_indexes();
             }
             break;
 

@@ -90,15 +90,16 @@ def expand_sha(repo, ref: str, logger) -> str:
     raise ValueError(f"Failed to find commit for '{ref}'")
 
 
-def create_commit_source(commit, repo, logger) -> Source:
+def create_commit_source(commit, repo, logger, skip_linked_pr: bool = False) -> Source:
     """Creates source from commit SHA"""
     linked_pr = None
-    try:
-        pulls = commit.get_pulls()
-        if pulls.totalCount > 0:
-            linked_pr = pulls.get_page(0)[0]
-    except Exception:
-        pass
+    if not skip_linked_pr:
+        try:
+            pulls = commit.get_pulls()
+            if pulls.totalCount > 0:
+                linked_pr = pulls.get_page(0)[0]
+        except Exception:
+            pass
     
     author = linked_pr.user.login if linked_pr else (commit.author.login if commit.author else None)
     body_item = f"* commit {commit.html_url}: {linked_pr.title}" if linked_pr else f"* commit {commit.html_url}"
@@ -530,7 +531,7 @@ def process_branch(
                         if conflicts:
                             run_git(repo_path, ['add', '-A'], logger)
                             commit_desc = f"commit {commit_to_pick[:7]}" + (f" (from merge commit {commit_sha[:7]})" if len(commits_to_pick) > 1 else "")
-                            run_git(repo_path, ['commit', '-m', f"BACKPORT-CONFLICT: manual resolution required for {commit_desc}"], logger)
+                            run_git(repo_path, ['commit', '--allow-empty', '-m', f"BACKPORT-CONFLICT: manual resolution required for {commit_desc}"], logger)
                             all_conflict_files.extend(conflicts)
                         else:
                             run_git(repo_path, ['cherry-pick', '--abort'], logger, check=False)
@@ -693,7 +694,8 @@ def main():
                 sys.exit(1)
             
             # When commit is passed directly, we cherry-pick it regardless of linked PR status
-            source = create_commit_source(commit, repo, logger)
+            # Don't search for linked PR to avoid finding wrong PR
+            source = create_commit_source(commit, repo, logger, skip_linked_pr=True)
             sources.append(source)
     
     # Validate

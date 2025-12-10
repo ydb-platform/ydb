@@ -10,22 +10,13 @@ namespace Ydb {
     enum StatusIds_StatusCode : int;
 }
 
-namespace Ydb {
-    namespace Replication {
-        class DescribeReplicationResult;
-        class DescribeTransferResult;
-    }
-    class StatusIds;
-    enum StatusIds_StatusCode : int;
-}
-
 namespace NKikimrSchemeOp {
     class TReplicationDescription;
     class TDirEntry;
 }
 
 namespace NKikimrReplication {
-    class TEvDescribeReplicationResult;
+    class TEvDesgicribeReplicationResult;
 }
 
 namespace NKikimr {

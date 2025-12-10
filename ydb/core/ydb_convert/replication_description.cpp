@@ -2,7 +2,6 @@
 #include "ydb_convert.h"
 
 #include <ydb/core/protos/replication.pb.h>
-
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
 #include <google/protobuf/util/time_util.h>

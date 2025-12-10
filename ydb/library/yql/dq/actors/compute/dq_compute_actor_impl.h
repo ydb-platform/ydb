@@ -1793,9 +1793,11 @@ protected:
         auto sink = outputInfo.Buffer;
 
         NKikimr::NMiniKQL::TUnboxedValueBatch dataBatch(sink->GetOutputType());
+        NDqProto::TWatermark watermark;
         NDqProto::TCheckpoint checkpoint;
 
         const ui64 dataSize = !outputInfo.Finished ? sink->Pop(dataBatch, bytes) : 0;
+        std::ignore = sink->Pop(watermark);
         const bool hasCheckpoint = sink->Pop(checkpoint);
         if (!dataSize && !hasCheckpoint) {
             if (!sink->IsFinished()) {

@@ -41,13 +41,8 @@ public:
         TString Error;
     };
 
-    THashesChecker();
     TResult OldFormatCheck(const TString& hash) const;
     TResult NewFormatCheck(const TString& hashes) const;
-    const THashTypeDescription* GetHashParams(const TString& hashName) const;
-
-private:
-    THashMap<TStringBuf, const THashTypeDescription&> AvailableHashTypes;
 };
 
 } // NLogin

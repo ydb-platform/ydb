@@ -72,6 +72,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.TxId = txId;
         read.SetLock(
             request.HasLockTxId() ? std::make_optional(request.GetLockTxId()) : std::nullopt,
+            request.HasLockNodeId() ? std::make_optional(request.GetLockNodeId()) : std::nullopt,
             request.HasLockMode() ? std::make_optional(request.GetLockMode()) : std::nullopt,
             request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr,
             false

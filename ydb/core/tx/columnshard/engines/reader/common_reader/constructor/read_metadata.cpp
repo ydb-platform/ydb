@@ -14,9 +14,13 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     InitShardingInfo(readDescription.TableMetadataAccessor);
     TxId = readDescription.TxId;
     LockId = readDescription.LockId;
+    auto lockNodeId = readDescription.LockNodeId;
     LockMode = readDescription.LockMode;
     if (LockId) {
         owner->GetOperationsManager().RegisterLock(*LockId, owner->Generation());
+        if (lockNodeId.has_value()) {
+            owner->SubscribeLockIfNotAlready(LockId.value(), lockNodeId.value());
+        }
         LockSharingInfo = owner->GetOperationsManager().GetLockVerified(*LockId).GetSharingInfo();
     }
     if (!owner->GetIndexOptional()) {

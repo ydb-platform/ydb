@@ -33,7 +33,13 @@ private:
     ui64 LockId;
 };
 
-void TColumnShard::MaybeCleanupLock(const ui64 lockId) {
+void TColumnShard::SubscribeLockIfNotAlready(const ui64 lockId, const ui32 lockNodeId) const {
+    auto& lock = OperationsManager->GetLockVerified(lockId);
+    if (!lock.IsSubscribed()) {
+        lock.SetSubscribed();
+        Send(NLongTxService::MakeLongTxServiceID(SelfId().NodeId()), std::make_unique<NLongTxService::TEvLongTxService::TEvSubscribeLock>(lockId, lockNodeId));
+    }
+}
     auto lock = OperationsManager->GetLockOptional(lockId);
     if (!lock || !lock->IsDeleted() || lock->IsAborted() || lock->IsTxIdAssigned() || lock->GetOperationsInProgress()) {
         return;

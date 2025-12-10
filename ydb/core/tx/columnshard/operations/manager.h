@@ -116,9 +116,13 @@ public:
         return SharingInfo->IsBroken();
     }
 
-    void SetDeleted() {
-        auto prevState = TLockSharingInfo::LockState::Created;
-        SharingInfo->State.compare_exchange_strong(prevState, TLockSharingInfo::LockState::Deleted);
+    bool subscribed = false;
+    void SetSubscribed() {
+        subscribed = true;
+    }
+    bool IsSubscribed() const {
+        return subscribed;
+    }
     }
 
     bool IsDeleted() const {

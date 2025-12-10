@@ -21,7 +21,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
     }
 
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
-    owner->SubscribeLock(LockId, LockNodeId);
+    owner->SubscribeLockIfNotAlready(LockId, LockNodeId);
     auto writeOperation = owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(

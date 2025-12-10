@@ -5634,6 +5634,20 @@
             "uri": "https://{canondata_backend}/1773845/fe7e8179b00c40d0490e546deadfa69d3c898235/resource.tar.gz#test_sql2yql.test_optimizers-yql-20363_/sql.yql"
         }
     ],
+    "test_sql2yql.test[optimizers-yql-20749_tuple1]": [
+        {
+            "checksum": "f4909a16f3df683822fdd7559155d9b8",
+            "size": 2899,
+            "uri": "https://{canondata_backend}/1784117/b97aa2572639a31f453955a285b7e28f616133e5/resource.tar.gz#test_sql2yql.test_optimizers-yql-20749_tuple1_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[optimizers-yql-20749_tuple2]": [
+        {
+            "checksum": "b2f39609ea6fa61b40787b19dfbe9401",
+            "size": 2925,
+            "uri": "https://{canondata_backend}/1784117/b97aa2572639a31f453955a285b7e28f616133e5/resource.tar.gz#test_sql2yql.test_optimizers-yql-20749_tuple2_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[optimizers-yson_dup_serialize]": [
         {
             "checksum": "c4d71b8c49a1202b8b7d0b439671a102",
@@ -13465,6 +13479,16 @@
     "test_sql_format.test[optimizers-yql-20363]": [
         {
             "uri": "file://test_sql_format.test_optimizers-yql-20363_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-yql-20749_tuple1]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-yql-20749_tuple1_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[optimizers-yql-20749_tuple2]": [
+        {
+            "uri": "file://test_sql_format.test_optimizers-yql-20749_tuple2_/formatted.sql"
         }
     ],
     "test_sql_format.test[optimizers-yson_dup_serialize]": [

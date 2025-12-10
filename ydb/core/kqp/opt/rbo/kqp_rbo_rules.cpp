@@ -499,12 +499,29 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_pt
         join->SetRightInput(std::make_shared<TOpMap>(rightInput, input->Pos, rightMapElements, false));
     }
 
-    // If there was an enforcer on the input map, move it to the output
-    if (input->Props.OrderEnforcer.has_value()) {
-        output->Props.OrderEnforcer = input->Props.OrderEnforcer;
+    return output;
+}
+
+std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+
+    if (input->Kind != EOperator::Limit) {
+        return input;
     }
 
-    return output;
+    auto limit = CastOperator<TOpLimit>(input);
+    if (limit->GetInput()->Kind != EOperator::Sort) {
+        return input;
+    }
+
+    auto sort = CastOperator<TOpSort>(limit->GetInput());
+    if (sort->LimitCond) {
+        return input;
+    }
+
+    sort->LimitCond = limit->LimitCond;
+    return sort;
 }
 
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
@@ -626,10 +643,6 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
         output =  std::make_shared<TOpFilter>(join, input->Pos, topFilterLambda);
     } else {
         output = join;
-    }
-
-    if (input->Props.OrderEnforcer.has_value()) {
-        output->Props.OrderEnforcer = input->Props.OrderEnforcer;
     }
 
     return output;
@@ -871,7 +884,15 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
-    } else if (input->Kind == EOperator::Limit) {
+    } else if (input->Kind == EOperator::Sort) {
+        auto sort = CastOperator<TOpSort>(input);
+        auto newStageId = props.StageGraph.AddStage();
+        input->Props.StageId = newStageId;
+        auto prevStageId = *(sort->GetInput()->Props.StageId);
+        auto conn = std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(prevStageId));
+        props.StageGraph.Connect(prevStageId, newStageId,conn);
+    }
+    else if (input->Kind == EOperator::Limit) {
         auto limit = CastOperator<TOpLimit>(input);
         auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
@@ -918,7 +939,8 @@ TRuleBasedStage RuleStage2 = TRuleBasedStage("Logical rewrites I",
         std::make_shared<TRemoveIdenityMapRule>(),
         std::make_shared<TExtractJoinExpressionsRule>(), 
         std::make_shared<TPushMapRule>(), 
-        std::make_shared<TPushFilterRule>()
+        std::make_shared<TPushFilterRule>(),
+        std::make_shared<TPushLimitIntoSortRule>()
     });
 
 TRuleBasedStage RuleStage3 = TRuleBasedStage("Prepare for CBO", 

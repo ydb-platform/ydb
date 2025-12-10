@@ -19,9 +19,6 @@ enum HealthCheckResponseFormat {
 class TJsonHealthCheck : public TViewerPipeClient {
     using TThis = TJsonHealthCheck;
     using TBase = TViewerPipeClient;
-    static const bool WithRetry = false;
-    TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
     HealthCheckResponseFormat Format;
     TString Database;
     bool Cache = true;
@@ -55,7 +52,7 @@ public:
         if (params.Has("return_hints")) {
             request->Request.set_return_hints(FromStringWithDefault<bool>(params.Get("return_hints"), false));
         }
-        SetDuration(TDuration::MilliSeconds(Timeout), *request->Request.mutable_operation_params()->mutable_operation_timeout());
+        SetDuration(Timeout, *request->Request.mutable_operation_params()->mutable_operation_timeout());
         return request;
     }
 
@@ -67,39 +64,38 @@ public:
         if (NeedToRedirect()) {
             return;
         }
-        const auto& params(Event->Get()->Request.GetParams());
         Format = HealthCheckResponseFormat::JSON;
-        if (params.Has("format")) {
-            auto& format = params.Get("format");
+        if (Params.Has("format")) {
+            auto& format = Params.Get("format");
             if (format == "json") {
                 Format = HealthCheckResponseFormat::JSON;
             } else if (format == "prometheus") {
                 Format = HealthCheckResponseFormat::PROMETHEUS;
             }
-        } else if (const auto *header = Event->Get()->Request.GetHeaders().FindHeader("Accept")) {
-            THashSet<TString> accept;
-            StringSplitter(header->Value()).SplitBySet(", ").SkipEmpty().Collect(&accept);
-            if (accept.contains("*/*") || accept.contains("application/json")) {
-                Format = HealthCheckResponseFormat::JSON;
-            } else if (accept.contains("text/plain")) {
-                Format = HealthCheckResponseFormat::PROMETHEUS;
-            } else {
-                Format = HealthCheckResponseFormat::JSON;
+        } else if (GetRequest().HasHeader("Accept")) {
+            std::vector<TString> accept;
+            StringSplitter(GetRequest().GetHeader("Accept")).SplitBySet(", ").SkipEmpty().Collect(&accept);
+            for (const auto& a : accept) {
+                if (a == "application/json") {
+                    Format = HealthCheckResponseFormat::JSON;
+                    break;
+                } else if (a == "text/plain") {
+                    Format = HealthCheckResponseFormat::PROMETHEUS;
+                    break;
+                }
             }
         }
-        if (Format == HealthCheckResponseFormat::JSON) {
-            JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
-            JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        }
-        Database = params.Get("database");
+        Database = Params.Get("database");
         if (Database.empty()) {
-            Database = params.Get("tenant");
+            Database = Params.Get("tenant");
         }
-        Cache = FromStringWithDefault<bool>(params.Get("cache"), Cache);
-        MergeRecords = FromStringWithDefault<bool>(params.Get("merge_records"), MergeRecords);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
+        if (!IsDatabaseRequest() && Format != HealthCheckResponseFormat::PROMETHEUS && !Viewer->CheckAccessMonitoring(GetRequest())) {
+            return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
+        }
+        Cache = FromStringWithDefault<bool>(Params.Get("cache"), Cache);
+        MergeRecords = FromStringWithDefault<bool>(Params.Get("merge_records"), MergeRecords);
 
-        if (params.Get("min_status") && !Ydb::Monitoring::StatusFlag_Status_Parse(params.Get("min_status"), &MinStatus)) {
+        if (Params.Get("min_status") && !Ydb::Monitoring::StatusFlag_Status_Parse(Params.Get("min_status"), &MinStatus)) {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "The field 'min_status' cannot be parsed"));
         }
         if (AppData()->FeatureFlags.GetEnableDbMetadataCache() && Cache && Database && MergeRecords) {
@@ -107,8 +103,8 @@ public:
         } else {
             SendHealthCheckRequest();
         }
-        Timeout += Timeout * 20 / 100; // we prefer to wait for more (+20%) verbose timeout status from HC
-        Become(&TThis::StateRequestedInfo, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Timeout += TDuration::MilliSeconds(Timeout.MilliSeconds() * 20 / 100); // we prefer to wait for more (+20%) verbose timeout status from HC
+        Become(&TThis::StateRequestedInfo, Timeout, new TEvents::TEvWakeup());
     }
 
     STFUNC(StateRequestedInfo) {
@@ -202,9 +198,7 @@ public:
             if (Format == HealthCheckResponseFormat::PROMETHEUS) {
                 return HandlePrometheus();
             } else {
-                TStringStream json;
-                TProtoToJson::ProtoToJson(json, *Result, JsonSettings);
-                return TBase::ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
+                return TBase::ReplyAndPassAway(GetHTTPOKJSON(*Result));
             }
         }
     }

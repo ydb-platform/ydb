@@ -51,6 +51,7 @@ public:
         return Finish;
     }
 
+    // query-agnistic order over sources of the same type
     virtual bool StableOrderLess(const TDataSourceConstructor& rhs) const = 0;
     virtual ~TDataSourceConstructor() = default;
 

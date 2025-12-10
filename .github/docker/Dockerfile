@@ -5,73 +5,51 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
 RUN apt-get update \
-    && apt-get install -y sudo wget gnupg lsb-release curl xz-utils tzdata \
-    cmake python3-pip ninja-build antlr3 m4 clang-14 lld-14 libidn11-dev libaio1 libaio-dev llvm-14 make \
-    && pip3 install conan==1.59 \
-    && (V=4.8.1; curl -L https://github.com/ccache/ccache/releases/download/v${V}/ccache-${V}-linux-x86_64.tar.xz | \
-         tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-${V}-linux-x86_64/ccache)
+    && apt-get install -y --no-install-recommends \
+      python3 curl lsb-release python3-dev libc6-dev libidn11-dev libaio1 libaio-dev libgcc-11-dev binutils tree git
 
-COPY ydb/ /ydbwork/ydb/
+COPY ydbd/ /ydbwork/ydbd/
+WORKDIR /ydbwork/ydbd/
+RUN ./ya make -r -T \
+      -C ydb/apps/ydbd/ydbd \
+      -o /ydbwork/out/ \
+    && /ydbwork/out/ydb/apps/ydbd/ydbd -V \
+    && tree /ydbwork/out/ \
+    && strip /ydbwork/out/ydb/apps/ydbd/ydbd \
+    && rm -rf ~/.ya  || echo 'unable to delete ~/.ya' # for reduce cache size
 
-COPY ydb/ /ydbwork/ydb/
+COPY cli/ /ydbwork/cli/
+WORKDIR /ydbwork/cli/
+RUN ./ya make -r -T \
+      -C ydb/apps/ydb/ydb \
+      -o /ydbwork/out/ \
+    && /ydbwork/out/cli/apps/ydb/ydb version \
+    && tree /ydbwork/out/ \
+    && strip /ydbwork/out/ydb/apps/ydb/ydb \
+    && rm -rf ~/.ya  || echo 'unable to delete ~/.ya' # for reduce cache size
 
-WORKDIR /ydbwork
-
-ARG GIT_REPO=https://github.com/ydb-platform/ydb.git
-ARG GIT_REF=main
-
-ENV GIT_REPO=$GIT_REPO
-ENV GIT_REF=$GIT_REF
-
-RUN mkdir ydb \
-    && git clone --depth=1 -b "${GIT_REF?}" ${GIT_REPO?}
-
-RUN --mount=type=secret,id=ccache_remote_storage \
-    mkdir build && cd build \
-    && export CONAN_USER_HOME=/ydbwork/build \
-    && export CCACHE_BASEDIR=/ydbwork/ \
-    && export CCACHE_SLOPPINESS=locale \
-    && export CCACHE_REMOTE_STORAGE="$(cat /run/secrets/ccache_remote_storage)" \
-    && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
-        -DCCACHE_PATH=/usr/local/bin/ccache \
-        -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
-        ../ydb \
-    && ninja ydb/apps/ydbd/ydbd ydb/apps/ydb/all \
-    && ccache -s \
-    && strip ydb/apps/ydbd/ydbd \
-    && strip ydb/apps/ydb/ydb \
-    && mv ./ydb/apps/ydbd/ydbd / \
-    && mv ./ydb/apps/ydb/ydb / \
-    && /ydbd -V  \
-    && /ydb version \
-    && cd .. && rm -rf build  # for reduce cache size
-
-
-
-# always use local_ydb.spec from main revision
-COPY main/ydb/public/tools/local_ydb/local_ydb.spec ydb/ydb/public/tools/local_ydb/
-
-RUN cd ydb && \
-    ./ydb/tests/oss/launch/compile_protos.sh . ydb library/cpp/actors && \
-    cd ydb/public/tools/local_ydb/ && \
-    pyinstaller local_ydb.spec && \
-    ./dist/local_ydb --help
-
+COPY local_ydb/ /ydbwork/local_ydb/
+WORKDIR /ydbwork/local_ydb/
+RUN ./ya make -r -T \
+      -C ydb/public/tools/local_ydb/local_ydb \
+      -o /ydbwork/out/ \
+    && tree /ydbwork/out/ \
+    && strip /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
+    && rm -rf ~/.ya  || echo 'unable to delete ~/.ya' # for reduce cache size
 
 FROM ubuntu:22.04
 RUN apt-get update  \
     && apt-get install --no-install-recommends -y libidn12 libaio1 jq \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /root/ydb/bin/ \
-    && mkdir -p /ydb_data \
-    && mkdir -p /ydb_certs \
-    && /ydbwork/out/ydb/apps/ydb/ydb version --disable-checks
+RUN mkdir -p /ydb_data && mkdir -p /ydb_certs
 
 COPY main/.github/docker/files/ /
-COPY --from=builder /ydbwork/ydb/ydb/public/tools/local_ydb/dist/local_ydb /
-COPY --from=builder /ydbd /ydb /
-
+COPY --from=builder \
+    /ydbwork/out/ydb/apps/ydbd/ydbd \
+    /ydbwork/out/ydb/apps/ydb/ydb \
+    /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
+    /
 
 # YDB grpc
 EXPOSE ${GRPC_TLS_PORT:-2135}
@@ -79,6 +57,6 @@ EXPOSE ${GRPC_PORT:-2136}
 EXPOSE ${MON_PORT:-8765}
 EXPOSE ${YDB_KAFKA_PROXY_PORT:-9092}
 
-HEALTHCHECK --start-period=60s --interval=1s CMD /ydb -e grpcs://localhost:${GRPC_TLS_PORT:-2135} --ca-file /ydb_certs/ca.pem -d /local --no-discovery monitoring healthcheck | grep -q GOOD || exit 1
+HEALTHCHECK --start-period=60s --interval=60s CMD sh /health_check
 
-CMD ["sh", "/initialize_local_ydb"]
+ENTRYPOINT ["bash", "/initialize_local_ydb"]

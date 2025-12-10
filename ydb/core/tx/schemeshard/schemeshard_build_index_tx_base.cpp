@@ -20,7 +20,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
-        auto& buildInfo = *buildInfoPtr->Get();
+        auto& buildInfo = *buildInfoPtr->get();
         LOG_I("Change state from " << buildInfo.State << " to " << state);
         if (state == TIndexBuildInfo::EState::Rejected ||
             state == TIndexBuildInfo::EState::Cancelled ||
@@ -91,7 +91,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
-        auto& buildInfo = *buildInfoPtr->Get();
+        auto& buildInfo = *buildInfoPtr->get();
         auto& processed = buildInfo.Processed;
         auto& billed = buildInfo.Billed;
 
@@ -209,7 +209,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
 
     for (const auto& item: indexInfo.Shards) {
         const TShardIdx& shardIdx = item.first;
-        const TIndexBuildInfo::TShardStatus& status = item.second;
+        const TIndexBuildShardStatus& status = item.second;
 
         if (status.Status != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
             if (status.UploadStatus != Ydb::StatusIds::SUCCESS) {
@@ -452,7 +452,7 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
     try {
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         TIndexBuildInfo* buildInfo = buildInfoPtr
-            ? buildInfoPtr->Get()
+            ? buildInfoPtr->get()
             : nullptr;
 
         LOG_E("Unhandled exception, id#"

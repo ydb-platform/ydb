@@ -281,6 +281,8 @@ SRCS(
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
     schemeshard_import_scheme_query_executor.cpp
+    schemeshard_index_build_info.cpp
+    schemeshard_index_build_info.h
     schemeshard_info_types.cpp
     schemeshard_info_types.h
     schemeshard_login_helper.cpp
@@ -323,6 +325,8 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_info_types.h)
+
+GENERATE_ENUM_SERIALIZATION(schemeshard_index_build_info.h)
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_types.h)
 

@@ -91,6 +91,10 @@ class TShredManager;
 // Forward declaration for incremental restore context
 struct TIncrementalRestoreState;
 
+// Forward declaration for index build info
+struct TIndexBuildInfo;
+struct TIndexBuildShardStatus;
+
 class TSchemeShard
     : public TActor<TSchemeShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
@@ -1523,8 +1527,8 @@ public:
     // namespace NIndexBuilder {
     TControlWrapper AllowDataColumnForIndexTable;
 
-    TMap<TIndexBuildId, TIndexBuildInfo::TPtr> IndexBuilds;
-    THashMap<TString, TIndexBuildInfo::TPtr> IndexBuildsByUid;
+    TMap<TIndexBuildId, std::shared_ptr<TIndexBuildInfo>> IndexBuilds;
+    THashMap<TString, std::shared_ptr<TIndexBuildInfo>> IndexBuildsByUid;
     THashMap<TTxId, TIndexBuildId> TxIdToIndexBuilds;
 
     // do not share pipes with operations
@@ -1556,11 +1560,11 @@ public:
     void PersistBuildIndexUnlockTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexUnlockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
-    void PersistBuildIndexShardStatusInitiate(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
-    void PersistBuildIndexShardStatus(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
-    void PersistBuildIndexShardRange(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
-    void PersistBuildIndexShardStatusFulltext(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
-    void PersistBuildIndexShardStatusReset(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, TIndexBuildInfo::TShardStatus& shardStatus);
+    void PersistBuildIndexShardStatusInitiate(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildShardStatus& shardStatus);
+    void PersistBuildIndexShardStatus(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildShardStatus& shardStatus);
+    void PersistBuildIndexShardRange(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildShardStatus& shardStatus);
+    void PersistBuildIndexShardStatusFulltext(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildShardStatus& shardStatus);
+    void PersistBuildIndexShardStatusReset(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, TIndexBuildShardStatus& shardStatus);
     void PersistBuildIndexShardStatusReset(NIceDb::TNiceDb& db, TIndexBuildInfo& info);
 
     void PersistBuildIndexDropColumnsTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);

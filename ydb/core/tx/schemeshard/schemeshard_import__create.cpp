@@ -1,5 +1,6 @@
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_index_build_info.h"
 #include "schemeshard_import.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_getters.h"
@@ -855,7 +856,7 @@ private:
     TMaybe<TString> GetIssues(TIndexBuildId indexBuildId) {
         const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(indexBuildId);
         Y_ABORT_UNLESS(indexInfoPtr);
-        const auto& indexInfo = *indexInfoPtr->Get();
+        const auto& indexInfo = *indexInfoPtr->get();
 
         if (indexInfo.IsDone()) {
             return Nothing();

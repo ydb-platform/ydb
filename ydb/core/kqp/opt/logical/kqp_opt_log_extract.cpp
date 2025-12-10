@@ -74,6 +74,11 @@ TExprBase KqpApplyExtractMembersToReadTable(TExprBase node, TExprContext& ctx, c
         return node;
     }
 
+    auto slt = node.Maybe<TKqlStreamLookupTable>();
+    if (slt && TKqpStreamLookupSettings::HasVectorTopDistinct(slt.Cast())) {
+        return node;
+    }
+
     TCoAtomList columnsNode = TExprBase(node.Ptr()->Child(TKqlReadColumnsNodeIdx)).Cast<TCoAtomList>();
     auto usedColumns = GetUsedColumns(node, columnsNode, parentsMap, allowMultiUsage, ctx);
     if (!usedColumns) {

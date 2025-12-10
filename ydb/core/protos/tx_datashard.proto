@@ -309,6 +309,13 @@ message TKqpVectorResolveSettings {
 
     // Input root cluster ID column (for the prefixed index)
     optional uint32 RootClusterColumnIndex = 16;
+
+    // Database name for KqpReadActor
+    optional string Database = 17;
+
+    // Parameters for finding overlapping clusters (multiple clusters per row)
+    optional uint32 OverlapClusters = 18;
+    optional double OverlapRatio = 19;
 }
 
 message TKqpTaskInfo {

@@ -33,6 +33,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
     constexpr int F_SIMILARITY = 1 << 3;
     constexpr int F_SUFFIX_PK  = 1 << 4;
     constexpr int F_WITH_INDEX = 1 << 5;
+    constexpr int F_OVERLAP    = 1 << 6;
 
     std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, const TString& query, int flags = 0) {
         {
@@ -303,11 +304,25 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
                 GLOBAL USING vector_kmeans_tree
                 ON (user, emb)
                 %s
-                WITH (%s=cosine, vector_type="uint8", vector_dimension=2, levels=%d, clusters=2);
-        )", cover, (flags & F_SIMILARITY ? "similarity" : "distance"), levels)));
+                WITH (%s=cosine, vector_type="uint8", vector_dimension=2, levels=%d, clusters=2%s);
+            )", cover, (flags & F_SIMILARITY ? "similarity" : "distance"), levels,
+            (flags & F_OVERLAP ? ", overlap_clusters=2" : ""))));
 
         auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void DoCheckOverlap(TSession& session, const TString& indexName) {
+        // Check number of rows in the posting table (should be 2x input rows)
+        {
+            const TString query1(Q_(Sprintf(R"(
+                SELECT COUNT(*), COUNT(DISTINCT pk) FROM `/Root/TestTable/%s/indexImplPostingTable`;
+            )", indexName.c_str())));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[60u;30u]]");
+        }
     }
 
     void DoTestOrderByCosine(ui32 indexLevels, int flags) {
@@ -350,7 +365,14 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
             UNIT_ASSERT_EQUAL(settings.Levels, indexLevels);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+            UNIT_ASSERT_EQUAL(settings.OverlapClusters, (flags & F_OVERLAP) ? 2 : 0);
+            UNIT_ASSERT_EQUAL(settings.OverlapRatio, 0);
         }
+
+        if (flags & F_OVERLAP) {
+            DoCheckOverlap(session, "index");
+        }
+
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, flags);
 
         {
@@ -364,12 +386,24 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoTestOrderByCosine(1, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0));
     }
 
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithOverlap, Nullable, Covered) {
+        DoTestOrderByCosine(1, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    }
+
     Y_UNIT_TEST_QUAD(OrderByCosineLevel2, Nullable, UseSimilarity) {
         DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0));
     }
 
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel2WithOverlap, Nullable, Covered) {
+        DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    }
+
     Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3) {
         DoTestOrderByCosine(3, 0);
+    }
+
+    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3WithOverlap) {
+        DoTestOrderByCosine(3, F_OVERLAP);
     }
 
     Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel4) {
@@ -382,6 +416,10 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(CosineDistanceWithPkSuffix, Nullable, Covered) {
         DoTestOrderByCosine(2, F_SUFFIX_PK | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    }
+
+    Y_UNIT_TEST_TWIN(CosineDistanceWithPkSuffixWithOverlap, Covered) {
+        DoTestOrderByCosine(2, F_SUFFIX_PK | F_OVERLAP | (Covered ? F_COVERING : 0));
     }
 
     void DoTestPrefixedVectorIndexInsert(int flags) {
@@ -449,7 +487,8 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u];[1u];[1u];[1u]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                (flags & F_OVERLAP ? "[[2u];[2u];[2u];[2u]]" : "[[1u];[1u];[1u];[1u]]"));
         }
     }
 
@@ -457,7 +496,11 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoTestPrefixedVectorIndexInsert((Returning ? F_RETURNING : 0) | (Covered ? F_COVERING : 0));
     }
 
-    Y_UNIT_TEST_QUAD(PrefixedVectorIndexInsertNewPrefix, Nullable, Covered) {
+    Y_UNIT_TEST_QUAD(PrefixedVectorIndexInsertWithOverlap, Returning, Covered) {
+        DoTestPrefixedVectorIndexInsert(F_OVERLAP | (Returning ? F_RETURNING : 0) | (Covered ? F_COVERING : 0));
+    }
+
+    void DoTestPrefixedVectorIndexInsertNewPrefix(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -465,7 +508,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
-        const int flags = (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -520,7 +562,8 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u];[1u]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                (flags & F_OVERLAP ? "[[2u];[1u]]" : "[[1u];[1u]]"));
         }
 
         // Delete one of the new rows
@@ -543,7 +586,16 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(PrefixedVectorEmptyIndexedTableInsert, Nullable, Covered) {
+    Y_UNIT_TEST_QUAD(PrefixedVectorIndexInsertNewPrefix, Nullable, Covered) {
+        DoTestPrefixedVectorIndexInsertNewPrefix((Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    }
+
+    Y_UNIT_TEST_TWIN(PrefixedVectorIndexInsertNewPrefixWithOverlap, Covered) {
+        // New prefixes are not affected by overlap - they are added directly into the Posting table
+        DoTestPrefixedVectorIndexInsertNewPrefix(F_OVERLAP | (Covered ? F_COVERING : 0));
+    }
+
+    void DoTestPrefixedVectorEmptyIndexedTableInsert(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -551,7 +603,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
-        const int flags = (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0) | F_WITH_INDEX;
+        flags |= F_WITH_INDEX;
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -578,8 +630,17 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             "$target = \"\x67\x68\x02\";\n$user = \"user_b\";");
     }
 
+    Y_UNIT_TEST_QUAD(PrefixedVectorEmptyIndexedTableInsert, Nullable, Covered) {
+        DoTestPrefixedVectorEmptyIndexedTableInsert((Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    }
+
+    Y_UNIT_TEST_TWIN(PrefixedVectorEmptyIndexedTableInsertWithOverlap, Covered) {
+        // New prefixes are not affected by overlap - they are added directly into the Posting table
+        DoTestPrefixedVectorEmptyIndexedTableInsert(F_OVERLAP | (Covered ? F_COVERING : 0));
+    }
+
     // Same as PrefixedVectorEmptyIndexedTableInsert, but the index is created separately after creating the table
-    Y_UNIT_TEST_QUAD(EmptyPrefixedVectorIndexInsert, Nullable, Covered) {
+    void DoTestEmptyPrefixedVectorIndexInsert(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -587,7 +648,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
-        const int flags = (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -613,6 +673,15 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             "$target = \"\x67\x68\x02\";\n$user = \"user_a\";");
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, flags,
             "$target = \"\x67\x68\x02\";\n$user = \"user_b\";");
+    }
+
+    Y_UNIT_TEST_QUAD(EmptyPrefixedVectorIndexInsert, Nullable, Covered) {
+        DoTestEmptyPrefixedVectorIndexInsert((Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    }
+
+    Y_UNIT_TEST_TWIN(EmptyPrefixedVectorIndexInsertWithOverlap, Covered) {
+        // New prefixes are not affected by overlap - they are added directly into the Posting table
+        DoTestEmptyPrefixedVectorIndexInsert(F_OVERLAP | (Covered ? F_COVERING : 0));
     }
 
     void DoTestPrefixedVectorIndexDelete(const TString& deleteQuery, int flags) {
@@ -653,9 +722,10 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(PrefixedVectorIndexDeletePk, Covered) {
+    Y_UNIT_TEST_QUAD(PrefixedVectorIndexDeletePk, Covered, Overlap) {
         // DELETE WHERE from the table with index should succeed
-        DoTestPrefixedVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=91;)"), (Covered ? F_COVERING : 0));
+        DoTestPrefixedVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=91;)"),
+            (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexDeleteFilter, Covered) {
@@ -668,9 +738,10 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoTestPrefixedVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 91 AS `pk`;)"), (Covered ? F_COVERING : 0));
     }
 
-    Y_UNIT_TEST_TWIN(PrefixedVectorIndexDeletePkReturning, Covered) {
+    Y_UNIT_TEST_QUAD(PrefixedVectorIndexDeletePkReturning, Covered, Overlap) {
         // DELETE WHERE from the table with index should succeed
-        DoTestPrefixedVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=91 RETURNING data, user, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0));
+        DoTestPrefixedVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=91 RETURNING data, user, emb, pk;)"),
+            F_RETURNING | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexDeleteFilterReturning, Covered) {
@@ -683,7 +754,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoTestPrefixedVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 91 AS `pk` RETURNING data, user, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0));
     }
 
-    Y_UNIT_TEST_QUAD(PrefixedVectorIndexUpdateNoChange, Nullable, Covered) {
+    void DoTestPrefixedVectorIndexUpdateNoChange(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -691,7 +762,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
-        const int flags = (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
@@ -716,7 +786,15 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
     }
 
-    Y_UNIT_TEST_QUAD(PrefixedVectorIndexUpdateNoClusterChange, Nullable, Covered) {
+    Y_UNIT_TEST_QUAD(PrefixedVectorIndexUpdateNoChange, Nullable, Covered) {
+        DoTestPrefixedVectorIndexUpdateNoChange((Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    }
+
+    Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpdateNoChangeWithOverlap, Covered) {
+        DoTestPrefixedVectorIndexUpdateNoChange(F_OVERLAP | (Covered ? F_COVERING : 0));
+    }
+
+    void DoTestPrefixedVectorIndexUpdateNoClusterChange(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -724,7 +802,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
-        const int flags = (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
@@ -750,6 +827,14 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             SubstGlobal(orig, "\"\x76\x76\\2\"];[\"19", "\"\x76\x75\\2\"];[\"19");
         }
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
+    }
+
+    Y_UNIT_TEST_QUAD(PrefixedVectorIndexUpdateNoClusterChange, Nullable, Covered) {
+        DoTestPrefixedVectorIndexUpdateNoClusterChange((Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    }
+
+    Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpdateNoClusterChangeWithOverlap, Covered) {
+        DoTestPrefixedVectorIndexUpdateNoClusterChange(F_OVERLAP | (Covered ? F_COVERING : 0));
     }
 
     void DoTestPrefixedVectorIndexUpdateClusterChange(const TString& updateQuery, int flags) {
@@ -791,13 +876,14 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                (flags & F_OVERLAP ? "[[2u]]" : "[[1u]]"));
         }
     }
 
-    Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpdatePkClusterChange, Covered) {
+    Y_UNIT_TEST_QUAD(PrefixedVectorIndexUpdatePkClusterChange, Covered, Overlap) {
         DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `pk`=91;)"),
-            F_NULLABLE | (Covered ? F_COVERING : 0));
+            F_NULLABLE | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpdateFilterClusterChange, Covered) {
@@ -810,9 +896,9 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             F_NULLABLE | (Covered ? F_COVERING : 0));
     }
 
-    Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpdatePkClusterChangeReturning, Covered) {
+    Y_UNIT_TEST_QUAD(PrefixedVectorIndexUpdatePkClusterChangeReturning, Covered, Overlap) {
         DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `pk`=91 RETURNING `data`, `emb`, `user`, `pk`;)"),
-            F_NULLABLE | F_RETURNING | (Covered ? F_COVERING : 0));
+            F_NULLABLE | F_RETURNING | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
     Y_UNIT_TEST_TWIN(PrefixedVectorIndexUpdateFilterClusterChangeReturning, Covered) {

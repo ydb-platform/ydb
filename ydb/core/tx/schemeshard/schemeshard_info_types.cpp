@@ -2,7 +2,7 @@
 
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
-#include "schemeshard_utils.h"  // for IsValidColumnName, ValidateImportDstPath
+#include "schemeshard_import_helpers.h"  // for ValidateImportDstPath
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/channel_profiles.h>

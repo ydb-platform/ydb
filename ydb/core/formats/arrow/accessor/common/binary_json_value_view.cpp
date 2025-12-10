@@ -3,36 +3,33 @@
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <util/generic/ylimits.h>
+#include <util/string/cast.h>
 
 #include <limits>
 #include <cmath>
 
 namespace NKikimr::NArrow::NAccessor {
 
-namespace {
-
-std::optional<std::string> JsonNumberToString(double val) {
-    if (std::isnan(val)) {
+std::optional<TString> TBinaryJsonValueView::JsonNumberToString(double jsonNumber) {
+    if (std::isnan(jsonNumber)) {
         return std::nullopt;
     }
 
     double integerPart;
-    double fractionPart = std::modf(val, &integerPart);
+    double fractionPart = std::modf(jsonNumber, &integerPart);
     if (!(fractionPart == 0.0)) {
-        return std::to_string(val);
+        return ::ToString(jsonNumber);
     }
 
     static constexpr double minD = static_cast<double>(std::numeric_limits<i64>::min());
     static constexpr double maxD = MaxFloor<i64>();
 
-    if (minD <= val && val <= maxD) {
-        return std::to_string(static_cast<i64>(val));
+    if (minD <= jsonNumber && jsonNumber <= maxD) {
+        return ::ToString(static_cast<i64>(jsonNumber));
     }
 
-    return std::to_string(val);
+    return ::ToString(jsonNumber);
 }
-
-} // namespace
 
 TBinaryJsonValueView::TBinaryJsonValueView(const TStringBuf& rawValue)
     : RawValue(rawValue) {

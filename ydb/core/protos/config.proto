@@ -2180,6 +2180,10 @@ message TColumnShardConfig {
     optional bool CombineChunksInResult = 54 [default = true];
     optional bool EnableDiagnostics = 55 [default = true];
     optional bool EnableParallelCompaction = 56 [default = false];
+<<<<<<< HEAD
+=======
+    optional NKikimrSchemeOp.TS3Settings S3Client = 58;
+>>>>>>> 0b70c78a427 (Parallel compaction (#30028))
 }
 
 message TSchemeShardConfig {

@@ -198,6 +198,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                             typeCtx->CorrectLineage = true;
                             try {
                                 calculatedLineage = CalculateLineage(*input, *typeCtx, ctx, false);
+                                typeCtx->LineageSize = calculatedLineage.size();
                             } catch (const std::exception& e) {
                                 YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
                                 typeCtx->CorrectLineage = false;
@@ -307,6 +308,7 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 output = input;
                 lineageOut = CalculateLineage(*input, *typeCtx, ctx, true);
+                typeCtx->LineageSize = lineageOut->size();
                 if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
                     auto loaded = typeCtx->QContext.GetReader()->Get({LineageComponent, StandaloneLineageLabel}).GetValueSync();
                     if (loaded.Defined()) {

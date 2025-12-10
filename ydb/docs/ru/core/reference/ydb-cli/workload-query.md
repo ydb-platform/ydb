@@ -231,11 +231,11 @@ ydb workload query --path user_path run --suite-path e1
 
 ```bash
 first_query_set.1.sql:
-	iteration 0:	ok	0.131573s seconds
+    iteration 0:    ok    0.131573s seconds
 first_query_set.2.yql:
-	iteration 0:	ok	0.089327s seconds
+    iteration 0:    ok    0.089327s seconds
 second_query_set.join.sql:
-	iteration 0:	ok	0.145536s seconds
+    iteration 0:    ok    0.145536s seconds
 
 Results for 1 iterations
 ┌───────────────────────────┬──────────┬─────────┬─────────┬─────────┬─────────┬───────────┬─────────┬─────────┬─────────┬─────────┬────────────────┬────────────────┬────────────────┬───────────┬──────────────┬────────────┬────────────┐

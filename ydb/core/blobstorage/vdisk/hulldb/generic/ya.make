@@ -13,6 +13,7 @@ SRCS(
     blobstorage_hulloptlsn.cpp
     blobstorage_hulloptlsn.h
     blobstorage_hullrecmerger.h
+    blobstorage_hullwriteindexsst.h
     blobstorage_hullwritesst.h
     defs.h
     hulldb_bulksstloaded.h

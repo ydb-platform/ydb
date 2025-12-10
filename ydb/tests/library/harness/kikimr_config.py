@@ -180,9 +180,6 @@ class KikimrConfigGenerator(object):
             memory_controller_config=None,
             verbose_memory_limit_exception=False,
             enable_static_auth=False,
-            cms_config=None,
-            explicit_statestorage_config=None,
-            protected_mode=False,
             tiny_mode=False,
     ):
         if extra_feature_flags is None:

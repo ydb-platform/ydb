@@ -758,7 +758,7 @@ protected:
                     if (caseValue == TExecutionOptions::EExecutionCase::StreamingQuery) {
                         ExecutionOptions.StreamingQueriesNames.emplace_back(name);
                     } else {
-                        ythrow yexception() << "QUery name is not allowed for not 'streaming' execution case";
+                        ythrow yexception() << "Query name is not allowed for not 'streaming' execution case";
                     }
                 }
 

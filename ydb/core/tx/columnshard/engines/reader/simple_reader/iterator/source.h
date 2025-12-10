@@ -428,7 +428,7 @@ class TAggregationDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
-    const ui64 LastSourceId;
+    const ui32 LastSourceIdx;
     const ui64 LastSourceRecordsCount;
 
     void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
@@ -519,8 +519,8 @@ public:
         return type == NCommon::IDataSource::EType::SimpleAggregation;
     }
 
-    ui64 GetLastSourceId() const {
-        return LastSourceId;
+    ui64 GetLastSourceIdx() const {
+        return LastSourceIdx;
     }
 
     ui64 GetLastSourceRecordsCount() const {
@@ -605,11 +605,12 @@ public:
 
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleAggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false)
+        : TBase(EType::SimpleAggregation, sources.back()->GetSourceId(), sources.back()->GetSourceIdx(), context, TSnapshot::Zero(),
+              TSnapshot::Zero(), CalcInputRecordsCount(sources), std::nullopt, false)
         , Sources(std::move(sources))
-        , LastSourceId(Sources.back()->GetSourceId())
-        , LastSourceRecordsCount(Sources.back()->GetRecordsCount()) {
+        , LastSourceIdx(Sources.back()->GetSourceIdx())
+        , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
+    {
         AFL_VERIFY(Sources.size());
     }
 };

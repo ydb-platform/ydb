@@ -112,9 +112,31 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
     def _get_nodes_for_pile_name(self, pile_name):
         """Получает ноды, которые относятся к указанному pile по имени."""
         nodes_for_pile = []
+        bridge_config = self.configurator.bridge_config
+        if not bridge_config:
+            return nodes_for_pile
+
+        piles = bridge_config.get("piles", [])
+        if not piles:
+            return nodes_for_pile
+
+        # Находим индекс pile по имени
+        pile_index = None
+        for idx, pile in enumerate(piles):
+            if pile.get("name") == pile_name:
+                pile_index = idx
+                break
+
+        if pile_index is None:
+            return nodes_for_pile
+
+        # Распределение нод по piles: (node_id - 1) % len(piles)
+        # Логика из kikimr_config.py строка 927
         for node_id, node in self.cluster.nodes.items():
-            if hasattr(node, 'bridge_pile_name') and node.bridge_pile_name == pile_name:
+            assigned_pile_index = (node_id - 1) % len(piles)
+            if assigned_pile_index == pile_index:
                 nodes_for_pile.append(node)
+
         return nodes_for_pile
 
     def _get_pile_id_from_name(self, pile_name):
@@ -217,8 +239,8 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                 if isinstance(result, Exception):
                     self.logger.error("Exception starting node: %s", result)
                     continue
-                    self.logger.info("Successfully started node %d on host %s",
-                                     primary_pile_nodes[i].node_id, primary_pile_nodes[i].host)
+                self.logger.info("Successfully started node %d on host %s",
+                                 primary_pile_nodes[i].node_id, primary_pile_nodes[i].host)
                 node_success_count += 1
 
             self.logger.info("Started %d/%d storage nodes", node_success_count, len(start_tasks))

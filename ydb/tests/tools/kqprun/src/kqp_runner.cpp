@@ -417,7 +417,7 @@ private:
                     status.Status = Ydb::StatusIds::GENERIC_ERROR;
                 } else if (StreamingMeta_.ExecutionStatus == "STOPPED") {
                     status.Status = Ydb::StatusIds::CANCELLED;
-                } else if (StreamingMeta_.ExecutionStatus == "STOPPED") {
+                } else if (StreamingMeta_.ExecutionStatus == "CREATED") {
                     status.Status = Ydb::StatusIds::PRECONDITION_FAILED;
                 }
                 break;

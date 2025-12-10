@@ -778,7 +778,6 @@ def main():
     try:
         repo_url = f"https://{token}@github.com/{repo_name}.git"
         logger.info("Cloning repository: %s to %s", repo_url, repo_dir)
-        logger.debug(f"Running: git clone https://github.com/{repo_name}.git {repo_dir}")
         result = subprocess.run(
             ['git', 'clone', repo_url, repo_dir],
             env={**os.environ, 'GIT_PROTOCOL': '2'},

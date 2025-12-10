@@ -54,7 +54,7 @@ class ColumnTableHelper:
             """
         )
 
-    def _coollect_volumes_column(self, column_name: str) -> tuple[int, int]:
+    def _collect_volumes_column(self, column_name: str) -> tuple[int, int]:
         query = f'SELECT * FROM `{self.path}/.sys/primary_index_stats` WHERE Activity == 1 AND EntityName = \"{column_name}\"'
         result_set = self.ydb_client.query(query)
         raw_bytes, bytes = 0, 0
@@ -66,12 +66,12 @@ class ColumnTableHelper:
 
     def get_volumes_column(self, column_name: str) -> tuple[int, int]:
         pred_raw_bytes, pred_bytes = 0, 0
-        raw_bytes, bytes = self._coollect_volumes_column(column_name)
+        raw_bytes, bytes = self._collect_volumes_column(column_name)
         while pred_raw_bytes != raw_bytes and pred_bytes != bytes:
             pred_raw_bytes = raw_bytes
             pred_bytes = bytes
-            time.sleep(10)
-            raw_bytes, bytes = self._coollect_volumes_column(column_name)
+            time.sleep(1)
+            raw_bytes, bytes = self._collect_volumes_column(column_name)
         logging.info(f"Table `{self.path}`, volumes `{column_name}` ({raw_bytes}, {bytes})")
         return raw_bytes, bytes
 

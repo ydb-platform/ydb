@@ -22,9 +22,9 @@ constexpr double ThreadSaturatedLoadThreshold = 0.6;
 struct TAllStatistics {
 
     struct TThreadStatistics {
-        TThreadStatistics() {
+        TThreadStatistics(bool highResHistogram) {
             TaskThreadStats = std::make_unique<ITaskQueue::TThreadStats>();
-            TerminalStats = std::make_unique<TTerminalStats>();
+            TerminalStats = std::make_unique<TTerminalStats>(highResHistogram);
         }
 
         void CalculateDerivative(const TThreadStatistics& prev, size_t seconds) {
@@ -64,10 +64,14 @@ struct TAllStatistics {
         THistogram ExternalQueueTimeMs{ITaskQueue::TThreadStats::BUCKET_COUNT, ITaskQueue::TThreadStats::MAX_HIST_VALUE};
     };
 
-    TAllStatistics(size_t threadCount, Clock::time_point ts)
-        : StatVec(threadCount)
-        , Ts(ts)
+    TAllStatistics(size_t threadCount, Clock::time_point ts, bool highResHistogram)
+        : Ts(ts)
+        , TotalTerminalStats(highResHistogram)
     {
+        StatVec.reserve(threadCount);
+        for (size_t i = 0; i < threadCount; ++i) {
+            StatVec.emplace_back(highResHistogram);
+        }
     }
 
     void CalculateDerivativeAndTotal(const TAllStatistics& prev) {
@@ -116,8 +120,8 @@ struct TRunStatusData {
 };
 
 struct TRunDisplayData {
-    TRunDisplayData(size_t threadCount, Clock::time_point ts)
-        : Statistics(threadCount, ts)
+    TRunDisplayData(size_t threadCount, Clock::time_point ts, bool highResHistogram)
+        : Statistics(threadCount, ts, highResHistogram)
     {}
 
     size_t WarehouseCount = 0;

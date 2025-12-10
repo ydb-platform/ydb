@@ -310,6 +310,7 @@ message TKqpPhyVectorTopK {
     Ydb.Table.VectorIndexSettings Settings = 2;
     TKqpPhyValue TargetVector = 3;
     TKqpPhyValue Limit = 4;
+    repeated uint32 DistinctColumns = 5;
 }
 
 message TKqpPhyCnStreamLookup {
@@ -337,6 +338,8 @@ message TKqpPhyCnVectorResolve {
     bytes OutputType = 8;
     uint32 ClusterColumnOutPos = 9;
     optional uint32 RootClusterColumnIndex = 10;
+    optional uint32 OverlapClusters = 11;
+    optional double OverlapRatio = 12;
 }
 
 message TKqpPhyCnSequencer {

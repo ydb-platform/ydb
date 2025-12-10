@@ -19,10 +19,10 @@ class YdbClient:
     def wait_connection(self, timeout=5):
         self.driver.wait(timeout, fail_fast=True)
 
-    def query(self, statement, is_ddl, retry_settings=None):
+    def query(self, statement, is_ddl, parameters=None, retry_settings=None):
         if self.use_query_service:
             try:
-                return self.session_pool.execute_with_retries(query=statement, retry_settings=retry_settings)
+                return self.session_pool.execute_with_retries(query=statement, parameters=parameters, retry_settings=retry_settings)
             except Exception as e:
                 logger.error(f"Error: {e} while executing query: {statement}")
                 raise e
@@ -30,7 +30,7 @@ class YdbClient:
             if is_ddl:
                 return self.session_pool.retry_operation_sync(lambda session: session.execute_scheme(statement))
             else:
-                raise "Unsuppported dml"  # TODO implement me
+                return self.session_pool.retry_operation_sync(lambda session: session.transaction().execute(statement, parameters=parameters, commit_tx=True))
 
     def drop_table(self, path_to_table):
         if self.use_query_service:

@@ -829,7 +829,7 @@ TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Enables runtime checks ensuring that no fiber context switch can happen
-//! during excution of a future handler.
+//! during execution of a future handler.
 //! See YT-25879 for more details.
 void ForbidContextSwitchInFutureHandler();
 bool IsContextSwitchInFutureHandlerForbidden();

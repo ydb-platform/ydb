@@ -4,7 +4,7 @@ This module provides a dictionary of workload configurations that is initialized
 only once when first imported, even when imported from multiple places.
 """
 from copy import deepcopy
-
+import yatest.common
 
 _all_stress_utils = None
 
@@ -97,11 +97,10 @@ def _init_stress_utils():
         'TestShard': {
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
-                "--channels", "dynamic_storage_pool:1,dynamic_storage_pool:1,dynamic_storage_pool:1"
             ],
             'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard'
         },
-        'IntrementalBackup': {
+        'IncrementalBackup': {
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
                 "--backup-interval", "20"
@@ -142,6 +141,12 @@ def _init_stress_utils():
                 ],
                 'local_path': 'ydb/tests/stress/transfer/transfer'
             }
+
+    filtered_stress_utils_arg = yatest.common.get_param('stress-utils-to-run', None)
+
+    if filtered_stress_utils_arg:
+        filtered_stress_utils = filtered_stress_utils_arg.split(',')
+        _all_stress_utils = {k: v for k, v in _all_stress_utils.items() if any(filtered_util in k for filtered_util in filtered_stress_utils)}
 
 
 # Initialize on import

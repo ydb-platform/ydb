@@ -138,6 +138,7 @@ public:
     TDuration Duration;
     TDuration Period;
     bool Sanitize;
+    bool CountersOnly;
 
     void SendRequest(ui32 i) {
         ui32 nodeId = Nodes[i].NodeId;
@@ -156,11 +157,14 @@ public:
     }
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        RequestSession();
-        RequestHealthCheck();
-        RequestBaseConfig();
-        RequestStorageConfig();
         Nodes = ev->Get()->Nodes;
+        CountersOnly = GetProtoRequest()->counters_only();
+        if (!CountersOnly) {
+            RequestSession();
+            RequestHealthCheck();
+            RequestBaseConfig();
+            RequestStorageConfig();
+        }
         NodeReceived.resize(Nodes.size());
         NodeRequested.resize(Nodes.size());
         for (ui32 i : xrange(Nodes.size())) {
@@ -170,7 +174,9 @@ public:
             node->SetHost(ni.Host);
             node->SetPort(ni.Port);
             node->SetLocation(ni.Location.ToString());
-            SendRequest(i);
+            if (!CountersOnly) {
+                SendRequest(i);
+            }
         }
         Counters.resize(Nodes.size());
         RequestCounters();
@@ -413,18 +419,24 @@ public:
         operation.set_status(Ydb::StatusIds::SUCCESS);
 
         Ydb::Monitoring::ClusterStateResult result;
-        AddBlock(result, "cluster_state.json", State);
-        NKikimrClusterStateInfoProto::TClusterStateInfoParameters params;
-        params.SetStartedAt(Started.ToStringUpToSeconds());
-        params.SetDurationSeconds(Duration.Seconds());
-        params.SetPeriodSeconds(Period.Seconds());
-        AddBlock(result, "cluster_state_fetch_parameters.json", params);
+
+        if (!CountersOnly) {
+            AddBlock(result, "cluster_state", State);
+            NKikimrClusterStateInfoProto::TClusterStateInfoParameters params;
+            params.SetStartedAt(Started.ToStringUpToSeconds());
+            params.SetDurationSeconds(Duration.Seconds());
+            params.SetPeriodSeconds(Period.Seconds());
+            AddBlock(result, "cluster_state_fetch_parameters", params);
+        }
         for (ui32 node : xrange(Counters.size())) {
             for (ui32 i : xrange(Counters[node].size())) {
                 auto* counterBlock = result.Addblocks();
                 TStringBuilder sb;
                 auto nodeId = Nodes[node].NodeId;
-                sb << "node_" << nodeId << "_counters_" << i << ".json";
+                sb << "node_" << nodeId << "_counters";
+                if (Counters[node].size() > 1) {
+                    sb << "_" << i;
+                }
                 counterBlock->Setname(sb);
                 counterBlock->Setcontent(Counters[node][i].first);
                 counterBlock->Mutabletimestamp()->set_seconds(Counters[node][i].second.Seconds());

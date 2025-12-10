@@ -257,19 +257,40 @@ TString GetDatabase(const TString& query) {
     return GetToken(query, R"(-- database: ")");
 }
 
-TString GetSecretName(const TString& query) {
-    TString secretName;
-    if (auto pwd = GetToken(query, R"(PASSWORD_SECRET_NAME = ')")) {
-        secretName = std::move(pwd);
-    } else if (auto token = GetToken(query, R"(TOKEN_SECRET_NAME = ')")) {
-        secretName = std::move(token);
+TVector<TSecretSetting> GetSecretSettings(const TString& query) {
+    static const TVector<TString> SECRET_SETTING_NAMES = [] {
+        static const TVector<TString> settings = {
+            "TOKEN_SECRET",
+            "PASSWORD_SECRET",
+            "SERVICE_ACCOUNT_SECRET",
+            "AWS_ACCESS_KEY_ID_SECRET",
+            "AWS_SECRET_ACCESS_KEY_SECRET",
+        };
+        TVector<TString> result;
+        for (const auto& name : settings) {
+            result.push_back(name + "_NAME");
+            result.push_back(name + "_PATH");
+        }
+
+        return result;
+    }();
+
+    TVector<TSecretSetting> result;
+    for (const auto& settingName : SECRET_SETTING_NAMES) {
+        auto secretSettingValue = GetToken(query, settingName + " = '");
+        if (!secretSettingValue) {
+            continue;
+        }
+        if (secretSettingValue.EndsWith("'")) {
+            secretSettingValue.resize(secretSettingValue.size() - 1);
+        }
+        result.push_back(TSecretSetting{
+            .Name = settingName,
+            .Value = secretSettingValue,
+        });
     }
 
-    if (secretName.EndsWith("'")) {
-        secretName.resize(secretName.size() - 1);
-    }
-
-    return secretName;
+    return result;
 }
 
 bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::TIssues& issues) {

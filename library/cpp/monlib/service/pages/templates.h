@@ -84,21 +84,12 @@
 #define HREF(path) \
     WITH_SCOPED(tmp, ::NMonitoring::THref(__stream, path))
 
-#define XHREF(nodeId, path) \
-    WITH_SCOPED(tmp, ::NMonitoring::THref(__stream, nodeId, path))
-
 namespace NMonitoring {
     struct THref {
         THref(IOutputStream& str, TStringBuf path)
             : Str(str)
         {
-            Str << "<a href=" << path << '>';
-        }
-
-        THref(IOutputStream& str, ui32 nodeId, TStringBuf path)
-            : Str(str)
-        {
-            Str << "<a href=" << "/node/" << nodeId << path << '>';
+            Str << "<a href="<< path << '>';
         }
 
         ~THref() {

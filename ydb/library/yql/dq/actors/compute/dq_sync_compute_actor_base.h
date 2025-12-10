@@ -99,7 +99,7 @@ protected:
                 str << "TDqSyncComputeActorBase, SelfId=" << this->SelfId() << Endl;
                 str << "  State: " << (unsigned int)TBase::State << Endl;
 
-                XHREF(this->SelfId().NodeId(), "/actors/kqp_node?action=run&ca=" + ToString(this->SelfId()))  {
+                HREF(TStringBuilder() << "/node/" << this->SelfId().NodeId() << "/actors/kqp_node?action=run&ca=" << this->SelfId())  {
                     str << "Resume Execution" << Endl;
                 }
 
@@ -131,7 +131,7 @@ protected:
                                 TABLED() {str << channelId;}
                                 TABLED() {
                                     if (info.HasPeer) {
-                                        XHREF(info.PeerId.NodeId(), "/actors/kqp_node?ca=" + ToString(info.PeerId))  {
+                                        HREF(TStringBuilder() << "/node/" << info.PeerId.NodeId() << "/actors/kqp_node?ca=" << info.PeerId)  {
                                             str << info.PeerId;
                                         }
                                     } else {
@@ -179,7 +179,7 @@ protected:
                                 TABLED() {str << channelId;}
                                 TABLED() {
                                     if (info.HasPeer) {
-                                        XHREF(info.PeerId.NodeId(), "/actors/kqp_node?ca=" + ToString(info.PeerId))  {
+                                        HREF(TStringBuilder() << "/node/" << info.PeerId.NodeId() << "/actors/kqp_node?ca=" << info.PeerId)  {
                                             str << info.PeerId;
                                         }
                                     } else {

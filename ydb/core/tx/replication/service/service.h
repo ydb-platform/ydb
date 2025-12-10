@@ -3,6 +3,7 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/row_version.h>
+#include <google/protobuf/timestamp.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/common/sensitive_event_pb.h>
 #include <ydb/core/tx/replication/common/worker_id.h>
@@ -76,12 +77,14 @@ struct TEvService {
             Record.SetLagMilliSeconds(lag.MilliSeconds());
         }
 
-        explicit TEvWorkerStatus(const TWorkerId& id , ui64 currentOperation, TVector<std::pair<ui64, i64>>&& statsValues) {
+        explicit TEvWorkerStatus(const TWorkerId& id , TInstant startTime, TVector<std::pair<ui64, i64>>&& statsValues) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
             Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_STATS);
             auto* stats = Record.MutableStats();
-            stats->SetCurrentOperation(static_cast<NKikimrReplication::EWorkOperation>(currentOperation));
+            if (startTime) {
+                stats->MutableStartTime()->set_seconds(startTime.Seconds());
+            }
             for (auto [k, v] : statsValues) {
                 auto* val = stats->AddValues();
                 val->SetKey(k);
@@ -90,8 +93,8 @@ struct TEvService {
         }
     };
 
-        struct TEvWorkerDataEnd: public TEventPB<TEvWorkerDataEnd, NKikimrReplication::TEvWorkerDataEnd, EvWorkerDataEnd> {
-            TEvWorkerDataEnd() = default;
+    struct TEvWorkerDataEnd: public TEventPB<TEvWorkerDataEnd, NKikimrReplication::TEvWorkerDataEnd, EvWorkerDataEnd> {
+        TEvWorkerDataEnd() = default;
     };
 
     struct TEvGetTxId: public TEventPB<TEvGetTxId, NKikimrReplication::TEvGetTxId, EvGetTxId> {

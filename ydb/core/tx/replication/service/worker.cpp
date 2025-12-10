@@ -161,6 +161,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         ui32 GetCreateAttempt() const {
             return CreateAttempt;
         }
+
     };
 
     TStringBuf GetLogPrefix() const {
@@ -259,7 +260,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (Writer) {
             Send(ev->Forward(Writer));
         }
-        //ToDo: Update host and worker counters
     }
 
     void Handle(TEvWorker::TEvTerminateWriter::TPtr& ev) {
@@ -311,10 +311,14 @@ class TWorker: public TActorBootstrapped<TWorker> {
         Y_ENSURE(stats->ReaderStats);
         auto* ev = TEvWorker::TEvStatus::FromOperation(EWorkerOperation::NONE);
         ev->DetailedStats->ReaderStats = std::move(stats->ReaderStats);
+        ev->DetailedStats->RestartsCount = RestartsCount;
+        RestartsCount = 0;
         return ev;
     }
 
     void MaybeRecreateActor(TEvWorker::TEvGone::TPtr& ev, TActorInfo& info) {
+        StartTime = Now();
+        RestartsCount++;
         switch (ev->Get()->Status) {
         case TEvWorker::TEvGone::UNAVAILABLE:
             if (info.GetCreateAttempt() < MaxAttempts) {
@@ -428,7 +432,8 @@ private:
     THolder<TEvWorker::TEvData> InFlightData;
     THolder<TEvWorker::TEvTerminateWriter> TerminateWriter;
     TDuration Lag;
-    //bool ReportStats;
+    TInstant StartTime = TInstant::Zero();
+    mutable ui64 RestartsCount = 0;
 };
 
 IActor* CreateWorker(
@@ -438,5 +443,4 @@ IActor* CreateWorker(
 {
     return new TWorker(parent, std::move(createReaderFn), std::move(createWriterFn));
 }
-
 }

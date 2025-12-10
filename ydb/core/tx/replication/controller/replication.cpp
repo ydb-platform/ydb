@@ -20,6 +20,17 @@
 
 namespace NKikimr::NReplication::NController {
 
+TString MakeReplicationName(const NKikimrReplication::TReplicationConfig& config) {
+    // ToDo: need to get an object path from SS here
+    if (!config.HasTransferSpecific()) { //currently only know how to make transfer's name
+        return TString{};
+    }
+    if (!config.GetTransferSpecific().GetTarget().HasDstPath()) {
+        return TString{};
+    }
+    return TStringBuilder() << config.GetTransferSpecific().GetTarget().GetSrcPath() << "--" << config.GetTransferSpecific().GetTarget().GetDstPath();
+    }
+
 class TReplication::TImpl: public TLagProvider {
     friend class TReplication;
 
@@ -110,6 +121,7 @@ public:
         , PathId(pathId)
         , Config(std::forward<T>(config))
         , Database(std::forward<D>(database))
+        , Name(MakeReplicationName(Config))
     {
     }
 
@@ -275,6 +287,7 @@ public:
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         KeepResourceId(Config, config);
         Config = config;
+        Name = MakeReplicationName(Config);
     }
 
     void ResetCredentials(const TActorContext& ctx) {
@@ -317,6 +330,7 @@ private:
     TActorId YdbProxy;
     TActorId TenantResolver; // TODO: Remove in next major release
     TActorId TargetDiscoverer;
+    TString Name;
 
 }; // TImpl
 
@@ -503,6 +517,9 @@ const TMaybe<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
 }
 
+const TString& TReplication::GetName() const {
+    return Impl->Name;
+}
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrReplication::TReplicationConfig::TargetCase, stream, value) {

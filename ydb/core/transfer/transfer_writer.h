@@ -8,10 +8,11 @@
 namespace NKikimr::NReplication {
 
 struct TTransferWriteStats {
-    TDuration ProcessDuration;
-    ui64 ProcessCpuMs;
+    TDuration ProcessingCpu;
     TDuration WriteDuration;
-    ui64 WriteCpuMs;
+    ui64 WriteBytes;
+    ui64 WriteRows;
+    ui64 WriteErrors = 0;
 };
 
 namespace NTransfer {

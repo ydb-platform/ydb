@@ -36,6 +36,12 @@ bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& it
         || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
 }
 
+bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    return item.SourcePathType == NKikimrSchemeOp::EPathTypeView
+        || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup
+        || item.SourcePathType == NKikimrSchemeOp::EPathTypeReplication;
+}
+
 template <typename T>
 concept HasMaterializeIndexes = requires(const T& t) {
     { t.materialize_indexes() } -> std::same_as<bool>;
@@ -418,9 +424,7 @@ private:
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView
-            || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup
-            || item.SourcePathType == NKikimrSchemeOp::EPathTypeReplication)
+        if (IsPathTypeSchemeObject(item))
         {
             Ydb::Export::ExportToS3Settings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));

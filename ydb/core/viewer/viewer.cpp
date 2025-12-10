@@ -133,8 +133,7 @@ public:
                 .RelPath = "healthcheck",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
-                .AllowedSIDs = databaseAllowedSIDs,
+                .UseAuth = false, // auth is checked inside handler
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
@@ -248,6 +247,17 @@ public:
             }
         }
         return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+    }
+
+    bool CheckAccessMonitoring(const TRequestState& request) override {
+        auto userTokenObject = request.GetUserTokenObject();
+        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
+            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
+                return true;
+            }
+        }
+        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs())
+            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
     }
 
     bool CheckAccessViewer(const TRequestState& request) override {

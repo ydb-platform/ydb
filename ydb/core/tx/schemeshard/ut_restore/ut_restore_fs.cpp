@@ -108,6 +108,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/Table", "Table");
@@ -147,6 +148,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/Table", "Table");
@@ -184,6 +186,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/Table", "Table");
@@ -221,6 +224,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         // Invalid destination path (empty) should fail validation
         TestImport(runtime, ++txId, "/MyRoot", R"(
@@ -238,6 +242,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         // Duplicate destination paths should fail validation
         TestImport(runtime, ++txId, "/MyRoot", R"(
@@ -259,6 +264,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/Table1", "Table1");
@@ -305,6 +311,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TTempBackupFiles backup;
 
@@ -335,6 +342,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/ComplexTable", "ComplexTable");
@@ -373,6 +381,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
         TTempBackupFiles backup;
         backup.CreateTableBackup(

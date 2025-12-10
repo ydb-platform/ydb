@@ -447,6 +447,9 @@ void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* 
 }
 
 bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
+    if (importInfo.Kind != TImportInfo::EKind::S3) {
+        return true;
+    }
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     auto& item = importInfo.Items.at(itemIdx);
 

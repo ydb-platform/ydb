@@ -97,7 +97,17 @@ namespace NTabletFlatExecutor {
 
         void SetTactic(ETactic tactic) noexcept { Tactic = tactic; }
 
-        void SetBackupWriter(TActorId backupWriter) noexcept { BackupWriter = backupWriter; }
+        void SetBackupWriter(TActorId backupWriter) {
+            if (BackupWriter) {
+                Y_ENSURE(Ops, "Commit manager is not started");
+                Ops->Send(BackupWriter, new TEvents::TEvPoisonPill());
+            }
+            BackupWriter = backupWriter;
+        }
+
+        TActorId GetBackupWriter() const noexcept {
+            return BackupWriter;
+        }
 
         ui64 Stamp() const noexcept
         {

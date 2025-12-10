@@ -60,8 +60,12 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
     def store_type(self, request):
         return request.param
 
+    @pytest.fixture()
+    def channel_buffer_size(self, request):
+        return request.param
+
     @pytest.fixture(autouse=True, scope="function")
-    def setup(self, store_type):
+    def setup(self, store_type, channel_buffer_size):
         self.store_type = store_type
 
         if min(self.versions) < (25, 3, 2):
@@ -77,7 +81,12 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         yield from self.setup_cluster(
             extra_feature_flags={
                 "enable_arrow_result_set_format": True
-                },
+            },
+            table_service_config={
+                "resource_manager": {
+                    "channel_buffer_size": channel_buffer_size
+                }
+            },
             column_shard_config={
                 "disabled_on_scheme_shard": False,
             }
@@ -106,16 +115,36 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.LZ4_FRAME),
         ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.LZ4_FRAME, 10), # LZ4_FRAME with level is not supported
     ])
-    def test_compression(self, codec: ydb.ArrowCompressionCodec):
+    def test_compression(self, codec):
         table_name = "test_arrow"
         rows_count = 500
 
         self._create_table(table_name)
         self._fill_table(table_name, rows_count)
 
-        self._validate_compression(self._select_table(table_name, codec), rows_count, codec)
+        self._validate_compression(self._select_table(table_name, codec=codec), rows_count, codec)
         self.change_cluster_version()
-        self._validate_compression(self._select_table(table_name, codec), rows_count, codec)
+        self._validate_compression(self._select_table(table_name, codec=codec), rows_count, codec)
+
+        self._drop_table(table_name)
+
+    @pytest.mark.parametrize("store_type", ["ROW", "COLUMM"])
+    @pytest.mark.parametrize("channel_buffer_size", [2 * 1024, 8 * 1024 * 1024]) # 2 KB, 8 MB
+    @pytest.mark.parametrize("schema_inclusion_mode", [
+        ydb.QuerySchemaInclusionMode.UNSPECIFIED, # UNSPECIFIED is the same as ALWAYS
+        ydb.QuerySchemaInclusionMode.ALWAYS,
+        ydb.QuerySchemaInclusionMode.FIRST_ONLY,
+    ])
+    def test_schema_inclusion_mode(self, schema_inclusion_mode):
+        table_name = "test_arrow"
+        rows_count = 500
+
+        self._create_table(table_name)
+        self._fill_table(table_name, rows_count)
+
+        self._validate_schema_inclusion_mode(self._select_table(table_name, schema_inclusion_mode=schema_inclusion_mode), rows_count, schema_inclusion_mode)
+        self.change_cluster_version()
+        self._validate_schema_inclusion_mode(self._select_table(table_name, schema_inclusion_mode=schema_inclusion_mode), rows_count, schema_inclusion_mode)
 
         self._drop_table(table_name)
 
@@ -172,14 +201,23 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         except Exception as e:
             assert False, f"Failed to fill table {table_name}: {e}"
 
-    def _select_table(self, table_name, codec: ydb.ArrowCompressionCodec | None = None):
+    def _select_table(self,
+        table_name,
+        schema_inclusion_mode = None,
+        codec = None
+    ):
         columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]]
         query = f"SELECT {", ".join(columns)} FROM {table_name};"
         arrow_format_settings = ydb.ArrowFormatSettings(compression_codec=codec) if codec else None
 
         try:
             with ydb.QuerySessionPool(self.driver) as pool:
-                result_sets = pool.execute_with_retries(query, result_set_format=ydb.QueryResultSetFormat.ARROW, arrow_format_settings=arrow_format_settings)
+                result_sets = pool.execute_with_retries(
+                    query,
+                    result_set_format=ydb.QueryResultSetFormat.ARROW,
+                    arrow_format_settings=arrow_format_settings,
+                    schema_inclusion_mode=schema_inclusion_mode
+                )
             return result_sets
         except Exception as e:
             if codec is None or (codec.type != ydb.ArrowCompressionCodecType.LZ4_FRAME or codec.level is None):
@@ -212,7 +250,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         assert result_rows_count == rows_count
 
-    def _validate_compression(self, result_sets, rows_count, codec: ydb.ArrowCompressionCodec):
+    def _validate_compression(self, result_sets, rows_count, codec):
         if result_sets is None:
             return
 
@@ -225,8 +263,8 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             assert result_set.arrow_format_meta is not None and len(result_set.arrow_format_meta.schema) != 0
 
             try:
-                schema: pa.Schema = pa.ipc.read_schema(pa.py_buffer(result_set.arrow_format_meta.schema))
-                batch: pa.RecordBatch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
+                schema = pa.ipc.read_schema(pa.py_buffer(result_set.arrow_format_meta.schema))
+                batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
                 batch.validate()
 
                 # is there the best way to check if the compression is working?
@@ -234,6 +272,50 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
                     assert len(result_set.data) == len(batch.serialize().to_pybytes())
                 else:
                     assert len(result_set.data) < len(batch.serialize().to_pybytes())
+
+                result_rows_count += batch.num_rows
+                assert batch.num_columns == len(self.all_types) + 1
+            except Exception as e:
+                assert False, f"Failed to read schema or batch from result set: {e}"
+
+        assert result_rows_count == rows_count
+
+    def _validate_schema_inclusion_mode(self, result_sets, rows_count, schema_inclusion_mode):
+        if result_sets is None:
+            return
+
+        assert len(result_sets) != 0
+
+        # To detect the schema inclusion mode
+        if self.channel_buffer_size == 2 * 1024:
+            assert len(result_sets) > 1
+
+        first_schema = None
+        result_rows_count = 0
+
+        for result_set in result_sets:
+            assert result_set.format == ydb.QueryResultSetFormat.ARROW
+            assert len(result_set.rows) == 0
+
+            if schema_inclusion_mode in [ydb.QuerySchemaInclusionMode.UNSPECIFIED, ydb.QuerySchemaInclusionMode.ALWAYS]:
+                assert len(result_set.columns) == len(self.all_types) + 1
+                assert len(result_set.arrow_format_meta.schema) != 0
+                first_schema = result_set.arrow_format_meta.schema
+            elif schema_inclusion_mode == ydb.QuerySchemaInclusionMode.FIRST_ONLY:
+                if first_schema is None:
+                    assert len(result_set.columns) == len(self.all_types) + 1
+                    assert len(result_set.arrow_format_meta.schema) != 0
+                    first_schema = result_set.arrow_format_meta.schema
+                else:
+                    assert len(result_set.columns) == 0
+                    assert len(result_set.arrow_format_meta.schema) == 0
+            else:
+                assert False, f"Unsupported schema inclusion mode: {schema_inclusion_mode}"
+
+            try:
+                schema = pa.ipc.read_schema(pa.py_buffer(first_schema))
+                batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
+                batch.validate()
 
                 result_rows_count += batch.num_rows
                 assert batch.num_columns == len(self.all_types) + 1

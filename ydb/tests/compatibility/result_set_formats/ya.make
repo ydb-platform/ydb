@@ -14,6 +14,7 @@ SIZE(LARGE)
 REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
+REQUIREMENTS(ram:16)
 
 DEPENDS(
     ydb/tests/library/compatibility/binaries

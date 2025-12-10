@@ -62,7 +62,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
     @pytest.fixture()
     def channel_buffer_size(self, request):
-        return request.param
+        return getattr(request, 'param', 8 * 1024 * 1024)
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self, store_type, channel_buffer_size):
@@ -184,6 +184,20 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             rows_count,
             schema_inclusion_mode
         )
+
+        self._drop_table(table_name)
+
+    @pytest.mark.parametrize("store_type", ["ROW", "COLUMM"])
+    def test_empty_result(self):
+        table_name = "test_arrow"
+        rows_count = 500
+
+        self._create_table(table_name)
+        self._fill_table(table_name, rows_count)
+
+        self._validate_empty_result(table_name)
+        self.change_cluster_version()
+        self._validate_empty_result(table_name)
 
         self._drop_table(table_name)
 
@@ -425,3 +439,39 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         for index in [0, 1]:
             assert first_schema[index] is not None
             assert result_rows_count[index] == rows_count
+
+    def _validate_empty_result(self, table_name):
+        empty_response_queries = [
+            f"ALTER TABLE {table_name} ADD COLUMN col_NewCol Uint32;",
+            f"UPSERT INTO {table_name} (pk_Uint64) VALUES (1234), (5678);",
+            f"ALTER TABLE {table_name} DROP COLUMN col_NewCol;",
+        ]
+
+        with ydb.QuerySessionPool(self.driver) as pool:
+            for query in empty_response_queries:
+                try:
+                    result_sets = pool.execute_with_retries(query, result_set_format=ydb.QueryResultSetFormat.ARROW)
+                    assert len(result_sets) == 0, f"Expected 0 result sets for query: {query}"
+                except Exception as e:
+                    assert False, f"Failed to execute query: {query}: {e}"
+
+        empty_result_queries = [
+            f"SELECT * FROM {table_name} WHERE 1 = 0;",
+            f"UPDATE {table_name} SET col_Int64 = 1234 WHERE pk_Uint64 > 1234567 RETURNING *;"
+        ]
+
+        with ydb.QuerySessionPool(self.driver) as pool:
+            for query in empty_result_queries:
+                try:
+                    result_sets = pool.execute_with_retries(query, result_set_format=ydb.QueryResultSetFormat.ARROW)
+                    assert len(result_sets) == 1, f"Expected 1 result set for query: {query}"
+                    assert result_sets[0].format == ydb.QueryResultSetFormat.ARROW
+
+                    schema = pa.ipc.read_schema(pa.py_buffer(result_sets[0].arrow_format_meta.schema))
+                    batch = pa.ipc.read_record_batch(pa.py_buffer(result_sets[0].data), schema)
+                    batch.validate()
+
+                    assert batch.num_rows == 0
+                    assert batch.num_columns == len(self.all_types) + 1
+                except Exception as e:
+                    assert False, f"Failed to execute query: {query}: {e}"

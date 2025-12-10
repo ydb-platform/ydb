@@ -21,10 +21,6 @@ from .kikimr_port_allocator import KikimrPortManagerPortAllocator
 from .param_constants import kikimr_driver_path, ydb_cli_path
 from .util import LogLevels
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
 if PDISK_SIZE_STR.endswith("GB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
@@ -326,7 +322,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config['pqconfig']['client_service_type'] = []
             for service_type in pq_client_service_types:
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
-
         if column_shard_config:
             self.yaml_config["column_shard_config"] = column_shard_config
 
@@ -602,7 +597,6 @@ class KikimrConfigGenerator(object):
         with open(metering_file_path, "w") as metering_file:
             metering_file.write('')
         self.yaml_config['metering_config'] = {'metering_file_path': metering_file_path}
-
 
     def __set_enable_audit_log(self):
         audit_file_path = os.path.join(self.__working_dir, 'audit.txt')

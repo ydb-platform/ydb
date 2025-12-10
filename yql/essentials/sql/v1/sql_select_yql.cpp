@@ -223,7 +223,11 @@ private:
 
         if (rule.HasBlock12()) {
             Token(rule.GetBlock12().GetToken1());
-            return Unsupported("HAVING expr");
+            if (auto result = Build(rule.GetBlock12().GetRule_expr2(), EColumnRefState::Allow)) {
+                select.Having = std::move(*result);
+            } else {
+                return std::unexpected(result.error());
+            }
         }
 
         if (rule.HasBlock13()) {

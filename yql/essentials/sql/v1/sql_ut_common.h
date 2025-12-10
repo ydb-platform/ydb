@@ -11913,6 +11913,43 @@ Y_UNIT_TEST(GroupByAvg) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 1 + 1);
 }
 
+Y_UNIT_TEST(GroupByExplicitWithHaving) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, Avg(b) FROM (VALUES (1, 2)) AS x(a, b)
+        GROUP BY a HAVING 1 < a AND Avg(b) < 2;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlGroup", "YqlWhere", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlWhere"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 2 * (1 + 1));
+}
+
+Y_UNIT_TEST(GroupByImplicitWithHaving) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT Avg(b) FROM (VALUES (1, 2)) AS x(a, b) HAVING Avg(b) < 2;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlGroup", "YqlWhere", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlWhere"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 2 * (1 + 1));
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
 Y_UNIT_TEST_SUITE(CreateViewNewSyntax) {

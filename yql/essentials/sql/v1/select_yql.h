@@ -62,6 +62,7 @@ struct TYqlSelectArgs {
     TMaybe<TNodePtr> Limit;
     TMaybe<TNodePtr> Offset;
     TMaybe<TGroupBy> GroupBy;
+    TMaybe<TNodePtr> Having;
     TMaybe<TOrderBy> OrderBy;
 };
 

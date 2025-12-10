@@ -34,8 +34,6 @@ def get_column_types():
         .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("test_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("error_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("metrics", ydb.OptionalType(ydb.PrimitiveType.Json))
     )
 
 def get_table_schema(table_path):
@@ -279,8 +277,12 @@ def filter_rows_for_schema(rows, has_full_name, has_metadata, has_error_type, ha
         if not has_full_name:
             filtered_row.pop('full_name', None)
         
-        # Remove error_type if table doesn't have it
-        if not has_error_type:
+        # Ensure error_type is present if table has it, otherwise remove it
+        if has_error_type:
+            # Make sure error_type key exists in row (set to None if missing)
+            if 'error_type' not in filtered_row:
+                filtered_row['error_type'] = None
+        else:
             filtered_row.pop('error_type', None)
         
         # Handle metadata: remove if table doesn't have it, or convert empty JSON to None
@@ -291,8 +293,12 @@ def filter_rows_for_schema(rows, has_full_name, has_metadata, has_error_type, ha
             if filtered_row['metadata'] == "{}":
                 filtered_row['metadata'] = None
         
-        # Handle metrics: remove if table doesn't have it
-        if not has_metrics:
+        # Ensure metrics is present if table has it, otherwise remove it
+        if has_metrics:
+            # Make sure metrics key exists in row (set to None if missing)
+            if 'metrics' not in filtered_row:
+                filtered_row['metrics'] = None
+        else:
             filtered_row.pop('metrics', None)
         
         filtered_rows.append(filtered_row)

@@ -23,7 +23,7 @@ class WorkloadConfig:
     cover_max_columns: int = 2
     allowed_secondary_indexes_count: List[int] = field(default_factory=lambda: [1, 2, 3, 8, 16])
     unique_indexes_allowed: bool = True
-    unique_index_probability: float = 0.1
+    unique_index_probability: float = 0.05
     null_probability: float = 0.05
 
     # Column types
@@ -476,6 +476,8 @@ class WorkloadSecondaryIndex(WorkloadBase):
         self.verify_table(table_name, table_info)
         self.drop_table(table_name)
 
+        print(f"Workload for table {table_name} completed.")
+
     def _get_batch(self, pk_size: int, pk_only: bool, table_info: TableInfo = None) -> List[List[Any]]:
         """Generate a batch of rows for operations"""
         batch_rows = []
@@ -550,9 +552,9 @@ class WorkloadSecondaryIndex(WorkloadBase):
             try:
                 if parameters:
                     logger.debug(f"Query: {query} Params: {parameters}")
-                    return self.client.query(query, is_ddl, parameters)
+                    return self.client.query(query, is_ddl, parameters, log_error=False)
                 else:
-                    return self.client.query(query, is_ddl)
+                    return self.client.query(query, is_ddl, log_error=False)
             except (ydb.issues.Aborted, ydb.issues.Unavailable, ydb.issues.Undetermined) as e:
                 last_exception = e
                 if attempt < self.config.max_retries - 1:
@@ -820,9 +822,10 @@ class WorkloadSecondaryIndex(WorkloadBase):
 
     def _loop(self):
         """Main loop for the workload"""
+        iteration = 0
         while not self.is_stop_requested():
             threads = []
-            for table_name in [f'test{i}' for i in range(self.config.tables_inflight)]:
+            for table_name in [f'test_{iteration}_{i}' for i in range(self.config.tables_inflight)]:
                 threads.append(
                     threading.Thread(target=lambda t=table_name: self.run_for_table(t), name=f'{table_name}')
                 )
@@ -832,6 +835,10 @@ class WorkloadSecondaryIndex(WorkloadBase):
 
             for thread in threads:
                 thread.join()
+
+            print(f"Iteration {iteration} finished.")
+            print(self.stats.get_stats())
+            iteration += 1
 
     def get_workload_thread_funcs(self):
         """Get the thread functions for the workload"""

@@ -523,7 +523,7 @@ def process_branch(
                     if conflicts:
                         run_git(repo_path, ['add', '-A'], logger)
                         commit_desc = f"commit {commit_sha[:7]}" + (" (merge commit)" if len(parents) >= 2 else "")
-                        run_git(repo_path, ['commit', '--allow-empty', '-m', f"BACKPORT-CONFLICT: manual resolution required for {commit_desc}"], logger)
+                        run_git(repo_path, ['commit', '-m', f"BACKPORT-CONFLICT: manual resolution required for {commit_desc}"], logger)
                         all_conflict_files.extend(conflicts)
                     else:
                         run_git(repo_path, ['cherry-pick', '--abort'], logger, check=False)

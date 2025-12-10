@@ -749,6 +749,7 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
     FetchMessagesIfNeeded();
     ProcessEventQueue();
+    UpdateMetrics();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
@@ -801,6 +802,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
     LOG_D("Handle TEvents::TEvWakeup");
+    UpdateMetrics();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
@@ -808,6 +810,33 @@ void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
     auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), TabletId, FirstPipeCacheRequest, 1);
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
     FirstPipeCacheRequest = false;
+}
+
+void TConsumerActor::UpdateMetrics() {
+    auto& metrics = Storage->GetMetrics();
+
+    NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters counters;
+    counters.SetInflightMessageCount(metrics.InflightMessageCount);
+    counters.SetUnprocessedMessageCount(metrics.UnprocessedMessageCount);
+    counters.SetLockedMessageCount(metrics.LockedMessageCount);
+    counters.SetLockedMessageGroupCount(metrics.LockedMessageGroupCount);
+    counters.SetDelayedMessageCount(metrics.DelayedMessageCount);
+    counters.SetCommittedMessageCount(metrics.CommittedMessageCount);
+    counters.SetDeadlineExpiredMessageCount(metrics.DeadlineExpiredMessageCount);
+    counters.SetDLQMessageCount(metrics.DLQMessageCount);
+
+    counters.SetTotalCommittedMessageCount(metrics.TotalCommittedMessageCount);
+    counters.SetTotalMovedToDLQMessageCount(metrics.TotalMovedToDLQMessageCount);
+    counters.SetTotalScheduledToDLQMessageCount(metrics.TotalScheduledToDLQMessageCount);
+    counters.SetTotalPurgedMessageCount(metrics.TotalPurgedMessageCount);
+    counters.SetTotalDeletedByDeadlinePolicyMessageCount(metrics.TotalDeletedByDeadlinePolicyMessageCount);
+    counters.SetTotalDeletedByRetentionMessageCount(metrics.TotalDeletedByRetentionMessageCount);
+
+    for (size_t i = 0; i < metrics.MessageLocks.GetRangeCount(); ++i) {
+        counters.AddMessageLocksValues(metrics.MessageLocks.GetRangeValue(i));
+    }
+
+    Send(PartitionActorId, new TEvPQ::TEvMLPConsumerState(PartitionId, Config.GetName(), std::move(counters)));
 }
 
 NActors::IActor* CreateConsumerActor(

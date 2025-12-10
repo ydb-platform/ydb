@@ -20,6 +20,7 @@ ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
 ydb/core/kqp/ut/olap KqpOlapLocks.DeleteAbsentMultipleShards+Reboot
+ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
@@ -48,6 +49,7 @@ ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/statistics/service/ut [*/*] chunk chunk
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_ColumnTable
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
+ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-true
@@ -63,7 +65,6 @@ ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Table
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
-ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryService
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
@@ -108,6 +109,7 @@ ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current_mixed-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current_mixed-row]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_25_1_to_current-row]
 ydb/tests/functional/compatibility test_followers.py.TestFollowersCompatibility.test_followers_compatability
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_kv[last_stable-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_kv[mixed-row]
@@ -116,8 +118,8 @@ ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[mixed-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[last_stable-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[mixed-row]
 ydb/tests/functional/config test_distconf.py.TestDistConfWithAuth.test_auth_v2_initialization
+ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
-ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/coalesce-and-join.test]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join-group-by-with-null.test]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join0.test]
@@ -135,6 +137,7 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/ydb_cli [test_ydb_backup.py] chunk chunk
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestClusterBackupRestore.test_cluster_backup_restore
+ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackup.test_database_backup
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test

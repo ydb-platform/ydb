@@ -503,7 +503,7 @@ def process_branch(
         
         try:
             if len(parents) >= 2:
-                # Merge commit: use -m 1 to cherry-pick changes from fork branch (second parent)
+                # Merge commit: use -m 1 to cherry-pick changes relative to the first parent (mainline), bringing in changes from the feature branch (second parent)
                 logger.info(f"Merge commit {commit_sha[:7]}: cherry-picking with -m 1")
                 result = run_git(repo_path, ['cherry-pick', '--allow-empty', '-m', '1', commit_sha], logger, check=False)
             else:
@@ -513,25 +513,27 @@ def process_branch(
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
             
             if result.returncode != 0:
-                if "empty" in output.lower() and "cherry-pick" in output.lower():
-                    # Empty commit after auto-merge or conflict resolution
+                # Check git status to determine the actual state
+                conflicts = detect_conflicts(repo_path, logger)
+                status_result = run_git(repo_path, ['status', '--porcelain'], logger)
+                has_changes = bool(status_result.stdout.strip())
+                
+                if conflicts:
+                    # Has conflicts - resolve them
+                    run_git(repo_path, ['add', '-A'], logger)
+                    commit_desc = f"commit {commit_sha[:7]}" + (" (merge commit)" if len(parents) >= 2 else "")
+                    run_git(repo_path, ['commit', '-m', f"BACKPORT-CONFLICT: manual resolution required for {commit_desc}"], logger)
+                    all_conflict_files.extend(conflicts)
+                elif has_changes:
+                    # Has changes but no conflicts - stage and commit them
+                    run_git(repo_path, ['add', '-A'], logger)
+                    commit_desc = f"commit {commit_sha[:7]}" + (" (merge commit)" if len(parents) >= 2 else "")
+                    run_git(repo_path, ['commit', '-m', f"Backport {commit_desc}"], logger)
+                else:
+                    # No conflicts and no changes - empty commit
                     logger.info(f"Commit {commit_sha[:7]} is empty, committing with --allow-empty")
                     commit_desc = f"commit {commit_sha[:7]}" + (" (merge commit)" if len(parents) >= 2 else "")
                     run_git(repo_path, ['commit', '--allow-empty', '-m', f"Backport {commit_desc}"], logger)
-                elif "conflict" in output.lower():
-                    conflicts = detect_conflicts(repo_path, logger)
-                    if conflicts:
-                        run_git(repo_path, ['add', '-A'], logger)
-                        commit_desc = f"commit {commit_sha[:7]}" + (" (merge commit)" if len(parents) >= 2 else "")
-                        run_git(repo_path, ['commit', '-m', f"BACKPORT-CONFLICT: manual resolution required for {commit_desc}"], logger)
-                        all_conflict_files.extend(conflicts)
-                    else:
-                        run_git(repo_path, ['cherry-pick', '--abort'], logger, check=False)
-                        logger.error(f"Cherry-pick conflict detected but no conflict files found. Output: {output}")
-                        raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {output}")
-                else:
-                    logger.error(f"Cherry-pick error for commit {commit_sha[:7]}: {output}")
-                    raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {output}")
             
             if output:
                 cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{output}")

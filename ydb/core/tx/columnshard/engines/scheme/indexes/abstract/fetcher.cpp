@@ -47,6 +47,7 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
             ranges.insert(ranges.end(), rangesLocal.begin(), rangesLocal.end());
         }
     }
+    std::sort(ranges.begin(), ranges.end());
     ranges.erase(std::unique(ranges.begin(), ranges.end()), ranges.end());
     if (ranges.size()) {
         auto reading = blobsAction.GetReading(StorageId);

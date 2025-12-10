@@ -15,7 +15,7 @@ namespace NKikimr::NKqp {
 namespace {
 
 TStringBuilder GetLogLabel(const TString& label, const ui64 requestId) {
-    return TStringBuilder() << label << " [" << requestId << "] : ";
+    return TStringBuilder() << label << " [" << requestId << "]: ";
 }
 
 class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecretsActor> {
@@ -121,6 +121,24 @@ NSchemeCache::TSchemeCacheNavigate::EStatus GetSchemeCacheEntryStatus(
     return entry.Status;
 }
 
+TString ListSecrets(const TVector<TString>& paths) {
+    if (paths.empty()) {
+        return "";
+    }
+    if (paths.size() == 1) {
+        return "secret `" + paths[0] + "`";
+    }
+
+    auto sb = TStringBuilder() << "secrets ";
+    for (size_t i = 0; i < paths.size(); ++i) {
+        sb << "`" << paths[i] << "`";
+        if (i + 1 < paths.size()) {
+            sb << ", ";
+        }
+    }
+    return sb;
+}
+
 }  // anonymous namespace
 
 void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
@@ -202,7 +220,7 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
     const auto& rec = ev->Get()->GetRecord();
     const auto& secretName = CanonizePath(rec.GetPath());
     if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
-        LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << ", SchemeShard error: " << EStatus_Name(rec.GetStatus()));
+        LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << "SchemeShard error: " << EStatus_Name(rec.GetStatus()));
         FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretName + "` not found") }));
         return;
     }
@@ -281,28 +299,50 @@ bool TDescribeSchemaSecretsService::LocalCacheHasActualObject(const TVersionedSe
 
 bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& requestId, NSchemeCache::TSchemeCacheNavigate& result) {
     if (result.ResultSet.empty()) {
-        LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId) << ", SchemeCache error: empty response");
+        LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId) << "SchemeCache error: empty response");
         FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secrets were not found") }));
         return true;
     }
 
     bool retryableError = false;
-    TString unresolvedSecretPath;
-    for (auto& entry: result.ResultSet) {
+    TString firstUnresolvedPath;
+    for (size_t i = 0; i < result.ResultSet.size(); ++i) {
+        auto& entry = result.ResultSet[i];
         switch (GetSchemeCacheEntryStatus(SchemeCacheStatusGetter, entry)) {
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError: {
-                retryableError = true;
-                unresolvedSecretPath = CanonizePath(entry.Path);
-                break;
-            }
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok: {
                 break;
             }
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError: {
+                retryableError = true;
+                if (firstUnresolvedPath.empty()) {
+                    firstUnresolvedPath = CanonizePath(entry.Path);
+                }
+                // we don't skip the remaining entries, since if there is a not retryable error, we should not retry anything
+                break;
+            }
             default: {
-                unresolvedSecretPath = CanonizePath(entry.Path);
-                LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId) << ", SchemeCache error "
-                    << ToString(entry.Status) << " for secret `" + unresolvedSecretPath + "`");
-                FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + unresolvedSecretPath + "` not found") }));
+                // we look at the all remaining entries, to report about all failed secrets
+                TVector<TString> unresolvedPaths;
+                unresolvedPaths.reserve(result.ResultSet.size());
+                unresolvedPaths.push_back(CanonizePath(entry.Path));
+                for (size_t j = i + 1; j < result.ResultSet.size(); ++j) {
+                    auto& nextEntry = result.ResultSet[j];
+                    const auto status = GetSchemeCacheEntryStatus(SchemeCacheStatusGetter, nextEntry);
+                    if (
+                        status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok &&
+                        status != NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError
+                    ) {
+                        unresolvedPaths.push_back(CanonizePath(nextEntry.Path));
+                    }
+                }
+
+                LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId) << "SchemeCache error "
+                    << ToString(entry.Status) << " for " << ListSecrets(unresolvedPaths));
+                FillResponse(
+                    requestId,
+                    TEvDescribeSecretsResponse::TDescription(
+                        Ydb::StatusIds::BAD_REQUEST,
+                        { NYql::TIssue(ListSecrets(unresolvedPaths) + " not found") }));
 
                 return true;
             }
@@ -310,18 +350,23 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
     }
 
     if (retryableError) {
-        if (ScheduleSchemeCacheRetry(requestId, unresolvedSecretPath)) {
+        if (ScheduleSchemeCacheRetry(requestId, firstUnresolvedPath)) {
             return true;
         }
 
         // no more retries
-        LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId) << ", retry limit exceeded for secret `" + unresolvedSecretPath + "`");
-        FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::UNAVAILABLE, { NYql::TIssue("Retry limit exceeded for secret `" + unresolvedSecretPath + "`") }));
+        LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId)
+            << "retry limit exceeded for secret `" + firstUnresolvedPath + "`");
+        FillResponse(
+            requestId,
+            TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::UNAVAILABLE,
+                { NYql::TIssue("Retry limit exceeded for secret `" + firstUnresolvedPath + "`") }));
 
         return true;
     }
 
-    return false;
+    return false; // no Scheme Cache errors
 }
 
 bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId, const TString& unresolvedSecretPath) {

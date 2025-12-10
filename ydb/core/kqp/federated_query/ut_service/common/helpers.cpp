@@ -83,7 +83,7 @@ namespace NKikimr::NKqp {
     {
     }
 
-   NSchemeCache::TSchemeCacheNavigate::EStatus TTestSchemeCacheStatusGetter::GetStatus(
+    NSchemeCache::TSchemeCacheNavigate::EStatus TTestSchemeCacheStatusGetter::GetStatus(
         NSchemeCache::TSchemeCacheNavigate::TEntry& entry) const
     {
         switch (FailProbability) {

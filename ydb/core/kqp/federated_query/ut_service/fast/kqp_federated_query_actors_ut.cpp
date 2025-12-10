@@ -380,6 +380,22 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
             AssertSecretValue(secrets[i].second, promises[i]);
         }
     }
+
+    Y_UNIT_TEST(SchemeCacheMultipleNotRetryableErrors) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const TString secretName1 = "/Root/s1";
+        const TString secretName2 = "/Root/s2";
+        const TString secretName3 = "/Root/s3";
+        CreateSchemaSecret(secretName2, /* secretValue */ "", session);
+        auto promise = ResolveSecrets({secretName1, secretName2, secretName3}, kikimr);
+
+        AssertBadRequest(promise, "<main>: Error: secrets `/Root/s1`, `/Root/s3` not found\n");
+    }
+
 }
 
 } // NKikimr::NKqp

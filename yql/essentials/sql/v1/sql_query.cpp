@@ -1437,6 +1437,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
+            if (context.ServiceId == YtProviderName) {
+                auto requiredLangVer = MakeLangVersion(2025, 5);
+                if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
+                    Error() << "CREATE VIEW is not available before language version " << FormatLangVersion(requiredLangVer);
+                    return false;
+                }
+            }
+
             const bool existingOk = node.HasBlock3();
 
             std::map<TString, TDeferredAtom> features;

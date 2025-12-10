@@ -87,6 +87,13 @@ inline void ExpectFailWithError(const TString& query, const TString& error) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), error);
 }
 
+inline void ExpectFailWithError(const TString& query, const TString& error, const NSQLTranslation::TTranslationSettings& settings) {
+    NYql::TAstParseResult res = SqlToYqlWithSettings(query, settings);
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), error);
+}
+
 inline void ExpectFailWithFuzzyError(const TString& query, const TString& errorRegex) {
     NYql::TAstParseResult res = SqlToYql(query);
 

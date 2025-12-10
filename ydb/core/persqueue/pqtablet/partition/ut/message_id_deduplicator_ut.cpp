@@ -119,20 +119,6 @@ TEST(TDeduplicatorTest, AddTwoMessages_DifferentTime_OneBucket) {
     scenario.AssertWALLoad();
 }
 
-TEST(TDeduplicatorTest, AddTwoMessages_DifferentTime_DifferentBucket) {
-    TestScenario scenario;
-
-    EXPECT_FALSE(scenario.AddMessage("message1", 1).has_value());
-    scenario.CreateWAL();
-    scenario.TimeProvider->Tick(TDuration::MilliSeconds(1010));
-    EXPECT_FALSE(scenario.AddMessage("message2", 2).has_value());
-    scenario.CreateWAL();
-
-    EXPECT_EQ(scenario.WALs.size(), 2ul);
-
-    scenario.AssertWALLoad();
-}
-
 TEST(TDeduplicatorTest, AddManyMessages_SameTime_DifferentBucket) {
     TestScenario scenario;
 

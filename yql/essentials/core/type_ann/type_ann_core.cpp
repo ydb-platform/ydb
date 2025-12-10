@@ -8,6 +8,7 @@
 #include "type_ann_wide.h"
 #include "type_ann_types.h"
 #include "type_ann_pg.h"
+#include "type_ann_yql.h"
 #include "type_ann_match_recognize.h"
 
 #include <yql/essentials/core/sql_types/yql_atom_enums.h>
@@ -14048,6 +14049,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["YqlStar"] = &PgStarWrapper;
         Functions["YqlWhere"] = &PgWhereWrapper;
         Functions["YqlSort"] = &PgSortWrapper;
+        Functions["YqlGroup"] = &PgWhereWrapper;
+        Functions["YqlGroupRef"] = &PgGroupRefWrapper;
+        Functions["YqlGrouping"] = &PgGroupingWrapper;
+        Functions["YqlGroupingSet"] = &PgGroupingSetWrapper;
+        ExtFunctions["YqlAggFactory"] = &YqlAggFactoryWrapper;
+        ExtFunctions["YqlAgg"] = &YqlAggWrapper;
+        Functions["YqlReplaceUnknown"] = &PgReplaceUnknownWrapper;
 
         for (ui32 i = 0; i < NKikimr::NUdf::DataSlotCount; ++i) {
             auto name = TString(NKikimr::NUdf::GetDataTypeInfo((EDataSlot)i).Name);

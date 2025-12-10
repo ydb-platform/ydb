@@ -1,30 +1,31 @@
-#include "ydb_state.h"
+#include "ydb_diagnostics.h"
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
 
 #include <chrono>
+#include <thread>
+
 #include <util/generic/xrange.h>
 #include <util/stream/mem.h>
-#include <library/cpp/streams/bzip2/bzip2.h>
 
 namespace NYdb::NConsoleClient {
 
-TCommandClusterState::TCommandClusterState()
-    : TClientCommandTree("state", {}, "Manage cluster internal state")
+TCommandClusterDiagnostics::TCommandClusterDiagnostics()
+    : TClientCommandTree("diagnostics", {}, "Manage cluster internal state")
 {
-    AddCommand(std::make_unique<TCommandClusterStateFetch>());
+    AddCommand(std::make_unique<TCommandClusterDiagnosticsCollect>());
 }
 
-TCommandClusterStateFetch::TCommandClusterStateFetch()
-    : TYdbReadOnlyCommand("fetch", {},
+TCommandClusterDiagnosticsCollect::TCommandClusterDiagnosticsCollect()
+    : TYdbReadOnlyCommand("collect", {},
         "Fetch aggregated cluster node state and metrics over a time period.\n"
         "Sends a cluster-wide request to collect state as a set of metrics from all nodes.\n"
         "One of the nodes gathers metrics from all others over the specified duration, then returns an aggregated result.")
 {}
 
-void TCommandClusterStateFetch::Config(TConfig& config) {
+void TCommandClusterDiagnosticsCollect::Config(TConfig& config) {
     TYdbReadOnlyCommand::Config(config);
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("duration",
@@ -47,7 +48,7 @@ void TCommandClusterStateFetch::Config(TConfig& config) {
     config.AllowEmptyDatabase = true;
 }
 
-void TCommandClusterStateFetch::Parse(TConfig& config) {
+void TCommandClusterDiagnosticsCollect::Parse(TConfig& config) {
     TYdbReadOnlyCommand::Parse(config);
     ParseOutputFormats();
 }
@@ -104,24 +105,51 @@ struct TARFile {
     }
 };
 
-int TCommandClusterStateFetch::Run(TConfig& config) {
+TString ReplaceCountersIdx(TString& name, ui32 index) {
+    if (!name.StartsWith("node")) {
+        return TStringBuilder() << name << ".json";
+    }
+    return TStringBuilder() << name << "_" << index << ".json";
+}
+
+void TCommandClusterDiagnosticsCollect::ProcessState(TConfig& config, TBZipCompress& compress, ui32 index) {
     NMonitoring::TMonitoringClient client(CreateDriver(config));
     NMonitoring::TClusterStateSettings settings;
-    settings.DurationSeconds(DurationSeconds);
-    settings.PeriodSeconds(PeriodSeconds);
+    settings.DurationSeconds(PeriodSeconds ? PeriodSeconds : DurationSeconds);
     settings.NoSanitize(NoSanitize);
+    settings.CountersOnly(index > 0);
     NMonitoring::TClusterStateResult result = client.ClusterState(settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     const auto& proto = NYdb::TProtoAccessor::GetProto(result);
-
-    TFileOutput out(FileName);
-    TBZipCompress compress(&out);
     for (ui32 i : xrange(proto.blocksSize())) {
         auto& block = proto.Getblocks(i);
         TString data = block.Getcontent();
         TMemoryInput input(data.data(), data.size());
         TBZipDecompress decompress(&input);
-        TARFile::ToStream(compress, block.Getname(), decompress.ReadAll(), TInstant::Seconds(block.Gettimestamp().seconds()));
+        TString fileName = block.Getname();
+        TARFile::ToStream(compress, ReplaceCountersIdx(fileName, index), decompress.ReadAll(), TInstant::Seconds(block.Gettimestamp().seconds()));
+    }
+}
+
+int TCommandClusterDiagnosticsCollect::Run(TConfig& config) {
+    auto start = TInstant::Now();
+    auto period = TDuration::Seconds(PeriodSeconds);
+    auto duration = TDuration::Seconds(DurationSeconds);
+    ui32 index = 0;
+    TFileOutput out(FileName);
+    TBZipCompress compress(&out);
+    Cout << TInstant::Now().ToString() << " Request cluster diagnostics" << "\n";
+    ProcessState(config, compress);
+
+    while (PeriodSeconds && (TInstant::Now() - start) < duration - period) {
+        index++;
+        auto p = TDuration::Seconds(PeriodSeconds * index);
+
+        if (start + p > TInstant::Now()) {
+            std::this_thread::sleep_for(std::chrono::nanoseconds((start - TInstant::Now() + p).NanoSeconds()));
+        }
+        Cout <<  TInstant::Now().ToString() << " Request counteres #" << index << "\n";
+        ProcessState(config, compress, index);
     }
     return EXIT_SUCCESS;
 }

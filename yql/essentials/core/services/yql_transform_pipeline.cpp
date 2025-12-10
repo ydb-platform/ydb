@@ -208,15 +208,18 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 if (lineageError) {
                                     std::rethrow_exception(lineageError);
                                 }
-                                if (NormalizeLineage(calculatedLineage) != NormalizeLineage(loadedLineage)) {
-                                    YQL_LOG(ERROR) << "Lineage in replay is different:"
+                                try {
+                                    CheckEquvalentLineages(calculatedLineage, loadedLineage);
+                                    YQL_LOG(INFO) << "Lineage replay is the same";
+                                } catch (const std::exception& e) {
+                                    YQL_LOG(ERROR) << "Lineage in replay is different for standalone mode:\n"
+                                                   << e.what()
                                                    << "\nCalculated lineage:\n"
                                                    << calculatedLineage
                                                    << "\nLoaded lineage:\n"
                                                    << loadedLineage;
                                     throw yexception() << "Lineage in replay is different";
                                 }
-                                YQL_LOG(INFO) << "Lineage replay is the same";
                             }
                             if (typeCtx->QContext && typeCtx->QContext.CanWrite() && *typeCtx->CorrectLineage) {
                                 typeCtx->QContext.GetWriter()->Put({LineageComponent, LineageResultLabel}, calculatedLineage).GetValueSync();
@@ -307,22 +310,25 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                 if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
                     auto loaded = typeCtx->QContext.GetReader()->Get({LineageComponent, StandaloneLineageLabel}).GetValueSync();
                     if (loaded.Defined()) {
-                        if (NormalizeLineage(*lineageOut) != NormalizeLineage(loaded->Value)) {
-                            YQL_LOG(ERROR) << "Lineage in replay is different for standalone mode:"
+                        try {
+                            CheckEquvalentLineages(*lineageOut, loaded->Value);
+                            YQL_LOG(INFO) << "Lineage replay is the same";
+                        } catch (const std::exception& e) {
+                            YQL_LOG(ERROR) << "Lineage in replay is different for standalone mode:\n"
+                                           << e.what()
                                            << "\nCalculated lineage:\n"
                                            << *lineageOut
                                            << "\nLoaded lineage:\n"
                                            << loaded->Value;
                             throw yexception() << "Lineage in replay is different";
                         }
-                        YQL_LOG(INFO) << "Lineage replay is the same";
                     }
                 }
                 if (typeCtx->EnableStandaloneLineage) {
                     if (typeCtx->QContext && typeCtx->QContext.CanWrite()) {
                         try {
-                            // normalize is needed to check correctness of lineage output, e.g. if column-wise lineage section is empty, normalization will fail
-                            NormalizeLineage(*lineageOut);
+                            // need to check correctness of lineage output before saving, e.g. if column-wise lineage section is empty
+                            ValidateLineage(*lineageOut);
                             typeCtx->CorrectStandaloneLineage = true;
                         } catch (const std::exception& e) {
                             typeCtx->CorrectStandaloneLineage = false;

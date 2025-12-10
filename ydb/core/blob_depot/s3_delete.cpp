@@ -21,13 +21,15 @@ namespace NKikimr::NBlobDepot {
         TActorId ParentId;
         THashMap<TString, TS3Locator> Locators;
         TString LogId;
+        const ui64 TabletId;
 
     public:
-        TDeleterActor(TActorId parentId, THashMap<TString, TS3Locator> locators, TString logId)
+        TDeleterActor(TActorId parentId, THashMap<TString, TS3Locator> locators, TString logId, ui64 tabletId)
             : TActor(&TThis::StateFunc)
             , ParentId(parentId)
             , Locators(locators)
             , LogId(std::move(logId))
+            , TabletId(tabletId)
         {}
 
         void Handle(TEvExternalStorage::TEvDeleteObjectResponse::TPtr ev) {
@@ -52,6 +54,7 @@ namespace NKikimr::NBlobDepot {
                 for (const Aws::S3::Model::DeletedObject& deleted : result.GetDeleted()) {
                     if (deleted.KeyHasBeenSet()) {
                         if (const auto it = Locators.find(deleted.GetKey().c_str()); it != Locators.end()) {
+                            BDEV(BDEV29, "deleted_from_S3", (BDT, TabletId), (Locator, it->second));
                             locatorsOk.push_back(it->second);
                             Locators.erase(it);
                         } else {
@@ -65,6 +68,7 @@ namespace NKikimr::NBlobDepot {
                 for (const Aws::S3::Model::Error& error : result.GetErrors()) {
                     if (error.KeyHasBeenSet() && error.GetCode() == "NoSuchKey") { // this key has already been deleted
                         if (const auto it = Locators.find(error.GetKey().c_str()); it != Locators.end()) {
+                            BDEV(BDEV30, "deleted_from_S3:NoSuchKey", (BDT, TabletId), (Locator, it->second));
                             locatorsOk.push_back(it->second);
                             Locators.erase(it);
                         }
@@ -82,6 +86,7 @@ namespace NKikimr::NBlobDepot {
             for (const auto& [key, locator] : Locators) {
                 locatorsError.push_back(locator);
                 STLOG(PRI_WARN, BLOB_DEPOT, BDTS08, "failed to delete object from S3", (Id, LogId), (Locator, locator));
+                BDEV(BDEV31, "deleted_from_S3:error", (BDT, TabletId), (Locator, locator));
             }
 
             Send(ParentId, new TEvDeleteResult(std::move(locatorsOk), std::move(locatorsError)));
@@ -154,14 +159,10 @@ namespace NKikimr::NBlobDepot {
 
     void TS3Manager::AddTrashToCollect(TS3Locator locator) {
         STLOG(PRI_INFO, BLOB_DEPOT, BDTS06, "AddTrashToCollect", (Id, Self->GetLogId()), (Locator, locator));
+        BDEV(BDEV32, "add_S3_trash_to_collect", (BDT, Self->TabletID()), (Locator, locator));
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_OBJECTS] = ++TotalS3TrashObjects;
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_S3_TRASH_SIZE] = TotalS3TrashSize += locator.Len;
-        if (const ui32 generation = Self->Executor()->Generation(); locator.Generation < generation) {
-            DeleteQueueInPrevGenerations.push_back(locator);
-        } else {
-            Y_DEBUG_ABORT_UNLESS(locator.Generation == generation);
-            DeleteQueueInCurrentGeneration.push_back(locator);
-        }
+        DeleteQueue.push_back(locator);
         RunDeletersIfNeeded();
     }
 
@@ -169,21 +170,21 @@ namespace NKikimr::NBlobDepot {
         while (NumDeleteTxInFlight + ActiveDeleters.size() < MaxDeletesInFlight) {
             // create list of locators we are going to delete during this operation
             THashMap<TString, TS3Locator> locators;
-            for (auto *queue : {&DeleteQueueInPrevGenerations, &DeleteQueueInCurrentGeneration}) {
-                while (!queue->empty() && locators.size() < MaxObjectsToDeleteAtOnce) {
-                    const TS3Locator& locator = queue->front();
-                    locators.emplace(locator.MakeObjectName(BasePath), locator);
-                    queue->pop_front();
-                }
+            while (!DeleteQueue.empty() && locators.size() < MaxObjectsToDeleteAtOnce) {
+                const TS3Locator& locator = DeleteQueue.front();
+                locators.emplace(locator.MakeObjectName(BasePath), locator);
+                DeleteQueue.pop_front();
             }
             if (!locators) {
                 break;
             }
 
-            const TActorId actorId = Self->Register(new TDeleterActor(Self->SelfId(), locators, Self->GetLogId()));
+            const TActorId actorId = Self->Register(new TDeleterActor(Self->SelfId(), locators, Self->GetLogId(),
+                Self->TabletID()));
             ActiveDeleters.insert(actorId);
 
             if (locators.size() == 1) {
+                BDEV(BDEV33, "issue_S3_delete", (BDT, Self->TabletID()), (Locator, locators.begin()->second));
                 TActivationContext::Send(new IEventHandle(WrapperId, actorId,
                     new TEvExternalStorage::TEvDeleteObjectRequest(
                         Aws::S3::Model::DeleteObjectRequest()
@@ -196,6 +197,7 @@ namespace NKikimr::NBlobDepot {
                 auto del = Aws::S3::Model::Delete();
                 for (const auto& [key, locator] : locators) {
                     del.AddObjects(Aws::S3::Model::ObjectIdentifier().WithKey(key));
+                    BDEV(BDEV34, "issue_S3_delete:multi", (BDT, Self->TabletID()), (Locator, locator));
                 }
 
                 TActivationContext::Send(new IEventHandle(WrapperId, actorId,
@@ -228,15 +230,7 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 if (!msg.LocatorsError.empty()) {
-                    const ui32 generation = Self->Executor()->Generation();
-                    for (auto& locator : msg.LocatorsError) {
-                        if (locator.Generation < generation) {
-                            DeleteQueueInPrevGenerations.push_back(locator);
-                        } else {
-                            Y_DEBUG_ABORT_UNLESS(locator.Generation == generation);
-                            DeleteQueueInCurrentGeneration.push_back(locator);
-                        }
-                    }
+                    DeleteQueue.insert(DeleteQueue.end(), msg.LocatorsError.begin(), msg.LocatorsError.end());
                     RunDeletersIfNeeded();
                 }
             })

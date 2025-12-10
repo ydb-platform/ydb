@@ -10,6 +10,7 @@
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -47,8 +48,13 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
 
 NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation);
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType);
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
+NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
 
-std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys);
+std::span<const std::string_view> GetImplTables(
+    NKikimrSchemeOp::EIndexType indexType,
+    std::span<const TString> indexKeys,
+    std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout = std::nullopt);
 std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout);
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);

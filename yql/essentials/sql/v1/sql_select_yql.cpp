@@ -1,6 +1,8 @@
 #include "sql_select_yql.h"
 
+#include "antlr_token.h"
 #include "sql_expression.h"
+#include "sql_group_by.h"
 #include "select_yql.h"
 
 #include <util/generic/overloaded.h>
@@ -212,7 +214,11 @@ private:
         }
 
         if (rule.HasBlock11()) {
-            return Unsupported("group_by_clause");
+            if (auto result = Build(rule.GetBlock11().GetRule_group_by_clause1())) {
+                select.GroupBy = std::move(*result);
+            } else {
+                return std::unexpected(result.error());
+            }
         }
 
         if (rule.HasBlock12()) {
@@ -302,7 +308,7 @@ private:
     TNodeResult Build(const TRule_result_column::TAlt2& alt) {
         TNodeResult expr = Build(alt.GetRule_expr1(), EColumnRefState::Allow);
         if (!expr) {
-            return std::unexpected(ESQLError::Basic);
+            return std::unexpected(expr.error());
         }
 
         if (const auto label = Label(alt)) {
@@ -345,12 +351,29 @@ private:
                 return std::unexpected(source.error());
             }
 
-            if (!block.HasBlock4()) {
-                return Unsupported("absent join_constraint");
+            if (!block.HasBlock4() && kind != EYqlJoinKind::Cross) {
+                Error() << "Expected ON or USING expression";
+                return std::unexpected(ESQLError::Basic);
             }
 
-            const auto& join_constraint = block.GetBlock4().GetRule_join_constraint1();
-            TSQLResult<TYqlJoinConstraint> constraint = Build(join_constraint, *kind);
+            if (block.HasBlock4() && kind == EYqlJoinKind::Cross) {
+                Error() << "Cross join should not have ON or USING expression";
+                return std::unexpected(ESQLError::Basic);
+            }
+
+            auto constraint = [&]() -> TSQLResult<TYqlJoinConstraint> {
+                if (!block.HasBlock4()) {
+                    YQL_ENSURE(kind == EYqlJoinKind::Cross);
+                    return TYqlJoinConstraint{
+                        .Kind = EYqlJoinKind::Cross,
+                        .Condition = TNodePtr(),
+                    };
+                }
+
+                const auto& join_constraint = block.GetBlock4().GetRule_join_constraint1();
+                return Build(join_constraint, *kind);
+            }();
+
             if (!constraint) {
                 return std::unexpected(constraint.error());
             }
@@ -364,16 +387,25 @@ private:
 
     TSQLResult<EYqlJoinKind> Build(const TRule_join_op& rule) {
         switch (rule.GetAltCase()) {
-            case TRule_join_op::kAltJoinOp1:
-                return Unsupported("COMMA");
+            case TRule_join_op::kAltJoinOp1: {
+                if (!Ctx_.AnsiImplicitCrossJoin) {
+                    Token(rule.GetAlt_join_op1().GetToken1());
+                    Error() << "Cartesian product of tables is disabled. "
+                            << "Please use an explicit CROSS JOIN or "
+                            << "enable it via PRAGMA AnsiImplicitCrossJoin";
+                    return std::unexpected(ESQLError::Basic);
+                }
+
+                return EYqlJoinKind::Cross;
+            }
             case TRule_join_op::kAltJoinOp2:
-                break;
+                return Build(rule.GetAlt_join_op2());
             case TRule_join_op::ALT_NOT_SET:
                 Y_UNREACHABLE();
-        };
+        }
+    }
 
-        const auto& alt = rule.GetAlt_join_op2();
-
+    TSQLResult<EYqlJoinKind> Build(const TRule_join_op::TAlt2& alt) {
         Token(alt.GetToken3());
 
         if (alt.HasBlock1()) {
@@ -381,15 +413,77 @@ private:
         }
 
         const auto& block = alt.GetBlock2();
-        if (!block.HasAlt1()) {
-            return Unsupported("INNER | CROSS");
+        switch (block.GetAltCase()) {
+            case TRule_join_op_TAlt2_TBlock2::kAlt1:
+                break;
+            case TRule_join_op_TAlt2_TBlock2::kAlt2:
+                YQL_ENSURE(IS_TOKEN(
+                    Ctx_.Settings.Antlr4Parser,
+                    block.GetAlt2().GetToken1().GetId(),
+                    INNER));
+                return EYqlJoinKind::Inner;
+            case TRule_join_op_TAlt2_TBlock2::kAlt3:
+                YQL_ENSURE(IS_TOKEN(
+                    Ctx_.Settings.Antlr4Parser,
+                    block.GetAlt3().GetToken1().GetId(),
+                    CROSS));
+                return EYqlJoinKind::Cross;
+            case TRule_join_op_TAlt2_TBlock2::ALT_NOT_SET:
+                Y_UNREACHABLE();
         }
 
         const auto& alt1 = block.GetAlt1();
         if (alt1.HasBlock1()) {
-            return Unsupported("(LEFT | RIGHT | EXCLUSION | FULL)");
+            const auto& block = alt1.GetBlock1();
+            switch (block.GetAltCase()) {
+                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt1: {
+                    const auto& alt = block.GetAlt1();
+
+                    if (alt.HasBlock2()) {
+                        return Unsupported("(ONLY | SEMI)");
+                    }
+
+                    YQL_ENSURE(IS_TOKEN(
+                        Ctx_.Settings.Antlr4Parser,
+                        block.GetAlt1().GetToken1().GetId(),
+                        LEFT));
+                    return EYqlJoinKind::Left;
+                }
+                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt2: {
+                    const auto& alt = block.GetAlt2();
+
+                    if (alt.HasBlock2()) {
+                        return Unsupported("(ONLY | SEMI)");
+                    }
+
+                    YQL_ENSURE(IS_TOKEN(
+                        Ctx_.Settings.Antlr4Parser,
+                        block.GetAlt2().GetToken1().GetId(),
+                        RIGHT));
+                    return EYqlJoinKind::Right;
+                }
+                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt3:
+                    YQL_ENSURE(IS_TOKEN(
+                        Ctx_.Settings.Antlr4Parser,
+                        block.GetAlt3().GetToken1().GetId(),
+                        EXCLUSION));
+                    return Unsupported("EXCLUSION");
+                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt4:
+                    YQL_ENSURE(IS_TOKEN(
+                        Ctx_.Settings.Antlr4Parser,
+                        block.GetAlt4().GetToken1().GetId(),
+                        FULL));
+                    return Unsupported("FULL");
+                case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::ALT_NOT_SET:
+                    Y_UNREACHABLE();
+            }
         }
+
         if (alt1.HasBlock2()) {
+            YQL_ENSURE(IS_TOKEN(
+                Ctx_.Settings.Antlr4Parser,
+                alt1.GetBlock2().GetToken1().GetId(),
+                OUTER));
             return Unsupported("OUTER");
         }
 
@@ -543,6 +637,31 @@ private:
         return columns;
     }
 
+    TSQLResult<TGroupBy> Build(const TRule_group_by_clause& rule) {
+        TGroupByClause legacy(Ctx_, Mode_);
+        legacy.SetYqlSelectProduced(true);
+        if (!legacy.Build(rule)) {
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        if (!legacy.Aliases().empty()) {
+            return Unsupported("GROUP BY aliases");
+        }
+        if (legacy.GetLegacyHoppingWindow() != nullptr) {
+            return Unsupported("GROUP BY HOP");
+        }
+        if (legacy.IsCompactGroupBy()) {
+            return Unsupported("GROUP COMPACT BY");
+        }
+        if (!legacy.GetSuffix().empty()) {
+            return Unsupported("GROUP BY ... WITH an_id");
+        }
+
+        return TGroupBy{
+            .Keys = std::move(legacy.Content()),
+        };
+    }
+
     TSQLResult<TOrderBy> Build(const TRule_ext_order_by_clause& rule) {
         TOrderBy orderBy;
 
@@ -604,7 +723,7 @@ private:
     TNodeResult Build(const TRule& rule, EColumnRefState state) {
         TColumnRefScope scope(Ctx_, state);
         TSqlExpression sqlExpr(Ctx_, Mode_);
-        sqlExpr.ProduceYqlSelect();
+        sqlExpr.SetYqlSelectProduced(true);
 
         return sqlExpr.Build(rule);
     }
@@ -657,7 +776,7 @@ private:
     }
 
     std::unexpected<ESQLError> Unsupported(TStringBuf message) {
-        return YqlSelectUnsupported(Ctx_, message);
+        return UnsupportedYqlSelect(Ctx_, message);
     }
 };
 

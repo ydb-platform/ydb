@@ -129,7 +129,7 @@ class WorkloadInsertDelete(WorkloadBase):
     def _query_with_retries(self, query):
         # retry undetermined
         retry_settings = ydb.RetrySettings(idempotent=True)
-        return self.client.query(query, False, retry_settings)
+        return self.client.query(query, False, retry_settings=retry_settings)
 
     def _loop(self):
         logger.debug("starting")

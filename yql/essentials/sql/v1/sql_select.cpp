@@ -825,7 +825,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     }
 
     TSqlCallExpr finalCall(call, args);
-    TNodePtr with(finalCall.IsExternal() ? finalCall.BuildCall() : finalCall.BuildUdf(/* forReduce = */ false));
+    TNodePtr with(finalCall.IsExternal() ? Unwrap(finalCall.BuildCall()) : finalCall.BuildUdf(/* forReduce = */ false));
     if (!with) {
         return {};
     }

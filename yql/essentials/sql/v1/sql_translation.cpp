@@ -940,12 +940,13 @@ TTableHints GetTableFuncHints(TStringBuf funcName) {
     return res;
 }
 
-TNodePtr TSqlTranslation::NamedExpr(
+TNodeResult TSqlTranslation::NamedExpr(
     const TRule_expr& exprTree,
     const TRule_an_id_or_type* nameTree,
     EExpr exprMode)
 {
     TSqlExpression expr(Ctx_, Mode_);
+    expr.SetYqlSelectProduced(IsYqlSelectProduced_);
     if (exprMode == EExpr::GroupBy) {
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::GroupBy);
     } else if (exprMode == EExpr::SqlLambdaParams) {
@@ -954,37 +955,47 @@ TNodePtr TSqlTranslation::NamedExpr(
     if (nameTree) {
         expr.MarkAsNamed();
     }
-    TNodePtr exprNode = Unwrap(expr.Build(exprTree));
-    if (!exprNode) {
+
+    TNodeResult exprNode = expr.Build(exprTree);
+    if (!exprNode && exprNode.error() == ESQLError::Basic) {
         Ctx_.IncrementMonCounter("sql_errors", "NamedExprInvalid");
-        return nullptr;
+        return std::unexpected(ESQLError::Basic);
     }
+    if (!exprNode) {
+        return std::unexpected(exprNode.error());
+    }
+
     if (nameTree) {
-        exprNode = SafeClone(exprNode);
-        exprNode->SetLabel(Id(*nameTree, *this));
+        exprNode = Wrap(SafeClone(TNodePtr(*exprNode)));
+        (*exprNode)->SetLabel(Id(*nameTree, *this));
     }
+
     return exprNode;
 }
 
-TNodePtr TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
+TNodeResult TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
     return NamedExpr(
         node.GetRule_expr1(),
         (node.HasBlock2() ? &node.GetBlock2().GetRule_an_id_or_type2() : nullptr),
         exprMode);
 }
 
-bool TSqlTranslation::NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode) {
-    exprs.emplace_back(NamedExpr(node.GetRule_named_expr1(), exprMode));
-    if (!exprs.back()) {
-        return false;
+TSQLStatus TSqlTranslation::NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode) {
+    if (auto result = NamedExpr(node.GetRule_named_expr1(), exprMode)) {
+        exprs.emplace_back(std::move(*result));
+    } else {
+        return std::unexpected(result.error());
     }
+
     for (auto& b : node.GetBlock2()) {
-        exprs.emplace_back(NamedExpr(b.GetRule_named_expr2(), exprMode));
-        if (!exprs.back()) {
-            return false;
+        if (auto result = NamedExpr(b.GetRule_named_expr2(), exprMode)) {
+            exprs.emplace_back(std::move(*result));
+        } else {
+            return std::unexpected(result.error());
         }
     }
-    return true;
+
+    return std::monostate();
 }
 
 bool TSqlTranslation::BindList(const TRule_bind_parameter_list& node, TVector<TSymbolNameWithPos>& bindNames) {
@@ -1087,13 +1098,16 @@ bool TSqlTranslation::NamedBindParam(const TRule_named_bind_parameter& node, TSy
     return true;
 }
 
-TMaybe<TTableArg> TSqlTranslation::TableArgImpl(const TRule_table_arg& node) {
+TSQLResult<TTableArg> TSqlTranslation::TableArgImpl(const TRule_table_arg& node) {
     TTableArg ret;
+
     ret.HasAt = node.HasBlock1();
+
     TColumnRefScope scope(Ctx_, EColumnRefState::AsStringLiteral);
-    ret.Expr = NamedExpr(node.GetRule_named_expr2());
-    if (!ret.Expr) {
-        return Nothing();
+    if (auto result = NamedExpr(node.GetRule_named_expr2())) {
+        ret.Expr = std::move(*result);
+    } else {
+        return std::unexpected(result.error());
     }
 
     if (node.HasBlock3()) {
@@ -3492,7 +3506,7 @@ TNodePtr TSqlTranslation::ValueConstructor(const TRule_value_constructor& node) 
     if (!call.Init(node)) {
         return {};
     }
-    return call.BuildCall();
+    return Unwrap(call.BuildCall());
 }
 
 TNodePtr TSqlTranslation::ListLiteral(const TRule_list_literal& node) {

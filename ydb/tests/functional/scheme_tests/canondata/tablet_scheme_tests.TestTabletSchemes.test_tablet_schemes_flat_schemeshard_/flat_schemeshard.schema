@@ -3268,6 +3268,11 @@
                 "ColumnId": 20,
                 "ColumnName": "SanitizedToken",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "MaterializeIndexes",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3293,7 +3298,8 @@
                     17,
                     18,
                     19,
-                    20
+                    20,
+                    21
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3366,6 +3372,11 @@
                 "ColumnId": 9,
                 "ColumnName": "SourcePathType",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "ParentIndex",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -3380,7 +3391,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6507,6 +6519,11 @@
                 "ColumnId": 20,
                 "ColumnName": "Topic",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "ParentIndex",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -6532,7 +6549,8 @@
                     17,
                     18,
                     19,
-                    20
+                    20,
+                    21
                 ],
                 "RoomID": 0,
                 "Codec": 0,

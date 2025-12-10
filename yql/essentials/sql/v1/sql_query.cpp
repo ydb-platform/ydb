@@ -306,6 +306,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     Error() << "Translation of the statement "
                             << "to YqlSelect was forced, but unsupported";
                     return false;
+                } else if (result.error() == ESQLError::Basic) {
+                    return false;
                 }
             }
 
@@ -4165,7 +4167,8 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
                 return nullptr;
             }
 
-            TNodePtr typeNode = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "ParseType", {BuildLiteralRawString(Ctx_.Pos(), type)});
+            TNodePtr typeNode = Unwrap(BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "ParseType", {BuildLiteralRawString(Ctx_.Pos(), type)},
+                                                        /*isYqlSelect=*/false));
             PushNamedAtom(Ctx_.Pos(), varName);
             // no duplicates are possible at this stage
             bool isWeak = true;
@@ -4232,7 +4235,8 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
                 return nullptr;
             }
 
-            TNodePtr typeNode = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "ParseType", {BuildLiteralRawString(Ctx_.Pos(), type)});
+            TNodePtr typeNode = Unwrap(BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "ParseType", {BuildLiteralRawString(Ctx_.Pos(), type)},
+                                                        /*isYqlSelect=*/false));
             PushNamedAtom(Ctx_.Pos(), varName);
             // no duplicates are possible at this stage
             bool isWeak = true;

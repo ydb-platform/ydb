@@ -1,3 +1,7 @@
+#include "login.h"
+
+#include <deque>
+
 #include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 #include <library/cpp/digest/argonish/argon2.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -10,11 +14,7 @@
 
 #include <util/string/builder.h>
 
-#include <deque>
-
-#include <ydb/library/login/password_checker/password_checker.h>
-
-#include "login.h"
+#include <ydb/library/login/hashes_checker/hashes_checker.h>
 
 namespace NLogin {
 
@@ -24,6 +24,7 @@ public:
     TLruCache WrongPasswordsCache;
     std::function<bool()> IsCacheUsed = [] () {return false;};
     static const THolder<const NArgonish::IArgon2Base> ArgonHasher;
+    THashesChecker HashesChecker;
 
 public:
     TImpl() : TImpl([] () {return false;}, {}) {}
@@ -35,7 +36,7 @@ public:
     {}
 
     void GenerateKeyPair(TString& publicKey, TString& privateKey) const ;
-    TString GenerateHash(const TString& password) const;
+    TString GenerateArgonHash(const TString& password) const;
     static bool VerifyHash(const TString& password, const TString& hash);
     bool VerifyHashWithCache(const TLruCache::TKey& key);
     bool NeedVerifyHash(const TLruCache::TKey& key, TPasswordCheckResult* checkResult);
@@ -93,7 +94,7 @@ bool TLoginProvider::CheckGroupNameAllowed(const bool strongCheckName, const TSt
 
 bool TLoginProvider::CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const {
     if (IsHashedPassword) {
-        auto hashCheckResult = HashChecker.Check(password);
+        auto hashCheckResult = Impl->HashesChecker.OldFormatCheck(password);
         if (!hashCheckResult.Success) {
             error = hashCheckResult.Error;
             return false;
@@ -133,7 +134,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
 
     TSidRecord& user = itUserCreate.first->second;
     user.Name = request.User;
-    user.PasswordHash = request.IsHashedPassword ? request.Password : Impl->GenerateHash(request.Password);
+    user.PasswordHash = request.IsHashedPassword ? request.Password : Impl->GenerateArgonHash(request.Password);
     user.CreatedAt = std::chrono::system_clock::now();
     user.IsEnabled = request.CanLogin;
     return response;
@@ -168,7 +169,7 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
             return response;
         }
 
-        user.PasswordHash = request.IsHashedPassword ? request.Password.value() : Impl->GenerateHash(request.Password.value());
+        user.PasswordHash = request.IsHashedPassword ? request.Password.value() : Impl->GenerateArgonHash(request.Password.value());
     }
 
     if (request.CanLogin.has_value()) {
@@ -811,21 +812,23 @@ void TLoginProvider::TImpl::GenerateKeyPair(TString& publicKey, TString& private
     BN_free(bne);
 }
 
-TString TLoginProvider::TImpl::GenerateHash(const TString& password) const {
-    char salt[SALT_SIZE];
-    char hash[HASH_SIZE];
-    RAND_bytes(reinterpret_cast<unsigned char*>(salt), SALT_SIZE);
+TString TLoginProvider::TImpl::GenerateArgonHash(const TString& password) const {
+    TString hashType = "argon2id";
+    const auto& hashDescription = *HashesChecker.GetHashParams(hashType);
+    char salt[hashDescription.SaltSize];
+    char hash[hashDescription.HashSize];
+    RAND_bytes(reinterpret_cast<unsigned char*>(salt), hashDescription.SaltSize);
     ArgonHasher->Hash(
         reinterpret_cast<const ui8*>(password.data()),
         password.size(),
         reinterpret_cast<ui8*>(salt),
-        SALT_SIZE,
+        hashDescription.SaltSize,
         reinterpret_cast<ui8*>(hash),
-        HASH_SIZE);
+        hashDescription.HashSize);
     NJson::TJsonValue json;
-    json["type"] = "argon2id";
-    json["salt"] = Base64Encode(TStringBuf(salt, SALT_SIZE));
-    json["hash"] = Base64Encode(TStringBuf(hash, HASH_SIZE));
+    json["type"] = std::move(hashType);
+    json["salt"] = Base64Encode(TStringBuf(salt, hashDescription.SaltSize));
+    json["hash"] = Base64Encode(TStringBuf(hash, hashDescription.HashSize));
     return NJson::WriteJson(json, false);
 }
 

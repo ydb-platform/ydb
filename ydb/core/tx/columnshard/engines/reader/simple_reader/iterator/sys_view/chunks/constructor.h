@@ -31,6 +31,12 @@ public:
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor);
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context);
+
+    virtual bool StableOrderLess(const NCommon::TDataSourceConstructor& rhs) const override {
+        auto* rhsLocal = VerifyDynamicCast<const TPortionDataConstructor*>(&rhs);
+        return std::make_tuple(GetTabletId(), GetPortion()->GetPortionId()) <
+               std::make_tuple(rhsLocal->GetTabletId(), rhsLocal->GetPortion()->GetPortionId());
+    }
 };
 
 class TConstructor: public NCommon::TSourcesConstructorWithAccessors<TPortionDataConstructor> {

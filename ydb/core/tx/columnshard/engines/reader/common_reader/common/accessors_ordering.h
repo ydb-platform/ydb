@@ -51,6 +51,25 @@ public:
         return Finish;
     }
 
+    virtual bool StableOrderLess(const TDataSourceConstructor& rhs) const = 0;
+    virtual ~TDataSourceConstructor() = default;
+
+    TDataSourceConstructor(TDataSourceConstructor&& other)
+        : Start(std::move(other.Start))
+        , Finish(std::move(other.Finish))
+        , SourceIdx(other.SourceIdx)
+        , SourceIdxInitialized(other.SourceIdxInitialized)
+    {
+    }
+
+    TDataSourceConstructor& operator=(TDataSourceConstructor&& other) {
+        Start = std::move(other.Start);
+        Finish = std::move(other.Finish);
+        SourceIdx = other.SourceIdx;
+        SourceIdxInitialized = other.SourceIdxInitialized;
+        return *this;
+    }
+
     class TComparator {
     private:
         const ERequestSorting Sorting;
@@ -63,7 +82,14 @@ public:
         }
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
-            return std::make_pair(r.Start, r.SourceId) < std::make_pair(l.Start, l.SourceId);
+            auto cmp = l.Start.Compare(r.Start);
+            if (cmp == std::partial_ordering::less) {
+                return false;
+            } else if (cmp == std::partial_ordering::greater) {
+                return true;
+            } else {
+                return r.StableOrderLess(l);
+            }
         }
     };
 };

@@ -42,6 +42,10 @@ public:
     }
 
     std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const;
+
+    virtual bool StableOrderLess(const TDataSourceConstructor& rhs) const override {
+        return Portion->GetPortionId() < VerifyDynamicCast<const TSourceConstructor*>(&rhs)->GetPortion()->GetPortionId();
+    }
 };
 
 class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSourceConstructor> {

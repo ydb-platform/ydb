@@ -27,6 +27,14 @@ public:
         return std::make_shared<TSourceData>(
             GetSourceIdx(), PathId, GetTabletId(), std::move(Portions), ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context);
     }
+
+    virtual bool StableOrderLess(const NCommon::TDataSourceConstructor& rhs) const override {
+        auto* rhsLocal = VerifyDynamicCast<const TDataSourceConstructor*>(&rhs);
+        AFL_VERIFY(!Portions.empty());
+        AFL_VERIFY(!rhsLocal->Portions.empty());
+        return std::make_tuple(GetTabletId(), Portions.front()->GetPortionId()) <
+               std::make_tuple(rhsLocal->GetTabletId(), rhsLocal->Portions.front()->GetPortionId());
+    }
 };
 
 class TConstructor: public NAbstract::TConstructor<TDataSourceConstructor> {

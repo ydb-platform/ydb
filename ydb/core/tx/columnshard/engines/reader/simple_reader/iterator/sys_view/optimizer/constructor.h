@@ -32,6 +32,11 @@ public:
         return std::make_shared<TSourceData>(GetSourceIdx(), GetTabletId(), Granule, std::move(tasks), ExternalPathId,
             ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context);
     }
+
+    virtual bool StableOrderLess(const NCommon::TDataSourceConstructor& rhs) const override {
+        auto* rhsLocal = VerifyDynamicCast<const TDataSourceConstructor*>(&rhs);
+        return std::make_tuple(GetTabletId(), ExternalPathId) < std::make_tuple(rhsLocal->GetTabletId(), rhsLocal->ExternalPathId);
+    }
 };
 
 class TConstructor: public NAbstract::TConstructor<TDataSourceConstructor> {

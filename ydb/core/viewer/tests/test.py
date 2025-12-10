@@ -1510,7 +1510,7 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
 
-        result['down_node_root'] = cls.get_viewer("/tablets/app", params={
+        result['down_node_root'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
@@ -1518,7 +1518,7 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         })
-        result['down_node_monitoring'] = cls.get_viewer("/tablets/app", params={
+        result['down_node_monitoring'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
@@ -1526,7 +1526,7 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         })
-        result['down_node_viewer'] = cls.get_viewer("/tablets/app", params={
+        result['down_node_viewer'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
@@ -1534,7 +1534,7 @@ class TestViewer(object):
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
         })
-        result['down_node_database'] = cls.get_viewer("/tablets/app", params={
+        result['down_node_database'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',

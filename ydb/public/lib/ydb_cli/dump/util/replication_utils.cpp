@@ -38,17 +38,27 @@ inline TString Interval(const TDuration& value) {
     return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
 }
 
+TString GetSecretSettingName(TStringBuf secretName, const TString& secretSettingPrefix) {
+    return secretName.StartsWith('/') ? secretSettingPrefix + "_PATH" : secretSettingPrefix + "_NAME";
+}
+
+void AddSecretSettingIfNotEmpty(const std::string& secretName, const TString& secretSettingName, TVector<TString>& options) {
+    if (!secretName.empty()) {
+        options.push_back(BuildOption(GetSecretSettingName(secretName, secretSettingName).c_str(), Quote(secretName)));
+    }
+}
+
 void AddConnectionOptions(const NReplication::TConnectionParams& connectionParams, TVector<TString>& options) {
     options.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(connectionParams))));
     switch (connectionParams.GetCredentials()) {
         case NReplication::TConnectionParams::ECredentials::Static:
             options.push_back(BuildOption("USER", Quote(connectionParams.GetStaticCredentials().User)));
-            options.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(connectionParams.GetStaticCredentials().PasswordSecretName)));
+            AddSecretSettingIfNotEmpty(connectionParams.GetStaticCredentials().PasswordSecretName,
+                "PASSWORD_SECRET", options);
             break;
         case NReplication::TConnectionParams::ECredentials::OAuth:
-            if (const auto& secret = connectionParams.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
-                options.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
-            }
+            AddSecretSettingIfNotEmpty(connectionParams.GetOAuthCredentials().TokenSecretName,
+                "TOKEN_SECRET", options);
             break;
     }
 }
@@ -139,9 +149,6 @@ TString BuildCreateTransferQuery(
 
     const TString& lambdaCreateQuery = desc.GetTransformationLambda().c_str();
     const TString& lambdaName = ExtractTransformationLambdaName(lambdaCreateQuery.c_str()).c_str();
-    if (lambdaName.empty()) {
-        return "";
-    }
 
     TString cleanedLambdaCreateQuery = lambdaCreateQuery;
     CleanQuery(cleanedLambdaCreateQuery, "PRAGMA OrderedColumns;");
@@ -159,7 +166,7 @@ TString BuildCreateTransferQuery(
             name.c_str(), 
             desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), lambdaName.c_str(),
             JoinSeq(",\n", options).c_str()
-        );        
+        );
 }
 
 } // namespace NYdb::NDump

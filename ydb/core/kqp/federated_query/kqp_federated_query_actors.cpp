@@ -221,7 +221,11 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
     const auto& secretName = CanonizePath(rec.GetPath());
     if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
         LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << "SchemeShard error: " << EStatus_Name(rec.GetStatus()));
-        FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretName + "` not found") }));
+        const auto errorStatus =
+            rec.GetStatus() == NKikimrScheme::EStatus::StatusNotAvailable
+            ? Ydb::StatusIds::UNAVAILABLE
+            : Ydb::StatusIds::BAD_REQUEST;
+        FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(errorStatus, { NYql::TIssue("secret `" + secretName + "` not found") }));
         return;
     }
 

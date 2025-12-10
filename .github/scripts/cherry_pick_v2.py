@@ -513,7 +513,12 @@ def process_branch(
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
             
             if result.returncode != 0:
-                if "conflict" in output.lower():
+                if "empty" in output.lower() and "cherry-pick" in output.lower():
+                    # Empty commit after auto-merge or conflict resolution
+                    logger.info(f"Commit {commit_sha[:7]} is empty, committing with --allow-empty")
+                    commit_desc = f"commit {commit_sha[:7]}" + (" (merge commit)" if len(parents) >= 2 else "")
+                    run_git(repo_path, ['commit', '--allow-empty', '-m', f"Backport {commit_desc}"], logger)
+                elif "conflict" in output.lower():
                     conflicts = detect_conflicts(repo_path, logger)
                     if conflicts:
                         run_git(repo_path, ['add', '-A'], logger)

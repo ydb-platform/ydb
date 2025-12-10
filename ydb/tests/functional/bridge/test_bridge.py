@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import pytest
 import asyncio
-import collections
 import time
 
 from common import BridgeKiKiMRTest
@@ -135,7 +134,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             try:
                 stop_tasks = []
                 slots_to_stop = []
-                
+
                 # Останавливаем слоты
                 for slot in self.cluster.slots.values():
                     # Проверяем, относится ли слот к primary pile по хосту
@@ -180,10 +179,10 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                 for i, result in enumerate(node_results):
                     if isinstance(result, Exception):
                         self.logger.error("Exception stopping node_id %d on host %s: %s",
-                                         primary_pile_nodes[i].node_id, primary_pile_nodes[i].host, result)
+                                          primary_pile_nodes[i].node_id, primary_pile_nodes[i].host, result)
                         raise result
                     self.logger.info("Successfully stopped node %d on host %s",
-                                   primary_pile_nodes[i].node_id, primary_pile_nodes[i].host)
+                                     primary_pile_nodes[i].node_id, primary_pile_nodes[i].host)
                     node_success_count += 1
 
                 self.logger.info("Stopped %d/%d storage nodes", node_success_count, len(stop_tasks))
@@ -199,7 +198,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         """Запускает ноды и слоты primary pile."""
         async def _async_start_nodes():
             start_tasks = []
-            
+
             # Запускаем storage nodes
             for node in primary_pile_nodes:
                 self.logger.info("Starting storage node %d on host %s", node.node_id, node.host)
@@ -218,8 +217,8 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                 if isinstance(result, Exception):
                     self.logger.error("Exception starting node: %s", result)
                     continue
-                self.logger.info("Successfully started node %d on host %s",
-                               primary_pile_nodes[i].node_id, primary_pile_nodes[i].host)
+                    self.logger.info("Successfully started node %d on host %s",
+                                     primary_pile_nodes[i].node_id, primary_pile_nodes[i].host)
                 node_success_count += 1
 
             self.logger.info("Started %d/%d storage nodes", node_success_count, len(start_tasks))
@@ -321,7 +320,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         state_after_failover = self.get_cluster_state(secondary_bridge_client)
         actual_states = {s.pile_name: s.state for s in state_after_failover.pile_states}
         self.logger.info(f"Bridge list state: {actual_states}")
-        
+
         assert actual_states.get("r1") == PileState.DISCONNECTED, \
             f"Expected r1 to be DISCONNECTED, got {actual_states.get('r1')}"
         assert actual_states.get("r2") == PileState.PRIMARY, \
@@ -331,7 +330,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         # Простая проверка - можем ли мы получить состояние кластера
         self.logger.info("=== CHECKING CLUSTER AVAILABILITY ===")
         try:
-            cluster_state = self.get_cluster_state(secondary_bridge_client)
+            self.get_cluster_state(secondary_bridge_client)
             self.logger.info("✓ Cluster is still accessible and working")
         except Exception as e:
             pytest.fail(f"Cluster is not accessible after failover: {e}")
@@ -366,7 +365,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         final_state = self.get_cluster_state(secondary_bridge_client)
         final_states = {s.pile_name: s.state for s in final_state.pile_states}
         self.logger.info(f"Final bridge list state: {final_states}")
-        
+
         assert final_states.get("r1") == PileState.SYNCHRONIZED, \
             f"Expected r1 to be SYNCHRONIZED after rejoin, got {final_states.get('r1')}"
         assert final_states.get("r2") == PileState.PRIMARY, \

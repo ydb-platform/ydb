@@ -79,4 +79,4 @@ CREATE EXTERNAL DATA SOURCE source_name WITH (
 
 - [Форматы данных](formats.md)
 - [Чекпойнты](checkpoints.md)
-- [Рецепты работы с потоковыми запросами](../../recipes/streaming.md)
+- [Рецепты работы с потоковыми запросами](../../recipes/streaming_queries/index.md)

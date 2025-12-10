@@ -10,7 +10,7 @@ from codeowners import CodeOwners
 from decimal import Decimal
 from ydb_wrapper import YDBWrapper
 
-max_characters_for_status_description = int(7340032/4) #workaround for error "cannot split batch in according to limits: there is row with size more then limit (7340032)"
+max_characters_for_status_description = int(7340032/3)  #workaround for error "cannot split batch in according to limits: there is row with size more then limit (7340032)"
 
 def get_column_types():
     """Get column types for bulk upsert (base columns, error_type and metrics added conditionally)"""
@@ -364,7 +364,7 @@ def main():
                 args.test_results_file, args.build_type, args.job_name, args.job_id,
                 args.commit, args.branch, args.pull, args.run_timestamp
             )
-            
+
             # Add owner information
             result_with_owners = get_codeowners_for_tests(codeowners, results)
             
@@ -394,6 +394,7 @@ def main():
         return 0
     
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -24,19 +24,26 @@ enum EEv {
     EvWriteChangelog,
     EvChangelogFailed,
 
+    EvStartNewBackup,
+
     EvEnd
 };
 
 static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR));
 
 struct TEvSnapshotCompleted : public TEventLocal<TEvSnapshotCompleted, EvSnapshotCompleted> {
-    TEvSnapshotCompleted(bool success, const TString& error = "")
-        : Success(success)
-        , Error(error)
+    TEvSnapshotCompleted(const TString& error)
+        : Error(error)
     {}
 
-    bool Success;
+    TEvSnapshotCompleted(ui64 writtenBytes)
+        : Success(true)
+        , WrittenBytes(writtenBytes)
+    {}
+
+    bool Success = false;
     TString Error;
+    ui64 WrittenBytes = 0;
 };
 
 enum class EScanStatus {
@@ -82,16 +89,18 @@ struct TEvChangelogFailed : public TEventLocal<TEvChangelogFailed, EvChangelogFa
     TString Error;
 };
 
+struct TEvStartNewBackup : public TEventLocal<TEvStartNewBackup, EvStartNewBackup> {};
+
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, NTable::TScheme::TTableInfo>& tables,
-                             TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
+                             TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,
                              TAutoPtr<NTable::TSchemeChanges> schema, TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 
 NTable::IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, NTable::TColumn>& columns,
                                   TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 
 IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
-                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
+                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,
                               const NTable::TScheme& schema, TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 
 } // NKikimr::NTabletFlatExecutor::NBackup

@@ -681,7 +681,7 @@ namespace NKikimr {
                 using E = decltype(msg->Mode);
 
                 case E::FULL:
-                    FullCompactionState.FullCompactionTask(confirmedLsn, ctx.Now(), msg->Type, msg->RequestId, ev->Sender, msg->Force);
+                    FullCompactionState.FullCompactionTask(confirmedLsn, AppData()->TimeProvider->Now(), msg->Type, msg->RequestId, ev->Sender, msg->Force);
                     break;
 
                 case E::FRESH_ONLY:

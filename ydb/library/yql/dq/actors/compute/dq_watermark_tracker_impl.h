@@ -118,7 +118,7 @@ public:
             return Nothing();
         }
 
-        for (auto it = ExpiresQueue_.begin(); it != ExpiresQueue_.end() && it->Time <= systemTime; ) {
+        for (auto it = ExpiresQueue_.begin(); it != ExpiresQueue_.end() && it->Time <= systemTime && WatermarksQueue_.size() > 1; ) {
            auto& [key, data] = *it->Iterator;
            Y_DEBUG_ABORT_UNLESS (data.IdleTimeout != TDuration::Max());
            WATERMARK_LOG_T("Mark " << key << " idle: " << it->Time <<  " >= " << systemTime);

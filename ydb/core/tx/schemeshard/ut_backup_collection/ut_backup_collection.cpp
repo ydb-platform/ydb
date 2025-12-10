@@ -2666,7 +2666,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         auto tableDesc4 = DescribePrivatePath(runtime, "/MyRoot/TestTable", true, true);
         UNIT_ASSERT(tableDesc4.GetPathDescription().HasTable());
-
+        // Now full backup rotate streams like incremental backup
         UNIT_ASSERT_VALUES_EQUAL(tableDesc4.GetPathDescription().GetTable().CdcStreamsSize(), 1);
     }
 } // TBackupCollectionTests

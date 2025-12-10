@@ -5,10 +5,12 @@
 namespace NKikimr::NReplication {
 
 struct TTransferReadStats {
-    ui64 TotalReadTimeMs = 0;
-    ui64 TotalDecompressTimeMs = 0;
-    ui64 ReadCpuMs = 0;
-    ui64 DecompressCpuMs = 0;
+    TDuration ReadTime = TDuration::Zero();
+    TDuration DecompressCpu = TDuration::Zero();
+    i64 Partition = -1;
+    ui64 Offset = 0;
+    ui64 Messages = 0;
+    ui64 Bytes = 0;
 };
 
 namespace NService {

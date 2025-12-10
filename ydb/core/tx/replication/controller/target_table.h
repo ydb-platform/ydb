@@ -13,9 +13,7 @@ public:
     void UpdateStats(ui64, const NKikimrReplication::TWorkerStats&, NMonitoring::TDynamicCounterPtr) override {
     }
 
-    const TReplication::ITargetStats* GetStats() const override {
-        return nullptr;
-    }
+    const TReplication::ITargetStats* GetStats() const override;
 
 protected:
     virtual TString BuildStreamPath() const = 0;

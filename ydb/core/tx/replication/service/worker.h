@@ -19,13 +19,14 @@ enum class EWorkerOperation {
     READ = 1,
     DECOMPRESS = 2,
     PROCESS = 3,
-    WRITE = 4
+    WRITE = 4,
 };
 
 struct TWorkerDetailedStats {
     EWorkerOperation CurrentOperation;
     std::unique_ptr<TTransferReadStats> ReaderStats;
     std::unique_ptr<TTransferWriteStats> WriterStats;
+    ui64 RestartsCount = 0;
 };
 
 

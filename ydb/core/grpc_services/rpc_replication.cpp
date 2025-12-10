@@ -271,8 +271,8 @@ private:
     static void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeTransferResult& result) {
         ConvertConnectionParams(record.GetConnectionParams(), *result.mutable_connection_params());
         ConvertState(*record.MutableState(), result);
-        if(record.HasStats()) {
-            result.mutable_stats()->CopyFrom(record.GetStats());
+        if (record.HasStats()&& record.GetStats().HasTransfer()) {
+            result.mutable_stats()->CopyFrom(record.GetStats().GetTransfer());
         }
 
         const auto& transferSpecific = record.GetTransferSpecific();

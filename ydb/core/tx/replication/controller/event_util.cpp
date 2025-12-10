@@ -19,7 +19,11 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         target.GetStreamConsumerName(),
         target.GetDstPathId(),
         replication->GetConfig().GetTransferSpecific().GetBatching(),
-        replication->GetDatabase());
+        replication->GetDatabase(),
+        replication->GetConfig().HasMetricsConfig()
+            ? replication->GetConfig().GetMetricsConfig().GetLevel()
+            : NKikimrReplication::TReplicationConfig::TMetricsConfig::LEVEL_NONE,
+        replication->GetName());
 }
 
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
@@ -33,7 +37,9 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const TString& srcStreamConsumerName,
         const TPathId& dstPathId,
         const NKikimrReplication::TBatchingSettings& batchingSettings,
-        const TString& database)
+        const TString& database,
+        NKikimrReplication::TReplicationConfig::TMetricsConfig::EMetricsLevel metricsLevel,
+        const TString& replicationName)
 {
     auto ev = MakeHolder<TEvService::TEvRunWorker>();
     auto& record = ev->Record;
@@ -43,9 +49,16 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     worker.SetTargetId(targetId);
     worker.SetWorkerId(workerId);
 
-    record.MutableCommand()->SetDatabase(database);
+    auto* command = record.MutableCommand();
 
-    auto& readerSettings = *record.MutableCommand()->MutableRemoteTopicReader();
+    command->SetDatabase(database);
+    if (metricsLevel) {
+        command->SetMetricsLevel(metricsLevel);
+    }
+    if (replicationName) {
+        command->SetReplicationName(replicationName);
+    }
+    auto& readerSettings = *command->MutableRemoteTopicReader();
     readerSettings.MutableConnectionParams()->CopyFrom(connectionParams);
     readerSettings.SetTopicPath(srcStreamPath);
     readerSettings.SetTopicPartitionId(workerId);
@@ -54,13 +67,13 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     switch(config->GetKind()) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable: {
-            auto& writerSettings = *record.MutableCommand()->MutableLocalTableWriter();
+            auto& writerSettings = *command->MutableLocalTableWriter();
             dstPathId.ToProto(writerSettings.MutablePathId());
             break;
         }
         case TReplication::ETargetKind::Transfer: {
             auto p = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(config);
-            auto& writerSettings = *record.MutableCommand()->MutableTransferWriter();
+            auto& writerSettings = *command->MutableTransferWriter();
             dstPathId.ToProto(writerSettings.MutablePathId());
             writerSettings.SetTransformLambda(p->GetTransformLambda());
             writerSettings.MutableBatching()->CopyFrom(batchingSettings);
@@ -70,7 +83,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         }
     }
 
-    record.MutableCommand()->MutableConsistencySettings()->CopyFrom(consistencySettings);
+    command->MutableConsistencySettings()->CopyFrom(consistencySettings);
 
     return ev;
 }

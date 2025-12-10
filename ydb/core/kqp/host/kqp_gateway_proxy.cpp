@@ -2852,6 +2852,10 @@ public:
                     target.SetDirectoryPath(*settings.Settings.DirectoryPath);
                 }
             }
+            if (settings.Settings.MetricsSettings) {
+                config.MutableMetricsConfig()->SetLevel(static_cast<NKikimrReplication::TReplicationConfig::TMetricsConfig::EMetricsLevel>(
+                    settings.Settings.MetricsSettings->Level));
+            }
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -2919,6 +2923,11 @@ public:
             } else if (const auto& standBy = settings.Settings.StateStandBy) {
                 auto& state = *op.MutableState();
                 state.MutableStandBy();
+            }
+
+            if (settings.Settings.MetricsSettings) {
+                op.MutableConfig()->MutableMetricsConfig()->SetLevel(static_cast<NKikimrReplication::TReplicationConfig::TMetricsConfig::EMetricsLevel>(
+                    settings.Settings.MetricsSettings->Level));
             }
 
             if (settings.Settings.ConnectionString

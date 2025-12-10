@@ -275,6 +275,7 @@ private:
                 ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
                 ProcessingError = TStringBuilder() << "Error transform message partition " << partitionId << " offset " << message.GetOffset()
                     << ": " << msg;
+                Stats.WriteErrors++;
             };
 
             try {
@@ -302,6 +303,8 @@ private:
                     } else {
                         tablePath = DefaultTablePath;
                     }
+                    Stats.BytesWritten += m->EstimateSize;
+                    Stats.RowsWritten += m->Data.RowCount();
                     if (!TableState->AddData(std::move(tablePath), m->Data, m->EstimateSize)) {
                         RequiredFlush = true;
                     }
@@ -491,7 +494,9 @@ public:
         , DirectoryPath(directoryPath)
         , Database(database)
         , TargetDirectoryPath(MakeTargetDirectoryPath(database, directoryPath))
-    {}
+    {
+        Stats.StartTime = Now();
+    }
 
 private:
     const TString TransformLambda;
@@ -533,6 +538,9 @@ private:
         EWorkerOperation Operation;
         TInstant StartTime;
         ui64 StartCpuSec;
+        ui64 BytesWritten = 0;
+        ui64 RowsWritten = 0;
+        ui64 WriteErrors = 0;
     };
     TStatsHolder Stats;
 
@@ -540,16 +548,20 @@ private:
     void ResetStats(EWorkerOperation newState, TTransferWriteStats* dumpTo) {
         if (dumpTo != nullptr) {
             if (Stats.Operation == EWorkerOperation::PROCESS) {
-                dumpTo->ProcessCpuMs = (GetElapsedTicksAsSeconds() - Stats.StartCpuSec) * 1000;
-                dumpTo->ProcessDuration = Now() - Stats.StartTime;
+                dumpTo->ProcessingCpu = TDuration::Seconds(GetElapsedTicksAsSeconds() - Stats.StartCpuSec);
             } else {
-                dumpTo->WriteCpuMs = (GetElapsedTicksAsSeconds() - Stats.StartCpuSec) * 1000;
                 dumpTo->WriteDuration = Now() - Stats.StartTime;
             }
+            dumpTo->WriteErrors = Stats.WriteErrors;
+            dumpTo->WriteBytes = Stats.BytesWritten;
+            dumpTo->WriteRows = Stats.RowsWritten;
+            Stats.BytesWritten = 0;
+            Stats.RowsWritten = 0;
+            Stats.WriteErrors = 0;
         }
-        Stats.StartTime = Now();
         Stats.StartCpuSec = GetElapsedTicksAsSeconds();
         Stats.Operation = newState;
+
     }
 
     void SendStats(EWorkerOperation newCurrentOperation) {

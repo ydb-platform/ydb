@@ -1,8 +1,10 @@
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/base.proto";
+import "google/protobuf/timestamp.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/draft/ydb_replication.proto";
+
 
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
@@ -119,8 +121,18 @@ message TReplicationConfig {
         optional uint64 CountersLevel = 4;
     }
 
+    message TMetricsConfig {
+        enum EMetricsLevel {
+            LEVEL_NONE = 0;
+            LEVEL_DATABASE = 1;
+            LEVEL_OBJECT = 2;
+            LEVEL_DETAILED = 3;
+        }
+        optional EMetricsLevel Level = 1;
+    }
     optional TConnectionParams SrcConnectionParams = 1;
     optional TConsistencySettings ConsistencySettings = 7;
+    optional TMetricsConfig MetricsConfig = 9;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -168,7 +180,7 @@ message TReplicationState {
 }
 message TReplicationStats {
     oneof Stats {
-        Ydb.Replication.DescribeTransferResult.TransferStats Transfer = 1;
+        Ydb.Replication.DescribeTransferResult.Stats Transfer = 1;
     };
 }
 
@@ -304,6 +316,8 @@ message TRunWorkerCommand {
 
     optional TConsistencySettings ConsistencySettings = 3;
     optional string Database = 5;
+    optional TReplicationConfig.TMetricsConfig.EMetricsLevel MetricsLevel = 6;
+    optional string ReplicationName = 7;
 }
 
 message TEvRunWorker {
@@ -318,39 +332,37 @@ message TEvStopWorker {
 }
 
 enum EWorkOperation {
-    STATE_UNSPECIFIED = 0;
-    STATE_READ = 1;
-    STATE_DECOMPRESS = 2;
-    STATE_PROCESS = 3;
-    STATE_WRITE = 4;
+    UNSPECIFIED = 0;
+    READ = 1;
+    DECOMPRESS = 2;
+    PROCESS = 3;
+    WRITE = 4;
 };
 
 message TWorkerStats {
     enum EStatsKeys {
-        READ_TIME = 0;
-        READ_ELAPSED_CPU = 1;
-        DECOMPRESS_TIME = 2;
-        DECOMPRESS_ELAPSED_CPU = 3;
-        READ_BYTES = 4;
-        READ_MESSAGES = 5;
-        READ_PARTITION = 6;
-        READ_OFFSET = 7;
+        READ_TIME = 1;
+        DECOMPRESS_ELAPSED_CPU = 2;
+        PROCESSING_ELAPSED_CPU = 3;
+        WRITE_TIME = 4;
+        READ_BYTES = 5;
+        READ_MESSAGES = 6;
+        WRITE_BYTES = 7;
+        WRITE_ROWS = 8;
+        READ_PARTITION = 9;
+        READ_OFFSET = 10;
+        RESTARTS_COUNT = 11;
 
-        PROCESSING_TIME = 8;
-        PROCESSING_ELAPSED_CPU = 9;
-        WRITE_TIME = 10;
-        WRITE_ELAPSED_CPU = 11;
-        WRITE_BYTES = 12;
-        WRITE_ROWS = 13;
+        WRITE_ERRORS = 12;
 
-        WORK_OPERATION = 16;
+        WORK_OPERATION = 13;
     };
 
     message TWorkerStatItem {
         optional uint64 Key = 1;
         optional int64 Value = 2;
     }
-    optional EWorkOperation CurrentOperation = 1;
+    optional google.protobuf.Timestamp StartTime = 2;
     repeated TWorkerStatItem Values = 3;
 }
 

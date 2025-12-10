@@ -24,7 +24,8 @@ class TTransferStats : public TReplication::ITargetStats {
         TInstant LastChange = TInstant::Zero();
         ui32 ReadOffset;
         ui32 Partition;
-        TDuration Uptime = TDuration::Zero();
+        TInstant StartTime = TInstant::Zero();
+        TInstant ChangeStateTime = TInstant::Zero();
         ui32 RestartsCount;
         TMultiSlidingWindow Restarts;
         TMultiSlidingWindow ReadBytes;
@@ -33,46 +34,31 @@ class TTransferStats : public TReplication::ITargetStats {
         TMultiSlidingWindow WriteRows;
         TMultiSlidingWindow DecompressionCpuTime;
         TMultiSlidingWindow ProcessingCpuTime;
-        ui64 ReadTime = 0;
-        ui64 ReadCpu = 0;
-        ui64 DecompressTime = 0;
-        ui64 DecompressCpu = 0;
-        ui64 ProcessingTime = 0;
-        ui64 ProcessingCpu = 0;
-        ui64 WriteTime = 0;
-        ui64 WriteCpu = 0;
     };
 
 public:
     void FillToProto(NKikimrReplication::TEvDescribeReplicationResult& destination, bool includeDetailed) const override;
 
     THashMap<ui64, TWorkserStats> WorkersStats;
-    TDuration MinUptime = TDuration::Zero();
     TMultiSlidingWindow ReadBytes;
     TMultiSlidingWindow ReadMessages;
     TMultiSlidingWindow WriteBytes;
     TMultiSlidingWindow WriteRows;
     TMultiSlidingWindow DecompressionCpuTime;
     TMultiSlidingWindow ProcessingCpuTime;
-    TInstant StartTime;
-    ui64 ReadTime = 0;
-    ui64 ReadCpu = 0;
-    ui64 DecompressTime = 0;
-    ui64 DecompressCpu = 0;
-    ui64 ProcessingTime = 0;
-    ui64 ProcessingCpu = 0;
-    ui64 WriteTime = 0;
-    ui64 WriteCpu = 0;
+    TInstant CollectionStartTime;
+    TInstant LastWorkerStartTime = TInstant::Zero();
 
     TTransferStats(TInstant startTime)
-        : StartTime(startTime)
+        : CollectionStartTime(startTime)
     {
     }
 };
 
 class TTargetTransfer: public TTargetWithStream {
-public:
-    struct TTransferConfig : public TConfigBase {
+    using TBase = TTargetWithStream;
+
+public: struct TTransferConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TTransferConfig>;
 
         TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda, const TString& runAsUser, const TString& directoryPath);
@@ -80,13 +66,11 @@ public:
         const TString& GetTransformLambda() const;
         const TString& GetRunAsUser() const;
         const TString& GetDirectoryPath() const;
-        ui64 GetCountersLevel() const override;
 
     private:
         TString TransformLambda;
         TString RunAsUser;
         TString DirectoryPath;
-        ui64 CountersLevel = 2; //ToDo - get level via YQL
     };
 
     explicit TTargetTransfer(TReplication* replication,
@@ -100,10 +84,42 @@ public:
     TString GetStreamPath() const override;
     void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats, NMonitoring::TDynamicCounterPtr counters) override;
     const TReplication::ITargetStats* GetStats() const override;
+    void RemoveWorker(ui64 id) override;
 
 private:
+    struct TCounters {
+        NMonitoring::TDynamicCounterPtr AggeregatedCounters;
+
+        NMonitoring::TDynamicCounters::TCounterPtr ReadTime;
+        NMonitoring::TDynamicCounters::TCounterPtr WriteTime;
+        NMonitoring::TDynamicCounters::TCounterPtr DecompressionCpuTime;
+        NMonitoring::TDynamicCounters::TCounterPtr ProcessingCpuTime;
+        NMonitoring::TDynamicCounters::TCounterPtr WriteBytes;
+        NMonitoring::TDynamicCounters::TCounterPtr WriteRows;
+        NMonitoring::TDynamicCounters::TCounterPtr WriteErrors;
+        NMonitoring::TDynamicCounters::TCounterPtr MinWorkerUptime;
+        NMonitoring::TDynamicCounters::TCounterPtr Restarts;
+
+        TCounters(NMonitoring::TDynamicCounterPtr counters, const TString& transferId)
+            : AggeregatedCounters(counters->GetSubgroup("counters", "transfer")->GetSubgroup("host", "")
+                                          ->GetSubgroup("transfer_id", transferId))
+            , ReadTime(AggeregatedCounters->GetCounter("transfer.read.duration_milliseconds", true))
+            , WriteTime(AggeregatedCounters->GetCounter("transfer.write.duration_milliseconds", true))
+            , DecompressionCpuTime(AggeregatedCounters->GetCounter("transfer.decompress.cpu_elapsed_microseconds", true))
+            , ProcessingCpuTime(AggeregatedCounters->GetCounter("transfer.process.cpu_elapsed_microseconds", true))
+            , WriteBytes(AggeregatedCounters->GetCounter("transfer.write_bytes", true))
+            , WriteRows(AggeregatedCounters->GetCounter("transfer.write_rows", true))
+            , WriteErrors(AggeregatedCounters->GetCounter("transfer.write_errors", true))
+            , MinWorkerUptime(AggeregatedCounters->GetCounter("transfer.worker_uptime_milliseconds_min", false))
+            , Restarts(AggeregatedCounters->GetCounter("transfer.worker_restarts", true))
+        {
+        }
+    };
+    TMaybe<TCounters> Counters;
+
     TActorId StreamConsumerRemover;
     std::unique_ptr<TTransferStats> Stats;
-    NMonitoring::TDynamicCounterPtr DynamicCounters;
+    ui64 MetricsLevel = 0;
+    TString Name;
 };
 }

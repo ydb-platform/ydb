@@ -26,18 +26,98 @@
 namespace NKikimr::NReplication::NService {
 
 class TSessionInfo {
-    struct TWorkerInfo {
+    using TMetricsConfig = NKikimrReplication::TReplicationConfig::TMetricsConfig;
+    class TWorkerInfo {
+        friend class TSessionInfo;
+    public:
         const TActorId ActorId;
+        TMetricsConfig::EMetricsLevel MetricsLevel;
         TRowVersion Heartbeat = TRowVersion::Min();
 
-        explicit TWorkerInfo(const TActorId& actorId)
+        explicit TWorkerInfo(const TActorId& actorId, const TString& replicationName, TMetricsConfig::EMetricsLevel metricsLevel, ui64 workerId)
             : ActorId(actorId)
+            , MetricsLevel(metricsLevel)
+            , ReplicationName(replicationName)
+            , WorkerId(workerId)
         {
+            StartTime = Now();
         }
 
         operator TActorId() const {
             return ActorId;
         }
+        void EnsureCounters(NMonitoring::TDynamicCounterPtr& countersRoot) {
+            if (MetricsLevel != TMetricsConfig::LEVEL_DETAILED || !ReplicationName)
+                return;
+            if (!WorkerCounters) {
+                WorkerCounters.ConstructInPlace(countersRoot->GetSubgroup("counters", "transfer_detailed"), ReplicationName, WorkerId);
+            }
+
+            if (!HostCounters) {
+                HostCounters.ConstructInPlace(countersRoot->GetSubgroup("counters", "transfer_detailed"), ReplicationName);
+            }
+        }
+        void ApplyStats(const TWorkerDetailedStats& stats) {
+            if (stats.ReaderStats) {
+                HostCounters->DecompressCpu->Add(stats.ReaderStats->DecompressCpu.MicroSeconds());
+                WorkerCounters->DecompressCpu->Add(stats.ReaderStats->DecompressCpu.MicroSeconds());
+                WorkerCounters->ReadTime->Add(stats.ReaderStats->ReadTime.MilliSeconds());
+            } if (stats.WriterStats) {
+                HostCounters->ProcessCpu->Add(stats.WriterStats->ProcessingCpu.MicroSeconds());
+                WorkerCounters->ProcessCpu->Add(stats.WriterStats->ProcessingCpu.MicroSeconds());
+                WorkerCounters->WriteTime->Add(stats.WriterStats->WriteDuration.MilliSeconds());
+                WorkerCounters->WriteRows->Add(stats.WriterStats->WriteRows);
+                WorkerCounters->WriteBytes->Add(stats.WriterStats->WriteBytes);
+                WorkerCounters->WriteErrors->Add(stats.WriterStats->WriteErrors);
+            }
+            WorkerCounters->Restarts->Add(stats.RestartsCount);
+        }
+
+    private:
+        struct TWorkerCounters {
+            NMonitoring::TDynamicCounterPtr WorkerCounters;
+            NMonitoring::TDynamicCounters::TCounterPtr ReadTime;
+            NMonitoring::TDynamicCounters::TCounterPtr WriteTime;
+            NMonitoring::TDynamicCounters::TCounterPtr DecompressCpu;
+            NMonitoring::TDynamicCounters::TCounterPtr ProcessCpu;
+            NMonitoring::TDynamicCounters::TCounterPtr WriteRows;
+            NMonitoring::TDynamicCounters::TCounterPtr WriteBytes;
+            NMonitoring::TDynamicCounters::TCounterPtr WriteErrors;
+            NMonitoring::TDynamicCounters::TCounterPtr Uptime;
+            NMonitoring::TDynamicCounters::TCounterPtr Restarts;
+
+            TWorkerCounters(NMonitoring::TDynamicCounterPtr subgroup, const TString& replicationName, ui64 workerId)
+                : WorkerCounters(subgroup->GetSubgroup("host", "")->GetSubgroup("transfer_id", replicationName)
+                                         ->GetSubgroup("worker", ToString(workerId)))
+                , ReadTime(WorkerCounters->GetCounter("transfer.read.duration_milliseconds", true))
+                , WriteTime(WorkerCounters->GetCounter("transfer.write.duration_milliseconds", true))
+                , DecompressCpu(WorkerCounters->GetCounter("transfer.decompress.cpu_elapsed_microseconds", true))
+                , ProcessCpu(WorkerCounters->GetCounter("transfer.process.cpu_elapsed_microseconds", true))
+                , WriteRows(WorkerCounters->GetCounter("transfer.write_rows", true))
+                , WriteBytes(WorkerCounters->GetCounter("transfer.write_bytes", true))
+                , WriteErrors(WorkerCounters->GetCounter("transfer.write_errors", true))
+                , Uptime(WorkerCounters->GetCounter("transfer.worker_uptime_milliseconds", false))
+                , Restarts(WorkerCounters->GetCounter("transfer.worker_restarts", true))
+            {
+            }
+        };
+        struct THostCounters {
+            NMonitoring::TDynamicCounterPtr HostCounters;
+            NMonitoring::TDynamicCounters::TCounterPtr DecompressCpu;
+            NMonitoring::TDynamicCounters::TCounterPtr ProcessCpu;
+
+            THostCounters(NMonitoring::TDynamicCounterPtr subgroup, const TString& replicationName)
+                : HostCounters(subgroup->GetSubgroup("transfer_id", replicationName))
+                , DecompressCpu(HostCounters->GetCounter("transfer.decompress.cpu_elapsed_microseconds", true))
+                , ProcessCpu(HostCounters->GetCounter("transfer.process.cpu_elapsed_microseconds", true))
+            {
+            }
+        };
+        TMaybe<TWorkerCounters> WorkerCounters;
+        TMaybe<THostCounters> HostCounters;
+        const TString ReplicationName;
+        ui64 WorkerId;
+        TInstant StartTime;
     };
 
 public:
@@ -101,11 +181,15 @@ public:
         return it->second;
     }
 
-    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId) {
-        auto res = Workers.emplace(id, ops->Register(actor, TMailboxType::HTSwap, poolId));
+    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId, const TString& replicationName,
+                            TMetricsConfig::EMetricsLevel metricsLevel)
+    {
+        auto res = Workers.emplace(id, TWorkerInfo{ops->Register(actor, TMailboxType::HTSwap, poolId),
+                                                                              replicationName, metricsLevel, id.WorkerId()});
         Y_ABORT_UNLESS(res.second);
+        res.first->second.MetricsLevel = metricsLevel;
 
-        const auto actorId = res.first->second;
+        const auto actorId = res.first->second.ActorId;
         ActorIdToWorkerId.emplace(actorId, id);
 
         SendWorkerStatus(ops, id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
@@ -140,6 +224,34 @@ public:
         ops->Send(ActorId, new TEvService::TEvWorkerStatus(id, std::forward<Args>(args)...));
     }
 
+    void SendWorkerStats(IActorOps* ops, const TWorkerId& id, std::unique_ptr<TWorkerDetailedStats>&& stats) {
+        auto iter = Workers.find(id);
+        if (iter.IsEnd()) {
+            return;
+        }
+        TVector<std::pair<ui64, i64>> statsValues;
+        if (stats->ReaderStats) {
+            statsValues.emplace_back(NKikimrReplication::TWorkerStats::READ_TIME, stats->ReaderStats->ReadTime.MilliSeconds());
+            statsValues.emplace_back(NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU, stats->ReaderStats->DecompressCpu.MicroSeconds());
+            statsValues.emplace_back(NKikimrReplication::TWorkerStats::READ_MESSAGES, stats->ReaderStats->Messages);
+            statsValues.emplace_back(NKikimrReplication::TWorkerStats::READ_BYTES, stats->ReaderStats->Bytes);
+            if (stats->ReaderStats->Partition != -1) {
+                statsValues.emplace_back(NKikimrReplication::TWorkerStats::READ_PARTITION, stats->ReaderStats->Partition);
+                statsValues.emplace_back(NKikimrReplication::TWorkerStats::READ_OFFSET, stats->ReaderStats->Offset);
+            }
+        } else if (stats->WriterStats) {
+            statsValues.emplace_back(NKikimrReplication::TWorkerStats::WRITE_TIME, stats->WriterStats->ProcessingCpu.MicroSeconds());
+            statsValues.emplace_back(NKikimrReplication::TWorkerStats::PROCESSING_ELAPSED_CPU, stats->WriterStats->WriteDuration.MilliSeconds());
+            statsValues.emplace_back(NKikimrReplication::TWorkerStats::WRITE_ERRORS, stats->WriterStats->WriteErrors);
+        }
+
+        statsValues.emplace_back(NKikimrReplication::TWorkerStats::WORK_OPERATION, static_cast<ui64>(stats->CurrentOperation));
+        statsValues.emplace_back(NKikimrReplication::TWorkerStats::RESTARTS_COUNT, stats->RestartsCount);
+        UpdateWorkerMetrics(id, *stats);
+        auto* ev = new TEvService::TEvWorkerStatus(id, iter->second.StartTime, std::move(statsValues));
+        ops->Send(ActorId, ev);
+    }
+
     void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId,
             const TVector<ui64>&& adjacentPartitionsIds, const TVector<ui64>&& childPartitionsIds)
     {
@@ -156,6 +268,16 @@ public:
         }
 
         ops->Send(ActorId, ev.Release());
+    }
+
+    void UpdateWorkerMetrics(const TWorkerId& id, const TWorkerDetailedStats& stats) {
+        auto it = Workers.find(id);
+        Y_ABORT_UNLESS(it != Workers.end());
+
+        if (it->second.MetricsLevel == TMetricsConfig::LEVEL_DETAILED && it->second.ReplicationName) {
+            it->second.EnsureCounters(AppData()->Counters);
+            it->second.ApplyStats(stats);
+        }
     }
 
     void Handle(IActorOps* ops, TEvService::TEvGetTxId::TPtr& ev) {
@@ -243,6 +365,7 @@ public:
         id.Serialize(*record.MutableWorker());
         ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
     }
+
 
     void Shutdown(IActorOps* ops) const {
         for (const auto& [_, actorId] : Workers) {
@@ -527,12 +650,16 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         } else {
             Y_ABORT("Unsupported");
         }
+
         const auto actorId = session.RegisterWorker(this, id,
             CreateWorker(
                 SelfId(),
                 ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit, reportStats),
                 std::move(writerFn)),
-            poolId);
+            poolId,
+            cmd.GetReplicationName(),
+            cmd.GetMetricsLevel()
+        );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 
@@ -680,26 +807,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         auto* session = SessionFromWorker(ev->Sender);
         if (session && session->HasWorker(ev->Sender)) {
+            const auto& workerId = session->GetWorkerId(ev->Sender);
             if (ev->Get()->DetailedStats) {
-                TVector<std::pair<ui64, i64>> stats;
-                if (ev->Get()->DetailedStats->ReaderStats) {
-                    stats.emplace_back(NKikimrReplication::TWorkerStats::READ_TIME, ev->Get()->DetailedStats->ReaderStats->TotalReadTimeMs);
-                    stats.emplace_back(NKikimrReplication::TWorkerStats::DECOMPRESS_TIME, ev->Get()->DetailedStats->ReaderStats->TotalDecompressTimeMs);
-                    stats.emplace_back(NKikimrReplication::TWorkerStats::READ_ELAPSED_CPU, ev->Get()->DetailedStats->ReaderStats->ReadCpuMs);
-                    stats.emplace_back(NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU, ev->Get()->DetailedStats->ReaderStats->DecompressCpuMs);
-                } else if (ev->Get()->DetailedStats->WriterStats) {
-                    stats.emplace_back(NKikimrReplication::TWorkerStats::PROCESSING_TIME, ev->Get()->DetailedStats->WriterStats->ProcessDuration.MilliSeconds());
-                    stats.emplace_back(NKikimrReplication::TWorkerStats::WRITE_TIME, ev->Get()->DetailedStats->WriterStats->ProcessCpuMs);
-                    stats.emplace_back(NKikimrReplication::TWorkerStats::PROCESSING_ELAPSED_CPU, ev->Get()->DetailedStats->WriterStats->WriteDuration.MilliSeconds());
-                    stats.emplace_back(NKikimrReplication::TWorkerStats::WRITE_ELAPSED_CPU, ev->Get()->DetailedStats->WriterStats->WriteCpuMs);
-                }
-
-                session->SendWorkerStatus(
-                        this, session->GetWorkerId(ev->Sender), static_cast<ui64>(ev->Get()->DetailedStats->CurrentOperation),
-                        std::move(stats)
-                );
+                session->SendWorkerStats(this, workerId, std::move(ev->Get()->DetailedStats));
             } else {
-                session->SendWorkerStatus(this, session->GetWorkerId(ev->Sender), ev->Get()->Lag);
+                session->SendWorkerStatus(this, workerId, ev->Get()->Lag);
             }
         }
     }

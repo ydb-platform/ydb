@@ -101,7 +101,6 @@ private:
 
 }; // TTargetDescriber
 
-
 class TController::TTxDescribeReplication: public TTxBase {
     const TActorId Sender;
     TEvController::TEvDescribeReplication::TPtr PubEv;

@@ -191,6 +191,18 @@ struct TBatchingSettings {
     std::uint64_t SizeBytes;
 };
 
+struct TTransferStats {
+    enum class EWorkOperation {
+        Unspecified = 0,
+        Read = 1,
+        Decompress = 2,
+        Process = 3,
+        Write = 4,
+    };
+    EWorkOperation Operation;
+    ui64 MinWorkerUptime;
+};
+
 class TTransferDescription {
 public:
     enum class EState {
@@ -223,6 +235,8 @@ private:
     std::string TransformationLambda_;
     std::string ConsumerName_;
     TBatchingSettings BatchingSettings_;
+    // TTransferStats Stats_;
+    //Ydb::Replication::DescribeTransferResult_Stats Stats_;
 
     std::variant<
         TRunningState,
@@ -239,6 +253,7 @@ class TDescribeTransferResult: public NScheme::TDescribePathResult {
 public:
     TDescribeTransferResult(TStatus&& status, Ydb::Replication::DescribeTransferResult&& desc);
     const TTransferDescription& GetTransferDescription() const;
+    const Ydb::Replication::DescribeTransferResult_Stats& GetStats() const;
 
 private:
     TTransferDescription TransferDescription_;

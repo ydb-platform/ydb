@@ -11,6 +11,10 @@ TTargetTableBase::TTargetTableBase(TReplication* replication, ETargetKind finalK
 {
 }
 
+const TReplication::ITargetStats* TTargetTableBase::GetStats() const {
+    return nullptr;
+}
+
 TTargetTable::TTargetTable(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetTableBase(replication, ETargetKind::Table, id, config)
 {

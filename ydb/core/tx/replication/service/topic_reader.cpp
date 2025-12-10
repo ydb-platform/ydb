@@ -2,9 +2,9 @@
 #include "worker.h"
 #include "topic_reader.h"
 
+#include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
@@ -69,6 +69,8 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
+        ui64 maxOffset = 0;
+        ui64 totalSize = 0;
         LOG_D("Handle " << ev->Get()->ToString());
 
         auto& result = ev->Get()->Result;
@@ -88,6 +90,8 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                 descompressRequired = true;
                 Decompress(msg);
             }
+            maxOffset = msg.GetOffset();
+            totalSize += msg.GetData().size();
             records.push_back(std::move(msg));
         }
         auto* event = new TEvWorker::TEvData(result.PartitionId, ToString(result.PartitionId), std::move(records));
@@ -99,10 +103,12 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
             event->Stats = std::make_unique<TWorkerDetailedStats>(EWorkerOperation::NONE, std::make_unique<TTransferReadStats>(),
                     nullptr);
-            event->Stats->ReaderStats->TotalReadTimeMs = (readDoneTime - request.StartTime).MilliSeconds();
-            event->Stats->ReaderStats->ReadCpuMs = (readDoneElapsed - request.StartCpuUsageSec) * 1000;
-            event->Stats->ReaderStats->TotalDecompressTimeMs = descompressRequired ? (Now() - readDoneTime).MilliSeconds() : 0;
-            event->Stats->ReaderStats->DecompressCpuMs = descompressRequired ? (readDoneElapsed - GetElapsedTicksAsSeconds()) * 1000 : 0;
+            event->Stats->ReaderStats->ReadTime = readDoneTime - request.StartTime;
+            event->Stats->ReaderStats->DecompressCpu = descompressRequired ? TDuration::Seconds(readDoneElapsed - GetElapsedTicksAsSeconds()) : TDuration::Zero();
+            event->Stats->ReaderStats->Partition = result.PartitionId;
+            event->Stats->ReaderStats->Offset = maxOffset;
+            event->Stats->ReaderStats->Messages = result.Messages.size();
+            event->Stats->ReaderStats->Bytes = totalSize;
         }
         Send(Worker, event);
     }

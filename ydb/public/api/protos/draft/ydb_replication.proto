@@ -114,9 +114,9 @@ message DescribeTransferResponse {
 // message representing sliding window statistics by several windows
 message MultipleWindowsStat {
     // average per minute
-    int64 per_minute = 1;
+    google.protobuf.Duration per_minute = 1;
     // average per hour
-    int64 per_hour = 2;
+    google.protobuf.Duration per_hour = 2;
 }
 
 message DescribeTransferResult {
@@ -133,7 +133,7 @@ message DescribeTransferResult {
     message PausedState {
     }
 
-    message TransferStats {
+    message Stats {
         enum WorkState {
             // no reported state
             STATE_UNSPECIFIED = 0;
@@ -172,10 +172,10 @@ message DescribeTransferResult {
             // table write speed in sliding window, rows
             MultipleWindowsStat write_rows = 12;
 
-            // cpu usage time on decompression, milliseconds
-            MultipleWindowsStat decompression_cpu_time_ms = 13;
-            // cpu usage time on processing, milliseconds
-            MultipleWindowsStat processing_cpu_time_ms = 14;
+            // cpu usage time on decompression, microseconds
+            MultipleWindowsStat decompression_cpu_time = 13;
+            // cpu usage time on processing, microseconds
+            MultipleWindowsStat processing_cpu_time = 14;
         }
         // detailed stats of every worker, only included if DescribeTransferRequest.include_stats flag = true in request
         repeated WorkerStats workers_stats = 1;
@@ -191,10 +191,10 @@ message DescribeTransferResult {
         // table write speed in sliding window, overall for transfer, rows
         MultipleWindowsStat write_rows = 6;
 
-        // cpu usage time on decompression, overall for transfer, milliseconds
-        MultipleWindowsStat decompression_cpu_time_ms = 7;
-        // cpu usage time on processing, overall for transfer, milliseconds
-        MultipleWindowsStat processing_cpu_time_ms = 8;
+        // cpu usage time on decompression, overall for transfer, microseconds
+        MultipleWindowsStat decompression_cpu_time = 7;
+        // cpu usage time on processing, overall for transfer, microseconds
+        MultipleWindowsStat processing_cpu_time = 8;
         // moment when stats collection was last started (or reset)
         google.protobuf.Timestamp stats_collection_start = 9;
     }
@@ -222,5 +222,5 @@ message DescribeTransferResult {
     }
 
     optional BatchSettings batch_settings = 11;
-    optional TransferStats stats = 12;
+    optional Stats stats = 12;
 }

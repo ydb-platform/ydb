@@ -40,7 +40,7 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
             auto ev = MakeRunWorkerEv(
                 ReplicationId, TargetId, Config, partition.GetPartitionId(),
                 ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId,
-                BatchingSettings, Database);
+                BatchingSettings, Database, MetricsLevel, ReplicationName);
             Send(Parent, std::move(ev));
         }
 
@@ -69,7 +69,10 @@ public:
             const TPathId& dstPathId,
             const TReplication::ITarget::IConfig::TPtr& config,
             const NKikimrReplication::TBatchingSettings& batchingSettings,
-            const TString& database)
+            const TString& database,
+            const NKikimrReplication::TReplicationConfig::TMetricsConfig& metricsConfig,
+            const TString& replicationName
+    )
         : Parent(parent)
         , YdbProxy(proxy)
         , ConnectionParams(connectionParams)
@@ -83,6 +86,8 @@ public:
         , Config(config)
         , BatchingSettings(batchingSettings)
         , Database(database)
+        , MetricsLevel(metricsConfig.GetLevel())
+        , ReplicationName(replicationName)
     {
     }
 
@@ -113,6 +118,8 @@ private:
     const TReplication::ITarget::IConfig::TPtr Config;
     const NKikimrReplication::TBatchingSettings BatchingSettings;
     const TString Database;
+    NKikimrReplication::TReplicationConfig::TMetricsConfig::EMetricsLevel MetricsLevel;
+    TString ReplicationName;
 
 }; // TWorkerRegistar
 
@@ -163,7 +170,8 @@ IActor* TTargetWithStream::CreateWorkerRegistar(const TActorContext& ctx) const 
     return new TWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
         config.GetSrcConnectionParams(), config.GetConsistencySettings(),
         replication->GetId(), GetId(), GetStreamPath(), GetStreamConsumerName(), GetDstPathId(), GetConfig(),
-        config.GetTransferSpecific().GetBatching(), replication->GetDatabase());
+        config.GetTransferSpecific().GetBatching(), replication->GetDatabase(), config.GetMetricsConfig(),
+        replication->GetName());
 }
 
 }

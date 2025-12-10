@@ -268,12 +268,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     auto oldConsumers = std::move(Consumers);
     Consumers.clear();
-    for (auto& consumer : TabletConfig.GetConsumers()) {
+    for (const auto& consumer : TabletConfig.GetConsumers()) {
         auto it = oldConsumers.find(consumer.GetName());
         if (it != oldConsumers.end()) {
             Consumers[consumer.GetName()] = std::move(it->second);
+            Consumers[consumer.GetName()].Config = consumer;
         } else {
-            Consumers.insert(std::make_pair(consumer.GetName(), TConsumerInfo{}));
+            Consumers.insert(std::make_pair(consumer.GetName(), TConsumerInfo{.Config = consumer}));
         }
     }
 
@@ -662,10 +663,13 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         ensureCounters(info.AggregatedCounters, labeledConsumerCounters, {{"consumer", consumerName}});
         info.Aggr.Reset(new TTabletLabeledCountersBase{});
 
-        //if (consumer == "mlp") {
-        ensureCounters(info.AggregatedMLPConsumerCounters, labeledMLPConsumerCounters, {{"consumer", consumerName}});
-        info.AggrMLP.Reset(new TTabletLabeledCountersBase{});
-        //}
+        if (info.Config.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            ensureCounters(info.AggregatedMLPConsumerCounters, labeledMLPConsumerCounters, {{"consumer", consumerName}});
+            info.AggrMLP.Reset(new TTabletLabeledCountersBase{});
+        } else {
+            info.AggregatedMLPConsumerCounters.clear();
+            info.AggrMLP.Reset();
+        }
     }
 
     /*** apply counters ****/

@@ -1,6 +1,5 @@
 # Dynamic Cluster Configuration
 
-{% include [deprecated](_includes/deprecated.md) %}
 
 Dynamic configuration allows running dynamic [nodes](../../../concepts/glossary.md#node) by configuring them centrally, without the need to manually distribute files across nodes. {{ ydb-short-name }} acts as a configuration management system, providing tools for reliable storage, versioning, and configuration delivery, as well as a [DSL (Domain Specific Language)](dynamic-config-selectors.md) for overriding parts of it for specific node groups. The configuration is a YAML document. It is an extended version of static configuration:
 

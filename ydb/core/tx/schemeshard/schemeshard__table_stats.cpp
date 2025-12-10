@@ -134,6 +134,22 @@ THolder<TProposeRequest> MergeRequest(
     return std::move(request);
 }
 
+const TString* GetPoolKind(const NKikimr::TChannelBind& channelBind, const TStoragePools& pools) {
+    auto findPoolByName = [](const auto& pools, const auto& name) {
+        return std::find_if(pools.begin(), pools.end(), [&name](const auto& pool) {
+            return pool.GetName() == name;
+        });
+    };
+    // fast: use pool kind specified by the channel bind
+    // slower: find pool kind by name
+    if (const auto& poolKind = channelBind.GetStoragePoolKind(); !poolKind.empty()) {
+        return &poolKind;
+    } else if (const auto& found = findPoolByName(pools, channelBind.GetStoragePoolName()); found != pools.end()) {
+        return &found->GetKind();
+    }
+    return nullptr;
+};
+
 template <typename T>
 TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
                                                  TInstant now,
@@ -153,14 +169,19 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
 
-    Y_UNUSED(pools);
-
     for (const auto& channelStats : tableStats.GetChannels()) {
-        const auto& channelBind = bindings[channelStats.GetChannel()];
-        const auto& poolKind = channelBind.GetStoragePoolKind();
-        auto& [dataSize, indexSize] = newStats.StoragePoolsStats[poolKind];
-        dataSize += channelStats.GetDataSize();
-        indexSize += channelStats.GetIndexSize();
+        const ui32 channel = channelStats.GetChannel();
+        if (channel < bindings.size()) {
+            const auto& channelBind = bindings[channel];
+            if (auto* poolKindPtr = GetPoolKind(channelBind, pools); poolKindPtr != nullptr) {
+                auto& [dataSize, indexSize] = newStats.StoragePoolsStats[*poolKindPtr];
+                dataSize += channelStats.GetDataSize();
+                indexSize += channelStats.GetIndexSize();
+            }
+            // skip update for unknown pool kind
+        }
+        // skip update for unknown channel
+        //NOTE: intentionally not logging to avoid flooding the log
     }
 
     newStats.ImmediateTxCompleted = tableStats.GetImmediateTxCompleted();
@@ -269,16 +290,16 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
+    auto subDomainInfo = Self->ResolveDomainInfo(pathElement);
+
+    const TPartitionStats newStats = PrepareStats(rec, now, subDomainInfo->EffectiveStoragePools(), shardInfo->BindedChannels);
+
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxStoreTableStats.PersistSingleStats: main stats from"
                     << " datashardId(TabletID)=" << datashardId << " maps to shardIdx: " << shardIdx
                     << " followerId=" << followerId
                     << ", pathId: " << pathId << ", pathId map=" << pathElement->Name
                     << ", is column=" << isColumnTable << ", is olap=" << isOlapStore);
-
-    auto subDomainInfo = Self->ResolveDomainInfo(pathElement);
-
-    const TPartitionStats newStats = PrepareStats(rec, now, subDomainInfo->EffectiveStoragePools(), shardInfo->BindedChannels);
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Add stats from shard with datashardId(TabletID)=" << datashardId << " followerId=" << followerId
@@ -353,7 +374,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                 LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "add stats for exists table with pathId=" << tablePathId);
 
-                Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(&diskSpaceUsageDelta, shardIdx, tablePathId, newTableStats, now);
+                Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(shardIdx, tablePathId, newTableStats, now);
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "failed add stats for table with pathId=" << tablePathId);

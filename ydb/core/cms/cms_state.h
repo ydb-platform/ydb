@@ -39,6 +39,7 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
     ui64 NextRequestId = 0;
     ui64 NextNotificationId = 0;
     ui64 LastLogRecordTimestamp = 0;
+    TInstant FirstBootTimestamp;
 
     // State of Wall-E tasks.
     THashMap<TString, TTaskInfo> WalleTasks;

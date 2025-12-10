@@ -542,12 +542,12 @@ void TBlobStorageController::UpdateSystemViews() {
                     }
                     CalculateGroupUsageStats(pb, disks, (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies());
 
-                    if (auto groupInfo = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr)) {
+                    if (!SelfManagementEnabled) {
+                        pb->SetLayoutCorrect(true);
+                    } else if (auto groupInfo = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr)) {
                         NLayoutChecker::TGroupLayout layout(groupInfo->GetTopology());
                         NLayoutChecker::TDomainMapper mapper;
-                        TGroupGeometryInfo geom(groupInfo->Type, SelfManagementEnabled
-                            ? StorageConfig.GetSelfManagementConfig().GetGeometry()
-                            : NKikimrBlobStorage::TGroupGeometry());
+                        TGroupGeometryInfo geom(groupInfo->Type, StorageConfig.GetSelfManagementConfig().GetGeometry());
 
                         Y_DEBUG_ABORT_UNLESS(pdiskIds.size() == groupInfo->GetTotalVDisksNum());
 

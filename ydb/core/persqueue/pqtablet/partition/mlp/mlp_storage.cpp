@@ -49,9 +49,10 @@ void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDe
             break;
         case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
             for (auto [offset, _] : std::exchange(DLQMessages, {})) {
-                DoCommit(offset, Metrics.TotalDeletedByDeadlinePolicyMessageCount);
+                size_t c = 0;
+                DoCommit(offset, c);
+                ++Metrics.TotalDeletedByDeadlinePolicyMessageCount;
             }
-            DLQQueue = {};
             break;
         case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
             WakeUpDLQ();

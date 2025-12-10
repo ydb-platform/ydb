@@ -735,9 +735,30 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
                 .Done());
     }
 
+    if (VectorTopDistinct) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(VectorTopDistinctSettingName)
+                .Done());
+    }
+
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add(settings)
         .Done();
+}
+
+bool TKqpStreamLookupSettings::HasVectorTopDistinct(const NNodes::TCoNameValueTupleList& list) {
+    for (const auto& tuple : list) {
+        auto name = tuple.Name().Value();
+        if (name == VectorTopDistinctSettingName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TKqpStreamLookupSettings::HasVectorTopDistinct(const NNodes::TKqlStreamLookupTable& node) {
+    return TKqpStreamLookupSettings::HasVectorTopDistinct(node.Settings());
 }
 
 TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameValueTupleList& list) {
@@ -775,6 +796,8 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
         } else if (name == VectorTopLimitSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.VectorTopLimit = tuple.Value().Cast().Ptr();
+        } else if (name == VectorTopDistinctSettingName) {
+            settings.VectorTopDistinct = true;
         } else {
             YQL_ENSURE(false, "Unknown KqpStreamLookup setting name '" << name << "'");
         }

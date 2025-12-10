@@ -58,7 +58,7 @@ class WorkloadVectorIndex(WorkloadBase):
         self.client.query(drop_index_sql, True)
 
     def _create_index(
-        self, index_name, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None, prefixed=False
+        self, index_name, table_path, vector_type, vector_dimension, levels, clusters, overlap_clusters=0, distance=None, similarity=None, prefixed=False
     ):
         logger.info(
             f"""Create index vector_type={vector_type},
@@ -75,6 +75,7 @@ class WorkloadVectorIndex(WorkloadBase):
             prefix = "user, "
         else:
             prefix = ""
+        overlap_param = f"overlap_clusters={overlap_clusters}," if overlap_clusters else ""
         create_index_sql = f"""
             ALTER TABLE `{table_path}`
             ADD INDEX `{index_name}` GLOBAL USING vector_kmeans_tree
@@ -83,6 +84,7 @@ class WorkloadVectorIndex(WorkloadBase):
                 vector_type={vector_type},
                 vector_dimension={vector_dimension},
                 levels={levels},
+                {overlap_param}
                 clusters={clusters}
             );
         """
@@ -195,8 +197,8 @@ class WorkloadVectorIndex(WorkloadBase):
             return
         raise Exception("Error getting index status")
 
-    def _check_loop(self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None, prefixed=False):
-        index_name = f"{self.index_name_prefix}_{vector_type}_{vector_dimension}_{levels}_{clusters}_{distance}_{similarity}_{str(prefixed)}"
+    def _check_loop(self, table_path, vector_type, vector_dimension, levels, clusters, overlap_clusters=0, distance=None, similarity=None, prefixed=False):
+        index_name = f"{self.index_name_prefix}_{vector_type}_{vector_dimension}_{levels}_{clusters}_{overlap_clusters}_{distance}_{similarity}_{str(prefixed)}"
         self._create_index(
             index_name=index_name,
             table_path=table_path,
@@ -204,6 +206,7 @@ class WorkloadVectorIndex(WorkloadBase):
             vector_dimension=vector_dimension,
             levels=levels,
             clusters=clusters,
+            overlap_clusters=overlap_clusters,
             distance=distance,
             similarity=similarity,
             prefixed=prefixed,
@@ -260,6 +263,7 @@ class WorkloadVectorIndex(WorkloadBase):
                 vector_dimension=vector_dimension,
                 levels=levels,
                 clusters=clusters,
+                overlap_clusters=overlap_clusters,
                 distance=distance,
                 similarity=similarity,
                 prefixed=prefixed,
@@ -275,11 +279,12 @@ class WorkloadVectorIndex(WorkloadBase):
         vector_type_data = ["float", "int8", "uint8"]
         prefixed_data = [False, True]
         levels_data = [1, 3]
+        overlap_data = [0, 2]
         clusters_data = [2, 17]
         vector_dimension_data = [5]
         self._create_table(table_path)
 
-        distance_index_data = list(product(vector_type_data, vector_dimension_data, levels_data, clusters_data, distance_data, prefixed_data))
+        distance_index_data = list(product(vector_type_data, vector_dimension_data, levels_data, clusters_data, distance_data, prefixed_data, overlap_data))
         similarity_index_data = list(product(vector_type_data, vector_dimension_data, levels_data, clusters_data, similarity_data, prefixed_data))
 
         random.shuffle(distance_index_data)
@@ -305,7 +310,8 @@ class WorkloadVectorIndex(WorkloadBase):
                     levels=distance_idx_data[2],
                     clusters=distance_idx_data[3],
                     distance=distance_idx_data[4],
-                    prefixed=distance_idx_data[5])
+                    prefixed=distance_idx_data[5],
+                    overlap_clusters=distance_idx_data[6])
                 similarity_idx_data = next(similarity_iter)
 
                 self._upsert_values(
@@ -323,7 +329,8 @@ class WorkloadVectorIndex(WorkloadBase):
                     levels=similarity_idx_data[2],
                     clusters=similarity_idx_data[3],
                     similarity=similarity_idx_data[4],
-                    prefixed=similarity_idx_data[5])
+                    prefixed=similarity_idx_data[5],
+                    overlap_clusters=distance_idx_data[6])
             except Exception as ex:
                 logger.info(f"ERROR {ex}")
                 raise ex

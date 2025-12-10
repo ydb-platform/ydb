@@ -450,7 +450,7 @@ bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     auto& item = importInfo.Items.at(itemIdx);
 
-    switch (importInfo.Settings.index_filling_mode()) {
+    switch (importInfo.GetS3Settings().index_filling_mode()) {
         case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD:
             return true;
         case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:

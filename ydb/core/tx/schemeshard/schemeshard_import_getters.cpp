@@ -925,18 +925,18 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     void StartDownloadingChangefeeds() {
         ResetRetries();
         DownloadChangefeeds();
-    }
+        }
 
-public:
-    explicit TSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv)
-        : TGetterFromS3<TSchemeGetter>(TGetterSettings::FromImportInfo(importInfo, std::move(iv)))
+    public:
+        explicit TSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv)
+            : TGetterFromS3<TSchemeGetter>(TGetterSettings::FromImportInfo(importInfo, std::move(iv)))
         , ImportInfo(std::move(importInfo))
         , ReplyTo(replyTo)
         , ItemIdx(itemIdx)
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
-        , IndexFillingMode(ImportInfo->Settings.index_filling_mode())
+        , IndexFillingMode(ImportInfo->GetS3Settings().index_filling_mode())
         , NeedDownloadPermissions(!ImportInfo->GetNoAcl())
         , NeedValidateChecksums(!ImportInfo->GetSkipChecksumValidation())
     {

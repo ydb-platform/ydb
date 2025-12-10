@@ -454,8 +454,11 @@ public:
                 for (auto& input : task.Inputs) {
                     if (input.SourceType) {
                         if (IsInfiniteSourceType(input.SourceType)) {
-                            if (watermarksIdleTimeoutUs) {
-                                input.WatermarksIdleTimeoutUs = watermarksIdleTimeoutUs;
+                            if (input.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                                watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                                if (watermarksIdleTimeoutUs) {
+                                    input.WatermarksIdleTimeoutUs = watermarksIdleTimeoutUs;
+                                }
                             }
                         }
                     } else {
@@ -472,6 +475,7 @@ public:
             } else {
                 for (auto& input : task.Inputs) {
                     input.WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+                    input.WatermarksIdleTimeoutUs.Clear();
                 }
             }
 

@@ -32,10 +32,6 @@ const TString& TTargetBase::TConfigBase::GetDstPath() const {
     return DstPath;
 }
 
-ui64 TTargetBase::TConfigBase::GetCountersLevel() const {
-    return 0;
-}
-
 TTargetBase::TTargetBase(TReplication* replication, ETargetKind kind,
         ui64 id, const IConfig::TPtr& config)
     : Replication(replication)

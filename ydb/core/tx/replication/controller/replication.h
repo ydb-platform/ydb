@@ -4,7 +4,7 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/protos/replication.pb.h>
+//#include <ydb/core/protos/replication.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
@@ -17,6 +17,7 @@
 namespace NKikimrReplication {
     class TReplicationConfig;
     class TWorkerStats;
+    class TEvDescribeReplicationResult;
 }
 
 namespace NKikimr::NReplication::NController {
@@ -73,7 +74,6 @@ public:
             virtual ETargetKind GetKind() const = 0;
             virtual const TString& GetSrcPath() const = 0;
             virtual const TString& GetDstPath() const = 0;
-            virtual ui64 GetCountersLevel() const = 0;
         };
 
         virtual ~ITarget() = default;
@@ -159,6 +159,7 @@ public:
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
     const TMaybe<TDuration> GetLag() const;
+    const TString& GetName() const;
 
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;

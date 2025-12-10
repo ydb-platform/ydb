@@ -446,9 +446,6 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
 
 void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
-    if (ev->Get()->Record.HasStats()) {
-        Cerr << "TEvService::TEvWorkerStatus: " << ev->Get()->Record.DebugString() << Endl;
-    }
     const auto nodeId = ev->Sender.NodeId();
     if (!Sessions.contains(nodeId)) {
         return;

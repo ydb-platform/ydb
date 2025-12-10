@@ -35,7 +35,7 @@
     ./local_ydb deploy --ydb-working-dir=/absolute/path/to/working/directory --ydb-binary-path=/path/to/kikimr/driver --enable-feature-flag=enable_external_data_sources --enable-feature-flag=enable_streaming_queries
     ```
 
-{% include [ydb-cli-profile](../_includes/ydb-cli-profile.md) %}
+{% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
 ## Шаг 1. Создание топиков {#step1}
 

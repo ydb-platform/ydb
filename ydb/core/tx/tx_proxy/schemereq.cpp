@@ -7,9 +7,12 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/docapi/traits.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/security/sasl/events.h>
+#include <ydb/core/security/sasl/hasher.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <ydb/library/login/login.h>
@@ -17,11 +20,19 @@
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/login/hashes_checker/hashes_checker.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <util/string/cast.h>
+
+namespace {
+    const TVector<NLogin::EHashType> HASHES_TO_COMPUTE = {
+        NLogin::EHashType::Argon,
+        NLogin::EHashType::ScramSha256,
+    };
+}
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -45,6 +56,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     TActorId Source;
     TActorId PipeClient;
+    ui64 ShardToRequest;
 
     struct TPathToResolve {
         const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
@@ -102,6 +114,24 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " SEND to# " << shardToRequest << " shardToRequest " << req->ToString());
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
+    }
+
+    void SendGeneralPropose(const TActorContext &ctx) {
+        auto request = MakeHolder<TEvSchemeShardPropose>(TxId, ShardToRequest);
+
+        if (UserToken) {
+            request->Record.SetOwner(UserToken->GetUserSID());
+        }
+
+        request->Record.SetPeerName(GetRequestProto().GetPeerName());
+        if (GetRequestEv().HasModifyScheme()) {
+            request->Record.AddTransaction()->MergeFrom(GetModifyScheme());
+        } else {
+            request->Record.MutableTransaction()->MergeFrom(GetModifications());
+        }
+
+        SendPropose(request.Release(), ShardToRequest, ctx);
+        static_cast<TDerived*>(this)->Become(&TDerived::StateWaitPrepare);
     }
 
     static bool IsSplitMergeFromSchemeShard(const NKikimrSchemeOp::TModifyScheme& modifyScheme) {
@@ -1587,33 +1617,125 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
         }
 
-        ui64 shardToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
-        auto request = MakeHolder<TEvSchemeShardPropose>(TxId, shardToRequest);
-
-        if (UserToken) {
-            request->Record.SetOwner(UserToken->GetUserSID());
-        }
-
-        request->Record.SetPeerName(GetRequestProto().GetPeerName());
-        if (GetRequestEv().HasModifyScheme()) {
-            request->Record.AddTransaction()->MergeFrom(GetModifyScheme());
-        } else {
-            request->Record.MutableTransaction()->MergeFrom(GetModifications());
-        }
+        ShardToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                     "Actor# " << ctx.SelfID.ToString()
                               << " HANDLE EvNavigateKeySetResult,"
                               << " txid# " << TxId
-                              << " shardToRequest# " << shardToRequest
+                              << " shardToRequest# " << ShardToRequest
                               << " DomainKey# " << navigate->ResultSet.begin()->DomainInfo->DomainKey
                               << " DomainInfo.Params# " << navigate->ResultSet.begin()->DomainInfo->Params.ShortDebugString()
                               << " RedirectRequired# " <<  (navigate->ResultSet.begin()->RedirectRequired ? "true" : "false"));
 
+        if (GetRequestEv().HasModifyScheme() && GetModifyScheme().GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterLogin) {
+            auto& alterLogin = *GetModifyScheme().MutableAlterLogin();
+            switch (alterLogin.GetAlterCase()) {
+            case NKikimrSchemeOp::TAlterLogin::kCreateUser:
+            {
+                auto& targetUser = *alterLogin.MutableCreateUser();
+                if (targetUser.GetHashedPassword()) {
+                    auto hashes = NLogin::ConvertHashes(targetUser.GetHashedPassword());
+                    if (hashes) {
+                        targetUser.SetPassword(std::move(hashes->OldHashFormat));
+                        targetUser.SetIsHashedPassword(true);
+                        targetUser.SetHashedPassword(std::move(hashes->NewHashFormat));
+                    } else {
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                            "Unsupported format of hashed password");
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, nullptr, &issue, ctx);
+                        return Die(ctx);
+                    }
+                } else {
+                    const auto& passwordComplexityProto = AppData()->AuthConfig.GetPasswordComplexity();
+                    NLogin::TPasswordComplexity passwordComplexity({
+                        .MinLength = passwordComplexityProto.GetMinLength(),
+                        .MinLowerCaseCount = passwordComplexityProto.GetMinLowerCaseCount(),
+                        .MinUpperCaseCount = passwordComplexityProto.GetMinUpperCaseCount(),
+                        .MinNumbersCount = passwordComplexityProto.GetMinNumbersCount(),
+                        .MinSpecialCharsCount = passwordComplexityProto.GetMinSpecialCharsCount(),
+                        .SpecialChars = passwordComplexityProto.GetSpecialChars(),
+                        .CanContainUsername = passwordComplexityProto.GetCanContainUsername(),
+                    });
 
-        SendPropose(request.Release(), shardToRequest, ctx);
-        static_cast<TDerived*>(this)->Become(&TDerived::StateWaitPrepare);
+                    TBase::Register(NSasl::CreateHasher(ctx.SelfID, { targetUser.GetUser(), targetUser.GetPassword() },
+                        HASHES_TO_COMPUTE, std::move(passwordComplexity)).release());
+                    return;
+                }
+                break;
+            }
+            case NKikimrSchemeOp::TAlterLogin::kModifyUser:
+            {
+                auto& targetUser = *alterLogin.MutableModifyUser();
+                if (targetUser.HasHashedPassword()) {
+                    auto hashes = NLogin::ConvertHashes(targetUser.GetHashedPassword());
+                    if (hashes) {
+                        targetUser.SetPassword(std::move(hashes->OldHashFormat));
+                        targetUser.SetIsHashedPassword(true);
+                        targetUser.SetHashedPassword(std::move(hashes->NewHashFormat));
+                    } else {
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                            "Unsupported format of hashed password");
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, nullptr, &issue, ctx);
+                        return Die(ctx);
+                    }
+                } else if (targetUser.HasPassword()) {
+                    const auto& passwordComplexityProto = AppData()->AuthConfig.GetPasswordComplexity();
+                    const NLogin::TPasswordComplexity passwordComplexity({
+                        .MinLength = passwordComplexityProto.GetMinLength(),
+                        .MinLowerCaseCount = passwordComplexityProto.GetMinLowerCaseCount(),
+                        .MinUpperCaseCount = passwordComplexityProto.GetMinUpperCaseCount(),
+                        .MinNumbersCount = passwordComplexityProto.GetMinNumbersCount(),
+                        .MinSpecialCharsCount = passwordComplexityProto.GetMinSpecialCharsCount(),
+                        .SpecialChars = passwordComplexityProto.GetSpecialChars(),
+                        .CanContainUsername = passwordComplexityProto.GetCanContainUsername(),
+                    });
+
+                    TBase::Register(NSasl::CreateHasher(ctx.SelfID, { targetUser.GetUser(), targetUser.GetPassword() },
+                        HASHES_TO_COMPUTE, std::move(passwordComplexity)).release());
+                    return;
+                }
+                break;
+            }
+            default:
+                break;
+            }
+        }
+
+        SendGeneralPropose(ctx);
     }
+
+    void Handle(NSasl::TEvSasl::TEvComputedHashes::TPtr &ev, const TActorContext &ctx) {
+        auto* computedHashes = ev->Get();
+        if (!computedHashes->Error.empty()) {
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, std::move(computedHashes->Error));
+        }
+
+        auto& alterLogin = *GetModifyScheme().MutableAlterLogin();
+        switch (alterLogin.GetAlterCase()) {
+        case NKikimrSchemeOp::TAlterLogin::kCreateUser:
+        {
+            auto& targetUser = *alterLogin.MutableCreateUser();
+            targetUser.SetPassword(std::move(computedHashes->ArgonHash));
+            targetUser.SetIsHashedPassword(true);
+            targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
+            break;
+        }
+        case NKikimrSchemeOp::TAlterLogin::kModifyUser:
+        {
+            auto& targetUser = *alterLogin.MutableModifyUser();
+            targetUser.SetPassword(std::move(computedHashes->ArgonHash));
+            targetUser.SetIsHashedPassword(true);
+            targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
+            break;
+        }
+        default:
+            break;
+        }
+
+        SendGeneralPropose(ctx);
+    }
+
 };
 
 //////////////////////////////////////////////////////////////
@@ -1656,6 +1778,7 @@ struct TFlatSchemeReq : public TBaseSchemeReq<TFlatSchemeReq> {
     STFUNC(StateWaitResolve) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            HFunc(NSasl::TEvSasl::TEvComputedHashes, Handle);
         }
     }
 

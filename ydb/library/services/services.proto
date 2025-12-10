@@ -210,6 +210,7 @@ enum EServiceKikimr {
     TICKET_PARSER = 455;
     BLACKBOX_VALIDATOR = 460;
     LDAP_AUTH_PROVIDER = 2650;
+    SASL_AUTH = 2651;
 
     GRPC_CLIENT = 461;
 
@@ -1137,5 +1138,6 @@ message TActivity {
         FILTER_KMEANS_SCAN_ACTOR = 675;
         BS_SYNC_SST_WRITER = 676;
         BS_ASYNC_SYNC_SST_COMMITTER = 677;
+        PASSWORD_HASHER = 678;
     };
 };

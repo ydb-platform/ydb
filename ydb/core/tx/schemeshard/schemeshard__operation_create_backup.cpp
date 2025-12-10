@@ -116,7 +116,7 @@ struct TBackup {
         Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState.TargetPathId));
         auto table = context.SS->ColumnTables.at(txState.TargetPathId);
 
-        auto& backupInfo = table->BackupHistory[opId.GetTxId()];
+        auto& backupInfo = table.GetPtr()->BackupHistory[opId.GetTxId()];
 
         backupInfo.StartDateTime = txState.StartTime.Seconds();
         backupInfo.CompletionDateTime = ts;

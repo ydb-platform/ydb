@@ -744,6 +744,9 @@ public:
     }
 };
 
+// The current copy of a column table returns a reference to itself. 
+// This is a fake copy for embedding into an existing backup pipeline.
+// TODO (hcpp): implementation for read only copy table https://github.com/ydb-platform/ydb/issues/26498
 class TCopyColumnTable: public TSubOperation {
     TMaybe<TPathElement::EPathState> TargetState;
 

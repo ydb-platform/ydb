@@ -35,9 +35,7 @@ public:
         : TxType(type)
         , OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {
-            TEvColumnShard::TEvNotifyTxCompletionResult::EventType,
-        });
+        IgnoreMessages(DebugHint(), {});
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
@@ -350,9 +348,9 @@ public:
         }
 
         // Move all notifications that were already received
-        // NOTE: SchemeChangeNotification is sent form DS after it has got PlanStep from coordinator and the schema tx has completed
+        // NOTE: SchemeChangeNotification is sent form DS or NotifyTxCompletionResult is sent from CS after it has got PlanStep from coordinator and the schema tx has completed
         // At that moment the SS might not have received PlanStep from coordinator yet (this message might be still on its way to SS)
-        // So we are going to accumulate SchemeChangeNotification that are received before this Tx switches to WaitParts state
+        // So we are going to accumulate SchemeChangeNotification or NotifyTxCompletionResult that are received before this Tx switches to WaitParts state
         txState->AcceptPendingSchemeNotification();
 
         // Got notifications from all datashards?

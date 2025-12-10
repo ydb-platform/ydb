@@ -257,7 +257,14 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                         LOG_D("WAL overrun");
                         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
                         request->Record.SetCookie(static_cast<ui64>(EKvCookie::WALRead));
-                        AddReadWAL(request, PartitionId, Config.GetName(), LastWALIndex);
+
+                        auto* readWAL = request->Record.AddCmdReadRange();
+                        readWAL->MutableRange()->SetFrom(walResult.GetPair().rbegin()->GetKey());
+                        readWAL->MutableRange()->SetIncludeFrom(false);
+                        readWAL->MutableRange()->SetTo(MaxWALKey(PartitionId, Config.GetName()));
+                        readWAL->MutableRange()->SetIncludeTo(true);
+                        readWAL->SetIncludeData(true);
+
                         Send(TabletActorId, std::move(request));
                         return;
                     }

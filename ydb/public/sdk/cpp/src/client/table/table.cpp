@@ -2561,6 +2561,8 @@ TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeS
         .Settings = TVectorIndexSettings::FromProto(proto.settings()),
         .Clusters = proto.clusters(),
         .Levels = proto.levels(),
+        .OverlapClusters = proto.overlap_clusters(),
+        .OverlapRatio = proto.overlap_ratio(),
     };
 }
 
@@ -2568,6 +2570,8 @@ void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) 
     Settings.SerializeTo(*settings.mutable_settings());
     settings.set_clusters(Clusters);
     settings.set_levels(Levels);
+    settings.set_overlap_clusters(OverlapClusters);
+    settings.set_overlap_ratio(OverlapRatio);
 }
 
 void TKMeansTreeSettings::Out(IOutputStream& o) const {

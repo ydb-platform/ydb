@@ -14,7 +14,7 @@
 
 ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
-  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL]
+  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>]
   [, ...],
     INDEX <index_name>
       [GLOBAL]
@@ -57,17 +57,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 Тип данных колонки. Полный список типов данных, которые поддерживает {{ ydb-short-name }} доступен в разделе [{#T}](../../types/index.md).
 
-### FAMILY <family_name> (настройка колонки)
-
-Указание принадлежности данной колонки к указанной группе колонок. Подробнее в разделе [{#T}](family.md).
-
-### NULL
-
-Данная колонка может содержать значения `NULL` (по умолчанию).
-
-### NOT NULL
-
-Данная колонка не принимает значения `NULL`.
+{% include [column_option_list.md](../_includes/column_option_list.md) %}
 
 ### INDEX
 
@@ -86,6 +76,8 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 Дополнительные параметры создания таблицы. Подробнее в разделе [{#T}](with.md).
 
 {% note info %}
+
+## Типы таблиц
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
@@ -144,6 +136,18 @@ WITH (
     ```
 
   {% endif %}
+
+  Пример создания таблицы с использованием значения по умолчанию (DEFAULT):
+
+  ```yql
+    CREATE TABLE table_with_default (
+    id Uint64,
+    name String DEFAULT "unknown",
+    score Double NOT NULL DEFAULT 0.0,
+    PRIMARY KEY (id)
+  );
+  ```
+
 
 
   {% if feature_column_container_type == true %}

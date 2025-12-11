@@ -1,6 +1,8 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
+
 namespace NKikimr::NOlap::NReader::NSimple {
 
 class TScanWithLimitCollection;
@@ -139,11 +141,11 @@ private:
                 Collection->OnSourceFinished(i);
                 --SourcesCount;
             }
-            cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceId(), aggrSource->GetLastSourceRecordsCount());
+            cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount());
         } else {
             AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
-            cursor = std::make_shared<TNotSortedSimpleScanCursor>(source->GetSourceId(), source->GetRecordsCount());
+            cursor = std::make_shared<TNotSortedSimpleScanCursor>(source->GetSourceIdx(), source->GetRecordsCount());
             --SourcesCount;
         }
         AFL_VERIFY(!source->GetStageResult().IsEmpty());
@@ -154,18 +156,17 @@ private:
             ++AggregationsCount;
             if (resultChunk->GetTable()->num_rows() > AggregatedResultKeysCountMinimalForControl &&
                 source->GetRecordsCount() < CriticalBadAggregationKffForAggregation * resultChunk->GetTable()->num_rows()) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "useless_aggregation")("source_id", source->GetSourceId())("source_idx",
-                    source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())(
-                    "activity", AggregationActivity)("useless_count", UselessAggregationsCount)("aggr_count", AggregationsCount);
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "useless_aggregation")("source_idx", source->GetSourceIdx())(
+                    "table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())("activity", AggregationActivity)(
+                    "useless_count", UselessAggregationsCount)("aggr_count", AggregationsCount);
                 if (++UselessAggregationsCount > UselessDetectorFractionKff * AggregationsCount &&
                     AggregationsCount > UselessDetectorCountLimit) {
                     AggregationActivity = false;
                 }
             }
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_id", source->GetSourceId())(
-            "source_idx", source->GetSourceIdx())("table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())(
-            "activity", AggregationActivity);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_idx", source->GetSourceIdx())(
+            "table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())("activity", AggregationActivity);
         reader.OnIntervalResult(
             std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->MutableAs<IDataSource>()->ExtractGroupGuard(),
                 resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt));

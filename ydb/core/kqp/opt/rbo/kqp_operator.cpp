@@ -881,6 +881,60 @@ TString TOpLimit::ToString(TExprContext& ctx) {
 }
 
 /**
+ * Sort operator
+ * FIXME: This is temporary, we want to get enforcers working
+ */
+TOpSort::TOpSort(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TSortElement> sortElements, TExprNode::TPtr limitCond)
+    : IUnaryOperator(EOperator::Sort, pos, input), SortElements(sortElements), LimitCond(limitCond) {}
+
+TVector<TInfoUnit> TOpSort::GetOutputIUs() { return GetInput()->GetOutputIUs(); }    
+
+void TOpSort::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+    Y_UNUSED(stopList);
+    TVector<TSortElement> newSortElements;
+    for (auto &el : SortElements) {
+
+        TInfoUnit newIU(el.SortColumn);
+
+        if (renameMap.contains(el.SortColumn)) {
+            newIU = renameMap.at(el.SortColumn);
+        }
+
+        auto sortElement = TSortElement(el);
+        sortElement.SortColumn = newIU;
+        newSortElements.push_back(sortElement);
+    }
+
+    if (LimitCond) {
+        LimitCond = RenameMembers(LimitCond, renameMap, ctx);
+    }
+}
+
+TString TOpSort::ToString(TExprContext& ctx) {
+    TStringBuilder res;
+    res << "Sort: [";
+    for (size_t i=0; i<SortElements.size(); i++) {
+        auto el = SortElements[i];
+        res << el.SortColumn.GetFullName() << " ";
+        if (el.Ascending) {
+            res << "asc";
+        } else {
+            res << "desc";
+        }
+
+        if (i!=SortElements.size()-1) {
+            res << ", ";
+        }
+    }
+    res << "]";
+    if (LimitCond) {
+        res << ", Limit: " << PrintRBOExpression(LimitCond, ctx);
+    }
+    
+    return res;
+}
+
+/**
  * OpAggregate operator methods
  */
 

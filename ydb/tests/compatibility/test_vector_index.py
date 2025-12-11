@@ -85,6 +85,30 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(sql_upsert)
 
+    def _get_knn_queries(self):
+        """Get KNN search queries without vector index (brute force with pushdown)."""
+        queries = []
+        for prefixed in ['', '_pfx']:
+            for vector_type in self.vector_types.keys():
+                for distance in self.targets.keys():
+                    for distance_func in self.targets[distance].keys():
+                        table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}"
+                        order = "ASC" if distance != "similarity" else "DESC"
+                        vector = self.get_vector(f"{vector_type}Vector", 1)
+                        where = ""
+                        if prefixed:
+                            where = "WHERE user=1"
+                        queries.append([
+                            True, f"""
+                            $Target = {self.vector_types[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
+                            SELECT key, vec, {self.targets[distance][distance_func]}(vec, $Target) as target
+                            FROM `{table_name}`
+                            {where}
+                            ORDER BY {self.targets[distance][distance_func]}(vec, $Target) {order}
+                            LIMIT {self.rows_count};"""
+                        ])
+        return queries
+
     def _get_queries(self):
         queries = []
         for prefixed in ['', '_pfx']:
@@ -159,6 +183,12 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         queries = self._get_queries()
         self._do_queries(queries)
 
+    def knn_search(self):
+        """Perform KNN search without vector index during rolling upgrade/downgrade."""
+        queries = self._get_knn_queries()
+        for _ in self.roll():
+            self._do_queries(queries)
+
     def create_table(self, table_name):
         query = f"""
                 CREATE TABLE {table_name} (
@@ -189,5 +219,6 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                             target=f"{distance}={distance_func}",
                             prefixed=prefixed,
                         )
+        self.knn_search()
         self.wait_index_ready()
         self.select_from_index()

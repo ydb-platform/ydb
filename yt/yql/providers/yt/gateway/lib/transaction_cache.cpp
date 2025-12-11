@@ -523,9 +523,6 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         }
         createdEntry->CacheTx = createdEntry->Client;
         createdEntry->CacheTtl = config->QueryCacheTtl.Get().GetOrElse(TDuration::Days(7));
-        if (createDumpTx) {
-            createdEntry->DumpTx = createdEntry->Client->StartTransaction(TStartTransactionOptions().Attributes(createdEntry->TransactionSpec));
-        }
         const TString tmpFolder = GetTablesTmpFolder(*config, cluster);
         if (!tmpFolder.empty()) {
             auto fullTmpFolder = AddPathPrefix(tmpFolder, NYT::TConfig::Get()->Prefix);
@@ -534,9 +531,14 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
             if (!existsGlobally && existsInTx) {
                 createdEntry->CacheTx = createdEntry->ExternalTx;
                 createdEntry->CacheTxId = createdEntry->ExternalTx->GetId();
+                createDumpTx = false;
+                YQL_CLOG(WARN, ProviderYt) << "Dump tx was not created because of ExternalTx-restricted TmpFolder";
             }
         } else {
             createdEntry->DefaultTmpFolder = NYT::AddPathPrefix("tmp/yql/" + UserName_, NYT::TConfig::Get()->Prefix);
+        }
+        if (createDumpTx) {
+            createdEntry->DumpTx = createdEntry->Client->StartTransaction(TStartTransactionOptions().Attributes(createdEntry->TransactionSpec));
         }
         createdEntry->InflightTempTablesLimit = config->InflightTempTablesLimit.Get().GetOrElse(Max<ui32>());
         createdEntry->KeepTables = GetReleaseTempDataMode(*config) == EReleaseTempDataMode::Never;

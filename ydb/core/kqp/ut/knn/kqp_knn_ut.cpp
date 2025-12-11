@@ -338,6 +338,202 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         observer.Remove();
     }
 
+    enum class EVectorType {
+        Float,
+        Bit,
+        Uint8,
+        Int8
+    };
+
+    void DoVectorKnnPushdownTest(EVectorType vectorType) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] {
+            return db.CreateSession().GetValueSync().GetSession();
+        });
+
+        // Create partitioned table
+        {
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder
+                .AddNonNullableColumn("pk", EPrimitiveType::Int64)
+                .AddNonNullableColumn("emb", EPrimitiveType::String)
+                .SetPrimaryKeyColumns({"pk"});
+            tableBuilder.BeginPartitioningSettings()
+                .SetMinPartitionsCount(3)
+            .EndPartitioningSettings();
+            auto partitions = TExplicitPartitions{}
+                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(3).EndTuple().Build())
+                .AppendSplitPoints(TValueBuilder{}.BeginTuple().AddElement().OptionalInt64(5).EndTuple().Build());
+            tableBuilder.SetPartitionAtKeys(partitions);
+            auto result = kikimr.RunCall([&] {
+                return session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TString insertQuery;
+        TString targetVector;
+        TString tagName;
+        i64 expectedMatchPk = 0;
+        switch (vectorType) {
+            case EVectorType::Float:
+                insertQuery = R"(
+                    UPSERT INTO `/Root/TestTable` (pk, emb) VALUES
+                    (1, Untag(Knn::ToBinaryStringFloat([1.0f, 2.0f, 3.0f]), "FloatVector")),
+                    (2, Untag(Knn::ToBinaryStringFloat([4.0f, 5.0f, 6.0f]), "FloatVector")),
+                    (3, Untag(Knn::ToBinaryStringFloat([7.0f, 8.0f, 9.0f]), "FloatVector")),
+                    (4, Untag(Knn::ToBinaryStringFloat([10.0f, 20.0f, 30.0f]), "FloatVector")),
+                    (5, Untag(Knn::ToBinaryStringFloat([13.0f, 14.0f, 15.0f]), "FloatVector")),
+                    (6, Untag(Knn::ToBinaryStringFloat([100.0f, 110.0f, 120.0f]), "FloatVector"));
+                )";
+                targetVector = "Knn::ToBinaryStringFloat([100.0f, 110.0f, 120.0f])";
+                tagName = "FloatVector";
+                expectedMatchPk = 6;
+                break;
+            case EVectorType::Bit:
+                insertQuery = R"(
+                    UPSERT INTO `/Root/TestTable` (pk, emb) VALUES
+                    (1, Untag(Knn::ToBinaryStringBit([0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 1.f]), "BitVector")),
+                    (2, Untag(Knn::ToBinaryStringBit([0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 1.f, 1.f]), "BitVector")),
+                    (3, Untag(Knn::ToBinaryStringBit([0.f, 0.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f]), "BitVector")),
+                    (4, Untag(Knn::ToBinaryStringBit([0.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f, 1.f]), "BitVector")),
+                    (5, Untag(Knn::ToBinaryStringBit([0.f, 0.f, 0.f, 1.f, 1.f, 1.f, 1.f, 1.f]), "BitVector")),
+                    (6, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f]), "BitVector"));
+                )";
+                targetVector = "Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f])";
+                tagName = "BitVector";
+                expectedMatchPk = 6;
+                break;
+            case EVectorType::Uint8:
+                insertQuery = R"(
+                    UPSERT INTO `/Root/TestTable` (pk, emb) VALUES
+                    (1, Untag(Knn::ToBinaryStringUint8([10ut, 20ut, 30ut]), "Uint8Vector")),
+                    (2, Untag(Knn::ToBinaryStringUint8([40ut, 50ut, 60ut]), "Uint8Vector")),
+                    (3, Untag(Knn::ToBinaryStringUint8([70ut, 80ut, 90ut]), "Uint8Vector")),
+                    (4, Untag(Knn::ToBinaryStringUint8([100ut, 110ut, 120ut]), "Uint8Vector")),
+                    (5, Untag(Knn::ToBinaryStringUint8([130ut, 140ut, 150ut]), "Uint8Vector")),
+                    (6, Untag(Knn::ToBinaryStringUint8([200ut, 210ut, 220ut]), "Uint8Vector"));
+                )";
+                targetVector = "Knn::ToBinaryStringUint8([200ut, 210ut, 220ut])";
+                tagName = "Uint8Vector";
+                expectedMatchPk = 6;
+                break;
+            case EVectorType::Int8:
+                insertQuery = R"(
+                    UPSERT INTO `/Root/TestTable` (pk, emb) VALUES
+                    (1, Untag(Knn::ToBinaryStringInt8([10t, 20t, 30t]), "Int8Vector")),
+                    (2, Untag(Knn::ToBinaryStringInt8([40t, 50t, 60t]), "Int8Vector")),
+                    (3, Untag(Knn::ToBinaryStringInt8([70t, 80t, 90t]), "Int8Vector")),
+                    (4, Untag(Knn::ToBinaryStringInt8([-10t, -20t, -30t]), "Int8Vector")),
+                    (5, Untag(Knn::ToBinaryStringInt8([-40t, -50t, -60t]), "Int8Vector")),
+                    (6, Untag(Knn::ToBinaryStringInt8([100t, 110t, 120t]), "Int8Vector"));
+                )";
+                targetVector = "Knn::ToBinaryStringInt8([100t, 110t, 120t])";
+                tagName = "Int8Vector";
+                expectedMatchPk = 6;
+                break;
+            default:
+                UNIT_ASSERT_C(false, "Unexpected vector type");
+        }
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(Q_(insertQuery),
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Setup observer to verify VectorTopK pushdown
+        auto observer = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            auto& read = ev->Get()->Record;
+            UNIT_ASSERT(read.HasVectorTopK());
+            UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetLimit(), 3u);
+        });
+
+        auto runDistanceQuery = [&](const TString& distanceFunc, const TString& orderDir = "") {
+            TString query = TStringBuilder()
+                << "$TargetEmbedding = Untag(" << targetVector << ", \"" << tagName << "\");\n"
+                << "SELECT pk, Knn::" << distanceFunc << "(emb, $TargetEmbedding) AS distance "
+                << "FROM `/Root/TestTable` ORDER BY distance " << orderDir << " LIMIT 3";
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(Q_(query),
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        // CosineDistance (ASC)
+        {
+            auto result = runDistanceQuery("CosineDistance");
+            auto results = ExtractPksAndScores<false>(result.GetResultSetParser(0));
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(results[0].first, expectedMatchPk);
+            CheckDistance(results[0].second, 0.0f);
+        }
+
+        // CosineSimilarity (DESC)
+        {
+            auto result = runDistanceQuery("CosineSimilarity", "DESC");
+            auto results = ExtractPksAndScores<false>(result.GetResultSetParser(0));
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(results[0].first, expectedMatchPk);
+            CheckDistance(results[0].second, 1.0f);
+        }
+
+        // EuclideanDistance (ASC)
+        {
+            auto result = runDistanceQuery("EuclideanDistance");
+            auto results = ExtractPksAndScores<false>(result.GetResultSetParser(0));
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(results[0].first, expectedMatchPk);
+            CheckDistance(results[0].second, 0.0f);
+        }
+
+        // ManhattanDistance (ASC)
+        {
+            auto result = runDistanceQuery("ManhattanDistance");
+            auto results = ExtractPksAndScores<false>(result.GetResultSetParser(0));
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(results[0].first, expectedMatchPk);
+            CheckDistance(results[0].second, 0.0f);
+        }
+
+        // InnerProductSimilarity (DESC)
+        {
+            auto result = runDistanceQuery("InnerProductSimilarity", "DESC");
+            auto results = ExtractPksAndScores<false>(result.GetResultSetParser(0));
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(results[0].first, expectedMatchPk);
+        }
+
+        observer.Remove();
+    }
+
+    Y_UNIT_TEST(FloatVectorKnnPushdown) {
+        DoVectorKnnPushdownTest(EVectorType::Float);
+    }
+
+    Y_UNIT_TEST(BitVectorKnnPushdown) {
+        DoVectorKnnPushdownTest(EVectorType::Bit);
+    }
+
+    Y_UNIT_TEST(Uint8VectorKnnPushdown) {
+        DoVectorKnnPushdownTest(EVectorType::Uint8);
+    }
+
+    Y_UNIT_TEST(Int8VectorKnnPushdown) {
+        DoVectorKnnPushdownTest(EVectorType::Int8);
+    }
+
 }
 
 }

@@ -303,7 +303,10 @@ public:
     bool IsSorted() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
-    bool IsCGComparatorApplicable() const;
+
+    //! Checks if the first `keyColumnCount` columns
+    //! (or all if not specified) are suitable for codegen comparison.
+    bool IsCGComparatorApplicable(std::optional<int> keyColumnCount = std::nullopt) const;
 
     std::optional<int> GetTtlColumnIndex() const;
 

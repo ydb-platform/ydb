@@ -13,52 +13,30 @@
 namespace NKikimr {
 namespace NStat {
 
-struct TColumnStatisticsProbes {
-    struct TProbe {
-        ui64 Value;
-        ui64 Probe;
+namespace {
+
+TTableInfo PrepareTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
+    auto tableInfo = CreateColumnTable(env, databaseName, tableName, 1);
+    InsertDataIntoTable(env, databaseName, tableName, RowsWithFewDistinctValues(1000));
+    return tableInfo;
+}
+
+void ValidateCountMinSketch(TTestActorRuntime& runtime, const TPathId& pathId) {
+    std::vector<TCountMinSketchProbes> expected = {
+        {
+            .Tag = 1, // Key column
+            .Probes = std::nullopt,
+        },
+        {
+            .Tag = 2, // Value column
+            .Probes = { { {"1", 100}, {"2", 100}, {"10", 0} } }
+        }
     };
 
-    ui16 Tag;
-    std::vector<TProbe> Probes;
-};
-
-void CheckColumnStatistics(
-    TTestActorRuntime& runtime, const TPathId& pathId, const TActorId& sender, const std::vector<TColumnStatisticsProbes>& expected
-) {
-    auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
-    evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;
-
-    for (auto item : expected) {
-        NStat::TRequest req;
-        req.PathId = pathId;
-        req.ColumnTag = item.Tag;
-        evGet->StatRequests.push_back(req);
-    }
-
-    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(0));
-    runtime.Send(statServiceId, sender, evGet.release(), 0, true);
-
-    auto res = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
-    auto msg = res->Get();
-
-    UNIT_ASSERT(msg->Success);
-    UNIT_ASSERT( msg->StatResponses.size() == expected.size());
-
-    for (size_t i = 0; i < msg->StatResponses.size(); ++i) {
-        const auto& stat = msg->StatResponses[i];
-        UNIT_ASSERT(stat.Success);
-
-        auto countMin = stat.CountMinSketch.CountMin.get();
-        UNIT_ASSERT(countMin != nullptr);
-
-        for (const auto& item : expected[i].Probes) {
-            ui64 value = item.Value;
-            auto probe = countMin->Probe((const char*)&value, sizeof(ui64));
-            UNIT_ASSERT_VALUES_EQUAL(item.Probe, probe);
-        }
-    }
+    CheckCountMinSketch(runtime, pathId, expected);
 }
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(ColumnStatistics) {
     Y_UNIT_TEST(CountMinSketchStatistics) {
@@ -66,20 +44,10 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-        PrepareColumnTable(env, "Database", "Table1", 1);
-        ui64 saTabletId = 0;
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &saTabletId);
+        const auto tableInfo = PrepareTable(env, "Database", "Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
 
-        Analyze(runtime, saTabletId, {pathId});
-
-        std::vector<TColumnStatisticsProbes> expected = {
-            {
-                .Tag = 1,
-                .Probes{ {1, 4}, {2, 4} }
-            }
-        };
-        auto sender = runtime.AllocateEdgeActor();
-        CheckColumnStatistics(runtime, pathId, sender, expected);
+        ValidateCountMinSketch(runtime, tableInfo.PathId);
     }
 
     Y_UNIT_TEST(CountMinSketchServerlessStatistics) {
@@ -90,27 +58,14 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         CreateServerlessDatabase(env, "Serverless1", "/Root/Shared", 1);
         CreateServerlessDatabase(env, "Serverless2", "/Root/Shared", 1);
 
-        PrepareColumnTable(env, "Serverless1", "Table1", 1);
-        PrepareColumnTable(env, "Serverless2", "Table2", 1);
+        const auto table1 = PrepareTable(env, "Serverless1", "Table1");
+        const auto table2 = PrepareTable(env, "Serverless2", "Table2");
 
-        // Same SA tablet for both serverless databases
-        ui64 saTabletId = 0;
-        auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1", nullptr, &saTabletId);
-        auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
+        Analyze(runtime, table1.SaTabletId, {table1.PathId}, "opId1", "/Root/Serverless1");
+        Analyze(runtime, table2.SaTabletId, {table2.PathId}, "opId1", "/Root/Serverless2");
 
-        Analyze(runtime, saTabletId, {pathId1}, "opId1", "/Root/Serverless1");
-        Analyze(runtime, saTabletId, {pathId2}, "opId1", "/Root/Serverless2");
-
-        auto sender = runtime.AllocateEdgeActor();
-        std::vector<TColumnStatisticsProbes> expected = {
-            {
-                .Tag = 1,
-                .Probes{ {1, 4}, {2, 4} }
-            }
-        };
-
-        CheckColumnStatistics(runtime, pathId1, sender, expected);
-        CheckColumnStatistics(runtime, pathId2, sender, expected);
+        ValidateCountMinSketch(runtime, table1.PathId);
+        ValidateCountMinSketch(runtime, table2.PathId);
     }
 }
 

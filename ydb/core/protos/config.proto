@@ -28,6 +28,7 @@ import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/recoveryshard_config.proto";
 import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
@@ -514,6 +515,7 @@ message TInterconnectConfig {
     optional uint32 RdmaMaxWr = 53 [default = 4096];
     optional bool RdmaChecksum = 54 [default = true];
     optional ERdmaCqMode RdmaCqMode = 55;
+    optional uint32 RdmaMemPoolSizeLimitMb = 56 [default = 4096];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -609,6 +611,7 @@ message TMonitoringConfig {
     optional string RedirectMainPageTo = 13 [default = "monitoring/"];
     optional string MonitoringCertificate = 14 [(Ydb.sensitive) = true];
     optional string MonitoringCertificateFile = 15;
+    optional string MonitoringPrivateKeyFile = 20;
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
@@ -1901,6 +1904,12 @@ message TImmediateControlsConfig {
             DefaultValue: 2 }];
 
         optional TRequestReportingSettings RequestReportingSettings = 12;
+
+        optional uint64 MaxPutTimeoutSeconds = 13 [(ControlOptions) = {
+            Description: "Maximum amount of time TEvPut request can work until it is terminated with DEADLINE status by DSProxy",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 60 }]; // 1 minute
     }
 
     message TPDiskControls {
@@ -2853,6 +2862,7 @@ message TSystemTabletBackupConfig {
         TFilesystemBackend Filesystem = 1;
     }
     repeated fixed64 ExcludeTabletIds = 2;
+    optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
 }
 
 message TAppConfig {
@@ -2965,6 +2975,8 @@ message TAppConfig {
 
     // Built-in AWS client options (used, for example, to interact with S3).
     optional TAwsClientConfig AwsClientConfig = 116;
+
+    optional TRecoveryShardConfig RecoveryShardConfig = 117;
 }
 
 message TYdbVersion {

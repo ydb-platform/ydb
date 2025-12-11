@@ -3,12 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 SRCS(
     kqp_knn_ut.cpp

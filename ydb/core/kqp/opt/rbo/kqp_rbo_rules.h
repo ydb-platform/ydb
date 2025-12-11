@@ -55,6 +55,16 @@ class TPushMapRule : public ISimplifiedRule {
 };
 
 /**
+ * Push limit into sort operator
+ */
+class TPushLimitIntoSortRule : public ISimplifiedRule {
+  public:
+    TPushLimitIntoSortRule() : ISimplifiedRule("Push limit into sort operator", ERuleProperties::RequireParents) {}
+
+    virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Push down filter through joins, adding join conditions to the join operator and potentially
  * converting left join into inner join
  */

@@ -7,15 +7,6 @@
 
 namespace NSQLTranslationV1 {
 
-bool Init(TContext& ctx, ISource* src, const TVector<TNodePtr>& nodes) {
-    for (const TNodePtr& node : nodes) {
-        if (!node->Init(ctx, src)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 class TYqlTableRefNode final: public INode, private TYqlTableRefArgs {
 public:
     TYqlTableRefNode(TPosition position, TYqlTableRefArgs&& args)
@@ -179,6 +170,7 @@ public:
         if (!InitProjection(ctx, src) ||
             !InitSource(ctx, src) ||
             (Where && !Where->GetRef().Init(ctx, src)) ||
+            (GroupBy && !NSQLTranslationV1::Init(ctx, src, GroupBy->Keys)) ||
             !InitOrderBy(ctx, src) ||
             (Limit && !Limit->GetRef().Init(ctx, src)) ||
             (Offset && !Offset->GetRef().Init(ctx, src))) {
@@ -231,6 +223,10 @@ public:
             }
 
             item->Add(Q(Y(Q("where"), Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), *Where)))));
+        }
+
+        if (GroupBy) {
+            item->Add(Q(Y(Q("group_by"), Q(BuildGroupBy(*GroupBy)))));
         }
 
         if (OrderBy) {
@@ -308,7 +304,7 @@ private:
         }
 
         for (const auto& constraint : Source->Constraints) {
-            if (!constraint.Condition->Init(ctx, src)) {
+            if (constraint.Condition && !constraint.Condition->Init(ctx, src)) {
                 return false;
             }
         }
@@ -419,9 +415,37 @@ private:
     }
 
     TNodePtr BuildJoinConstraint(const TYqlJoinConstraint& constraint) const {
+        // YQL has no IMPLICIT CROSS JOIN (COMMA) over JOIN precedence.
+        // Consider the following query:
+        // FROM       (VALUES (01)      ) AS a(a)
+        // CROSS JOIN (VALUES (10)      ) AS b(b) -- 'CROSS JOIN' <-> ','
+        // RIGHT JOIN (VALUES (10), (00)) AS c(c) ON b.b = c.c;
+
+        EYqlJoinKind kind = constraint.Kind;
+        if (constraint.Kind == EYqlJoinKind::Cross) {
+            kind = EYqlJoinKind::Inner;
+        }
+
+        TNodePtr condition = constraint.Condition;
+        if (constraint.Kind == EYqlJoinKind::Cross) {
+            condition = Y("Bool", Q("true"));
+        }
+
         return Q(Y(
-            Q(ToString(constraint.Kind)),
-            Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), constraint.Condition))));
+            Q(ToString(kind)),
+            Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), std::move(condition)))));
+    }
+
+    TNodePtr BuildGroupBy(const TGroupBy& groupBy) const {
+        TNodePtr clause = Y();
+        for (TNodePtr key : groupBy.Keys) {
+            clause = L(std::move(clause), BuildYqlGroup(std::move(key)));
+        }
+        return clause;
+    }
+
+    TNodePtr BuildYqlGroup(TNodePtr node) const {
+        return Y("YqlGroup", Y("Void"), Y("lambda", Q(Y()), std::move(node)));
     }
 
     TNodePtr BuildSortSpecification(const TVector<TSortSpecificationPtr>& keys) const {
@@ -439,6 +463,8 @@ private:
 
     static TString ToString(EYqlJoinKind kind) {
         switch (kind) {
+            case EYqlJoinKind::Cross:
+                return "cross";
             case EYqlJoinKind::Inner:
                 return "inner";
             case EYqlJoinKind::Left:

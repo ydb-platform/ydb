@@ -284,6 +284,7 @@ private:
 
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
+    std::vector<TStatisticsItem> StatisticsToSave;
     bool PendingDeleteStatistics = false;
 
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;

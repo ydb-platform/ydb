@@ -9,6 +9,8 @@ SRCS(
     analyze_actor.cpp
     schema.h
     schema.cpp
+    select_builder.h
+    select_builder.cpp
     tx_ack_timeout.cpp
     tx_aggr_stat_response.cpp
     tx_analyze.cpp

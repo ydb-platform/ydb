@@ -39,6 +39,7 @@ struct TClusterStateSettings : public TOperationRequestSettings<TClusterStateSet
     FLUENT_SETTING_OPTIONAL(uint32_t, DurationSeconds);
     FLUENT_SETTING_OPTIONAL(uint32_t, PeriodSeconds);
     FLUENT_SETTING_OPTIONAL(bool, NoSanitize);
+    FLUENT_SETTING_OPTIONAL(bool, CountersOnly);
 };
 
 

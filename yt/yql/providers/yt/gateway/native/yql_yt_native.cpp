@@ -5678,7 +5678,10 @@ private:
         TString tmpFolder = GetTablesTmpFolder(*config, execCtx->Cluster_);
 
         auto entry = execCtx->GetEntry();
-        YQL_ENSURE(entry->DumpTx);
+        YQL_ENSURE(entry->DumpTx, "Dump tx is not available");
+
+        auto tmpParentPath = NYql::TransformPath(tmpFolder, "tmp/", true, execCtx->Session_->UserName_);
+        CreateParents({tmpParentPath}, entry->Client);
 
         auto queryDumpAccount = config->_QueryDumpAccount.Get(execCtx->Cluster_);
         YQL_ENSURE(queryDumpAccount.Defined());

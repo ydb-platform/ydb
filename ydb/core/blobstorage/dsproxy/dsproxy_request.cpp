@@ -251,6 +251,7 @@ namespace NKikimr {
                     .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                     .AccelerationParams = GetAccelerationParams(),
                     .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
+                    .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
                 }),
                 ev->Get()->Deadline
             );
@@ -563,6 +564,7 @@ namespace NKikimr {
             if (CurrentStateFunc() == &TThis::StateWork) {
                 TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
                 bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
+                TInstant now = TActivationContext::Now();
                 // TODO(alexvru): MinLatency support
                 auto process = [&](std::optional<ui32> forceGroupGeneration, TBatchedPutQueue& batch) {
                     if (batch.Queue.size() == 1) {
@@ -588,7 +590,8 @@ namespace NKikimr {
                                 .Stats = PerDiskStats,
                                 .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                                 .AccelerationParams = GetAccelerationParams(),
-                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
+                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
+                                .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
                             }),
                             ev->Get()->Deadline
                         );
@@ -612,7 +615,8 @@ namespace NKikimr {
                                 .Tactic = tactic,
                                 .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                                 .AccelerationParams = GetAccelerationParams(),
-                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
+                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
+                                .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
                             }),
                             TInstant::Max()
                         );

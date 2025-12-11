@@ -8,18 +8,25 @@ namespace NYdb::inline Dev {
 
 bool IsTokenCorrect(const std::string& in) {
     for (char c : in) {
-        if (!(IsAsciiAlnum(c) || IsAsciiPunct(c) || c == ' '))
+        if (!(IsAsciiAlnum(c) || IsAsciiPunct(c) || c == ' ')) {
             return false;
+        }
     }
     return true;
 }
 
 std::string GetAuthInfo(TDbDriverStatePtr p) {
-    auto token = p->CredentialsProvider->GetAuthInfo();
-    if (!IsTokenCorrect(token)) {
-        throw TContractViolation("token is incorrect, illegal characters found");
+    try {
+        auto token = p->CredentialsProvider->GetAuthInfo();
+        if (!IsTokenCorrect(token)) {
+            throw TAuthenticationError("token is incorrect, illegal characters found");
+        }
+        return token;
+    } catch (const TAuthenticationError& e) {
+        throw e;
+    } catch (const std::exception& e) {
+        throw TAuthenticationError(TStringBuilder() << "Can't get Authentication info from CredentialsProvider. " << e.what());
     }
-    return token;
 }
 
 void SetDatabaseHeader(TCallMeta& meta, const std::string& database) {
@@ -440,6 +447,42 @@ void TGRpcConnectionsImpl::EnqueueResponse(IObjectInQueue* action) {
     ResponseQueue_->Post([action]() {
         action->Process(nullptr);
     });
+}
+
+TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestSettings, const TDbDriverStatePtr& dbState) const {
+    TCallMeta meta;
+    meta.Timeout = requestSettings.Deadline;
+#ifndef YDB_GRPC_UNSECURE_AUTH
+    meta.CallCredentials = dbState->CallCredentials;
+#else
+    if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
+        meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState)});
+    }
+#endif
+    if (!requestSettings.TraceId.empty()) {
+        meta.Aux.push_back({YDB_TRACE_ID_HEADER, requestSettings.TraceId});
+    }
+
+    if (!requestSettings.RequestType.empty()) {
+        meta.Aux.push_back({YDB_REQUEST_TYPE_HEADER, requestSettings.RequestType});
+    }
+
+    if (!requestSettings.TraceParent.empty()) {
+        meta.Aux.push_back({OTEL_TRACE_HEADER, requestSettings.TraceParent});
+    }
+
+    if (!dbState->Database.empty()) {
+        // See TDbDriverStateTracker::GetDriverState to find place where we do quote non ASCII characters
+        meta.Aux.push_back({YDB_DATABASE_HEADER, dbState->Database});
+    }
+
+    static const std::string clientPid = GetClientPIDHeaderValue();
+
+    meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
+    meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
+    meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
+
+    return meta;
 }
 
 } // namespace NYdb

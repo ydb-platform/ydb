@@ -64,6 +64,7 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/protos/recoveryshard_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
@@ -611,9 +612,8 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.Certificate = appConfig.GetMonitoringConfig().GetMonitoringCertificate();
         monConfig.MaxRequestsPerSecond = appConfig.GetMonitoringConfig().GetMaxRequestsPerSecond();
         monConfig.InactivityTimeout = TDuration::Parse(appConfig.GetMonitoringConfig().GetInactivityTimeout());
-        if (appConfig.GetMonitoringConfig().HasMonitoringCertificateFile()) {
-            monConfig.Certificate = TUnbufferedFileInput(appConfig.GetMonitoringConfig().GetMonitoringCertificateFile()).ReadAll();
-        }
+        monConfig.CertificateFile = appConfig.GetMonitoringConfig().GetMonitoringCertificateFile();
+        monConfig.PrivateKeyFile = appConfig.GetMonitoringConfig().GetMonitoringPrivateKeyFile();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
         if (includeHostName) {
             if (appConfig.HasNameserviceConfig() && appConfig.GetNameserviceConfig().NodeSize() > 0) {
@@ -1559,6 +1559,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasDataIntegrityTrailsConfig()) {
         AppData->DataIntegrityTrailsConfig = runConfig.AppConfig.GetDataIntegrityTrailsConfig();
+    }
+
+    if (runConfig.AppConfig.HasRecoveryShardConfig()) {
+        AppData->RecoveryShardConfig = runConfig.AppConfig.GetRecoveryShardConfig();
     }
 
     // setup resource profiles

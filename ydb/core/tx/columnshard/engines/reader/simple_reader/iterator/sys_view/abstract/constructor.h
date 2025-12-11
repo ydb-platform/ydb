@@ -8,88 +8,25 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NAbstract {
 
-class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
+class TDataSourceConstructor: public NCommon::TDataSourceConstructor {
 private:
-    ui64 TabletId;
-    ui32 SourceId = 0;
-    NArrow::TSimpleRow Start;
-    NArrow::TSimpleRow Finish;
-    ui32 SourceIdx = 0;
-    bool SourceIdxInitialized = false;
+    YDB_READONLY_DEF(ui64, TabletId);
 
-    virtual ui64 DoGetEntityId() const override {
-        return SourceId;
-    }
     virtual ui64 DoGetEntityRecordsCount() const override {
         return 0;
     }
 
 public:
-    ui32 GetSourceId() const {
-        return SourceId;
+    TDataSourceConstructor(const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish)
+        : NCommon::TDataSourceConstructor(TReplaceKeyAdapter(std::move(start), false), TReplaceKeyAdapter(std::move(finish), false))
+        , TabletId(tabletId)
+    {
     }
-
-    void SetIndex(const ui32 index) {
-        AFL_VERIFY(!SourceIdxInitialized);
-        SourceIdxInitialized = true;
-        SourceIdx = index;
-    }
-
-    ui64 GetTabletId() const {
-        return TabletId;
-    }
-    ui32 GetSourceIdx() const {
-        AFL_VERIFY(SourceIdxInitialized);
-        return SourceIdx;
-    }
-
-    NArrow::TSimpleRow ExtractStart() {
-        return std::move(Start);
-    }
-
-    NArrow::TSimpleRow ExtractFinish() {
-        return std::move(Finish);
-    }
-
-    TDataSourceConstructor(const ui64 tabletId, const ui32 sourceId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish)
-        : TabletId(tabletId)
-        , SourceId(sourceId)
-        , Start(std::move(start))
-        , Finish(std::move(finish)) {
-        AFL_VERIFY(SourceId);
-    }
-
-    const NArrow::TSimpleRow& GetStart() const {
-        return Start;
-    }
-    const NArrow::TSimpleRow& GetFinish() const {
-        return Finish;
-    }
-
-    class TComparator {
-    private:
-        const ERequestSorting Sorting;
-
-    public:
-        TComparator(const ERequestSorting sorting)
-            : Sorting(sorting) {
-            AFL_VERIFY(Sorting != ERequestSorting::NONE);
-        }
-
-        bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
-            if (Sorting == ERequestSorting::DESC) {
-                return l.Finish < r.Finish;
-            } else {
-                return r.Start < l.Start;
-            }
-        }
-    };
 };
 
 template <class TDataSourceConstructorImpl>
 class TConstructor: public NCommon::ISourcesConstructor {
 private:
-    ui32 CurrentSourceIdx = 0;
     virtual void DoClear() override {
         Constructors.Clear();
     }
@@ -102,7 +39,6 @@ private:
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext(
         const std::shared_ptr<NCommon::TSpecialReadContext>& context, const ui32 /*inFlightCurrentLimit*/) override final {
         auto constructor = Constructors.PopFront();
-        constructor.SetIndex(CurrentSourceIdx++);
         return constructor.Construct(context);
     }
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) override {

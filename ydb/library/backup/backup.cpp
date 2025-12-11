@@ -768,17 +768,27 @@ inline TString Interval(const TDuration& value) {
     return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
 }
 
+TString GetSecretSettingName(TStringBuf secretName, const TString& secretSettingPrefix) {
+    return secretName.StartsWith('/') ? secretSettingPrefix + "_PATH" : secretSettingPrefix + "_NAME";
+}
+
+void AddSecretSettingIfNotEmpty(const std::string& secretName, const TString& secretSettingName, TVector<TString>& options) {
+    if (!secretName.empty()) {
+        options.push_back(BuildOption(GetSecretSettingName(secretName, secretSettingName).c_str(), Quote(secretName)));
+    }
+}
+
 void AddConnectionOptions(const NReplication::TConnectionParams& connectionParams, TVector<TString>& options) {
     options.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(connectionParams))));
     switch (connectionParams.GetCredentials()) {
         case NReplication::TConnectionParams::ECredentials::Static:
             options.push_back(BuildOption("USER", Quote(connectionParams.GetStaticCredentials().User)));
-            options.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(connectionParams.GetStaticCredentials().PasswordSecretName)));
+            AddSecretSettingIfNotEmpty(connectionParams.GetStaticCredentials().PasswordSecretName,
+                "PASSWORD_SECRET", options);
             break;
         case NReplication::TConnectionParams::ECredentials::OAuth:
-            if (const auto& secret = connectionParams.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
-                options.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
-            }
+            AddSecretSettingIfNotEmpty(connectionParams.GetOAuthCredentials().TokenSecretName,
+                "TOKEN_SECRET", options);
             break;
     }
 }
@@ -912,7 +922,7 @@ TString BuildCreateTransferQuery(
             name.c_str(), 
             desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), lambdaName.c_str(),
             JoinSeq(",\n", options).c_str()
-        );        
+        );
 }
 
 } // namespace
@@ -958,9 +968,14 @@ void CanonizeForBackup(Ydb::Table::DescribeExternalDataSourceResult& desc) {
     desc.mutable_properties()->erase("REFERENCES");
 }
 
-TString BuildCreateExternalDataSourceQuery(const Ydb::Table::DescribeExternalDataSourceResult& description) {
+TString BuildCreateExternalDataSourceQuery(
+    const Ydb::Table::DescribeExternalDataSourceResult& description,
+    const TString& db)
+{
     return std::format(
+        "-- database: \"{}\"\n"
         "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}` WITH (\n{},\n{}{}\n);",
+        db.c_str(),
         description.self().name().c_str(),
         ToString("SOURCE_TYPE", description.source_type()),
         ToString("LOCATION", description.location()),
@@ -973,7 +988,7 @@ TString BuildCreateExternalDataSourceQuery(const Ydb::Table::DescribeExternalDat
 
 }
 
-void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+void BackupExternalDataSource(TDriver driver, const TString& db, const TString& dbPath, const TFsPath& fsBackupFolder) {
     Y_ENSURE(!dbPath.empty());
     LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
@@ -981,7 +996,7 @@ void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPa
     NTable::TTableClient client(driver);
     VerifyStatusOrSkip(NDump::DescribeExternalDataSource(client, dbPath, description), "error describing external data source");
     CanonizeForBackup(description);
-    const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
+    const auto creationQuery = BuildCreateExternalDataSourceQuery(description, db);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalDataSource());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -1168,7 +1183,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 } else if (dbIt.IsReplication()) {
                     BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 } else if (dbIt.IsExternalDataSource()) {
-                    BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
+                    BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsExternalTable()) {
                     BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsSystemView()) {

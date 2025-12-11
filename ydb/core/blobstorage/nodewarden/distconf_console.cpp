@@ -119,7 +119,6 @@ namespace NKikimr::NStorage {
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNotNeeded:
                 // it's okay, just wait for another configuration change or something like that
-                ConfigCommittedToConsole = true;
                 ProposedConfigHashVersion.reset();
                 break;
 
@@ -148,10 +147,10 @@ namespace NKikimr::NStorage {
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::NotCommitted:
+                STLOG(PRI_ERROR, BS_NODE, NWDC46, "failed to commit config to Console", (Record, ev->Get()->Record));
                 break;
 
             case NKikimrBlobStorage::TEvControllerConsoleCommitResponse::Committed:
-                ConfigCommittedToConsole = true;
                 break;
         }
 
@@ -190,7 +189,6 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::OnConsolePipeError() {
         ConsolePipeId = {};
         ConsoleConnected = false;
-        ConfigCommittedToConsole = false;
         ProposedConfigHashVersion.reset();
         ProposeRequestInFlight = false;
         ++CommitRequestCookie; // to prevent processing any messages

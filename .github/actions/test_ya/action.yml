@@ -310,12 +310,9 @@ runs:
           if [ true = ${{ inputs.run_tests }} ]; then
             YA_MAKE_COMMAND+=" --retest"
           fi
-          CONTEXT_TMP_PATH=$(realpath context_tmp.json)
           $YA_MAKE_COMMAND -k --cache-tests \
-            --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_TMP_PATH \
+            --save-graph-to $GRAPH_PATH --save-context-to $CONTEXT_PATH \
             $YA_MAKE_TARGET
-          # DEVTOOLSSUPPORT-73480
-          cat $CONTEXT_TMP_PATH | jq --slurpfile graph $GRAPH_PATH '.graph=$graph[]' > $CONTEXT_PATH
         fi
 
         # Scripts to checkout from main

@@ -366,10 +366,10 @@ enum ECumulativeCounters {
     COUNTER_BORROWED_COMPACTION_OK = 76                   [(CounterOpts) = {Name: "BorrowedCompactionOK"}];
     COUNTER_BORROWED_COMPACTION_TIMEOUT = 77              [(CounterOpts) = {Name: "BorrowedCompactionTimeout"}];
 
-    COUNTER_FORCED_COMPACTION_OK = 81                     [(CounterOpts) = {Name: "ForcedCompactionOK"}];
-    COUNTER_FORCED_COMPACTION_TIMEOUT = 82                [(CounterOpts) = {Name: "ForcedCompactionTimeout"}];
+    COUNTER_FORCED_COMPACTION_OK = 78                     [(CounterOpts) = {Name: "ForcedCompactionOK"}];
+    COUNTER_FORCED_COMPACTION_TIMEOUT = 79                [(CounterOpts) = {Name: "ForcedCompactionTimeout"}];
 
-    COUNTER_FINISHED_OPS_TxCreateBlobDepot = 78           [(CounterOpts) = {Name: "FinishedOps/CreateBlobDepot"}];
+    COUNTER_FINISHED_OPS_TxCreateBlobDepot = 80           [(CounterOpts) = {Name: "FinishedOps/CreateBlobDepot"}];
     COUNTER_FINISHED_OPS_TxAlterBlobDepot = 79            [(CounterOpts) = {Name: "FinishedOps/AlterBlobDepot"}];
     COUNTER_FINISHED_OPS_TxDropBlobDepot = 80             [(CounterOpts) = {Name: "FinishedOps/DropBlobDepot"}];
 
@@ -445,6 +445,9 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateStreamingQuery = 130 [(CounterOpts) = {Name: "FinishedOps/CreateStreamingQuery"}];
     COUNTER_FINISHED_OPS_TxDropStreamingQuery = 131   [(CounterOpts) = {Name: "FinishedOps/DropStreamingQuery"}];
     COUNTER_FINISHED_OPS_TxAlterStreamingQuery = 132  [(CounterOpts) = {Name: "FinishedOps/AlterStreamingQuery"}];
+
+    COUNTER_FORCED_COMPACTION_OK_TOTAL = 133                     [(CounterOpts) = {Name: "ForcedCompactionOKTotal"}];
+    COUNTER_FORCED_COMPACTION_TIMEOUT_TOTAL = 134                [(CounterOpts) = {Name: "ForcedCompactionTimeoutTotal"}];
 }
 
 enum EPercentileCounters {

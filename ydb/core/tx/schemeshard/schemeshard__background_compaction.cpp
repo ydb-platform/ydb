@@ -82,6 +82,49 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
         record.GetPathId().GetOwnerId(),
         record.GetPathId().GetLocalId());
 
+    // Check if this is a forced compaction result
+    bool isForcedCompaction = RunningForcedCompactions.contains(shardIdx);
+
+    if (isForcedCompaction) {
+        // Handle forced compaction
+        auto duration = ForcedCompactionQueue->OnDone(shardIdx);
+
+        if (shardIdx == InvalidShardIdx) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Finished forced compaction of unknown shard "
+                "for pathId# " << pathId << ", datashard# " << tabletId
+                << " in# " << duration.MilliSeconds()
+                << ", next wakeup# " << ForcedCompactionQueue->GetWakeupDelta()
+                << ", rate# " << ForcedCompactionQueue->GetRate()
+                << ", in queue# " << ForcedCompactionQueue->Size() << " shards"
+                << ", running# " << ForcedCompactionQueue->RunningSize() << " shards"
+                << " at schemeshard " << TabletID());
+        } else {
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Finished forced compaction "
+                "for pathId# " << pathId << ", datashard# " << tabletId
+                << ", shardIdx# " << shardIdx
+                << " in# " << duration.MilliSeconds()
+                << ", next wakeup# " << ForcedCompactionQueue->GetWakeupDelta()
+                << ", rate# " << ForcedCompactionQueue->GetRate()
+                << ", in queue# " << ForcedCompactionQueue->Size() << " shards"
+                << ", running# " << ForcedCompactionQueue->RunningSize() << " shards"
+                << " at schemeshard " << TabletID());
+
+            // Update tracking
+            auto tableIt = ForcedCompactionsByTable.find(pathId);
+            if (tableIt != ForcedCompactionsByTable.end()) {
+                tableIt->second.CompactedShards++;
+                tableIt->second.RunningShards.erase(shardIdx);
+                tableIt->second.QueuedShards.erase(shardIdx);
+            }
+        }
+
+        RunningForcedCompactions.erase(shardIdx);
+        TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_OK_TOTAL].Increment(1);
+        UpdateForcedCompactionQueueMetrics();
+        return;
+    }
+
+    // Handle background compaction
     // it's OK to OnDone InvalidShardIdx
     // move shard to the end of all queues
     TInstant now = AppData(ctx)->TimeProvider->Now();

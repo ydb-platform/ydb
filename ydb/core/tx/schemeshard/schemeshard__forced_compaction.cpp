@@ -46,7 +46,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
 
 void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
     UpdateForcedCompactionQueueMetrics();
-    TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_TIMEOUT].Increment(1);
+    TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_TIMEOUT_TOTAL].Increment(1);
 
     RunningForcedCompactions.erase(shardIdx);
 
@@ -150,53 +150,6 @@ void TSchemeShard::UpdateForcedCompactionQueueMetrics() {
 
     TabletCounters->Simple()[COUNTER_FORCED_COMPACTION_QUEUE_SIZE].Set(ForcedCompactionQueue->Size());
     TabletCounters->Simple()[COUNTER_FORCED_COMPACTION_QUEUE_RUNNING].Set(ForcedCompactionQueue->RunningSize());
-}
-
-void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
-    const auto& record = ev->Get()->Record;
-
-    const TTabletId tabletId(record.GetTabletId());
-    const TShardIdx shardIdx = GetShardIdx(tabletId);
-
-    auto pathId = TPathId(
-        record.GetPathId().GetOwnerId(),
-        record.GetPathId().GetLocalId());
-
-    auto duration = ForcedCompactionQueue->OnDone(shardIdx);
-
-    if (shardIdx == InvalidShardIdx) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Finished forced compaction of unknown shard "
-            "for pathId# " << pathId << ", datashard# " << tabletId
-            << " in# " << duration.MilliSeconds()
-            << ", next wakeup# " << ForcedCompactionQueue->GetWakeupDelta()
-            << ", rate# " << ForcedCompactionQueue->GetRate()
-            << ", in queue# " << ForcedCompactionQueue->Size() << " shards"
-            << ", running# " << ForcedCompactionQueue->RunningSize() << " shards"
-            << " at schemeshard " << TabletID());
-    } else {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Finished forced compaction "
-            "for pathId# " << pathId << ", datashard# " << tabletId
-            << ", shardIdx# " << shardIdx
-            << " in# " << duration.MilliSeconds()
-            << ", next wakeup# " << ForcedCompactionQueue->GetWakeupDelta()
-            << ", rate# " << ForcedCompactionQueue->GetRate()
-            << ", in queue# " << ForcedCompactionQueue->Size() << " shards"
-            << ", running# " << ForcedCompactionQueue->RunningSize() << " shards"
-            << " at schemeshard " << TabletID());
-
-        // Update tracking
-        auto tableIt = ForcedCompactionsByTable.find(pathId);
-        if (tableIt != ForcedCompactionsByTable.end()) {
-            tableIt->second.CompactedShards++;
-            tableIt->second.RunningShards.erase(shardIdx);
-            tableIt->second.QueuedShards.erase(shardIdx);
-        }
-    }
-
-    RunningForcedCompactions.erase(shardIdx);
-
-    TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_OK].Increment(1);
-    UpdateForcedCompactionQueueMetrics();
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvForceCompaction::TPtr &ev, const TActorContext &ctx) {

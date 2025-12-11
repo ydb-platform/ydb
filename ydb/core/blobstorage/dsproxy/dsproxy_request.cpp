@@ -586,6 +586,7 @@ namespace NKikimr {
                                     .ExecutionRelay = ev->Get()->ExecutionRelay,
                                     .LatencyQueueKind = kind,
                                     .ForceGroupGeneration = forceGroupGeneration,
+                                    .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                                 },
                                 .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                                 .Stats = PerDiskStats,

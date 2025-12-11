@@ -1117,21 +1117,27 @@ struct TEvBlobStorage {
 
         TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(id, TRope(std::move(buffer)), deadline, handleClass, tactic, issueKeepFlag)
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false,
+               std::optional<TMessageRelevanceWatcher> externalRelevanceWatcher = std::nullopt)
+            : TEvPut(id, TRope(std::move(buffer)), deadline, handleClass, tactic, issueKeepFlag,
+                    /*ignoreBlock=*/false, std::move(externalRelevanceWatcher))
         {}
 
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag)
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false,
+               std::optional<TMessageRelevanceWatcher> externalRelevanceWatcher = std::nullopt)
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag,
+                    /*ignoreBlock=*/false, std::move(externalRelevanceWatcher))
         {}
 
 
         TEvPut(const TLogoBlobID &id, const TSharedData &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag)
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false,
+               std::optional<TMessageRelevanceWatcher> externalRelevanceWatcher = std::nullopt)
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag,
+                    /*ignoreBlock=*/false, std::move(externalRelevanceWatcher))
         {}
 
         TString Print(bool isFull) const {

@@ -853,7 +853,7 @@ public:
         }
 
         if (deadline != TInstant::Max()) {
-            Schedule(deadline, new TKikimrEvents::TEvWakeup);
+            Schedule(std::min(now + DsMaximumDelayBetweenPutWakeups, deadline), new TKikimrEvents::TEvWakeup);
         }
     }
 

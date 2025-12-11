@@ -38,6 +38,7 @@ const ui64 UnconfiguredBufferSizeLimit = 32 << 20;
 const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(5);
 
 const TDuration DsMinimumDelayBetweenPutWakeups = TDuration::Seconds(1);
+const TDuration DsMaximumDelayBetweenPutWakeups = TDuration::Seconds(60);
 
 const ui64 BufferSizeThreshold = 1 << 20;
 

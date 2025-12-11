@@ -4456,11 +4456,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
+            case EPathTypeTestShard:
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
             case EPathTypeSolomonVolume:
             case EPathTypeFileStore:
-            case EPathTypeTestShard:
                 break; // other projects
             case EPathTypeStreamingQuery:
                 break; // https://github.com/ydb-platform/ydb/issues/22571

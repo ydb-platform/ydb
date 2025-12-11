@@ -665,8 +665,8 @@
                 {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "First", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Second", "Type": "TExprBase"},
-                {"Index": 3, "Name": "Third", "Type": "TExprBase"}
-
+                {"Index": 3, "Name": "Third", "Type": "TExprBase"},
+                {"Index": 4, "Name": "OpType", "Type": "TExprBase"}
             ]
         },
         {

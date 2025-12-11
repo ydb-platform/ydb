@@ -25,7 +25,7 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     , Batch(this)
 {
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
-    Metrics.MessageLocks.Initialize(MLP_LOCKS_INTERVALS, sizeof(MLP_LOCKS_INTERVALS), true);
+    Metrics.MessageLocks.Initialize(MLP_LOCKS_INTERVALS, std::size(MLP_LOCKS_INTERVALS), true);
 }
 
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {

@@ -68,7 +68,7 @@ void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
 
 void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvMLPConsumerState " << ev->Get()->Metrics.ShortDebugString());
-    auto it = MLPConsumers.find(ev->Get()->Metrics.GetConsumerName());
+    auto it = MLPConsumers.find(ev->Get()->Metrics.GetConsumer());
     if (it == MLPConsumers.end()) {
         return;
     }

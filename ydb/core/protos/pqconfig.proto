@@ -781,26 +781,10 @@ message TAggregatedCounters {
     }
 
     message TMLPConsumerCounters {
-        optional string ConsumerName = 1;
-        optional uint32 PartitionId = 2;
+        optional string Consumer = 1;
 
-        optional uint64 InflightMessageCount = 3;
-        optional uint64 UnprocessedMessageCount = 4;
-        optional uint64 LockedMessageCount = 5;
-        optional uint64 LockedMessageGroupCount = 6;
-        optional uint64 DelayedMessageCount = 7;
-        optional uint64 CommittedMessageCount = 8;
-        optional uint64 DeadlineExpiredMessageCount = 9; // ???
-        optional uint64 DLQMessageCount = 10;
-
-        optional uint64 TotalCommittedMessageCount = 11;
-        optional uint64 TotalMovedToDLQMessageCount = 12;
-        optional uint64 TotalScheduledToDLQMessageCount = 13;
-        optional uint64 TotalPurgedMessageCount = 14;
-        optional uint64 TotalDeletedByDeadlinePolicyMessageCount = 15;
-        optional uint64 TotalDeletedByRetentionMessageCount = 16;
-
-        repeated uint64 MessageLocksValues = 17;
+        repeated uint64 CountersValues = 2;
+        repeated uint64 MessageLocksValues = 3;
     }
 }
 

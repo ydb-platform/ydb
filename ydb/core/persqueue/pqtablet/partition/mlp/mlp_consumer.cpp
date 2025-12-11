@@ -3,6 +3,7 @@
 
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
+#include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
 namespace NKikimr::NPQ::NMLP {
@@ -816,24 +817,20 @@ void TConsumerActor::UpdateMetrics() {
     auto& metrics = Storage->GetMetrics();
 
     NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters counters;
-    counters.SetConsumerName(Config.GetName());
-    counters.SetPartitionId(PartitionId);
+    counters.SetConsumer(Config.GetName());
 
-    counters.SetInflightMessageCount(metrics.InflightMessageCount);
-    counters.SetUnprocessedMessageCount(metrics.UnprocessedMessageCount);
-    counters.SetLockedMessageCount(metrics.LockedMessageCount);
-    counters.SetLockedMessageGroupCount(metrics.LockedMessageGroupCount);
-    counters.SetDelayedMessageCount(metrics.DelayedMessageCount);
-    counters.SetCommittedMessageCount(metrics.CommittedMessageCount);
-    counters.SetDeadlineExpiredMessageCount(metrics.DeadlineExpiredMessageCount);
-    counters.SetDLQMessageCount(metrics.DLQMessageCount);
-
-    counters.SetTotalCommittedMessageCount(metrics.TotalCommittedMessageCount);
-    counters.SetTotalMovedToDLQMessageCount(metrics.TotalMovedToDLQMessageCount);
-    counters.SetTotalScheduledToDLQMessageCount(metrics.TotalScheduledToDLQMessageCount);
-    counters.SetTotalPurgedMessageCount(metrics.TotalPurgedMessageCount);
-    counters.SetTotalDeletedByDeadlinePolicyMessageCount(metrics.TotalDeletedByDeadlinePolicyMessageCount);
-    counters.SetTotalDeletedByRetentionMessageCount(metrics.TotalDeletedByRetentionMessageCount);
+    auto* values = counters.MutableCountersValues();
+    values->Resize(10, 0);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_COMMITTED_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_LOCKED_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_DELAYED_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_UNLOCKED_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_COMMITTED_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_MOVED_TO_DLQ_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_DELETED_BY_RETENTION_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_DELETED_BY_DEADLINE_POLICY_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_PURGED_COUNT, metrics.CommittedMessageCount);
 
     for (size_t i = 0; i < metrics.MessageLocks.GetRangeCount(); ++i) {
         counters.AddMessageLocksValues(metrics.MessageLocks.GetRangeValue(i));

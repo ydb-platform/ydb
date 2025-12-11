@@ -674,7 +674,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
                 });
                 info.MessageLockAttemptsCounter = DynamicCounters->GetExpiringNamedHistogram("name", "topic.message_lock_attempts", std::move(collector));
                 info.MessageLockAttemptsAggregator.Reset(new TTabletPercentileCounter());
-                info.MessageLockAttemptsAggregator->Initialize(MLP_LOCKS_INTERVALS, sizeof(MLP_LOCKS_INTERVALS), true);
+                info.MessageLockAttemptsAggregator->Initialize(MLP_LOCKS_INTERVALS, std::size(MLP_LOCKS_INTERVALS), true);
             }
 
             info.MessageLockAttemptsAggregator->Clear();
@@ -684,6 +684,9 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             info.MessageLockAttemptsCounter = nullptr;
         }
     }
+
+    NKikimrPQ::TAggregatedCounters aggregatedCounters;
+    aggregatedCounters.MutableValues()->Resize(9, 0);
 
     /*** apply counters ****/
 
@@ -699,25 +702,32 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         }
     };
 
-    for (auto it = AggregatedStats.Stats.begin(); it != AggregatedStats.Stats.end(); ++it) {
-        auto& partitionStats = it->second;
+    auto collect = [&](auto& aggregated, const auto& values) {
+        size_t count = std::min(aggregated.size(), values.size());
+        for (size_t i = 0; i < count; ++i) {
+            aggregated[i] += values[i];
+        }
+    };
 
+    for (auto& [_, partitionStats] : AggregatedStats.Stats) {
         if (!partitionStats.HasCounters) {
             continue;
         }
 
-        setCounters(labeledCounters, partitionStats.Counters);
+        auto& partitionCounters = partitionStats.Counters;
+
+        setCounters(labeledCounters, partitionCounters);
         aggr->AggregateWith(*labeledCounters);
 
-        setCounters(extendedLabeledCounters, partitionStats.Counters.GetExtendedCounters());
+        setCounters(extendedLabeledCounters, partitionCounters.GetExtendedCounters());
         aggrExtended->AggregateWith(*extendedLabeledCounters);
 
         if (TabletConfig.GetEnableCompactification()) {
-            setCounters(compactionCounters, partitionStats.Counters.GetCompactionCounters());
+            setCounters(compactionCounters, partitionCounters.GetCompactionCounters());
             compactionAggr->AggregateWith(*compactionCounters);
         }
 
-        for (const auto& consumerStats : partitionStats.Counters.GetConsumerAggregatedCounters()) {
+        for (const auto& consumerStats : partitionCounters.GetConsumerAggregatedCounters()) {
             auto jt = Consumers.find(consumerStats.GetConsumer());
             if (jt == Consumers.end()) {
                 continue;
@@ -728,24 +738,19 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             consumerInfo.Aggr->AggregateWith(*labeledConsumerCounters);
         }
 
-        for (const auto& consumerStats : partitionStats.Counters.GetMLPConsumerCounters()) {
-            auto jt = Consumers.find(consumerStats.GetConsumerName());
+        for (const auto& consumerStats : partitionCounters.GetMLPConsumerCounters()) {
+            auto jt = Consumers.find(consumerStats.GetConsumer());
             if (jt == Consumers.end()) {
                 continue;
             }
 
             auto& consumerInfo = jt->second;
-            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGHT_COMMITTED_COUNT].Add(consumerStats.GetCommittedMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGHT_LOCKED_COUNT].Add(consumerStats.GetLockedMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGHT_DELAYED_COUNT].Add(consumerStats.GetDelayedMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGHT_UNLOCKED_COUNT].Add(consumerStats.GetUnprocessedMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT].Add(consumerStats.GetDLQMessageCount());
-
-            consumerInfo.AggrMLP->GetCounters()[METRIC_COMMITTED_COUNT].Add(consumerStats.GetTotalCommittedMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_MOVED_TO_DLQ_COUNT].Add(consumerStats.GetTotalMovedToDLQMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_DELETED_BY_RETENTION_COUNT].Add(consumerStats.GetTotalDeletedByRetentionMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_DELETED_BY_DEADLINE_POLICY_COUNT].Add(consumerStats.GetTotalDeletedByDeadlinePolicyMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_PURGED_COUNT].Add(consumerStats.GetTotalPurgedMessageCount());
+            setCounters(labeledMLPConsumerCounters, consumerStats);
+            for (ssize_t i = 0; i < labeledMLPConsumerCounters->GetCounters().Size() && i < consumerStats.GetCountersValues().size(); ++i) {
+                labeledMLPConsumerCounters->GetCounters()[i] = consumerStats.GetCountersValues(i);
+            }
+    
+            consumerInfo.Aggr->AggregateWith(*labeledConsumerCounters);
 
             consumerInfo.MessageLockAttemptsAggregator->PopulateFrom(consumerStats.GetMessageLocksValues().begin(), consumerStats.GetMessageLocksValues().end());
         }

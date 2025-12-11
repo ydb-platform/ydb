@@ -2,6 +2,21 @@
 
 ## Version 25.2 {#25-2}
 
+### Version 25.2.1.23 {#25-2-1-23}
+
+#### Bug Fixes
+
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/23858) where tablet deletion might get stuck
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20866) with follower alter
+* Fixed a couple of change feed related issues:
+  * [Issue](https://github.com/ydb-platform/ydb/issues/25524)
+  * [Issue](https://github.com/ydb-platform/ydb/issues/25454)
+* Fixed an [error](https://github.com/ydb-platform/ydb/issues/25869) in upsert in ColumnShard
+* Fixed heap-use-after-free [error](https://github.com/ydb-platform/ydb/issues/26225)
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/23122) with duplicates in uniq secondary index
+* Fixed an [issue](https://github.com/ydb-platform/ydb/issues/26565) with checksum mismatch error on restoration compressed backup from s3
+* Fixed [node failure](https://github.com/ydb-platform/ydb/issues/27193) on some queries
+
 ### Release candidate 25.2.1.10 {#25-2-1-10-rc}
 
 Release date: September 21, 2025.

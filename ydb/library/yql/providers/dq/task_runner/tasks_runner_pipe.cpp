@@ -1185,7 +1185,7 @@ public:
         }
     }
 
-    void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
+    void UpdateSettings(const TDqChannelSettings::TMutable& settings) override {
         Y_UNUSED(settings);
     }
 

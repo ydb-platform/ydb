@@ -627,9 +627,19 @@ public:
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
-                    auto inputChannel = CreateDqInputChannel(channelId, inputChannelDesc.GetSrcStageId(), *inputType,
-                        memoryLimits.ChannelBufferSize, StatsModeToCollectStatsLevel(Settings.StatsMode), typeEnv, holderFactory,
-                        inputChannelDesc.GetTransportVersion(), FromProto(task.GetValuePackerVersion()));
+
+                    TDqChannelSettings settings;
+                    settings.ChannelId = channelId;
+                    settings.SrcStageId = inputChannelDesc.GetSrcStageId();
+                    settings.RowType = *inputType;
+                    settings.HolderFactory = &holderFactory;
+                    settings.MaxStoredBytes = memoryLimits.ChannelBufferSize;
+                    settings.TransportVersion = inputChannelDesc.GetTransportVersion();
+                    settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
+                    settings.PackerVersion = FromProto(task.GetValuePackerVersion());
+
+                    auto inputChannel = CreateDqInputChannel(settings, typeEnv);
+
                     auto ret = AllocatedHolder->InputChannels.emplace(channelId, inputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated input channelId: " << channelId);
                     inputs.emplace_back(inputChannel);
@@ -733,7 +743,11 @@ public:
                 for (auto& outputChannelDesc : outputDesc.GetChannels()) {
                     ui64 channelId = outputChannelDesc.GetId();
 
-                    TDqOutputChannelSettings settings;
+                    TDqChannelSettings settings;
+                    settings.ChannelId = channelId;
+                    settings.DstStageId = outputChannelDesc.GetDstStageId();
+                    settings.RowType = *taskOutputType;
+                    settings.HolderFactory = &holderFactory;
                     settings.MaxStoredBytes = memoryLimits.ChannelBufferSize;
                     settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
                     settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
@@ -741,7 +755,7 @@ public:
                     settings.BufferPageAllocSize = memoryLimits.BufferPageAllocSize;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
-                    settings.ValuePackerVersion = task.GetValuePackerVersion();
+                    settings.PackerVersion = FromProto(task.GetValuePackerVersion());
 
                     if (!outputChannelDesc.GetInMemory()) {
                         settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
@@ -753,7 +767,7 @@ public:
                         settings.MutableSettings.IsLocalChannel = srcNodeId == dstNodeId;
                     }
 
-                    auto outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);
+                    auto outputChannel = CreateDqOutputChannel(settings, LogFunc);
 
                     auto ret = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << channelId);

@@ -32,7 +32,7 @@ An *audit event source* is a {{ ydb-short-name }} service or subsystem that can 
 Audit events are grouped into *log classes* that represent broad categories of operations. You can enable or disable logging for each class in [configuration](#log-class-config) and, if necessary, tailor the configuration per class. The available log classes are:
 
 #|
-|| Log class.         | Description ||
+|| **Log class**         | **Description** ||
 || `ClusterAdmin`     | Cluster administration requests. ||
 || `DatabaseAdmin`    | Database administration requests. ||
 || `Login`            | Login requests. ||

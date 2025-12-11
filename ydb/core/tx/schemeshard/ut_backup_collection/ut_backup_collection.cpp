@@ -2568,15 +2568,15 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             IncrementalBackupConfig: {}
         )";
 
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
-        env.TestWaitNotification(runtime, txId);
-
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TestTable"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
         env.TestWaitNotification(runtime, txId);
 
         TestBackupBackupCollection(runtime, ++txId, "/MyRoot",

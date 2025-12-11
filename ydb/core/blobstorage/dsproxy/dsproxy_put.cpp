@@ -311,6 +311,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 GetVDiskTimeMs(record.GetTimestamps()));
         }
 
+        if (CheckForExternalCancellation()) {
+            return;
+        }
+
         if (status == NKikimrProto::BLOCKED || status == NKikimrProto::DEADLINE) {
             TString error = TStringBuilder() << "Got VPutResult status# " << status << " from VDiskId# " << vdiskId;
             TPutImpl::TPutResultVec putResults;
@@ -385,6 +389,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                         NKikimrBlobStorage::EPutHandleClass_Name(PutImpl.GetPutHandleClass()),
                         NKikimrProto::EReplyStatus_Name(itemStatus));
             }
+        }
+
+        if (CheckForExternalCancellation()) {
+            return;
         }
 
         // Handle put results
@@ -735,6 +743,10 @@ public:
             << " BlobIDs# " << BlobIdSequenceToString()
             << " Not answered in "
             << (TActivationContext::Monotonic() - RequestStartTime) << " seconds");
+
+        if (CheckForExternalCancellation()) {
+            return;
+        }
 
         const TInstant now = TActivationContext::Now();
         while (!PutDeadlineMasks.empty()) {

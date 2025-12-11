@@ -189,6 +189,7 @@ public:
         NWilson::TTraceId TraceId = {};
         TEv* Event = nullptr;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay = nullptr;
+        std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
 
         bool LogAccEnabled = false;
         TMaybe<TGroupStat::EKind> LatencyQueueKind = {};
@@ -237,6 +238,12 @@ public:
         }
 
         Y_ABORT_UNLESS(CostModel);
+
+        if (params.Common.ExternalRelevanceWatcher) {
+            Relevance = std::move(params.Common.ExternalRelevanceWatcher);
+        } else {
+            Relevance = std::make_shared<TMessageRelevanceTracker>;
+        }
     }
 
     virtual ~TBlobStorageGroupRequestActor() = default;
@@ -290,6 +297,8 @@ public:
     static double GetTotalTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
     static double GetVDiskTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
 
+    bool CheckForExternalCancellation();
+
 private:
     void CheckPostponedQueue();
 
@@ -315,7 +324,7 @@ protected:
 private:
     const TActorId Source;
     const ui64 Cookie;
-    std::shared_ptr<TMessageRelevanceTracker> MessageRelevanceTracker = std::make_shared<TMessageRelevanceTracker>();
+    std::variant<TMessageRelevanceOwner, TMessageRelevanceWatcher> Relevance;
     ui32 RequestsInFlight = 0;
     std::unique_ptr<IEventBase> Response;
     const TMaybe<TGroupStat::EKind> LatencyQueueKind;

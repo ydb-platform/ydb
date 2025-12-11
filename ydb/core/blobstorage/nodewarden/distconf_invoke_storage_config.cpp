@@ -188,10 +188,6 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
         RunCommonChecks();
 
-        if (!Self->ConfigCommittedToConsole && Self->SelfManagementEnabled) {
-            throw TExRace() << "Previous config has not been committed to Console yet";
-        }
-
         // extract YAML files provided by the user
         NewYaml = request.HasYAML() ? std::make_optional(request.GetYAML()) : std::nullopt;
         NewStorageYaml = request.HasStorageYAML() ? std::make_optional(request.GetStorageYAML()) : std::nullopt;

@@ -105,7 +105,7 @@ CREATE EXTERNAL DATA SOURCE `streaming_test/ydb_source` WITH (
 Пример:
 
 ```sql
-SELECT 
+SELECT
     Data
 FROM
     `streaming_test/ydb_source`.topic_name
@@ -169,7 +169,7 @@ $lookup =
         (
             service_id UInt32,
             name Utf8,
-        )    
+        )
     );
 
 $parsed = (

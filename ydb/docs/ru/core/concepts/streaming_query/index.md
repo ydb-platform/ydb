@@ -238,4 +238,5 @@ SELECT * FROM $table_data;
 
 - [Форматы данных](formats.md)
 - [Чекпойнты](checkpoints.md)
+- [Водяные знаки](watermarks.md)
 - [Рецепты работы с потоковыми запросами](../../recipes/streaming_queries/index.md)

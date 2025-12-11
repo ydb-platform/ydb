@@ -35,51 +35,8 @@ END DO;
 ```sql
 CREATE STREAMING QUERY `my_queries/query_name` AS
 DO BEGIN
-PRAGMA pq.Consumer = 'ConsumerName';
-
-$input = (
-    SELECT
-        *
-    FROM
-        source_name.input_topic_name WITH (
-            FORMAT = 'json_each_row',
-            SCHEMA (Year Int32, Manufacturer Utf8, Model Utf8, Price Double)
-        )
-);
-
-$filtered = (
-    SELECT
-        *
-    FROM
-        $input
-    WHERE
-        level == 'error'
-);
-
-$number_errors = (
-    SELECT
-        COUNT(*) AS error_count,
-        CAST(HOP_START() AS String) AS ts
-    FROM
-        $filtered
-    GROUP BY
-        HOP (CAST(time AS Timestamp), 'PT600S', 'PT600S', 'PT0S'),
-        host
-);
-
-$json = (
-    SELECT
-        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-    FROM
-        $number_errors
-);
-
 INSERT INTO source_name.output_topic_name
-SELECT
-    *
-FROM
-    $json
-;
+SELECT Data FROM source_name.input_topic_name;
 END DO;
 
 ```

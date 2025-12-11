@@ -12,7 +12,7 @@
 * [проверка содержимого выходного топика](#step6);
 * [удаление потокового запроса](#step7).
 
-Предварительные условия:
+## Предварительные условия {#requirements}
 
 * запущенная база {{ ydb-short-name }}, пример запуска [quick start](../../quickstart.md),
 * включены флаги `enable_external_data_sources` и  `enable_streaming_queries`:
@@ -117,14 +117,7 @@ END DO;
 Это можно сделать с помощью SQL-запроса:
 
 ```yql
-SELECT
-    Path,
-    Status,
-    Issues,
-    Text,
-    Run
-FROM
-    `.sys/streaming_queries`
+SELECT Path, Status, Issues, Run FROM `.sys/streaming_queries`
 ;
 ```
 

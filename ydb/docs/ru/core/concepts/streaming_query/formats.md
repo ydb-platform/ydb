@@ -38,6 +38,7 @@ SELECT
 FROM
     ...
 ```
+
 Описание функций вы можете найти в документации: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
 
 ### Формат csv_with_names {#csv_with_names}
@@ -57,8 +58,6 @@ Year,Manufacturer,Model,Price
 ```sql
 CREATE STREAMING QUERY `my_queries/query_name` AS
 DO BEGIN
-PRAGMA pq.Consumer = 'ConsumerName';
-
 $input = (SELECT
     *
     FROM source_name.input_topic_name WITH
@@ -75,6 +74,7 @@ FROM
     $input
 ;
 ```
+
 {% endcut %}
 
 ### Формат tsv_with_names {#tsv_with_names}
@@ -94,7 +94,6 @@ Year    Manufacturer    Model   Price
 ```sql
 CREATE STREAMING QUERY `my_queries/query_name` AS
 DO BEGIN
-PRAGMA pq.Consumer = 'ConsumerName';
 
 $input = (SELECT
     *
@@ -151,8 +150,6 @@ FROM
 ```sql
 CREATE STREAMING QUERY `my_queries/query_name` AS
 DO BEGIN
-PRAGMA pq.Consumer = 'ConsumerName';
-
 $input = (
     SELECT
         *
@@ -227,8 +224,6 @@ END DO;
 ```sql
 CREATE STREAMING QUERY `my_queries/query_name` AS
 DO BEGIN
-PRAGMA pq.Consumer = 'ConsumerName';
-
 $input = (
     SELECT
         CAST(JSON_VALUE(Data, "$.Year") AS Int32) AS Year,
@@ -268,8 +263,6 @@ FROM
 ```sql
 CREATE STREAMING QUERY `my_queries/query_name` AS
 DO BEGIN
-PRAGMA pq.Consumer = 'ConsumerName';
-
 $input = (
     SELECT
         *

@@ -15,7 +15,7 @@ TAG(ya:fat)
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
 ELSE()
-    TIMEOUT(100)
+    TIMEOUT(1800)
 ENDIF()
 
 

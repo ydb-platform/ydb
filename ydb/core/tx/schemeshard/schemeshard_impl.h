@@ -1321,7 +1321,6 @@ public:
     void Handle(TEvSchemeShard::TEvMigrateSchemeShardResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvForceCompaction::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvGetForceCompactionProgress::TPtr &ev, const TActorContext &ctx);

@@ -158,8 +158,6 @@ enum ESimpleCounters {
 
     COUNTER_BORROWED_COMPACTION_QUEUE_SIZE = 129          [(CounterOpts) = {Name: "BorrowedCompactionQueueSize"}];
     COUNTER_BORROWED_COMPACTION_QUEUE_RUNNING = 130       [(CounterOpts) = {Name: "BorrowedCompactionQueueRunning"}];
-    COUNTER_FORCED_COMPACTION_QUEUE_SIZE = 131            [(CounterOpts) = {Name: "ForcedCompactionQueueSize"}];
-    COUNTER_FORCED_COMPACTION_QUEUE_RUNNING = 132         [(CounterOpts) = {Name: "ForcedCompactionQueueRunning"}];
 
     COUNTER_BLOB_DEPOT_COUNT = 131                        [(CounterOpts) = {Name: "BlobDepots"}];
     COUNTER_BLOB_DEPOT_SHARD_COUNT = 132                  [(CounterOpts) = {Name: "BlobDepotShards"}];
@@ -272,6 +270,8 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateStreamingQuery = 210 [(CounterOpts) = {Name: "InFlightOps/CreateStreamingQuery"}];
     COUNTER_IN_FLIGHT_OPS_TxDropStreamingQuery = 211   [(CounterOpts) = {Name: "InFlightOps/DropStreamingQuery"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterStreamingQuery = 212  [(CounterOpts) = {Name: "InFlightOps/AlterStreamingQuery"}];
+    COUNTER_FORCED_COMPACTION_QUEUE_SIZE = 213            [(CounterOpts) = {Name: "ForcedCompactionQueueSize"}];
+    COUNTER_FORCED_COMPACTION_QUEUE_RUNNING = 214         [(CounterOpts) = {Name: "ForcedCompactionQueueRunning"}];
 }
 
 enum ECumulativeCounters {

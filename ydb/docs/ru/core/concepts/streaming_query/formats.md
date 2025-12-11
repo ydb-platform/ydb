@@ -1,6 +1,6 @@
 # Форматы данных при чтении/записи топиков
 
-В данном разделе описываются поддерживаемые в {{ydb-full-name}} форматы данных, поддерживаемуе при чтении из топиков и список поддерживаемых [YQL типов](../../yql/reference/types/index.md) для каждого формата данных.
+В данном разделе описываются поддерживаемые в {{ydb-full-name}} форматы данных, поддерживаемые при чтении из топиков и список поддерживаемых [YQL типов](../../yql/reference/types/index.md) для каждого формата данных.
 
 ## Поддерживаемые форматы данных {#formats}
 
@@ -15,6 +15,8 @@
 | [`json_as_string`](#json_as_string) | ✓      |        |
 | [`parquet`](#parquet)               | ✓      |        |
 | [`raw`](#raw)                       | ✓      | ✓      |
+
+Примеры парсинга данных других форматах см. [Примеры парсинга данных в различных форматах](#parsing).
 
 ## Форматы при записи данных {#write-formats}
 
@@ -53,29 +55,25 @@ Year,Manufacturer,Model,Price
 1999,Man_2,Model_2,4900.00
 ```
 
-{% cut "Пример запроса" %}
+Пример запроса:
 
 ```sql
-CREATE STREAMING QUERY `my_queries/query_name` AS
-DO BEGIN
-$input = (SELECT
-    *
-    FROM source_name.input_topic_name WITH
-        (
-            FORMAT = "csv_with_names",
-            SCHEMA =(Year Int32 NOT NULL, Manufacturer String NOT NULL, Model String NOT NULL, Price Double NOT NULL)
-        );
-);
-
-INSERT INTO source_name.output_topic_name
 SELECT
-    Model
-FROM
-    $input
-;
+    *
+FROM source_name.input_topic_name
+WITH
+(
+    FORMAT = "csv_with_names",
+    SCHEMA =
+    (
+        Year Int32 NOT NULL, 
+        Manufacturer String NOT NULL,
+        Model String NOT NULL,
+        Price Double NOT NULL
+    )
+)
+LIMIT 1;
 ```
-
-{% endcut %}
 
 ### Формат tsv_with_names {#tsv_with_names}
 
@@ -89,30 +87,25 @@ Year    Manufacturer    Model   Price
 1999    Man_2   Model_2    4900.00
 ```
 
-{% cut "Пример запроса" %}
+Пример запроса:
 
 ```sql
-CREATE STREAMING QUERY `my_queries/query_name` AS
-DO BEGIN
-
-$input = (SELECT
-    *
-    FROM source_name.input_topic_name WITH
-        (
-            FORMAT = "tsv_with_names",
-            SCHEMA =(Year Int32 NOT NULL, Manufacturer String NOT NULL, Model String NOT NULL, Price Double NOT NULL)
-        );
-);
-
-INSERT INTO source_name.output_topic_name
 SELECT
-    Model
-FROM
-    $input
-;
+    *
+FROM source_name.input_topic_name
+WITH
+(
+    FORMAT = "tsv_with_names",
+    SCHEMA =
+    (
+        Year Int32 NOT NULL,
+        Manufacturer String NOT NULL,
+        Model String NOT NULL,
+        Price Double NOT NULL
+    )
+)
+LIMIT 1;
 ```
-
-{% endcut %}
 
 ### Формат json_list {#json_list}
 
@@ -145,59 +138,24 @@ FROM
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 ```
 
-{% cut "Пример запроса" %}
+Пример запроса:
 
 ```sql
-CREATE STREAMING QUERY `my_queries/query_name` AS
-DO BEGIN
-$input = (
-    SELECT
-        *
-    FROM
-        source_name.input_topic_name WITH (
-            FORMAT = 'json_each_row',
-            SCHEMA (Year Int32, Manufacturer Utf8, Model Utf8, Price Double)
-        )
-);
-
-$filtered = (
-    SELECT
-        *
-    FROM
-        $input
-    WHERE
-        level == 'error'
-);
-
-$number_errors = (
-    SELECT
-        COUNT(*) AS error_count,
-        CAST(HOP_START() AS String) AS ts
-    FROM
-        $filtered
-    GROUP BY
-        HOP (CAST(time AS Timestamp), 'PT600S', 'PT600S', 'PT0S'),
-        host
-);
-
-$json = (
-    SELECT
-        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-    FROM
-        $number_errors
-);
-
-INSERT INTO source_name.output_topic_name
 SELECT
     *
-FROM
-    $json
-;
-END DO;
-
+FROM source_name.input_topic_name
+WITH (
+    FORMAT = 'json_each_row',
+    SCHEMA =
+    (
+        Year Int32,
+        Manufacturer Utf8,
+        Model Utf8,
+        Price Double
+    )
+)
+LIMIT 1;
 ```
-
-{% endcut %}
 
 ### Формат json_as_string {#json_as_string}
 
@@ -219,113 +177,68 @@ END DO;
 
 В этом формате схема читаемых данных должна состоять только из одной колонки с одним из разрешённых типов данных, подробнее см. [ниже](#schema).
 
-{% cut "Пример запроса" %}
+Пример запроса:
 
 ```sql
-CREATE STREAMING QUERY `my_queries/query_name` AS
-DO BEGIN
-$input = (
-    SELECT
-        CAST(JSON_VALUE(Data, "$.Year") AS Int32) AS Year,
-        JSON_VALUE(Data, "$.Attrs.Manufacturer") AS Manufacturer,
-        JSON_VALUE(Data, "$.Attrs.Model") AS Model,
-        CAST(JSON_VALUE(Data, "$.Price") AS Double) AS Price
-    FROM
-        source_name.input_topic_name WITH (
-            FORMAT = 'json_as_string',
-            SCHEMA (Data Json)
-        )
-);
-
-$json = (
-    SELECT
-        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-    FROM
-        $input
-);
-
-INSERT INTO source_name.output_topic_name
 SELECT
     *
-FROM
-    $json
+FROM source_name.input_topic_name
+WITH
+(
+    FORMAT = 'json_as_string',
+    SCHEMA = 
+    (
+        Data Json
+    )
+)
+LIMIT 1;
 ```
-
-{% endcut %}
 
 ### Формат parquet {#parquet}
 
 Данный формат позволяет считывать содержимое сообщений в формате [Apache Parquet](https://parquet.apache.org).
 
 
-{% cut "Пример запроса" %}
+Пример запроса:
 
 ```sql
-CREATE STREAMING QUERY `my_queries/query_name` AS
-DO BEGIN
-$input = (
-    SELECT
-        *
-    FROM
-        source_name.input_topic_name WITH (
-            FORMAT = 'parquet',
-            SCHEMA (Year Int32, Manufacturer Utf8, Model Utf8, Price Double)
-        )
-);
-
-$json = (
-    SELECT
-        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-    FROM
-        $input
-);
-
-INSERT INTO source_name.output_topic_name
 SELECT
     *
-FROM
-    $json
+FROM source_name.input_topic_name
+WITH
+(
+    FORMAT = 'parquet',
+    SCHEMA =
+    (
+        Year Int32,
+        Manufacturer Utf8,
+        Model Utf8,
+        Price Double
+    )
+)
+LIMIT 1;
 ```
-
-{% endcut %}
 
 ### Формат raw {#raw}
 
 Данный формат позволяет считывать содержимое сообщений как есть, в "сыром" виде. Считанные таким образом данные можно обработать средствами [YQL](../../../yql/reference/udf/list/string). Cхема по умолчанию: `SCHEMA(Data String)`.
 
-{% cut "Пример запроса" %}
+Пример запроса:
 
 ```sql
-CREATE STREAMING QUERY `my_queries/query_name` AS
-DO BEGIN
-$input = (
-    SELECT
-        CAST(data AS Json) AS json
-    FROM
-        source_name.input_topic_name WITH (
-            FORMAT = 'raw',
-            SCHEMA = (data String)
-        )
-);
-
-$parsed = (
-    SELECT
-        JSON_VALUE (json, '$.field1') AS field1,
-        JSON_VALUE (json, '$.field2') AS field2
-    FROM
-        $input
-);
-
-INSERT INTO source_name.output_topic_name
 SELECT
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-FROM
-    $parsed
-;
-END DO;
+    *
+FROM source_name.input_topic_name
+WITH
+(
+    FORMAT = 'raw',
+    SCHEMA =
+    (
+        data String)
+    )
+)
+LIMIT 1;
 ```
-
-{% endcut %}
 
 ### Поддерживаемые типы данных {#schema}
 
@@ -345,3 +258,109 @@ END DO;
 |`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`|| ||||   |   |
 |`Optional<T>`                        |✓             |✓             |✓        |✓            |✓             |✓      |✓  |
 
+## Примеры парсинга данных в различных форматах {#parsing}
+
+### Парсинг JSON встроенными функциями {#json_builtins}
+
+Пример данных:
+```json
+{"key": 1997, "value": "42"}
+```
+
+Пример запроса:
+
+```sql
+$input = 
+SELECT
+    CAST(data AS Json) AS json
+FROM source_name.input_topic_name
+WITH
+(
+    FORMAT = 'raw',
+    SCHEMA =
+    (
+        data String
+    )
+);
+
+$parsed =
+SELECT
+    JSON_VALUE (json, '$.key') AS key,
+    JSON_VALUE (json, '$.value') AS value
+FROM
+    $input;
+
+SELECT 
+    *
+FROM $parsed
+LIMIT 1;
+```
+
+### Парсинг JSON библиотекой Yson {#json_yson}
+
+Пример данных (формат [Change Data Capture](concepts/cdc)):
+
+```json
+{"update":{"volume":10,"product":"bWlsaw=="},"key":[6],"ts":[1765192622420,18446744073709551615]}
+```
+
+Пример запроса:
+```sql
+$input = 
+SELECT 
+    *
+FROM source_name.input_topic_name
+WITH (
+    FORMAT = json_as_string,
+    SCHEMA = (Data Json));
+
+$col = SELECT * from (select Yson::ConvertTo(Data,
+    Struct<
+        update: Struct<volume: Uint64>,
+        key: List<UInt64>,
+        ts: List<UInt64>
+    >) FROM $input) FLATTEN COLUMNS;
+
+$volumes =
+SELECT
+    *
+FROM (SELECT ts[0] as ts, update from $col) FLATTEN COLUMNS;
+
+SELECT 
+    *
+FROM $volumes
+LIMIT 1;
+```
+
+## Парсинг DSV (TSKV) {#dsv}
+
+Пример данных:
+
+```json
+name=Elena	uid=95792365232151958
+name=Denis	uid=78086244452810046
+name=Mikhail	uid=70609792906901286
+```
+
+Пример запроса:
+
+```sql
+$input =
+SELECT value FROM (
+    SELECT
+        String::SplitToList(Data, "\n", TRUE AS SkipEmpty) AS value
+    FROM source_name.input_topic_name
+)
+FLATTEN LIST BY value;
+
+$parsed =
+SELECT Dsv::Parse(value, "\t") as parsed
+FROM $input;
+
+SELECT
+    DictLookup(parsed, "name") as name,
+    DictLookup(parsed, "uid") as uid
+FROM
+    $parsed
+LIMIT 2;
+```

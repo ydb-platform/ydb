@@ -72,7 +72,7 @@ $input = (
     FROM
         source_name.`streaming_recipe/input_topic` WITH (
             FORMAT = 'json_each_row',
-            SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
+            SCHEMA = (time String NOT NULL, level String NOT NULL, host String NOT NULL)
         )
 );
 

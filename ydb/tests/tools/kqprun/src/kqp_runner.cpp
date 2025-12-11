@@ -1,7 +1,10 @@
 #include "kqp_runner.h"
 #include "ydb_setup.h"
 
+#include <fmt/format.h>
+
 #include <library/cpp/colorizer/colors.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 
 using namespace NKikimrRun;
 
@@ -15,6 +18,12 @@ class TKqpRunner::TImpl {
 
     static constexpr TDuration RETRY_PERIOD = TDuration::MilliSeconds(100);
     static constexpr TDuration SCRIPT_RETRY_CYCLE = TDuration::Minutes(1);
+
+    struct TStreamingMeta : public TQueryMeta {
+        TString Name;
+        TString Database;
+        TString ExecutionStatus;
+    };
 
 public:
     enum class EQueryType {
@@ -158,6 +167,54 @@ public:
         return Ydb::StatusIds::SUCCESS;
     }
 
+    Ydb::StatusIds::StatusCode ExecuteStreaming(const TRequestOptions& query, const TString& queryName, TDuration* duration) {
+        using namespace fmt::literals;
+
+        if (query.Action != NKikimrKqp::QUERY_ACTION_EXECUTE) {
+            ythrow yexception() << "Invalid execution action for streaming query: " << NKikimrKqp::EQueryAction_Name(query.Action) << ", only allowed action is execute";
+        }
+
+        if (!query.Params.empty()) {
+            ythrow yexception() << "Streaming query does not support parameters";
+        }
+
+        StartScriptTraceOpt(query.QueryId);
+
+        if (VerbosityLevel_ >= EVerbosity::QueriesText) {
+            Cout << CoutColors_.Cyan() << "Starting streaming request '" << queryName << "':\n" << CoutColors_.Default() << query.Query << Endl;
+        }
+
+        TRequestResult status = YdbSetup_.QueryRequest({
+            .Query = fmt::format(R"(
+                CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
+                    RESOURCE_POOL = "{pool}"
+                ) AS DO BEGIN
+                {query}
+                END DO)",
+                "query_name"_a = queryName,
+                "pool"_a = query.PoolId,
+                "query"_a = query.Query
+            ),
+            .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
+            .TraceId = query.TraceId,
+            .UserSID = query.UserSID,
+            .Database = query.Database,
+            .Timeout = query.Timeout,
+            .GroupSIDs = query.GroupSIDs,
+        });
+
+        if (!status.IsSuccess()) {
+            Cerr << CerrColors_.Red() << "Failed to create streaming query '" << queryName << "', reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            return status.Status;
+        }
+
+        StreamingMeta_ = TStreamingMeta();
+        StreamingMeta_.Name = queryName;
+        StreamingMeta_.Database = query.Database ? query.Database : YdbSetup_.GetDefaultDatabase();
+
+        return WaitStreamingQueryExecution(query.QueryId, duration, query.UserSID);
+    }
+
     void FinalizeRunner() const {
         YdbSetup_.WaitAsyncQueries();
         YdbSetup_.CloseSessions();
@@ -180,7 +237,7 @@ public:
         return true;
     }
 
-    bool ForgetExecutionOperation(const TString& userSID) {
+    bool ForgetExecutionOperation(const TString& userSID) const {
         TYdbSetup::StopTraceOpt();
 
         TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID);
@@ -192,6 +249,29 @@ public:
 
         if (!status.Issues.Empty()) {
             Cerr << CerrColors_.Red() << "Forget operation finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+        }
+
+        return true;
+    }
+
+    bool ForgetStreamingQuery(const TString& userSID) const {
+        TYdbSetup::StopTraceOpt();
+
+        TRequestResult status = YdbSetup_.QueryRequest({
+            .Query = TStringBuilder() << "DROP STREAMING QUERY IF EXISTS `" << StreamingMeta_.Name << "`",
+            .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
+            .TraceId = "streaming-control::forget",
+            .UserSID = userSID,
+            .Database = StreamingMeta_.Database,
+        });
+
+        if (!status.IsSuccess()) {
+            Cerr << CerrColors_.Red() << "Failed to drop streaming query '" << StreamingMeta_.Name << "', reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            return false;
+        }
+
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Drop streaming query finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
         }
 
         return true;
@@ -216,10 +296,7 @@ private:
             TYdbSetup::StopTraceOpt();
         };
 
-        TDuration getOperationPeriod = TDuration::Seconds(1);
-        if (auto progressStatsPeriodMs = Options_.YdbSettings.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
-            getOperationPeriod = TDuration::MilliSeconds(progressStatsPeriodMs);
-        }
+        const auto getOperationPeriod = GetPingPeriod();
 
         TRequestResult status;
         TString previousIssues;
@@ -260,6 +337,122 @@ private:
 
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
             Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status " << ExecutionMeta_.ExecutionStatus << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            return status.Status;
+        }
+
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+        }
+
+        return Ydb::StatusIds::SUCCESS;
+    }
+
+    Ydb::StatusIds::StatusCode WaitStreamingQueryExecution(ui64 queryId, TDuration* duration, const TString& userSID) {
+        StartTime_ = TInstant::Now();
+        Y_DEFER {
+            TYdbSetup::StopTraceOpt();
+        };
+
+        const auto fetchPeriod = GetPingPeriod();
+        TString fullQueryName = StreamingMeta_.Name;
+        if (const auto& database = NKikimr::CanonizePath(StreamingMeta_.Database); !fullQueryName.StartsWith(database)) {
+            fullQueryName = NKikimr::JoinPath({database, fullQueryName});
+        }
+
+        TRequestResult status;
+        TString previousIssues;
+        while (true) {
+            TQueryMeta meta;
+            std::vector<Ydb::ResultSet> resultSets;
+            status = YdbSetup_.QueryRequest({
+                .Query = TStringBuilder() << "SELECT * FROM `.sys/streaming_queries` WHERE Path = \"" << fullQueryName << "\"",
+                .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
+                .TraceId = "streaming-control::fetch",
+                .UserSID = userSID,
+                .Database = StreamingMeta_.Database,
+            }, meta, resultSets, nullptr);
+
+            if (!status.IsSuccess()) {
+                Cerr << CerrColors_.Red() << "Failed to fetch streaming query, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+                return status.Status;
+            }
+
+            if (resultSets.size() != 1) {
+                ythrow yexception() << "Unexpected result set size " << resultSets.size() << ", expected 1 for fetch streaming query request";
+            }
+
+            NYdb::TResultSetParser parser(resultSets[0]);
+            if (!parser.TryNextRow()) {
+                Cerr << CerrColors_.Red() << "Failed to fetch streaming query, query '" << fullQueryName << "' not found" << CerrColors_.Default() << Endl;
+                return Ydb::StatusIds::NOT_FOUND;
+            }
+
+            if (const auto& ast = parser.ColumnParser("Ast").GetOptionalUtf8()) {
+                StreamingMeta_.Ast = *ast;
+            }
+
+            if (const auto& plan = parser.ColumnParser("Plan").GetOptionalUtf8()) {
+                StreamingMeta_.Plan = *plan;
+            }
+
+            PrintScriptProgress(queryId, StreamingMeta_.Plan);
+
+            if (const auto& status = parser.ColumnParser("Status").GetOptionalUtf8()) {
+                StreamingMeta_.ExecutionStatus = *status;
+            } else {
+                ythrow yexception() << "Unexpected streaming query fetch response, missing 'Status' column";
+            }
+
+            if (const auto& issues = parser.ColumnParser("Issues").GetOptionalUtf8()) {
+                Ydb::Issue::IssueMessage rootMessage = NProtobufJson::Json2Proto<Ydb::Issue::IssueMessage>(*issues);
+                NYql::TIssue root = NYql::IssueFromMessage(rootMessage);
+
+                for (const auto& issuePtr : root.GetSubIssues()) {
+                    status.Issues.AddIssue(*issuePtr);
+                }
+            }
+
+            if (IsIn({"COMPLETED", "FAILED", "STOPPED", "CREATED"}, StreamingMeta_.ExecutionStatus)) {
+                if (StreamingMeta_.ExecutionStatus == "FAILED") {
+                    status.Status = Ydb::StatusIds::GENERIC_ERROR;
+                } else if (StreamingMeta_.ExecutionStatus == "STOPPED") {
+                    status.Status = Ydb::StatusIds::CANCELLED;
+                } else if (StreamingMeta_.ExecutionStatus == "CREATED") {
+                    status.Status = Ydb::StatusIds::PRECONDITION_FAILED;
+                }
+                break;
+            }
+
+            if (const auto newIssues = status.Issues.ToString(); newIssues && previousIssues != newIssues && Options_.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
+                previousIssues = newIssues;
+                Cerr << CerrColors_.Red() << "Streaming query issues updated:" << CerrColors_.Default() << Endl << newIssues << Endl;
+            }
+
+            if (Options_.ScriptCancelAfter && TInstant::Now() - StartTime_ > Options_.ScriptCancelAfter) {
+                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Cancelling streaming query..." << CoutColors_.Default() << Endl;
+                TRequestResult cancelStatus = YdbSetup_.QueryRequest({
+                    .Query = TStringBuilder() << "ALTER STREAMING QUERY IF EXISTS `" << StreamingMeta_.Name << "` SET (RUN = FALSE)",
+                    .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
+                    .TraceId = "streaming-control::cancel",
+                    .UserSID = userSID,
+                    .Database = StreamingMeta_.Database,
+                });
+                if (!cancelStatus.IsSuccess()) {
+                    Cerr << CerrColors_.Red() << "Failed to cancel streaming query, reason:" << CerrColors_.Default() << Endl << cancelStatus.ToString() << Endl;
+                    return cancelStatus.Status;
+                }
+            }
+
+            Sleep(fetchPeriod);
+        }
+
+        PrintScriptAst(queryId, StreamingMeta_.Ast);
+        PrintScriptProgress(queryId, StreamingMeta_.Plan);
+        PrintScriptPlan(queryId, StreamingMeta_.Plan);
+        PrintScriptFinish(StreamingMeta_, "Streaming", duration);
+
+        if (!status.IsSuccess() || StreamingMeta_.ExecutionStatus != "COMPLETED") {
+            Cerr << CerrColors_.Red() << "Failed to execute streaming query, invalid final status " << StreamingMeta_.ExecutionStatus << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
             return status.Status;
         }
 
@@ -376,6 +569,14 @@ private:
         RetryState_ = RetryPolicy_->CreateRetryState();
     }
 
+    TDuration GetPingPeriod() const {
+        TDuration pingPeriod = TDuration::Seconds(1);
+        if (auto progressStatsPeriodMs = Options_.YdbSettings.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
+            pingPeriod = TDuration::MilliSeconds(progressStatsPeriodMs);
+        }
+        return pingPeriod;
+    }
+
 private:
     TRunnerOptions Options_;
     EVerbosity VerbosityLevel_;
@@ -390,6 +591,7 @@ private:
 
     TString ExecutionOperation_;
     TExecutionMeta ExecutionMeta_;
+    TStreamingMeta StreamingMeta_;
     std::vector<Ydb::ResultSet> ResultSets_;
     TInstant StartTime_;
 };
@@ -429,6 +631,12 @@ void TKqpRunner::ExecuteQueryAsync(const TRequestOptions& query) const {
     Impl_->ExecuteQuery(query, TImpl::EQueryType::AsyncQuery, nullptr);
 }
 
+bool TKqpRunner::ExecuteStreaming(const TRequestOptions& query, const TString& queryName, TDuration& duration) const {
+    return Impl_->ExecuteWithRetries([this, query, queryName, &duration]() {
+        return Impl_->ExecuteStreaming(query, queryName, &duration);
+    });
+}
+
 void TKqpRunner::FinalizeRunner() const {
     Impl_->FinalizeRunner();
 }
@@ -439,6 +647,10 @@ bool TKqpRunner::FetchScriptResults(const TString& userSID) {
 
 bool TKqpRunner::ForgetExecutionOperation(const TString& userSID) {
     return Impl_->ForgetExecutionOperation(userSID);
+}
+
+bool TKqpRunner::ForgetStreamingQuery(const TString& userSID) {
+    return Impl_->ForgetStreamingQuery(userSID);
 }
 
 void TKqpRunner::PrintScriptResults() const {

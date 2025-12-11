@@ -39,6 +39,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
     auto tableIt = ForcedCompactionsByTable.find(pathId);
     if (tableIt != ForcedCompactionsByTable.end()) {
         tableIt->second.RunningShards.insert(shardIdx);
+        tableIt->second.QueuedShards.erase(shardIdx);
     }
 
     return NOperationQueue::EStartStatus::EOperationRunning;
@@ -95,8 +96,18 @@ void TSchemeShard::ForcedCompactionHandleDisconnect(TTabletId tabletId, const TA
 
     RunningForcedCompactions.erase(it);
 
-    // disconnected from node we have requested forced compaction. We just resend request, because it
-    // is safe: if first request is executing or has been already executed, then second request will be ignored.
+    // Update tracking state
+    auto shardIt = ShardInfos.find(shardIdx);
+    if (shardIt != ShardInfos.end()) {
+        const auto& pathId = shardIt->second.PathId;
+        auto tableIt = ForcedCompactionsByTable.find(pathId);
+        if (tableIt != ForcedCompactionsByTable.end()) {
+            tableIt->second.RunningShards.erase(shardIdx);
+        }
+    }
+
+    // Disconnected from the node to which we have requested forced compaction. We just resend the request, because it
+    // is safe: if the first request is executing or has already been executed, then the second request will be ignored.
 
     StartForcedCompaction(shardIdx);
 }
@@ -175,8 +186,6 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvForceCompaction::TPtr &ev, const TA
         return;
     }
 
-    const auto& pathElement = pathIt->second;
-
     // Check if it's a table
     auto tableIt = Tables.find(pathId);
     if (tableIt == Tables.end()) {
@@ -194,12 +203,14 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvForceCompaction::TPtr &ev, const TA
     const auto& tableInfo = tableIt->second;
     const auto& shards = tableInfo->GetPartitions();
 
-    // Initialize tracking structure
+    // Initialize tracking structure if not exists, otherwise keep existing progress
     auto& compactionInfo = ForcedCompactionsByTable[pathId];
-    compactionInfo.TotalShards = shards.size();
-    compactionInfo.CompactedShards = 0;
-    compactionInfo.QueuedShards.clear();
-    compactionInfo.RunningShards.clear();
+    if (compactionInfo.TotalShards == 0) {
+        compactionInfo.TotalShards = shards.size();
+        compactionInfo.CompactedShards = 0;
+        compactionInfo.QueuedShards.clear();
+        compactionInfo.RunningShards.clear();
+    }
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Enqueuing " << shards.size() << " shards for forced compaction of pathId# " << pathId

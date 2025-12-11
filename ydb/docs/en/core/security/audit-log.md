@@ -94,7 +94,7 @@ The table below summarizes the built-in audit event sources. Use it to identify 
 
 ## Audit event attributes {#audit-event-attributes}
 
-As mentioned, attributes are divided into two groups:
+Audit log event attributes are divided into two groups:
 * Common attributes present in many *audit event sources* and always carry the same meaning.
 * Attributes specific to the source that generates the event.
 

@@ -125,7 +125,7 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 Пример:
 
 ```yql
-SELECT 
+SELECT
     Data
 FROM
     ydb_source.topic_name

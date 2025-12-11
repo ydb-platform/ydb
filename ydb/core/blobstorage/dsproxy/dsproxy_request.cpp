@@ -1135,7 +1135,7 @@ namespace NKikimr {
         std::visit(
             TOverloaded{
                 [&](const TMessageRelevanceOwner&) { cancelled = false; },
-                [&](const TMessageRelevanceWatcher& watcher) { cancelled = watcher.is_expired(); }
+                [&](const TMessageRelevanceWatcher& watcher) { cancelled = watcher.expired(); }
             }, Relevance);
 
         if (cancelled) {

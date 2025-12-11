@@ -189,13 +189,14 @@ public:
         NWilson::TTraceId TraceId = {};
         TEv* Event = nullptr;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay = nullptr;
-        std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
 
         bool LogAccEnabled = false;
         TMaybe<TGroupStat::EKind> LatencyQueueKind = {};
 
         std::optional<ui32> ForceGroupGeneration; // work only with this specific group generation and nothing else
         bool DoSendDeathNote = true; // unschedules DSProxy timeout on termination, be careful with disabling
+
+        std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
     };
 
     struct TTypeSpecificParameters {
@@ -240,9 +241,9 @@ public:
         Y_ABORT_UNLESS(CostModel);
 
         if (params.Common.ExternalRelevanceWatcher) {
-            Relevance = std::move(params.Common.ExternalRelevanceWatcher);
+            Relevance = std::move(*params.Common.ExternalRelevanceWatcher);
         } else {
-            Relevance = std::make_shared<TMessageRelevanceTracker>;
+            Relevance = std::make_shared<TMessageRelevanceTracker>();
         }
     }
 

@@ -570,7 +570,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     struct TEventWithRelevanceTracker {
-        std::optionalTMessageRelevanceWatcher> MessageRelevanceTracker;
+        std::optional<TMessageRelevanceWatcher> MessageRelevanceTracker;
     };
 
     struct TEvBlobStorage::TEvVPut

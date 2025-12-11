@@ -164,12 +164,13 @@
             text-decoration: none;
         }
         .sanitizer-badge {
-            background-color: #ff4500;
-            color: white;
-            padding: 3px 8px;
+            background-color: #fff4e6;
+            color: #d1242f;
+            border: 1px solid #ff4500;
+            padding: 2px 8px;
             border-radius: 3px;
             font-size: 11px;
-            font-weight: 600;
+            font-weight: 500;
             white-space: nowrap;
         }
         .suite-group {
@@ -222,6 +223,10 @@
             gap: 12px;
             flex-wrap: wrap;
             transition: padding 0.2s ease;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            overflow: hidden;
         }
         .test-item.error-hidden {
             padding: 6px 12px;
@@ -249,12 +254,13 @@
             border-left-width: 4px;
         }
         .flaky-badge {
-            background-color: #ffc107;
-            color: #000;
-            padding: 3px 8px;
+            background-color: #fff8c5;
+            color: #9a6700;
+            border: 1px solid #ffc107;
+            padding: 2px 8px;
             border-radius: 3px;
             font-size: 11px;
-            font-weight: bold;
+            font-weight: 500;
         }
         .test-name {
             font-weight: 500;
@@ -377,6 +383,9 @@
         .error-section {
             flex-basis: 100%;
             margin-top: 8px;
+            min-width: 0;
+            width: 100%;
+            overflow: hidden;
         }
         .error-button {
             background-color: #fff4e6;
@@ -406,21 +415,23 @@
             padding: 8px;
             background-color: #f6f8fa;
             border-radius: 4px;
+            width: 100%;
+            min-width: 0;
+            overflow: hidden;
         }
         .error-content pre {
             margin: 0;
             overflow-x: auto;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
+            overflow-y: visible;
+            width: 100%;
             max-width: 100%;
+            min-width: 0;
         }
         .error-content pre code {
             font-size: 12px;
-            white-space: pre-wrap;
-            word-break: break-word;
-            overflow-wrap: break-word;
-            max-width: 100%;
+            white-space: pre;
             display: block;
+            min-width: 0;
         }
         .test-actions {
             margin-left: 12px;

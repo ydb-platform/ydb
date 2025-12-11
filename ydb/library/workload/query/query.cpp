@@ -175,7 +175,10 @@ std::string TQueryGenerator::GetDDLQueries() const {
     for (const auto& cq: Params.GetCustomQueries()) {
         result << cq.c_str() << ";" << std::endl;
     }
-    result << GetDDLQueriesFromDir(Params.GetSuitePath() / "init");
+    const auto initPath = Params.GetSuitePath() / "init";
+    if (Params.GetSuitePath().IsDefined() && initPath.IsDirectory()) {
+        result << GetDDLQueriesFromDir(initPath);
+    }
     return result.str();
 }
 

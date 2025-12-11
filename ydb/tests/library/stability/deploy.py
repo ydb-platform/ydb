@@ -113,7 +113,7 @@ class StressUtilDeployer:
                         processed_binaries[workload_info['local_path']].append(workload_name)
                         with allure.step(f"Deploy {workload_name} binary"):
                             allure.attach(
-                                "Skipping deployment, binary already deployed"
+                                "Skipping deployment, binary already deployed",
                                 "Summary",
                                 attachment_type=allure.attachment_type.TEXT,
                             )

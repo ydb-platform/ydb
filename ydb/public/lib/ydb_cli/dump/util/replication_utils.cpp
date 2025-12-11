@@ -86,7 +86,7 @@ TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
     return lambdaCreateQuery.substr(startPos, endPos - startPos);
 }
 
-void CleanQuery(TString& query, const TString& patternToRemove) {    
+void CleanQuery(TString& query, const TString& patternToRemove) {
     if (patternToRemove.empty()) {
         return;
     }
@@ -95,7 +95,7 @@ void CleanQuery(TString& query, const TString& patternToRemove) {
     size_t position;
     while ((position = query.find(patternToRemove)) != TString::npos) {
         query.erase(position, patternLength);
-    }    
+    }
 }
 
 } // anonymous namespace
@@ -135,7 +135,7 @@ TString BuildCreateTransferQuery(
         const TString& backupRoot,
         const TString& name,
         const NReplication::TTransferDescription& desc)
-{            
+{
     TVector<TString> options(::Reserve(7));
 
     const auto& connectionParams = desc.GetConnectionParams();
@@ -163,7 +163,7 @@ TString BuildCreateTransferQuery(
             "WITH (\n{}\n);",
             db.c_str(), backupRoot.c_str(),
             cleanedLambdaCreateQuery.c_str(),
-            name.c_str(), 
+            name.c_str(),
             desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), lambdaName.c_str(),
             JoinSeq(",\n", options).c_str()
         );

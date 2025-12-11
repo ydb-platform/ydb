@@ -158,7 +158,7 @@ bool CheckReplicationConfig(
             error = "unexpected config type";
             break;
     }
-    
+
     status = Ydb::StatusIds::INTERNAL_ERROR;
     return false;
 }
@@ -181,7 +181,7 @@ bool CheckTransferConfig(
             error = "unexpected config type";
             break;
     }
-    
+
     status = Ydb::StatusIds::INTERNAL_ERROR;
     return false;
 }
@@ -194,14 +194,14 @@ bool FillReplicationDescription(
     const NKikimrSchemeOp::TDirEntry& inDirEntry,
     Ydb::StatusIds_StatusCode& status,
     TString& error) {
-        
+
     const auto& config = inDesc.GetConfig();
     if (!CheckReplicationConfig(config, status, error)) {
         return false;
     }
 
     ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
-    
+
     ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
     ConvertConsistencySettings(config.GetConsistencySettings(), out);
     ConvertState(inDesc.GetState(), out);
@@ -219,14 +219,14 @@ bool FillTransferDescription(
     const NKikimrSchemeOp::TDirEntry& inDirEntry,
     Ydb::StatusIds_StatusCode& status,
     TString& error) {
-        
+
     const auto& config = inDesc.GetConfig();
     if (!CheckTransferConfig(config, status, error)) {
         return false;
     }
 
     ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
-    
+
     ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
     ConvertState(inDesc.GetState(), out);
 
@@ -257,7 +257,7 @@ void FillReplicationDescription(
 void FillTransferDescription(
     Ydb::Replication::DescribeTransferResult& out,
     const NKikimrReplication::TEvDescribeReplicationResult& inDesc) {
-    
+
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertState(inDesc.GetState(), out);
 

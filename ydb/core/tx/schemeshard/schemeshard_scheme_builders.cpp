@@ -96,9 +96,9 @@ bool BuildReplicationScheme(
     }
 
     scheme = NYdb::NDump::BuildCreateReplicationQuery(
-        database, backupRoot, replicationDesc.GetName(), 
+        database, backupRoot, replicationDesc.GetName(),
         NYdb::NReplication::TReplicationDescription(replicationDescResult));
-    
+
     return true;
 }
 

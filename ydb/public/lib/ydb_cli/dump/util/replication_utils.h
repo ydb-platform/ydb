@@ -15,7 +15,7 @@ TString BuildCreateReplicationQuery(
     const TString& backupRoot,
     const TString& name,
     const NReplication::TReplicationDescription& desc);
-    
+
 constexpr TStringBuf TRANSFER_LAMBDA_DEFAULT_NAME = "$__ydb_transfer_lambda";
 
 TString BuildCreateTransferQuery(

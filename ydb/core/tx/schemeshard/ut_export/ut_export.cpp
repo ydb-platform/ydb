@@ -694,8 +694,7 @@ namespace {
             }
         }
 
-        void TestReplication(const TString& scheme, const TString& expected, bool enablePermissions = false) {
-            EnvOptions().EnablePermissionsExport(enablePermissions);
+        void TestReplication(const TString& scheme, const TString& expected) {
             Env();
             ui64 txId = 100;
 
@@ -721,17 +720,16 @@ namespace {
             UNIT_ASSERT(HasS3File("/Replication/create_async_replication.sql"));
             const auto content = GetS3FileContent("/Replication/create_async_replication.sql");
             UNIT_ASSERT_EQUAL_C(
-                content, expected, 
+                content, expected,
                 TStringBuilder() << "\nExpected:\n\n" << expected << "\n\nActual:\n\n" << content);
-            
-            if (enablePermissions) {
-                UNIT_ASSERT(HasS3File("/Replication/permissions.pb"));
-                const auto permissions = GetS3FileContent("/Replication/permissions.pb");
-                const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
-                UNIT_ASSERT_EQUAL_C(
-                    permissions, permissions_expected, 
-                    TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
-            }
+
+            UNIT_ASSERT(HasS3File("/Replication/permissions.pb"));
+            const auto permissions = GetS3FileContent("/Replication/permissions.pb");
+            const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
+            UNIT_ASSERT_EQUAL_C(
+                permissions, permissions_expected,
+                TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
+
         }
 
     protected:
@@ -3263,7 +3261,7 @@ attributes {
             }
         )");
     }
-    
+
     Y_UNIT_TEST(ReplicationExportWithStaticCredentials) {
         TString scheme = R"(
             Name: "Replication"
@@ -3285,7 +3283,7 @@ attributes {
                 }
             }
         )";
-        // As passwords are not backuped 
+        // As passwords are not backuped
         TString expected = R"(-- database: "/MyRoot"
 -- backup root: "/MyRoot"
 CREATE ASYNC REPLICATION `Replication`
@@ -3431,6 +3429,6 @@ WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=',
   CONSISTENCY_LEVEL = 'Row'
 );)";
-        TestReplication(scheme, expected, true);
+        TestReplication(scheme, expected);
     }
 }

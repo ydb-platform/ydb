@@ -811,7 +811,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             }
         )", TTestEnvOptions().EnableIndexMaterialization(true));
     }
-    
+
     // Async Replication
     Y_UNIT_TEST(ShouldSucceedOnSingleReplication) {
         RunS3({

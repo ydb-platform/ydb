@@ -973,17 +973,18 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         THashMap<TString, TExprNode::TPtr> aggProjectionMap;
         TVector<TString> finalProjection;
 
-        for (auto resultItem : result->Child(1)->Children()) {
-            auto column = resultItem->Child(0);
+        auto processResultColumn = [&] (TExprNode::TPtr column, const TTypeAnnotationNode* actualColumnType, TExprNode::TPtr itemLambda) {
             TString columnName = TString(column->Content());
 
             const auto expectedTypeNode = finalType->FindItemType(columnName);
+            if (!expectedTypeNode) {
+                YQL_CLOG(TRACE, CoreDq) << "didn't find " << columnName << " in: " << *(TTypeAnnotationNode*)finalType;
+            }
             Y_ENSURE(expectedTypeNode);
-            const auto actualTypeNode = resultItem->GetTypeAnn();
 
-            auto lambda = TCoLambda(ctx.DeepCopyLambda(*(resultItem->Child(2))));
+            auto lambda = TCoLambda(ctx.DeepCopyLambda(*(itemLambda)));
 
-            YQL_CLOG(TRACE, CoreDq) << "Actual type for column: " << columnName << " is: " << *actualTypeNode;
+            YQL_CLOG(TRACE, CoreDq) << "Actual type for column: " << columnName << " is: " << *actualColumnType;
             YQL_CLOG(TRACE, CoreDq) << "Expected type for column: " << columnName << " is: " << *expectedTypeNode;
 
             bool needPgCast = false;
@@ -993,7 +994,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             bool needPgCastForAgg = pgSyntax && distinctAll;
 
             if (pgSyntax) {
-                Y_ENSURE(ExtractPgType(actualTypeNode, actualPgTypeId, convertToPg, node->Pos(), ctx));
+                Y_ENSURE(ExtractPgType(actualColumnType, actualPgTypeId, convertToPg, node->Pos(), ctx));
                 needPgCast = (expectedPgType->GetId() != actualPgTypeId);
             }
 
@@ -1071,6 +1072,53 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             // clang-format on
             
             finalProjection.push_back(columnName);
+        };
+
+        for (auto resultItem : result->Child(1)->Children()) {
+            auto maybeColumn = resultItem->Child(0);
+            auto itemType = resultItem->GetTypeAnn();
+            if (maybeColumn->IsAtom()) {
+                processResultColumn(maybeColumn, itemType, resultItem->Child(2));
+            } else if (maybeColumn->IsList()) {
+                for (size_t i=0; i<maybeColumn->ChildrenSize(); i++) {
+                    auto columnSpec = maybeColumn->Child(i);
+                    TExprNode::TPtr outputColumn;
+                    TExprNode::TPtr inputColumn;
+                    const TTypeAnnotationNode* columnType;
+
+                    if (columnSpec->IsList()) {
+                        outputColumn = columnSpec->Child(0);
+                        inputColumn = columnSpec->Child(1);
+                        columnType = itemType->Cast<TStructExprType>()->FindItemType(inputColumn->Content());
+                    }
+                    else {
+                        outputColumn = columnSpec;
+                        auto starLambda = resultItem->Child(2);
+                        Y_ENSURE(starLambda->IsLambda());
+                        Y_ENSURE(starLambda->Child(1)->IsCallable("AsStruct"));
+                        auto member = starLambda->Child(1)->Child(i);
+                        inputColumn = member->Child(1)->Child(1);
+                        columnType = itemType->Cast<TStructExprType>()->FindItemType(outputColumn->Content());
+                    }
+
+                    auto mapLambda = Build<TCoLambda>(ctx, node->Pos())
+                        .Args({"arg"})
+                        .Body<TCoMember>()
+                            .Struct("arg")
+                            .Name(inputColumn)
+                        .Build()
+                        .Done().Ptr();
+
+                    if (!columnType) {
+                        YQL_CLOG(TRACE, CoreDq) << "didn't find " << inputColumn->Content() << " in: " << *(TTypeAnnotationNode*)itemType;
+                    }
+                    Y_ENSURE(columnType);
+
+                    processResultColumn(outputColumn, columnType, mapLambda);
+                }
+            } else {
+                Y_ENSURE(false, "Uknown entity in result items");
+            }
         }
 
         // Sort clause may contain extra columns that we need to keep in the projection in order for sort to work

@@ -1811,11 +1811,19 @@ private:
 
             AFL_ENSURE(Writes.size() == 1);
             const auto writeRows = GetRows(Writes[0].Batch);
+            const auto& existsMask = Writes[0].ExistsMask;
+            AFL_ENSURE(writeRows.size() == existsMask.size());
 
             for (auto& [pathId, lookupInfo] : PathLookupInfo) {
                 if (pathId == PathId) {
                     continue;
                 }
+
+                const bool isPrimaryKeySubset = std::equal(
+                    lookupInfo.KeyIndexes.begin(),
+                    lookupInfo.KeyIndexes.end(),
+                    lookupInfo.OldKeyIndexes.begin(),
+                    lookupInfo.OldKeyIndexes.end());
 
                 TUniqueSecondaryKeyCollector collector(
                         KeyColumnTypes,
@@ -1826,8 +1834,15 @@ private:
 
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
-                for (const auto& row : writeRows) {
-                    if (lookupInfo.SkipEqualRowsForUniqCheck && IsEqual(
+                for (size_t index = 0; index < writeRows.size(); ++index) {
+                    const auto& row = writeRows[index];
+                    if (isPrimaryKeySubset && existsMask[index]
+                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+                        Error = ConflictWithExistingKeyErrorText;
+                        return false;
+                    }
+                    if (!isPrimaryKeySubset && lookupInfo.SkipEqualRowsForUniqCheck && IsEqual(
                             row,
                             {},
                             lookupInfo.KeyIndexes,
@@ -1844,6 +1859,7 @@ private:
                 }
 
                 const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
+
                 lookupInfo.Lookup->AddUniqueCheckTask(
                     Cookie,
                     std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},

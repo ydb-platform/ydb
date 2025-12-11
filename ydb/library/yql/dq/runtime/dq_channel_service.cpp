@@ -1706,8 +1706,6 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
 // unbinded channels
 
 IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelParams& params) {
-    Y_ENSURE(params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0
-            || params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0);
     auto buffer  = GetOutputBuffer(params.Desc.ChannelId);
     buffer->PushStats.Level = params.Level;
     buffer->PopStats.Level = params.Level;
@@ -1715,8 +1713,6 @@ IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelParam
 }
 
 IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelParams& params) {
-    Y_ENSURE(params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0
-            || params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0);
     auto buffer = GetInputBuffer(params.Desc.ChannelId);
     buffer->PushStats.Level = params.Level;
     buffer->PopStats.Level = params.Level;
@@ -1810,7 +1806,6 @@ bool TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
 }
 
 void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
-    LOGA_E("TChannelServiceActor::Mutex");
     std::lock_guard lock(ChannelService->Mutex);
     TStringStream str;
     HTML(str) {
@@ -1841,7 +1836,6 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                 }
                 TABLEBODY() {
                     auto registry = ChannelService->LocalBufferRegistry;
-                    LOGA_E("LocalBufferRegistry::Mutex");
                     std::lock_guard lock(registry->Mutex);
                     for (auto& [info, weakBuffer] : registry->LocalBuffers) {
                         auto sharedBuffer = weakBuffer.lock();
@@ -1902,7 +1896,6 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                 }
                 TABLEBODY() {
                     for (auto& [nodeId, state] : ChannelService->NodeStates) {
-                        LOGA_E("TNodeState::Mutex, NodeId=" << state->NodeId);
                         std::lock_guard lock(state->Mutex);
                         TABLER() {
                             TABLED() {str << nodeId;}

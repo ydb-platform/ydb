@@ -8511,6 +8511,20 @@
             "uri": "https://{canondata_backend}/1784117/f7e7299a1132dd2e53350d06fcab928ba47c6d34/resource.tar.gz#test_sql2yql.test_select_yql-group_by_a_count_b_nulls_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-group_by_a_having_b]": [
+        {
+            "checksum": "c9964e0c119560770d0fa0964fad5725",
+            "size": 1566,
+            "uri": "https://{canondata_backend}/1814674/fbce22356acccc2dfada35cdd3302bb3c1c79331/resource.tar.gz#test_sql2yql.test_select_yql-group_by_a_having_b_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-group_by_a_having_b_where_b]": [
+        {
+            "checksum": "13f3327ee7f702669369cd5de68db344",
+            "size": 1648,
+            "uri": "https://{canondata_backend}/1814674/fbce22356acccc2dfada35cdd3302bb3c1c79331/resource.tar.gz#test_sql2yql.test_select_yql-group_by_a_having_b_where_b_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-group_by_a_max_b]": [
         {
             "checksum": "cfaa59d8800d483dfbd89bdec46b3b49",
@@ -8544,6 +8558,13 @@
             "checksum": "41fe943e3d9926465e7238ab45a3641b",
             "size": 965,
             "uri": "https://{canondata_backend}/1784117/01d5a74e6d83f8c3d38e7fc80ab9529f2963f1fb/resource.tar.gz#test_sql2yql.test_select_yql-group_by_count_b_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-group_by_having_b]": [
+        {
+            "checksum": "464e1e9493f32d013b017b0bca6ba8b8",
+            "size": 1105,
+            "uri": "https://{canondata_backend}/1814674/fbce22356acccc2dfada35cdd3302bb3c1c79331/resource.tar.gz#test_sql2yql.test_select_yql-group_by_having_b_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-join_cross_2_implicit]": [
@@ -14076,6 +14097,16 @@
             "uri": "file://test_sql_format.test_select_yql-group_by_a_count_b_nulls_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select_yql-group_by_a_having_b]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-group_by_a_having_b_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-group_by_a_having_b_where_b]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-group_by_a_having_b_where_b_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select_yql-group_by_a_max_b]": [
         {
             "uri": "file://test_sql_format.test_select_yql-group_by_a_max_b_/formatted.sql"
@@ -14099,6 +14130,11 @@
     "test_sql_format.test[select_yql-group_by_count_b]": [
         {
             "uri": "file://test_sql_format.test_select_yql-group_by_count_b_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-group_by_having_b]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-group_by_having_b_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-join_cross_2_implicit]": [

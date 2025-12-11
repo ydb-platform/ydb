@@ -92,16 +92,16 @@ NYql::TAstParseResult SqlToYql(const TLexers& lexers, const TParsers& parsers, c
     const TString queryName = settings.File;
 
     NSQLTranslation::TSQLHints hints;
-    auto lexer = MakeLexer(lexers, settings.AnsiLexer, settings.Antlr4Parser);
+    auto lexer = MakeLexer(lexers, settings.AnsiLexer);
     YQL_ENSURE(lexer);
-    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, res.Issues, settings.MaxErrors, settings.Antlr4Parser)) {
+    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, res.Issues, settings.MaxErrors, /*utf8Aware=*/true)) {
         return res;
     }
 
     TContext ctx(lexers, parsers, settings, hints, res.Issues, query);
     NSQLTranslation::TErrorCollectorOverIssues collector(res.Issues, settings.MaxErrors, settings.File);
 
-    google::protobuf::Message* ast(SqlAST(parsers, query, queryName, collector, settings.AnsiLexer, settings.Antlr4Parser, settings.Arena));
+    google::protobuf::Message* ast(SqlAST(parsers, query, queryName, collector, settings.AnsiLexer, settings.Arena));
     if (ast) {
         SqlASTToYqlImpl(res, *ast, ctx);
     } else {
@@ -201,16 +201,16 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TLexers& lexers, const T
     TIssues issues;
 
     NSQLTranslation::TSQLHints hints;
-    auto lexer = MakeLexer(lexers, settings.AnsiLexer, settings.Antlr4Parser);
+    auto lexer = MakeLexer(lexers, settings.AnsiLexer);
     YQL_ENSURE(lexer);
-    if (!CollectSqlHints(*lexer, queryText, queryName, settings.File, hints, issues, settings.MaxErrors, settings.Antlr4Parser)) {
+    if (!CollectSqlHints(*lexer, queryText, queryName, settings.File, hints, issues, settings.MaxErrors, /*utf8Aware=*/true)) {
         return result;
     }
 
     TContext ctx(lexers, parsers, settings, hints, issues, queryText);
     NSQLTranslation::TErrorCollectorOverIssues collector(issues, settings.MaxErrors, settings.File);
 
-    google::protobuf::Message* astProto(SqlAST(parsers, queryText, queryName, collector, settings.AnsiLexer, settings.Antlr4Parser, settings.Arena));
+    google::protobuf::Message* astProto(SqlAST(parsers, queryText, queryName, collector, settings.AnsiLexer, settings.Arena));
     if (astProto) {
         auto ast = static_cast<const TSQLv1ParserAST&>(*astProto);
         const auto& query = ast.GetRule_sql_query();
@@ -259,7 +259,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TLexers& lexers, const T
 
 bool SplitQueryToStatements(const TLexers& lexers, const TParsers& parsers, const TString& query, TVector<TString>& statements, NYql::TIssues& issues,
                             const NSQLTranslation::TTranslationSettings& settings) {
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, settings.Antlr4Parser);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer);
 
     TVector<TString> parts;
     if (!SplitQueryToStatements(query, lexer, parts, issues)) {
@@ -269,7 +269,7 @@ bool SplitQueryToStatements(const TLexers& lexers, const TParsers& parsers, cons
     for (auto& currentQuery : parts) {
         NYql::TIssues parserIssues;
         auto message = NSQLTranslationV1::SqlAST(parsers, currentQuery, settings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
-                                                 settings.AnsiLexer, settings.Antlr4Parser, settings.Arena);
+                                                 settings.AnsiLexer, settings.Arena);
         if (!message) {
             // Skip empty statements
             continue;
@@ -290,7 +290,7 @@ public:
     }
 
     NSQLTranslation::ILexer::TPtr MakeLexer(const NSQLTranslation::TTranslationSettings& settings) final {
-        return NSQLTranslationV1::MakeLexer(Lexers_, settings.AnsiLexer, settings.Antlr4Parser);
+        return NSQLTranslationV1::MakeLexer(Lexers_, settings.AnsiLexer);
     }
 
     NYql::TAstParseResult TextToAst(const TString& query, const NSQLTranslation::TTranslationSettings& settings,
@@ -301,7 +301,7 @@ public:
 
     google::protobuf::Message* TextToMessage(const TString& query, const TString& queryName,
                                              NYql::TIssues& issues, size_t maxErrors, const NSQLTranslation::TTranslationSettings& settings) final {
-        return SqlAST(Parsers_, query, queryName, issues, maxErrors, settings.AnsiLexer, settings.Antlr4Parser, settings.Arena);
+        return SqlAST(Parsers_, query, queryName, issues, maxErrors, settings.AnsiLexer, settings.Arena);
     }
 
     NYql::TAstParseResult TextAndMessageToAst(const TString& query, const google::protobuf::Message& protoAst,

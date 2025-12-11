@@ -22,14 +22,9 @@ TLexers Lexers = {
     .RegexAnsi = MakeRegexLexerFactory(/* ansi = */ true),
 };
 
-auto PureAnsiLexer = MakeLexer(
-    Lexers, /* ansi = */ true, /* antlr4 = */ true, ELexerFlavor::Pure);
-
-auto DefaultLexer = MakeLexer(
-    Lexers, /* ansi = */ false, /* antlr4 = */ false, ELexerFlavor::Regex);
-
-auto AnsiLexer = MakeLexer(
-    Lexers, /* ansi = */ true, /* antlr4 = */ false, ELexerFlavor::Regex);
+auto PureAnsiLexer = MakeLexer(Lexers, /* ansi = */ true, ELexerFlavor::Pure);
+auto DefaultLexer = MakeLexer(Lexers, /* ansi = */ false, ELexerFlavor::Regex);
+auto AnsiLexer = MakeLexer(Lexers, /* ansi = */ true, ELexerFlavor::Regex);
 
 TString ToString(TParsedToken token) {
     TString& string = token.Name;

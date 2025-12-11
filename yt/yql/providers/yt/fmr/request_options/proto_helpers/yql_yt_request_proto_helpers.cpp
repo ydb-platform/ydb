@@ -191,15 +191,39 @@ TTableStats TableStatsFromProto(const NProto::TTableStats& protoTableStats) {
     };
 }
 
+NProto::TSortedChunkStats SortedChunkStatsToProto(const TSortedChunkStats& sortedChunkStats) {
+    NProto::TSortedChunkStats protoSortedChunkStats;
+    protoSortedChunkStats.SetIsSorted(sortedChunkStats.IsSorted);
+    if (!sortedChunkStats.FirstRowKeys.IsUndefined()) {
+        protoSortedChunkStats.SetFirstRowKeys(NYT::NodeToYsonString(sortedChunkStats.FirstRowKeys));
+    }
+    return protoSortedChunkStats;
+}
+
+TSortedChunkStats SortedChunkStatsFromProto(const NProto::TSortedChunkStats& protoSortedChunkStats) {
+    TSortedChunkStats sortedChunkStats;
+    sortedChunkStats.IsSorted = protoSortedChunkStats.GetIsSorted();
+    if (!protoSortedChunkStats.GetFirstRowKeys().empty()) {
+        sortedChunkStats.FirstRowKeys = NYT::NodeFromYsonString(protoSortedChunkStats.GetFirstRowKeys());
+    }
+    return sortedChunkStats;
+}
+
 NProto::TChunkStats ChunkStatsToProto(const TChunkStats& chunkStats) {
     NProto::TChunkStats protoChunkStats;
     protoChunkStats.SetRows(chunkStats.Rows);
     protoChunkStats.SetDataWeight(chunkStats.DataWeight);
+    auto protoSortedChunkStats = SortedChunkStatsToProto(chunkStats.SortedChunkStats);
+    protoChunkStats.MutableSortedChunkStats()->Swap(&protoSortedChunkStats);
     return protoChunkStats;
 }
 
 TChunkStats ChunkStatsFromProto(const NProto::TChunkStats& protoChunkStats) {
-    return TChunkStats{.Rows = protoChunkStats.GetRows(), .DataWeight = protoChunkStats.GetDataWeight()};
+    TChunkStats chunkStats;
+    chunkStats.Rows = protoChunkStats.GetRows();
+    chunkStats.DataWeight = protoChunkStats.GetDataWeight();
+    chunkStats.SortedChunkStats = SortedChunkStatsFromProto(protoChunkStats.GetSortedChunkStats());
+    return chunkStats;
 }
 
 NProto::TTableChunkStats TableChunkStatsToProto(const TTableChunkStats& tableChunkStats) {

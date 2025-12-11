@@ -27,8 +27,7 @@ ui32 PopFront(TDeque<ui32>& pendingItems) {
 }
 
 bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
-    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable
-        || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
+    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
 }
 
 bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
@@ -1267,15 +1266,25 @@ private:
             AllocateTxId(*exportInfo);
         } else {
             // None of the items is a table.
+            TDeque<ui32> tables;
             for (ui32 i : xrange(exportInfo->Items.size())) {
-                exportInfo->Items[i].State = EState::Transferring;
+                auto& item = exportInfo->Items[i];
+                item.State = EState::Transferring;
                 Self->PersistExportItemState(db, *exportInfo, i);
 
-                UploadScheme(*exportInfo, i, ctx);
+                // TODO (hcpp): remove after implementing copying of column tables
+                if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+                    tables.emplace_back(i);
+                } else {
+                    UploadScheme(*exportInfo, i, ctx);
+                }
             }
 
             exportInfo->State = EState::Transferring;
-            exportInfo->PendingItems.clear();
+            exportInfo->PendingItems = std::move(tables);
+            for (ui32 itemIdx : exportInfo->PendingItems) {
+                AllocateTxId(*exportInfo, itemIdx);
+            }
         }
 
         Self->PersistExportState(db, *exportInfo);
@@ -1348,15 +1357,25 @@ private:
                 AllocateTxId(*exportInfo);
             } else {
                 // None of the items is a table.
+                TDeque<ui32> tables;
                 for (ui32 i : xrange(exportInfo->Items.size())) {
-                    exportInfo->Items[i].State = EState::Transferring;
+                    auto& item = exportInfo->Items[i];
+                    item.State = EState::Transferring;
                     Self->PersistExportItemState(db, *exportInfo, i);
 
-                    UploadScheme(*exportInfo, i, ctx);
+                    // TODO (hcpp): remove after implementing copying of column tables
+                    if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+                        tables.emplace_back(i);
+                    } else {
+                        UploadScheme(*exportInfo, i, ctx);
+                    }
                 }
 
                 exportInfo->State = EState::Transferring;
-                exportInfo->PendingItems.clear();
+                exportInfo->PendingItems = std::move(tables);
+                for (ui32 itemIdx : exportInfo->PendingItems) {
+                    AllocateTxId(*exportInfo, itemIdx);
+                }
             }
             break;
         }

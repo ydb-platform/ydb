@@ -306,7 +306,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             Y_ABORT("Unreachable");
         }
     } else if (info.IsBuildColumns()) {
-        for(const auto& column : info.BuildColumns) {
+        for (const auto& column : info.BuildColumns) {
             auto* columnProto = settings.mutable_column_build_operation()->add_column();
             columnProto->SetColumnName(column.ColumnName);
             columnProto->mutable_default_from_literal()->CopyFrom(column.DefaultFromLiteral);

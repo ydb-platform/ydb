@@ -166,7 +166,11 @@ public:
                 return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
             }
         } else if (settings.has_column_build_operation()) {
-            buildInfo->TargetName = settings.source_path();
+            if (!Self->EnableAddColumsWithDefaults) {
+                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
+            }
+
+            buildInfo->TargetName = tablePath.PathString();
             // put some validation here for the build operation
             buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;
             buildInfo->BuildColumns.reserve(settings.column_build_operation().column_size());
@@ -194,12 +198,7 @@ public:
 
         Self->PersistCreateBuildIndex(db, *buildInfo);
 
-        if (buildInfo->IsBuildColumns()) {
-            buildInfo->State = TIndexBuildInfo::EState::AlterMainTable;
-        } else {
-            Y_ASSERT(buildInfo->IsBuildIndex());
-            buildInfo->State = TIndexBuildInfo::EState::Locking;
-        }
+        buildInfo->State = TIndexBuildInfo::EState::Locking;
 
         Self->PersistBuildIndexState(db, *buildInfo);
 

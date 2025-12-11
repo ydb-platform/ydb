@@ -12,7 +12,6 @@ namespace {
 class TScriptExecutionLeaseCheckActor : public TActorBootstrapped<TScriptExecutionLeaseCheckActor> {
     static constexpr TDuration CHECK_PERIOD = TDuration::Seconds(1);
     static constexpr TDuration REFRESH_NODES_PERIOD = TDuration::Minutes(1);
-    static constexpr TDuration STARTUP_TIMEOUT = TDuration::Seconds(15);
 
     enum class EWakeup {
         RefreshNodesInfo,
@@ -21,9 +20,10 @@ class TScriptExecutionLeaseCheckActor : public TActorBootstrapped<TScriptExecuti
     };
 
 public:
-    TScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
+    TScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters)
         : QueryServiceConfig(queryServiceConfig)
         , Counters(counters)
+        , StartupTimeout(startupTimeout)
     {}
 
     void Bootstrap() {
@@ -31,7 +31,7 @@ public:
         Become(&TScriptExecutionLeaseCheckActor::MainState);
 
         RefreshNodesInfo();
-        Schedule(STARTUP_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
+        Schedule(StartupTimeout, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
     }
 
     STRICT_STFUNC(MainState,
@@ -117,6 +117,7 @@ private:
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     const TIntrusivePtr<TKqpCounters> Counters;
+    const TDuration StartupTimeout;
 
     TDuration RefreshLeasePeriod = CHECK_PERIOD;
 
@@ -127,8 +128,8 @@ private:
 
 }  // anonymous namespace
 
-IActor* CreateScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
-    return new TScriptExecutionLeaseCheckActor(queryServiceConfig, counters);
+IActor* CreateScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters) {
+    return new TScriptExecutionLeaseCheckActor(queryServiceConfig, startupTimeout, counters);
 }
 
 }  // namespace NKikimr::NKqp

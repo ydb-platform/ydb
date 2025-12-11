@@ -735,11 +735,11 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             }
 
             auto& consumerInfo = jt->second;
-            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGTH_COMMITTED_COUNT].Add(consumerStats.GetCommittedMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGTH_LOCKED_COUNT].Add(consumerStats.GetLockedMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGTH_DELAYED_COUNT].Add(consumerStats.GetDelayedMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGTH_UNLOCKED_COUNT].Add(consumerStats.GetUnprocessedMessageCount());
-            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGTH_SCHEDULED_TO_DLQ_COUNT].Add(consumerStats.GetDLQMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGHT_COMMITTED_COUNT].Add(consumerStats.GetCommittedMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGHT_LOCKED_COUNT].Add(consumerStats.GetLockedMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGHT_DELAYED_COUNT].Add(consumerStats.GetDelayedMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGHT_UNLOCKED_COUNT].Add(consumerStats.GetUnprocessedMessageCount());
+            consumerInfo.AggrMLP->GetCounters()[METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT].Add(consumerStats.GetDLQMessageCount());
 
             consumerInfo.AggrMLP->GetCounters()[METRIC_COMMITTED_COUNT].Add(consumerStats.GetTotalCommittedMessageCount());
             consumerInfo.AggrMLP->GetCounters()[METRIC_MOVED_TO_DLQ_COUNT].Add(consumerStats.GetTotalMovedToDLQMessageCount());

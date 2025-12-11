@@ -1,5 +1,9 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="https://storage.yandexcloud.net/ydb-site-assets/favicon-202305/favicon.ico">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism-themes/1.9.0/prism-vs.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
@@ -9,7 +13,7 @@
         body {
             font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
             margin: 0;
-            padding: 20px;
+            padding: 10px;
             box-sizing: border-box;
             zoom: 80%;
         }
@@ -17,8 +21,16 @@
             background-color: #f6f8fa;
             border: 1px solid #d0d7de;
             border-radius: 6px;
-            padding: 16px;
-            margin: 16px 0;
+            padding: 10px 12px;
+            margin: 8px 0;
+        }
+        .report-header h2 {
+            margin: 0 0 8px 0;
+            font-size: 20px;
+        }
+        .report-header p {
+            margin: 4px 0;
+            line-height: 1.4;
         }
         .filter-buttons {
             margin: 20px 0;
@@ -388,6 +400,15 @@
         .test-action-btn:hover {
             text-decoration: underline;
         }
+        .emoji {
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
+            font-style: normal;
+            font-variant: normal;
+            font-weight: normal;
+            line-height: 1;
+            display: inline-block;
+            vertical-align: middle;
+        }
         /* Modal styles */
         .modal {
             display: none;
@@ -455,16 +476,9 @@
         }
         .modal-log-links {
             margin-top: 10px;
-        }
-        .modal-log-link {
-            display: block;
-            margin: 4px 0;
-            color: #0969da;
-            text-decoration: none;
-            word-break: break-all;
-        }
-        .modal-log-link:hover {
-            text-decoration: underline;
+            display: inline-flex;
+            gap: 6px;
+            flex-wrap: wrap;
         }
         .console-frame {
             background-color: #f6f8fa;
@@ -476,6 +490,15 @@
         .console-frame pre {
             margin: 0;
             overflow-x: auto;
+        }
+        /* Hidden text for search - accessible to cmd+F but invisible */
+        .searchable-full-path {
+            position: absolute;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
         }
     </style>
 </head>
@@ -544,6 +567,7 @@
             <div id="suite-{{ loop.index }}" class="suite-content">
                 {% for test in tests %}
                 <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-is-flaky="{% if test.is_flaky %}true{% else %}false{% endif %}">
+                    <span class="searchable-full-path">{{ test.full_name }}</span>
                     <span class="test-name" title="{{ test.full_name }}">{{ test.name }}</span>
                     
                     <div class="test-meta">
@@ -564,14 +588,14 @@
                             {% if test.full_name in test_success_rates %}
                             {% set rates = test_success_rates[test.full_name] %}
                             <button class="success-rate-button" onclick="showSuccessRateModal('{{ test.full_name }}')" title="View success rate and history">
-                                📊 
+                                <span class="emoji">&#128202;</span> 
                                 {% if rates.pr_check %}PR:{{ rates.pr_check.rate }}%{% endif %}
                                 {% if rates.pr_check and rates.other %} | {% endif %}
-                                {% if rates.other %}Other:{{ rates.other.rate }}%{% endif %}
+                                {% if rates.other %}Branch:{{ rates.other.rate }}%{% endif %}
                             </button>
                             {% else %}
                             <button class="success-rate-button" onclick="showSuccessRateModal('{{ test.full_name }}')" title="View success rate and history">
-                                📊 No history
+                                <span class="emoji">&#128202;</span> No history
                             </button>
                             {% endif %}
                             {% endif %}
@@ -587,9 +611,9 @@
                         </div>
                         
                         <div class="test-actions">
-                            <button class="test-action-btn" onclick="copyTestName('{{ test.full_name }}')" title="Copy full test name">📋 Copy name</button>
-                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
-                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
+                            <button class="test-action-btn" onclick="copyTestName('{{ test.full_name }}')" title="Copy full test name"><span class="emoji">&#128203;</span> Copy name</button>
+                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command"><span class="emoji">&#128203;</span> Copy cmd</button>
+                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history"><span class="emoji">&#128202;</span> History</button>
                         </div>
                         
                         {% if test.status_description %}
@@ -1186,7 +1210,7 @@
                 html += `<div><strong>PR-Check:</strong> ${rates.pr_check.rate}% (${rates.pr_check.passed}/${rates.pr_check.total})</div>`;
             }
             if (rates.other) {
-                html += `<div><strong>Other Runs:</strong> ${rates.other.rate}% (${rates.other.passed}/${rates.other.total})</div>`;
+                html += `<div><strong>Branch Runs:</strong> ${rates.other.rate}% (${rates.other.passed}/${rates.other.total})</div>`;
             }
             html += '</div></div>';
             
@@ -1226,10 +1250,11 @@
             html += '<table style="width: 100%; border-collapse: collapse; margin-top: 15px; min-width: 100%;">';
             html += '<thead><tr style="background-color: #f6f8fa; border-bottom: 2px solid #d0d7de;">';
             html += '<th style="padding: 10px; text-align: left;">Date</th>';
-            html += '<th style="padding: 10px; text-align: center;">Success Rate-in-pr</th>';
-            html += '<th style="padding: 10px; text-align: center;">Success Rate-in-branch</th>';
-            html += '<th style="padding: 10px; text-align: left;">Runs-in-pr</th>';
-            html += '<th style="padding: 10px; text-align: left;">Runs-in-branch</th>';
+            const branch = "{{ branch }}";
+            html += `<th style="padding: 10px; text-align: center;">Success Rate Branch (${branch})</th>`;
+            html += `<th style="padding: 10px; text-align: left;">Runs in Branch (${branch})</th>`;
+            html += '<th style="padding: 10px; text-align: center;">Success Rate PR-Check</th>';
+            html += '<th style="padding: 10px; text-align: left;">Runs in PR-Check</th>';
             html += '</tr></thead><tbody>';
             
             for (const date of sortedDates) {
@@ -1380,15 +1405,15 @@
                 document.getElementById('modalErrorSection').style.display = 'none';
             }
             
-            // Log links
+            // Log links - reuse same style as main page
             modalLogLinks.innerHTML = '';
             if (testInfo.logUrls && Object.keys(testInfo.logUrls).length > 0) {
                 for (const [logName, logUrl] of Object.entries(testInfo.logUrls)) {
                     const link = document.createElement('a');
                     link.href = logUrl;
                     link.target = '_blank';
-                    link.className = 'modal-log-link';
-                    link.textContent = logName + ': ' + logUrl;
+                    link.className = 'log-link';
+                    link.textContent = logName;
                     modalLogLinks.appendChild(link);
                 }
             }

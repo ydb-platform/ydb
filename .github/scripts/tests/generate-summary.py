@@ -20,7 +20,7 @@ def load_owner_area_mapping():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         config_dir = os.path.join(script_dir, '..', '..', 'config')
         mapping_file = os.path.join(config_dir, 'owner_area_mapping.json')
-        with open(mapping_file, 'r') as f:
+        with open(mapping_file, 'r', encoding='utf-8') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Warning: Could not load owner area mapping: {e}")
@@ -176,20 +176,17 @@ class TestResult:
         # Properties are added later by transform_build_results.py with URL format
         log_urls = {}
         if properties and isinstance(properties, dict):
-            # Check both "url:key" and "key" formats (as used in transform_build_results.py)
-            # Try lowercase first, then original case
-            log_keys = ['log', 'Log', 'logsdir', 'Logsdir', 'stdout', 'Stdout', 'stderr', 'Stderr']
+            # Check both "url:key" (primary format) and "key" (fallback for backward compatibility)
+            log_keys = ['log', 'logsdir', 'stdout', 'stderr']
             for key in log_keys:
                 # Try "url:key" format first (primary format from transform_build_results.py)
                 url = properties.get(f"url:{key}")
                 if not url:
-                    # Fallback to just "key"
+                    # Fallback to just "key" (for backward compatibility)
                     url = properties.get(key)
                 if url:
-                    # Use lowercase key as display name for consistency
-                    display_key = key.lower()
-                    if display_key not in log_urls:  # Don't overwrite if already found
-                        log_urls[display_key] = url
+                    if key not in log_urls:  # Don't overwrite if already found
+                        log_urls[key] = url
         
         # Note: Links are processed later in gen_summary() to handle both URLs and file paths
         # (file paths need public_dir_url for conversion, which is only available in gen_summary)
@@ -464,7 +461,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         commit_sha=github_sha
     )
 
-    with open(fn, "w") as fp:
+    with open(fn, "w", encoding="utf-8") as fp:
         fp.write(content)
 
 
@@ -679,7 +676,7 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
         all_tests=rows
     )
 
-    with open(fn, "w") as fp:
+    with open(fn, "w", encoding="utf-8") as fp:
         fp.write(content)
 
 
@@ -700,7 +697,7 @@ def write_summary(summary: TestSummary):
 
 
 def get_codeowners_for_tests(codeowners_file_path, tests_data):
-    with open(codeowners_file_path, 'r') as file:
+    with open(codeowners_file_path, 'r', encoding='utf-8') as file:
         data = file.read()
         owners_odj = CodeOwners(data)
 
@@ -727,7 +724,7 @@ def iter_build_results_files(path):
     
     for fn in files:
         try:
-            with open(fn, 'r') as f:
+            with open(fn, 'r', encoding='utf-8') as f:
                 report = json.load(f)
             
             for result in report.get("results") or []:
@@ -766,7 +763,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
                             continue
                         
                         # Skip if already found in properties or processed earlier
-                        display_key = link_type.lower()
+                        display_key = link_type  # Already lowercase from list
                         if display_key in test_result.log_urls:
                             continue
                         
@@ -834,7 +831,7 @@ def get_comment_text(summary: TestSummary, summary_links: str, is_last_retry: bo
         body.append("<details>")
         body.append("")
 
-    with open(summary_links) as f:
+    with open(summary_links, encoding='utf-8') as f:
         links = f.readlines()
     
     links.sort()
@@ -899,14 +896,14 @@ def main():
 
     color, text = get_comment_text(summary, args.summary_links, is_last_retry=bool(args.is_last_retry), is_test_result_ignored=args.is_test_result_ignored)
 
-    with open(args.comment_color_file, "w") as f:
+    with open(args.comment_color_file, "w", encoding="utf-8") as f:
         f.write(color)
 
-    with open(args.comment_text_file, "w") as f:
+    with open(args.comment_text_file, "w", encoding="utf-8") as f:
         f.write('\n'.join(text))
         f.write('\n')
 
-    with open(args.status_report_file, "w") as f:
+    with open(args.status_report_file, "w", encoding="utf-8") as f:
         f.write(overall_status)
 
 

@@ -111,7 +111,14 @@ class StressUtilDeployer:
                 for workload_name, workload_info in workload_params.items():
                     if workload_info['local_path'] in processed_binaries:
                         processed_binaries[workload_info['local_path']].append(workload_name)
+                        with allure.step(f"Deploy {workload_name} binary"):
+                            allure.attach(
+                                "Skipping deployment, binary already deployed"
+                                "Summary",
+                                attachment_type=allure.attachment_type.TEXT,
+                            )
                         continue
+                    processed_binaries[workload_info['local_path']].append(workload_name)
                     deploy_futures.append(
                         (
                             tpe.submit(self._deploy_workload_binary, workload_name, workload_info['local_path'], nodes_percentage),

@@ -39,6 +39,7 @@ PY3TEST()
             ydb/tests/stress/transfer
             ydb/tests/stress/reconfig_state_storage_workload
             ydb/tests/stress/show_create/view
+            ydb/tests/stress/show_create/table
             ydb/tests/stress/cdc
             ydb/tests/stress/statistics_workload
             ydb/tests/stress/viewer

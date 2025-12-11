@@ -32,7 +32,7 @@ An *audit event source* is a {{ ydb-short-name }} service or subsystem that can 
 Audit events are grouped into *log classes* that represent broad categories of operations. You can enable or disable logging for each class in [configuration](#log-class-config) and, if necessary, tailor the configuration per class. The available log classes are:
 
 #|
-|| **Log class**         | **Description** ||
+|| **Log class**      | **Description** ||
 || `ClusterAdmin`     | Cluster administration requests. ||
 || `DatabaseAdmin`    | Database administration requests. ||
 || `Login`            | Login requests. ||
@@ -53,9 +53,9 @@ At the moment, not all audit event sources categorize events into log classes. F
 Some audit event sources divide the request processing into stages. *Logging phase* indicates the processing stages at which audit logging records events. Specifying logging phases is useful when you need fine-grained visibility into request execution and want to capture events before and after critical processing steps. The available log phases are:
 
 #|
-|| Log phase      | Description ||
-|| `Received`     | A request is received and the initial checks and authentication are made. The `status` attribute is set to `IN-PROCESS`. </br>This phase is disabled by default; you must include `Received` in `log_class_config.log_phase` to enable it. ||
-|| `Completed`    | A request is completely finished. The `status` attribute is set to `SUCCESS` or `ERROR`. This phase is enabled by default when `log_class_config.log_phase` is not set. ||
+|| **Log phase**    | **Description** ||
+|| `Received`       | A request is received and the initial checks and authentication are made. The `status` attribute is set to `IN-PROCESS`. </br>This phase is disabled by default; you must include `Received` in `log_class_config.log_phase` to enable it. ||
+|| `Completed`      | A request is completely finished. The `status` attribute is set to `SUCCESS` or `ERROR`. This phase is enabled by default when `log_class_config.log_phase` is not set. ||
 |#
 
 ### Audit log destinations {#stream-destinations}
@@ -78,18 +78,17 @@ For test installations, forward the audit log to the standard error stream (`std
 
 The table below summarizes the built-in audit event sources. Use it to identify which source emits the events you need and how to enable those events.
 
-#|
-|| Source / UID | What it records | Configuration requirements ||
-|| [Schemeshard](#schemeshard) </br>`schemeshard` | Schema operations, ACL modifications, and user management actions. | Included in the [basic audit configuration](#enabling-audit-log). ||
-|| [gRPC services](#grpc-proxy) </br>`grpc-proxy` | Non-internal requests handled by {{ ydb-short-name }} gRPC endpoints. | Enable the relevant [log classes](#log-class-config) and optional [log phases](#log-phases). ||
+|| **Source / UID**                                     | **What it records** | **Configuration requirements** ||
+|| [Schemeshard](#schemeshard) </br>`schemeshard`       | Schema operations, ACL modifications, and user management actions. | Included in the [basic audit configuration](#enabling-audit-log). ||
+|| [gRPC services](#grpc-proxy) </br>`grpc-proxy`       | Non-internal requests handled by {{ ydb-short-name }} gRPC endpoints. | Enable the relevant [log classes](#log-class-config) and optional [log phases](#log-phases). ||
 || [gRPC connection](#grpc-connection) </br>`grpc-conn` | Client connection and disconnection events. | Enable the [`enable_grpc_audit`](../reference/configuration/feature_flags.md) feature flag. ||
 || [gRPC authentication](#grpc-login) </br>`grpc-login` | gRPC authentication attempts. | Enable the `Login` class in [`log_class_config`](#log-class-config). ||
-|| [Monitoring service](#monitoring) </br>`monitoring` | HTTP requests handled by the [monitoring endpoint](../reference/configuration/tls.md#http). | Enable the `ClusterAdmin` class in [`log_class_config`](#log-class-config). ||
-|| [Heartbeat](#heartbeat) </br>`audit` | Synthetic heartbeat events proving that audit logging is alive. | Enable the `AuditHeartbeat` class in [`log_class_config`](#log-class-config) and optionally adjust [heartbeat settings](#heartbeat-settings). ||
-|| [BlobStorage Controller](#bsc) </br>`bsc` | Console-driven BlobStorage Controller configuration changes. | Included in the [basic audit configuration](#enabling-audit-log). ||
-|| [Distconf](#distconf) </br>`distconf` | Distributed configuration updates. | Included in the [basic audit configuration](#enabling-audit-log). ||
-|| [Web login](#web-login) </br>`web-login` | Interactions with the web console authentication widget. | Included in the [basic audit configuration](#enabling-audit-log). ||
-|| [Console](#console) </br>`console` | Database lifecycle operations and dynamic configuration changes. | Included in the [basic audit configuration](#enabling-audit-log). ||
+|| [Monitoring service](#monitoring) </br>`monitoring`  | HTTP requests handled by the [monitoring endpoint](../reference/configuration/tls.md#http). | Enable the `ClusterAdmin` class in [`log_class_config`](#log-class-config). ||
+|| [Heartbeat](#heartbeat) </br>`audit`                 | Synthetic heartbeat events proving that audit logging is alive. | Enable the `AuditHeartbeat` class in [`log_class_config`](#log-class-config) and optionally adjust [heartbeat settings](#heartbeat-settings). ||
+|| [BlobStorage Controller](#bsc) </br>`bsc`            | Console-driven BlobStorage Controller configuration changes. | Included in the [basic audit configuration](#enabling-audit-log). ||
+|| [Distconf](#distconf) </br>`distconf`                | Distributed configuration updates. | Included in the [basic audit configuration](#enabling-audit-log). ||
+|| [Web login](#web-login) </br>`web-login`             | Interactions with the web console authentication widget. | Included in the [basic audit configuration](#enabling-audit-log). ||
+|| [Console](#console) </br>`console`                   | Database lifecycle operations and dynamic configuration changes. | Included in the [basic audit configuration](#enabling-audit-log). ||
 |#
 
 ## Audit event attributes {#audit-event-attributes}
@@ -105,20 +104,20 @@ In this section, you will find a reference guide to the attributes in audit even
 The table below lists the common attributes.
 
 #|
-|| Attribute          | Description ||
-|| `subject`          | Event source [SID](../concepts/glossary.md#access-sid) if mandatory authentication is enabled, or `{none}` otherwise. ||
-|| `sanitized_token`  | A partially masked authentication token that was used to execute the request. Can be used to link related events while keeping the original credentials hidden. If authentication was not performed, the value will be `{none}`. ||
-|| `operation`        | Operation name (for example, `ALTER DATABASE`, `CREATE TABLE`). ||
-|| `component`        | Unique identifier (UID) of the *audit event source*. ||
-|| `status`           | Operation completion status.<br/>Acceptable values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul> ||
-|| `reason`           | Error message. ||
-|| `request_id`       | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context. ||
-|| `remote_address`   | IP of the client that delivered the request. ||
-|| `detailed_status`  | The status delivered by a {{ ydb-short-name }} *audit event source*. ||
-|| `database`         | Database path (for example, `/my_dir/db`). ||
-|| `cloud_id`         | Cloud identifier of the {{ ydb-short-name }} database. ||
-|| `folder_id`        | Folder identifier of the {{ ydb-short-name }} cluster or database. ||
-|| `resource_id`      | Resource identifier of the {{ ydb-short-name }} database.<br/>*Optional.* ||
+|| **Attribute**          | **Description** ||
+|| `subject`              | Event source [SID](../concepts/glossary.md#access-sid) if mandatory authentication is enabled, or `{none}` otherwise. ||
+|| `sanitized_token`      | A partially masked authentication token that was used to execute the request. Can be used to link related events while keeping the original credentials hidden. If authentication was not performed, the value will be `{none}`. ||
+|| `operation`            | Operation name (for example, `ALTER DATABASE`, `CREATE TABLE`). ||
+|| `component`            | Unique identifier (UID) of the *audit event source*. ||
+|| `status`               | Operation completion status.<br/>Acceptable values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul> ||
+|| `reason`               | Error message. ||
+|| `request_id`           | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context. ||
+|| `remote_address`       | IP of the client that delivered the request. ||
+|| `detailed_status`      | The status delivered by a {{ ydb-short-name }} *audit event source*. ||
+|| `database`             | Database path (for example, `/my_dir/db`). ||
+|| `cloud_id`             | Cloud identifier of the {{ ydb-short-name }} database. ||
+|| `folder_id`            | Folder identifier of the {{ ydb-short-name }} cluster or database. ||
+|| `resource_id`          | Resource identifier of the {{ ydb-short-name }} database.<br/>*Optional.* ||
 |#
 
 ### Schemeshard {#schemeshard}
@@ -130,7 +129,7 @@ The table below lists the common attributes.
 The table below lists additional attributes specific to the `Schemeshard` source.
 
 #|
-|| Attribute                                | Description ||
+|| **Attribute**                            | **Description** ||
 || **Common schemeshard attributes**        | **>** ||
 || `tx_id`                                  | Unique transaction ID. This ID can be used to differentiate events related to different operations.</br>*Required.* ||
 || `paths`                                  | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).</br>*Optional.* ||
@@ -177,7 +176,7 @@ The table below lists additional attributes specific to the `Schemeshard` source
 Тhe table below lists additional attributes specific to the `gRPC services` source.
 
 #|
-|| Attribute                  | Description ||
+|| **Attribute**              | **Description** ||
 || **Common gRPC attributes** | **>** ||
 || `grpc_method`              | RPC method name.</br>*Optional.* ||
 || `request`                  | Sanitized representation of the incoming request.</br>*Optional.* ||
@@ -216,7 +215,7 @@ The table below lists additional attributes specific to the `Schemeshard` source
 The table below lists additional attributes specific to the `gRPC authentication` source.
 
 #|
-|| Attribute          | Description ||
+|| **Attribute**      | **Description** ||
 || `login_user`       | User name. *Required.* ||
 || `login_user_level` | Privilege level of the user recorded by audit events. This attribute only uses the `admin` value. *Optional.* ||
 |#
@@ -232,11 +231,11 @@ The table below lists additional attributes specific to the `gRPC authentication
 The table below lists additional attributes specific to the `Monitoring service` source.
 
 #|
-|| Attribute  | Description ||
-|| `method`   | HTTP request method. For example `POST`, `GET`.</br>*Required.* ||
-|| `url`      | Request path without query parameters.</br>*Required.* ||
-|| `params`   | Raw query parameters.</br>*Optional.* ||
-|| `body`     | Request body (truncated to 2 MB with the `TRUNCATED_BY_YDB` suffix).</br>*Optional.* ||
+|| **Attribute**  | **Description** ||
+|| `method`       | HTTP request method. For example `POST`, `GET`.</br>*Required.* ||
+|| `url`          | Request path without query parameters.</br>*Required.* ||
+|| `params`       | Raw query parameters.</br>*Optional.* ||
+|| `body`         | Request body (truncated to 2 MB with the `TRUNCATED_BY_YDB` suffix).</br>*Optional.* ||
 |#
 
 ### Heartbeat {#heartbeat}
@@ -250,8 +249,8 @@ The table below lists additional attributes specific to the `Monitoring service`
 The table below lists additional attributes specific to the `Heartbeat` source.
 
 #|
-|| Attribute | Description ||
-|| `node_id` | Node identifier where the event occurred. *Required.* ||
+|| **Attribute**  | **Description** ||
+|| `node_id`      | Node identifier where the event occurred. *Required.* ||
 |#
 
 ### BlobStorage Controller {#bsc}
@@ -263,9 +262,9 @@ The table below lists additional attributes specific to the `Heartbeat` source.
 The table below lists additional attributes specific to the `BlobStorage Controller` source.
 
 #|
-|| Attribute    | Description ||
-|| `old_config` | Snapshot of the previous BlobStorage Controller configuration in YAML form. </br>*Optional.* ||
-|| `new_config` | Snapshot of the configuration that replaced the previous one. </br>*Optional.* ||
+|| **Attribute**    | **Description** ||
+|| `old_config`     | Snapshot of the previous BlobStorage Controller configuration in YAML form. </br>*Optional.* ||
+|| `new_config`     | Snapshot of the configuration that replaced the previous one. </br>*Optional.* ||
 |#
 
 ### Distconf {#distconf}
@@ -277,9 +276,9 @@ The table below lists additional attributes specific to the `BlobStorage Control
 The table below lists additional attributes specific to the `Distconf` source.
 
 #|
-|| Attribute    | Description ||
-|| `old_config` | Snapshot of the configuration that was active before the distributed update was accepted. Distconf serializes it in YAML. *Required.* ||
-|| `new_config` | Snapshot of the configuration that Distconf committed after the change. *Required.* ||
+|| **Attribute**    | **Description** ||
+|| `old_config`     | Snapshot of the configuration that was active before the distributed update was accepted. Distconf serializes it in YAML. *Required.* ||
+|| `new_config`     | Snapshot of the configuration that Distconf committed after the change. *Required.* ||
 |#
 
 ### Web login {#web-login}
@@ -299,9 +298,9 @@ The table below lists additional attributes specific to the `Distconf` source.
 The table below lists additional attributes specific to the `Console` source.
 
 #|
-|| Attribute    | Description ||
-|| `old_config` | Snapshot of the configuration that was in effect before the console request was applied. *Optional.* ||
-|| `new_config` | Snapshot of the configuration that the console applied. *Optional.* ||
+|| **Attribute**    | **Description** ||
+|| `old_config`     | Snapshot of the configuration that was in effect before the console request was applied. *Optional.* ||
+|| `new_config`     | Snapshot of the configuration that the console applied. *Optional.* ||
 |#
 
 ## Audit log configuration {#audit-log-configuration}
@@ -327,7 +326,7 @@ audit_config:
 All fields are optional.
 
 #|
-|| Field                    | Description ||
+|| **Field**                | **Description** ||
 || `stderr_backend`         | Forward the audit log to the standard error stream (`stderr`). See the [backend settings](#backend-settings) for details. ||
 || `file_backend`           | Write the audit log to a file at each cluster node. See the [backend settings](#backend-settings) for details. ||
 || `unified_agent_backend`  | Stream the audit log to the [Unified Agent](https://yandex.cloud/docs/monitoring/concepts/data-collection/unified-agent/). In addition, you need to define the `uaclient_config` section in the [cluster configuration](../reference/configuration/index.md). See the [backend settings](#backend-settings) for details. ||
@@ -340,7 +339,7 @@ All fields are optional.
 Each backend supports the following fields:
 
 #|
-|| Field                | Description ||
+|| **Field**            | **Description** ||
 || `format`             | Audit log format. The default value is `JSON`. See [Log format](#log-format) for details.<br/>*Optional.* ||
 || `file_path`          | Path to the file that the audit log will be streamed to. If the path and the file are missing, they will be created on each node at cluster startup. If the file exists, the data will be appended to it. Only for `file_backend`. <br/>*Required.* ||
 || `log_name`           | The session metadata delivered with the message. Using the metadata, you can redirect the log stream to one or more child channels based on the condition: `_log_name: "session_meta_log_name"`. Only for `unified_agent_backend`. <br/>*Optional.* ||
@@ -352,7 +351,7 @@ Each backend supports the following fields:
 The `format` field specifies the serialization format for audit events. The supported formats are:
 
 #|
-|| Format                 | Description ||
+|| **Format**             | **Description** ||
 || `JSON`                 | Each audit event is serialized as a single-line JSON object preceded by an ISO 8601 timestamp.</br>Example: `<time>: {"k1": "v1", "k2": "v2", ...}` </br>*`k1`, `k2`, …, `kn` represent audit log attributes; `v1`, `v2`, …, `vn` represent their values.* ||
 || `TXT`                  | Each audit event is serialized as a single-line text string in the `key=value` format, preceded by an ISO 8601 timestamp.</br>Example: `<time>: k1=v1, k2=v2, ...` </br>*`k1`, `k2`, …, `kn` represent audit log attributes; `v1`, `v2`, …, `vn` represent their values.* ||
 || `JSON_LOG_COMPATIBLE`  | Each audit event is serialized as a single-line JSON object suitable for output to destinations shared with debug logs. The object contains the `@timestamp` field with the ISO 8601 timestamp and the `@log_type` field set to `audit`.</br>Example: `{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}` </br>*`@timestamp` stores the ISO 8601 timestamp; `k1`, `k2`, …, `kn` represent audit log attributes; `v1`, `v2`, …, `vn` represent their values.* ||
@@ -378,7 +377,7 @@ See the [Example with Envelope JSON](#examples) section for output details.
 Each entry in `log_class_config` accepts the following fields:
 
 #|
-|| Field                  | Description ||
+|| **Field**              | **Description** ||
 || `log_class`            | Class name to configure. Uses values from the [log classes](#log-classes) list. The `log_class_config` list must not contain two classes with the same name.<br/>*Required.* ||
 || `enable_logging`       | Enables audit event emission for the selected log class. Disabled by default.<br/>*Optional.* ||
 || `exclude_account_type` | Array of account type (`Anonymous`, `User`, `Service`, `ServiceImpersonatedFromUser`) that should exclude events even if logging is enabled.<br/>*Optional.* ||

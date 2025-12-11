@@ -590,6 +590,7 @@ public:
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())
         , LongRequestThreshold(params.LongRequestThreshold)
+        , MaxTimeout(params.MaxTimeout)
     {
         if (params.Common.Event->Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;

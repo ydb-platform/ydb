@@ -1123,7 +1123,13 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 {
     ui32 curWrites = 0;
     for (ui32 i = 0; i < request->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
-        auto key = TKey::FromString(request->Record.GetCmdWrite(i).GetKey());
+        const auto& k = request->Record.GetCmdWrite(i).GetKey();
+        if ((k.front() != TKeyPrefix::TypeTmpData) &&
+            (k.front() != TKeyPrefix::ServiceTypeTmpData)) {
+            continue;
+        }
+        // оптимизация. можно не создавать ключ. достаточно проверить первый символ и перевести с учётом типа партиции
+        auto key = TKey::FromString(k);
         if (key.GetType() == TKeyPrefix::TypeTmpData) {
             key.SetType(TKeyPrefix::TypeData);
             request->Record.MutableCmdWrite(i)->SetKey(key.Data(), key.Size());

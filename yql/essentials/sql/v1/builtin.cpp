@@ -3318,6 +3318,9 @@ struct TBuiltinFuncData {
             // Hint builtins
             {"grouping", {"Grouping", "AggKey", BuildSimpleBuiltinFactoryCallback<TGroupingNode>()}},
 
+            // Fulltext builtins
+            {"fulltextcontains", {"FulltextContains", "Normal", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(2, "FulltextContains", 2, -1)}},
+
             // Window funcitons
             {"rownumber", {"RowNumber", "Window", BuildNamedArgcBuiltinFactoryCallback<TWinRowNumber>("RowNumber", 0, 0)}},
             {"rank", {"Rank", "Window", BuildNamedArgcBuiltinFactoryCallback<TWinRank>("Rank", 0, 1)}},

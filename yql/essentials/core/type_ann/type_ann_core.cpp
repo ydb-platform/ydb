@@ -12239,6 +12239,23 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus FulltextContainsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+
+        if (!EnsureNotInDiscoveryMode(*input, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 0);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
+        input->SetUnorderedChildren();
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus JsonValueWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
 
@@ -14005,6 +14022,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
         ExtFunctions["Version"] = &VersionWrapper;
         ExtFunctions["FromBytes"] = &FromBytesWrapper;
+
+        ExtFunctions["FulltextContains"] = &DataGeneratorWrapper<NKikimr::NUdf::EDataSlot::Uuid>;
+
 
         ExtFunctions["Aggregate"] = &AggregateWrapper;
         ExtFunctions["AggregateCombine"] = &AggregateWrapper;

@@ -11026,25 +11026,19 @@ return /*Комментарий*/ $x;
 )";
 
     NSQLTranslationV1::TLexers lexers;
-#if ANTLR_VER == 3
-    bool antlr4 = false;
-    lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
-#else
-    bool antlr4 = true;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-#endif
 
     ui64 lexerPosition = 0;
     const auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         NSQLv1Generated::TToken tokenProto;
         tokenProto.SetLine(token.Line);
         tokenProto.SetColumn(token.LinePos);
-        UNIT_ASSERT_VALUES_EQUAL_C(lexerPosition, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4), token.Line << ":" << token.LinePos << ":'" << token.Content << "'");
+        UNIT_ASSERT_VALUES_EQUAL_C(lexerPosition, NSQLTranslationV1::GetQueryPosition(query, tokenProto), token.Line << ":" << token.LinePos << ":'" << token.Content << "'");
 
         lexerPosition += token.Content.size();
     };
 
-    const auto lexer = NSQLTranslationV1::MakeLexer(lexers, false, antlr4);
+    const auto lexer = NSQLTranslationV1::MakeLexer(lexers, /*ansi=*/false);
 
     NYql::TIssues issues;
     const bool result = lexer->Tokenize(query, {}, onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS);
@@ -11055,27 +11049,21 @@ Y_UNIT_TEST(TestTokenMissing) {
     const TString query = "BEGIN /*Комментарий*/ \nEND";
     NSQLv1Generated::TToken tokenProto;
 
-#if ANTLR_VER == 3
-    bool antlr4 = false;
-#else
-    bool antlr4 = true;
-#endif
-
     tokenProto.SetLine(3);
     tokenProto.SetColumn(0);
-    UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4));
+    UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto));
 
     tokenProto.SetLine(2);
     tokenProto.SetColumn(4);
-    UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4));
+    UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto));
 
     tokenProto.SetLine(1);
     tokenProto.SetColumn(34);
-    UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4));
+    UNIT_ASSERT_VALUES_EQUAL(std::string::npos, NSQLTranslationV1::GetQueryPosition(query, tokenProto));
 
     tokenProto.SetLine(1);
     tokenProto.SetColumn(0);
-    UNIT_ASSERT_VALUES_EQUAL(0, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4));
+    UNIT_ASSERT_VALUES_EQUAL(0, NSQLTranslationV1::GetQueryPosition(query, tokenProto));
 }
 } // Y_UNIT_TEST_SUITE(TestGetQueryPosition)
 
@@ -11913,15 +11901,66 @@ Y_UNIT_TEST(GroupByAvg) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 1 + 1);
 }
 
+Y_UNIT_TEST(GroupByExplicitWithHaving) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, Avg(b) FROM (VALUES (1, 2)) AS x(a, b)
+        GROUP BY a HAVING 1 < a AND Avg(b) < 2;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlGroup", "YqlWhere", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlWhere"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 2 * (1 + 1));
+}
+
+Y_UNIT_TEST(GroupByImplicitWithHaving) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT Avg(b) FROM (VALUES (1, 2)) AS x(a, b) HAVING Avg(b) < 2;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlGroup", "YqlWhere", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlWhere"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 2 * (1 + 1));
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
 Y_UNIT_TEST_SUITE(CreateViewNewSyntax) {
 
+Y_UNIT_TEST(DoesntWorkOnOldLangVersion) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+    ExpectFailWithError("create view plato.foo as select 1;",
+                        "<main>:1:13: Error: CREATE VIEW is not available before language version 2025.05\n",
+                        settings);
+    ExpectFailWithError("create view plato.foo as do begin select 1; end do;",
+                        "<main>:1:13: Error: CREATE VIEW is not available before language version 2025.05\n",
+                        settings);
+}
+
 Y_UNIT_TEST(Basic) {
-    NYql::TAstParseResult res = SqlToYql(R"sql(
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         CREATE VIEW plato.foo AS
         DO BEGIN $foo = 1; select /* some hint */  $foo + 123; END DO;
-    )sql");
+    )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 
     TWordCountHive stat = {
@@ -11938,6 +11977,9 @@ Y_UNIT_TEST(Basic) {
 }
 
 Y_UNIT_TEST(NamedNodesAreNotVisibleInView) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
     auto query = R"sql(
         $foo = 1;
         CREATE VIEW plato.foo AS
@@ -11947,17 +11989,20 @@ Y_UNIT_TEST(NamedNodesAreNotVisibleInView) {
         END DO;
     )sql";
 
-    ExpectFailWithError(query, "<main>:6:27: Error: Unknown name: $foo\n");
+    ExpectFailWithError(query, "<main>:6:27: Error: Unknown name: $foo\n", settings);
 }
 
 Y_UNIT_TEST(ScopedPragmasDoNotAffectView) {
-    NYql::TAstParseResult res = SqlToYql(R"sql(
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         pragma CheckedOps = 'true';
         CREATE VIEW plato.foo AS
         DO BEGIN
             select 1 + 1;
         END DO;
-    )sql");
+    )sql", settings);
 
     TWordCountHive stat = {
         {TString("+MayWarn"), 0},
@@ -11969,29 +12014,41 @@ Y_UNIT_TEST(ScopedPragmasDoNotAffectView) {
 }
 
 Y_UNIT_TEST(NewSyntaxDoesntWorkOnYdb) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
     ExpectFailWithError("create view ydb.foo as do begin select 1; end do",
-                        "<main>:1:13: Error: CREATE VIEW ... AS DO BEGIN ... END DO syntax is not supported for ydb provider. Please use CREATE VIEW ... AS SELECT\n");
+                        "<main>:1:13: Error: CREATE VIEW ... AS DO BEGIN ... END DO syntax is not supported for ydb provider. Please use CREATE VIEW ... AS SELECT\n",
+                        settings);
 }
 
 Y_UNIT_TEST(OldSyntaxDoesntWorkOnYt) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
     ExpectFailWithError("create view plato.foo as select 1;",
-                        "<main>:1:13: Error: CREATE VIEW ... AS SELECT syntax is not supported for yt provider. Please use CREATE VIEW ... AS DO BEGIN ... END DO\n");
+                        "<main>:1:13: Error: CREATE VIEW ... AS SELECT syntax is not supported for yt provider. Please use CREATE VIEW ... AS DO BEGIN ... END DO\n",
+                        settings);
 }
 
 Y_UNIT_TEST(EmptyViewBody) {
-    ExpectFailWithError("create view plato.foo as do begin end do", "<main>:1:13: Error: Empty view body is not allowed\n");
-    ExpectFailWithError("create view plato.foo as do begin /*comment*/;; end do", "<main>:1:13: Error: Empty view body is not allowed\n");
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+    ExpectFailWithError("create view plato.foo as do begin end do", "<main>:1:13: Error: Empty view body is not allowed\n", settings);
+    ExpectFailWithError("create view plato.foo as do begin /*comment*/;; end do", "<main>:1:13: Error: Empty view body is not allowed\n", settings);
 }
 
 Y_UNIT_TEST(MultiSelectsInViewOrStatementAfterSelect) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
     ExpectFailWithError("create view plato.foo as do begin select 1; select 2; end do",
-                        "<main>:1:52: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n");
+                        "<main>:1:52: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
     ExpectFailWithError("create view plato.foo as do begin select 1;   $foo = 2; end do",
-                        "<main>:1:54: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n");
+                        "<main>:1:54: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n", settings);
 }
 
 Y_UNIT_TEST(ErrorOnMissingCluster) {
-    ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:1: Error: No cluster name given and no default cluster is selected\n");
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+    ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:1: Error: No cluster name given and no default cluster is selected\n", settings);
 }
 
 } // Y_UNIT_TEST_SUITE(CreateViewNewSyntax)

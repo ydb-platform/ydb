@@ -13,8 +13,7 @@ NSQLTranslation::ILexer::TPtr MakeLexer() {
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
     return NSQLTranslationV1::MakeLexer(
-        lexers, /* ansi = */ false, /* antlr4 = */ true,
-        NSQLTranslationV1::ELexerFlavor::Pure);
+        lexers, /* ansi = */ false, NSQLTranslationV1::ELexerFlavor::Pure);
 }
 
 TCursorTokenContext Context(TString input) {

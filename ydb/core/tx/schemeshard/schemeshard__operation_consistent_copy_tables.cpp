@@ -20,7 +20,7 @@ static bool ShouldOmitAutomaticIndexProcessing(const NKikimrSchemeOp::TCopyTable
     return false;  // Regular copy - let CreateCopyTable handle indexes automatically
 }
 
-static NKikimrSchemeOp::TModifyScheme CopyTableTaskImpl(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, const NKikimrSchemeOp::TCopyTableConfig& descr) {
+static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, const NKikimrSchemeOp::TCopyTableConfig& descr) {
     using namespace NKikimr::NSchemeShard;
 
     auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
@@ -42,26 +42,6 @@ static NKikimrSchemeOp::TModifyScheme CopyTableTaskImpl(NKikimr::NSchemeShard::T
     }
 
     return scheme;
-}
-
-static NKikimrSchemeOp::TModifyScheme CopyColumnTableTaskImpl(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, const NKikimrSchemeOp::TCopyTableConfig&) {
-    using namespace NKikimr::NSchemeShard;
-
-    auto scheme = TransactionTemplate(dst.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
-    scheme.SetFailOnExist(true);
-
-    auto operation = scheme.MutableCreateColumnTable();
-    operation->SetName(src.PathString());
-
-    return scheme;
-}
-
-static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, const NKikimrSchemeOp::TCopyTableConfig& descr) {
-    if (src->IsColumnTable()) {
-        return CopyColumnTableTaskImpl(src, dst, descr);
-    } else {
-        return CopyTableTaskImpl(src, dst, descr);
-    }
 }
 
 static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NSchemeShard::TTableIndexInfo::TPtr indexInfo, NKikimr::NSchemeShard::TPath& dst) {
@@ -171,7 +151,7 @@ bool CreateConsistentCopyTables(
             TPath::TChecker checks = srcPath.Check();
             checks.IsResolved()
                   .NotDeleted()
-                  .Or(&TPath::TChecker::IsTable, &TPath::TChecker::IsColumnTable);
+                  .IsTable();
 
             // Allow copying index impl tables when feature flag is enabled
             if (!srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {

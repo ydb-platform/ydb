@@ -6,7 +6,7 @@ import os
 from ydb.tests.stress.oltp_workload.workload import WorkloadRunner
 from ydb.tests.stress.common.common import YdbClient
 
-logging.basicConfig(level=os.getenv('LOG_LEVEL', 'INFO'))
+logging.basicConfig(level=os.getenv('LOG_LEVEL', 'ERROR'))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

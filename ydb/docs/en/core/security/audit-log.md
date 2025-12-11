@@ -1,6 +1,6 @@
 # Audit log
 
-_An audit log_ is a stream of records that document the operation of the {{ ydb-short-name }} cluster. Unlike technical logs, which help detect failures and troubleshoot issues, the audit log provides data relevant to security. It serves as a source of information that answers the questions: who did what, when, and from where.
+_An audit log is a stream of records that document security-relevant operations performed within the {{ ydb-short-name }} cluster. Unlike technical logs, which help detect failures and troubleshoot issues, the audit log provides data relevant to security. It serves as a source of information that answers the questions: who did what, when, and from where.
 
 A single audit log record may look like this:
 

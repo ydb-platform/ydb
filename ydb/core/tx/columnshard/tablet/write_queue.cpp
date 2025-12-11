@@ -14,8 +14,8 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
     owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
 
     if (const auto lock = owner->OperationsManager->GetLockOptional(LockId); lock) {
-        if (lock->IsDeleted()) {
-            Abort(owner, "lock is deleted", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        if (lock->NeedsAborting()) {
+            Abort(owner, "transaction is aborted", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
             return true;
         }
     }

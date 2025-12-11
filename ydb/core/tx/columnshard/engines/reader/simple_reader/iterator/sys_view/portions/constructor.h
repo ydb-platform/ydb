@@ -28,7 +28,7 @@ public:
             GetSourceIdx(), PathId, GetTabletId(), std::move(Portions), ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context);
     }
 
-    virtual bool StableOrderLess(const NCommon::TDataSourceConstructor& rhs) const override {
+    virtual bool QueryAgnosticLess(const NCommon::TDataSourceConstructor& rhs) const override {
         auto* rhsLocal = VerifyDynamicCast<const TDataSourceConstructor*>(&rhs);
         AFL_VERIFY(!Portions.empty());
         AFL_VERIFY(!rhsLocal->Portions.empty());

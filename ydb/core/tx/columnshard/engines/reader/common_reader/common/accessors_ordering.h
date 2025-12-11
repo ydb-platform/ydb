@@ -51,8 +51,7 @@ public:
         return Finish;
     }
 
-    // query-agnistic order over sources of the same type
-    virtual bool StableOrderLess(const TDataSourceConstructor& rhs) const = 0;
+    virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const = 0;
     virtual ~TDataSourceConstructor() = default;
 
     TDataSourceConstructor(TDataSourceConstructor&& other)
@@ -89,7 +88,7 @@ public:
             } else if (cmp == std::partial_ordering::greater) {
                 return true;
             } else {
-                return r.StableOrderLess(l);
+                return r.QueryAgnosticLess(l);
             }
         }
     };

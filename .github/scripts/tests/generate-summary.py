@@ -191,17 +191,8 @@ class TestResult:
                     if display_key not in log_urls:  # Don't overwrite if already found
                         log_urls[display_key] = url
         
-        # Fallback to links if not in properties
-        if not log_urls and isinstance(links, dict):
-            def get_link_url(link_type):
-                if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
-                    return links[link_type][0]  # Take first URL from array
-                return None
-            
-            for key in ['Log', 'log', 'logsdir', 'stdout', 'stderr']:
-                url = get_link_url(key)
-                if url and key not in log_urls:
-                    log_urls[key] = url
+        # Note: Links are processed later in gen_summary() to handle both URLs and file paths
+        # (file paths need public_dir_url for conversion, which is only available in gen_summary)
         
         # Extract elapsed time from metrics
         elapsed = 0.0
@@ -758,6 +749,53 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
 
         for fn, result in iter_build_results_files(path):
             test_result = TestResult.from_build_results_report(result)
+            
+            # Convert file paths in links to URLs if needed
+            # Links may contain file paths that need to be converted to URLs
+            links = result.get("links", {})
+            if links and isinstance(links, dict):
+                for link_type in ["stdout", "stderr", "log", "logsdir"]:
+                    if link_type in links:
+                        link_value = links[link_type]
+                        # If it's a list, take the first element
+                        if isinstance(link_value, list) and len(link_value) > 0:
+                            link_path = link_value[0]
+                        elif isinstance(link_value, str):
+                            link_path = link_value
+                        else:
+                            continue
+                        
+                        # Skip if already found in properties or processed earlier
+                        display_key = link_type.lower()
+                        if display_key in test_result.log_urls:
+                            continue
+                        
+                        # If it's already a URL, use it
+                        if isinstance(link_path, str) and (link_path.startswith("http://") or link_path.startswith("https://")):
+                            test_result.log_urls[display_key] = link_path
+                        # If it's a file path, try to convert it to URL
+                        elif isinstance(link_path, str) and os.path.isabs(link_path):
+                            try:
+                                # Common pattern: paths like /home/runner/.../tmp/out/...
+                                # Extract relative path after tmp/out
+                                if "tmp/out" in link_path:
+                                    parts = link_path.split("tmp/out", 1)
+                                    if len(parts) > 1:
+                                        rel_path = parts[1].lstrip("/")
+                                        # Construct URL - try common patterns
+                                        # Usually logs are accessible via artifacts/logs/ or similar
+                                        # Try multiple possible URL patterns
+                                        possible_urls = [
+                                            f"{public_dir_url}/artifacts/logs/{rel_path}",
+                                            f"{public_dir_url}/logs/{rel_path}",
+                                            f"{public_dir_url}/{rel_path}",
+                                        ]
+                                        # Use the first pattern (most common)
+                                        test_result.log_urls[display_key] = possible_urls[0]
+                            except Exception:
+                                # If conversion fails, skip this link
+                                pass
+            
             summary_line.add(test_result)
         
         if os.path.isabs(html_fn):

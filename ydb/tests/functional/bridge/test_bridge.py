@@ -151,129 +151,18 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         return None
 
     def _stop_primary_pile_nodes(self, primary_pile_nodes):
-        """Останавливает ноды и слоты primary pile (логика из BridgePileStopNodesNemesis)."""
-        async def _async_stop_nodes():
-            try:
-                stop_tasks = []
-                slots_to_stop = []
-
-                # Останавливаем слоты
-                for slot in self.cluster.slots.values():
-                    # Проверяем, относится ли слот к primary pile по хосту
-                    if slot.host in [node.host for node in primary_pile_nodes]:
-                        self.logger.info("Stopping slot %d on host %s", slot.ic_port, slot.host)
-                        task = asyncio.create_task(
-                            asyncio.to_thread(
-                                slot.ssh_command,
-                                "sudo systemctl stop kikimr-multi@%d" % slot.ic_port,
-                                raise_on_error=True
-                            )
-                        )
-                        stop_tasks.append(task)
-                        slots_to_stop.append(slot)
-
-                slot_results = await asyncio.gather(*stop_tasks, return_exceptions=True)
-                slot_success_count = 0
-                for slot, result in zip(slots_to_stop, slot_results):
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception stopping slot %d on host %s: %s", slot.ic_port, slot.host, result)
-                        continue
-                    self.logger.info("Successfully stopped slot %d on host %s", slot.ic_port, slot.host)
-                    slot_success_count += 1
-
-                self.logger.info("Stopped %d/%d dynamic slots", slot_success_count, len(stop_tasks))
-
-                # Останавливаем storage nodes
-                stop_tasks = []
-                for node in primary_pile_nodes:
-                    self.logger.info("Stopping storage node %d on host %s", node.node_id, node.host)
-                    task = asyncio.create_task(
-                        asyncio.to_thread(
-                            node.ssh_command,
-                            "sudo systemctl stop kikimr",
-                            raise_on_error=True
-                        )
-                    )
-                    stop_tasks.append(task)
-
-                node_results = await asyncio.gather(*stop_tasks, return_exceptions=True)
-                node_success_count = 0
-                for i, result in enumerate(node_results):
-                    if isinstance(result, Exception):
-                        self.logger.error("Exception stopping node_id %d on host %s: %s",
-                                          primary_pile_nodes[i].node_id, primary_pile_nodes[i].host, result)
-                        raise result
-                    self.logger.info("Successfully stopped node %d on host %s",
-                                     primary_pile_nodes[i].node_id, primary_pile_nodes[i].host)
-                    node_success_count += 1
-
-                self.logger.info("Stopped %d/%d storage nodes", node_success_count, len(stop_tasks))
-
-            except Exception as e:
-                self.logger.error("Failed to stop nodes: %s", str(e))
-                raise e
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_stop_nodes())
+        """Останавливает ноды primary pile через node.stop()."""
+        for node in primary_pile_nodes:
+            self.logger.info("Stopping storage node %d on host %s", node.node_id, node.host)
+            node.stop()
+        self.logger.info("Stopped %d storage nodes", len(primary_pile_nodes))
 
     def _start_primary_pile_nodes(self, primary_pile_nodes):
-        """Запускает ноды и слоты primary pile."""
-        async def _async_start_nodes():
-            start_tasks = []
-
-            # Запускаем storage nodes
-            for node in primary_pile_nodes:
-                self.logger.info("Starting storage node %d on host %s", node.node_id, node.host)
-                task = asyncio.create_task(
-                    asyncio.to_thread(
-                        node.ssh_command,
-                        "sudo systemctl start kikimr",
-                        raise_on_error=True
-                    )
-                )
-                start_tasks.append(task)
-
-            node_results = await asyncio.gather(*start_tasks, return_exceptions=True)
-            node_success_count = 0
-            for i, result in enumerate(node_results):
-                if isinstance(result, Exception):
-                    self.logger.error("Exception starting node: %s", result)
-                    continue
-                self.logger.info("Successfully started node %d on host %s",
-                                 primary_pile_nodes[i].node_id, primary_pile_nodes[i].host)
-                node_success_count += 1
-
-            self.logger.info("Started %d/%d storage nodes", node_success_count, len(start_tasks))
-
-            # Запускаем слоты
-            start_tasks = []
-            slots_to_start = []
-            for slot in self.cluster.slots.values():
-                if slot.host in [node.host for node in primary_pile_nodes]:
-                    self.logger.info("Starting slot %d on host %s", slot.ic_port, slot.host)
-                    task = asyncio.create_task(
-                        asyncio.to_thread(
-                            slot.ssh_command,
-                            "sudo systemctl start kikimr-multi@%d" % slot.ic_port,
-                            raise_on_error=True
-                        )
-                    )
-                    start_tasks.append(task)
-                    slots_to_start.append(slot)
-
-            slot_results = await asyncio.gather(*start_tasks, return_exceptions=True)
-            slot_success_count = 0
-            for slot, result in zip(slots_to_start, slot_results):
-                if isinstance(result, Exception):
-                    self.logger.error("Exception starting slot %d on host %s: %s", slot.ic_port, slot.host, result)
-                    continue
-                self.logger.info("Successfully started slot %d on host %s", slot.ic_port, slot.host)
-                slot_success_count += 1
-
-            self.logger.info("Started %d/%d dynamic slots", slot_success_count, len(start_tasks))
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_start_nodes())
+        """Запускает ноды primary pile через node.start()."""
+        for node in primary_pile_nodes:
+            self.logger.info("Starting storage node %d on host %s", node.node_id, node.host)
+            node.start()
+        self.logger.info("Started %d storage nodes", len(primary_pile_nodes))
 
     def test_failover_after_stopping_primary_pile_nodes(self):
         """

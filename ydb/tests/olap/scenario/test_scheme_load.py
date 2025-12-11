@@ -27,7 +27,7 @@ class TestSchemeLoad(BaseTestSet):
     def _drop_tables(self, prefix: str, count: int, ctx: TestContext):
         sth = ScenarioTestHelper(ctx)
         for i in range(count):
-            sth.execute_scheme_query(DropTable(f'store/{prefix}_{i}'), retries=2)
+            sth.execute_scheme_query(DropTable(f'store/{prefix}_{i}'), retries=5)
 
     def scenario_create_and_drop_tables(self, ctx: TestContext):
         tables_count = 100

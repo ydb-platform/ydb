@@ -366,7 +366,7 @@ class TestAlterTiering(TieringTestBase):
             sth.execute_scheme_query(AlterTable(table).action(ResetSetting('TTL')), retries=2)
 
         for table in self.tables:
-            sth.execute_scheme_query(DropTable(table), retries=2)
-        sth.execute_scheme_query(DropTableStore('store'), retries=2)
+            sth.execute_scheme_query(DropTable(table), retries=5)
+        sth.execute_scheme_query(DropTableStore('store'), retries=5)
 
         self._tier_down_tiering_test(ctx)

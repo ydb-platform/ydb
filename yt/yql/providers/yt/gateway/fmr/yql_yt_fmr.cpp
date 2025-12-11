@@ -31,13 +31,6 @@ using namespace NYql::NNodes;
 
 namespace NYql::NFmr {
 
-enum class ETablePresenceStatus {
-    Undefined,
-    OnlyInYt,
-    OnlyInFmr,
-    Both
-};
-
 namespace {
 
 TIssue ToIssue(const TFmrError& error, const TPosition& pos){
@@ -1130,25 +1123,3 @@ IYtGateway::TPtr CreateYtFmrGateway(IYtGateway::TPtr slave, IFmrCoordinator::TPt
 }
 
 } // namespace NYql::NFmr
-
-template<>
-void Out<NYql::NFmr::ETablePresenceStatus>(IOutputStream& out, NYql::NFmr::ETablePresenceStatus status) {
-    switch (status) {
-        case NYql::NFmr::ETablePresenceStatus::Undefined: {
-            out << "UNDEFINED";
-            return;
-        }
-        case NYql::NFmr::ETablePresenceStatus::Both: {
-            out << "BOTH";
-            return;
-        }
-        case NYql::NFmr::ETablePresenceStatus::OnlyInFmr: {
-            out << "ONLY IN FMR";
-            return;
-        }
-        case NYql::NFmr::ETablePresenceStatus::OnlyInYt: {
-            out << "ONLY IN YT";
-            return;
-        }
-    }
-}

@@ -148,6 +148,7 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
     if (self) {
         self->Counters.GetTabletCounters()->OnCompactionWriteIndexCompleted(
             context.FinishedSuccessfully, context.BlobsWritten, context.BytesWritten);
+        NChanges::TGeneralCompactionCounters::OnCompactionFinish(context.Duration.MilliSeconds(), context.BlobsWritten, context.BlobsWritten);
     }
 }
 
@@ -158,12 +159,6 @@ void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& sel
     auto& g = *GranuleMeta;
     self.Counters.GetCSCounters().OnSplitCompactionInfo(
         g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
-}
-
-
-void TGeneralCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    TBase::DoOnFinish(self, context);
-    NChanges::TGeneralCompactionCounters::OnCompactionFinish((TMonotonic::Now() - StartTime).MilliSeconds());
 }
 
 NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

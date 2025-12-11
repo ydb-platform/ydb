@@ -39,7 +39,6 @@ protected:
         return NPortion::EProduced::SPLIT_COMPACTED;
     }
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
-    virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
     virtual ui64 DoCalcMemoryForUsage() const override {
         auto predictor = BuildMemoryPredictor();

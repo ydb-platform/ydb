@@ -14,19 +14,41 @@ using namespace NTableIndex;
 TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
 
+    if (!context.SS->EnableAddColumsWithDefaults) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled")};
+    }
+
     const auto& op = tx.GetInitiateColumnBuild();
 
-    const auto table = TPath::Resolve(op.GetTable(), context.SS);
+    const auto tablePath = TPath::Resolve(op.GetTable(), context.SS);
+    {
+        const auto checks = tablePath.Check();
+        checks
+            .IsAtLocalSchemeShard()
+            .NotEmpty()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotUnderDeleting()
+            .NotUnderOperation()
+            .NotAsyncReplicaTable()
+            .IsCommonSensePath();
+
+        if (!checks) {
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        }
+    }
+
     TVector<ISubOperation::TPtr> result;
 
     // altering version of the table.
     {
-        auto outTx = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
+        auto outTx = TransactionTemplate(tablePath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
         outTx.SetInternal(tx.GetInternal());
 
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
-        snapshot.SetTableName(table.LeafName());
+        snapshot.SetTableName(tablePath.LeafName());
 
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }

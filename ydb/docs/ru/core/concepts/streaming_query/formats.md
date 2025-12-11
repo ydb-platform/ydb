@@ -18,7 +18,7 @@
 
 Примеры парсинга данных других форматах см. [Примеры парсинга данных в различных форматах](#parsing).
 
-## Форматы при записи данных {#write-formats}
+## Форматы при записи данных {#write_formats}
 
 Для записи небходимо указывать одну колонку, поддерживаются типы: String, Json, Yson. При этом колонка должна быть неопциональная. Например:
 
@@ -42,6 +42,8 @@ FROM
 ```
 
 Описание функций вы можете найти в документации: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
+
+## Форматы при чтении данных {#read_formats}
 
 ### Формат csv_with_names {#csv_with_names}
 
@@ -263,6 +265,7 @@ LIMIT 1;
 ### Парсинг JSON встроенными функциями {#json_builtins}
 
 Пример данных:
+
 ```json
 {"key": 1997, "value": "42"}
 ```
@@ -298,13 +301,14 @@ LIMIT 1;
 
 ### Парсинг JSON библиотекой Yson {#json_yson}
 
-Пример данных (формат [Change Data Capture](concepts/cdc)):
+Пример данных (формат [Change Data Capture](../concepts/cdc)):
 
 ```json
 {"update":{"volume":10,"product":"bWlsaw=="},"key":[6],"ts":[1765192622420,18446744073709551615]}
 ```
 
 Пример запроса:
+
 ```sql
 $input = 
 SELECT 
@@ -332,7 +336,7 @@ FROM $volumes
 LIMIT 1;
 ```
 
-## Парсинг DSV (TSKV) {#dsv}
+### Парсинг DSV (TSKV) {#dsv}
 
 Пример данных:
 

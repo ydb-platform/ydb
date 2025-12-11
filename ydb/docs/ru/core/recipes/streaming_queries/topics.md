@@ -51,7 +51,7 @@ CREATE TOPIC `streaming_recipe/output_topic`;
 После создания топиков нужно создать внешний источник данных. Это можно сделать с помощью SQL-запроса:
 
 ```yql
-CREATE EXTERNAL DATA SOURCE source_name WITH (
+CREATE EXTERNAL DATA SOURCE `streaming_test/source_name` WITH (
     SOURCE_TYPE = 'Ydb',
     LOCATION = 'localhost:2136',
     DATABASE_NAME = '/local',
@@ -64,13 +64,13 @@ CREATE EXTERNAL DATA SOURCE source_name WITH (
 Далее необходимо запустить потоковый запрос. Это можно сделать с помощью SQL-запроса:
 
 ```yql
-CREATE STREAMING QUERY `my_queries/query_name` AS
+CREATE STREAMING QUERY `streaming_test/query_name` AS
 DO BEGIN
 $input = (
     SELECT
         *
     FROM
-        source_name.`streaming_recipe/input_topic` WITH (
+        `streaming_test/source_name`.`streaming_recipe/input_topic` WITH (
             FORMAT = 'json_each_row',
             SCHEMA = (time String NOT NULL, level String NOT NULL, host String NOT NULL)
         )
@@ -102,7 +102,7 @@ $json = (
         $number_errors
 );
 
-INSERT INTO source_name.`streaming_recipe/output_topic`
+INSERT INTO `streaming_test/source_name`.`streaming_recipe/output_topic`
 SELECT
     *
 FROM
@@ -155,5 +155,5 @@ echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"
 Удалить запрос (при этом он останавливается) можно с помощью SQL-запроса:
 
 ```yql
-DROP STREAMING QUERY `my_queries/query_name`;
+DROP STREAMING QUERY `streaming_test/query_name`;
 ```

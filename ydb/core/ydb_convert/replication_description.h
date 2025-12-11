@@ -16,7 +16,7 @@ namespace NKikimrSchemeOp {
 }
 
 namespace NKikimrReplication {
-    class TEvDesgicribeReplicationResult;
+    class TEvDescribeReplicationResult;
 }
 
 namespace NKikimr {

@@ -266,6 +266,7 @@ private:
                     .NotDeleted()
                     .NotUnderDeleting()
                     .IsSupportedInExports()
+                    .NotAsyncReplicaTable()
                     .FailOnRestrictedCreateInTempZone();
 
                 if (!checks) {

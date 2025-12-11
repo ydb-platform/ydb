@@ -13,7 +13,7 @@ namespace NKikimrSchemeOp {
 namespace NKikimr::NSchemeShard {
 
 bool BuildScheme(
-    const NKikimrScheme::TEvDescribeSchemeResult& describeResult, 
+    const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
     TString& scheme,
     const TString& databaseRoot,
     TString& error);

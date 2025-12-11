@@ -421,6 +421,10 @@
             max-height: 80vh;
             overflow-y: auto;
         }
+        #successRateModal .modal-content {
+            width: 95%;
+            max-width: 95%;
+        }
         .close-modal {
             color: #aaa;
             float: right;
@@ -522,7 +526,7 @@
         {% for suite_name, tests in suites.items()|sort %}
         <div class="suite-group">
             <div class="suite-header" onclick="toggleSuite('suite-{{ loop.index }}')">
-                <span class="suite-toggle">▼</span>
+                <span class="suite-toggle">&#9660;</span>
                 <span>{{ suite_name }}</span>
                 <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
                 {% set suite_duration = tests|sum(attribute='elapsed') %}
@@ -540,7 +544,7 @@
             <div id="suite-{{ loop.index }}" class="suite-content">
                 {% for test in tests %}
                 <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-is-flaky="{% if test.is_flaky %}true{% else %}false{% endif %}">
-                    <span class="test-name">{{ test.name }}</span>
+                    <span class="test-name" title="{{ test.full_name }}">{{ test.name }}</span>
                     
                     <div class="test-meta">
                         <span class="test-status {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}">{{ test.status_display }}</span>
@@ -583,6 +587,7 @@
                         </div>
                         
                         <div class="test-actions">
+                            <button class="test-action-btn" onclick="copyTestName('{{ test.full_name }}')" title="Copy full test name">📋 Copy name</button>
                             <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
                             <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
                         </div>
@@ -606,7 +611,7 @@
     <!-- Filtering is now done via JavaScript using data-test-status, data-is-sanitizer, and data-is-flaky attributes -->
     <!-- Modal for success rate and detailed history -->
     <div id="successRateModal" class="modal">
-        <div class="modal-content" style="max-width: 1200px; max-height: 90vh;">
+        <div class="modal-content" style="max-height: 90vh;">
             <span class="close-modal" onclick="closeSuccessRateModal()">&times;</span>
             <div class="modal-header">
                 <h2 id="successRateModalTitle">Test Success Rate</h2>
@@ -679,10 +684,10 @@
             
             if (suite.classList.contains('hidden')) {
                 suite.classList.remove('hidden');
-                if (toggle) toggle.textContent = '▼';
+                if (toggle) toggle.textContent = '\u25BC';
             } else {
                 suite.classList.add('hidden');
-                if (toggle) toggle.textContent = '▶';
+                if (toggle) toggle.textContent = '\u25B6';
             }
         }
         
@@ -692,7 +697,7 @@
                 suite.classList.remove('hidden');
             });
             document.querySelectorAll('.suite-toggle').forEach(toggle => {
-                toggle.textContent = '▼';
+                toggle.textContent = '\u25BC';
             });
             // Initialize filter from URL
             initFilterFromUrl();
@@ -825,7 +830,7 @@
                     // Expand all suites when filtering
                     suiteContent.classList.remove('hidden');
                     const toggle = suiteGroup.querySelector('.suite-toggle');
-                    if (toggle) toggle.textContent = '▼';
+                    if (toggle) toggle.textContent = '\u25BC';
                 } else {
                     suiteGroup.style.display = 'none';
                 }
@@ -934,6 +939,19 @@
             
             const [path, testName] = parsed;
             return formatTestCommand(path, testName);
+        }
+        
+        function copyTestName(testFullName) {
+            if (!testFullName) return;
+
+            navigator.clipboard.writeText(testFullName).then(
+                () => {
+                    console.log("Test name copied:", testFullName);
+                },
+                () => {
+                    console.error("Unable to copy test name to clipboard:", testFullName);
+                }
+            );
         }
         
         function copyRunCommand(test) {
@@ -1204,7 +1222,8 @@
             const sortedDates = Object.keys(historyByDate).sort((a, b) => new Date(b) - new Date(a));
             
             html += '<h3>Daily History</h3>';
-            html += '<table style="width: 100%; border-collapse: collapse; margin-top: 15px;">';
+            html += '<div style="overflow-x: auto; width: 100%;">';
+            html += '<table style="width: 100%; border-collapse: collapse; margin-top: 15px; min-width: 100%;">';
             html += '<thead><tr style="background-color: #f6f8fa; border-bottom: 2px solid #d0d7de;">';
             html += '<th style="padding: 10px; text-align: left;">Date</th>';
             html += '<th style="padding: 10px; text-align: center;">Success Rate-in-pr</th>';
@@ -1271,6 +1290,7 @@
                 html += '</div></td></tr>';
             }
             html += '</tbody></table>';
+            html += '</div>';
             
             modalTitle.textContent = `Success Rate: ${testFullName}`;
             modalContent.innerHTML = html;

@@ -123,6 +123,11 @@
             background-color: #0969da;
             border-color: #0969da;
         }
+        .flaky-stable-badge.sanitizer-badge-btn.active {
+            background-color: #ff4500;
+            color: white;
+            border-color: #ff4500;
+        }
         .badge-label {
             font-size: 13px;
             color: #656d76;
@@ -216,6 +221,10 @@
             align-items: center;
             gap: 12px;
             flex-wrap: wrap;
+            transition: padding 0.2s ease;
+        }
+        .test-item.error-hidden {
+            padding: 6px 12px;
         }
         .test-item:hover {
             background-color: #f6f8fa;
@@ -360,17 +369,37 @@
         .hidden {
             display: none;
         }
+        /* Hide all tests initially if body has data-initial-filter attribute - will be shown by JavaScript */
+        body[data-initial-filter] .test-item,
+        body[data-initial-filter] .suite-group {
+            display: none;
+        }
         .error-section {
             flex-basis: 100%;
             margin-top: 8px;
         }
         .error-button {
-            background: none;
-            border: none;
+            background-color: #fff4e6;
+            color: #9a6700;
+            border: 1px solid #ffd8a8;
+            border-radius: 4px;
             cursor: pointer;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 3px 8px;
+            margin-left: 8px;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .error-button:hover {
+            background-color: #ffe8cc;
+            border-color: #ffc878;
+        }
+        .error-button::before {
+            content: "⚠";
             font-size: 12px;
-            color: #0969da;
-            padding: 0;
         }
         .error-content {
             margin-top: 8px;
@@ -378,8 +407,20 @@
             background-color: #f6f8fa;
             border-radius: 4px;
         }
-        pre code {
+        .error-content pre {
+            margin: 0;
+            overflow-x: auto;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            max-width: 100%;
+        }
+        .error-content pre code {
             font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-wrap: break-word;
+            max-width: 100%;
+            display: block;
         }
         .test-actions {
             margin-left: 12px;
@@ -439,8 +480,11 @@
             border: 1px solid #888;
             width: 80%;
             border-radius: 5px;
-            max-height: 80vh;
-            overflow-y: auto;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
         }
         #successRateModal .modal-content {
             width: 95%;
@@ -448,10 +492,15 @@
         }
         .close-modal {
             color: #aaa;
-            float: right;
             font-size: 28px;
             font-weight: bold;
             cursor: pointer;
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            line-height: 1;
+            padding: 0;
+            z-index: 1;
         }
         .close-modal:hover {
             color: #000;
@@ -460,11 +509,25 @@
             margin-bottom: 15px;
             padding-bottom: 10px;
             border-bottom: 1px solid #eee;
+            flex-shrink: 0;
         }
         .modal-info {
             font-size: 14px;
             margin-bottom: 15px;
             line-height: 1.6;
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+            flex-shrink: 0;
+        }
+        .modal-info-left {
+            flex: 1;
+        }
+        .modal-info-right {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
         }
         .modal-info-item {
             margin-bottom: 8px;
@@ -475,10 +538,16 @@
             width: 100px;
         }
         .modal-log-links {
-            margin-top: 10px;
             display: inline-flex;
             gap: 6px;
             flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        #modalErrorSection {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
         }
         .console-frame {
             background-color: #f6f8fa;
@@ -486,6 +555,11 @@
             border-radius: 6px;
             padding: 16px;
             margin-top: 10px;
+            max-height: 60vh;
+            overflow-y: auto;
+            overflow-x: auto;
+            flex: 1 1 auto;
+            min-height: 0;
         }
         .console-frame pre {
             margin: 0;
@@ -500,9 +574,51 @@
             overflow: hidden;
             clip: rect(0, 0, 0, 0);
         }
+        /* Enhanced selection highlight */
+        ::selection {
+            background-color: #ffc107;
+            color: #000;
+        }
+        ::-moz-selection {
+            background-color: #ffc107;
+            color: #000;
+        }
     </style>
 </head>
 <body>
+    <script>
+        // Apply filter immediately on page load, before DOM is fully rendered
+        // This prevents showing "all" tests when URL has ?status=Failed
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const status = urlParams.get('status');
+            const flakyStable = urlParams.get('flakyStable');
+            
+            if (status) {
+                // Map status to filter name
+                const filter = status.toLowerCase();
+                const filterMap = {
+                    'fail': 'failed',
+                    'pass': 'passed',
+                    'err': 'error',
+                    'mut': 'mute',
+                    'skip': 'skipped',
+                    'fla': 'flaky'
+                };
+                const actualFilter = filterMap[filter] || filter;
+                
+                // Store filter state for later use
+                window.__initialFilter = {
+                    main: actualFilter,
+                    flakyStable: flakyStable || 'all'
+                };
+                
+                // Add data attribute to body to hide all tests via CSS
+                // This will be removed by applyFilters() after filtering
+                document.body.setAttribute('data-initial-filter', 'true');
+            }
+        })();
+    </script>
     <div class="report-header">
         <h2>Test Results Report</h2>
         <p><strong>Build Preset:</strong> {{ build_preset }}</p>
@@ -525,12 +641,9 @@
         <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }})</button>
         <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }})</button>
         <button class="filter-btn skipped" onclick="setFilter('skipped', this)">Skipped ({{ test_counts.skipped }})</button>
-        {% if test_counts.sanitizer > 0 %}
-        <button class="filter-btn sanitizer" onclick="setFilter('sanitizer', this)">Sanitizer ({{ test_counts.sanitizer }})</button>
-        {% endif %}
     </div>
     
-    <!-- Flaky/Stable badges - shown based on current filter -->
+    <!-- Flaky/Stable/Sanitizer badges - shown based on current filter -->
     <div id="flaky-stable-badges" class="flaky-stable-badges" style="margin: 10px 0; display: none;">
         <span class="badge-label" style="margin-right: 10px; font-weight: 500;">Filter by:</span>
         <button id="badge-flaky" class="flaky-stable-badge flaky-badge-btn" onclick="setFlakyStableFilter('flaky', this)" style="display: none;">
@@ -539,6 +652,11 @@
         <button id="badge-stable" class="flaky-stable-badge stable-badge-btn" onclick="setFlakyStableFilter('stable', this)" style="display: none;">
             Stable - <span id="badge-stable-count">0</span>
         </button>
+        {% if test_counts.sanitizer > 0 %}
+        <button id="badge-sanitizer" class="flaky-stable-badge sanitizer-badge-btn" onclick="setFlakyStableFilter('sanitizer', this)" style="display: none;">
+            Sanitizer - <span id="badge-sanitizer-count">{{ test_counts.sanitizer }}</span>
+        </button>
+        {% endif %}
         <button id="badge-all" class="flaky-stable-badge all-badge-btn" onclick="setFlakyStableFilter('all', this)" style="display: none;">
             All
         </button>
@@ -569,6 +687,9 @@
                 <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-is-flaky="{% if test.is_flaky %}true{% else %}false{% endif %}">
                     <span class="searchable-full-path">{{ test.full_name }}</span>
                     <span class="test-name" title="{{ test.full_name }}">{{ test.name }}</span>
+                    {% if test.status_description %}
+                    <button class="error-button" onclick="toggleError(this)" title="Show/hide error">Error</button>
+                    {% endif %}
                     
                     <div class="test-meta">
                         <span class="test-status {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}">{{ test.status_display }}</span>
@@ -589,9 +710,9 @@
                             {% set rates = test_success_rates[test.full_name] %}
                             <button class="success-rate-button" onclick="showSuccessRateModal('{{ test.full_name }}')" title="View success rate and history">
                                 <span class="emoji">&#128202;</span> 
+                                {% if rates.other %}{{ branch|upper }}:{{ rates.other.rate }}%{% endif %}
+                                {% if rates.other and rates.pr_check %} | {% endif %}
                                 {% if rates.pr_check %}PR:{{ rates.pr_check.rate }}%{% endif %}
-                                {% if rates.pr_check and rates.other %} | {% endif %}
-                                {% if rates.other %}Branch:{{ rates.other.rate }}%{% endif %}
                             </button>
                             {% else %}
                             <button class="success-rate-button" onclick="showSuccessRateModal('{{ test.full_name }}')" title="View success rate and history">
@@ -618,7 +739,6 @@
                         
                         {% if test.status_description %}
                         <div class="error-section">
-                            <button class="error-button" onclick="toggleError(this)">Show error</button>
                             <div class="error-content hidden">
                                 <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
                             </div>
@@ -723,8 +843,38 @@
             document.querySelectorAll('.suite-toggle').forEach(toggle => {
                 toggle.textContent = '\u25BC';
             });
-            // Initialize filter from URL
-            initFilterFromUrl();
+            // Initialize error-hidden class for tests with hidden errors
+            document.querySelectorAll('.test-item').forEach(testItem => {
+                const errorContent = testItem.querySelector('.error-content');
+                if (errorContent && errorContent.classList.contains('hidden')) {
+                    testItem.classList.add('error-hidden');
+                }
+            });
+            // Initialize filter from URL - apply immediately to prevent showing all tests
+            if (window.__initialFilter) {
+                // Use pre-parsed filter from inline script
+                const filter = window.__initialFilter.main;
+                const flakyStable = window.__initialFilter.flakyStable;
+                const button = document.querySelector(`.filter-btn.${filter}`);
+                if (button) {
+                    // Apply main filter immediately
+                    setFilter(filter, button);
+                    // Apply flaky/stable/sanitizer filter if present
+                    if (flakyStable && flakyStable !== 'all') {
+                        const badgeButton = document.getElementById(`badge-${flakyStable}`);
+                        if (badgeButton) {
+                            setFlakyStableFilter(flakyStable, badgeButton);
+                        }
+                    }
+                }
+            } else {
+                // Fallback to URL parsing if inline script didn't run
+                initFilterFromUrl();
+            }
+            
+            // Always update badges visibility on page load
+            const currentFilter = currentMainFilter || 'all';
+            updateFlakyStableBadges(currentFilter);
         });
         
         // Also expand when filter changes - now filters tests via data attributes
@@ -750,14 +900,17 @@
             const badgesContainer = document.getElementById('flaky-stable-badges');
             const badgeFlaky = document.getElementById('badge-flaky');
             const badgeStable = document.getElementById('badge-stable');
+            const badgeSanitizer = document.getElementById('badge-sanitizer');
             const badgeAll = document.getElementById('badge-all');
             const badgeFlakyCount = document.getElementById('badge-flaky-count');
             const badgeStableCount = document.getElementById('badge-stable-count');
+            const badgeSanitizerCount = document.getElementById('badge-sanitizer-count');
             
-            // Show badges only for failed, error, and mute filters
+            // Always show badges container if there are any badges to show
+            let hasAnyBadge = false;
+            
+            // Show Flaky/Stable badges only for failed, error, and mute filters
             if (mainFilter === 'failed' || mainFilter === 'error' || mainFilter === 'mute') {
-                badgesContainer.style.display = 'flex';
-                
                 // Get counts for current filter
                 const flakyKey = `flaky_${mainFilter}`;
                 const stableKey = `stable_${mainFilter}`;
@@ -771,15 +924,45 @@
                 // Show/hide badges based on counts
                 badgeFlaky.style.display = flakyCount > 0 ? 'inline-block' : 'none';
                 badgeStable.style.display = stableCount > 0 ? 'inline-block' : 'none';
-                badgeAll.style.display = 'inline-block';
                 
-                // Reset badge states
-                badgeFlaky.classList.remove('active');
-                badgeStable.classList.remove('active');
-                badgeAll.classList.add('active');
+                if (flakyCount > 0 || stableCount > 0) {
+                    hasAnyBadge = true;
+                }
             } else {
-                badgesContainer.style.display = 'none';
+                // Hide Flaky/Stable badges for other filters
+                badgeFlaky.style.display = 'none';
+                badgeStable.style.display = 'none';
             }
+            
+            // Update Sanitizer badge count based on current filter
+            if (badgeSanitizer && badgeSanitizerCount) {
+                // Get sanitizer count for current filter
+                const sanitizerKey = mainFilter === 'all' ? 'sanitizer_all' : `sanitizer_${mainFilter}`;
+                const sanitizerCount = testCounts[sanitizerKey] || 0;
+                
+                // Update count
+                badgeSanitizerCount.textContent = sanitizerCount;
+                
+                // Show/hide badge based on count
+                badgeSanitizer.style.display = sanitizerCount > 0 ? 'inline-block' : 'none';
+                
+                if (sanitizerCount > 0) {
+                    hasAnyBadge = true;
+                }
+            }
+            
+            // Always show All badge
+            badgeAll.style.display = 'inline-block';
+            hasAnyBadge = true;
+            
+            // Show container if there are any badges to display
+            badgesContainer.style.display = hasAnyBadge ? 'flex' : 'none';
+            
+            // Reset badge states
+            badgeFlaky.classList.remove('active');
+            badgeStable.classList.remove('active');
+            if (badgeSanitizer) badgeSanitizer.classList.remove('active');
+            badgeAll.classList.add('active');
         }
         
         function setFlakyStableFilter(type, button) {
@@ -796,9 +979,17 @@
         }
         
         function applyFilters() {
+            // Remove data-initial-filter attribute from body (was used to hide all tests initially)
+            if (document.body && document.body.hasAttribute('data-initial-filter')) {
+                document.body.removeAttribute('data-initial-filter');
+            }
+            
             // Filter tests using data attributes
             const allTestItems = document.querySelectorAll('.test-item');
             const allSuites = document.querySelectorAll('.suite-group');
+            
+            // Use DocumentFragment for better performance when many tests
+            const fragment = document.createDocumentFragment();
             
             allTestItems.forEach(testItem => {
                 const testStatus = testItem.getAttribute('data-test-status');
@@ -809,8 +1000,6 @@
                 // First apply main filter
                 if (currentMainFilter === 'all') {
                     shouldShow = true;
-                } else if (currentMainFilter === 'sanitizer') {
-                    shouldShow = isSanitizer;
                 } else {
                     // Match status (failed, error, mute, passed, skipped)
                     shouldShow = testStatus === currentMainFilter;
@@ -826,11 +1015,13 @@
                     // 'all' means show both, so no additional filtering needed
                 }
                 
-                if (shouldShow) {
-                    testItem.style.display = '';
-                } else {
-                    testItem.style.display = 'none';
+                // Apply sanitizer filter if selected (works for all main filters)
+                if (shouldShow && currentFlakyStableFilter === 'sanitizer') {
+                    shouldShow = shouldShow && isSanitizer;
                 }
+                
+                // Use display property directly for better performance
+                testItem.style.display = shouldShow ? '' : 'none';
             });
             
             // Show/hide suites based on visible tests, update counts
@@ -867,7 +1058,7 @@
             } else {
                 url.searchParams.set('status', currentMainFilter.charAt(0).toUpperCase() + currentMainFilter.slice(1));
             }
-            if (currentFlakyStableFilter !== 'all' && (currentMainFilter === 'failed' || currentMainFilter === 'error' || currentMainFilter === 'mute')) {
+            if (currentFlakyStableFilter !== 'all') {
                 url.searchParams.set('flakyStable', currentFlakyStableFilter);
             } else {
                 url.searchParams.delete('flakyStable');
@@ -898,8 +1089,8 @@
                 if (button) {
                     setFilter(actualFilter, button);
                     
-                    // Apply flaky/stable filter if present
-                    if (flakyStable && (actualFilter === 'failed' || actualFilter === 'error' || actualFilter === 'mute')) {
+                    // Apply flaky/stable/sanitizer filter if present
+                    if (flakyStable) {
                         const badgeButton = document.getElementById(`badge-${flakyStable}`);
                         if (badgeButton) {
                             setFlakyStableFilter(flakyStable, badgeButton);
@@ -916,14 +1107,16 @@
         });
 
         function toggleError(button) {
-            const errorSection = button.parentElement;
-            const errorContent = errorSection.querySelector('.error-content');
+            const testItem = button.closest('.test-item');
+            const errorContent = testItem.querySelector('.error-content');
             if (errorContent.classList.contains('hidden')) {
                 errorContent.classList.remove('hidden');
-                button.textContent = 'Hide error';
+                testItem.classList.remove('error-hidden');
+                button.textContent = 'Hide';
             } else {
                 errorContent.classList.add('hidden');
-                button.textContent = 'Show error';
+                testItem.classList.add('error-hidden');
+                button.textContent = 'Error';
             }
         }
         
@@ -1169,15 +1362,9 @@
             }
             const is_sanitizer = testItem.querySelector('.sanitizer-badge') !== null;
             let errorText = '';
-            const errorButton = testItem.querySelector('.error-button');
-            if (errorButton) {
-                const errorSection = errorButton.closest('.error-section');
-                if (errorSection) {
-                    const errorContent = errorSection.querySelector('pre code');
-                    if (errorContent) {
-                        errorText = errorContent.textContent;
-                    }
-                }
+            const errorContent = testItem.querySelector('.error-content pre code');
+            if (errorContent) {
+                errorText = errorContent.textContent;
             }
             let logUrls = {};
             const logLinks = testItem.querySelectorAll('.log-link');
@@ -1206,11 +1393,11 @@
             let html = '<div style="margin-bottom: 20px;">';
             html += '<h3>Overall Success Rate (Last 4 Days)</h3>';
             html += '<div style="display: flex; gap: 30px; margin: 15px 0;">';
-            if (rates.pr_check) {
-                html += `<div><strong>PR-Check:</strong> ${rates.pr_check.rate}% (${rates.pr_check.passed}/${rates.pr_check.total})</div>`;
-            }
             if (rates.other) {
                 html += `<div><strong>Branch Runs:</strong> ${rates.other.rate}% (${rates.other.passed}/${rates.other.total})</div>`;
+            }
+            if (rates.pr_check) {
+                html += `<div><strong>PR-Check:</strong> ${rates.pr_check.rate}% (${rates.pr_check.passed}/${rates.pr_check.total})</div>`;
             }
             html += '</div></div>';
             
@@ -1266,23 +1453,32 @@
                     ? ((dayData.other.passed / dayData.other.total) * 100).toFixed(1)
                     : '-';
                 
-                html += `<tr style="border-bottom: 1px solid #d0d7de;">`;
-                html += `<td style="padding: 10px;"><strong>${date}</strong></td>`;
-                html += `<td style="padding: 10px; text-align: center;">${dayData.pr_check.total > 0 ? `${prRate}% (${dayData.pr_check.passed}/${dayData.pr_check.total})` : '-'}</td>`;
-                html += `<td style="padding: 10px; text-align: center;">${dayData.other.total > 0 ? `${otherRate}% (${dayData.other.passed}/${dayData.other.total})` : '-'}</td>`;
-                
                 // Sort entries by timestamp (newest first) and separate by type
                 dayData.entries.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
                 
-                // Generate in-pr runs column
-                html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
+                // Separate entries by type
                 const prCheckEntries = dayData.entries.filter(({ entry }) => {
                     const jobName = entry.job_name || '';
                     return jobName.toLowerCase().includes('pr-check') ||
                            jobName.toLowerCase().includes('pr_check') ||
                            jobName.toLowerCase().includes('pr/check');
                 });
-                for (const { timestamp, entry } of prCheckEntries) {
+                const otherEntries = dayData.entries.filter(({ entry }) => {
+                    const jobName = entry.job_name || '';
+                    return !jobName.toLowerCase().includes('pr-check') &&
+                           !jobName.toLowerCase().includes('pr_check') &&
+                           !jobName.toLowerCase().includes('pr/check');
+                });
+                
+                html += `<tr style="border-bottom: 1px solid #d0d7de;">`;
+                html += `<td style="padding: 10px;"><strong>${date}</strong></td>`;
+                
+                // Column 1: Success Rate Branch (main) - процент и количество для Branch runs
+                html += `<td style="padding: 10px; text-align: center;">${dayData.other.total > 0 ? `${otherRate}% (${dayData.other.passed}/${dayData.other.total})` : '-'}</td>`;
+                
+                // Column 2: Runs in Branch (main) - иконки для Branch runs
+                html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
+                for (const { timestamp, entry } of otherEntries) {
                     const statusColor = entry.status === 'passed' ? '#28a745' : 
                                        entry.status === 'failure' ? '#dc3545' : '#007bff';
                     const statusSymbol = entry.status === 'passed' ? '✓' : 
@@ -1294,15 +1490,12 @@
                 }
                 html += '</div></td>';
                 
-                // Generate in-branch runs column
+                // Column 3: Success Rate PR-Check - процент и количество для PR-Check runs
+                html += `<td style="padding: 10px; text-align: center;">${dayData.pr_check.total > 0 ? `${prRate}% (${dayData.pr_check.passed}/${dayData.pr_check.total})` : '-'}</td>`;
+                
+                // Column 4: Runs in PR-Check - иконки для PR-Check runs
                 html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
-                const otherEntries = dayData.entries.filter(({ entry }) => {
-                    const jobName = entry.job_name || '';
-                    return !jobName.toLowerCase().includes('pr-check') &&
-                           !jobName.toLowerCase().includes('pr_check') &&
-                           !jobName.toLowerCase().includes('pr/check');
-                });
-                for (const { timestamp, entry } of otherEntries) {
+                for (const { timestamp, entry } of prCheckEntries) {
                     const statusColor = entry.status === 'passed' ? '#28a745' : 
                                        entry.status === 'failure' ? '#dc3545' : '#007bff';
                     const statusSymbol = entry.status === 'passed' ? '✓' : 
@@ -1454,6 +1647,20 @@
                     successRateModal.style.display = 'none';
                 }
             }
+            
+            // Close modals on Escape key
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape' || event.keyCode === 27) {
+                    const errorModal = document.getElementById('errorModal');
+                    const successRateModal = document.getElementById('successRateModal');
+                    if (errorModal && errorModal.style.display === 'block') {
+                        errorModal.style.display = 'none';
+                    }
+                    if (successRateModal && successRateModal.style.display === 'block') {
+                        successRateModal.style.display = 'none';
+                    }
+                }
+            });
         });
     </script>
 </body>

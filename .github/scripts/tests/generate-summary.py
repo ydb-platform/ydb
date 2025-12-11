@@ -587,6 +587,13 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     stable_error = [t for t in status_test.get(TestStatus.ERROR, []) if not getattr(t, 'is_flaky', False)]
     stable_mute = [t for t in status_test.get(TestStatus.MUTE, []) if not getattr(t, 'is_flaky', False)]
     
+    # Count sanitizer per status (for badge display)
+    sanitizer_failed = [t for t in status_test.get(TestStatus.FAIL, []) if t.is_sanitizer_issue]
+    sanitizer_error = [t for t in status_test.get(TestStatus.ERROR, []) if t.is_sanitizer_issue]
+    sanitizer_mute = [t for t in status_test.get(TestStatus.MUTE, []) if t.is_sanitizer_issue]
+    sanitizer_passed = [t for t in status_test.get(TestStatus.PASS, []) if t.is_sanitizer_issue]
+    sanitizer_skipped = [t for t in status_test.get(TestStatus.SKIP, []) if t.is_sanitizer_issue]
+    
     # Count all tests including flaky (flaky tests remain in failed/error/mute filters)
     test_counts = {
         'all': len(visible_tests),
@@ -602,7 +609,13 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
         'stable_failed': len(stable_failed),  # Count of stable within failed
         'stable_error': len(stable_error),   # Count of stable within error
         'stable_mute': len(stable_mute),     # Count of stable within mute
-        'sanitizer': len([t for t in rows if t.is_sanitizer_issue])
+        'sanitizer': len([t for t in rows if t.is_sanitizer_issue]),  # Total sanitizer count
+        'sanitizer_failed': len(sanitizer_failed),  # Count of sanitizer within failed
+        'sanitizer_error': len(sanitizer_error),    # Count of sanitizer within error
+        'sanitizer_mute': len(sanitizer_mute),     # Count of sanitizer within mute
+        'sanitizer_passed': len(sanitizer_passed),  # Count of sanitizer within passed
+        'sanitizer_skipped': len(sanitizer_skipped),  # Count of sanitizer within skipped
+        'sanitizer_all': len([t for t in visible_tests if t.is_sanitizer_issue])  # Count of sanitizer in visible tests
     }
     
     # Group sanitizer tests by suite

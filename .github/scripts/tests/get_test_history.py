@@ -25,8 +25,6 @@ def get_test_history(test_names_array, days_back, build_type, branch):
         print(f"  build_type: {build_type}")
         print(f"  branch: {branch}")
         print(f"  days_back: {days_back}")
-        if test_names_array:
-            print(f"  Sample test names (first 3): {test_names_array[:3]}")
         
         results = {}
         batch_size = 500

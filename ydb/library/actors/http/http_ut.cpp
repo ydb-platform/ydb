@@ -1349,4 +1349,26 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         UNIT_ASSERT_EQUAL(response2->Response->Status, "200");
     }
+
+    Y_UNIT_TEST(IsReadableContentTest) {
+        // Test text/ prefix
+        UNIT_ASSERT(NHttp::IsReadableContent("text/html"));
+        UNIT_ASSERT(NHttp::IsReadableContent("text/plain"));
+        UNIT_ASSERT(NHttp::IsReadableContent("text/css"));
+        UNIT_ASSERT(NHttp::IsReadableContent("text/html; charset=utf-8"));
+
+        // Test application/json
+        UNIT_ASSERT(NHttp::IsReadableContent("application/json"));
+        UNIT_ASSERT(NHttp::IsReadableContent("application/json; charset=utf-8"));
+
+        // Test application/x-www-form-urlencoded
+        UNIT_ASSERT(NHttp::IsReadableContent("application/x-www-form-urlencoded"));
+        UNIT_ASSERT(NHttp::IsReadableContent("application/x-www-form-urlencoded; charset=utf-8"));
+
+        // Test non-readable content types
+        UNIT_ASSERT(!NHttp::IsReadableContent("image/png"));
+        UNIT_ASSERT(!NHttp::IsReadableContent("application/octet-stream"));
+        UNIT_ASSERT(!NHttp::IsReadableContent("application/pdf"));
+        UNIT_ASSERT(!NHttp::IsReadableContent("video/mp4"));
+    }
 }

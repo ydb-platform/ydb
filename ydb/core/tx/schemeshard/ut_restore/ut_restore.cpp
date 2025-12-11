@@ -316,6 +316,7 @@ namespace {
             }
             break;
         case EPathTypeView:
+        case EPathTypeReplication:
             result.CreationQuery = typedScheme.Scheme;
             break;
         case EPathTypeCdcStream:
@@ -359,6 +360,14 @@ namespace {
                 result.emplace(viewKey, item.CreationQuery);
                 if (withChecksum) {
                     result.emplace(NBackup::ChecksumKey(viewKey), item.CreationQuery.Checksum);
+                }
+                break;
+            }
+            case EPathTypeReplication: {
+                auto replicationKey = prefix + "/create_async_replication.sql";
+                result.emplace(replicationKey, item.CreationQuery);
+                if (withChecksum) {
+                    result.emplace(NBackup::ChecksumKey(replicationKey), item.CreationQuery.Checksum);
                 }
                 break;
             }
@@ -3337,6 +3346,78 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TTestEnv env(runtime, TTestEnvOptions());
         Run(runtime, env, std::move(data), request, expectedStatus, dbName, serverless, userSID);
+    }
+
+    Y_UNIT_TEST(ReplicationCreation) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(2);
+        bucketContent.emplace("/Table", GenerateTestData(R"(
+            columns {
+                name: "key"
+                type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+                name: "value"
+                type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )"));
+        bucketContent.emplace("/Replication", GenerateTestData(
+            {
+                EPathTypeReplication,
+                R"(
+                    -- database: "/MyRoot"
+                    -- backup root: "/MyRoot"
+                    CREATE ASYNC REPLICATION `Replication`
+                    FOR
+                        `/MyRoot/Table1` AS `/MyRoot/TableReplica`
+                    WITH (
+                        CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+                        USER = 'user',
+                        PASSWORD_SECRET_NAME = 'pwd-secret-name',
+                        CONSISTENCY_LEVEL = 'Row'
+                    );
+                )"
+            }
+        ));
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Table"
+                destination_path: "/MyRoot/Table"
+              }
+              items {
+                source_prefix: "Replication"
+                destination_path: "/MyRoot/Replication"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
+            NLs::Finished,
+            NLs::IsReplication,
+        });
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {

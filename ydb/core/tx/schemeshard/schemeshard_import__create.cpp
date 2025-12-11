@@ -13,6 +13,7 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -60,6 +61,15 @@ bool AllDoneOrWaiting(const THashMap<EState, int>& stateCounts) {
 bool IsCreatedByQuery(const TItem& item) {
     return !item.CreationQuery.empty();
 }
+
+bool IsView(const TItem& item) {
+    return item.CreationQuery.Contains("CREATE VIEW");
+}
+
+bool IsReplication(const TItem& item) {
+    return item.CreationQuery.Contains("CREATE ASYNC REPLICATION");
+}
+
 
 TString GetDatabase(TSchemeShard& ss) {
     return CanonizePath(ss.RootPathElements);
@@ -573,7 +583,7 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    void RetryViewsCreation(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    void RetryCreatedByQueryCreation(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const auto database = GetDatabase(*Self);
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo.Items.size())) {
@@ -1099,13 +1109,22 @@ private:
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
             const TString source = TStringBuilder()
-                << importInfo->GetItemSrcPrefix(msg.ItemIdx) << NYdb::NDump::NFiles::CreateView().FileName;
+                << importInfo->GetItemSrcPrefix(msg.ItemIdx) << "/" << NYdb::NDump::NFiles::CreateView().FileName;
 
             NYql::TIssues issues;
-            if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
-                issues.AddIssue(TStringBuilder() << "path: " << source);
-                return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid view creation query");
+            if (IsView(item)) {
+                if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
+                    issues.AddIssue(TStringBuilder() << "path: " << source);
+                    return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid view creation query");
+                }
             }
+            if (IsReplication(item)) {
+                if (!NYdb::NDump::RewriteCreateAsyncReplicationQuery(item.CreationQuery, database, item.DstPathName, issues)) {
+                    issues.AddIssue(TStringBuilder() << "path: " << source);
+                    return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid replication creation query");
+                }
+            }
+            
             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                 Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
             ));
@@ -1248,7 +1267,7 @@ private:
                     // No progress has been made since the last view creation retry.
                     return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
                 }
-                RetryViewsCreation(*importInfo, db, ctx);
+                RetryCreatedByQueryCreation(*importInfo, db, ctx);
             }
             return;
         }
@@ -1655,7 +1674,7 @@ private:
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         } else if (AllDoneOrWaiting(stateCounts)) {
-            RetryViewsCreation(*importInfo, db, ctx);
+            RetryCreatedByQueryCreation(*importInfo, db, ctx);
         }
 
         Self->PersistImportItemState(db, *importInfo, itemIdx);

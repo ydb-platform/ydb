@@ -408,6 +408,7 @@ class AddColumnFamily(AlterTableAction):
     def title(self) -> str:
         return f'add family `{self._column_family.name}`'
 
+
 class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
     """The base class for all requests to change table-like objects.
 

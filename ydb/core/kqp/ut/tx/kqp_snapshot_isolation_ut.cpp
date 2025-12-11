@@ -48,7 +48,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST(TSimpleOltp) {
-        return;
         TSimple tester;
         tester.SetIsOlap(false);
         tester.Execute();
@@ -136,7 +135,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST(TConflictWriteOltp) {
-        return;
         TConflictWrite tester("upsert_partial");
         tester.SetIsOlap(false);
         tester.Execute();
@@ -216,7 +214,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST(TConflictReadWriteOltp) {
-        return;
         TConflictReadWrite tester;
         tester.SetIsOlap(false);
         tester.Execute();
@@ -273,7 +270,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST(TReadOnlyOltp) {
-        return;
         TReadOnly tester;
         tester.SetIsOlap(false);
         tester.Execute();
@@ -419,7 +415,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST(TReadOwnChangesOltp) {
-        return;
         TReadOwnChanges tester;
         tester.SetIsOlap(false);
         tester.Execute();

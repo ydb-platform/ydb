@@ -19,7 +19,8 @@ docker_args=(
     -d                              # run container in background and print container ID
     --rm                            # automatically remove the container
     --name ydb-local                # assign a name to the container
-    -h localhost                    # hostname
+    --hostname localhost            # hostname
+    --platform linux/amd64          # platform
     -p 2135:2135                    # publish a container grpcs port to the host
     -p 2136:2136                    # publish a container grpc port to the host
     -p 8765:8765                    # publish a container http port to the host
@@ -60,7 +61,8 @@ For users who are not experienced with Docker, it's important to understand how 
    docker run -d \
      --rm \
      --name ydb-local \
-     -h localhost \
+     --hostname localhost \
+     --platform linux/amd64 \
      -v $(pwd)/ydb_certs:/ydb_certs \
      -e GRPC_TLS_PORT=2135 \
      -e GRPC_PORT=2136 \
@@ -88,7 +90,8 @@ For users who are not experienced with Docker, it's important to understand how 
        -d
        --rm
        --name ydb-local
-       -h localhost
+       --hostname localhost
+       --platform linux/amd64
        -p 2135:2135
        -p 2136:2136
        -p 8765:8765

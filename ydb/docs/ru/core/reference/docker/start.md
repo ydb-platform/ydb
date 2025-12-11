@@ -19,7 +19,8 @@ docker_args=(
     -d                              # запуск в фоне
     --rm                            # автоматическое удаление после установки
     --name ydb-local                # имя контейнера
-    -h localhost                    # хостейм
+    --hostname localhost            # хостейм
+    --platform linux/amd64          # платформа
     -p 2135:2135                    # открытие внешнего доступа к grpcs порту
     -p 2136:2136                    # открытие внешнего доступа к grpc порту
     -p 8765:8765                    # открытие внешнего доступа к http порту
@@ -60,7 +61,8 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
    docker run -d \
      --rm \
      --name ydb-local \
-     -h localhost \
+     --hostname localhost \
+     --platform linux/amd64 \
      -v $(pwd)/ydb_certs:/ydb_certs \
      -e GRPC_TLS_PORT=2135 \
      -e GRPC_PORT=2136 \
@@ -88,7 +90,8 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
       -d
       --rm
       --name ydb-local
-      -h localhost
+      --hostname localhost
+      --platform linux/amd64
       -p 2135:2135
       -p 2136:2136
       -p 8765:8765

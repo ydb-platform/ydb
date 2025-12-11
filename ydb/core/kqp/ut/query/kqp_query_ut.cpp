@@ -3421,12 +3421,10 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
             "SELECT 1 UNION ALL (DISCARD SELECT 2)",
             "SELECT (DISCARD SELECT 1) as result"
         };
-        // todo: "SELECT 1 UNION ALL (DISCARD SELECT 2)" breaks on backward compability test in this code, but in old all is okay
         TVector<TString> invalidQueriesForDml = {
             "SELECT 1 UNION ALL DISCARD SELECT 2"
         };
 
-        // INTO RESULT в скобках - эти запросы должны работать (backward compatibility)
         TVector<TString> intoResultQueries = {
             "SELECT 1 UNION ALL (SELECT 2 INTO RESULT foo)",
             "SELECT 1 UNION ALL (SELECT 2 INTO RESULT foo) UNION ALL SELECT 3"
@@ -3466,7 +3464,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
                 "DISCARD");
         }
-        // backward compability test: dml
+        // backward compatibility test: dml
         {
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             for (auto& query : Concatenate(queries, invalidQueries)) {
@@ -3537,7 +3535,6 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
             }
             if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvChannelData::EventType) {
                 auto& record = ev->Get<NYql::NDq::TEvDqCompute::TEvChannelData>()->Record;
-                // if (record.GetFinished == true) {
                     Cerr << "ChannelData event detected, channelId: " << record.GetChannelData().GetChannelId() 
                         << ", sender: " << ev->Sender << ", recipient: " << ev->Recipient << Endl;
                     
@@ -3546,7 +3543,6 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
                         Cerr << "ChannelData sent to Executer! Count: " << channelDataCount << Endl;
                         return TTestActorRuntime::EEventAction::PROCESS;
                     }
-            // }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         };

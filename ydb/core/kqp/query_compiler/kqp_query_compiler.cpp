@@ -815,7 +815,7 @@ public:
         }
 
         ui32 resultIdx = 0;
-        
+
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
 
@@ -830,7 +830,6 @@ public:
 
             YQL_ENSURE(txResult.GetIsStream());
 
-            
             if (querySettings.Type == EPhysicalQueryType::GenericQuery && 
                 i < resultDiscardFlags.size() && resultDiscardFlags[i]) {
                 continue;

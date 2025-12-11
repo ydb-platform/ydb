@@ -1069,10 +1069,26 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                 processResultColumn(maybeColumn, itemType, resultItem->Child(2));
             } else if (maybeColumn->IsList()) {
                 for (size_t i=0; i<maybeColumn->ChildrenSize(); i++) {
-                    auto outputColumn = maybeColumn->Child(i)->Child(0);
-                    auto inputColumn = maybeColumn->Child(i)->Child(1);
-                    auto columnType = itemType->Cast<TStructExprType>()->FindItemType(inputColumn->Content());
-                    Y_ENSURE(columnType);
+                    auto columnSpec = maybeColumn->Child(i);
+                    TExprNode::TPtr outputColumn;
+                    TExprNode::TPtr inputColumn;
+                    const TTypeAnnotationNode* columnType;
+
+                    if (columnSpec->IsList()) {
+                        outputColumn = columnSpec->Child(0);
+                        inputColumn = columnSpec->Child(1);
+                        columnType = itemType->Cast<TStructExprType>()->FindItemType(inputColumn->Content());
+                    }
+                    else {
+                        outputColumn = columnSpec;
+                        auto starLambda = resultItem->Child(2);
+                        Y_ENSURE(starLambda->IsLambda());
+                        Y_ENSURE(starLambda->Child(1)->IsCallable("AsStruct"));
+                        auto member = starLambda->Child(1)->Child(i);
+                        inputColumn = member->Child(1)->Child(1);
+                        columnType = itemType->Cast<TStructExprType>()->FindItemType(outputColumn->Content());
+                    }
+
                     auto mapLambda = Build<TCoLambda>(ctx, node->Pos())
                         .Args({"arg"})
                         .Body<TCoMember>()
@@ -1080,6 +1096,12 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                             .Name(inputColumn)
                         .Build()
                         .Done().Ptr();
+
+                    if (!columnType) {
+                        YQL_CLOG(TRACE, CoreDq) << "didn't find " << inputColumn->Content() << " in: " << *(TTypeAnnotationNode*)itemType;
+                    }
+                    Y_ENSURE(columnType);
+
                     processResultColumn(outputColumn, columnType, mapLambda);
                 }
             } else {

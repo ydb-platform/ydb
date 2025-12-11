@@ -161,11 +161,17 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 SELECT * FROM foo WHERE name = '3_name';
             )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT f.* FROM foo as f WHERE name = '3_name';
+            )"
         };
 
         std::vector<std::string> results = {
             R"([["0"];["1"];["2"];["4"];["5"];["6"];["7"];["8"];["9"]])",
             R"([["3"]])",
+            R"([["3";"\\x335f6e616d65"]])",
             R"([["3";"\\x335f6e616d65"]])"
         };
 

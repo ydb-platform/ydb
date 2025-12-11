@@ -139,7 +139,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
             )",
-
         };
 
         std::vector<std::string> results = {

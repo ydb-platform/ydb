@@ -66,7 +66,7 @@ WITH
     FORMAT = "csv_with_names",
     SCHEMA =
     (
-        Year Int32 NOT NULL, 
+        Year Int32 NOT NULL,
         Manufacturer String NOT NULL,
         Model String NOT NULL,
         Price Double NOT NULL
@@ -186,7 +186,7 @@ FROM source_name.input_topic_name
 WITH
 (
     FORMAT = 'json_as_string',
-    SCHEMA = 
+    SCHEMA =
     (
         Data Json
     )
@@ -270,7 +270,7 @@ LIMIT 1;
 Пример запроса:
 
 ```sql
-$input = 
+$input =
 SELECT
     CAST(data AS Json) AS json
 FROM source_name.input_topic_name
@@ -290,7 +290,7 @@ SELECT
 FROM
     $input;
 
-SELECT 
+SELECT
     *
 FROM $parsed
 LIMIT 1;
@@ -306,8 +306,8 @@ LIMIT 1;
 
 Пример запроса:
 ```sql
-$input = 
-SELECT 
+$input =
+SELECT
     *
 FROM source_name.input_topic_name
 WITH (
@@ -326,7 +326,7 @@ SELECT
     *
 FROM (SELECT ts[0] as ts, update from $col) FLATTEN COLUMNS;
 
-SELECT 
+SELECT
     *
 FROM $volumes
 LIMIT 1;

@@ -1438,7 +1438,8 @@ namespace Tests {
                 Settings->AppConfig->GetQueryServiceConfig(),
                 federatedQuerySetupFactory,
                 Settings->S3ActorsFactory,
-                Settings->EnableScriptExecutionBackgroundChecks
+                Settings->EnableScriptExecutionBackgroundChecks,
+                TDuration::Zero()
             );
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);

@@ -27,6 +27,7 @@ private:
     NMonitoring::THistogramPtr HistogramRepackPortionsRawBytes;
     NMonitoring::THistogramPtr HistogramRepackPortionsBlobBytes;
     NMonitoring::THistogramPtr HistogramRepackPortionsCount;
+    NMonitoring::THistogramPtr HistogramRepackPortionsRows;
     NMonitoring::THistogramPtr HistogramCompactionDuration;
 
 public:
@@ -52,7 +53,8 @@ public:
         HistogramRepackPortionsRawBytes = TBase::GetHistogram("RepackPortions/Raw/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
         HistogramRepackPortionsBlobBytes =
             TBase::GetHistogram("RepackPortions/Blob/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
-        HistogramRepackPortionsCount = TBase::GetHistogram("RepackPortions/Count", NMonitoring::LinearHistogram(15, 10, 16));
+        HistogramRepackPortionsCount = TBase::GetHistogram("RepackPortions/Count", NMonitoring::ExponentialHistogram(15, 1, 2));
+        HistogramRepackPortionsRows = TBase::GetHistogram("RepackPortions/Rows", NMonitoring::ExponentialHistogram(15, 1, 2));
         HistogramCompactionDuration = TBase::GetHistogram("Compaction/Duration", NMonitoring::ExponentialHistogram(15, 2, 10));
     }
 
@@ -61,6 +63,7 @@ public:
         Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsCount->Collect(portions.GetCount());
         Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsBlobBytes->Collect(portions.GetBlobBytes());
         Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsRawBytes->Collect(portions.GetRawBytes());
+        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsCount->Collect(portions.GetRecordsCount());
     }
 
     static void OnRepackPortionsByLevel(const THashMap<ui32, TSimplePortionsGroupInfo>& portions, const ui32 targetLevelIdx) {

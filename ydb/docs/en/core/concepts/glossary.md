@@ -399,6 +399,12 @@ Roles in {{ ydb-short-name }} are implemented as [groups](#access-group) that ar
 
 This section explains terms that are useful to [{{ ydb-short-name }} contributors](../contributor/index.md) and users who want to get a deeper understanding of what's going on inside the system.
 
+### Audit log {#audit-log}
+
+A stream of records that document the operation of a {{ ydb-short-name }} cluster. Unlike technical logs, which help detect failures and troubleshoot issues, the audit log provides data relevant to security. It serves as a source of information that answers the questions: who did what, when, and from where.
+
+See [Audit log](../security/audit-log.md) for details.
+
 ### Actors implementation {#actor-implementation}
 
 #### Actor system {#actor-system}

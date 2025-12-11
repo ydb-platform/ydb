@@ -362,7 +362,7 @@ struct TBlobStorageGroupPutParameters {
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
-    TDuration MaxTimeout;
+    TDuration MaxTimeout = TDuration::Seconds(60);
 };
 IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters params);
 
@@ -382,7 +382,7 @@ struct TBlobStorageGroupMultiPutParameters {
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
-    TDuration MaxTimeout;
+    TDuration MaxTimeout = TDuration::Seconds(60);
 
     static ui32 CalculateRestartCounter(TBatchedVec<TEvBlobStorage::TEvPut::TPtr>& events) {
         ui32 maxRestarts = 0;

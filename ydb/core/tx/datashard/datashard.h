@@ -3,6 +3,7 @@
 #include "datashard_s3_download.h"
 #include "datashard_s3_upload.h"
 
+#include <ydb/core/tablet_flat/util_basics.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/message_seqno.h>
@@ -26,8 +27,6 @@ class RecordBatch;
 }
 
 namespace NKikimr {
-    
-struct IDestructable;
 
 namespace NDataShard {
     using TShardState = NKikimrTxDataShard::EDatashardState;

@@ -589,10 +589,15 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     # Count flaky tests (for badge display)
     flaky_tests_list = [t for t in visible_tests if getattr(t, 'is_flaky', False)]
     
-    # Count flaky per status (for filter button labels)
+    # Count flaky per status (for badge display)
     flaky_failed = [t for t in status_test.get(TestStatus.FAIL, []) if getattr(t, 'is_flaky', False)]
     flaky_error = [t for t in status_test.get(TestStatus.ERROR, []) if getattr(t, 'is_flaky', False)]
     flaky_mute = [t for t in status_test.get(TestStatus.MUTE, []) if getattr(t, 'is_flaky', False)]
+    
+    # Count stable (non-flaky) per status
+    stable_failed = [t for t in status_test.get(TestStatus.FAIL, []) if not getattr(t, 'is_flaky', False)]
+    stable_error = [t for t in status_test.get(TestStatus.ERROR, []) if not getattr(t, 'is_flaky', False)]
+    stable_mute = [t for t in status_test.get(TestStatus.MUTE, []) if not getattr(t, 'is_flaky', False)]
     
     # Count all tests including flaky (flaky tests remain in failed/error/mute filters)
     test_counts = {
@@ -606,6 +611,9 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
         'flaky_failed': len(flaky_failed),  # Count of flaky within failed
         'flaky_error': len(flaky_error),    # Count of flaky within error
         'flaky_mute': len(flaky_mute),      # Count of flaky within mute
+        'stable_failed': len(stable_failed),  # Count of stable within failed
+        'stable_error': len(stable_error),   # Count of stable within error
+        'stable_mute': len(stable_mute),     # Count of stable within mute
         'sanitizer': len([t for t in rows if t.is_sanitizer_issue])
     }
     

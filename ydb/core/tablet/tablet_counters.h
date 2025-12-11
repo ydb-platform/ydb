@@ -263,7 +263,6 @@ public:
         }
         for (auto i: xrange(Values.size())) {
             Values[i] += *(begin + i);
-            ++begin;
         }
         return true;
     }

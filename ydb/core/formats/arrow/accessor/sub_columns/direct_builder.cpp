@@ -16,18 +16,20 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount) {
     AFL_VERIFY(!Accessor);
-    auto recordsBuilder = TSparsedArray::MakeBuilderUtf8(RecordIndexes.size(), DataSize);
+    auto recordsBuilder = TSparsedArray::MakeBuilderBinary(RecordIndexes.size(), DataSize);
     for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
-        recordsBuilder.AddRecord(RecordIndexes[idx], Values[idx]);
+        const auto& rec = Values[idx];
+        recordsBuilder.AddRecord(RecordIndexes[idx], std::string_view(rec.Data(), rec.Size()));
     }
     Accessor = recordsBuilder.Finish(recordsCount);
 }
 
 void TColumnElements::BuildPlainAccessor(const ui32 recordsCount) {
     AFL_VERIFY(!Accessor);
-    auto builder = TTrivialArray::MakeBuilderUtf8(recordsCount, DataSize);
+    auto builder = TTrivialArray::MakeBuilderBinary(recordsCount, DataSize);
     for (auto it = RecordIndexes.begin(); it != RecordIndexes.end(); ++it) {
-        builder.AddRecord(*it, Values[it - RecordIndexes.begin()]);
+        const auto& rec = Values[it - RecordIndexes.begin()];
+        builder.AddRecord(*it, std::string_view(rec.Data(), rec.Size()));
     }
     Accessor = builder.Finish(recordsCount);
 }
@@ -87,7 +89,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
 
     auto records = std::make_shared<TGeneralContainer>(CurrentRecordIndex);
     for (auto&& i : columnElements) {
-        records->AddField(std::make_shared<arrow::Field>(std::string(i->GetKeyName()), arrow::utf8()), i->GetAccessorVerified()).Validate();
+        records->AddField(std::make_shared<arrow::Field>(std::string(i->GetKeyName()), arrow::binary()), i->GetAccessorVerified()).Validate();
     }
     TColumnsData cData(std::move(columnStats), std::move(records));
     return std::make_shared<TSubColumnsArray>(std::move(cData), std::move(rbOthers), Type, CurrentRecordIndex, Settings);
@@ -105,7 +107,10 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
     auto othersBuilder = TOthersData::MakeMergedBuilder();
     while (heap.size()) {
         std::pop_heap(heap.begin(), heap.end());
-        othersBuilder->AddImpl(heap.back().GetRecordIndex(), heap.back().GetKeyIndex(), heap.back().GetValuePointer());
+        std::string_view view = heap.back().GetValuePointer() ?
+            std::string_view(heap.back().GetValuePointer()->Data(), heap.back().GetValuePointer()->Size()) : "";
+        std::string_view* viewPtr = heap.back().GetValuePointer() ? &view : nullptr;
+        othersBuilder->AddImpl(heap.back().GetRecordIndex(), heap.back().GetKeyIndex(), viewPtr);
         if (!heap.back().Next()) {
             heap.pop_back();
         } else {

@@ -286,3 +286,24 @@ enum EMLPConsumerLabeledCounters {
     METRIC_DELETED_BY_DEADLINE_POLICY_COUNT = 8                   [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.deleted_by_deadline_policy_messages"}]; // TODO name
     METRIC_PURGED_COUNT = 9                                       [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.purged_messages"}];
 }
+
+enum EMLPProcessingPercentileCounters {
+    option (GlobalCounterOpts) = {
+        Ranges { Value: 0    Name: "0"    }
+        Ranges { Value: 1    Name: "1"    }
+        Ranges { Value: 4    Name: "4"    }
+        Ranges { Value: 16   Name: "16"   }
+        Ranges { Value: 64   Name: "64"   }
+        Ranges { Value: 512  Name: "512"  }
+    };
+
+    METRIC_INFLIGHT_LOCKS = 0                                   [(CounterOpts) = {Name: "" SVName: "topic.message_lock_attempts"
+                                                                    Ranges { Value: 0    Name: "0"    }
+                                                                    Ranges { Value: 1    Name: "1"    }
+                                                                    Ranges { Value: 4    Name: "4"    }
+                                                                    Ranges { Value: 16   Name: "16"   }
+                                                                    Ranges { Value: 64   Name: "64"   }
+                                                                    Ranges { Value: 512  Name: "512"  }
+                                                                }];
+
+}

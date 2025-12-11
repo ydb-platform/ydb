@@ -6,6 +6,7 @@
 #include "read_balancer_log.h"
 #include "mirror_describer_factory.h"
 
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/base/feature_flags.h>
@@ -271,8 +272,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     for (const auto& consumer : TabletConfig.GetConsumers()) {
         auto it = oldConsumers.find(consumer.GetName());
         if (it != oldConsumers.end()) {
-            Consumers[consumer.GetName()] = std::move(it->second);
-            Consumers[consumer.GetName()].Config = consumer;
+            auto& newValue = Consumers[consumer.GetName()] = std::move(it->second);
+            newValue.Config = consumer;
         } else {
             Consumers.insert(std::make_pair(consumer.GetName(), TConsumerInfo{.Config = consumer}));
         }
@@ -666,9 +667,21 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         if (info.Config.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
             ensureCounters(info.AggregatedMLPConsumerCounters, labeledMLPConsumerCounters, {{"consumer", consumerName}});
             info.AggrMLP.Reset(new TTabletLabeledCountersBase{});
+
+            if (!info.MessageLockAttemptsCounter) {
+                auto collector = NMonitoring::ExplicitHistogram({
+                    0, 1, 4, 16, 64, 512
+                });
+                info.MessageLockAttemptsCounter = DynamicCounters->GetExpiringNamedHistogram("name", "topic.message_lock_attempts", std::move(collector));
+                info.MessageLockAttemptsAggregator.Reset(new TTabletPercentileCounter());
+                info.MessageLockAttemptsAggregator->Initialize(MLP_LOCKS_INTERVALS, sizeof(MLP_LOCKS_INTERVALS), true);
+            }
+
+            info.MessageLockAttemptsAggregator->Clear();
         } else {
             info.AggregatedMLPConsumerCounters.clear();
             info.AggrMLP.Reset();
+            info.MessageLockAttemptsCounter = nullptr;
         }
     }
 
@@ -733,6 +746,8 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             consumerInfo.AggrMLP->GetCounters()[METRIC_DELETED_BY_RETENTION_COUNT].Add(consumerStats.GetTotalDeletedByRetentionMessageCount());
             consumerInfo.AggrMLP->GetCounters()[METRIC_DELETED_BY_DEADLINE_POLICY_COUNT].Add(consumerStats.GetTotalDeletedByDeadlinePolicyMessageCount());
             consumerInfo.AggrMLP->GetCounters()[METRIC_PURGED_COUNT].Add(consumerStats.GetTotalPurgedMessageCount());
+
+            consumerInfo.MessageLockAttemptsAggregator->PopulateFrom(consumerStats.GetMessageLocksValues().begin(), consumerStats.GetMessageLocksValues().end());
         }
     }
 
@@ -759,6 +774,11 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         processAggregators(info.Aggr, info.AggregatedCounters);
         if (info.AggrMLP) {
             processAggregators(info.AggrMLP, info.AggregatedMLPConsumerCounters);
+
+            for (size_t i = 0; i < info.MessageLockAttemptsAggregator->GetRangeCount(); ++i) {
+                info.MessageLockAttemptsCounter->Collect((i64)info.MessageLockAttemptsAggregator->GetRangeBound(i),
+                    (ui64)info.MessageLockAttemptsAggregator->GetRangeValue(i));
+            }
         }
     }
 }

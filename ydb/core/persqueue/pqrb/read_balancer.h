@@ -164,6 +164,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
         std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedMLPConsumerCounters;
         THolder<TTabletLabeledCountersBase> AggrMLP;
+
+        NMonitoring::THistogramPtr MessageLockAttemptsCounter;
+        THolder<TTabletPercentileCounter> MessageLockAttemptsAggregator;
     };
 
     std::unordered_map<TString, TConsumerInfo> Consumers;

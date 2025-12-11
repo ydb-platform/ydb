@@ -26,6 +26,8 @@ private:
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,
         const ISnapshotSchema::TPtr& resultSchema) const;
 
+    TMonotonic StartTime;
+
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
 
@@ -37,6 +39,7 @@ protected:
         return NPortion::EProduced::SPLIT_COMPACTED;
     }
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
+    virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
     virtual ui64 DoCalcMemoryForUsage() const override {
         auto predictor = BuildMemoryPredictor();

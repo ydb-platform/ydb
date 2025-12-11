@@ -27,6 +27,7 @@ private:
     NMonitoring::THistogramPtr HistogramRepackPortionsRawBytes;
     NMonitoring::THistogramPtr HistogramRepackPortionsBlobBytes;
     NMonitoring::THistogramPtr HistogramRepackPortionsCount;
+    NMonitoring::THistogramPtr HistogramCompactionDuration;
 
 public:
     TGeneralCompactionCounters()
@@ -52,6 +53,7 @@ public:
         HistogramRepackPortionsBlobBytes =
             TBase::GetHistogram("RepackPortions/Blob/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
         HistogramRepackPortionsCount = TBase::GetHistogram("RepackPortions/Count", NMonitoring::LinearHistogram(15, 10, 16));
+        HistogramCompactionDuration = TBase::GetHistogram("Compaction/Duration", NMonitoring::ExponentialHistogram(15, 2, 10));
     }
 
     static void OnRepackPortions(const TSimplePortionsGroupInfo& portions) {
@@ -97,6 +99,10 @@ public:
     static void OnFullBlobAppend(const i64 bytes) {
         Singleton<TGeneralCompactionCounters>()->FullBlobsAppendCount->Add(1);
         Singleton<TGeneralCompactionCounters>()->FullBlobsAppendBytes->Add(bytes);
+    }
+
+    static void OnCompactionFinish(const ui64 timeMS) {
+        Singleton<TGeneralCompactionCounters>()->HistogramCompactionDuration->Collect(timeMS);
     }
 };
 

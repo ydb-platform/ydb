@@ -91,6 +91,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     TBlobStorageGroupInfo::TGroupVDisks ExpiredVDiskSet;
 
     TDuration LongRequestThreshold;
+    TDuration MaxTimeout;
 
     void SanityCheck() {
         if (RequestsSent <= MaxSaneRequests) {
@@ -589,6 +590,7 @@ public:
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())
         , LongRequestThreshold(params.LongRequestThreshold)
+        , MaxTimeout(params.MaxTimeout)
     {
         if (params.Common.Event->Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;
@@ -619,6 +621,7 @@ public:
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())
         , LongRequestThreshold(params.LongRequestThreshold)
+        , MaxTimeout(params.MaxTimeout)
     {
         Y_DEBUG_ABORT_UNLESS(params.Events.size() <= MaxBatchedPutRequests);
         for (auto &ev : params.Events) {
@@ -656,7 +659,7 @@ public:
         TInstant now = TActivationContext::Now();
 
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            TInstant deadline = std::min(now + DsMaximumPutTimeout, PutImpl.Blobs[blobIdx].Deadline);
+            TInstant deadline = std::min(now + MaxTimeout, PutImpl.Blobs[blobIdx].Deadline);
             PutDeadlineMasks[deadline].set(blobIdx);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }

@@ -5,7 +5,8 @@ PEERDIR(
 )
 
 SRCS(
-    password_checker.cpp
+    hash_types.cpp
+    hashes_checker.cpp
 )
 
 END()

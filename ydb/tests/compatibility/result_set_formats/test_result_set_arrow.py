@@ -100,9 +100,9 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self._create_table(table_name)
         self._fill_table(table_name, rows_count)
 
-        self._validate_response_types(self._select_table(table_name), rows_count)
+        self._validate_types_mapping(self._select_table(table_name), rows_count)
         self.change_cluster_version()
-        self._validate_response_types(self._select_table(table_name), rows_count)
+        self._validate_types_mapping(self._select_table(table_name), rows_count)
 
         self._drop_table(table_name)
 
@@ -201,6 +201,23 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         self._drop_table(table_name)
 
+    @pytest.mark.parametrize("store_type", ["ROW", "COLUMM"])
+    def test_limit_ordered_columns(self):
+        table_name = "test_arrow"
+        rows_count = 500
+        limit = 100
+
+        assert limit < rows_count
+
+        self._create_table(table_name)
+        self._fill_table(table_name, rows_count)
+
+        self._validate_limit_ordered_columns(self._select_table(table_name, limit=limit, pragmas=["OrderedColumns"], ordered=False), limit)
+        self.change_cluster_version()
+        self._validate_limit_ordered_columns(self._select_table(table_name, limit=limit, pragmas=["OrderedColumns"], ordered=False), limit)
+
+        self._drop_table(table_name)
+
     def _create_table(self, table_name):
         query = create_table_sql_request(
             table_name,
@@ -238,7 +255,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             value = [format_sql_value(i + offset, "Uint64", self.store_type != "COLUMN")]
             for type_name in type_names:
                 if i % 3 == 0:
-                    value.append(format_sql_value(self.all_types[type_name](randint(0, 127)), type_name))
+                    value.append(format_sql_value(self.all_types[type_name](i % 128), type_name))
                 else:
                     value.append('NULL')
             values.append("(" + ", ".join(value) + ")")
@@ -257,10 +274,17 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
     def _select_table(self,
         table_name,
         schema_inclusion_mode = None,
-        codec = None
+        codec = None,
+        limit = None,
+        pragmas = [],
+        ordered = True
     ):
-        columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]]
-        query = f"SELECT {", ".join(columns)} FROM {table_name};"
+        pragmas_stmt = ";".join(f"PRAGMA {pragma}" for pragma in pragmas)
+        columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]] if ordered else ["*"]
+        query = f"""
+            {(pragmas_stmt + ";") if len(pragmas_stmt) > 0 else ""}
+            SELECT {", ".join(columns)} FROM {table_name}{f" LIMIT {limit}" if limit is not None else ""};
+        """
         arrow_format_settings = ydb.ArrowFormatSettings(compression_codec=codec) if codec else None
 
         try:
@@ -297,7 +321,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         except Exception as e:
             assert False, f"Failed to select table: {e}"
 
-    def _validate_response_types(self, result_sets, rows_count):
+    def _validate_types_mapping(self, result_sets, rows_count):
         if result_sets is None:
             return
 
@@ -318,7 +342,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
                 assert batch.num_columns == len(self.all_types) + 1
 
                 for type_name in self.all_types.keys():
-                    assert schema.field(f"col_{cleanup_type_name(type_name)}").type == primitive_type_to_arrow_type[type_name]
+                    assert batch.schema.field(f"col_{cleanup_type_name(type_name)}").type == primitive_type_to_arrow_type[type_name]
             except Exception as e:
                 assert False, f"Failed to read schema or batch from result set: {e}"
 
@@ -475,3 +499,30 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
                     assert batch.num_columns == len(self.all_types) + 1
                 except Exception as e:
                     assert False, f"Failed to execute query: {query}: {e}"
+
+    def _validate_limit_ordered_columns(self, result_sets, rows_count):
+        if result_sets is None:
+            return
+
+        assert len(result_sets) != 0
+
+        result_rows_count = 0
+        for result_set in result_sets:
+            assert result_set.format == ydb.QueryResultSetFormat.ARROW
+            assert result_set.data is not None and len(result_set.data) != 0
+            assert result_set.arrow_format_meta is not None and len(result_set.arrow_format_meta.schema) != 0
+
+            try:
+                schema = pa.ipc.read_schema(pa.py_buffer(result_set.arrow_format_meta.schema))
+                batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
+                batch.validate()
+
+                result_rows_count += batch.num_rows
+                assert batch.num_columns == len(self.all_types) + 1
+
+                for i, col_name in enumerate(self.all_types.keys(), start=1):
+                    assert batch.schema.field(i).name == "col_" + cleanup_type_name(col_name)
+            except Exception as e:
+                assert False, f"Failed to read schema or batch from result set: {e}"
+
+        assert result_rows_count == rows_count

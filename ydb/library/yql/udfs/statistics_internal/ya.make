@@ -15,6 +15,7 @@ SRCS(
 
 PEERDIR(
     yql/essentials/core/minsketch
+    yql/essentials/core/histogram
 )
 
 END()

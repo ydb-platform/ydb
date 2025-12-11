@@ -59,6 +59,10 @@
         .filter-btn.active.skipped {
             background-color: #6c757d;
         }
+        .filter-btn.active.flaky {
+            background-color: #ffc107;
+            color: #000;
+        }
         .filter-btn.active.sanitizer {
             background-color: #ff4500;
         }
@@ -68,6 +72,19 @@
         }
         .filter-btn.sanitizer:hover {
             background-color: #cc3700;
+        }
+        .success-rate-button {
+            background-color: #0969da;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            margin-left: 4px;
+        }
+        .success-rate-button:hover {
+            background-color: #0860ca;
         }
         .issue-button {
             background-color: #0969da;
@@ -164,6 +181,18 @@
         .test-item.mute {
             border-left-color: blue;
         }
+        .test-item[data-is-flaky="true"] {
+            border-left-color: #ffc107;
+            border-left-width: 4px;
+        }
+        .flaky-badge {
+            background-color: #ffc107;
+            color: #000;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+        }
         .test-name {
             font-weight: 500;
             flex: 1;
@@ -234,24 +263,19 @@
             text-decoration: none;
             border-color: #0969da;
         }
-        .history-icons {
-            display: inline-flex;
-            gap: 4px;
-            align-items: center;
-        }
-        .history-icon {
-            width: 14px;
-            height: 14px;
+        .success-rate-button {
+            background-color: #0366d6;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
             cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            margin-left: 8px;
         }
-        .svg_passed {
-            fill: #28a745;
-        }
-        .svg_failure {
-            fill: #dc3545;
-        }
-        .svg_mute {
-            fill: #007bff;
+        .success-rate-button:hover {
+            background-color: #0256cc;
         }
         .status-group {
             margin: 30px 0;
@@ -323,6 +347,17 @@
             text-decoration: underline;
         }
         /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
         #errorModal {
             display: none;
             position: fixed;
@@ -417,10 +452,13 @@
     <div class="filter-buttons">
         <button class="filter-btn active all" onclick="setFilter('all', this)">All ({{ test_counts.all }})</button>
         <button class="filter-btn passed" onclick="setFilter('passed', this)">Passed ({{ test_counts.passed }})</button>
-        <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }})</button>
-        <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }})</button>
-        <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }})</button>
+        <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }}){% if test_counts.flaky_failed > 0 %}/Flaky({{ test_counts.flaky_failed }}){% endif %}</button>
+        <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }}){% if test_counts.flaky_error > 0 %}/Flaky({{ test_counts.flaky_error }}){% endif %}</button>
+        <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }}){% if test_counts.flaky_mute > 0 %}/Flaky({{ test_counts.flaky_mute }}){% endif %}</button>
         <button class="filter-btn skipped" onclick="setFilter('skipped', this)">Skipped ({{ test_counts.skipped }})</button>
+        {% if test_counts.flaky > 0 %}
+        <button class="filter-btn flaky" onclick="setFilter('flaky', this)">Flaky ({{ test_counts.flaky }})</button>
+        {% endif %}
         {% if test_counts.sanitizer > 0 %}
         <button class="filter-btn sanitizer" onclick="setFilter('sanitizer', this)">Sanitizer ({{ test_counts.sanitizer }})</button>
         {% endif %}
@@ -448,7 +486,7 @@
             </div>
             <div id="suite-{{ loop.index }}" class="suite-content">
                 {% for test in tests %}
-                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}">
+                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-is-flaky="{% if test.is_flaky %}true{% else %}false{% endif %}">
                     <span class="test-name">{{ test.name }}</span>
                     
                     <div class="test-meta">
@@ -456,43 +494,31 @@
                         <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
                         
                         <div class="test-badges">
+                            {% if test.is_flaky %}
+                            <span class="flaky-badge">FLAKY</span>
+                            {% endif %}
                             {% if test.is_sanitizer_issue %}
                             <span class="sanitizer-badge">SANITIZER</span>
                             {% endif %}
                             {% if test.status.value == 1 or test.status.value == 2 %}
                             <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
                             {% endif %}
+                            {% if test.status.value == 1 or test.status.value == 2 or test.status.value == 4 %}
+                            {% if test.full_name in test_success_rates %}
+                            {% set rates = test_success_rates[test.full_name] %}
+                            <button class="success-rate-button" onclick="showSuccessRateModal('{{ test.full_name }}')" title="View success rate and history">
+                                📊 
+                                {% if rates.pr_check %}PR:{{ rates.pr_check.rate }}%{% endif %}
+                                {% if rates.pr_check and rates.other %} | {% endif %}
+                                {% if rates.other %}Other:{{ rates.other.rate }}%{% endif %}
+                            </button>
+                            {% else %}
+                            <button class="success-rate-button" onclick="showSuccessRateModal('{{ test.full_name }}')" title="View success rate and history">
+                                📊 No history
+                            </button>
+                            {% endif %}
+                            {% endif %}
                         </div>
-                        
-                        {% if test.full_name in history %}
-                        <span class="history-icons">
-                        {% for h in history[test.full_name] %}
-                        <span class="history-icon" 
-                              data-test-name="{{ test.full_name }}" 
-                              data-status="{{ history[test.full_name][h].status }}" 
-                              data-date="{{ history[test.full_name][h].datetime }}" 
-                              data-history-timestamp="{{ h|string }}" 
-                              data-commit="{{ history[test.full_name][h].commit }}"
-                              data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
-                              data-job-id="{{ history[test.full_name][h].job_id }}"
-                              onclick="showHistoryInfo(this)">
-                            {% if history[test.full_name][h].status == 'failure' %}
-                            <svg class="svg_failure history-icon" viewBox="0 0 16 16">
-                                <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
-                            </svg>
-                            {% elif history[test.full_name][h].status == 'passed' %}
-                            <svg class="svg_passed history-icon" viewBox="0 0 16 16">
-                                <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
-                            </svg>
-                            {% elif history[test.full_name][h].status == 'mute' %}
-                            <svg class="svg_mute history-icon" viewBox="0 0 17 16">
-                                <path fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>
-                            </svg>
-                            {% endif %}
-                        </span>
-                        {% endfor %}
-                            </span>
-                            {% endif %}
                             
                             {% if test.log_urls %}
                             <span class="log-links">
@@ -523,8 +549,19 @@
         {% endfor %}
     </div>
 
-    <!-- Removed duplicate views (view-passed, view-failed, view-error, view-mute, view-sanitizer) to reduce HTML size -->
-    <!-- Filtering is now done via JavaScript using data-test-status and data-is-sanitizer attributes -->
+    <!-- Removed duplicate views (view-passed, view-failed, view-error, view-mute, view-sanitizer, view-flaky) to reduce HTML size -->
+    <!-- Filtering is now done via JavaScript using data-test-status, data-is-sanitizer, and data-is-flaky attributes -->
+    <!-- Modal for success rate and detailed history -->
+    <div id="successRateModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <span class="close-modal" onclick="closeSuccessRateModal()">&times;</span>
+            <div class="modal-header">
+                <h2 id="successRateModalTitle">Test Success Rate</h2>
+            </div>
+            <div id="successRateModalContent"></div>
+        </div>
+    </div>
+
     <!-- Modal for test details -->
     <div id="errorModal">
         <div class="modal-content">
@@ -562,6 +599,7 @@
     <script>
         // Preload history data to avoid embedding large status_description in HTML
         const testHistory = {{ history_for_js | tojson }};
+        const testSuccessRates = {{ test_success_rates | tojson }};
         
         function getHistoryError(testName, timestamp) {
             if (!testHistory || !testHistory[testName]) return '';
@@ -606,7 +644,7 @@
         function setFilter(filter, button) {
             // Update button states
             document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
+                btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'flaky', 'sanitizer');
             });
             button.classList.add('active', filter);
 
@@ -617,6 +655,7 @@
             allTestItems.forEach(testItem => {
                 const testStatus = testItem.getAttribute('data-test-status');
                 const isSanitizer = testItem.getAttribute('data-is-sanitizer') === 'true';
+                const isFlaky = testItem.getAttribute('data-is-flaky') === 'true';
                 let shouldShow = false;
                 
                 if (filter === 'all') {
@@ -624,8 +663,10 @@
                     shouldShow = true;
                 } else if (filter === 'sanitizer') {
                     shouldShow = isSanitizer;
+                } else if (filter === 'flaky') {
+                    shouldShow = isFlaky;
                 } else {
-                    // Match status
+                    // Match status (failed, error, mute, passed, skipped) - including flaky
                     shouldShow = testStatus === filter;
                 }
                 
@@ -686,6 +727,7 @@
                     'err': 'error',
                     'mut': 'mute',
                     'skip': 'skipped',
+                    'fla': 'flaky',
                     'san': 'sanitizer'
                 };
                 const actualFilter = filterMap[filter] || filter;
@@ -931,14 +973,16 @@
             const owner = testItem.getAttribute('data-test-owner') || '';
             const ownerMatch = owner.match(/TEAM:@ydb-platform\/([^;:]+)/);
             const ownerSimple = ownerMatch ? ownerMatch[1] : owner;
-            const historyIcons = testItem.querySelectorAll('.history-icon');
+            // Get success/fail counts from test history if available
             let success_count = 0;
             let fail_count = 0;
-            historyIcons.forEach(icon => {
-                const status = icon.getAttribute('data-status');
-                if (status === 'passed') success_count++;
-                else if (status === 'failure' || status === 'mute') fail_count++;
-            });
+            if (testHistory && testHistory[testName]) {
+                for (const timestamp in testHistory[testName]) {
+                    const status = testHistory[testName][timestamp].status;
+                    if (status === 'passed') success_count++;
+                    else if (status === 'failure' || status === 'mute') fail_count++;
+                }
+            }
             const is_sanitizer = testItem.querySelector('.sanitizer-badge') !== null;
             let errorText = '';
             const errorButton = testItem.querySelector('.error-button');
@@ -959,34 +1003,140 @@
             createIssue(testName, ownerSimple, success_count, fail_count, is_sanitizer, errorText, logUrls);
         }
         
-        function showHistoryInfo(icon) {
-            const testName = icon.getAttribute('data-test-name');
-            const status = icon.getAttribute('data-status');
-            const date = icon.getAttribute('data-date');
-            const timestamp = icon.getAttribute('data-history-timestamp');
-            const errorText = timestamp ? getHistoryError(testName, timestamp) : '';
-            const commit = icon.getAttribute('data-commit');
-            const jobName = icon.getAttribute('data-job-name');
-            const jobId = icon.getAttribute('data-job-id');
+        function showSuccessRateModal(testFullName) {
+            const modal = document.getElementById('successRateModal');
+            const modalTitle = document.getElementById('successRateModalTitle');
+            const modalContent = document.getElementById('successRateModalContent');
+            
+            if (!testHistory || !testHistory[testFullName] || !testSuccessRates || !testSuccessRates[testFullName]) {
+                modalTitle.textContent = `Success Rate: ${testFullName}`;
+                modalContent.innerHTML = '<div style="padding: 20px;"><p>No history data available for this test.</p><p>History is collected for the last 4 days for failed, error, and muted tests.</p></div>';
+                modal.style.display = 'block';
+                return;
+            }
+            
+            const rates = testSuccessRates[testFullName];
+            const history = testHistory[testFullName];
+            
+            // Build modal content
+            let html = '<div style="margin-bottom: 20px;">';
+            html += '<h3>Overall Success Rate (Last 4 Days)</h3>';
+            html += '<div style="display: flex; gap: 30px; margin: 15px 0;">';
+            if (rates.pr_check) {
+                html += `<div><strong>PR-Check:</strong> ${rates.pr_check.rate}% (${rates.pr_check.passed}/${rates.pr_check.total})</div>`;
+            }
+            if (rates.other) {
+                html += `<div><strong>Other Runs:</strong> ${rates.other.rate}% (${rates.other.passed}/${rates.other.total})</div>`;
+            }
+            html += '</div></div>';
+            
+            // Group history by date and calculate daily success rates
+            const historyByDate = {};
+            for (const timestamp in history) {
+                const entry = history[timestamp];
+                const date = entry.date.split(' ')[0]; // Get date part only
+                if (!historyByDate[date]) {
+                    historyByDate[date] = {
+                        pr_check: { passed: 0, total: 0 },
+                        other: { passed: 0, total: 0 },
+                        entries: []
+                    };
+                }
+                const isPrCheck = entry.job_name && (
+                    entry.job_name.toLowerCase().includes('pr-check') ||
+                    entry.job_name.toLowerCase().includes('pr_check') ||
+                    entry.job_name.toLowerCase().includes('pr/check')
+                );
+                const group = isPrCheck ? 'pr_check' : 'other';
+                historyByDate[date][group].total++;
+                if (entry.status === 'passed') {
+                    historyByDate[date][group].passed++;
+                }
+                historyByDate[date].entries.push({
+                    timestamp: timestamp,
+                    entry: entry
+                });
+            }
+            
+            // Sort dates (newest first)
+            const sortedDates = Object.keys(historyByDate).sort((a, b) => new Date(b) - new Date(a));
+            
+            html += '<h3>Daily History</h3>';
+            html += '<table style="width: 100%; border-collapse: collapse; margin-top: 15px;">';
+            html += '<thead><tr style="background-color: #f6f8fa; border-bottom: 2px solid #d0d7de;">';
+            html += '<th style="padding: 10px; text-align: left;">Date</th>';
+            html += '<th style="padding: 10px; text-align: center;">PR-Check Rate</th>';
+            html += '<th style="padding: 10px; text-align: center;">Other Runs Rate</th>';
+            html += '<th style="padding: 10px; text-align: left;">Runs</th>';
+            html += '</tr></thead><tbody>';
+            
+            for (const date of sortedDates) {
+                const dayData = historyByDate[date];
+                const prRate = dayData.pr_check.total > 0 
+                    ? ((dayData.pr_check.passed / dayData.pr_check.total) * 100).toFixed(1)
+                    : '-';
+                const otherRate = dayData.other.total > 0
+                    ? ((dayData.other.passed / dayData.other.total) * 100).toFixed(1)
+                    : '-';
+                
+                html += `<tr style="border-bottom: 1px solid #d0d7de;">`;
+                html += `<td style="padding: 10px;"><strong>${date}</strong></td>`;
+                html += `<td style="padding: 10px; text-align: center;">${dayData.pr_check.total > 0 ? `${prRate}% (${dayData.pr_check.passed}/${dayData.pr_check.total})` : '-'}</td>`;
+                html += `<td style="padding: 10px; text-align: center;">${dayData.other.total > 0 ? `${otherRate}% (${dayData.other.passed}/${dayData.other.total})` : '-'}</td>`;
+                html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
+                
+                // Sort entries by timestamp (newest first)
+                dayData.entries.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
+                
+                for (const { timestamp, entry } of dayData.entries) {
+                    const statusColor = entry.status === 'passed' ? '#28a745' : 
+                                       entry.status === 'failure' ? '#dc3545' : '#007bff';
+                    const statusSymbol = entry.status === 'passed' ? '✓' : 
+                                        entry.status === 'failure' ? '✗' : '⊘';
+                    html += `<span style="cursor: pointer; padding: 4px 8px; border-radius: 3px; background-color: ${statusColor}; color: white; font-size: 11px;" `;
+                    html += `onclick="showHistoryEntry('${testFullName}', '${timestamp}')" `;
+                    html += `title="${entry.status} - ${entry.date} - ${entry.job_name}">`;
+                    html += `${statusSymbol}</span>`;
+                }
+                html += '</div></td></tr>';
+            }
+            html += '</tbody></table>';
+            
+            modalTitle.textContent = `Success Rate: ${testFullName}`;
+            modalContent.innerHTML = html;
+            modal.style.display = 'block';
+        }
+        
+        function showHistoryEntry(testName, timestamp) {
+            if (!testHistory || !testHistory[testName] || !testHistory[testName][timestamp]) return;
+            
+            const entry = testHistory[testName][timestamp];
+            const errorText = entry.status_description || '';
             
             // Find the test item to get log URLs
-            const testItem = icon.closest('.test-item');
-            const logLinks = testItem.querySelectorAll('.log-link');
+            const testItem = document.querySelector(`[data-test-name="${testName}"]`);
             const logUrls = {};
-            logLinks.forEach(link => {
-                logUrls[link.textContent] = link.href;
-            });
+            if (testItem) {
+                const logLinks = testItem.querySelectorAll('.log-link');
+                logLinks.forEach(link => {
+                    logUrls[link.textContent] = link.href;
+                });
+            }
             
             showTestInfo({
                 testName: testName,
-                status: status,
-                date: date,
+                status: entry.status,
+                date: entry.date,
                 errorText: errorText,
-                commit: commit,
-                job_name: jobName,
-                job_id: jobId,
+                commit: entry.commit,
+                job_name: entry.job_name,
+                job_id: entry.job_id,
                 logUrls: logUrls
             });
+        }
+        
+        function closeSuccessRateModal() {
+            document.getElementById('successRateModal').style.display = 'none';
         }
         
         function showTestInfo(testInfo) {
@@ -1057,18 +1207,24 @@
             modal.style.display = 'block';
         }
         
-        // Close modal when clicking X
+        // Close modal when clicking X or outside
         document.addEventListener('DOMContentLoaded', function() {
-            const closeModal = document.querySelector('.close-modal');
-            if (closeModal) {
-                closeModal.onclick = function() {
-                    document.getElementById('errorModal').style.display = 'none';
+            const closeModals = document.querySelectorAll('.close-modal');
+            closeModals.forEach(closeBtn => {
+                closeBtn.onclick = function() {
+                    const modal = this.closest('.modal');
+                    if (modal) modal.style.display = 'none';
                 }
-            }
+            });
+            
             window.onclick = function(event) {
-                const modal = document.getElementById('errorModal');
-                if (event.target == modal) {
-                    modal.style.display = 'none';
+                const errorModal = document.getElementById('errorModal');
+                const successRateModal = document.getElementById('successRateModal');
+                if (event.target == errorModal) {
+                    errorModal.style.display = 'none';
+                }
+                if (event.target == successRateModal) {
+                    successRateModal.style.display = 'none';
                 }
             }
         });

@@ -13,7 +13,6 @@
 - [Транзакции](transactions.md)
 - [Change Data Capture (CDC)](cdc.md)
 - [Время жизни и вытеснение](ttl.md)
-- [Scan-запросы](scan_query.md)
 - [Ограничения базы данных](limits-ydb.md)
 {% if feature_async_replication %}- [Асинхронная репликация](async-replication.md){% endif %}
 

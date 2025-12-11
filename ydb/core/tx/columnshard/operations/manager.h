@@ -232,21 +232,14 @@ public:
     void CommitTransactionOnExecute(
         TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
     void CommitTransactionOnComplete(
-        TColumnShard& owner, const ui64 txId, const NOlap::TSnapshot& snapshot);
-    void AddTemporaryTxLink(const ui64 lockId) {
-        AFL_VERIFY(Tx2Lock.emplace(lockId, lockId).second);
-        auto& lock = GetLockVerified(lockId);
-        lock.SetTxIdAssigned();
-    }
+        TColumnShard& owner, const ui64 txId, const ui64 lockId, const NOlap::TSnapshot& snapshot);
     void LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void LinkTransactionOnComplete(const ui64 lockId, const ui64 txId);
-    void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-    void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId);
-    void AbortLockOnExecute(TColumnShard& owner, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
-    void AbortLockOnComplete(TColumnShard& owner, const ui64 lockId);
+    void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
+    void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId, const ui64 lockId);
 
     void BreakConflictingTxs(const TLockFeatures& lock);
-    void BreakConflictingTxs(const ui64 txId);
+    void BreakConflictingTxs(const ui64 lockId);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
     std::optional<ui64> GetLockForTxOptional(const ui64 txId) const {

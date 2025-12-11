@@ -87,7 +87,10 @@ public:
         Version = version;
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("progress_tx_id", GetTxId())("lock_id", LockId)("broken", IsTxBroken());
         if (IsTxBroken()) {
-            owner.GetOperationsManager().AbortTransactionOnExecute(owner, GetTxId(), txc);
+            auto& lock = owner.GetOperationsManager().GetLockVerified(GetLockId());
+            lock.SetNeedsAborting();
+            lock.SetAborting();
+            owner.GetOperationsManager().AbortTransactionOnExecute(owner, GetTxId(), GetLockId(), txc);
         } else {
             owner.GetOperationsManager().CommitTransactionOnExecute(owner, GetTxId(), txc, version);
         }
@@ -98,14 +101,14 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("progress_tx_id", GetTxId())("lock_id", LockId)("broken", IsTxBroken());
         AFL_VERIFY(Version);
         if (IsTxBroken()) {
-            owner.GetOperationsManager().AbortTransactionOnComplete(owner, GetTxId());
+            owner.GetOperationsManager().AbortTransactionOnComplete(owner, GetTxId(), GetLockId());
             LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), GetTxId(), TxInfo.Cookie, "on_complete", false, "lock invalidated");
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
                 owner.TabletID(), GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "lock invalidated");
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
         } else {
             LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), GetTxId(), TxInfo.Cookie, "on_complete", true, "");
-            owner.GetOperationsManager().CommitTransactionOnComplete(owner, GetTxId(), *Version);
+            owner.GetOperationsManager().CommitTransactionOnComplete(owner, GetTxId(), GetLockId(), *Version);
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(owner.TabletID(), GetTxId());
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
         }
@@ -113,11 +116,11 @@ public:
     }
 
     virtual bool ExecuteOnAbort(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override {
-        owner.GetOperationsManager().AbortTransactionOnExecute(owner, GetTxId(), txc);
+        owner.GetOperationsManager().AbortTransactionOnExecute(owner, GetTxId(), GetLockId(), txc);
         return true;
     }
     virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& /*ctx*/) override {
-        owner.GetOperationsManager().AbortTransactionOnComplete(owner, GetTxId());
+        owner.GetOperationsManager().AbortTransactionOnComplete(owner, GetTxId(), GetLockId());
         return true;
     }
 };

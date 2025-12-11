@@ -144,13 +144,12 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
             AFL_VERIFY(CommitSnapshot);
             // No tx writes (bulk upsert) must break decent/proper txs.
             // Decent/proper txs asked for serializable, so we have to give them serializable. 
-            Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
             Self->OperationsManager->BreakConflictingTxs(op->GetLockId());
-            Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), *CommitSnapshot);
+            Self->OperationsManager->CommitTransactionOnComplete(*Self, 0, op->GetLockId(), *CommitSnapshot);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
         } else {
             Self->GetOperationsManager().SetOperationFinished(op->GetWriteId());
-            Self->MaybeCleanupLock(op->GetLockId());
+            Self->MaybeAbortTransaction(op->GetLockId());
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();

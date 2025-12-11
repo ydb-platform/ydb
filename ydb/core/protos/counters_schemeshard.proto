@@ -370,11 +370,11 @@ enum ECumulativeCounters {
     COUNTER_FORCED_COMPACTION_TIMEOUT = 79                [(CounterOpts) = {Name: "ForcedCompactionTimeout"}];
 
     COUNTER_FINISHED_OPS_TxCreateBlobDepot = 80           [(CounterOpts) = {Name: "FinishedOps/CreateBlobDepot"}];
-    COUNTER_FINISHED_OPS_TxAlterBlobDepot = 79            [(CounterOpts) = {Name: "FinishedOps/AlterBlobDepot"}];
-    COUNTER_FINISHED_OPS_TxDropBlobDepot = 80             [(CounterOpts) = {Name: "FinishedOps/DropBlobDepot"}];
+    COUNTER_FINISHED_OPS_TxAlterBlobDepot = 81            [(CounterOpts) = {Name: "FinishedOps/AlterBlobDepot"}];
+    COUNTER_FINISHED_OPS_TxDropBlobDepot = 82             [(CounterOpts) = {Name: "FinishedOps/DropBlobDepot"}];
 
-    COUNTER_STATS_WRITTEN = 81                            [(CounterOpts) = {Name: "StatsWritten"}];
-    COUNTER_FINISHED_OPS_TxUpdateMainTableOnIndexMove = 82 [(CounterOpts) = {Name: "FinishedOps/UpdateMainTableOnIndexMove"}];
+    COUNTER_STATS_WRITTEN = 83                            [(CounterOpts) = {Name: "StatsWritten"}];
+    COUNTER_FINISHED_OPS_TxUpdateMainTableOnIndexMove = 84 [(CounterOpts) = {Name: "FinishedOps/UpdateMainTableOnIndexMove"}];
 
     COUNTER_FINISHED_OPS_TxAllocatePQ   = 83              [(CounterOpts) = {Name: "FinishedOps/AllocatePQ"}];
     COUNTER_FINISHED_OPS_TxCreateCdcStreamAtTableWithInitialScan = 84 [(CounterOpts) = {Name: "FinishedOps/CreateCdcStreamAtTableWithInitialScan"}];

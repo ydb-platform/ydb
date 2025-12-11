@@ -1344,7 +1344,7 @@ private:
                 break;
             }
         }
-        
+
         // only query will throw error to save the backward compatibility
         if (SessionCtx->Query().Type == EKikimrQueryType::Query && hasDiscardWarning) {
             ctx.AddError(YqlIssue(TPosition(), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()

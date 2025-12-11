@@ -281,9 +281,6 @@ public:
                         auto streamPath = context.SS->PathsById.at(id);
 
                         if (stream->AlterData && streamPath->LastTxId == OperationId.GetTxId()) {
-                            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                "TCopyTable HandleReply: Finalizing rotation for OLD stream " << name << " id " << id);
-
                             context.MemChanges.GrabCdcStream(context.SS, id);
 
                             stream->FinishAlter();
@@ -412,13 +409,6 @@ public:
             TPath src = TPath::Resolve(Transaction.GetCreateTable().GetCopyFromTable(), context.SS);
             TPath oldP = src.Child(oldStreamName);
             TPath newP = src.Child(newStreamName);
-
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "DEBUG_ROTATION: OpId# " << OperationId
-                << " OldName: " << oldStreamName 
-                << " OldExists: " << oldP.IsResolved() << " (Deleted: " << oldP.IsDeleted() << ")"
-                << " NewName: " << newStreamName 
-                << " NewExists: " << newP.IsResolved());
         }
 
         const TTabletId ssId = context.SS->SelfTabletId();

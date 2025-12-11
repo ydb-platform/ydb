@@ -176,10 +176,20 @@ class TestResult:
         # Properties are added later by transform_build_results.py with URL format
         log_urls = {}
         if properties and isinstance(properties, dict):
-            for key in ['Log', 'log', 'logsdir', 'stdout', 'stderr']:
-                url = properties.get(f"url:{key}") or properties.get(key)
+            # Check both "url:key" and "key" formats (as used in transform_build_results.py)
+            # Try lowercase first, then original case
+            log_keys = ['log', 'Log', 'logsdir', 'Logsdir', 'stdout', 'Stdout', 'stderr', 'Stderr']
+            for key in log_keys:
+                # Try "url:key" format first (primary format from transform_build_results.py)
+                url = properties.get(f"url:{key}")
+                if not url:
+                    # Fallback to just "key"
+                    url = properties.get(key)
                 if url:
-                    log_urls[key] = url
+                    # Use lowercase key as display name for consistency
+                    display_key = key.lower()
+                    if display_key not in log_urls:  # Don't overwrite if already found
+                        log_urls[display_key] = url
         
         # Fallback to links if not in properties
         if not log_urls and isinstance(links, dict):
@@ -339,6 +349,22 @@ def render_pm(value, url, diff=None):
     return text
 
 
+def group_tests_by_suite(tests):
+    """Group tests by suite (classname)"""
+    suites = {}
+    for test in tests:
+        suite_name = test.classname
+        if suite_name not in suites:
+            suites[suite_name] = []
+        suites[suite_name].append(test)
+    
+    # Sort tests within each suite
+    for suite_name in suites:
+        suites[suite_name].sort(key=attrgetter("full_name"))
+    
+    return suites
+
+
 def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None):
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
@@ -451,6 +477,125 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         fp.write(content)
 
 
+def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None):
+    """New version: Group tests by suite with filters"""
+    TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
+
+    env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
+
+    # Filter out SKIP tests for display (they are not shown in filters)
+    visible_rows = [t for t in rows if t.status in [TestStatus.PASS, TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE]]
+    
+    # Group tests by suite (only visible tests)
+    suites_dict = group_tests_by_suite(visible_rows)
+    
+    # Also group by status for status-based view
+    status_test = {}
+    for t in rows:
+        status_test.setdefault(t.status, []).append(t)
+    
+    # Get testowners for all tests
+    dir = os.path.dirname(__file__)
+    git_root = f"{dir}/../../.."
+    codeowners = f"{git_root}/.github/TESTOWNERS"
+    get_codeowners_for_tests(codeowners, rows)
+    
+    # Get history for failed and muted tests
+    status_for_history = [TestStatus.FAIL, TestStatus.MUTE, TestStatus.ERROR]
+    status_for_history = [s for s in status_for_history if s in status_test]
+    tests_in_statuses = [test for status in status_for_history for test in status_test.get(status, [])]
+    tests_names_for_history = [test.full_name for test in tests_in_statuses]
+    
+    history = {}
+    try:
+        history = get_test_history(tests_names_for_history, 5, build_preset, branch)
+    except Exception:
+        print(traceback.format_exc())
+    
+    # Get count of passed tests in history for sorting
+    for test in tests_in_statuses:
+        if test.full_name in history:
+            test.count_of_passed = len([
+                history[test.full_name][x]
+                for x in history[test.full_name]
+                if history[test.full_name][x]["status"] == "passed"
+            ])
+    
+    # Group by status -> suite -> tests
+    # Convert to dict with status enum as key for template
+    status_suites = {}
+    for status in [TestStatus.ERROR, TestStatus.FAIL, TestStatus.SKIP, TestStatus.MUTE, TestStatus.PASS]:
+        if status in status_test:
+            status_suites[status] = group_tests_by_suite(status_test[status])
+    
+    # Calculate test counts for filters
+    # Count only tests that are shown in filters (PASS, FAIL, ERROR, MUTE)
+    # SKIP tests are not shown in filters, so we exclude them from "all"
+    visible_tests = [
+        t for t in rows 
+        if t.status in [TestStatus.PASS, TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE]
+    ]
+    test_counts = {
+        'all': len(visible_tests),
+        'passed': len(status_test.get(TestStatus.PASS, [])),
+        'failed': len(status_test.get(TestStatus.FAIL, [])),
+        'error': len(status_test.get(TestStatus.ERROR, [])),
+        'mute': len(status_test.get(TestStatus.MUTE, [])),
+        'sanitizer': len([t for t in rows if t.is_sanitizer_issue])
+    }
+    
+    # Group sanitizer tests by suite
+    sanitizer_tests = [t for t in rows if t.is_sanitizer_issue]
+    sanitizer_suites = group_tests_by_suite(sanitizer_tests) if sanitizer_tests else {}
+    
+    # Build preset params
+    buid_preset_params = '--build unknown_build_type'
+    if build_preset == 'release-asan':
+        buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'release-msan':
+        buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'release-tsan':
+        buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'relwithdebinfo':
+        buid_preset_params = '--build "relwithdebinfo"'
+    
+    # Get GitHub server URL and repository from environment
+    github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    github_repository = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
+    github_sha = os.environ.get("GITHUB_HEAD_SHA", "")
+    
+    pr_url = None
+    workflow_url = None
+    if pr_number:
+        pr_url = f"{github_server_url}/{github_repository}/pull/{pr_number}"
+    if workflow_run_id:
+        workflow_url = f"{github_server_url}/{github_repository}/actions/runs/{workflow_run_id}"
+    
+    # Load owner to area mapping
+    owner_area_mapping = load_owner_area_mapping()
+    
+    content = env.get_template("summary_v2.html").render(
+        suites=suites_dict,
+        status_suites=status_suites,
+        sanitizer_suites=sanitizer_suites,
+        test_counts=test_counts,
+        history=history,
+        build_preset=build_preset,
+        buid_preset_params=buid_preset_params,
+        branch=branch,
+        pr_number=pr_number,
+        pr_url=pr_url,
+        workflow_run_id=workflow_run_id,
+        workflow_url=workflow_url,
+        owner_area_mapping=owner_area_mapping,
+        commit_sha=github_sha,
+        all_tests=rows
+    )
+
+    with open(fn, "w") as fp:
+        fp.write(content)
+
+
 def write_summary(summary: TestSummary):
     summary_fn = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_fn:
@@ -498,8 +643,11 @@ def iter_build_results_files(path):
             with open(fn, 'r') as f:
                 report = json.load(f)
             
-            for result in report.get("results", []):
-                if result.get("type") == "test":
+            for result in report.get("results") or []:
+                # Filter: only tests without suite=true and chunk=true
+                if (result.get("type") == "test" and 
+                    not result.get("suite", False) and 
+                    not result.get("chunk", False)):
                     yield fn, result
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)
@@ -520,7 +668,8 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"
 
-        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id)
+        # Use new version v2 for rendering
+        render_testlist_html_v2(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id)
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 

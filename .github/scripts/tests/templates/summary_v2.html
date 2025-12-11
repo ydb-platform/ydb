@@ -1,0 +1,1479 @@
+<html>
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism-themes/1.9.0/prism-vs.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .report-header {
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        .filter-buttons {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+        }
+        .filter-btn {
+            padding: 8px 16px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            background-color: #f6f8fa;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .filter-btn:hover {
+            background-color: #f3f4f6;
+        }
+        .filter-btn.active {
+            color: white;
+            border-color: #0969da;
+        }
+        .filter-btn.active.all {
+            background-color: #0969da;
+        }
+        .filter-btn.active.passed {
+            background-color: #28a745;
+        }
+        .filter-btn.active.failed {
+            background-color: #dc3545;
+        }
+        .filter-btn.active.error {
+            background-color: #ff9800;
+        }
+        .filter-btn.active.mute {
+            background-color: #007bff;
+        }
+        .filter-btn.active.sanitizer {
+            background-color: #ff4500;
+        }
+        .filter-btn.sanitizer {
+            background-color: #ff4500;
+            color: white;
+        }
+        .filter-btn.sanitizer:hover {
+            background-color: #cc3700;
+        }
+        .issue-button {
+            background-color: #0969da;
+            border: 1px solid #0969da;
+            border-radius: 4px;
+            color: white;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .issue-button:hover {
+            background-color: #0860ca;
+            border-color: #0860ca;
+            text-decoration: none;
+        }
+        .sanitizer-badge {
+            background-color: #ff4500;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .suite-group {
+            margin: 20px 0;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+        }
+        .suite-header {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #0969da;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .suite-owner {
+            font-size: 12px;
+            font-weight: normal;
+            color: #656d76;
+            margin-left: auto;
+        }
+        .suite-owner a {
+            color: #656d76;
+            text-decoration: none;
+        }
+        .suite-owner a:hover {
+            text-decoration: underline;
+            color: #0969da;
+        }
+        .suite-header:hover {
+            text-decoration: underline;
+        }
+        .suite-toggle {
+            font-size: 12px;
+        }
+        .suite-content {
+            margin-top: 12px;
+        }
+        .test-item {
+            padding: 10px 12px;
+            margin: 6px 0;
+            border-left: 3px solid;
+            border-radius: 4px;
+            background-color: #fafbfc;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .test-item:hover {
+            background-color: #f6f8fa;
+        }
+        .test-item.passed {
+            border-left-color: green;
+        }
+        .test-item.failed {
+            border-left-color: red;
+        }
+        .test-item.error {
+            border-left-color: orange;
+        }
+        .test-item.skipped {
+            border-left-color: gray;
+        }
+        .test-item.mute {
+            border-left-color: blue;
+        }
+        .test-name {
+            font-weight: 500;
+            flex: 1;
+            min-width: 200px;
+        }
+        .test-status {
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .test-duration {
+            font-size: 12px;
+            color: #656d76;
+            white-space: nowrap;
+        }
+        .suite-duration {
+            font-size: 12px;
+            font-weight: normal;
+            color: #656d76;
+            margin-left: 8px;
+        }
+        .test-status.passed {
+            background-color: #dafbe1;
+            color: #1a7f37;
+        }
+        .test-status.failed {
+            background-color: #ffebe9;
+            color: #cf222e;
+        }
+        .test-status.error {
+            background-color: #fff8c5;
+            color: #9a6700;
+        }
+        .test-status.skipped {
+            background-color: #f6f8fa;
+            color: #656d76;
+        }
+        .test-status.mute {
+            background-color: #ddf4ff;
+            color: #0969da;
+        }
+        .test-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .log-links {
+            display: inline-flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .log-link {
+            font-size: 11px;
+            color: #0969da;
+            text-decoration: none;
+            padding: 4px 8px;
+            border: 1px solid #d0d7de;
+            border-radius: 3px;
+            background-color: #ffffff;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .log-link:hover {
+            background-color: #f3f4f6;
+            text-decoration: none;
+            border-color: #0969da;
+        }
+        .history-icons {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+        }
+        .history-icon {
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+        }
+        .svg_passed {
+            fill: #28a745;
+        }
+        .svg_failure {
+            fill: #dc3545;
+        }
+        .svg_mute {
+            fill: #007bff;
+        }
+        .status-group {
+            margin: 30px 0;
+        }
+        .status-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid;
+        }
+        .status-header.error {
+            color: orange;
+            border-bottom-color: orange;
+        }
+        .status-header.failed {
+            color: red;
+            border-bottom-color: red;
+        }
+        .status-header.passed {
+            color: green;
+            border-bottom-color: green;
+        }
+        .status-header.mute {
+            color: blue;
+            border-bottom-color: blue;
+        }
+        .hidden {
+            display: none;
+        }
+        .error-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            color: #0969da;
+            margin-left: 8px;
+        }
+        .error-content {
+            margin-top: 8px;
+            padding: 8px;
+            background-color: #f6f8fa;
+            border-radius: 4px;
+        }
+        pre code {
+            font-size: 12px;
+        }
+        .test-actions {
+            margin-left: 12px;
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+        }
+        .test-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 4px;
+            display: inline-flex;
+            align-items: center;
+            color: #0969da;
+            font-size: 11px;
+        }
+        .test-action-btn:hover {
+            text-decoration: underline;
+        }
+        /* Modal styles */
+        #errorModal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            border-radius: 5px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .close-modal {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close-modal:hover {
+            color: #000;
+        }
+        .modal-header {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .modal-info {
+            font-size: 14px;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        .modal-info-item {
+            margin-bottom: 8px;
+        }
+        .modal-info-label {
+            font-weight: bold;
+            display: inline-block;
+            width: 100px;
+        }
+        .modal-log-links {
+            margin-top: 10px;
+        }
+        .modal-log-link {
+            display: block;
+            margin: 4px 0;
+            color: #0969da;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        .modal-log-link:hover {
+            text-decoration: underline;
+        }
+        .console-frame {
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 10px;
+        }
+        .console-frame pre {
+            margin: 0;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="report-header">
+        <h2>Test Results Report</h2>
+        <p><strong>Build Preset:</strong> {{ build_preset }}</p>
+        <p><strong>Branch:</strong> {{ branch }}</p>
+        {% if pr_number %}
+        <p><strong>PR:</strong> <a href="{{ pr_url }}">#{{ pr_number }}</a></p>
+        {% endif %}
+        {% if workflow_run_id %}
+        <p><strong>Workflow:</strong> <a href="{{ workflow_url }}">Run #{{ workflow_run_id }}</a></p>
+        {% endif %}
+        {% if commit_sha %}
+        <p><strong>Commit:</strong> {{ commit_sha[:7] }}</p>
+        {% endif %}
+    </div>
+
+    <div class="filter-buttons">
+        <button class="filter-btn active all" onclick="setFilter('all', this)">All ({{ test_counts.all }})</button>
+        <button class="filter-btn passed" onclick="setFilter('passed', this)">Passed ({{ test_counts.passed }})</button>
+        <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }})</button>
+        <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }})</button>
+        <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }})</button>
+        {% if test_counts.sanitizer > 0 %}
+        <button class="filter-btn sanitizer" onclick="setFilter('sanitizer', this)">Sanitizer ({{ test_counts.sanitizer }})</button>
+        {% endif %}
+    </div>
+
+    <!-- All view: grouped by suite -->
+    <div id="view-all" class="view">
+        {% for suite_name, tests in suites.items()|sort %}
+        <div class="suite-group">
+            <div class="suite-header" onclick="toggleSuite('suite-{{ loop.index }}')">
+                <span class="suite-toggle">▼</span>
+                <span>{{ suite_name }}</span>
+                <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
+                {% set suite_duration = tests|sum(attribute='elapsed') %}
+                {% set suite_minutes = (suite_duration // 60)|int %}
+                {% set suite_seconds = (suite_duration % 60)|round(3) %}
+                <span class="suite-duration">
+                    {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
+                </span>
+                {% if tests and tests[0].owners %}
+                <span class="suite-owner">
+                    Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
+                </span>
+                {% endif %}
+            </div>
+            <div id="suite-{{ loop.index }}" class="suite-content">
+                {% for test in tests %}
+                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
+                    <span class="test-name">{{ test.name }}</span>
+                    
+                    <div class="test-meta">
+                        <span class="test-status {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}">{{ test.status_display }}</span>
+                        <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
+                        
+                        <div class="test-badges">
+                            {% if test.is_sanitizer_issue %}
+                            <span class="sanitizer-badge">SANITIZER</span>
+                            {% endif %}
+                            {% if test.status.value == 1 or test.status.value == 2 %}
+                            <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
+                            {% endif %}
+                        </div>
+                        
+                        {% if test.full_name in history %}
+                        <span class="history-icons">
+                        {% for h in history[test.full_name] %}
+                        <span class="history-icon" 
+                              data-test-name="{{ test.full_name }}" 
+                              data-status="{{ history[test.full_name][h].status }}" 
+                              data-date="{{ history[test.full_name][h].datetime }}" 
+                              data-error="{{ history[test.full_name][h].status_description | e }}" 
+                              data-commit="{{ history[test.full_name][h].commit }}"
+                              data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
+                              data-job-id="{{ history[test.full_name][h].job_id }}"
+                              onclick="showHistoryInfo(this)">
+                            {% if history[test.full_name][h].status == 'failure' %}
+                            <svg class="svg_failure history-icon" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
+                            </svg>
+                            {% elif history[test.full_name][h].status == 'passed' %}
+                            <svg class="svg_passed history-icon" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
+                            </svg>
+                            {% elif history[test.full_name][h].status == 'mute' %}
+                            <svg class="svg_mute history-icon" viewBox="0 0 17 16">
+                                <path fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>
+                            </svg>
+                            {% endif %}
+                        </span>
+                        {% endfor %}
+                            </span>
+                            {% endif %}
+                            
+                            {% if test.log_urls %}
+                            <span class="log-links">
+                                {% for log_name, log_url in test.log_urls.items() %}
+                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
+                                {% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="test-actions">
+                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
+                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
+                        </div>
+                        
+                        {% if test.status_description %}
+                    <button class="error-button" onclick="toggleError(this)">Show error</button>
+                    <div class="error-content hidden">
+                        <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Status-based views: grouped by status -> suite -> tests -->
+    <div id="view-passed" class="view hidden">
+        {% for status_key, suites_dict in status_suites.items() %}
+        {% if status_key.name == 'PASS' %}
+        <div class="status-group">
+            <div class="status-header passed">PASSED</div>
+            {% for suite_name, tests in suites_dict.items()|sort %}
+            <div class="suite-group">
+                <div class="suite-header" onclick="toggleSuite('status-pass-suite-{{ loop.index }}')">
+                    <span class="suite-toggle">▼</span>
+                    <span>{{ suite_name }}</span>
+                    <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
+                    {% set suite_duration = tests|sum(attribute='elapsed') %}
+                    {% set suite_minutes = (suite_duration // 60)|int %}
+                    {% set suite_seconds = (suite_duration % 60)|round(3) %}
+                    <span class="suite-duration">
+                        {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
+                    </span>
+                    {% if tests and tests[0].owners %}
+                    <span class="suite-owner">
+                        Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
+                    </span>
+                    {% endif %}
+                </div>
+                <div id="status-pass-suite-{{ loop.index }}" class="suite-content">
+                    {% for test in tests %}
+                    <div class="test-item passed" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
+                        <span class="test-name">{{ test.name }}</span>
+                        
+                        <div class="test-meta">
+                            <span class="test-status passed">{{ test.status_display }}</span>
+                            <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
+                            
+                            <div class="test-badges">
+                                {% if test.is_sanitizer_issue %}
+                                <span class="sanitizer-badge">SANITIZER</span>
+                                {% endif %}
+                            </div>
+                            
+                            {% if test.log_urls %}
+                            <span class="log-links">
+                                {% for log_name, log_url in test.log_urls.items() %}
+                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
+                                {% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="test-actions">
+                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
+                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <div id="view-failed" class="view hidden">
+        {% for status_key, suites_dict in status_suites.items() %}
+        {% if status_key.name == 'FAIL' %}
+        <div class="status-group">
+            <div class="status-header failed">FAILED</div>
+            {% for suite_name, tests in suites_dict.items()|sort %}
+            <div class="suite-group">
+                <div class="suite-header" onclick="toggleSuite('status-fail-suite-{{ loop.index }}')">
+                    <span class="suite-toggle">▼</span>
+                    <span>{{ suite_name }}</span>
+                    <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
+                    {% set suite_duration = tests|sum(attribute='elapsed') %}
+                    {% set suite_minutes = (suite_duration // 60)|int %}
+                    {% set suite_seconds = (suite_duration % 60)|round(3) %}
+                    <span class="suite-duration">
+                        {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
+                    </span>
+                    {% if tests and tests[0].owners %}
+                    <span class="suite-owner">
+                        Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
+                    </span>
+                    {% endif %}
+                </div>
+                <div id="status-fail-suite-{{ loop.index }}" class="suite-content">
+                    {% for test in tests %}
+                    <div class="test-item failed" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
+                        <span class="test-name">{{ test.name }}</span>
+                        
+                        <div class="test-meta">
+                            <span class="test-status failed">{{ test.status_display }}</span>
+                            <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
+                            
+                            <div class="test-badges">
+                                {% if test.is_sanitizer_issue %}
+                                <span class="sanitizer-badge">SANITIZER</span>
+                                {% endif %}
+                                <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
+                            </div>
+                            
+                            {% if test.full_name in history %}
+                            <span class="history-icons">
+                            {% for h in history[test.full_name] %}
+                            <span class="history-icon" 
+                                  data-test-name="{{ test.full_name }}" 
+                                  data-status="{{ history[test.full_name][h].status }}" 
+                                  data-date="{{ history[test.full_name][h].datetime }}" 
+                                  data-error="{{ history[test.full_name][h].status_description | e }}" 
+                                  data-commit="{{ history[test.full_name][h].commit }}"
+                                  data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
+                                  data-job-id="{{ history[test.full_name][h].job_id }}"
+                                  onclick="showHistoryInfo(this)">
+                                {% if history[test.full_name][h].status == 'failure' %}
+                                <svg class="svg_failure history-icon" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
+                                </svg>
+                                {% elif history[test.full_name][h].status == 'passed' %}
+                                <svg class="svg_passed history-icon" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
+                                </svg>
+                                {% elif history[test.full_name][h].status == 'mute' %}
+                                <svg class="svg_mute history-icon" viewBox="0 0 17 16">
+                                    <path fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>
+                                </svg>
+                                {% endif %}
+                            </span>
+                            {% endfor %}
+                            </span>
+                            {% endif %}
+                            
+                            {% if test.log_urls %}
+                            <span class="log-links">
+                                {% for log_name, log_url in test.log_urls.items() %}
+                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
+                                {% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="test-actions">
+                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
+                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
+                        </div>
+                        
+                        {% if test.status_description %}
+                        <button class="error-button" onclick="toggleError(this)">Show error</button>
+                        <div class="error-content hidden">
+                            <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <div id="view-error" class="view hidden">
+        {% for status_key, suites_dict in status_suites.items() %}
+        {% if status_key.name == 'ERROR' %}
+        <div class="status-group">
+            <div class="status-header error">ERROR</div>
+            {% for suite_name, tests in suites_dict.items()|sort %}
+            <div class="suite-group">
+                <div class="suite-header" onclick="toggleSuite('status-error-suite-{{ loop.index }}')">
+                    <span class="suite-toggle">▼</span>
+                    <span>{{ suite_name }}</span>
+                    <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
+                    {% set suite_duration = tests|sum(attribute='elapsed') %}
+                    {% set suite_minutes = (suite_duration // 60)|int %}
+                    {% set suite_seconds = (suite_duration % 60)|round(3) %}
+                    <span class="suite-duration">
+                        {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
+                    </span>
+                    {% if tests and tests[0].owners %}
+                    <span class="suite-owner">
+                        Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
+                    </span>
+                    {% endif %}
+                </div>
+                <div id="status-error-suite-{{ loop.index }}" class="suite-content">
+                    {% for test in tests %}
+                    <div class="test-item error" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
+                        <span class="test-name">{{ test.name }}</span>
+                        
+                        <div class="test-meta">
+                            <span class="test-status error">{{ test.status_display }}</span>
+                            <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
+                            
+                            <div class="test-badges">
+                                {% if test.is_sanitizer_issue %}
+                                <span class="sanitizer-badge">SANITIZER</span>
+                                {% endif %}
+                                <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
+                            </div>
+                            
+                            {% if test.full_name in history %}
+                            <span class="history-icons">
+                            {% for h in history[test.full_name] %}
+                            <span class="history-icon" 
+                                  data-test-name="{{ test.full_name }}" 
+                                  data-status="{{ history[test.full_name][h].status }}" 
+                                  data-date="{{ history[test.full_name][h].datetime }}" 
+                                  data-error="{{ history[test.full_name][h].status_description | e }}" 
+                                  data-commit="{{ history[test.full_name][h].commit }}"
+                                  data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
+                                  data-job-id="{{ history[test.full_name][h].job_id }}"
+                                  onclick="showHistoryInfo(this)">
+                                {% if history[test.full_name][h].status == 'failure' %}
+                                <svg class="svg_failure history-icon" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
+                                </svg>
+                                {% elif history[test.full_name][h].status == 'passed' %}
+                                <svg class="svg_passed history-icon" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
+                                </svg>
+                                {% elif history[test.full_name][h].status == 'mute' %}
+                                <svg class="svg_mute history-icon" viewBox="0 0 17 16">
+                                    <path fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>
+                                </svg>
+                                {% endif %}
+                            </span>
+                            {% endfor %}
+                            </span>
+                            {% endif %}
+                            
+                            {% if test.log_urls %}
+                            <span class="log-links">
+                                {% for log_name, log_url in test.log_urls.items() %}
+                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
+                                {% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="test-actions">
+                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
+                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
+                        </div>
+                        
+                        {% if test.status_description %}
+                        <button class="error-button" onclick="toggleError(this)">Show error</button>
+                        <div class="error-content hidden">
+                            <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <div id="view-mute" class="view hidden">
+        {% for status_key, suites_dict in status_suites.items() %}
+        {% if status_key.name == 'MUTE' %}
+        <div class="status-group">
+            <div class="status-header mute">MUTED</div>
+            {% for suite_name, tests in suites_dict.items()|sort %}
+            <div class="suite-group">
+                <div class="suite-header" onclick="toggleSuite('status-mute-suite-{{ loop.index }}')">
+                    <span class="suite-toggle">▼</span>
+                    <span>{{ suite_name }}</span>
+                    <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
+                    {% set suite_duration = tests|sum(attribute='elapsed') %}
+                    {% set suite_minutes = (suite_duration // 60)|int %}
+                    {% set suite_seconds = (suite_duration % 60)|round(3) %}
+                    <span class="suite-duration">
+                        {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
+                    </span>
+                    {% if tests and tests[0].owners %}
+                    <span class="suite-owner">
+                        Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
+                    </span>
+                    {% endif %}
+                </div>
+                <div id="status-mute-suite-{{ loop.index }}" class="suite-content">
+                    {% for test in tests %}
+                    <div class="test-item mute" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
+                        <span class="test-name">{{ test.name }}</span>
+                        
+                        <div class="test-meta">
+                            <span class="test-status mute">{{ test.status_display }}</span>
+                            <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
+                            
+                            <div class="test-badges">
+                                {% if test.is_sanitizer_issue %}
+                                <span class="sanitizer-badge">SANITIZER</span>
+                                {% endif %}
+                            </div>
+                            
+                            {% if test.full_name in history %}
+                            <span class="history-icons">
+                            {% for h in history[test.full_name] %}
+                            <span class="history-icon" 
+                                  data-test-name="{{ test.full_name }}" 
+                                  data-status="{{ history[test.full_name][h].status }}" 
+                                  data-date="{{ history[test.full_name][h].datetime }}" 
+                                  data-error="{{ history[test.full_name][h].status_description | e }}" 
+                                  data-commit="{{ history[test.full_name][h].commit }}"
+                                  data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
+                                  data-job-id="{{ history[test.full_name][h].job_id }}"
+                                  onclick="showHistoryInfo(this)">
+                                {% if history[test.full_name][h].status == 'failure' %}
+                                <svg class="svg_failure history-icon" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
+                                </svg>
+                                {% elif history[test.full_name][h].status == 'passed' %}
+                                <svg class="svg_passed history-icon" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
+                                </svg>
+                                {% elif history[test.full_name][h].status == 'mute' %}
+                                <svg class="svg_mute history-icon" viewBox="0 0 17 16">
+                                    <path fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>
+                                </svg>
+                                {% endif %}
+                            </span>
+                            {% endfor %}
+                            </span>
+                            {% endif %}
+                            
+                            {% if test.log_urls %}
+                            <span class="log-links">
+                                {% for log_name, log_url in test.log_urls.items() %}
+                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
+                                {% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="test-actions">
+                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
+                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
+                        </div>
+                        
+                        {% if test.status_description %}
+                        <button class="error-button" onclick="toggleError(this)">Show error</button>
+                        <div class="error-content hidden">
+                            <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- Sanitizer view: grouped by suite -->
+    {% if sanitizer_suites %}
+    <div id="view-sanitizer" class="view hidden">
+        {% for suite_name, tests in sanitizer_suites.items()|sort %}
+        <div class="suite-group">
+            <div class="suite-header" onclick="toggleSuite('sanitizer-suite-{{ loop.index }}')">
+                <span class="suite-toggle">▼</span>
+                <span>{{ suite_name }}</span>
+                <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
+                {% set suite_duration = tests|sum(attribute='elapsed') %}
+                {% set suite_minutes = (suite_duration // 60)|int %}
+                {% set suite_seconds = (suite_duration % 60)|round(3) %}
+                <span class="suite-duration">
+                    {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
+                </span>
+                {% if tests and tests[0].owners %}
+                <span class="suite-owner">
+                    Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
+                </span>
+                {% endif %}
+            </div>
+            <div id="sanitizer-suite-{{ loop.index }}" class="suite-content">
+                {% for test in tests %}
+                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
+                    <span class="test-name">{{ test.name }}</span>
+                    
+                    <div class="test-meta">
+                        <span class="test-status {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}">{{ test.status_display }}</span>
+                        <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
+                        
+                        <div class="test-badges">
+                            <span class="sanitizer-badge">SANITIZER</span>
+                            {% if test.status.value == 1 or test.status.value == 2 %}
+                            <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
+                            {% endif %}
+                        </div>
+                        
+                        {% if test.full_name in history %}
+                        <span class="history-icons">
+                        {% for h in history[test.full_name] %}
+                        <span class="history-icon" 
+                              data-test-name="{{ test.full_name }}" 
+                              data-status="{{ history[test.full_name][h].status }}" 
+                              data-date="{{ history[test.full_name][h].datetime }}" 
+                              data-error="{{ history[test.full_name][h].status_description | e }}" 
+                              data-commit="{{ history[test.full_name][h].commit }}"
+                              data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
+                              data-job-id="{{ history[test.full_name][h].job_id }}"
+                              onclick="showHistoryInfo(this)">
+                            {% if history[test.full_name][h].status == 'failure' %}
+                            <svg class="svg_failure history-icon" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
+                            </svg>
+                            {% elif history[test.full_name][h].status == 'passed' %}
+                            <svg class="svg_passed history-icon" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
+                            </svg>
+                            {% elif history[test.full_name][h].status == 'mute' %}
+                            <svg class="svg_mute history-icon" viewBox="0 0 17 16">
+                                <path fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>
+                            </svg>
+                            {% endif %}
+                        </span>
+                        {% endfor %}
+                            </span>
+                            {% endif %}
+                            
+                            {% if test.log_urls %}
+                            <span class="log-links">
+                                {% for log_name, log_url in test.log_urls.items() %}
+                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
+                                {% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="test-actions">
+                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
+                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
+                        </div>
+                        
+                        {% if test.status_description %}
+                    <button class="error-button" onclick="toggleError(this)">Show error</button>
+                    <div class="error-content hidden">
+                        <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Modal for test details -->
+    <div id="errorModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <div class="modal-header">
+                <h2 id="modalTitle">Test details</h2>
+            </div>
+            <div class="modal-info">
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Run:</span>
+                    <a id="modalJobLink" href="#" target="_blank"></a>
+                </div>
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Status:</span>
+                    <span id="modalStatus"></span>
+                </div>
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Date:</span>
+                    <span id="modalDate"></span>
+                </div>
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Commit:</span>
+                    <a id="modalShaLink" href="#" target="_blank"></a>
+                </div>
+            </div>
+            <div id="modalErrorSection" style="display: none;">
+                <div class="console-frame">
+                    <pre><code id="modalErrorContent"></code></pre>
+                </div>
+            </div>
+            <div id="modalLogLinks" class="modal-log-links"></div>
+        </div>
+    </div>
+
+    <script>
+
+        function toggleSuite(suiteId) {
+            const suite = document.getElementById(suiteId);
+            if (!suite) return;
+            
+            const header = suite.previousElementSibling;
+            const toggle = header.querySelector('.suite-toggle');
+            
+            if (suite.classList.contains('hidden')) {
+                suite.classList.remove('hidden');
+                if (toggle) toggle.textContent = '▼';
+            } else {
+                suite.classList.add('hidden');
+                if (toggle) toggle.textContent = '▶';
+            }
+        }
+        
+        // Initialize: expand all suites by default for cmd+f search
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.suite-content').forEach(suite => {
+                suite.classList.remove('hidden');
+            });
+            document.querySelectorAll('.suite-toggle').forEach(toggle => {
+                toggle.textContent = '▼';
+            });
+            // Initialize filter from URL
+            initFilterFromUrl();
+        });
+        
+        // Also expand when filter changes
+        function setFilter(filter, button) {
+            // Update button states
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'sanitizer');
+            });
+            button.classList.add('active', filter);
+
+            // Show/hide views
+            document.querySelectorAll('.view').forEach(view => {
+                view.classList.add('hidden');
+            });
+            const activeView = document.getElementById('view-' + filter);
+            if (activeView) {
+                activeView.classList.remove('hidden');
+                // Expand all suites in the active view
+                activeView.querySelectorAll('.suite-content').forEach(suite => {
+                    suite.classList.remove('hidden');
+                });
+                activeView.querySelectorAll('.suite-toggle').forEach(toggle => {
+                    toggle.textContent = '▼';
+                });
+            }
+            
+            // Update URL without reload
+            const url = new URL(window.location);
+            if (filter === 'all') {
+                url.searchParams.delete('status');
+            } else {
+                url.searchParams.set('status', filter.charAt(0).toUpperCase() + filter.slice(1));
+            }
+            window.history.pushState({filter: filter}, '', url);
+        }
+        
+        // Handle URL parameters on load
+        function initFilterFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const status = urlParams.get('status');
+            if (status) {
+                const filter = status.toLowerCase();
+                // Map common status names to filter names
+                const filterMap = {
+                    'fail': 'failed',
+                    'pass': 'passed',
+                    'err': 'error',
+                    'mut': 'mute',
+                    'san': 'sanitizer'
+                };
+                const actualFilter = filterMap[filter] || filter;
+                const button = document.querySelector(`.filter-btn.${actualFilter}`);
+                if (button) {
+                    // Don't update URL again, just set filter
+                    document.querySelectorAll('.filter-btn').forEach(btn => {
+                        btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'sanitizer');
+                    });
+                    button.classList.add('active', actualFilter);
+                    document.querySelectorAll('.view').forEach(view => {
+                        view.classList.add('hidden');
+                    });
+                    const activeView = document.getElementById('view-' + actualFilter);
+                    if (activeView) {
+                        activeView.classList.remove('hidden');
+                        activeView.querySelectorAll('.suite-content').forEach(suite => {
+                            suite.classList.remove('hidden');
+                        });
+                        activeView.querySelectorAll('.suite-toggle').forEach(toggle => {
+                            toggle.textContent = '▼';
+                        });
+                    }
+                    return;
+                }
+            }
+        }
+        
+        // Handle browser back/forward
+        window.addEventListener('popstate', function(event) {
+            initFilterFromUrl();
+        });
+
+        function toggleError(button) {
+            const errorContent = button.nextElementSibling;
+            if (errorContent.classList.contains('hidden')) {
+                errorContent.classList.remove('hidden');
+                button.textContent = 'Hide error';
+            } else {
+                errorContent.classList.add('hidden');
+                button.textContent = 'Show error';
+            }
+        }
+        
+        function parseTestName(full_name) {
+            const trimmed = full_name.trim();
+            let pieces;
+            
+            if (trimmed.includes('.py.')) {
+                pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(trimmed);
+            } else {
+                pieces = /(.+)\/([^$]+)$/.exec(trimmed);
+            }
+
+            if (!pieces) {
+                console.error("Unable to split path/test name from %o", trimmed);
+                return null;
+            }
+            
+            return [pieces[1], pieces[2]];
+        }
+
+        function formatTestCommand(path, testName) {
+            const namePieces = testName.split('.');
+
+            if (namePieces.length === 2) {
+                testName = namePieces[0] + '::' + namePieces[1];
+            } else {
+                testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+            }
+
+            return `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
+        }
+
+        function getTestRunCommand(test) {
+            const parsed = parseTestName(test);
+            if (!parsed) return "";
+            
+            const [path, testName] = parsed;
+            return formatTestCommand(path, testName);
+        }
+        
+        function copyRunCommand(test) {
+            const cmdArg = getTestRunCommand(test);
+            if (!cmdArg) return;
+
+            console.log(cmdArg);
+
+            navigator.clipboard.writeText(cmdArg).then(
+                () => {
+                    console.log("Copied!");
+                },
+                () => {
+                    console.error("Unable to copy %o to clipboard", cmdArg);
+                }
+            );
+        }
+        
+        function openHistory(test) {
+            const full_name = test.trim();
+            const buildPreset = "{{ build_preset }}";
+            const branch = "{{ branch }}";
+            let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
+            window.open(url, '_blank');
+        }
+        
+        // Configuration constants
+        const MAX_URL_LENGTH = 8000;
+        const GITHUB_ISSUE_BASE_URL = "https://github.com/ydb-platform/ydb/issues/new";
+        
+        function buildGitHubIssueUrl(title, body, labels) {
+            return GITHUB_ISSUE_BASE_URL + "?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+        }
+        
+        function isDecodable(s) {
+            try { decodeURIComponent(s); return true; } catch (e) { return false; }
+        }
+        
+        function safeTruncateEncoded(encoded, maxLen) {
+            if (encoded.length <= maxLen) return encoded;
+            let cut = encoded.slice(0, maxLen);
+            cut = cut.replace(/%(?:[0-9A-Fa-f]{0,2})$/, '');
+            while (cut && !isDecodable(cut)) {
+                if (/%[0-9A-Fa-f]{2}$/.test(cut)) cut = cut.slice(0, -3);
+                else cut = cut.slice(0, -1);
+            }
+            return cut;
+        }
+        
+        function getOwnerAreaLabel(owner) {
+            const ownerMapping = {{ owner_area_mapping | tojson }};
+            if (!ownerMapping) return "";
+            return ownerMapping[owner] || "";
+        }
+        
+        function buildLabels(issueType, buildPreset, ownerAreaLabel) {
+            let labels = [];
+            if (issueType === 'mute') {
+                labels.push('mute');
+            } else {
+                labels.push('bug');
+                if (issueType === 'sanitizer') {
+                    labels.push('sanitizer');
+                    if (buildPreset.includes("asan")) {
+                        labels.push("asan");
+                    } else if (buildPreset.includes("msan")) {
+                        labels.push("msan");
+                    } else if (buildPreset.includes("tsan")) {
+                        labels.push("tsan");
+                    }
+                }
+            }
+            if (ownerAreaLabel) {
+                labels.push(ownerAreaLabel);
+            }
+            return labels.join(',');
+        }
+        
+        function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText) {
+            let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
+            if (issueType === 'sanitizer') {
+            } else if (issueType === 'mute') {
+                body += "**Test mute request**%0A%0A";
+            } else {
+                body += "**Test Failure**%0A%0A";
+            }
+            body += "**Build Information:**%0A";
+            if (commitSha && commitSha !== "") {
+                body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
+            }
+            body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+            body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
+            body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
+            body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
+            if (issueType !== 'sanitizer') {
+                if (success_count + fail_count != 0) {
+                    body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+                } else {
+                    body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+                }
+            }
+            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+            body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
+            return body;
+        }
+        
+        function buildBodyWithLengthLimit(baseBody, logUrls, errorText, title, labels, maxUrlLength) {
+            let body = baseBody;
+            if (logUrls && Object.keys(logUrls).length > 0) {
+                let logsSection = "**Logs:**%0A";
+                for (const [logName, logUrl] of Object.entries(logUrls)) {
+                    logsSection += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+                }
+                logsSection += "%0A";
+                body += logsSection;
+            }
+            if (errorText && errorText.trim() !== "") {
+                const errorPrefix = "**Error Summary:**%0A```%0A";
+                const errorSuffix = "%0A```%0A%0A";
+                const truncationMsg = "%0A<TRUNCATED>";
+                const fullErrorText = errorText.trim();
+                const encodedFullError = encodeURIComponent(fullErrorText);
+                const minimalSection = errorPrefix + errorSuffix;
+                const minimalUrl = buildGitHubIssueUrl(title, body + minimalSection, labels);
+                if (minimalUrl.length > maxUrlLength) {
+                } else {
+                    const allowedDelta = maxUrlLength - minimalUrl.length;
+                    if (encodedFullError.length <= allowedDelta) {
+                        body += errorPrefix + encodedFullError + errorSuffix;
+                    } else {
+                        const allowedForEncoded = allowedDelta - truncationMsg.length;
+                        if (allowedForEncoded > 0) {
+                            const truncatedEncoded = safeTruncateEncoded(encodedFullError, allowedForEncoded);
+                            if (truncatedEncoded) {
+                                body += errorPrefix + truncatedEncoded + truncationMsg + errorSuffix;
+                            }
+                        }
+                    }
+                }
+            }
+            return body;
+        }
+        
+        function createIssueGeneric(issueType, test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+            const parsed = parseTestName(test);
+            if (!parsed) return;
+            const [path, testName] = parsed;
+            const buildPreset = "{{ build_preset }}";
+            const branch = "{{ branch }}";
+            const commitSha = "{{ commit_sha }}";
+            const testRunCommand = getTestRunCommand(test);
+            const ownerAreaLabel = getOwnerAreaLabel(owner);
+            let actualIssueType = issueType;
+            if (is_sanitizer && issueType === 'bug') {
+                actualIssueType = 'sanitizer';
+            }
+            let title;
+            if (actualIssueType === 'sanitizer') {
+                title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            } else if (actualIssueType === 'mute') {
+                title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            } else {
+                title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            }
+            const body = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText);
+            const labels = buildLabels(actualIssueType, buildPreset, ownerAreaLabel);
+            const finalBody = buildBodyWithLengthLimit(body, logUrls, errorText, title, labels, MAX_URL_LENGTH);
+            const finalUrl = buildGitHubIssueUrl(title, finalBody, labels);
+            window.open(finalUrl, '_blank');
+        }
+        
+        function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+            createIssueGeneric('bug', test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
+        }
+        
+        function createIssueForTest(button) {
+            const testItem = button.closest('.test-item');
+            const testName = testItem.getAttribute('data-test-name');
+            const owner = testItem.getAttribute('data-test-owner') || '';
+            const ownerMatch = owner.match(/TEAM:@ydb-platform\/([^;:]+)/);
+            const ownerSimple = ownerMatch ? ownerMatch[1] : owner;
+            const historyIcons = testItem.querySelectorAll('.history-icon');
+            let success_count = 0;
+            let fail_count = 0;
+            historyIcons.forEach(icon => {
+                const status = icon.getAttribute('data-status');
+                if (status === 'passed') success_count++;
+                else if (status === 'failure' || status === 'mute') fail_count++;
+            });
+            const is_sanitizer = testItem.querySelector('.sanitizer-badge') !== null;
+            let errorText = '';
+            const errorButton = testItem.querySelector('.error-button');
+            if (errorButton && errorButton.nextElementSibling) {
+                const errorContent = errorButton.nextElementSibling.querySelector('pre code');
+                if (errorContent) {
+                    errorText = errorContent.textContent;
+                }
+            }
+            let logUrls = {};
+            const logLinks = testItem.querySelectorAll('.log-link');
+            logLinks.forEach(link => {
+                logUrls[link.textContent] = link.href;
+            });
+            createIssue(testName, ownerSimple, success_count, fail_count, is_sanitizer, errorText, logUrls);
+        }
+        
+        function showHistoryInfo(icon) {
+            const testName = icon.getAttribute('data-test-name');
+            const status = icon.getAttribute('data-status');
+            const date = icon.getAttribute('data-date');
+            const errorText = icon.getAttribute('data-error');
+            const commit = icon.getAttribute('data-commit');
+            const jobName = icon.getAttribute('data-job-name');
+            const jobId = icon.getAttribute('data-job-id');
+            
+            // Find the test item to get log URLs
+            const testItem = icon.closest('.test-item');
+            const logLinks = testItem.querySelectorAll('.log-link');
+            const logUrls = {};
+            logLinks.forEach(link => {
+                logUrls[link.textContent] = link.href;
+            });
+            
+            showTestInfo({
+                testName: testName,
+                status: status,
+                date: date,
+                errorText: errorText,
+                commit: commit,
+                job_name: jobName,
+                job_id: jobId,
+                logUrls: logUrls
+            });
+        }
+        
+        function showTestInfo(testInfo) {
+            const modal = document.getElementById('errorModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalStatus = document.getElementById('modalStatus');
+            const modalDate = document.getElementById('modalDate');
+            const modalSha = document.getElementById('modalSha');
+            const modalJob = document.getElementById('modalJob');
+            const modalErrorContent = document.getElementById('modalErrorContent');
+            const modalLogLinks = document.getElementById('modalLogLinks');
+
+            // Fill information
+            modalTitle.textContent = 'Test details: ' + testInfo.testName;
+            modalStatus.textContent = testInfo.status;
+            modalDate.textContent = testInfo.date;
+            
+            // Update job link
+            const jobLink = document.getElementById('modalJobLink');
+            if (testInfo.job_id) {
+                jobLink.href = `https://github.com/ydb-platform/ydb/actions/runs/${testInfo.job_id}`;
+                jobLink.textContent = testInfo.job_name || 'View run';
+            }
+            
+            // Update commit link
+            const shaLink = document.getElementById('modalShaLink');
+            if (testInfo.commit) {
+                shaLink.href = `https://github.com/ydb-platform/ydb/commit/${testInfo.commit}`;
+                shaLink.textContent = testInfo.commit.substring(0, 8);
+            }
+            
+            // Status class
+            modalStatus.className = '';
+            if (testInfo.status === 'passed') {
+                modalStatus.classList.add('test_pass');
+            } else if (testInfo.status === 'failure') {
+                modalStatus.classList.add('test_fail');
+            } else if (testInfo.status === 'mute') {
+                modalStatus.classList.add('test_mute');
+            }
+            
+            // Error text
+            if (testInfo.errorText && testInfo.errorText.trim() !== "") {
+                document.getElementById('modalErrorSection').style.display = 'block';
+                modalErrorContent.textContent = testInfo.errorText;
+                modalErrorContent.className = 'language-' + (testInfo.testName.includes('.py') ? 'python' : 'cpp');
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightElement(modalErrorContent);
+                }
+            } else {
+                document.getElementById('modalErrorSection').style.display = 'none';
+            }
+            
+            // Log links
+            modalLogLinks.innerHTML = '';
+            if (testInfo.logUrls && Object.keys(testInfo.logUrls).length > 0) {
+                for (const [logName, logUrl] of Object.entries(testInfo.logUrls)) {
+                    const link = document.createElement('a');
+                    link.href = logUrl;
+                    link.target = '_blank';
+                    link.className = 'modal-log-link';
+                    link.textContent = logName + ': ' + logUrl;
+                    modalLogLinks.appendChild(link);
+                }
+            }
+            
+            // Show modal
+            modal.style.display = 'block';
+        }
+        
+        // Close modal when clicking X
+        document.addEventListener('DOMContentLoaded', function() {
+            const closeModal = document.querySelector('.close-modal');
+            if (closeModal) {
+                closeModal.onclick = function() {
+                    document.getElementById('errorModal').style.display = 'none';
+                }
+            }
+            window.onclick = function(event) {
+                const modal = document.getElementById('errorModal');
+                if (event.target == modal) {
+                    modal.style.display = 'none';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+

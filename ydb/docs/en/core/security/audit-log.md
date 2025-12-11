@@ -106,7 +106,7 @@ The table below lists the common attributes.
 
 #|
 || Attribute          | Description ||
-|| `subject`          | Event source SID (`<login>@<subsystem>` format). Unless mandatory authentication is enabled, the attribute will be set to `{none}`. ||
+|| `subject`          | Event source [SID](../concepts/glossary.md#access-sid) if mandatory authentication is enabled, or `{none}` otherwise. ||
 || `sanitized_token`  | A partially masked authentication token that was used to execute the request. Can be used to link related events while keeping the original credentials hidden. If authentication was not performed, the value will be `{none}`. ||
 || `operation`        | Operation name (for example, `ALTER DATABASE`, `CREATE TABLE`). ||
 || `component`        | Unique identifier (UID) of the *audit event source*. ||

@@ -66,6 +66,12 @@ struct TEnvironmentSetup {
         const ui32 NumPiles = 0;
         const bool AutomaticBootstrap = false;
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
+<<<<<<< HEAD
+=======
+        const bool EnablePhantomFlagStorage = false;
+        const bool TinySyncLog = false;
+        const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
+>>>>>>> 00bc17a837c (Make max deadline for put in DSProxy customizable via ICB (#30501))
     };
 
     const TSettings Settings;
@@ -517,11 +523,21 @@ config:
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
 
+<<<<<<< HEAD
 #define ADD_ICB_CONTROL(controlName, defaultVal, minVal, maxVal, currentValue) {        \
                     TControlWrapper control(defaultVal, minVal, maxVal);                \
                     appData->Icb->RegisterSharedControl(control, controlName);          \
                     control = currentValue;                                             \
                     IcbControls.insert({{nodeId, controlName}, std::move(control)});    \
+=======
+                auto& icb = *appData->Icb;
+#define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {       \
+                    auto& icbControl = icb.ICB_CONTROL_PATH;                                \
+                    TControlWrapper control(defaultVal, minVal, maxVal);                    \
+                    TControlBoard::RegisterSharedControl(control, icbControl);              \
+                    control = currentValue;                                                 \
+                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});  \
+>>>>>>> 00bc17a837c (Make max deadline for put in DSProxy customizable via ICB (#30501))
                 }
 
                 if (Settings.BurstThresholdNs) {
@@ -543,7 +559,20 @@ config:
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
 
+<<<<<<< HEAD
                 ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
+=======
+                ADD_ICB_CONTROL(DSProxyControls.SlowDiskThreshold, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.SlowDiskThresholdHDD, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.SlowDiskThresholdSSD, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.PredictedDelayMultiplier, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.PredictedDelayMultiplierHDD, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.PredictedDelayMultiplierSSD, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisks, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(DSProxyControls.MaxPutTimeoutSeconds, 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
+>>>>>>> 00bc17a837c (Make max deadline for put in DSProxy customizable via ICB (#30501))
 
 #undef ADD_ICB_CONTROL
 

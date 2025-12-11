@@ -164,7 +164,7 @@ private:
         TFifoQueue<TShardIdx>,
         TEvPrivate::EvRunForcedCompaction,
         NKikimrServices::FLAT_TX_SCHEMESHARD,
-        NKikimrServices::TActivity::SCHEMESHARD_BORROWED_COMPACTION>;
+        NKikimrServices::TActivity::SCHEMESHARD_FORCED_COMPACTION>;
 
     class TForcedCompactionStarter : public TForcedCompactionQueue::IStarter {
     public:
@@ -1321,8 +1321,8 @@ public:
     void Handle(TEvSchemeShard::TEvMigrateSchemeShardResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvForceCompaction::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvGetForceCompactionProgress::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvTenantShredRequest::TPtr& ev, const TActorContext& ctx);

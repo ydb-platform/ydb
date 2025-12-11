@@ -158,6 +158,8 @@ enum ESimpleCounters {
 
     COUNTER_BORROWED_COMPACTION_QUEUE_SIZE = 129          [(CounterOpts) = {Name: "BorrowedCompactionQueueSize"}];
     COUNTER_BORROWED_COMPACTION_QUEUE_RUNNING = 130       [(CounterOpts) = {Name: "BorrowedCompactionQueueRunning"}];
+    COUNTER_FORCED_COMPACTION_QUEUE_SIZE = 131            [(CounterOpts) = {Name: "ForcedCompactionQueueSize"}];
+    COUNTER_FORCED_COMPACTION_QUEUE_RUNNING = 132         [(CounterOpts) = {Name: "ForcedCompactionQueueRunning"}];
 
     COUNTER_BLOB_DEPOT_COUNT = 131                        [(CounterOpts) = {Name: "BlobDepots"}];
     COUNTER_BLOB_DEPOT_SHARD_COUNT = 132                  [(CounterOpts) = {Name: "BlobDepotShards"}];
@@ -363,6 +365,9 @@ enum ECumulativeCounters {
 
     COUNTER_BORROWED_COMPACTION_OK = 76                   [(CounterOpts) = {Name: "BorrowedCompactionOK"}];
     COUNTER_BORROWED_COMPACTION_TIMEOUT = 77              [(CounterOpts) = {Name: "BorrowedCompactionTimeout"}];
+
+    COUNTER_FORCED_COMPACTION_OK = 81                     [(CounterOpts) = {Name: "ForcedCompactionOK"}];
+    COUNTER_FORCED_COMPACTION_TIMEOUT = 82                [(CounterOpts) = {Name: "ForcedCompactionTimeout"}];
 
     COUNTER_FINISHED_OPS_TxCreateBlobDepot = 78           [(CounterOpts) = {Name: "FinishedOps/CreateBlobDepot"}];
     COUNTER_FINISHED_OPS_TxAlterBlobDepot = 79            [(CounterOpts) = {Name: "FinishedOps/AlterBlobDepot"}];

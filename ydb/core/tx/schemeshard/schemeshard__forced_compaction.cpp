@@ -46,7 +46,7 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
 
 void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
     UpdateForcedCompactionQueueMetrics();
-    TabletCounters->Cumulative()[COUNTER_BORROWED_COMPACTION_TIMEOUT].Increment(1);
+    TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_TIMEOUT].Increment(1);
 
     RunningForcedCompactions.erase(shardIdx);
 
@@ -148,8 +148,8 @@ void TSchemeShard::UpdateForcedCompactionQueueMetrics() {
     if (!ForcedCompactionQueue)
         return;
 
-    TabletCounters->Simple()[COUNTER_BORROWED_COMPACTION_QUEUE_SIZE].Set(ForcedCompactionQueue->Size());
-    TabletCounters->Simple()[COUNTER_BORROWED_COMPACTION_QUEUE_RUNNING].Set(ForcedCompactionQueue->RunningSize());
+    TabletCounters->Simple()[COUNTER_FORCED_COMPACTION_QUEUE_SIZE].Set(ForcedCompactionQueue->Size());
+    TabletCounters->Simple()[COUNTER_FORCED_COMPACTION_QUEUE_RUNNING].Set(ForcedCompactionQueue->RunningSize());
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
@@ -195,7 +195,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
 
     RunningForcedCompactions.erase(shardIdx);
 
-    TabletCounters->Cumulative()[COUNTER_BORROWED_COMPACTION_OK].Increment(1);
+    TabletCounters->Cumulative()[COUNTER_FORCED_COMPACTION_OK].Increment(1);
     UpdateForcedCompactionQueueMetrics();
 }
 

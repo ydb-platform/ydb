@@ -329,17 +329,17 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
     // Struct field validation
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {"", SimpleLogicalType(ESimpleLogicalValueType::Int8)}
-        })));
+            {"", "", SimpleLogicalType(ESimpleLogicalValueType::Int8)}
+        }, /*removedFieldStableNames*/ {})));
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {TString(257, 'a'), SimpleLogicalType(ESimpleLogicalValueType::Int8)}
-        })));
+            {TString(257, 'a'), TString(257, 'a'), SimpleLogicalType(ESimpleLogicalValueType::Int8)}
+        }, /*removedFieldStableNames*/ {})));
 
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {"\255", SimpleLogicalType(ESimpleLogicalValueType::Int8)}
-        })));
+            {"\255", "\255", SimpleLogicalType(ESimpleLogicalValueType::Int8)}
+        }, /*removedFieldStableNames*/ {})));
 
     ValidateColumnSchema(
         TColumnSchema("Column", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int8)), ESortOrder::Ascending));
@@ -373,9 +373,9 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
 
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {"foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-            {"bar", SimpleLogicalType(ESimpleLogicalValueType::String)},
-        }), ESortOrder::Ascending));
+            {"foo", "foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
+            {"bar", "bar", SimpleLogicalType(ESimpleLogicalValueType::String)},
+        }, /*removedFieldStableNames*/ {}), ESortOrder::Ascending));
 
     // Allow some names starting from SystemColumnNamePrefix
     EXPECT_NO_THROW(

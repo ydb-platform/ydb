@@ -315,11 +315,11 @@ class TestSummary:
                 row.append(line.title)
             row.extend([
                 render_pm(f"{line.test_count}" + (" (only retried tests)" if self.is_retry else ""), f"{report_url}", 0),
-                render_pm(line.passed, f"{report_url}#PASS", 0),
-                render_pm(line.errors, f"{report_url}#ERROR", 0),
-                render_pm(line.failed, f"{report_url}#FAIL", 0),
-                render_pm(line.skipped, f"{report_url}#SKIP", 0),
-                render_pm(line.muted, f"{report_url}#MUTE", 0),
+                render_pm(line.passed, f"{report_url}?status=Passed", 0),
+                render_pm(line.errors, f"{report_url}?status=Error", 0),
+                render_pm(line.failed, f"{report_url}?status=Failed", 0),
+                render_pm(line.skipped, f"{report_url}?status=Skipped", 0),
+                render_pm(line.muted, f"{report_url}?status=Mute", 0),
             ])
             result.append(self.render_line(row))
 
@@ -483,8 +483,8 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
-    # Filter out SKIP tests for display (they are not shown in filters)
-    visible_rows = [t for t in rows if t.status in [TestStatus.PASS, TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE]]
+    # Include all statuses including SKIP for display
+    visible_rows = [t for t in rows if t.status in [TestStatus.PASS, TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE, TestStatus.SKIP]]
     
     # Group tests by suite (only visible tests)
     suites_dict = group_tests_by_suite(visible_rows)
@@ -529,11 +529,10 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
             status_suites[status] = group_tests_by_suite(status_test[status])
     
     # Calculate test counts for filters
-    # Count only tests that are shown in filters (PASS, FAIL, ERROR, MUTE)
-    # SKIP tests are not shown in filters, so we exclude them from "all"
+    # Include all statuses including SKIP
     visible_tests = [
         t for t in rows 
-        if t.status in [TestStatus.PASS, TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE]
+        if t.status in [TestStatus.PASS, TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE, TestStatus.SKIP]
     ]
     test_counts = {
         'all': len(visible_tests),
@@ -541,6 +540,7 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
         'failed': len(status_test.get(TestStatus.FAIL, [])),
         'error': len(status_test.get(TestStatus.ERROR, [])),
         'mute': len(status_test.get(TestStatus.MUTE, [])),
+        'skipped': len(status_test.get(TestStatus.SKIP, [])),
         'sanitizer': len([t for t in rows if t.is_sanitizer_issue])
     }
     
@@ -574,12 +574,30 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     # Load owner to area mapping
     owner_area_mapping = load_owner_area_mapping()
     
+    # Prepare history data for JavaScript (without status_description to reduce HTML size)
+    # Store full history with status_description in a separate JS object
+    history_for_js = {}
+    if history:
+        for test_name, test_history in history.items():
+            history_for_js[test_name] = {}
+            for timestamp, hist_data in test_history.items():
+                history_for_js[test_name][str(timestamp)] = {
+                    "status": hist_data["status"],
+                    "date": hist_data["datetime"],
+                    "commit": hist_data["commit"],
+                    "job_name": hist_data["job_name"],
+                    "job_id": hist_data["job_id"],
+                    "branch": hist_data["branch"],
+                    "status_description": hist_data.get("status_description", "")  # Keep for JS access
+                }
+    
     content = env.get_template("summary_v2.html").render(
         suites=suites_dict,
         status_suites=status_suites,
         sanitizer_suites=sanitizer_suites,
         test_counts=test_counts,
-        history=history,
+        history=history,  # Keep for template checks (test.full_name in history)
+        history_for_js=history_for_js,  # New: optimized history for JS
         build_preset=build_preset,
         buid_preset_params=buid_preset_params,
         branch=branch,

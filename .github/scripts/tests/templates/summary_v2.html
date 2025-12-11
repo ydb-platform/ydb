@@ -55,6 +55,9 @@
         .filter-btn.active.mute {
             background-color: #007bff;
         }
+        .filter-btn.active.skipped {
+            background-color: #6c757d;
+        }
         .filter-btn.active.sanitizer {
             background-color: #ff4500;
         }
@@ -278,13 +281,17 @@
         .hidden {
             display: none;
         }
+        .error-section {
+            flex-basis: 100%;
+            margin-top: 8px;
+        }
         .error-button {
             background: none;
             border: none;
             cursor: pointer;
             font-size: 12px;
             color: #0969da;
-            margin-left: 8px;
+            padding: 0;
         }
         .error-content {
             margin-top: 8px;
@@ -412,6 +419,7 @@
         <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }})</button>
         <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }})</button>
         <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }})</button>
+        <button class="filter-btn skipped" onclick="setFilter('skipped', this)">Skipped ({{ test_counts.skipped }})</button>
         {% if test_counts.sanitizer > 0 %}
         <button class="filter-btn sanitizer" onclick="setFilter('sanitizer', this)">Sanitizer ({{ test_counts.sanitizer }})</button>
         {% endif %}
@@ -439,7 +447,7 @@
             </div>
             <div id="suite-{{ loop.index }}" class="suite-content">
                 {% for test in tests %}
-                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
+                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}">
                     <span class="test-name">{{ test.name }}</span>
                     
                     <div class="test-meta">
@@ -462,7 +470,7 @@
                               data-test-name="{{ test.full_name }}" 
                               data-status="{{ history[test.full_name][h].status }}" 
                               data-date="{{ history[test.full_name][h].datetime }}" 
-                              data-error="{{ history[test.full_name][h].status_description | e }}" 
+                              data-history-timestamp="{{ h|string }}" 
                               data-commit="{{ history[test.full_name][h].commit }}"
                               data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
                               data-job-id="{{ history[test.full_name][h].job_id }}"
@@ -500,11 +508,13 @@
                         </div>
                         
                         {% if test.status_description %}
-                    <button class="error-button" onclick="toggleError(this)">Show error</button>
-                    <div class="error-content hidden">
-                        <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
-                    </div>
-                    {% endif %}
+                        <div class="error-section">
+                            <button class="error-button" onclick="toggleError(this)">Show error</button>
+                            <div class="error-content hidden">
+                                <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
+                            </div>
+                        </div>
+                        {% endif %}
                 </div>
                 {% endfor %}
             </div>
@@ -512,459 +522,8 @@
         {% endfor %}
     </div>
 
-    <!-- Status-based views: grouped by status -> suite -> tests -->
-    <div id="view-passed" class="view hidden">
-        {% for status_key, suites_dict in status_suites.items() %}
-        {% if status_key.name == 'PASS' %}
-        <div class="status-group">
-            <div class="status-header passed">PASSED</div>
-            {% for suite_name, tests in suites_dict.items()|sort %}
-            <div class="suite-group">
-                <div class="suite-header" onclick="toggleSuite('status-pass-suite-{{ loop.index }}')">
-                    <span class="suite-toggle">▼</span>
-                    <span>{{ suite_name }}</span>
-                    <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
-                    {% set suite_duration = tests|sum(attribute='elapsed') %}
-                    {% set suite_minutes = (suite_duration // 60)|int %}
-                    {% set suite_seconds = (suite_duration % 60)|round(3) %}
-                    <span class="suite-duration">
-                        {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
-                    </span>
-                    {% if tests and tests[0].owners %}
-                    <span class="suite-owner">
-                        Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
-                    </span>
-                    {% endif %}
-                </div>
-                <div id="status-pass-suite-{{ loop.index }}" class="suite-content">
-                    {% for test in tests %}
-                    <div class="test-item passed" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
-                        <span class="test-name">{{ test.name }}</span>
-                        
-                        <div class="test-meta">
-                            <span class="test-status passed">{{ test.status_display }}</span>
-                            <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
-                            
-                            <div class="test-badges">
-                                {% if test.is_sanitizer_issue %}
-                                <span class="sanitizer-badge">SANITIZER</span>
-                                {% endif %}
-                            </div>
-                            
-                            {% if test.log_urls %}
-                            <span class="log-links">
-                                {% for log_name, log_url in test.log_urls.items() %}
-                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
-                                {% endfor %}
-                            </span>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="test-actions">
-                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
-                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
-                        </span>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endfor %}
-    </div>
-
-    <div id="view-failed" class="view hidden">
-        {% for status_key, suites_dict in status_suites.items() %}
-        {% if status_key.name == 'FAIL' %}
-        <div class="status-group">
-            <div class="status-header failed">FAILED</div>
-            {% for suite_name, tests in suites_dict.items()|sort %}
-            <div class="suite-group">
-                <div class="suite-header" onclick="toggleSuite('status-fail-suite-{{ loop.index }}')">
-                    <span class="suite-toggle">▼</span>
-                    <span>{{ suite_name }}</span>
-                    <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
-                    {% set suite_duration = tests|sum(attribute='elapsed') %}
-                    {% set suite_minutes = (suite_duration // 60)|int %}
-                    {% set suite_seconds = (suite_duration % 60)|round(3) %}
-                    <span class="suite-duration">
-                        {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
-                    </span>
-                    {% if tests and tests[0].owners %}
-                    <span class="suite-owner">
-                        Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
-                    </span>
-                    {% endif %}
-                </div>
-                <div id="status-fail-suite-{{ loop.index }}" class="suite-content">
-                    {% for test in tests %}
-                    <div class="test-item failed" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
-                        <span class="test-name">{{ test.name }}</span>
-                        
-                        <div class="test-meta">
-                            <span class="test-status failed">{{ test.status_display }}</span>
-                            <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
-                            
-                            <div class="test-badges">
-                                {% if test.is_sanitizer_issue %}
-                                <span class="sanitizer-badge">SANITIZER</span>
-                                {% endif %}
-                                <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
-                            </div>
-                            
-                            {% if test.full_name in history %}
-                            <span class="history-icons">
-                            {% for h in history[test.full_name] %}
-                            <span class="history-icon" 
-                                  data-test-name="{{ test.full_name }}" 
-                                  data-status="{{ history[test.full_name][h].status }}" 
-                                  data-date="{{ history[test.full_name][h].datetime }}" 
-                                  data-error="{{ history[test.full_name][h].status_description | e }}" 
-                                  data-commit="{{ history[test.full_name][h].commit }}"
-                                  data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
-                                  data-job-id="{{ history[test.full_name][h].job_id }}"
-                                  onclick="showHistoryInfo(this)">
-                                {% if history[test.full_name][h].status == 'failure' %}
-                                <svg class="svg_failure history-icon" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
-                                </svg>
-                                {% elif history[test.full_name][h].status == 'passed' %}
-                                <svg class="svg_passed history-icon" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
-                                </svg>
-                                {% elif history[test.full_name][h].status == 'mute' %}
-                                <svg class="svg_mute history-icon" viewBox="0 0 17 16">
-                                    <path fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>
-                                </svg>
-                                {% endif %}
-                            </span>
-                            {% endfor %}
-                            </span>
-                            {% endif %}
-                            
-                            {% if test.log_urls %}
-                            <span class="log-links">
-                                {% for log_name, log_url in test.log_urls.items() %}
-                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
-                                {% endfor %}
-                            </span>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="test-actions">
-                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
-                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
-                        </div>
-                        
-                        {% if test.status_description %}
-                        <button class="error-button" onclick="toggleError(this)">Show error</button>
-                        <div class="error-content hidden">
-                            <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endfor %}
-    </div>
-
-    <div id="view-error" class="view hidden">
-        {% for status_key, suites_dict in status_suites.items() %}
-        {% if status_key.name == 'ERROR' %}
-        <div class="status-group">
-            <div class="status-header error">ERROR</div>
-            {% for suite_name, tests in suites_dict.items()|sort %}
-            <div class="suite-group">
-                <div class="suite-header" onclick="toggleSuite('status-error-suite-{{ loop.index }}')">
-                    <span class="suite-toggle">▼</span>
-                    <span>{{ suite_name }}</span>
-                    <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
-                    {% set suite_duration = tests|sum(attribute='elapsed') %}
-                    {% set suite_minutes = (suite_duration // 60)|int %}
-                    {% set suite_seconds = (suite_duration % 60)|round(3) %}
-                    <span class="suite-duration">
-                        {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
-                    </span>
-                    {% if tests and tests[0].owners %}
-                    <span class="suite-owner">
-                        Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
-                    </span>
-                    {% endif %}
-                </div>
-                <div id="status-error-suite-{{ loop.index }}" class="suite-content">
-                    {% for test in tests %}
-                    <div class="test-item error" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
-                        <span class="test-name">{{ test.name }}</span>
-                        
-                        <div class="test-meta">
-                            <span class="test-status error">{{ test.status_display }}</span>
-                            <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
-                            
-                            <div class="test-badges">
-                                {% if test.is_sanitizer_issue %}
-                                <span class="sanitizer-badge">SANITIZER</span>
-                                {% endif %}
-                                <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
-                            </div>
-                            
-                            {% if test.full_name in history %}
-                            <span class="history-icons">
-                            {% for h in history[test.full_name] %}
-                            <span class="history-icon" 
-                                  data-test-name="{{ test.full_name }}" 
-                                  data-status="{{ history[test.full_name][h].status }}" 
-                                  data-date="{{ history[test.full_name][h].datetime }}" 
-                                  data-error="{{ history[test.full_name][h].status_description | e }}" 
-                                  data-commit="{{ history[test.full_name][h].commit }}"
-                                  data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
-                                  data-job-id="{{ history[test.full_name][h].job_id }}"
-                                  onclick="showHistoryInfo(this)">
-                                {% if history[test.full_name][h].status == 'failure' %}
-                                <svg class="svg_failure history-icon" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
-                                </svg>
-                                {% elif history[test.full_name][h].status == 'passed' %}
-                                <svg class="svg_passed history-icon" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
-                                </svg>
-                                {% elif history[test.full_name][h].status == 'mute' %}
-                                <svg class="svg_mute history-icon" viewBox="0 0 17 16">
-                                    <path fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>
-                                </svg>
-                                {% endif %}
-                            </span>
-                            {% endfor %}
-                            </span>
-                            {% endif %}
-                            
-                            {% if test.log_urls %}
-                            <span class="log-links">
-                                {% for log_name, log_url in test.log_urls.items() %}
-                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
-                                {% endfor %}
-                            </span>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="test-actions">
-                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
-                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
-                        </div>
-                        
-                        {% if test.status_description %}
-                        <button class="error-button" onclick="toggleError(this)">Show error</button>
-                        <div class="error-content hidden">
-                            <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endfor %}
-    </div>
-
-    <div id="view-mute" class="view hidden">
-        {% for status_key, suites_dict in status_suites.items() %}
-        {% if status_key.name == 'MUTE' %}
-        <div class="status-group">
-            <div class="status-header mute">MUTED</div>
-            {% for suite_name, tests in suites_dict.items()|sort %}
-            <div class="suite-group">
-                <div class="suite-header" onclick="toggleSuite('status-mute-suite-{{ loop.index }}')">
-                    <span class="suite-toggle">▼</span>
-                    <span>{{ suite_name }}</span>
-                    <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
-                    {% set suite_duration = tests|sum(attribute='elapsed') %}
-                    {% set suite_minutes = (suite_duration // 60)|int %}
-                    {% set suite_seconds = (suite_duration % 60)|round(3) %}
-                    <span class="suite-duration">
-                        {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
-                    </span>
-                    {% if tests and tests[0].owners %}
-                    <span class="suite-owner">
-                        Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
-                    </span>
-                    {% endif %}
-                </div>
-                <div id="status-mute-suite-{{ loop.index }}" class="suite-content">
-                    {% for test in tests %}
-                    <div class="test-item mute" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
-                        <span class="test-name">{{ test.name }}</span>
-                        
-                        <div class="test-meta">
-                            <span class="test-status mute">{{ test.status_display }}</span>
-                            <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
-                            
-                            <div class="test-badges">
-                                {% if test.is_sanitizer_issue %}
-                                <span class="sanitizer-badge">SANITIZER</span>
-                                {% endif %}
-                            </div>
-                            
-                            {% if test.full_name in history %}
-                            <span class="history-icons">
-                            {% for h in history[test.full_name] %}
-                            <span class="history-icon" 
-                                  data-test-name="{{ test.full_name }}" 
-                                  data-status="{{ history[test.full_name][h].status }}" 
-                                  data-date="{{ history[test.full_name][h].datetime }}" 
-                                  data-error="{{ history[test.full_name][h].status_description | e }}" 
-                                  data-commit="{{ history[test.full_name][h].commit }}"
-                                  data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
-                                  data-job-id="{{ history[test.full_name][h].job_id }}"
-                                  onclick="showHistoryInfo(this)">
-                                {% if history[test.full_name][h].status == 'failure' %}
-                                <svg class="svg_failure history-icon" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
-                                </svg>
-                                {% elif history[test.full_name][h].status == 'passed' %}
-                                <svg class="svg_passed history-icon" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
-                                </svg>
-                                {% elif history[test.full_name][h].status == 'mute' %}
-                                <svg class="svg_mute history-icon" viewBox="0 0 17 16">
-                                    <path fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>
-                                </svg>
-                                {% endif %}
-                            </span>
-                            {% endfor %}
-                            </span>
-                            {% endif %}
-                            
-                            {% if test.log_urls %}
-                            <span class="log-links">
-                                {% for log_name, log_url in test.log_urls.items() %}
-                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
-                                {% endfor %}
-                            </span>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="test-actions">
-                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
-                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
-                        </div>
-                        
-                        {% if test.status_description %}
-                        <button class="error-button" onclick="toggleError(this)">Show error</button>
-                        <div class="error-content hidden">
-                            <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% endfor %}
-    </div>
-
-    <!-- Sanitizer view: grouped by suite -->
-    {% if sanitizer_suites %}
-    <div id="view-sanitizer" class="view hidden">
-        {% for suite_name, tests in sanitizer_suites.items()|sort %}
-        <div class="suite-group">
-            <div class="suite-header" onclick="toggleSuite('sanitizer-suite-{{ loop.index }}')">
-                <span class="suite-toggle">▼</span>
-                <span>{{ suite_name }}</span>
-                <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
-                {% set suite_duration = tests|sum(attribute='elapsed') %}
-                {% set suite_minutes = (suite_duration // 60)|int %}
-                {% set suite_seconds = (suite_duration % 60)|round(3) %}
-                <span class="suite-duration">
-                    {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
-                </span>
-                {% if tests and tests[0].owners %}
-                <span class="suite-owner">
-                    Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
-                </span>
-                {% endif %}
-            </div>
-            <div id="sanitizer-suite-{{ loop.index }}" class="suite-content">
-                {% for test in tests %}
-                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}">
-                    <span class="test-name">{{ test.name }}</span>
-                    
-                    <div class="test-meta">
-                        <span class="test-status {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}">{{ test.status_display }}</span>
-                        <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
-                        
-                        <div class="test-badges">
-                            <span class="sanitizer-badge">SANITIZER</span>
-                            {% if test.status.value == 1 or test.status.value == 2 %}
-                            <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
-                            {% endif %}
-                        </div>
-                        
-                        {% if test.full_name in history %}
-                        <span class="history-icons">
-                        {% for h in history[test.full_name] %}
-                        <span class="history-icon" 
-                              data-test-name="{{ test.full_name }}" 
-                              data-status="{{ history[test.full_name][h].status }}" 
-                              data-date="{{ history[test.full_name][h].datetime }}" 
-                              data-error="{{ history[test.full_name][h].status_description | e }}" 
-                              data-commit="{{ history[test.full_name][h].commit }}"
-                              data-job-name="{{ history[test.full_name][h].job_name }}[{{ history[test.full_name][h].branch }}:{{ build_preset }}]"
-                              data-job-id="{{ history[test.full_name][h].job_id }}"
-                              onclick="showHistoryInfo(this)">
-                            {% if history[test.full_name][h].status == 'failure' %}
-                            <svg class="svg_failure history-icon" viewBox="0 0 16 16">
-                                <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0M6.53 5.47a.75.75 0 0 0-1.06 1.06L6.94 8 5.47 9.47a.75.75 0 1 0 1.06 1.06L8 9.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L9.06 8l1.47-1.47a.75.75 0 1 0-1.06-1.06L8 6.94z" clip-rule="evenodd"></path>
-                            </svg>
-                            {% elif history[test.full_name][h].status == 'passed' %}
-                            <svg class="svg_passed history-icon" viewBox="0 0 16 16">
-                                <path fill-rule="evenodd" d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0m-3.9-1.55a.75.75 0 1 0-1.2-.9L7.419 8.858 6.03 7.47a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.13-.08z" clip-rule="evenodd"></path>
-                            </svg>
-                            {% elif history[test.full_name][h].status == 'mute' %}
-                            <svg class="svg_mute history-icon" viewBox="0 0 17 16">
-                                <path fill-rule="evenodd" d="M5.06 9.94A1.5 1.5 0 0 0 4 9.5H2a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5h2a1.5 1.5 0 0 0 1.06-.44l2.483-2.482a.268.268 0 0 1 .457.19v8.464a.268.268 0 0 1-.457.19zM2 5h2l2.482-2.482A1.768 1.768 0 0 1 9.5 3.768v8.464a1.768 1.768 0 0 1-3.018 1.25L4 11H2a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m10.28.72a.75.75 0 1 0-1.06 1.06L12.44 8l-1.22 1.22a.75.75 0 1 0 1.06 1.06l1.22-1.22 1.22 1.22a.75.75 0 1 0 1.06-1.06L14.56 8l1.22-1.22a.75.75 0 0 0-1.06-1.06L13.5 6.94z" clip-rule="evenodd"></path>
-                            </svg>
-                            {% endif %}
-                        </span>
-                        {% endfor %}
-                            </span>
-                            {% endif %}
-                            
-                            {% if test.log_urls %}
-                            <span class="log-links">
-                                {% for log_name, log_url in test.log_urls.items() %}
-                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
-                                {% endfor %}
-                            </span>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="test-actions">
-                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command">📋 Copy cmd</button>
-                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history">📊 History</button>
-                        </div>
-                        
-                        {% if test.status_description %}
-                    <button class="error-button" onclick="toggleError(this)">Show error</button>
-                    <div class="error-content hidden">
-                        <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
-                    </div>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
+    <!-- Removed duplicate views (view-passed, view-failed, view-error, view-mute, view-sanitizer) to reduce HTML size -->
+    <!-- Filtering is now done via JavaScript using data-test-status and data-is-sanitizer attributes -->
     <!-- Modal for test details -->
     <div id="errorModal">
         <div class="modal-content">
@@ -1000,6 +559,19 @@
     </div>
 
     <script>
+        // Preload history data to avoid embedding large status_description in HTML
+        const testHistory = {{ history_for_js | tojson }};
+        
+        function getHistoryError(testName, timestamp) {
+            if (!testHistory || !testHistory[testName]) return '';
+            // timestamp всегда строка в testHistory (ключи преобразованы в строки)
+            const timestampStr = String(timestamp);
+            const histEntry = testHistory[testName][timestampStr];
+            if (histEntry && histEntry.status_description) {
+                return histEntry.status_description;
+            }
+            return '';
+        }
 
         function toggleSuite(suiteId) {
             const suite = document.getElementById(suiteId);
@@ -1029,29 +601,66 @@
             initFilterFromUrl();
         });
         
-        // Also expand when filter changes
+        // Also expand when filter changes - now filters tests via data attributes
         function setFilter(filter, button) {
             // Update button states
             document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'sanitizer');
+                btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
             });
             button.classList.add('active', filter);
 
-            // Show/hide views
-            document.querySelectorAll('.view').forEach(view => {
-                view.classList.add('hidden');
+            // Filter tests using data attributes
+            const allTestItems = document.querySelectorAll('.test-item');
+            const allSuites = document.querySelectorAll('.suite-group');
+            
+            allTestItems.forEach(testItem => {
+                const testStatus = testItem.getAttribute('data-test-status');
+                const isSanitizer = testItem.getAttribute('data-is-sanitizer') === 'true';
+                let shouldShow = false;
+                
+                if (filter === 'all') {
+                    // Show all including skipped
+                    shouldShow = true;
+                } else if (filter === 'sanitizer') {
+                    shouldShow = isSanitizer;
+                } else {
+                    // Match status
+                    shouldShow = testStatus === filter;
+                }
+                
+                if (shouldShow) {
+                    testItem.style.display = '';
+                } else {
+                    testItem.style.display = 'none';
+                }
             });
-            const activeView = document.getElementById('view-' + filter);
-            if (activeView) {
-                activeView.classList.remove('hidden');
-                // Expand all suites in the active view
-                activeView.querySelectorAll('.suite-content').forEach(suite => {
-                    suite.classList.remove('hidden');
-                });
-                activeView.querySelectorAll('.suite-toggle').forEach(toggle => {
-                    toggle.textContent = '▼';
-                });
-            }
+            
+            // Show/hide suites based on visible tests, update counts
+            allSuites.forEach(suiteGroup => {
+                const suiteContent = suiteGroup.querySelector('.suite-content');
+                const allTestsInSuite = suiteContent.querySelectorAll('.test-item');
+                const visibleCount = Array.from(allTestsInSuite).filter(item => 
+                    item.style.display !== 'none'
+                ).length;
+                
+                // Update suite header count
+                const countSpan = suiteGroup.querySelector('.suite-header span:nth-of-type(2)');
+                if (countSpan && countSpan.textContent.includes('(')) {
+                    const suiteName = suiteGroup.querySelector('.suite-header span:nth-of-type(1)').textContent.trim();
+                    countSpan.textContent = ` (${visibleCount} test${visibleCount !== 1 ? 's' : ''})`;
+                }
+                
+                // Show/hide suite based on visible tests
+                if (visibleCount > 0) {
+                    suiteGroup.style.display = '';
+                    // Expand all suites when filtering
+                    suiteContent.classList.remove('hidden');
+                    const toggle = suiteGroup.querySelector('.suite-toggle');
+                    if (toggle) toggle.textContent = '▼';
+                } else {
+                    suiteGroup.style.display = 'none';
+                }
+            });
             
             // Update URL without reload
             const url = new URL(window.location);
@@ -1075,29 +684,13 @@
                     'pass': 'passed',
                     'err': 'error',
                     'mut': 'mute',
+                    'skip': 'skipped',
                     'san': 'sanitizer'
                 };
                 const actualFilter = filterMap[filter] || filter;
                 const button = document.querySelector(`.filter-btn.${actualFilter}`);
                 if (button) {
-                    // Don't update URL again, just set filter
-                    document.querySelectorAll('.filter-btn').forEach(btn => {
-                        btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'sanitizer');
-                    });
-                    button.classList.add('active', actualFilter);
-                    document.querySelectorAll('.view').forEach(view => {
-                        view.classList.add('hidden');
-                    });
-                    const activeView = document.getElementById('view-' + actualFilter);
-                    if (activeView) {
-                        activeView.classList.remove('hidden');
-                        activeView.querySelectorAll('.suite-content').forEach(suite => {
-                            suite.classList.remove('hidden');
-                        });
-                        activeView.querySelectorAll('.suite-toggle').forEach(toggle => {
-                            toggle.textContent = '▼';
-                        });
-                    }
+                    setFilter(actualFilter, button);
                     return;
                 }
             }
@@ -1109,7 +702,8 @@
         });
 
         function toggleError(button) {
-            const errorContent = button.nextElementSibling;
+            const errorSection = button.parentElement;
+            const errorContent = errorSection.querySelector('.error-content');
             if (errorContent.classList.contains('hidden')) {
                 errorContent.classList.remove('hidden');
                 button.textContent = 'Hide error';
@@ -1347,10 +941,13 @@
             const is_sanitizer = testItem.querySelector('.sanitizer-badge') !== null;
             let errorText = '';
             const errorButton = testItem.querySelector('.error-button');
-            if (errorButton && errorButton.nextElementSibling) {
-                const errorContent = errorButton.nextElementSibling.querySelector('pre code');
-                if (errorContent) {
-                    errorText = errorContent.textContent;
+            if (errorButton) {
+                const errorSection = errorButton.closest('.error-section');
+                if (errorSection) {
+                    const errorContent = errorSection.querySelector('pre code');
+                    if (errorContent) {
+                        errorText = errorContent.textContent;
+                    }
                 }
             }
             let logUrls = {};
@@ -1365,7 +962,8 @@
             const testName = icon.getAttribute('data-test-name');
             const status = icon.getAttribute('data-status');
             const date = icon.getAttribute('data-date');
-            const errorText = icon.getAttribute('data-error');
+            const timestamp = icon.getAttribute('data-history-timestamp');
+            const errorText = timestamp ? getHistoryError(testName, timestamp) : '';
             const commit = icon.getAttribute('data-commit');
             const jobName = icon.getAttribute('data-job-name');
             const jobId = icon.getAttribute('data-job-id');

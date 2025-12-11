@@ -70,7 +70,7 @@ class ColumnTableHelper:
         while pred_raw_bytes != raw_bytes and pred_bytes != bytes:
             pred_raw_bytes = raw_bytes
             pred_bytes = bytes
-            time.sleep(1)
+            time.sleep(5)
             raw_bytes, bytes = self._collect_volumes_column(column_name)
         logging.info(f"Table `{self.path}`, volumes `{column_name}` ({raw_bytes}, {bytes})")
         return raw_bytes, bytes

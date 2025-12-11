@@ -26,7 +26,7 @@ class TestCompressionBase(ColumnTestBase):
                     return <|
                         key: $i + $prev_count,
                         vInt: $i / 3,
-                        vStr: 'qwerty'u || CAST($i as Utf8),
+                        vStr: 'qwerty'u || CAST($i %% 8 as Utf8),
                         vFlt: $i %% 10,
                         vTs: DateTime::FromSeconds(CAST($i AS Uint32))
                     |>;
@@ -159,14 +159,15 @@ class TestCreateWithColumnCompression(TestCompressionBase):
                 f"UPDATE `{self.table_path}` SET `{col}2` = `{col}`;"
             )
 
-        logger.info(f"Table {self.table_path} altered")
         table = ColumnTableHelper(self.ydb_client, self.table_path)
+        current_num_rows: int = table.get_row_count()
+        logger.info(f"Table {self.table_path} altered, rows: {current_num_rows}")
 
         for col in ["vInt", "vStr", "vFlt", "vTs"]:
             col2 = col + "2"
             volumes = table.get_volumes_column(col2)
             koef: float = self.volumes_without_compression[col] / volumes[1]
             logging.info(
-                f"compression in `{table.path}` {self.volumes_without_compression[col]} / {volumes[1]}: {koef}"
+                f"column `{col2}` compression in `{table.path}` {self.volumes_without_compression[col]} / {volumes[1]}: {koef}"
             )
             assert koef > 1, col

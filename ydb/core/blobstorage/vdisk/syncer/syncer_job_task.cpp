@@ -163,8 +163,10 @@ namespace NKikimr {
                     Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
                     "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
 #ifdef USE_NEW_FULL_SYNC_SCHEME
-                auto msgFinished = std::make_unique<TEvLocalSyncFinished>();
-                return TSjOutcome::Event(SstWriterId, std::move(msgFinished));
+                if (Type == EFullRecover) {
+                    auto msgFinished = std::make_unique<TEvLocalSyncFinished>();
+                    return TSjOutcome::Event(SstWriterId, std::move(msgFinished));
+                }
 #endif
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
             }
@@ -474,8 +476,10 @@ namespace NKikimr {
 
             if (EndOfStream) {
 #ifdef USE_NEW_FULL_SYNC_SCHEME
-                auto msgFinished = std::make_unique<TEvLocalSyncFinished>();
-                return TSjOutcome::Event(SstWriterId, std::move(msgFinished));
+                if (Type == EFullRecover) {
+                    auto msgFinished = std::make_unique<TEvLocalSyncFinished>();
+                    return TSjOutcome::Event(SstWriterId, std::move(msgFinished));
+                }
 #endif
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
             } else {

@@ -117,7 +117,13 @@ namespace NKikimr {
                         "TSyncerRLDFullSyncProxyActor(%s): TEvSyncerJobDone; Task# %s",
                             TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data()));
             ActiveActors.Erase(ev->Sender);
-            std::unique_ptr<TSyncerJobTask> task = std::move(ev->Get()->Task);
+            auto* msg = ev->Get();
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+            if (msg->Task->SstWriterId) {
+                ActiveActors.Erase(msg->Task->SstWriterId);
+            }
+#endif
+            std::unique_ptr<TSyncerJobTask> task = std::move(msg->Task);
             auto syncStatus = task->GetCurrent().LastSyncStatus;
             if (!TPeerSyncState::Good(syncStatus)) {
                 RerunTaskAfterTimeout(ctx);

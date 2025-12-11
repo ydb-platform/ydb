@@ -32,10 +32,12 @@ namespace NKikimr::NBlobDepot {
                     if (CheckBlockForTablet(blk->Id, std::nullopt, &blockedGeneration) != NKikimrProto::OK) {
                         return;
                     }
-                    if (blockedGeneration != blk->Generation) {
+                    if (blockedGeneration < blk->Generation) {
                         // this can happen only in distributed storage, but not possible in BlobDepot
-                        return EndWithError(NKikimrProto::ERROR, "incorrect blocked generation provided for"
-                            " ForceBlockTabletData in TEvGet query to BlobDepot");
+                        return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "incorrect blocked generation"
+                            " provided for ForceBlockTabletData in TEvGet query to BlobDepot"
+                            << " Id# " << blk->Id << " required Generation# " << blk->Generation
+                            << " actual Generation# " << blockedGeneration);
                     }
                 }
 

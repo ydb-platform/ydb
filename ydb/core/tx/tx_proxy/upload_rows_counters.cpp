@@ -99,5 +99,6 @@ TUploadCounters::TUploadCounters()
             WrittenBytes = TBase::GetDeriviative("Replies/WrittenBytes");
             FailedBytes = TBase::GetDeriviative("Replies/FailedBytes");
             RequestsBytes = TBase::GetDeriviative("Requests/Bytes");
+            MissingDefaultColumnsCount = TBase::GetDeriviative("MissingDefaultColumns/Count");
 }
 }

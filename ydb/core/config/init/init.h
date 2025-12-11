@@ -271,6 +271,7 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         NConfig::TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const = 0;
 };
@@ -330,6 +331,7 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const
     {
@@ -339,6 +341,7 @@ public:
             scopeId,
             tenantName,
             servicesMask,
+            tinyMode,
             clusterName,
             configsDispatcherInitInfo);
     }

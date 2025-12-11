@@ -36,6 +36,7 @@ int TClientCommandServer::Run(TConfig& config) {
         RunConfig.ScopeId,
         RunConfig.TenantName,
         RunConfig.ServicesMask,
+        RunConfig.TinyMode,
         RunConfig.ClusterName,
         RunConfig.ConfigsDispatcherInitInfo);
 

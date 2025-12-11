@@ -195,7 +195,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
         output = std::make_shared<TOpMap>(input, input->Pos, mapElements, false);
     }
 
-    output->Props.OrderEnforcer = TOrderEnforcer(EOrderEnforcerAction::REQUIRE, EOrderEnforcerReason::USER, sortElements);
+    output = std::make_shared<TOpSort>(output, node->Pos(), sortElements);
     return output;
 }
 

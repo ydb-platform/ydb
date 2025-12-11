@@ -89,7 +89,7 @@ namespace NKikimr {
 
         void Seek(const TKey& key) {
             // Advance to the first entry with a key >= target
-            Ptr = ::LowerBound(Begin(), End(), key, typename TRec::TLess());
+            Ptr = ::LowerBound(Begin(), End(), key);
         }
 
         template <class TRecordMerger>
@@ -209,8 +209,7 @@ namespace NKikimr {
             TLevelSegment::TLogoBlobIdHigh keyHigh(key.LogoBlobID());
             TLevelSegment::TLogoBlobIdLow keyLow(key.LogoBlobID());
 
-            High = std::lower_bound(Segment->IndexHigh.begin(), Segment->IndexHigh.end(),
-                    keyHigh, TLevelSegment::TRecHigh::TLess());
+            High = std::lower_bound(Segment->IndexHigh.begin(), Segment->IndexHigh.end(), keyHigh);
 
             if (High == Segment->IndexHigh.end()) {
                 Low = LowRangeBegin = Segment->IndexLow.end();
@@ -227,7 +226,7 @@ namespace NKikimr {
 
             auto rangeEnd = Segment->IndexLow.begin() + High->GetLowRangeEndIndex();
 
-            Low = std::lower_bound(rangeBegin, rangeEnd, keyLow, TLevelSegment::TRecLow::TLess());
+            Low = std::lower_bound(rangeBegin, rangeEnd, keyLow);
 
             if (Low == rangeEnd) {
                 LowRangeBegin = rangeEnd;

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import pytest
-import asyncio
 import time
 
 from common import BridgeKiKiMRTest

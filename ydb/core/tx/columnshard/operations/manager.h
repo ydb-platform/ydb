@@ -25,7 +25,6 @@ private:
     const ui64 Generation;
     std::atomic<bool> Broken = false;
     std::atomic<bool> Writes = false;
-    std::atomic<LockState> State{LockState::Created};
     friend class TLockFeatures;
 
 public:
@@ -52,18 +51,6 @@ public:
     ui64 GetInternalGenerationCounter() const {
         return IsBroken() ? TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken : 0;
     }
-
-    bool IsDeleted() const {
-        return State == LockState::Deleted || State == LockState::Aborted;
-    }
-
-    bool IsAborted() const {
-        return State == LockState::Aborted;
-    }
-
-    bool IsTxIdAssigned() const {
-        return State == LockState::TxIdAssigned;
-    }
 };
 
 class TLockFeatures: TMoveOnly {
@@ -77,6 +64,11 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, Committed);
     YDB_READONLY_DEF(TPositiveControlInteger, OperationsInProgress);
 
+    bool Subscribed = false;
+    bool needsAborting = false;
+    bool Aborting = false;
+    bool Aborted = false;
+    ui64 TxId = 0;
 public:
     ui64 GetLockId() const {
         return SharingInfo->GetLockId();
@@ -111,39 +103,50 @@ public:
     void SetBroken() {
         SharingInfo->Broken = true;
     }
-
     bool IsBroken() const {
         return SharingInfo->IsBroken();
     }
 
-    bool subscribed = false;
     void SetSubscribed() {
-        subscribed = true;
+        Subscribed = true;
     }
     bool IsSubscribed() const {
-        return subscribed;
-    }
-    }
-
-    bool IsDeleted() const {
-        return SharingInfo->IsDeleted();
+        return Subscribed;
     }
 
-    bool SetAborted() {
-        auto prevState = TLockSharingInfo::LockState::Deleted;
-        return SharingInfo->State.compare_exchange_strong(prevState, TLockSharingInfo::LockState::Aborted);
+    void SetNeedsAborting() {
+        needsAborting = true;
+    }
+    bool NeedsAborting() const { 
+        return needsAborting;
     }
 
+    bool ReadyForAborting() const {
+        return NeedsAborting() && !IsAborting() && OperationsInProgress.Val() == 0;
+    }
+
+    void SetAborting() {
+        AFL_VERIFY(ReadyForAborting())("lock_id", GetLockId())("needs_aborting", NeedsAborting())("operations_in_progress", OperationsInProgress.Val())("aborting", Aborting);
+        Aborting = true;
+    }
+    bool IsAborting() const {
+        return Aborting;
+    }
+
+    void SetAborted(const ui64 txId) {
+        AFL_VERIFY(IsAborting() && !Aborted && TxId == txId)("arg_tx_id", txId)("assigned_tx_id", TxId)("lock_id", GetLockId())("aborting", IsAborting())("aborted", Aborted);
+        Aborted = true;
+    }
     bool IsAborted() const {
-        return SharingInfo->IsAborted();
+        return Aborted;
     }
 
-    void SetTxIdAssigned() {
-        SharingInfo->State.store(TLockSharingInfo::LockState::TxIdAssigned);
+    void SetTxId(const ui64 txId) {
+        AFL_VERIFY(!TxId || TxId == txId)("tx_id", txId)("lock_id", GetLockId())("tx_id_assigned", TxId);
+        TxId = txId;
     }
-
     bool IsTxIdAssigned() const {
-        return SharingInfo->IsTxIdAssigned();
+        return TxId != 0;
     }
 
     bool IsCommitted(const ui64 lockId) const {
@@ -205,7 +208,7 @@ public:
         AFL_VERIFY(op->GetInsertWriteIds() == insertions)("operation_data", JoinSeq(", ", op->GetInsertWriteIds()))(
             "expected", JoinSeq(", ", insertions));
         for (auto&& i : insertions) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "add_by_insert_id")("id", i)("operation_id", operationId);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "add_write_id_to_operation_id")("write_id", i)("operation_id", operationId);
             InsertWriteIdToOpWriteId.emplace(i, operationId);
         }
     }
@@ -258,7 +261,7 @@ public:
     }
     TLockFeatures& GetLockFeaturesForTxVerified(const ui64 txId) {
         auto lockId = GetLockForTxOptional(txId);
-        AFL_VERIFY(lockId);
+        AFL_VERIFY(lockId)("tx_id", txId);
         return GetLockVerified(*lockId);
     }
     ui64 GetLockForTxVerified(const ui64 txId) const {

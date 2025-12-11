@@ -318,6 +318,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedPrefix << "/topic_description.pb";
     }
 
+    static TString ReplicaitonDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        return SchemeKeyFromSettings(importInfo, itemIdx, NYdb::NDump::NFiles::CreateAsyncReplication().FileName);
+    }
+
     static bool IsView(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateView().FileName);
     }
@@ -328,6 +333,15 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     static bool IsTopic(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTopic().FileName);
+    }
+
+    static bool IsReplication(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateAsyncReplication().FileName);
+    }
+
+    static bool IsCreatedByQuery(TStringBuf schemeKey) {
+        return IsView(schemeKey)
+            || IsReplication(schemeKey);
     }
 
     static bool NoObjectFound(Aws::S3::S3Errors errorType) {
@@ -365,6 +379,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 // try search for a topic
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
                 SchemeFileType = NBackup::EBackupFileType::TopicCreate;
+                HeadObject(SchemeKey);
+            } else if (IsTopic(SchemeKey)) {
+                // try search for a replication
+                SchemeKey = ReplicaitonDescriptionKeyFromSettings(*ImportInfo, ItemIdx);
+                SchemeFileType = NBackup::EBackupFileType::AsyncReplicationCreate;
                 HeadObject(SchemeKey);
             } else {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
@@ -527,7 +546,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", schemeKey# " << SchemeKey
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
-        if (IsView(SchemeKey)) {
+        if (IsCreatedByQuery(SchemeKey)) {
             item.CreationQuery = content;
         } else if (IsTopic(SchemeKey)) {
             Ydb::Topic::CreateTopicRequest request;

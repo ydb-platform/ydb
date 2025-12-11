@@ -19,6 +19,7 @@
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 

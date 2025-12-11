@@ -211,4 +211,42 @@ bool RewriteCreateTransferQueryNoSecrets(
     return RewriteCreateQuery(query, "CREATE TRANSFER `{}`", dbPath, issues);
 }
 
+namespace {
+
+bool IsSchemaSecret(TStringBuf secretName) {
+    return secretName.StartsWith('/');
+}
+
+bool RewriteSecretsNoCheck(TString& query, const TString& dbRestoreRoot, NYql::TIssues& issues) {
+    auto secretSettings = GetSecretSettings(query);
+    for (auto& secretSetting : secretSettings) {
+        if (IsSchemaSecret(secretSetting.Value)) {
+            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, GetDatabase(query), dbRestoreRoot);
+        }
+
+        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
+           return false;
+        }
+    }
+
+    return true;
+}
+
+} // anonymous namespace
+
+bool RewriteCreateAsyncReplicationQuery(
+    TString& query,
+    const TString& dbRestoreRoot,
+    const TString& dbPath,
+    NYql::TIssues& issues) {
+    
+    if (!RewriteSecretsNoCheck(query, dbRestoreRoot, issues)) {
+        return false;
+    }
+    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
+        return false;
+    }
+    return RewriteCreateQuery(query, "CREATE ASYNC REPLICATION `{}`", dbPath, issues);
+}
+
 } // namespace NYdb::NDump

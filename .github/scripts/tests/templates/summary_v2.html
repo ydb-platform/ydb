@@ -73,6 +73,48 @@
         .filter-btn.sanitizer:hover {
             background-color: #cc3700;
         }
+        .flaky-stable-badges {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0;
+            padding: 8px 0;
+        }
+        .flaky-stable-badge {
+            padding: 6px 12px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            background-color: #f6f8fa;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .flaky-stable-badge:hover {
+            background-color: #f3f4f6;
+        }
+        .flaky-stable-badge.active {
+            color: white;
+            border-color: #0969da;
+        }
+        .flaky-stable-badge.flaky-badge-btn.active {
+            background-color: #ffc107;
+            color: #000;
+            border-color: #ffc107;
+        }
+        .flaky-stable-badge.stable-badge-btn.active {
+            background-color: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+        .flaky-stable-badge.all-badge-btn.active {
+            background-color: #0969da;
+            border-color: #0969da;
+        }
+        .badge-label {
+            font-size: 13px;
+            color: #656d76;
+        }
         .success-rate-button {
             background-color: #0969da;
             color: white;
@@ -452,16 +494,27 @@
     <div class="filter-buttons">
         <button class="filter-btn active all" onclick="setFilter('all', this)">All ({{ test_counts.all }})</button>
         <button class="filter-btn passed" onclick="setFilter('passed', this)">Passed ({{ test_counts.passed }})</button>
-        <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }}){% if test_counts.flaky_failed > 0 %}/Flaky({{ test_counts.flaky_failed }}){% endif %}</button>
-        <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }}){% if test_counts.flaky_error > 0 %}/Flaky({{ test_counts.flaky_error }}){% endif %}</button>
-        <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }}){% if test_counts.flaky_mute > 0 %}/Flaky({{ test_counts.flaky_mute }}){% endif %}</button>
+        <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }})</button>
+        <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }})</button>
+        <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }})</button>
         <button class="filter-btn skipped" onclick="setFilter('skipped', this)">Skipped ({{ test_counts.skipped }})</button>
-        {% if test_counts.flaky > 0 %}
-        <button class="filter-btn flaky" onclick="setFilter('flaky', this)">Flaky ({{ test_counts.flaky }})</button>
-        {% endif %}
         {% if test_counts.sanitizer > 0 %}
         <button class="filter-btn sanitizer" onclick="setFilter('sanitizer', this)">Sanitizer ({{ test_counts.sanitizer }})</button>
         {% endif %}
+    </div>
+    
+    <!-- Flaky/Stable badges - shown based on current filter -->
+    <div id="flaky-stable-badges" class="flaky-stable-badges" style="margin: 10px 0; display: none;">
+        <span class="badge-label" style="margin-right: 10px; font-weight: 500;">Filter by:</span>
+        <button id="badge-flaky" class="flaky-stable-badge flaky-badge-btn" onclick="setFlakyStableFilter('flaky', this)" style="display: none;">
+            Flaky - <span id="badge-flaky-count">0</span>
+        </button>
+        <button id="badge-stable" class="flaky-stable-badge stable-badge-btn" onclick="setFlakyStableFilter('stable', this)" style="display: none;">
+            Stable - <span id="badge-stable-count">0</span>
+        </button>
+        <button id="badge-all" class="flaky-stable-badge all-badge-btn" onclick="setFlakyStableFilter('all', this)" style="display: none;">
+            All
+        </button>
     </div>
 
     <!-- All view: grouped by suite -->
@@ -553,7 +606,7 @@
     <!-- Filtering is now done via JavaScript using data-test-status, data-is-sanitizer, and data-is-flaky attributes -->
     <!-- Modal for success rate and detailed history -->
     <div id="successRateModal" class="modal">
-        <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-content" style="max-width: 1200px; max-height: 90vh;">
             <span class="close-modal" onclick="closeSuccessRateModal()">&times;</span>
             <div class="modal-header">
                 <h2 id="successRateModalTitle">Test Success Rate</h2>
@@ -600,6 +653,11 @@
         // Preload history data to avoid embedding large status_description in HTML
         const testHistory = {{ history_for_js | tojson }};
         const testSuccessRates = {{ test_success_rates | tojson }};
+        const testCounts = {{ test_counts | tojson }};
+        
+        // Current filter state
+        let currentMainFilter = 'all';
+        let currentFlakyStableFilter = 'all'; // 'all', 'flaky', or 'stable'
         
         function getHistoryError(testName, timestamp) {
             if (!testHistory || !testHistory[testName]) return '';
@@ -647,7 +705,68 @@
                 btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'flaky', 'sanitizer');
             });
             button.classList.add('active', filter);
-
+            
+            // Update current main filter
+            currentMainFilter = filter;
+            currentFlakyStableFilter = 'all'; // Reset flaky/stable filter when main filter changes
+            
+            // Update flaky/stable badges visibility and counts
+            updateFlakyStableBadges(filter);
+            
+            // Apply filters
+            applyFilters();
+        }
+        
+        function updateFlakyStableBadges(mainFilter) {
+            const badgesContainer = document.getElementById('flaky-stable-badges');
+            const badgeFlaky = document.getElementById('badge-flaky');
+            const badgeStable = document.getElementById('badge-stable');
+            const badgeAll = document.getElementById('badge-all');
+            const badgeFlakyCount = document.getElementById('badge-flaky-count');
+            const badgeStableCount = document.getElementById('badge-stable-count');
+            
+            // Show badges only for failed, error, and mute filters
+            if (mainFilter === 'failed' || mainFilter === 'error' || mainFilter === 'mute') {
+                badgesContainer.style.display = 'flex';
+                
+                // Get counts for current filter
+                const flakyKey = `flaky_${mainFilter}`;
+                const stableKey = `stable_${mainFilter}`;
+                const flakyCount = testCounts[flakyKey] || 0;
+                const stableCount = testCounts[stableKey] || 0;
+                
+                // Update counts
+                badgeFlakyCount.textContent = flakyCount;
+                badgeStableCount.textContent = stableCount;
+                
+                // Show/hide badges based on counts
+                badgeFlaky.style.display = flakyCount > 0 ? 'inline-block' : 'none';
+                badgeStable.style.display = stableCount > 0 ? 'inline-block' : 'none';
+                badgeAll.style.display = 'inline-block';
+                
+                // Reset badge states
+                badgeFlaky.classList.remove('active');
+                badgeStable.classList.remove('active');
+                badgeAll.classList.add('active');
+            } else {
+                badgesContainer.style.display = 'none';
+            }
+        }
+        
+        function setFlakyStableFilter(type, button) {
+            // Update badge states
+            document.querySelectorAll('.flaky-stable-badge').forEach(badge => {
+                badge.classList.remove('active');
+            });
+            button.classList.add('active');
+            
+            currentFlakyStableFilter = type;
+            
+            // Apply filters
+            applyFilters();
+        }
+        
+        function applyFilters() {
             // Filter tests using data attributes
             const allTestItems = document.querySelectorAll('.test-item');
             const allSuites = document.querySelectorAll('.suite-group');
@@ -658,16 +777,24 @@
                 const isFlaky = testItem.getAttribute('data-is-flaky') === 'true';
                 let shouldShow = false;
                 
-                if (filter === 'all') {
-                    // Show all including skipped
+                // First apply main filter
+                if (currentMainFilter === 'all') {
                     shouldShow = true;
-                } else if (filter === 'sanitizer') {
+                } else if (currentMainFilter === 'sanitizer') {
                     shouldShow = isSanitizer;
-                } else if (filter === 'flaky') {
-                    shouldShow = isFlaky;
                 } else {
-                    // Match status (failed, error, mute, passed, skipped) - including flaky
-                    shouldShow = testStatus === filter;
+                    // Match status (failed, error, mute, passed, skipped)
+                    shouldShow = testStatus === currentMainFilter;
+                }
+                
+                // Then apply flaky/stable filter if applicable
+                if (shouldShow && (currentMainFilter === 'failed' || currentMainFilter === 'error' || currentMainFilter === 'mute')) {
+                    if (currentFlakyStableFilter === 'flaky') {
+                        shouldShow = shouldShow && isFlaky;
+                    } else if (currentFlakyStableFilter === 'stable') {
+                        shouldShow = shouldShow && !isFlaky;
+                    }
+                    // 'all' means show both, so no additional filtering needed
                 }
                 
                 if (shouldShow) {
@@ -706,18 +833,25 @@
             
             // Update URL without reload
             const url = new URL(window.location);
-            if (filter === 'all') {
+            if (currentMainFilter === 'all') {
                 url.searchParams.delete('status');
             } else {
-                url.searchParams.set('status', filter.charAt(0).toUpperCase() + filter.slice(1));
+                url.searchParams.set('status', currentMainFilter.charAt(0).toUpperCase() + currentMainFilter.slice(1));
             }
-            window.history.pushState({filter: filter}, '', url);
+            if (currentFlakyStableFilter !== 'all' && (currentMainFilter === 'failed' || currentMainFilter === 'error' || currentMainFilter === 'mute')) {
+                url.searchParams.set('flakyStable', currentFlakyStableFilter);
+            } else {
+                url.searchParams.delete('flakyStable');
+            }
+            window.history.pushState({filter: currentMainFilter, flakyStable: currentFlakyStableFilter}, '', url);
         }
         
         // Handle URL parameters on load
         function initFilterFromUrl() {
             const urlParams = new URLSearchParams(window.location.search);
             const status = urlParams.get('status');
+            const flakyStable = urlParams.get('flakyStable');
+            
             if (status) {
                 const filter = status.toLowerCase();
                 // Map common status names to filter names
@@ -734,6 +868,14 @@
                 const button = document.querySelector(`.filter-btn.${actualFilter}`);
                 if (button) {
                     setFilter(actualFilter, button);
+                    
+                    // Apply flaky/stable filter if present
+                    if (flakyStable && (actualFilter === 'failed' || actualFilter === 'error' || actualFilter === 'mute')) {
+                        const badgeButton = document.getElementById(`badge-${flakyStable}`);
+                        if (badgeButton) {
+                            setFlakyStableFilter(flakyStable, badgeButton);
+                        }
+                    }
                     return;
                 }
             }
@@ -1065,9 +1207,10 @@
             html += '<table style="width: 100%; border-collapse: collapse; margin-top: 15px;">';
             html += '<thead><tr style="background-color: #f6f8fa; border-bottom: 2px solid #d0d7de;">';
             html += '<th style="padding: 10px; text-align: left;">Date</th>';
-            html += '<th style="padding: 10px; text-align: center;">PR-Check Rate</th>';
-            html += '<th style="padding: 10px; text-align: center;">Other Runs Rate</th>';
-            html += '<th style="padding: 10px; text-align: left;">Runs</th>';
+            html += '<th style="padding: 10px; text-align: center;">Success Rate-in-pr</th>';
+            html += '<th style="padding: 10px; text-align: center;">Success Rate-in-branch</th>';
+            html += '<th style="padding: 10px; text-align: left;">Runs-in-pr</th>';
+            html += '<th style="padding: 10px; text-align: left;">Runs-in-branch</th>';
             html += '</tr></thead><tbody>';
             
             for (const date of sortedDates) {
@@ -1083,12 +1226,39 @@
                 html += `<td style="padding: 10px;"><strong>${date}</strong></td>`;
                 html += `<td style="padding: 10px; text-align: center;">${dayData.pr_check.total > 0 ? `${prRate}% (${dayData.pr_check.passed}/${dayData.pr_check.total})` : '-'}</td>`;
                 html += `<td style="padding: 10px; text-align: center;">${dayData.other.total > 0 ? `${otherRate}% (${dayData.other.passed}/${dayData.other.total})` : '-'}</td>`;
-                html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
                 
-                // Sort entries by timestamp (newest first)
+                // Sort entries by timestamp (newest first) and separate by type
                 dayData.entries.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
                 
-                for (const { timestamp, entry } of dayData.entries) {
+                // Generate in-pr runs column
+                html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
+                const prCheckEntries = dayData.entries.filter(({ entry }) => {
+                    const jobName = entry.job_name || '';
+                    return jobName.toLowerCase().includes('pr-check') ||
+                           jobName.toLowerCase().includes('pr_check') ||
+                           jobName.toLowerCase().includes('pr/check');
+                });
+                for (const { timestamp, entry } of prCheckEntries) {
+                    const statusColor = entry.status === 'passed' ? '#28a745' : 
+                                       entry.status === 'failure' ? '#dc3545' : '#007bff';
+                    const statusSymbol = entry.status === 'passed' ? '✓' : 
+                                        entry.status === 'failure' ? '✗' : '⊘';
+                    html += `<span style="cursor: pointer; padding: 4px 8px; border-radius: 3px; background-color: ${statusColor}; color: white; font-size: 11px;" `;
+                    html += `onclick="showHistoryEntry('${testFullName}', '${timestamp}')" `;
+                    html += `title="${entry.status} - ${entry.date} - ${entry.job_name}">`;
+                    html += `${statusSymbol}</span>`;
+                }
+                html += '</div></td>';
+                
+                // Generate in-branch runs column
+                html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
+                const otherEntries = dayData.entries.filter(({ entry }) => {
+                    const jobName = entry.job_name || '';
+                    return !jobName.toLowerCase().includes('pr-check') &&
+                           !jobName.toLowerCase().includes('pr_check') &&
+                           !jobName.toLowerCase().includes('pr/check');
+                });
+                for (const { timestamp, entry } of otherEntries) {
                     const statusColor = entry.status === 'passed' ? '#28a745' : 
                                        entry.status === 'failure' ? '#dc3545' : '#007bff';
                     const statusSymbol = entry.status === 'passed' ? '✓' : 
@@ -1211,9 +1381,21 @@
         document.addEventListener('DOMContentLoaded', function() {
             const closeModals = document.querySelectorAll('.close-modal');
             closeModals.forEach(closeBtn => {
-                closeBtn.onclick = function() {
-                    const modal = this.closest('.modal');
-                    if (modal) modal.style.display = 'none';
+                closeBtn.onclick = function(event) {
+                    event.stopPropagation(); // Prevent triggering window.onclick
+                    // Try to find modal parent with class 'modal' first
+                    let modal = this.closest('.modal');
+                    if (!modal) {
+                        // If not found, try to find parent with id 'errorModal'
+                        modal = this.closest('div#errorModal');
+                        if (!modal) {
+                            // Fallback: find by id directly
+                            modal = document.getElementById('errorModal');
+                        }
+                    }
+                    if (modal) {
+                        modal.style.display = 'none';
+                    }
                 }
             });
             

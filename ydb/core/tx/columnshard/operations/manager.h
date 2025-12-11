@@ -62,7 +62,8 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, BreakOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, NotifyOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, Committed);
-    YDB_READONLY_DEF(TPositiveControlInteger, OperationsInProgress);
+
+    ui64 OperationsInProgress = 0;
 
     bool Subscribed = false;
     bool needsAborting = false;
@@ -93,6 +94,7 @@ public:
     }
 
     void OnWriteOperationFinished() {
+        AFL_VERIFY(OperationsInProgress > 0)("operations_in_progress", OperationsInProgress);
         --OperationsInProgress;
     }
 
@@ -122,11 +124,11 @@ public:
     }
 
     bool ReadyForAborting() const {
-        return NeedsAborting() && !IsAborting() && OperationsInProgress.Val() == 0;
+        return NeedsAborting() && !IsAborting() && OperationsInProgress == 0;
     }
 
     void SetAborting() {
-        AFL_VERIFY(ReadyForAborting())("lock_id", GetLockId())("needs_aborting", NeedsAborting())("operations_in_progress", OperationsInProgress.Val())("aborting", Aborting);
+        AFL_VERIFY(ReadyForAborting())("lock_id", GetLockId())("needs_aborting", NeedsAborting())("operations_in_progress", OperationsInProgress)("aborting", Aborting);
         Aborting = true;
     }
     bool IsAborting() const {

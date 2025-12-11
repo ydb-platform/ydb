@@ -961,17 +961,18 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         THashMap<TString, TExprNode::TPtr> aggProjectionMap;
         TVector<TString> finalProjection;
 
-        for (auto resultItem : result->Child(1)->Children()) {
-            auto column = resultItem->Child(0);
+        auto processResultColumn = [&] (TExprNode::TPtr column, const TTypeAnnotationNode* actualColumnType, TExprNode::TPtr itemLambda) {
             TString columnName = TString(column->Content());
 
             const auto expectedTypeNode = finalType->FindItemType(columnName);
+            if (!expectedTypeNode) {
+                YQL_CLOG(TRACE, CoreDq) << "didn't find " << columnName << " in: " << *(TTypeAnnotationNode*)finalType;
+            }
             Y_ENSURE(expectedTypeNode);
-            const auto actualTypeNode = resultItem->GetTypeAnn();
 
-            auto lambda = TCoLambda(ctx.DeepCopyLambda(*(resultItem->Child(2))));
+            auto lambda = TCoLambda(ctx.DeepCopyLambda(*(itemLambda)));
 
-            YQL_CLOG(TRACE, CoreDq) << "Actual type for column: " << columnName << " is: " << *actualTypeNode;
+            YQL_CLOG(TRACE, CoreDq) << "Actual type for column: " << columnName << " is: " << *actualColumnType;
             YQL_CLOG(TRACE, CoreDq) << "Expected type for column: " << columnName << " is: " << *expectedTypeNode;
 
             bool needPgCast = false;
@@ -981,7 +982,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             bool needPgCastForAgg = distinctAll;
 
             if (pgSyntax) {
-                Y_ENSURE(ExtractPgType(actualTypeNode, actualPgTypeId, convertToPg, node->Pos(), ctx));
+                Y_ENSURE(ExtractPgType(actualColumnType, actualPgTypeId, convertToPg, node->Pos(), ctx));
                 needPgCast = (expectedPgType->GetId() != actualPgTypeId);
             }
 
@@ -1059,6 +1060,31 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             // clang-format on
             
             finalProjection.push_back(columnName);
+        };
+
+        for (auto resultItem : result->Child(1)->Children()) {
+            auto maybeColumn = resultItem->Child(0);
+            auto itemType = resultItem->GetTypeAnn();
+            if (maybeColumn->IsAtom()) {
+                processResultColumn(maybeColumn, itemType, resultItem->Child(2));
+            } else if (maybeColumn->IsList()) {
+                for (size_t i=0; i<maybeColumn->ChildrenSize(); i++) {
+                    auto outputColumn = maybeColumn->Child(i)->Child(0);
+                    auto inputColumn = maybeColumn->Child(i)->Child(1);
+                    auto columnType = itemType->Cast<TStructExprType>()->FindItemType(inputColumn->Content());
+                    Y_ENSURE(columnType);
+                    auto mapLambda = Build<TCoLambda>(ctx, node->Pos())
+                        .Args({"arg"})
+                        .Body<TCoMember>()
+                            .Struct("arg")
+                            .Name(inputColumn)
+                        .Build()
+                        .Done().Ptr();
+                    processResultColumn(outputColumn, columnType, mapLambda);
+                }
+            } else {
+                Y_ENSURE(false, "Uknown entity in result items");
+            }
         }
 
         // Sort clause may contain extra columns that we need to keep in the projection in order for sort to work

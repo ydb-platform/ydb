@@ -135,11 +135,17 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 SELECT id as id2 FROM `/Root/foo` WHERE name = '3_name' order by id;
             )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
+            )",
+
         };
 
         std::vector<std::string> results = {
             R"([[0];[1];[2];[4];[5];[6];[7];[8];[9]])",
-            R"([[3]])"
+            R"([[3]])",
+            R"([[3;["3_name"]]])"
         };
 
         auto tableClient = kikimr.GetTableClient();
@@ -153,9 +159,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST(Filter) {
-        TestFilter(/*columnTables=*/false);
-        TestFilter(/*columnTables=*/true);
+     Y_UNIT_TEST_TWIN(Filter, ColumnStore) {
+        TestFilter(ColumnStore);
     }
 
     void TestConstantFolding(bool columnTables) {
@@ -221,9 +226,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST(ConstantFolding) {
-        TestConstantFolding(/*columnTables=*/false);
-        TestConstantFolding(/*columnTables=*/true);
+    Y_UNIT_TEST_TWIN(ConstantFolding, ColumnStore) {
+        TestConstantFolding(ColumnStore);
     }
 
     /*

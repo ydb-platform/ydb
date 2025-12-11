@@ -111,7 +111,7 @@ jobs:
       - name: Build Workload Image
         run: |
           # Build current version
-          if [ -f "$GITHUB_WORKSPACE/current/tests/slo/Dockerfile" ]; then
+          if [ -f "$GITHUB_WORKSPACE/current/ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile" ]; then
             echo "Building current app image..."
             cd "$GITHUB_WORKSPACE/current"
 
@@ -125,7 +125,7 @@ jobs:
           fi
 
           # Build baseline version
-          if [ -f "$GITHUB_WORKSPACE/baseline/tests/slo/Dockerfile" ]; then
+          if [ -f "$GITHUB_WORKSPACE/baseline/ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile" ]; then
             echo "Building baseline app image..."
             cd "$GITHUB_WORKSPACE/baseline"
 
@@ -162,7 +162,7 @@ jobs:
         run: |
           DURATION=${{ inputs.slo_workload_duration_seconds || 600 }}
           READ_RPS=${{ inputs.slo_workload_read_max_rps || 1000 }}
-          WRITE_RPS=${{ inputs.slo_workload_write_max_rps || 1000 }}
+          WRITE_RPS=${{ inputs.slo_workload_write_max_rps || 100 }}
 
           ARGS="--connection-string grpc://ydb:2136/?database=/Root/testdb run \
             --metrics-push-url http://localhost:9090/api/v1/otlp/v1/metrics \

@@ -62,7 +62,8 @@ double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nItera
 
     for (int i=0; i<nIterations; i++) {
         //session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        session.ExplainDataQuery(query).GetValueSync();
+        auto result = session.ExplainDataQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
@@ -85,7 +86,8 @@ double TimeQuery(TString schema, TString query, int nIterations) {
 
     for (int i=0; i<nIterations; i++) {
         //session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        session.ExplainDataQuery(query).GetValueSync();
+        auto result = session.ExplainDataQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;

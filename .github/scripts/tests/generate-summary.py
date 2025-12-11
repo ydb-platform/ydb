@@ -652,21 +652,38 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     owner_area_mapping = load_owner_area_mapping()
     
     # Prepare history data for JavaScript (without status_description to reduce HTML size)
-    # Store full history with status_description in a separate JS object
+    # Store status_description separately - only for failed/error/mute entries to save space
     history_for_js = {}
+    history_descriptions = {}  # Separate object for status descriptions (only non-empty, failed/error/mute)
     if history:
         for test_name, test_history in history.items():
             history_for_js[test_name] = {}
+            history_descriptions[test_name] = {}
             for timestamp, hist_data in test_history.items():
-                history_for_js[test_name][str(timestamp)] = {
-                    "status": hist_data["status"],
+                timestamp_str = str(timestamp)
+                status = hist_data.get("status", "")
+                history_for_js[test_name][timestamp_str] = {
+                    "status": status,
                     "date": hist_data["datetime"],
                     "commit": hist_data["commit"],
                     "job_name": hist_data["job_name"],
                     "job_id": hist_data["job_id"],
-                    "branch": hist_data["branch"],
-                    "status_description": hist_data.get("status_description", "")  # Keep for JS access
+                    "branch": hist_data["branch"]
+                    # status_description removed to reduce HTML size - stored separately
                 }
+                # Store description separately (only for failed/error/mute and if not empty to save space)
+                desc = hist_data.get("status_description", "")
+                if desc and desc.strip() and status in ("failure", "error", "mute"):
+                    history_descriptions[test_name][timestamp_str] = desc
+    
+    # Prepare test descriptions for current tests (without embedding in HTML to reduce size)
+    # Store only for tests with errors (FAIL, ERROR, MUTE) and if not empty
+    test_descriptions = {}
+    for test in rows:
+        if test.status in (TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE):
+            desc = test.status_description
+            if desc and desc.strip():
+                test_descriptions[test.full_name] = desc
     
     content = env.get_template("summary_v2.html").render(
         suites=suites_dict,
@@ -675,7 +692,9 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
         flaky_suites=flaky_suites,  # Flaky tests grouped by suite
         test_counts=test_counts,
         history=history,  # Keep for template checks (test.full_name in history)
-        history_for_js=history_for_js,  # New: optimized history for JS
+        history_for_js=history_for_js,  # Optimized history for JS (without status_description)
+        history_descriptions=history_descriptions,  # Separate object for error descriptions (loaded on demand)
+        test_descriptions=test_descriptions,  # Separate object for current test error descriptions (loaded on demand)
         test_success_rates=test_success_rates,  # Success rates for pr-check and other runs
         build_preset=build_preset,
         buid_preset_params=buid_preset_params,

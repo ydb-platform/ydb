@@ -699,7 +699,7 @@
                     <span class="searchable-full-path">{{ test.full_name }}</span>
                     <span class="test-name" title="{{ test.full_name }}">{{ test.name }}</span>
                     {% if test.status_description %}
-                    <button class="error-button" onclick="toggleError(this)" title="Show/hide error">Error</button>
+                    <button class="error-button" onclick="toggleError(this)" data-test-name="{{ test.full_name }}" title="Show/hide error">Error</button>
                     {% endif %}
                     
                     <div class="test-meta">
@@ -750,8 +750,8 @@
                         
                         {% if test.status_description %}
                         <div class="error-section">
-                            <div class="error-content hidden">
-                                <pre><code class="language-{{ 'python' if '.py' in test.full_name else 'cpp' }}">{{ test.status_description|e }}</code></pre>
+                            <div class="error-content hidden" data-test-name="{{ test.full_name }}">
+                                <!-- Error description will be loaded on demand from testDescriptions -->
                             </div>
                         </div>
                         {% endif %}
@@ -810,8 +810,12 @@
     </div>
 
     <script>
-        // Preload history data to avoid embedding large status_description in HTML
+        // Preload history data (without status_description to reduce HTML size)
         const testHistory = {{ history_for_js | tojson }};
+        // Separate object for error descriptions (only for failed/error/mute entries)
+        const historyDescriptions = {{ history_descriptions | tojson }};
+        // Separate object for current test error descriptions (loaded on demand)
+        const testDescriptions = {{ test_descriptions | tojson }};
         const testSuccessRates = {{ test_success_rates | tojson }};
         const testCounts = {{ test_counts | tojson }};
         
@@ -820,14 +824,10 @@
         let currentFlakyStableFilter = 'all'; // 'all', 'flaky', or 'stable'
         
         function getHistoryError(testName, timestamp) {
-            if (!testHistory || !testHistory[testName]) return '';
-            // timestamp всегда строка в testHistory (ключи преобразованы в строки)
+            if (!historyDescriptions || !historyDescriptions[testName]) return '';
+            // timestamp всегда строка в historyDescriptions (ключи преобразованы в строки)
             const timestampStr = String(timestamp);
-            const histEntry = testHistory[testName][timestampStr];
-            if (histEntry && histEntry.status_description) {
-                return histEntry.status_description;
-            }
-            return '';
+            return historyDescriptions[testName][timestampStr] || '';
         }
 
         function toggleSuite(suiteId) {
@@ -1120,7 +1120,29 @@
         function toggleError(button) {
             const testItem = button.closest('.test-item');
             const errorContent = testItem.querySelector('.error-content');
+            const testName = button.getAttribute('data-test-name');
+            
             if (errorContent.classList.contains('hidden')) {
+                // Load error description on demand if not already loaded
+                if (!errorContent.hasAttribute('data-loaded')) {
+                    const errorText = testDescriptions[testName] || '';
+                    if (errorText) {
+                        const isPython = testName.includes('.py');
+                        const codeElement = document.createElement('code');
+                        codeElement.className = 'language-' + (isPython ? 'python' : 'cpp');
+                        codeElement.textContent = errorText;
+                        const preElement = document.createElement('pre');
+                        preElement.appendChild(codeElement);
+                        errorContent.appendChild(preElement);
+                        
+                        // Highlight syntax if Prism is available
+                        if (typeof Prism !== 'undefined') {
+                            Prism.highlightElement(codeElement);
+                        }
+                    }
+                    errorContent.setAttribute('data-loaded', 'true');
+                }
+                
                 errorContent.classList.remove('hidden');
                 testItem.classList.remove('error-hidden');
                 button.textContent = 'Hide';
@@ -1373,9 +1395,13 @@
             }
             const is_sanitizer = testItem.querySelector('.sanitizer-badge') !== null;
             let errorText = '';
+            // Try to get from loaded error content first
             const errorContent = testItem.querySelector('.error-content pre code');
             if (errorContent) {
                 errorText = errorContent.textContent;
+            } else {
+                // If not loaded yet, get from testDescriptions
+                errorText = testDescriptions[testName] || '';
             }
             let logUrls = {};
             const logLinks = testItem.querySelectorAll('.log-link');
@@ -1530,7 +1556,9 @@
             if (!testHistory || !testHistory[testName] || !testHistory[testName][timestamp]) return;
             
             const entry = testHistory[testName][timestamp];
-            const errorText = entry.status_description || '';
+            const timestampStr = String(timestamp);
+            // Get error text from separate historyDescriptions object
+            const errorText = getHistoryError(testName, timestampStr);
             
             // Find the test item to get log URLs
             const testItem = document.querySelector(`[data-test-name="${testName}"]`);

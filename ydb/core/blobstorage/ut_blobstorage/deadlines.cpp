@@ -66,14 +66,17 @@ Y_UNIT_TEST_SUITE(Deadlines) {
                 OrderNumberToNodeId[orderNum] = group.GetVSlotId(orderNum).GetNodeId();
             }
 
+            CheckStatus();
+            VDiskDelayEmulator->DefaultDelay = VDiskDelay;
+
+            Env->Runtime->FilterFunction = TDelayFilterFunctor{ .VDiskDelayEmulator = VDiskDelayEmulator };
+        }
+
+        void CheckStatus() {
             Env->Runtime->WrapInActorContext(Edge, [&] {
                 SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvStatus(TInstant::Max()));
             });
             auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(Edge, false, TInstant::Max());
-            VDiskDelayEmulator->DefaultDelay = VDiskDelay;
-
-            Env->Runtime->FilterFunction = TDelayFilterFunctor{ .VDiskDelayEmulator = VDiskDelayEmulator };
-
         }
 
         ~TestCtx() {
@@ -486,34 +489,63 @@ Y_UNIT_TEST_SUITE(Deadlines) {
 
     #undef TEST_DEADLINE
 
-    Y_UNIT_TEST(TestCustomPutTimeout) {
+    void TestCustomPutTimeout(TDuration maxTimeout, bool shouldFail) {
         TestCtx ctx(TBlobStorageGroupType::ErasureMirror3dc,
-                /*vdiskDelay=*/TDuration::Seconds(120),
-                /*maxPutTimeout=*/TDuration::Seconds(180));
+                /*vdiskDelay=*/TDuration::Seconds(70),
+                /*maxPutTimeout=*/maxTimeout);
         ctx.Initialize();
 
+        ui64 delayedTablet = 1000;
+        ui64 undelayedTablet = 2000;
+
+        ui64 ctr = 0;
+        auto sendPut = [&](ui64 tabletId) {
+            TString data = MakeData(10);
+            TLogoBlobID blobId(tabletId, 1, 1, 1, data.size(), ++ctr);
+            ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
+                    SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max(),
+                            NKikimrBlobStorage::TabletLog));
+            });
+        };
+
+        sendPut(delayedTablet);
+
         ctx.VDiskDelayEmulator->LogUnwrap = true;
-        ctx.VDiskDelayEmulator->AddHandler(TEvBlobStorage::TEvPut::EventType, [&](std::unique_ptr<IEventHandle>& ev) {
+        ctx.VDiskDelayEmulator->AddHandler(TEvBlobStorage::TEvVPutResult::EventType, [&](std::unique_ptr<IEventHandle>& ev) {
             ui32 nodeId = ev->Sender.NodeId();
-            if (nodeId < ctx.NodeCount) {
+            TLogoBlobID id = LogoBlobIDFromLogoBlobID(ev->Get<TEvBlobStorage::TEvVPutResult>()->Record.GetBlobID());
+            if (id.TabletID() == delayedTablet && nodeId < ctx.NodeCount) {
                 ctx.VDiskDelayEmulator->DelayMsg(ev);
                 return false;
             }
             return true;
         });
 
-        {
-            TString data = MakeData(10);
-            TLogoBlobID blobId(1, 1, 1, 1, data.size(), 123);
-            ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
-                    SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max(),
-                            NKikimrBlobStorage::TabletLog));
-            });
+        for (ui32 i = 0; i < 57; ++i) {
+            ctx.Env->Sim(TDuration::Seconds(1));
+            sendPut(undelayedTablet);
+            auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(ctx.Edge, false, TInstant::Max());
+            UNIT_ASSERT(res);
+            UNIT_ASSERT(res->Get()->Id.TabletID() == undelayedTablet);
         }
 
         {
             auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(ctx.Edge, false, TInstant::Max());
-            UNIT_ASSERT(res->Get()->Status == NKikimrProto::OK);
+            UNIT_ASSERT(res);
+            UNIT_ASSERT(res->Get()->Id.TabletID() == delayedTablet);
+            if (shouldFail) {
+                UNIT_ASSERT(res->Get()->Status != NKikimrProto::OK);
+            } else {
+                UNIT_ASSERT(res->Get()->Status == NKikimrProto::OK);
+            }
         }
+    }
+
+    Y_UNIT_TEST(TestDefaultPutTimeout) {
+        TestCustomPutTimeout(TDuration::Seconds(60), true);
+    }
+
+    Y_UNIT_TEST(TestCustomPutTimeout) {
+        TestCustomPutTimeout(TDuration::Seconds(90), false);
     }
 }

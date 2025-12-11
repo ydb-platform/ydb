@@ -12,6 +12,7 @@ namespace {
 class TScriptExecutionLeaseCheckActor : public TActorBootstrapped<TScriptExecutionLeaseCheckActor> {
     static constexpr TDuration CHECK_PERIOD = TDuration::Seconds(1);
     static constexpr TDuration REFRESH_NODES_PERIOD = TDuration::Minutes(1);
+    static constexpr TDuration STARTUP_TIMEOUT = TDuration::Seconds(15);
 
     enum class EWakeup {
         RefreshNodesInfo,
@@ -30,7 +31,7 @@ public:
         Become(&TScriptExecutionLeaseCheckActor::MainState);
 
         RefreshNodesInfo();
-        ScheduleRefreshScriptExecutions();
+        Schedule(STARTUP_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
     }
 
     STRICT_STFUNC(MainState,
@@ -64,6 +65,7 @@ public:
 
         const auto nodesCount = ev->Get()->AssignedNodes.size();
         RefreshLeasePeriod = std::max(nodesCount, static_cast<size_t>(1)) * CHECK_PERIOD;
+        HasNodesInfo = true;
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Handle discover tenant nodes result, number of nodes #" << nodesCount << ", new RefreshLeasePeriod: " << RefreshLeasePeriod);
     }
@@ -92,6 +94,11 @@ private:
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Do ScheduleRefreshScriptExecutions (WaitRefreshScriptExecutions: " << WaitRefreshScriptExecutions << "), next refresh after " << RefreshLeasePeriod);
         Schedule(RefreshLeasePeriod, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
 
+        if (!HasNodesInfo) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Skip ScheduleRefreshScriptExecutions, node info is not arrived");
+            return;
+        }
+
         if (!WaitRefreshScriptExecutions) {
             WaitRefreshScriptExecutions = true;
 
@@ -115,6 +122,7 @@ private:
 
     bool WaitRefreshNodes = false;
     bool WaitRefreshScriptExecutions = false;
+    bool HasNodesInfo = false;
 };
 
 }  // anonymous namespace

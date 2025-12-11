@@ -574,7 +574,13 @@ private:
     }
 
     void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        LOG_T("Got script progress from " << ev->Sender);
+        const bool isExecuting = IsExecuting();
+        LOG_T("Got script progress from " << ev->Sender << ", isExecuting: " << isExecuting);
+
+        if (!isExecuting) {
+            return;
+        }
+
         const auto& record = ev->Get()->Record;
         QueryPlan = record.GetQueryPlan();
         QueryAst = record.GetQueryAst();

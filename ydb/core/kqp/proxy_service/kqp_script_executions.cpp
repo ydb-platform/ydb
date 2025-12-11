@@ -3087,7 +3087,7 @@ public:
             State = EState::CancelScriptExecution;
         }
 
-        if (const TString message("Failed to deliver cancel request to destination (delivery problem)"); !ScheduleRetry(message)) {
+        if (const TString message(TStringBuilder() << "Failed to deliver cancel request to destination (delivery problem, reason: " << reason << ")"); !ScheduleRetry(message)) {
             Reply(Ydb::StatusIds::UNAVAILABLE, message);
         }
     }

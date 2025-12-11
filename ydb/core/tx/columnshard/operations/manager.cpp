@@ -41,6 +41,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
                 it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0)).first;
             }
             it->second.AddWriteOperation(operation);
+            it->second.OnWriteOperationFinished();
             LastWriteId = std::max(LastWriteId, operation->GetWriteId());
             if (!rowset.Next()) {
                 return false;
@@ -61,6 +62,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
                 lock.SetBroken();
                 LockFeatures.emplace(lockId, std::move(lock));
             }
+            LockFeatures.find(lockId)->second.SetTxId(txId);
             AFL_VERIFY(Tx2Lock.emplace(txId, lockId).second);
             if (!rowset.Next()) {
                 return false;

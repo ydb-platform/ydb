@@ -98,6 +98,14 @@ ydb_stream_logs() {
     done
 }
 
+ydb_truncate_logs() {
+    find "${YDB_WORKING_DIR}" -type f \( -name stdout -o -name stderr -o -name "logfile_*" \) 2>/dev/null | sort | while read -r log_file; do
+        if [ -n "$log_file" ]; then
+            echo "" > "$log_file"
+        fi
+    done
+}
+
 ydb_monitor_process() {
     local attempts=60
     local ydb_pid=""
@@ -217,15 +225,24 @@ ydb_custom_init_scripts() {
     fi
 }
 
+# Clear any existing log files to prevent duplicate output on restarts
+ydb_truncate_logs
+
 # Run pre-initialization scripts
 ydb_custom_pre_init_scripts
 
 # Start YDB in a background process
 log init "Starting YDB..."
 mkdir -p "${YDB_PDISKS_DIRECTORY}"
-/local_ydb deploy --ydb-working-dir /ydb_data --ydb-binary-path /ydbd --fixed-ports "$@"
+/local_ydb deploy --ydb-working-dir /ydb_data --ydb-binary-path /ydbd --fixed-ports "$@" 1> >(log_stream "deploy|stdout") 2> >(log_stream "deploy|stderr")
+deploy_exit_code=$?
 
-# Stream logs to stdout
+if [ $deploy_exit_code -ne 0 ]; then
+    log init "ERROR: local_ydb deploy failed with exit code $local_ydb_exit_code"
+    exit $local_ydb_exit_code
+fi
+
+# Stream logs
 ydb_stream_logs
 
 # Run initialization scripts after YDB is ready

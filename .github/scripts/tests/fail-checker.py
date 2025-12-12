@@ -29,10 +29,14 @@ def check_for_fail(paths: List[str], output_path: str):
                 name = result.get("name", "")
                 subtest_name = result.get("subtest_name", "")
                 
-                # Format: path/name/subtest_name
-                test_name = path_str
+                # Format: name.subtest_name (same as generate-summary.py and upload_tests_results.py)
                 if subtest_name:
-                    test_name = f"{path_str}/{name}/{subtest_name}" if name else f"{path_str}/{subtest_name}"
+                    if name:
+                        test_name = f"{name}.{subtest_name}"
+                    else:
+                        test_name = subtest_name
+                else:
+                    test_name = name or ""
                 
                 # Check for failures and errors
                 if status == "FAILED":

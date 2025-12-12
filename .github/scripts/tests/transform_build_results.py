@@ -209,9 +209,6 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
 
     # Process each suite
     for suite_name, results in suites.items():
-        traces = YTestReportTrace(ya_out_dir)
-        traces.load(suite_name)
-
         has_fail_tests = False
 
         for result in results:
@@ -224,11 +221,6 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                 name = name.replace(".py::", ".py.")
                 result["name"] = name  # Update the result to normalize the format
             
-            # Convert FAILED to ERROR for suite results
-            if result.get("suite") and result.get("status") == "FAILED":
-                result["status"] = "ERROR"
-                log_print(f"Converted suite FAILED to ERROR for {suite_name}")
-            
             test_name_for_mute = ""
             if subtest_name:
                 if name:
@@ -238,7 +230,7 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             else:
                 test_name_for_mute = name
 
-            # Convert ERROR to FAILED for all test results
+            # Convert ERROR to FAILED for all test results (including suite results)
             if result.get("status") == "ERROR":
                 result["status"] = "FAILED"
                 log_print(f"Converted ERROR to FAILED for {suite_name}/{test_name_for_mute}")
@@ -253,61 +245,42 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             is_fail = status in ("FAILED", "ERROR")
             has_fail_tests |= is_fail
 
-            # Add logs for failed tests
-            # First, try to get logs from ytest.report.trace
-            if is_fail and subtest_name and "." in subtest_name:
-                test_cls, test_method = subtest_name.rsplit(".", maxsplit=1)
-                logs = filter_empty_logs(traces.get_logs(test_cls, test_method))
-
-                if logs:
-                    log_print(f"add {list(logs.keys())!r} properties for {test_cls}.{test_method}")
-                    if "properties" not in result:
-                        result["properties"] = {}
-                    
-                    for name, fn in logs.items():
-                        url = save_log(ya_out_dir, fn, log_out_dir, log_url_prefix, log_truncate_size)
-                        result["properties"][f"url:{name}"] = url
-            
-            # Also process existing links from build-results-report (they are arrays with file paths)
+            # Process links from build-results-report (they are arrays with file/directory paths)
+            # Format: {"stdout": ["/path"], "stderr": ["/path"], "log": ["/path"], "logsdir": ["/path"]}
+            # We update links directly, replacing local paths with URLs
             if is_fail:
-                if "properties" not in result:
-                    result["properties"] = {}
+                if "links" not in result:
+                    result["links"] = {}
+                
                 original_links = result.get("links", {})
-                # links is an object with arrays: {"stdout": ["/path"], "stderr": ["/path"]}
-                for link_type in ["stdout", "stderr", "log"]:
-                    if link_type in original_links and isinstance(original_links[link_type], list):
-                        for file_path in original_links[link_type]:
+                
+                # Process all link types from links
+                for link_type, paths in original_links.items():
+                    if not isinstance(paths, list):
+                        continue
+                    
+                    for i, file_path in enumerate(paths):
+                        if link_type == "logsdir":
+                            # logsdir is a directory - archive it
+                            if os.path.isdir(file_path):
+                                url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, {file_path})
+                                # Replace first path with URL
+                                result["links"][link_type] = [url]
+                                break
+                        else:
+                            # Other links are files
                             if os.path.isfile(file_path):
                                 url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
-                                result["properties"][f"url:{link_type}"] = url
+                                # Replace first path with URL
+                                result["links"][link_type] = [url]
                                 break
 
-            # Add user properties
+            # Initialize properties dict only for user properties (if needed)
             if test_dir and path_str in user_properties:
                 if subtest_name and subtest_name in user_properties[path_str]:
                     if "properties" not in result:
                         result["properties"] = {}
                     result["properties"].update(user_properties[path_str][subtest_name])
-
-        # Add logsdir for failed tests
-        if has_fail_tests:
-            if not traces.logs_dir:
-                log_print(f"no logsdir for {suite_name}")
-                continue
-
-            url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, traces.logs_dir)
-
-            for result in results:
-                if "properties" not in result:
-                    result["properties"] = {}
-                result["properties"]["url:logsdir"] = url
-                # Also update links if it exists (for consistency)
-                if "links" in result:
-                    if "logsdir" not in result["links"]:
-                        result["links"]["logsdir"] = []
-                    # Add URL to links array (though properties is the primary source)
-                    if url not in result["links"]["logsdir"]:
-                        result["links"]["logsdir"].append(url)
 
     # Strip rich markup from all results (not just test results) to ensure cleanup
     for result in report.get("results", []):

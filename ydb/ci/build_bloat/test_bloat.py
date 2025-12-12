@@ -22,13 +22,21 @@ def generate(report_path, output_dir):
             continue
         
         suite_name = result.get("path", "")
+        name_part = result.get("name", "")
         subtest_name = result.get("subtest_name", "")
         
-        # Get duration from metrics
-        metrics = result.get("metrics", {})
-        duration = metrics.get("elapsed_time", 0)
+        # Get duration from result (same as generate-summary.py and upload_tests_results.py)
+        duration = result.get("duration", 0)
         
-        test_name = subtest_name if subtest_name else ""
+        # Format test_name: name.subtest_name (same as generate-summary.py and upload_tests_results.py)
+        if subtest_name:
+            if name_part:
+                test_name = f"{name_part}.{subtest_name}"
+            else:
+                test_name = subtest_name
+        else:
+            test_name = name_part or ""
+        
         # Remove parameterized test parameters
         test_name = test_name.split("[")[0]
 

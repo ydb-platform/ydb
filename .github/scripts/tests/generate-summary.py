@@ -169,24 +169,23 @@ class TestResult:
         else:
             status = TestStatus.PASS
         
-        # Extract log URLs from properties
-        # Properties (added by transform_build_results.py) contain URLs in format: {"url:log": "...", "url:stdout": "..."}
+        # Extract log URLs from links (updated by transform_build_results.py with URLs)
+        # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
         log_urls = {}
-        if properties and isinstance(properties, dict):
-            for key in ['Log', 'log', 'logsdir', 'stdout', 'stderr']:
-                url = properties.get(f"url:{key}") or properties.get(key)
-                if url:
-                    log_urls[key] = url
+        links = result.get("links", {})
+        if links and isinstance(links, dict):
+            for key in ['log', 'logsdir', 'stdout', 'stderr']:
+                if key in links and isinstance(links[key], list) and len(links[key]) > 0:
+                    url = links[key][0]  # Take first URL from array
+                    if url:
+                        log_urls[key] = url
         
-        # Extract elapsed time from metrics
-        elapsed = 0.0
-        if metrics and isinstance(metrics, dict):
-            elapsed_time = metrics.get("elapsed_time")
-            if elapsed_time is not None:
-                try:
-                    elapsed = float(elapsed_time)
-                except (TypeError, ValueError):
-                    elapsed = 0.0
+        # Get duration from result (same as upload_tests_results.py)
+        duration = result.get("duration", 0)
+        try:
+            elapsed = float(duration)
+        except (TypeError, ValueError):
+            elapsed = 0.0
         
         return cls(
             classname=classname,

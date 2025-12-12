@@ -121,15 +121,19 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
             # OK, PASSED, or any other status -> "passed"
             status = "passed"
         
-        # Extract log URLs from properties
-        # Properties are added by transform_build_results.py with URL format (converted from links)
-        properties = result.get("properties") or {}
+        # Extract log URLs from links (updated by transform_build_results.py with URLs)
+        # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
+        links = result.get("links", {})
         
-        # Get log URLs from properties (added by transform_build_results.py with URLs)
-        log_url = properties.get("url:log") or properties.get("log") or ""
-        logsdir_url = properties.get("url:logsdir") or properties.get("logsdir") or ""
-        stderr_url = properties.get("url:stderr") or properties.get("stderr") or ""
-        stdout_url = properties.get("url:stdout") or properties.get("stdout") or ""
+        def get_link_url(link_type):
+            if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
+                return links[link_type][0]  # Take first URL from array
+            return ""
+        
+        log_url = get_link_url("log")
+        logsdir_url = get_link_url("logsdir")
+        stderr_url = get_link_url("stderr")
+        stdout_url = get_link_url("stdout")
 
         # Build metadata JSON from available fields
         metadata = {

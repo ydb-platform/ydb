@@ -739,7 +739,7 @@ private:
         return GetIssues(table, itemPathId, backupTxId);
     }
 
-    template<typename TTable>
+    template <typename TTable>
     TMaybe<TString> GetIssues(const TTable& table, const TPathId& itemPathId, TTxId backupTxId) {
         if (!table->BackupHistory.contains(backupTxId)) {
             return TStringBuilder() << "Cannot find backup: " << backupTxId << " for table: " << itemPathId;
@@ -1268,7 +1268,7 @@ private:
             AllocateTxId(*exportInfo);
         } else {
             // None of the items is a table.
-            TDeque<ui32> tables;
+            TDeque<ui32> columnTables;
             for (ui32 i : xrange(exportInfo->Items.size())) {
                 auto& item = exportInfo->Items[i];
                 item.State = EState::Transferring;
@@ -1276,14 +1276,14 @@ private:
 
                 // TODO (hcpp): remove after implementing copying of column tables
                 if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
-                    tables.emplace_back(i);
+                    columnTables.emplace_back(i);
                 } else {
                     UploadScheme(*exportInfo, i, ctx);
                 }
             }
 
             exportInfo->State = EState::Transferring;
-            exportInfo->PendingItems = std::move(tables);
+            exportInfo->PendingItems = std::move(columnTables);
             for (ui32 itemIdx : exportInfo->PendingItems) {
                 AllocateTxId(*exportInfo, itemIdx);
             }
@@ -1359,7 +1359,7 @@ private:
                 AllocateTxId(*exportInfo);
             } else {
                 // None of the items is a table.
-                TDeque<ui32> tables;
+                TDeque<ui32> columnTables;
                 for (ui32 i : xrange(exportInfo->Items.size())) {
                     auto& item = exportInfo->Items[i];
                     item.State = EState::Transferring;
@@ -1367,14 +1367,14 @@ private:
 
                     // TODO (hcpp): remove after implementing copying of column tables
                     if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
-                        tables.emplace_back(i);
+                        columnTables.emplace_back(i);
                     } else {
                         UploadScheme(*exportInfo, i, ctx);
                     }
                 }
 
                 exportInfo->State = EState::Transferring;
-                exportInfo->PendingItems = std::move(tables);
+                exportInfo->PendingItems = std::move(columnTables);
                 for (ui32 itemIdx : exportInfo->PendingItems) {
                     AllocateTxId(*exportInfo, itemIdx);
                 }

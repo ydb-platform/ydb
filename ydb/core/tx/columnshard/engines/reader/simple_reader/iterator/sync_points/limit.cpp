@@ -55,26 +55,19 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         for (auto it : SourcesSequentially) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("SourcesSequentially", it->GetSourceId());
         }
-        if (FindIf(Iterators, [&](const auto& item) { return item.GetSourceId() == source->GetSourceId(); }) != Iterators.end()) {
-            AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId())("issue #28037", "portion is in heap")
-                ("front", Iterators.front().DebugString())
-                ("back", Iterators.back().DebugString())
-                ("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())
-                ("source_id", source->GetSourceId());
-        }
-        else if (FindIf(DebugOrder, [&](const auto& item) { return item.GetSourceId() == source->GetSourceId(); }) != DebugOrder.end()) {
-            AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId())("issue #28037", "known portion, not in heap")
-                ("front", Iterators.front().DebugString())
-                ("back", Iterators.back().DebugString())
-                ("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())
-                ("source_id", source->GetSourceId());
-        }
-        else {
-            AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId())("issue #28037", "unknown portion")
-                ("front", Iterators.front().DebugString())
-                ("back", Iterators.back().DebugString())
-                ("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())
-                ("source_id", source->GetSourceId());
+        if (FindIf(Iterators, [&](const auto& item) {
+                return item.GetSourceIdx() == source->GetSourceIdx();
+            }) != Iterators.end()) {
+            AFL_VERIFY(Iterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "portion is in heap")("front", Iterators.front().DebugString())
+                ("back", Iterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_idx", source->GetSourceIdx());
+        } else if (FindIf(DebugOrder, [&](const auto& item) {
+                return item.GetSourceIdx() == source->GetSourceIdx();
+            }) != Iterators.end()) {
+            AFL_VERIFY(Iterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "known portion, not in heap")("front", Iterators.front().DebugString())
+                ("back", Iterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_idx", source->GetSourceIdx());
+        } else {
+            AFL_VERIFY(Iterators.front().GetSourceIdx() == source->GetSourceIdx())("issue #28037", "unknown portion")("front", Iterators.front().DebugString())
+                ("back", Iterators.back().DebugString())("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())("source_idx", source->GetSourceIdx());
         }
     }
     std::pop_heap(Iterators.begin(), Iterators.end());

@@ -17,8 +17,8 @@ struct TStatSimple {
     ui64 BytesSize = 0;
 };
 
-struct TStatHyperLogLog {
-    // TODO:
+struct TStatSimpleColumn {
+    std::optional<NKikimrStat::TSimpleColumnStatistics> Data;
 };
 
 struct TStatCountMinSketch {
@@ -40,7 +40,7 @@ struct TResponse {
     bool Success = true;
     TRequest Req;
     TStatSimple Simple;
-    TStatHyperLogLog HyperLogLog;
+    TStatSimpleColumn SimpleColumn;
     TStatCountMinSketch CountMinSketch;
 };
 

@@ -777,7 +777,7 @@ private:
             AddNavigateEntry(navigate->ResultSet, req.PathId, true);
         }
 
-        ui64 cookie = request.StatType == EStatType::COUNT_MIN_SKETCH ? requestId : 0;
+        ui64 cookie = request.StatType == EStatType::SIMPLE ? 0 : requestId;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()), 0, cookie);
     }
 
@@ -836,9 +836,9 @@ private:
                 SyncNode();
             } else {
                 // In case of StatisticsAggregator tablet could not be found,
-                // we need to cancel the current requests. No need to delete CountMinSketch requests.
+                // we need to cancel the current requests. No need to delete column statistic requests.
                 for (auto it = InFlight.begin(); it != InFlight.end();) {
-                    if (EStatType::COUNT_MIN_SKETCH == it->second.StatType) {
+                    if (it->second.StatType != EStatType::SIMPLE) {
                         ++it;
                         continue;
                     }
@@ -1161,17 +1161,31 @@ private:
                 << ". Request not found in InFlight");
             return;
         }
-
         auto& request = itRequest->second;
-
         auto& response = request.StatResponses[requestIndex];
-        Y_ABORT_UNLESS(request.StatType == EStatType::COUNT_MIN_SKETCH);
 
         const auto msg = ev->Get();
-
         if (msg->Success && msg->Data) {
-            response.Success = true;
-            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(msg->Data->data(), msg->Data->size()));
+            switch (request.StatType) {
+            case EStatType::SIMPLE_COLUMN: {
+                NKikimrStat::TSimpleColumnStatistics data;
+                response.Success = data.ParseFromString(*msg->Data);
+                if (response.Success) {
+                    response.SimpleColumn.Data = std::move(data);
+                }
+                break;
+            }
+            case EStatType::COUNT_MIN_SKETCH:
+                response.Success = true;
+                response.CountMinSketch.CountMin.reset(
+                    TCountMinSketch::FromString(msg->Data->data(), msg->Data->size()));
+                break;
+            default:
+                SA_LOG_E("TEvLoadStatisticsQueryResponse, request id = " << requestId
+                    << ". Unexpected stat type: " << static_cast<int>(request.StatType));
+                response.Success = false;
+                break;
+            }
         } else {
             response.Success = false;
         }
@@ -1353,16 +1367,14 @@ private:
 
             str << "InFlight: " << InFlight.size();
             {
-                ui32 simple{ 0 };
-                ui32 countMin{ 0 };
-                for (auto it = InFlight.begin(); it != InFlight.end(); ++it) {
-                    if (it->second.StatType == EStatType::SIMPLE) {
-                        ++simple;
-                    } else if (it->second.StatType == EStatType::COUNT_MIN_SKETCH) {
-                        ++countMin;
-                    }
+                std::unordered_map<EStatType, size_t> counts;
+                for (const auto& [id, req] : InFlight) {
+                    ++counts[req.StatType];
                 }
-                str << "[SIMPLE: " << simple << ", COUNT_MIN_SKETCH: " << countMin << "]" << Endl;
+                str << "[SIMPLE: " << counts[EStatType::SIMPLE]
+                    << ", SIMPLE_COLUMN: " << counts[EStatType::SIMPLE_COLUMN]
+                    << ", COUNT_MIN_SKETCH: " << counts[EStatType::COUNT_MIN_SKETCH]
+                    << "]" << Endl;
             }
             str << "NextRequestId: " << NextRequestId << Endl;
 

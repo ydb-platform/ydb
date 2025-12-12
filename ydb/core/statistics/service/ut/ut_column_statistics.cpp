@@ -15,20 +15,49 @@ namespace NStat {
 
 namespace {
 
+const std::vector<TColumnDesc>& GetColumns() {
+    static const std::vector<TColumnDesc> ret {
+        {
+            .Name = "LowCardinalityString",
+            .TypeId = NScheme::NTypeIds::String,
+            .AddValue = [](ui64 key, Ydb::Value& row) {
+                row.add_items()->set_bytes_value(ToString(key % 10));
+            },
+        },
+    };
+
+    return ret;
+}
+
+ui16 GetTag(const std::string_view& columnName) {
+    if (columnName == "Key") {
+        return 1;
+    }
+
+    const auto& columns = GetColumns();
+    for (size_t i = 0; i < columns.size(); ++i) {
+        if (columns[i].Name == columnName) {
+            return i + 2; // Key column is 1, value columns go after.
+        }
+    }
+    UNIT_ASSERT_C(false, "unknown column " << columnName);
+    Y_UNREACHABLE();
+}
+
 TTableInfo PrepareTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
-    auto tableInfo = CreateColumnTable(env, databaseName, tableName, 1);
-    InsertDataIntoTable(env, databaseName, tableName, 1000);
-    return tableInfo;
+    auto info = CreateColumnTable(env, databaseName, tableName, 4, GetColumns());
+    InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber, GetColumns());
+    return info;
 }
 
 void ValidateCountMinSketch(TTestActorRuntime& runtime, const TPathId& pathId) {
     std::vector<TCountMinSketchProbes> expected = {
         {
-            .Tag = 1, // Key column
+            .Tag = GetTag("Key"),
             .Probes = std::nullopt,
         },
         {
-            .Tag = 2, // Value column
+            .Tag = GetTag("LowCardinalityString"),
             .Probes = { { {"1", 100}, {"2", 100}, {"10", 0} } }
         }
     };
@@ -66,6 +95,38 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         ValidateCountMinSketch(runtime, table1.PathId);
         ValidateCountMinSketch(runtime, table2.PathId);
+    }
+
+    Y_UNIT_TEST(SimpleColumnStatistics) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        auto responses = GetStatistics(runtime, tableInfo.PathId, EStatType::SIMPLE_COLUMN, {
+            GetTag("Key"),
+            GetTag("LowCardinalityString"),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 2);
+        for (const auto& resp : responses) {
+            UNIT_ASSERT(resp.Success);
+            UNIT_ASSERT(resp.SimpleColumn.Data);
+            UNIT_ASSERT_VALUES_EQUAL(resp.SimpleColumn.Data->GetCount(), 1000);
+        }
+
+        {
+            // Key column
+            const auto& data = *responses[0].SimpleColumn.Data;
+            UNIT_ASSERT_VALUES_EQUAL(data.GetCountDistinct(), 1000);
+        }
+
+        {
+            // LowCardinalityString column
+            const auto& data = *responses[1].SimpleColumn.Data;
+            UNIT_ASSERT_VALUES_EQUAL(data.GetCountDistinct(), 10);
+        }
     }
 }
 

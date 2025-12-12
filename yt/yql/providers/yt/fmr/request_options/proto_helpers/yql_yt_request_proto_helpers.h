@@ -41,6 +41,10 @@ NProto::TTableStats TableStatsToProto(const TTableStats& tableStats);
 
 TTableStats TableStatsFromProto(const NProto::TTableStats& protoTableStats);
 
+NProto::TSortedChunkStats SortedChunkStatsToProto(const TSortedChunkStats& sortedChunkStats);
+
+TSortedChunkStats SortedChunkStatsFromProto(const NProto::TSortedChunkStats& protoSortedChunkStats);
+
 NProto::TChunkStats ChunkStatsToProto(const TChunkStats& chunkStats);
 
 TChunkStats ChunkStatsFromProto(const NProto::TChunkStats& protoChunkStats);

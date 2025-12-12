@@ -223,7 +223,11 @@ private:
 
         if (rule.HasBlock12()) {
             Token(rule.GetBlock12().GetToken1());
-            return Unsupported("HAVING expr");
+            if (auto result = Build(rule.GetBlock12().GetRule_expr2(), EColumnRefState::Allow)) {
+                select.Having = std::move(*result);
+            } else {
+                return std::unexpected(result.error());
+            }
         }
 
         if (rule.HasBlock13()) {
@@ -417,16 +421,10 @@ private:
             case TRule_join_op_TAlt2_TBlock2::kAlt1:
                 break;
             case TRule_join_op_TAlt2_TBlock2::kAlt2:
-                YQL_ENSURE(IS_TOKEN(
-                    Ctx_.Settings.Antlr4Parser,
-                    block.GetAlt2().GetToken1().GetId(),
-                    INNER));
+                YQL_ENSURE(IS_TOKEN(block.GetAlt2().GetToken1().GetId(), INNER));
                 return EYqlJoinKind::Inner;
             case TRule_join_op_TAlt2_TBlock2::kAlt3:
-                YQL_ENSURE(IS_TOKEN(
-                    Ctx_.Settings.Antlr4Parser,
-                    block.GetAlt3().GetToken1().GetId(),
-                    CROSS));
+                YQL_ENSURE(IS_TOKEN(block.GetAlt3().GetToken1().GetId(), CROSS));
                 return EYqlJoinKind::Cross;
             case TRule_join_op_TAlt2_TBlock2::ALT_NOT_SET:
                 Y_UNREACHABLE();
@@ -443,10 +441,7 @@ private:
                         return Unsupported("(ONLY | SEMI)");
                     }
 
-                    YQL_ENSURE(IS_TOKEN(
-                        Ctx_.Settings.Antlr4Parser,
-                        block.GetAlt1().GetToken1().GetId(),
-                        LEFT));
+                    YQL_ENSURE(IS_TOKEN(block.GetAlt1().GetToken1().GetId(), LEFT));
                     return EYqlJoinKind::Left;
                 }
                 case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt2: {
@@ -456,23 +451,14 @@ private:
                         return Unsupported("(ONLY | SEMI)");
                     }
 
-                    YQL_ENSURE(IS_TOKEN(
-                        Ctx_.Settings.Antlr4Parser,
-                        block.GetAlt2().GetToken1().GetId(),
-                        RIGHT));
+                    YQL_ENSURE(IS_TOKEN(block.GetAlt2().GetToken1().GetId(), RIGHT));
                     return EYqlJoinKind::Right;
                 }
                 case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt3:
-                    YQL_ENSURE(IS_TOKEN(
-                        Ctx_.Settings.Antlr4Parser,
-                        block.GetAlt3().GetToken1().GetId(),
-                        EXCLUSION));
+                    YQL_ENSURE(IS_TOKEN(block.GetAlt3().GetToken1().GetId(), EXCLUSION));
                     return Unsupported("EXCLUSION");
                 case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::kAlt4:
-                    YQL_ENSURE(IS_TOKEN(
-                        Ctx_.Settings.Antlr4Parser,
-                        block.GetAlt4().GetToken1().GetId(),
-                        FULL));
+                    YQL_ENSURE(IS_TOKEN(block.GetAlt4().GetToken1().GetId(), FULL));
                     return Unsupported("FULL");
                 case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::ALT_NOT_SET:
                     Y_UNREACHABLE();
@@ -480,10 +466,7 @@ private:
         }
 
         if (alt1.HasBlock2()) {
-            YQL_ENSURE(IS_TOKEN(
-                Ctx_.Settings.Antlr4Parser,
-                alt1.GetBlock2().GetToken1().GetId(),
-                OUTER));
+            YQL_ENSURE(IS_TOKEN(alt1.GetBlock2().GetToken1().GetId(), OUTER));
             return Unsupported("OUTER");
         }
 

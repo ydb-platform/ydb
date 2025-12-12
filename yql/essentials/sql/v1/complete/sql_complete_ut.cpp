@@ -63,8 +63,7 @@ TLexerSupplier MakePureLexerSupplier() {
     lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
     return [lexers = std::move(lexers)](bool ansi) {
         return NSQLTranslationV1::MakeLexer(
-            lexers, ansi, /* antlr4 = */ true,
-            NSQLTranslationV1::ELexerFlavor::Pure);
+            lexers, ansi, NSQLTranslationV1::ELexerFlavor::Pure);
     };
 }
 

@@ -418,7 +418,6 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TCredentials::TPtr Credentials = MakeIntrusive<TCredentials>();
     IModuleResolver::TPtr Modules;
     IUrlListerManagerPtr UrlListerManager;
-    bool UseUrlListerForFolder = false;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
@@ -484,6 +483,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool EnableStandaloneLineage = false;
     TMaybe<bool> CorrectLineage;
     TMaybe<bool> CorrectStandaloneLineage;
+    TMaybe<ui32> LineageSize;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;

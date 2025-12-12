@@ -177,6 +177,11 @@ public:
         return AlignUp(Chunks_.size() * sizeof(TByte), NBitmapDetail::SerializationAlignment);
     }
 
+    size_t GetMemoryUsage() const
+    {
+        return Chunks_.capacity() * sizeof(TByte);
+    }
+
 private:
     TCompactVector<TByte, NBitmapDetail::SerializationAlignment> Chunks_;
     size_t BitSize_ = 0;

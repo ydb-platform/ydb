@@ -150,7 +150,12 @@ extern "C" {  // portability definitions are in global scope, not a namespace
 #include <arm_neon.h>
 #endif
 
-#if !CROARING_REGULAR_VISUAL_STUDIO
+#if defined(__e2k__)
+// we have an e2k (Elbrus-2000) processor
+#define CROARING_IS_E2K 1
+#endif
+
+#if !CROARING_REGULAR_VISUAL_STUDIO && !defined(CROARING_IS_E2K)
 /* Non-Microsoft C/C++-compatible compiler, assumes that it supports inline
  * assembly */
 #define CROARING_INLINE_ASM 1

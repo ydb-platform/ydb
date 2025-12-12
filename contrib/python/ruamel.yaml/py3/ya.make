@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.17.40)
+VERSION(0.18.16)
 
 LICENSE(MIT)
 
@@ -22,12 +22,14 @@ PY_SRCS(
     ruamel/yaml/configobjwalker.py
     ruamel/yaml/constructor.py
     ruamel/yaml/cyaml.py
+    ruamel/yaml/docinfo.py
     ruamel/yaml/dumper.py
     ruamel/yaml/emitter.py
     ruamel/yaml/error.py
     ruamel/yaml/events.py
     ruamel/yaml/loader.py
     ruamel/yaml/main.py
+    ruamel/yaml/mergevalue.py
     ruamel/yaml/nodes.py
     ruamel/yaml/parser.py
     ruamel/yaml/reader.py

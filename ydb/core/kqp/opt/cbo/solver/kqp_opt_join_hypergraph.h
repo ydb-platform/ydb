@@ -287,7 +287,7 @@ public:
         edge.Right = newRight;
     }
 
-private:
+// private:
     /* Attach edges to nodes */
     void AddEdgeImpl(TEdge edge) {
         Edges_.push_back(edge);
@@ -303,7 +303,7 @@ private:
         }
     }
 
-private:
+// private:
     THashMap<TString, size_t> NodeIdByRelationName_;
 
     TVector<TNode> Nodes_;

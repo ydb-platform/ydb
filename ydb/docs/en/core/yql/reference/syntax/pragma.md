@@ -429,7 +429,7 @@ SELECT $foo;
 {% endif %}
 
 
-{% if backend_name == "YDB" %}
+{% {% if backend_name == "YDB" %} %}
 
 ## YDB
 

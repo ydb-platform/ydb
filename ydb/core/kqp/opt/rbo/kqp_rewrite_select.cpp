@@ -390,9 +390,9 @@ TExprNode::TPtr BuildSort(TExprNode::TPtr input, TExprNode::TPtr sort,
             const TString aggColName = GetColumnNameFromGroupRef(groupRef, groupByKeysExpressionsMap);
             // clang-format off
             sortLambda = Build<TCoLambda>(ctx, input->Pos())
-                .Args(sortLambda.Args())
+                .Args({"arg"})
                 .Body<TCoMember>()
-                    .Struct(sortLambda.Args().Arg(0))
+                    .Struct("arg")
                     .Name<TCoAtom>()
                         .Value(aggColName)
                     .Build()
@@ -811,25 +811,10 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         // Here we create a new column with non optional type,
                         // because aggregation for optional and non optional is different.
                         // count(*) counts nulls, count(a) does not.
-                        // clang-format off
-                        exprBody = Build<TCoAddMember>(ctx, node->Pos())
-                            .Struct(lambda.Args().Arg(0))
-                            .Name<TCoAtom>()
-                                .Value(aggColName.GetFullName())
-                            .Build()
-                            .Item<TCoUint64>()
-                                .Literal().Build("1")
-                            .Build()
-                        .Done().Ptr();
 
-                        exprBody = Build<TCoMember>(ctx, node->Pos())
-                            .Struct(exprBody)
-                            .Name<TCoAtom>()
-                                .Value(aggColName.GetFullName())
-                            .Build()
-                        .Done().Ptr();
-                        // clang-format on
+                        exprBody = Build<TCoUint64>(ctx, node->Pos()).Literal().Build("1").Done().Ptr();
                     }
+
 
                     // clang-format off
                     auto exprLambda = Build<TCoLambda>(ctx, node->Pos())

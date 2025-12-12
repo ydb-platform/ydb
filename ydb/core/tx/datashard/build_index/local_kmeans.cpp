@@ -80,10 +80,14 @@ protected:
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
     bool IsEmpty = false;
+    const ui32 OverlapClusters = 0;
+    const double OverlapRatio = 0;
+    bool OutForeign = false;
+    bool InForeign = false;
+    NTable::TPos IsForeignPos = 0;
 
     const TIndexBuildScanSettings ScanSettings;
 
-    NTable::TTag EmbeddingTag;
     TTags ScanTags;
 
     TUploadStatus UploadStatus;
@@ -104,6 +108,7 @@ protected:
     bool IsExhausted = false;
 
     std::unique_ptr<IClusters> Clusters;
+    std::vector<std::pair<ui32, double>> TmpClusters;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -126,6 +131,8 @@ public:
         , Uploader(request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
         , K(request.GetK())
+        , OverlapClusters(request.GetOverlapClusters() ? request.GetOverlapClusters() : 1)
+        , OverlapRatio(request.GetOverlapRatio())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
@@ -134,9 +141,16 @@ public:
     {
         LOG_I("Create " << Debug());
 
+        const bool toBuild = (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
+            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD);
+        InForeign = OverlapClusters > 1 && (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
+            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING);
+        OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
+
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
-        ScanTags = MakeScanTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
+        ScanTags = MakeScanTags(table, embedding, data, toBuild,
+            EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
         {
             Ydb::Type type;
@@ -148,7 +162,7 @@ public:
             (*levelTypes)[2] = {NTableIndex::NKMeans::CentroidColumn, type};
             LevelBuf = Uploader.AddDestination(request.GetLevelName(), std::move(levelTypes));
         }
-        OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data));
+        OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data, {}, OutForeign));
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
@@ -433,6 +447,14 @@ protected:
 
     void FeedSample(TArrayRef<const TCell> row)
     {
+        if (InForeign) {
+            bool foreign = row.at(IsForeignPos).AsValue<bool>();
+            if (foreign) {
+                // Skip rows from "non-domestic" clusters to not affect K-means centroids
+                return;
+            }
+        }
+
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!Clusters->IsExpectedSize(embedding)) {
             return;
@@ -445,37 +467,56 @@ protected:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
+        if (InForeign) {
+            bool foreign = row.at(IsForeignPos).AsValue<bool>();
+            if (foreign) {
+                // Skip rows from "non-domestic" clusters to not affect K-means centroids
+                return;
+            }
+        }
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }
     }
 
+    void FeedFinal(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
+        TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
+    {
+        Clusters->FindClusters(row.at(EmbeddingPos).AsRef(), TmpClusters, OverlapClusters, OverlapRatio);
+        if (OutForeign) {
+            bool foreign = false;
+            if (InForeign) {
+                foreign = row.at(IsForeignPos).AsValue<bool>();
+            }
+            for (auto& [pos, distance]: TmpClusters) {
+                AddRowToDataWithForeign(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, foreign, distance, isPostingLevel);
+                foreign = true;
+            }
+        } else {
+            for (auto& [pos, _]: TmpClusters) {
+                AddRowToData(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, isPostingLevel);
+            }
+        }
+    }
+
     void FeedMainToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            AddRowToData(*OutputBuf, Child + *pos, key, row, key, false);
-        }
+        FeedFinal(row, key, row.Slice(DataPos), key, false);
     }
 
     void FeedMainToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            AddRowToData(*OutputBuf, Child + *pos, key, row.Slice(DataPos), key, true);
-        }
+        FeedFinal(row, key, row.Slice(DataPos), key, true);
     }
 
     void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            AddRowToData(*OutputBuf, Child + *pos, key.Slice(1), row, key, false);
-        }
+        FeedFinal(row, key.Slice(1), row.Slice(DataPos), key, false);
     }
 
     void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            AddRowToData(*OutputBuf, Child + *pos, key.Slice(1), row.Slice(DataPos), key, true);
-        }
+        FeedFinal(row, key.Slice(1), row.Slice(DataPos), key, true);
     }
 
     void FormLevelRows()

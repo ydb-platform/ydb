@@ -302,6 +302,12 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
             if (settings->Clusters != 80) {
                 continue;
             }
+            if (settings->OverlapClusters != 3) {
+                continue;
+            }
+            if (settings->OverlapRatio != 1.2) {
+                continue;
+            }
             return true;
         }
         return false;
@@ -690,7 +696,7 @@ void TestRestoreTableWithIndex(
                 PRIMARY KEY (Key),
                 INDEX %s GLOBAL USING vector_kmeans_tree
                     ON (Group, Value)
-                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80, overlap_clusters=3, overlap_ratio="1.2")
             );)", table, index);
         } else {
             query = Sprintf(R"(CREATE TABLE `%s` (
@@ -700,7 +706,7 @@ void TestRestoreTableWithIndex(
                 PRIMARY KEY (Key),
                 INDEX %s GLOBAL USING vector_kmeans_tree
                     ON (Value)
-                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80, overlap_clusters=3, overlap_ratio="1.2")
             );)", table, index);
         }
     } else {

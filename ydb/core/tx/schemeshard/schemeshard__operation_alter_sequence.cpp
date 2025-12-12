@@ -532,6 +532,7 @@ public:
 
         sequencePath->PathState = TPathElement::EPathState::EPathStateAlter;
         sequencePath->LastTxId = OperationId.GetTxId();
+        context.SS->PersistSequenceAlter(db, dstPath->PathId, *alterData);
         context.SS->PersistLastTxId(db, sequencePath);
         context.SS->PersistTxState(db, OperationId);
 

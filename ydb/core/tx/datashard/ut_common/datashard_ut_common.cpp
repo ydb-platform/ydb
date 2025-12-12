@@ -2608,6 +2608,8 @@ namespace {
                 out << parser.GetTimestamp64().time_since_epoch().count();
                 break;
             PRINT_PRIMITIVE(String);
+            PRINT_PRIMITIVE(Bool);
+            PRINT_PRIMITIVE(Double);
             PRINT_PRIMITIVE(Utf8);
             PRINT_PRIMITIVE(DyNumber);
 

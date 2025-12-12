@@ -4781,10 +4781,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeSample::Id>();
                     fillBuildInfoByIdSafe(id, "KMeansTreeSample", [&](TIndexBuildInfo& buildInfo) {
-                        buildInfo.Sample.Add(
-                            rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
-                            rowset.GetValue<Schema::KMeansTreeSample::Data>()
-                        );
+                        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Filter ||
+                            buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::FilterBorders) {
+                            buildInfo.KMeans.FilterBorderRows.push_back(rowset.GetValue<Schema::KMeansTreeSample::Data>());
+                        } else {
+                            buildInfo.Sample.Add(
+                                rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
+                                rowset.GetValue<Schema::KMeansTreeSample::Data>()
+                            );
+                        }
                     });
                     sampleCount++;
 

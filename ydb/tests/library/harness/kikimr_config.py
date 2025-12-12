@@ -15,6 +15,7 @@ import yatest
 
 from ydb.core.protos import config_pb2
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.harness.kikimr_runner import ensure_path_exists
 
 from . import tls_tools
 from .kikimr_port_allocator import KikimrPortManagerPortAllocator
@@ -742,6 +743,7 @@ class KikimrConfigGenerator(object):
                     pdisk_size_gb = disk_size / (1024 * 1024 * 1024)
                     pdisk_path = "SectorMap:%d:%d" % (pdisk_id, pdisk_size_gb)
                 elif self.__pdisks_directory:
+                    ensure_path_exists(self.__pdisks_directory)
                     pdisk_path = os.path.join(self.__pdisks_directory, str(pdisk_id))
                 else:
                     tmp_file = tempfile.NamedTemporaryFile(prefix="pdisk{}".format(pdisk_id), suffix=".data",

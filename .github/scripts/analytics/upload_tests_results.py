@@ -112,10 +112,7 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
         if result.get("muted", False):
             status = "mute"
         elif status_str == "FAILED":
-            if error_type == "REGULAR":
-                status = "failure"
-            else:
-                status = "error"
+            status = "failure"
         elif status_str == "ERROR":
             status = "error"
         elif status_str == "SKIPPED":

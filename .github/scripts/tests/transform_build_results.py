@@ -238,6 +238,11 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             else:
                 test_name_for_mute = name
 
+            # Convert ERROR to FAILED for all test results
+            if result.get("status") == "ERROR":
+                result["status"] = "FAILED"
+                log_print(f"Converted ERROR to FAILED for {suite_name}/{test_name_for_mute}")
+
             # Check if test should be muted
             if mute_check(suite_name, test_name_for_mute):
                 log_print("mute", suite_name, test_name_for_mute)

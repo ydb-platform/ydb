@@ -161,7 +161,7 @@ class TestResult:
         if is_muted:
             status = TestStatus.MUTE
         elif status_str == "FAILED":
-            status = TestStatus.FAIL if error_type == "REGULAR" else TestStatus.ERROR
+            status = TestStatus.FAIL
         elif status_str == "ERROR":
             status = TestStatus.ERROR
         elif status_str == "SKIPPED":

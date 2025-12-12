@@ -429,7 +429,7 @@ SELECT $foo;
 {% endif %}
 
 
-{% {% if backend_name == "YDB" %} %}
+{% if backend_name == "YDB" %}
 
 ## YDB
 
@@ -460,8 +460,6 @@ SELECT $foo;
 An experimental pragma that allows you to reduce the isolation level of the current YDB transaction.
 
 {% endif %}
-
-
 
 {% if tech %}
 

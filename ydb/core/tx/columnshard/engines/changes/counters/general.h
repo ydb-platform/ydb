@@ -45,15 +45,15 @@ public:
             MovePortionsToLevel.emplace(
                 i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "move").CreateSubGroup("direction", "to")));
         }
-        HistogramRepackPortionsRawBytes = TBase::GetHistogram("RepackPortions/Raw/Bytes", NMonitoring::ExponentialHistogram(18, 1024, 2));
+        HistogramRepackPortionsRawBytes = TBase::GetHistogram("RepackPortions/Raw/Bytes", NMonitoring::ExponentialHistogram(18, 2, 1024));
         HistogramRepackPortionsBlobBytes =
             TBase::GetHistogram("RepackPortions/Blob/Bytes", NMonitoring::ExponentialHistogram(18, 1024, 2));
-        HistogramRepackPortionsCount = TBase::GetHistogram("RepackPortions/Count", NMonitoring::ExponentialHistogram(15, 1, 2));
-        HistogramRepackPortionsRows = TBase::GetHistogram("RepackPortions/Rows", NMonitoring::ExponentialHistogram(15, 1, 2));
-        HistogramBlobsWrittenCount = TBase::GetHistogram("BlobsWritten/Count", NMonitoring::ExponentialHistogram(15, 1, 2));
-        HistogramBlobsWrittenBytes = TBase::GetHistogram("BlobsWritten/Bytes", NMonitoring::ExponentialHistogram(18, 1024, 2));
-        HistogramCompactionDuration = TBase::GetHistogram("Compaction/Duration", NMonitoring::ExponentialHistogram(15, 2, 10));
-        HistogramTaskGenerationDuration = TBase::GetHistogram("TaskGeneration/Duration", NMonitoring::ExponentialHistogram(15, 2, 10));
+        HistogramRepackPortionsCount = TBase::GetHistogram("RepackPortions/Count", NMonitoring::ExponentialHistogram(15, 2));
+        HistogramRepackPortionsRows = TBase::GetHistogram("RepackPortions/Rows", NMonitoring::ExponentialHistogram(15, 2));
+        HistogramBlobsWrittenCount = TBase::GetHistogram("BlobsWritten/Count", NMonitoring::ExponentialHistogram(15, 2));
+        HistogramBlobsWrittenBytes = TBase::GetHistogram("BlobsWritten/Bytes", NMonitoring::ExponentialHistogram(18, 2, 1024));
+        HistogramCompactionDuration = TBase::GetHistogram("Compaction/Duration", NMonitoring::ExponentialHistogram(15, 10));
+        HistogramTaskGenerationDuration = TBase::GetHistogram("TaskGeneration/Duration", NMonitoring::ExponentialHistogram(15, 10));
         HistogramTaskGenerationCount = TBase::GetHistogram("TaskGeneration/Count", NMonitoring::LinearHistogram(20, 0, 1));
     }
 

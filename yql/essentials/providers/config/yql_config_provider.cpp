@@ -1097,11 +1097,11 @@ private:
 
             Types_.NormalizeDependsOn = res;
         } else if (name == "UseUrlListerForFolder" || name == "DisableUseUrlListerForFolder") {
+            // TODO: remove
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
-            Types_.UseUrlListerForFolder = ("UseUrlListerForFolder" == name);
         } else if (name == "EarlyExpandSeq" || name == "DisableEarlyExpandSeq") {
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -1342,91 +1342,33 @@ private:
         TStringBuf url = args[1];
         TStringBuf tokenName = args.size() == 3 ? args[2] : TStringBuf();
 
-        if (Types_.UseUrlListerForFolder) {
-            TStringBuf token;
-            if (tokenName) {
-                if (auto cred = Types_.Credentials->FindCredential(tokenName)) {
-                    token = cred->Content;
-                } else {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << tokenName << "' for folder."));
-                    return false;
-                }
-            }
-
-            if (!Types_.UrlListerManager) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "UrlListerManager is not initialized, unable to add folder by url"));
-                return false;
-            }
-
-            TString separator = "/";
-            TVector<TUrlListEntry> entries;
-            try {
-                entries = Types_.UrlListerManager->ListUrlRecursive(TString(url), TString(tokenName), separator, Types_.FolderSubDirsLimit);
-            } catch (const std::exception& e) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "failed to list URL '" << url << "', details: " << e.what()));
-                return false;
-            }
-
-            for (const auto& entry : entries) {
-                if (!AddFileByUrlImpl(TStringBuilder() << prefix << entry.Name, entry.Url, token, pos, ctx)) {
-                    return false;
-                }
-            }
-        } else {
-            TStringBuf token;
-            if (tokenName) {
-                if (auto cred = Types_.Credentials->FindCredential(tokenName)) {
-                    token = cred->Content;
-                } else {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << tokenName << "' for folder."));
-                    return false;
-                }
-            } else if (auto cred = Types_.Credentials->FindCredential("default_sandbox")) {
+        TStringBuf token;
+        if (tokenName) {
+            if (auto cred = Types_.Credentials->FindCredential(tokenName)) {
                 token = cred->Content;
+            } else {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name '" << tokenName << "' for folder."));
+                return false;
             }
+        }
 
-            std::vector<std::pair<TString, TString>> queue;
-            queue.emplace_back(prefix, url);
+        if (!Types_.UrlListerManager) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << "UrlListerManager is not initialized, unable to add folder by url"));
+            return false;
+        }
 
-            size_t count = 0;
-            while (!queue.empty()) {
-                auto [prefix, url] = queue.back();
-                queue.pop_back();
+        TString separator = "/";
+        TVector<TUrlListEntry> entries;
+        try {
+            entries = Types_.UrlListerManager->ListUrlRecursive(TString(url), TString(tokenName), separator, Types_.FolderSubDirsLimit);
+        } catch (const std::exception& e) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << "failed to list URL '" << url << "', details: " << e.what()));
+            return false;
+        }
 
-                YQL_CLOG(DEBUG, ProviderConfig) << "Listing sandbox folder " << prefix << ": " << url;
-                NJson::TJsonValue content;
-                if (!ListSandboxFolder(url, token, pos, ctx, content)) {
-                    return false;
-                }
-
-                for (const auto& file : content.GetMap()) {
-                    const auto& fileAttrs = file.second.GetMap();
-                    auto fileUrl = fileAttrs.FindPtr("url");
-                    if (fileUrl) {
-                        TString type = "REGULAR";
-                        if (auto t = fileAttrs.FindPtr("type")) {
-                            type = t->GetString();
-                        }
-                        TStringBuilder alias;
-                        if (!prefix.empty()) {
-                            alias << prefix << "/";
-                        }
-                        alias << file.first;
-                        if (type == "REGULAR") {
-                            if (!AddFileByUrlImpl(alias, TStringBuf(MakeHttps(fileUrl->GetString())), token, pos, ctx)) {
-                                return false;
-                            }
-                        } else if (type == "DIRECTORY") {
-                            queue.emplace_back(alias, fileUrl->GetString());
-                            if (++count > Types_.FolderSubDirsLimit) {
-                                ctx.AddError(TIssue(pos, TStringBuilder() << "Sandbox resource has too many subfolders. Limit is " << Types_.FolderSubDirsLimit));
-                                return false;
-                            }
-                        } else {
-                            YQL_CLOG(WARN, ProviderConfig) << "Got unknown sandbox item type: " << type << ", name=" << alias;
-                        }
-                    }
-                }
+        for (const auto& entry : entries) {
+            if (!AddFileByUrlImpl(TStringBuilder() << prefix << entry.Name, entry.Url, token, pos, ctx)) {
+                return false;
             }
         }
 

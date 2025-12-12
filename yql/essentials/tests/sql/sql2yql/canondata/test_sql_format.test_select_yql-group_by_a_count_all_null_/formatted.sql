@@ -1,4 +1,4 @@
-/* custom error: List items types isn't same: Tuple<Int32,Null> and Tuple<Int32,Int32> */
+/* custom error: List items types isn't same: Tuple<Int32,Int32> and Tuple<Int32,Null> */
 PRAGMA YqlSelect = 'force';
 
 -- FIXME(YQL-20436): bad test, postgres can.

@@ -74,4 +74,7 @@ TIssue MakeIssueFromYtError(const NYT::TYtError& e, TStringBuf what, TPosition p
 
 TString GenerateInputQuery(const TExprNode::TPtr& qlFilterNode);
 
+TString UploadBinarySnapshotToYt(const TString& remotePath, NYT::IClientPtr client, NYT::ITransactionPtr snapshotTx,
+    const TString& localPath, TDuration expirationInterval, const TMaybe<NYT::TNode>& transactionSpec = Nothing());
+
 } // NYql

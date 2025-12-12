@@ -317,7 +317,7 @@ public:
 
     void Set(const TError& error)
     {
-        DoTrySet<true>(error);
+        DoTrySet<true>(error, Guard(SpinLock_));
     }
 
     bool TrySet(const TError& error)
@@ -328,7 +328,7 @@ public:
         }
 
         // Slow path.
-        return DoTrySet<false>(error);
+        return DoTrySet<false>(error, Guard(SpinLock_));
     }
 
     TFutureCallbackCookie Subscribe(TVoidResultHandler handler);
@@ -403,25 +403,25 @@ protected:
     virtual void ResetResult();
     virtual void SetResultError(const TError& error);
     virtual bool TrySetError(const TError& error);
+    virtual void SetErrorGuarded(const TError& error, TGuard<NThreading::TSpinLock>&& guard);
 
     template <bool MustSet, class F>
-    bool DoRunSetter(F setter)
+    bool DoRunSetter(F setter, TGuard<NThreading::TSpinLock>&& guard)
     {
-        NThreading::TEvent* readyEvent = nullptr;
-        bool canceled;
-        {
-            auto guard = Guard(SpinLock_);
-            YT_ASSERT(!AbandonedUnset_);
-            if (MustSet && !Canceled_) {
-                YT_VERIFY(!Set_);
-            } else if (Set_) {
-                return false;
-            }
-            RunFutureHandler(setter);
-            Set_ = true;
-            canceled = Canceled_;
-            readyEvent = ReadyEvent_.get();
+        YT_ASSERT_SPINLOCK_AFFINITY(*guard.GetMutex());
+        YT_ASSERT(!AbandonedUnset_);
+        if (MustSet && !Canceled_) {
+            YT_VERIFY(!Set_);
+        } else if (Set_) {
+            return false;
         }
+        RunFutureHandler(setter);
+        Set_ = true;
+
+        bool canceled = Canceled_;
+        NThreading::TEvent* readyEvent = ReadyEvent_.get();
+
+        guard.Release();
 
         if (readyEvent) {
             readyEvent->NotifyAll();
@@ -437,14 +437,16 @@ protected:
     }
 
     template <bool MustSet>
-    bool DoTrySet(const TError& error)
+    bool DoTrySet(const TError& error, TGuard<NThreading::TSpinLock>&& guard)
     {
         // Calling subscribers may release the last reference to this.
         TIntrusivePtr<TFutureState<void>> this_(this);
 
-        return DoRunSetter<MustSet>([&] {
-            SetResultError(error);
-        });
+        return DoRunSetter<MustSet>(
+            [&] {
+                SetResultError(error);
+            },
+            std::move(guard));
     }
 
     virtual bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard);
@@ -499,17 +501,19 @@ private:
     }
 
     template <bool MustSet, class U>
-    bool DoTrySet(U&& value) noexcept
+    bool DoTrySet(U&& value, TGuard<NThreading::TSpinLock>&& guard) noexcept
     {
         // Calling subscribers may release the last reference to this.
         TIntrusivePtr<TFutureState<void>> this_(this);
 
-        if (!DoRunSetter<MustSet>([&] {
-            Result_.emplace(std::forward<U>(value));
-            if (!Result_->IsOK()) {
-                ResultError_ = *Result_;
-            }
-        }))
+        if (!DoRunSetter<MustSet>(
+            [&] {
+                Result_.emplace(std::forward<U>(value));
+                if (!Result_->IsOK()) {
+                    ResultError_ = *Result_;
+                }
+            },
+            std::move(guard)))
         {
             return false;
         }
@@ -552,6 +556,11 @@ private:
     bool TrySetError(const TError& error) override
     {
         return TrySet(error);
+    }
+
+    void SetErrorGuarded(const TError& error, TGuard<NThreading::TSpinLock>&& guard) override
+    {
+        DoTrySet<true>(error, std::move(guard));
     }
 
     void ResetResult() override
@@ -639,7 +648,7 @@ public:
     template <class U>
     void Set(U&& value)
     {
-        DoTrySet<true>(std::forward<U>(value));
+        DoTrySet<true>(std::forward<U>(value), Guard(SpinLock_));
     }
 
     template <class U>
@@ -651,7 +660,7 @@ public:
         }
 
         // Slow path.
-        return DoTrySet<false>(std::forward<U>(value));
+        return DoTrySet<false>(std::forward<U>(value), Guard(SpinLock_));
     }
 
     TFutureCallbackCookie Subscribe(TResultHandler handler)

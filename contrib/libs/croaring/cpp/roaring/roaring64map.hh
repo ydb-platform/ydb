@@ -1250,9 +1250,11 @@ class Roaring64Map {
     }
 
     /**
-     * For advanced users only.
+     * For advanced users only. This function is unsafe. You must ensure that
+     * the provided buffer is 32-byte aligned.
      */
     static const Roaring64Map frozenView(const char *buf) {
+        // We do not check that buf is 32-byte aligned. Caller is responsible.
         // size of bitmap buffer and key
         const size_t metadata_size = sizeof(size_t) + sizeof(uint32_t);
 
@@ -1311,16 +1313,24 @@ class Roaring64Map {
         return result;
     }
 
+    /**
+     * For advanced users only. Offered on a best-effort basis.
+     * If you use this function in production, you are responsible for
+     * testing it on your target platforms. This function is unsafe.
+     */
     // As with serialized 64-bit bitmaps, 64-bit frozen bitmaps are serialized
     // by concatenating one or more Roaring::write output buffers with the
-    // preceeding map key. Unlike standard bitmap serialization, frozen bitmaps
-    // must be 32-byte aligned and requires a buffer length to parse. As a
-    // result, each concatenated output of Roaring::writeFrozen is preceeded by
-    // padding, the buffer size (size_t), and the map key (uint32_t). The
-    // padding is used to ensure 32-byte alignment, but since it is followed by
-    // the buffer size and map key, it actually pads to `(x - sizeof(size_t) +
-    // sizeof(uint32_t)) mod 32` to leave room for the metadata.
+    // preceeding map key. Like the 32-bit bitmaps, it expects that the provided
+    // buffer is 32-byte aligned. The caller is responsible to check the
+    // alignment. Unlike standard bitmap serialization, frozen bitmaps must be
+    // 32-byte aligned and requires a buffer length to parse. As a result, each
+    // concatenated output of Roaring::writeFrozen is preceeded by padding, the
+    // buffer size (size_t), and the map key (uint32_t). The padding is used to
+    // ensure 32-byte alignment, but since it is followed by the buffer size and
+    // map key, it actually pads to `(x - sizeof(size_t) + sizeof(uint32_t)) mod
+    // 32` to leave room for the metadata.
     void writeFrozen(char *buf) const {
+        // We do not check that buf is 32-byte aligned. Caller is responsible.
         // size of bitmap buffer and key
         const size_t metadata_size = sizeof(size_t) + sizeof(uint32_t);
 
@@ -1349,6 +1359,9 @@ class Roaring64Map {
         }
     }
 
+    /**
+     * For advanced users only. This function is unsafe.
+     */
     size_t getFrozenSizeInBytes() const {
         // size of bitmap size and map key
         const size_t metadata_size = sizeof(size_t) + sizeof(uint32_t);

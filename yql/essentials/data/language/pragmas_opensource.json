@@ -294,6 +294,9 @@
     "name": "yt.KeepTempTables"
   },
   {
+    "name": "yt.KeepWorldDepForFillOp"
+  },
+  {
     "name": "yt.KeyFilterForStartsWith"
   },
   {
@@ -826,6 +829,9 @@
   },
   {
     "name": "dq.WatermarksGranularityMs"
+  },
+  {
+    "name": "dq.WatermarksIdleTimeoutMs"
   },
   {
     "name": "dq.WatermarksLateArrivalDelayMs"

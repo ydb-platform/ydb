@@ -150,6 +150,24 @@ public:
         const TStartTransactionOptions& options = TStartTransactionOptions()) = 0;
 
     ///
+    /// @brief Initialize distributed file session and request cookies for participants.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands#start_distributed_write_file_session)
+    virtual TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteFileOptions& options = {}) = 0;
+
+    ///
+    /// @brief Initialize distributed table session and request cookies for participants.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#start_distributed_write_session)
+    virtual TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteTableOptions& options = {}) = 0;
+
+    ///
     /// @brief Change properties of table.
     ///
     /// Allows to:
@@ -580,14 +598,6 @@ public:
     /// Distributed table write API
     /// @{
 
-    /// @brief Initialize distributed session and request cookies for participants.
-    ///
-    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#start_distributed_write_session)
-    virtual TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
-        const TRichYPath& richPath,
-        i64 cookieCount,
-        const TStartDistributedWriteTableOptions& options = {}) = 0;
-
     /// @brief Ping distributed session to prolong its main transaction lifetime.
     ///
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#ping_distributed_write_session)
@@ -608,14 +618,6 @@ public:
     ///
     /// Distributed file write API
     /// @{
-
-    /// @brief Initialize distributed session and request cookies for participants.
-    ///
-    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#start_distributed_write_file_session)
-    virtual TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
-        const TRichYPath& richPath,
-        i64 cookieCount,
-        const TStartDistributedWriteFileOptions& options = {}) = 0;
 
     /// @brief Ping distributed session to prolong its main transaction lifetime.
     ///

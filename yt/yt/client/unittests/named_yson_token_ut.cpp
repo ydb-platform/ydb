@@ -21,13 +21,13 @@ using namespace NTableClient;
 ////////////////////////////////////////////////////////////////////////////////
 
 const auto KeyValueStruct = StructLogicalType({
-    {"key", SimpleLogicalType(ESimpleLogicalValueType::String)},
-    {"value", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
-});
+    {"key", "key", SimpleLogicalType(ESimpleLogicalValueType::String)},
+    {"value", "value", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
+}, /*removedFieldStableNames*/ {});
 
 const auto IntStringVariant = VariantStructLogicalType({
-    {"int", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-    {"string", SimpleLogicalType(ESimpleLogicalValueType::String)},
+    {"int", "int", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
+    {"string", "string", SimpleLogicalType(ESimpleLogicalValueType::String)},
 });
 
 YT_DEFINE_THREAD_LOCAL(TYsonConverterConfig, PositionalToNamedConfigInstance);
@@ -188,11 +188,11 @@ TEST(TNamedPositionalYsonConverterTest, TestStructSkipNullValues)
     CHECK_POSITIONAL_TO_NAMED(KeyValueStruct, "[foo]", "{key=foo}");
 
     auto type2 = StructLogicalType({
-        {"opt_int", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))},
-        {"opt_opt_int", OptionalLogicalType(OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))},
-        {"list_null", ListLogicalType(NullLogicalType())},
-        {"null", NullLogicalType()},
-    });
+        {"opt_int", "opt_int", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))},
+        {"opt_opt_int", "opt_opt_int", OptionalLogicalType(OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))},
+        {"list_null", "list_null", ListLogicalType(NullLogicalType())},
+        {"null", "null", NullLogicalType()},
+    }, /*removedFieldStableNames*/ {});
     CHECK_POSITIONAL_TO_NAMED(type2, "[42; [#]; []; #]", "{opt_int=42; opt_opt_int=[#]; list_null=[]}");
     CHECK_POSITIONAL_TO_NAMED(type2, "[#; #; [#; #;]]", "{list_null=[#; #;]}");
 }

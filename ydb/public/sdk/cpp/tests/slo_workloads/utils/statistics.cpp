@@ -3,6 +3,10 @@
 #include "metrics.h"
 #include "utils.h"
 
+#include <fstream>
+#include <chrono>
+#include <unistd.h>
+
 
 namespace {
     // Calculated percentiles for a period of time
@@ -33,6 +37,10 @@ TStat::TStat(const std::optional<std::string>& metricsPushUrl, const std::string
     : StartTime(TInstant::Now())
     , MetricsPusher(metricsPushUrl ? CreateOtelMetricsPusher(*metricsPushUrl, operationType) : CreateNoopMetricsPusher())
 {
+    // #region agent log
+    std::cerr << "[DEBUG_LOG] {\"location\":\"statistics.cpp:TStat_constructor\",\"message\":\"TStat constructor creating metrics pusher\",\"data\":{\"hasMetricsPushUrl\":" << (metricsPushUrl.has_value() ? "true" : "false") << ",\"metricsPushUrl\":\"" << (metricsPushUrl ? *metricsPushUrl : "none") << "\",\"operationType\":\"" << operationType << "\",\"pid\":" << getpid() << "},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"A,E\"}" << std::endl;
+    // #endregion
+
     MetricsPushQueue.Start(20);
 }
 

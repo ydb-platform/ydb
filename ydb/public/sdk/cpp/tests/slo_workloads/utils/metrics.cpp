@@ -9,6 +9,11 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
+#include <fstream>
+#include <chrono>
+#include <unistd.h>
+#include <sys/types.h>
+
 using namespace std::chrono_literals;
 
 class TOtelMetricsPusher : public IMetricsPusher {
@@ -16,6 +21,11 @@ public:
     TOtelMetricsPusher(const std::string& metricsPushUrl, const std::string& operationType)
         : OperationType_(operationType)
     {
+        // #region agent log
+        char hostname[256]; gethostname(hostname, sizeof(hostname));
+        std::cerr << "[DEBUG_LOG] {\"location\":\"metrics.cpp:constructor\",\"message\":\"TOtelMetricsPusher constructor called\",\"data\":{\"metricsPushUrl\":\"" << metricsPushUrl << "\",\"operationType\":\"" << operationType << "\",\"pid\":" << getpid() << ",\"hostname\":\"" << hostname << "\"},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"A,D,E\"}" << std::endl;
+        // #endregion
+
         auto exporterOptions = opentelemetry::exporter::otlp::OtlpHttpMetricExporterOptions();
         exporterOptions.url = metricsPushUrl;
 
@@ -32,10 +42,22 @@ public:
 
         Meter_ = MeterProvider_->GetMeter("slo_workloads", NYdb::GetSdkSemver());
 
+        // #region agent log
+        std::cerr << "[DEBUG_LOG] {\"location\":\"metrics.cpp:after_meter\",\"message\":\"Meter created\",\"data\":{\"meterName\":\"slo_workloads\",\"meterVersion\":\"" << NYdb::GetSdkSemver() << "\"},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"D\"}" << std::endl;
+        // #endregion
+
         InitMetrics();
     }
 
     void PushRequestData(const TRequestData& requestData) override {
+        // #region agent log
+        static std::atomic<int> pushCounter{0};
+        int currentPush = ++pushCounter;
+        if (currentPush <= 5 || currentPush % 100 == 0) {
+            std::cerr << "[DEBUG_LOG] {\"location\":\"metrics.cpp:PushRequestData\",\"message\":\"Pushing metrics\",\"data\":{\"pushNumber\":" << currentPush << ",\"operationType\":\"" << OperationType_ << "\",\"status\":\"" << YdbStatusToString(requestData.Status) << "\",\"delayMs\":" << requestData.Delay.MilliSeconds() << ",\"pid\":" << getpid() << "},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"B,C\"}" << std::endl;
+        }
+        // #endregion
+
         if (requestData.Status == NYdb::EStatus::SUCCESS) {
             OperationsSuccessTotal_->Add(1, {{"operation_type", OperationType_}});
         } else {

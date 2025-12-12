@@ -26,6 +26,8 @@ private:
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage,
         const ISnapshotSchema::TPtr& resultSchema) const;
 
+    TMonotonic StartTime;
+
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
 

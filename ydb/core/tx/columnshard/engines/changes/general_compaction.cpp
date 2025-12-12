@@ -148,11 +148,13 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
     if (self) {
         self->Counters.GetTabletCounters()->OnCompactionWriteIndexCompleted(
             context.FinishedSuccessfully, context.BlobsWritten, context.BytesWritten);
+        NChanges::TGeneralCompactionCounters::OnCompactionFinish(context.Duration.MilliSeconds(), context.BlobsWritten, context.BytesWritten);
     }
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     AFL_VERIFY(PrioritiesAllocationGuard);
+    StartTime = TMonotonic::Now();
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
     self.Counters.GetCSCounters().OnSplitCompactionInfo(

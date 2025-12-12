@@ -431,10 +431,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             .Level = TCollectStatsLevel::Profile,
             .TransportVersion = TransportVersion,
             .MaxStoredBytes = 100,
-            .MaxChunkBytes = 100,
-            .MutableSettings = {
-                .IsLocalChannel = true
-            }
+            .MaxChunkBytes = 100
         };
 
         return CreateDqOutputChannel(settings, logFunc);

@@ -1267,7 +1267,7 @@ private:
             exportInfo->State = EState::CopyTables;
             AllocateTxId(*exportInfo);
         } else {
-            // None of the items is a table.
+            // None of the items is a column table.
             TDeque<ui32> columnTables;
             for (ui32 i : xrange(exportInfo->Items.size())) {
                 auto& item = exportInfo->Items[i];
@@ -1358,7 +1358,7 @@ private:
                 exportInfo->State = EState::CopyTables;
                 AllocateTxId(*exportInfo);
             } else {
-                // None of the items is a table.
+                // None of the items is a column table.
                 TDeque<ui32> columnTables;
                 for (ui32 i : xrange(exportInfo->Items.size())) {
                     auto& item = exportInfo->Items[i];

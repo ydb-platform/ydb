@@ -166,7 +166,7 @@ bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) 
 bool TTxController::ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     auto opIt = Operators.find(txId);
     AFL_VERIFY(opIt != Operators.end());
-    AFL_ALERT(opIt->second->GetTxInfo().PlanStep == 0)("tx_id", txId)("plan_step", opIt->second->GetTxInfo().PlanStep);
+    AFL_VERIFY(opIt->second->GetTxInfo().PlanStep == 0)("tx_id", txId)("plan_step", opIt->second->GetTxInfo().PlanStep);
 
     opIt->second->ExecuteOnAbort(Owner, txc);
 

@@ -1,5 +1,4 @@
 #include "columnshard_impl.h"
-#include "columnshard_schema.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -27,7 +26,7 @@ public:
             if (lock->ReadyForAborting()) {
                 lock->SetAborting();
                 Self->ProgressTxController->ExecuteOnCancel(TxId, txc);
-                doComplete = true;
+                DoComplete = true;
             }
         }
         return true;
@@ -35,14 +34,14 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         LOG_S_DEBUG("TTxProposeCancel.Complete");
-        if (doComplete) {
+        if (DoComplete) {
             Self->ProgressTxController->CompleteOnCancel(TxId, ctx);
         }
     }
 
 private:
     ui64 TxId;
-    bool doComplete = false;
+    bool DoComplete = false;
 };
 
 void TColumnShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& /*ctx*/) {

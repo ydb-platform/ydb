@@ -41,6 +41,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
                 it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0)).first;
             }
             it->second.AddWriteOperation(operation);
+            // all the operations are finished at the moment of transaction proposal (or later) 
             it->second.OnWriteOperationFinished();
             LastWriteId = std::max(LastWriteId, operation->GetWriteId());
             if (!rowset.Next()) {
@@ -163,8 +164,8 @@ void TOperationsManager::OnTransactionFinishOnExecute(
     for (auto&& op : operations) {
         RemoveOperationOnExecute(op, txc);
     }
-    NIceDb::TNiceDb db(txc.DB);
     if (txId != 0) {
+        NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::OperationTxIds>().Key(txId, lock.GetLockId()).Delete();
     }
 }

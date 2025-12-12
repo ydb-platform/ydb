@@ -497,14 +497,22 @@ const std::vector<TCreatePathOp> CreatePathOperations({
     },
     {
         .Type = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShard,
-        .CreateRequest = [](const TString& workingDir, const TString& path) {
-            const TString modifyScheme = Sprintf(R"(
-                Name: "%s"
-            )",
-            path.c_str()
-            );
-            return CreateTestShardRequest(/* txId */ 0, workingDir, modifyScheme);
-        }
+        //TODO: proper check
+        .CreateRequest = nullptr,
+        // .CreateRequest = [](const TString& workingDir, const TString& path) {
+        //     auto parts = SplitPath(path);
+        //     const auto basename = parts.back();
+        //     const TString modifyScheme = Sprintf(R"(
+        //         Name: "%s"
+        //         Count: 1
+        //         StorageConfig {
+        //         }
+        //         Config: "workload: {}"
+        //     )",
+        //     basename.c_str()
+        //     );
+        //     return CreateTestShardRequest(/* txId */ 0, workingDir, modifyScheme);
+        // }
     }
 
     //NOTE: ADD NEW ENTRY ABOVE THIS LINE

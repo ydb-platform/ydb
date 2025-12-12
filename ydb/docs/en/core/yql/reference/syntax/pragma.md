@@ -429,7 +429,7 @@ SELECT $foo;
 {% endif %}
 
 
-{% {% if backend_name == "YDB" %} %}
+{% if backend_name == "YDB" %}
 
 ## YDB
 
@@ -470,8 +470,6 @@ The pragma for query hints is desicribed in [a separate section](../../../dev/qu
 An experimental pragma that allows you to reduce the isolation level of the current YDB transaction.
 
 {% endif %}
-
-
 
 {% if tech %}
 

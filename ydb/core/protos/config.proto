@@ -2457,6 +2457,7 @@ message TColumnShardConfig {
 
     optional TStatistics Statistics = 57;
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
+    optional string DefaultCompaction = 59;
 }
 
 message TSchemeShardConfig {

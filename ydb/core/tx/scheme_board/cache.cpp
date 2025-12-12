@@ -784,6 +784,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             SysViewInfo.Drop();
             SecretInfo.Drop();
             StreamingQueryInfo.Drop();
+            TestShardInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -1326,6 +1327,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(SysViewInfo);
             DESCRIPTION_PART(SecretInfo);
             DESCRIPTION_PART(StreamingQueryInfo);
+            DESCRIPTION_PART(TestShardInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1684,6 +1686,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindStreamingQuery;
                 FillInfo(Kind, StreamingQueryInfo, std::move(*pathDesc.MutableStreamingQueryDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeTestShard:
+                Kind = TNavigate::KindTestShard;
+                FillInfo(Kind, TestShardInfo, std::move(*pathDesc.MutableTestShardDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
                 break;
@@ -1771,6 +1777,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeStreamingQuery:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindStreamingQuery);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeTestShard:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindTestShard);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -2012,6 +2021,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.SecretInfo = SecretInfo;
             entry.TableKind = TableKind;
             entry.StreamingQueryInfo = StreamingQueryInfo;
+            entry.TestShardInfo = TestShardInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2328,6 +2338,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // StreamingQuery specific
         TIntrusivePtr<TNavigate::TStreamingQueryInfo> StreamingQueryInfo;
+
+        // TestShard specific
+        TIntrusivePtr<TNavigate::TTestShardInfo> TestShardInfo;
 
     }; // TCacheItem
 

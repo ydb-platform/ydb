@@ -16,14 +16,6 @@ bool IsFastPool(std::shared_ptr<NInterconnect::NRdma::IMemPool> memPool) {
     return memPool->GetName() == "SlotMemPool" || memPool->GetName() == "IncrementalMemPool";
 }
 
-namespace NMonitoring {
-    struct TDynamicCounters;
-}
-
-namespace NInterconnect::NRdma {
-    std::shared_ptr<IMemPool> CreateNonStaticSlotMemPool(NMonitoring::TDynamicCounters* counters, std::optional<TMemPoolSettings> settings) noexcept;
-}
-
 class TAllocatorSuite : public TSkipFixture {};
 
 TEST_F(TAllocatorSuite, AllocMemoryManually) {
@@ -377,39 +369,6 @@ TEST_P(WithAllPools, DetachAndDestroySrc) {
     UNIT_ASSERT_EQUAL(data2.GetSize(), 4u);
     UNIT_ASSERT_EQUAL(res, data2.GetData());
     UNIT_ASSERT_EQUAL(::memcmp(res, "test", 4), 0);
-}
-
-TEST_F(TAllocatorSuite, SlotPoolLimit) {
-    const NInterconnect::NRdma::TMemPoolSettings settings {
-        .SizeLimitMb = 32
-    };
-    static auto pool = NInterconnect::NRdma::CreateNonStaticSlotMemPool(nullptr, settings);
-
-    const size_t sz = 4 << 20;
-    std::vector<NInterconnect::NRdma::TMemRegionPtr> regions;
-    regions.reserve(8);
-    size_t i = 0;
-    for (;;i++) {
-        auto reg = pool->Alloc(sz, 0);
-        if (!reg) {
-            UNIT_ASSERT(i == 8); // 32 / 4
-            break;
-        }
-        ASSERT_TRUE(reg->GetAddr()) << "invalid address";
-        ASSERT_TRUE(reg->GetSize() == sz) << "invalid size of allocated chunk";
-        regions.push_back(reg);
-    }
-
-    regions.erase(regions.begin()); // free one region
-
-    {
-        auto reg = pool->Alloc(sz, 0); // allocate one
-        ASSERT_TRUE(reg->GetAddr()) << "invalid address";
-        ASSERT_TRUE(reg->GetSize() == sz) << "invalid size of allocated chunk";
-        UNIT_ASSERT(!pool->Alloc(sz, 0)); // pool is full
-    }
-
-    regions.clear();
 }
 
 INSTANTIATE_TEST_SUITE_P(

@@ -12,8 +12,10 @@ IF (OS_LINUX)
 
     PEERDIR(
         ydb/library/actors/interconnect/address
+        ydb/library/actors/util
         contrib/libs/ibdrv
         contrib/libs/protobuf
+        library/cpp/monlib/dynamic_counters
     )
 
 ELSE()
@@ -26,7 +28,9 @@ ELSE()
 
     PEERDIR(
         ydb/library/actors/interconnect/address
+        ydb/library/actors/util
         contrib/libs/protobuf
+        library/cpp/monlib/dynamic_counters
     )
 
 ENDIF()
@@ -39,4 +43,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    ut_mem_pool_limit
 )

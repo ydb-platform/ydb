@@ -28,17 +28,15 @@ public:
     {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         auto weakConnections = std::weak_ptr<TGRpcConnectionsImpl>(Connections_);
-        std::weak_ptr<TPrivateClient::TImpl> self = weak_from_this();
-        auto channelPoolUpdateWrapper = [weakConnections, self]
+        auto channelPoolUpdateWrapper = [weakConnections, ptr = this]
             (NYdb::NIssue::TIssues&&, EStatus status) mutable {
                 if (status != EStatus::SUCCESS) {
                     return false;
                 }
-            auto ptr = self.lock();
             auto connections = weakConnections.lock();
-            if (!ptr || !connections) {
+            if (!connections) {
                 return false;
-            } 
+            }
             std::vector<std::string> endpoints;
             {
                 std::lock_guard lock(ptr->KnownEndpointsLock);

@@ -4519,7 +4519,7 @@ void TDataShard::ScanComplete(NTable::EStatus,
     PlanQueue.Progress(ctx);
 }
 
-void TDataShard::Handle(TEvPrivate::TEvAsyncJobComplete::TPtr &ev, const TActorContext &ctx) {
+void TDataShard::Handle(TEvDataShard::TEvAsyncJobComplete::TPtr &ev, const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "AsyncJob complete"
         << " at " << TabletID());
 

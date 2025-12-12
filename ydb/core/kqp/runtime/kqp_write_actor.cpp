@@ -1158,11 +1158,14 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
-            evWrite->Record.SetLockMode(LockMode);
 
             if (MvccSnapshot) {
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
             }
+        }
+
+        if (LockMode != NKikimrDataEvents::OPTIMISTIC) {
+            evWrite->Record.SetLockMode(LockMode);
         }
 
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
@@ -1194,13 +1197,16 @@ public:
             Counters->WriteActorImmediateWritesRetries->Inc();
         }
 
-        if (isPrepare && MvccSnapshot) {
-            bool needMvccSnapshot = false;
-            for (const auto& operation : evWrite->Record.GetOperations()) {
-                if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
-                    // This operation may fail with an incorrect unique constraint violation otherwise
-                    needMvccSnapshot = true;
-                    break;
+        if (MvccSnapshot && (isPrepare || isImmediateCommit)) {
+            // Commit in snapshot isolation must validate writes against a snapshot
+            bool needMvccSnapshot = LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+            if (!needMvccSnapshot && isPrepare) {
+                for (const auto& operation : evWrite->Record.GetOperations()) {
+                    if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+                        // This operation may fail with an incorrect unique constraint violation otherwise
+                        needMvccSnapshot = true;
+                        break;
+                    }
                 }
             }
             if (needMvccSnapshot) {

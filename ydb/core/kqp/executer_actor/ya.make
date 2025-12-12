@@ -39,6 +39,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/mkql_proto
     ydb/library/mkql_proto/protos
+    ydb/library/plan2svg
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks

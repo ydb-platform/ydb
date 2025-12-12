@@ -744,6 +744,7 @@ private:
         if (!table->BackupHistory.contains(backupTxId)) {
             return TStringBuilder() << "Cannot find backup: " << backupTxId << " for table: " << itemPathId;
         }
+
         const auto& result = table->BackupHistory.at(backupTxId);
         if (result.TotalShardCount == result.SuccessShardCount) {
             return Nothing();

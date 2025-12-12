@@ -156,6 +156,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
     const TPath exportPath = TPath::Init(exportInfo.ExportPathId, ss);
     auto& task = *modifyScheme.MutableBackup();
+
     if (item.ParentIdx == Max<ui32>()) {
         const TPath sourcePath = TPath::Init(item.SourcePathId, ss);
         TString exportPathName;

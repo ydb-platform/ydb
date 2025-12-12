@@ -2296,5 +2296,66 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         );
     }
 
+
+    Y_UNIT_TEST(LocksBrokenStats) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+
+        // Insert initial data
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100);"));
+
+        TString sessionId, txId;
+        KqpSimpleBegin(runtime, sessionId, txId, Q_("SELECT * FROM `/Root/table-1` WHERE key = 1;"));
+        UNIT_ASSERT(!txId.empty());
+
+        // Breaker write - breaks the locks established by the SELECT above
+        auto writeRequest = MakeWriteRequestOneKeyValue(
+            std::nullopt,  // No lock context - this will break locks
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            tableId,
+            opts.Columns_,
+            1,  // key
+            200 // value
+        );
+
+        auto writeResult = Write(runtime, sender, shard, std::move(writeRequest), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        // Verify breaker stats
+        UNIT_ASSERT(writeResult.HasTxStats());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxStats().GetLocksBrokenAsBreaker(), 1u);
+
+        // Now try to commit the victim transaction - it should fail with LOCKS_BROKEN
+        TMaybe<NKikimrDataEvents::TEvWriteResult> victimRecord;
+        auto observer = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>([&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+            if (ev->Get()->Record.GetOrigin() == shard &&
+                ev->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN) {
+                victimRecord = ev->Get()->Record;
+            }
+        });
+
+        auto commitResult = KqpSimpleCommit(runtime, sessionId, txId, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 300);"));
+        UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
+
+        // Verify victim was captured
+        UNIT_ASSERT(victimRecord.Defined());
+
+        auto tableState = ReadTable(server, shards, tableId);
+        UNIT_ASSERT(tableState.find("key = 1, value = 200") != TString::npos);
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

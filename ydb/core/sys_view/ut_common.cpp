@@ -53,7 +53,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     NKikimrConfig::TAppConfig appConfig;
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
-    appConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
+
+    auto& tableServiceConfig = *appConfig.MutableTableServiceConfig();
+    tableServiceConfig = settings.TableServiceConfig;
+    tableServiceConfig.SetEnableTempTablesForUser(true);
+
     Settings->SetAppConfig(appConfig);
 
     for (ui32 i : xrange(settings.StoragePools)) {

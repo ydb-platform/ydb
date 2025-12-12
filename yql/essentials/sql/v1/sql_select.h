@@ -20,6 +20,7 @@ public:
     TSourcePtr BuildSubSelect(const TRule_select_subexpr& node);
 
 private:
+    TSourcePtr CheckSubSelectOnDiscard(TSourcePtr source);
     bool SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column& node);
     bool ValidateSelectColumns(const TVector<TNodePtr>& terms);
     bool ColumnName(TVector<TNodePtr>& keys, const TRule_column_name& node);

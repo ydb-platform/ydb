@@ -61,6 +61,23 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
 
 } // namespace
 
+TSourcePtr TSqlSelect::CheckSubSelectOnDiscard(TSourcePtr source) {
+    if (!source) {
+        return nullptr;
+    }
+
+    auto writeSettings = source->GetWriteSettings();
+    if (writeSettings.Discard) {
+        if (!Ctx_.Warning(writeSettings.DiscardPos, TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
+                out << "DISCARD can only be used at the top level, not inside subqueries";
+            })) {
+            return nullptr;
+        }
+    }
+
+    return source;
+}
+
 bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, TMaybe<TPosition> anyPos) {
     // block: (join_op (ANY)? flatten_source join_constraint?)
     // join_op:
@@ -530,7 +547,7 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
             Token(alt.GetToken1());
             TSqlSelect innerSelect(Ctx_, Mode_);
             TPosition pos;
-            auto source = innerSelect.Build(alt.GetRule_select_stmt2(), pos);
+            auto source = CheckSubSelectOnDiscard(innerSelect.Build(alt.GetRule_select_stmt2(), pos));
             if (!source) {
                 return nullptr;
             }
@@ -1288,6 +1305,9 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
 
     TWriteSettings settings;
     settings.Discard = discard;
+    if (discard) {
+        settings.DiscardPos = Ctx_.TokenPosition(node.GetBlock1().GetToken1());
+    }
     if (hasLabel) {
         settings.Label = PureColumnOrNamed(node.GetBlock3().GetRule_pure_column_or_named3(), *this);
     }
@@ -1296,6 +1316,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
     if (placement.Defined()) {
         if (placement->IsFirstInSelectOp) {
             res.Settings.Discard = settings.Discard;
+            res.Settings.DiscardPos = settings.DiscardPos;
         } else if (settings.Discard) {
             auto discardPos = Ctx_.TokenPosition(node.GetBlock1().GetToken1());
             Ctx_.Error(discardPos) << "DISCARD within UNION ALL is only allowed before first subquery";
@@ -1338,7 +1359,18 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
     if (node.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis1) {
         return SelectKind(node.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1(), selectPos, placement);
     } else {
-        return SelectKind(node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2(), selectPos, {});
+        const auto& partial = node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
+        const auto& innerSelectKind = partial.GetRule_select_kind1();
+        // filter only discard
+        if (innerSelectKind.HasBlock1() && placement.Defined() && !placement->IsFirstInSelectOp) {
+            auto discardPos = Ctx_.TokenPosition(partial.GetRule_select_kind1().GetBlock1().GetToken1());
+            if (!Ctx_.Warning(discardPos, TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
+                    out << "DISCARD within set operators has no effect in second or later subqueries";
+                })) {
+                return {};
+            }
+        }
+        return SelectKind(partial, selectPos, {});
     }
 }
 
@@ -1382,7 +1414,7 @@ TSourcePtr TSqlSelect::BuildSubSelect(const TRule_select_kind_partial& node) {
         .Last = result,
     };
 
-    return BuildStmt(std::move(result.Source), std::move(extra));
+    return CheckSubSelectOnDiscard(BuildStmt(std::move(result.Source), std::move(extra)));
 }
 
 TSourcePtr TSqlSelect::BuildStmt(TSourcePtr result, TBuildExtra extra) {
@@ -1401,6 +1433,7 @@ TSourcePtr TSqlSelect::BuildStmt(TSourcePtr result, TBuildExtra extra) {
     TNodePtr skipTake = extra.Last.SelectOpSkipTake;
     TWriteSettings outermostSettings = {
         .Discard = extra.First.Settings.Discard,
+        .DiscardPos = extra.First.Settings.DiscardPos,
         .Label = extra.Last.Settings.Label,
     };
 
@@ -1542,6 +1575,7 @@ TSourcePtr TSqlSelect::BuildUnionException(const TRule& node, TPosition& pos, TS
     Y_ENSURE(extra.First);
     TWriteSettings outermostSettings;
     outermostSettings.Discard = extra.First.Settings.Discard;
+    outermostSettings.DiscardPos = extra.First.Settings.DiscardPos;
     if (extra.Last) {
         outermostSettings.Label = extra.Last.Settings.Label;
     }
@@ -1671,7 +1705,7 @@ TSourcePtr TSqlSelect::Build(const TRule_select_unparenthesized_stmt& node, TPos
 TSourcePtr TSqlSelect::BuildSubSelect(const TRule_select_subexpr& node) {
     TColumnRefScope scope(Ctx_, EColumnRefState::Deny);
     TPosition pos;
-    return BuildStmt(node, pos);
+    return CheckSubSelectOnDiscard(BuildStmt(node, pos));
 }
 
 } // namespace NSQLTranslationV1

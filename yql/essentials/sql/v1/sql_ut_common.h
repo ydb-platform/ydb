@@ -779,6 +779,72 @@ Y_UNIT_TEST(WarnUnknownJoinStrategyHint) {
     UNIT_ASSERT_STRINGS_EQUAL(res.Issues.ToString(), "<main>:1:41: Warning: Unsupported join hint: xmerge, code: 4534\n");
 }
 
+Y_UNIT_TEST(NoWarnDiscardAtTopLevel) {
+    NYql::TAstParseResult res = SqlToYql("DISCARD SELECT 1");
+    UNIT_ASSERT(res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(Err2Str(res), "");
+}
+
+Y_UNIT_TEST(WarnDiscardInSubqueryFromClause) {
+    NYql::TAstParseResult res = SqlToYql("SELECT * FROM (DISCARD SELECT 1)");
+    UNIT_ASSERT(res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(Err2Str(res),
+                              "<main>:1:16: Warning: DISCARD can only be used at the top level, not inside subqueries, code: 4541\n");
+}
+
+Y_UNIT_TEST(WarnDiscardInSubqueryFromClauseMultiline) {
+    NYql::TAstParseResult res = SqlToYql(
+        "SELECT * FROM \n"
+        "(DISCARD SELECT 1)");
+    UNIT_ASSERT(res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(Err2Str(res),
+                              "<main>:2:2: Warning: DISCARD can only be used at the top level, not inside subqueries, code: 4541\n");
+}
+
+Y_UNIT_TEST(WarnDiscardInUnionAllSecondSubquery) {
+    NYql::TAstParseResult res = SqlToYql("SELECT 1 UNION ALL (DISCARD SELECT 2)");
+    UNIT_ASSERT(res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(Err2Str(res),
+                              "<main>:1:21: Warning: DISCARD within set operators has no effect in second or later subqueries, code: 4541\n");
+}
+
+Y_UNIT_TEST(WarnDiscardInIntersectSecondSubquery) {
+    NYql::TAstParseResult res = SqlToYql("SELECT 1 INTERSECT (DISCARD SELECT 2)");
+    UNIT_ASSERT(res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(Err2Str(res),
+                              "<main>:1:21: Warning: DISCARD within set operators has no effect in second or later subqueries, code: 4541\n");
+}
+
+Y_UNIT_TEST(WarnDiscardInExceptSecondSubquery) {
+    NYql::TAstParseResult res = SqlToYql("SELECT 1 EXCEPT (DISCARD SELECT 2)");
+    UNIT_ASSERT(res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(Err2Str(res),
+                              "<main>:1:18: Warning: DISCARD within set operators has no effect in second or later subqueries, code: 4541\n");
+}
+
+Y_UNIT_TEST(WarnDiscardInUnionAllThirdSubquery) {
+    NYql::TAstParseResult res = SqlToYql("SELECT 1 UNION ALL SELECT 2 UNION ALL (DISCARD SELECT 3)");
+    UNIT_ASSERT(res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(Err2Str(res),
+                              "<main>:1:40: Warning: DISCARD within set operators has no effect in second or later subqueries, code: 4541\n");
+}
+
+Y_UNIT_TEST(NoWarnDiscardFirstInUnionAll) {
+    NYql::TAstParseResult res = SqlToYql("DISCARD SELECT 1 UNION ALL SELECT 2");
+    UNIT_ASSERT(res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(Err2Str(res), "");
+}
+
+Y_UNIT_TEST(WarnDiscardInNamedSubquery) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        $sub = (DISCARD SELECT 1);
+        SELECT * FROM $sub
+    )sql");
+    UNIT_ASSERT(res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res),
+                                "Warning: DISCARD can only be used at the top level, not inside subqueries");
+}
+
 Y_UNIT_TEST(ReverseLabels) {
     NYql::TAstParseResult res = SqlToYql("select in.key as subkey, subkey as key from plato.Input as in;");
     UNIT_ASSERT(res.Root);

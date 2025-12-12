@@ -166,7 +166,7 @@ void TSchemeShard::UpdateForcedCompactionQueueMetrics() {
 void TSchemeShard::Handle(TEvSchemeShard::TEvForceCompaction::TPtr &ev, const TActorContext &ctx) {
     const auto& record = ev->Get()->Record;
 
-    TPathId pathId(record.GetPathId().GetOwnerId(), record.GetPathId().GetLocalPathId());
+    TPathId pathId(record.GetPathId().GetOwnerId(), record.GetPathId().GetLocalId());
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Received TEvForceCompaction for pathId# " << pathId
@@ -229,7 +229,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvForceCompaction::TPtr &ev, const TA
 void TSchemeShard::Handle(TEvSchemeShard::TEvGetForceCompactionProgress::TPtr &ev, const TActorContext &ctx) {
     const auto& record = ev->Get()->Record;
 
-    TPathId pathId(record.GetPathId().GetOwnerId(), record.GetPathId().GetLocalPathId());
+    TPathId pathId(record.GetPathId().GetOwnerId(), record.GetPathId().GetLocalId());
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Received TEvGetForceCompactionProgress for pathId# " << pathId

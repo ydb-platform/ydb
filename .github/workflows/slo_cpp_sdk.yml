@@ -21,6 +21,12 @@ on:
         description: "Maximum write RPS for the SLO workload"
         required: false
         default: "100"
+      fork_repository:
+        description: "Fork repository (e.g., username/ydb). Leave empty to use current repository"
+        required: false
+      fork_ref:
+        description: "Fork branch/ref to test. Leave empty to use current branch"
+        required: false
 
 jobs:
   ydb-slo-action:
@@ -68,6 +74,8 @@ jobs:
       - name: Checkout current version
         uses: actions/checkout@v5
         with:
+          repository: ${{ inputs.fork_repository || github.repository }}
+          ref: ${{ inputs.fork_ref || github.ref }}
           path: current
           fetch-depth: 0
 
@@ -144,7 +152,7 @@ jobs:
           github_issue: ${{ github.event.inputs.github_issue }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workload_name: ${{ matrix.workload }}
-          workload_current_ref: ${{ github.head_ref || github.ref_name }}
+          workload_current_ref: ${{ inputs.fork_ref || github.head_ref || github.ref_name }}
           workload_baseline_ref: ${{ steps.baseline.outputs.ref }}
 
       - name: Prepare SLO Database

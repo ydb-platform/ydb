@@ -429,7 +429,7 @@ SELECT $foo;
 {% endif %}
 
 
-{% if tech %}
+{% {% if backend_name == "YDB" %} %}
 
 ## YDB
 

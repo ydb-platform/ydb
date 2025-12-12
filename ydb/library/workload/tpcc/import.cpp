@@ -53,7 +53,7 @@ constexpr int UPSERT_BACKOFF_CEILING = 5;
 
 constexpr int INDEX_CHECK_MAX_RETRIES = 10;
 constexpr int INDEX_CHECK_BACKOFF_MILLIS = 1000;
-constexpr int INDEX_CHECK_BACKOFF_CEILING = 10000;
+constexpr int INDEX_CHECK_BACKOFF_CEILING = 6;
 
 constexpr auto INDEX_PROGRESS_CHECK_INTERVAL = std::chrono::seconds(1);
 
@@ -814,6 +814,10 @@ std::expected<double, std::string> GetIndexProgress(
 {
     NYdb::TStatus lastStatus(EStatus::STATUS_UNDEFINED, NIssue::TIssues());
     for (int i = 0; i < INDEX_CHECK_MAX_RETRIES; ++i) {
+        if (GetGlobalInterruptSource().stop_requested()) {
+            break;
+        }
+
         try {
             auto operation = client.Get<NTable::TBuildIndexOperation>(id).GetValueSync();
             lastStatus = operation.Status();
@@ -821,8 +825,14 @@ std::expected<double, std::string> GetIndexProgress(
                 if (lastStatus.IsSuccess() && operation.Metadata().State == NTable::EBuildIndexState::Done) {
                     return 100;
                 } else {
+                    if (lastStatus.GetStatus() == EStatus::CANCELLED) {
+                        TStringStream ss;
+                        ss << "Index operation id " << id.ToString() << ", externally cancelled";
+                        return std::unexpected(ss.Str());
+                    }
                     // we don't check which kind of failure is in status,
                     // because we expect only retryable errors here
+                    LOG_D("Failed to check index operation id: " << lastStatus);
                 }
             } else {
                 return operation.Metadata().Progress;

@@ -454,9 +454,12 @@ public:
                 for (auto& input : task.Inputs) {
                     if (input.SourceType) {
                         if (IsInfiniteSourceType(input.SourceType)) {
-                            watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                            input.WatermarksIdleTimeoutUs = watermarksIdleTimeoutUs; // TODO extract from source settings
-                            input.WatermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                            if (input.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                                watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                                if (watermarksIdleTimeoutUs) {
+                                    input.WatermarksIdleTimeoutUs = watermarksIdleTimeoutUs;
+                                }
+                            }
                         }
                     } else {
                         for (ui64 channelId : input.Channels) {
@@ -468,6 +471,11 @@ public:
                         }
                     }
                     task.WatermarksIdleTimeoutUs = Max(task.WatermarksIdleTimeoutUs, input.WatermarksIdleTimeoutUs);
+                }
+            } else {
+                for (auto& input : task.Inputs) {
+                    input.WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+                    input.WatermarksIdleTimeoutUs.Clear();
                 }
             }
 

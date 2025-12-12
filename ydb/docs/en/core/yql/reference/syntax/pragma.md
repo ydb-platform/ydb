@@ -433,6 +433,14 @@ SELECT $foo;
 
 ## YDB
 
+### `ydb.CostBasedOptimization` {#costbasedoptimization}
+
+|  Value | Description |
+| ------- | ---------------------- |
+| on | Cost optimizer is enabled for the current query |
+| off | Cost optimizer is disabled for the current query |
+| auto | The cost optimizer works in accordance with the current [CostBasedOptimizationLevel](#costbasedoptimizationlevel) level |
+
 ### `ydb.CostBasedOptimizationLevel` {#costbasedoptimizationlevel}
 
 | Level | Description |

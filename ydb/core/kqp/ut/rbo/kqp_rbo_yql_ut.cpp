@@ -495,8 +495,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestAggregation(ColumnStore);
     }
 
-    /*
-    Y_UNIT_TEST(CrossInnerJoin) {
+    Y_UNIT_TEST(BasicJoins) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
@@ -524,7 +523,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         NYdb::TValueBuilder rowsTableFoo;
         rowsTableFoo.BeginList();
-        for (size_t i = 0; i < 1; ++i) {
+        for (size_t i = 0; i < 4; ++i) {
             rowsTableFoo.AddListItem()
                 .BeginStruct()
                 .AddMember("id").Int64(i)
@@ -538,7 +537,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         NYdb::TValueBuilder rowsTableBar;
         rowsTableBar.BeginList();
-        for (size_t i = 0; i < 4; ++i) {
+        for (size_t i = 0; i < 3; ++i) {
             rowsTableBar.AddListItem()
                 .BeginStruct()
                 .AddMember("id").Int64(i)
@@ -555,47 +554,36 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                --!syntax_pg
-                SELECT foo.id FROM /Root/foo as foo inner join /Root/bar as bar on foo.id = bar.id;
+                PRAGMA YqlSelect = 'force';
+                SELECT foo.id, bar.id FROM `/Root/foo` as foo inner join `/Root/bar` as bar on foo.id = bar.id order by foo.id;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
-                SELECT foo.id FROM `/Root/foo` inner join `/Root/bar` on foo.id = bar.id WHERE name = '1_name';
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                SELECT f.id as id2 FROM `/Root/foo` AS f, `/Root/bar` WHERE f.id = bar.id and name = '0_name';
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                SELECT foo.id FROM `/Root/foo`, `/Root/bar`;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                SELECT foo.id, bar.id FROM `/Root/foo`, `/Root/bar`;
+                SELECT foo.id, bar.id FROM `/Root/foo` as foo left join `/Root/bar` as bar on foo.id = bar.id order by foo.id;
             )",
         };
 
-        // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
-            R"([[0]])",
-            R"([])",
-            R"([[0]])",
-            R"([[0];[0];[0];[0]])",
-            R"([[0;0];[0;1];[0;2];[0;3]])",
+            R"([[0;0];[1;1];[2;2]])",
+            R"([[0;[0]];[1;[1]];[2;[2]];[3;#]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            UNIT_ASSERT_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
 
+    /*
     Y_UNIT_TEST(ScalarSubquery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -605,13 +593,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 id	Int64	NOT NULL,	
 	            name	String,
                 primary key(id)	
-            );
+            ) with (Store = Column);
 
             CREATE TABLE `/Root/bar` (
                 id	Int64	NOT NULL,	
 	            lastname	String,
                 primary key(id)	
-            );
+            ) with (Store = Column);
         )").GetValueSync();
 
         NYdb::TValueBuilder rowsTableFoo;
@@ -647,7 +635,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                SELECT bar.id FROM `/Root/bar` where bar.id = (SELECT id FROM `/Root/foo`);
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` where bar.id = (SELECT min(foo.id) FROM `/Root/foo` as foo);
             )"
         };
 
@@ -663,7 +652,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
-
 
     Y_UNIT_TEST(PredicatePushdownLeftJoin) {
         NKikimrConfig::TAppConfig appConfig;

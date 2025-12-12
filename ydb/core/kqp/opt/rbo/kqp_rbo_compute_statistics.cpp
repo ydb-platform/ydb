@@ -23,7 +23,7 @@ TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NYql::TOptimizerStatistics::T
     TVector<TInfoUnit> result;
     for (auto k : keyColumns->Data) {
         auto it = std::find_if(outputColumns.begin(), outputColumns.end(), [&k](const TInfoUnit& iu) {
-            return k == iu.ColumnName;
+            return k == iu.GetColumnName();
         });
 
         Y_ENSURE(it!=outputColumns.end());
@@ -350,8 +350,8 @@ void TOpJoin::ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) {
     TVector<TJoinColumn> rightJoinKeys;
 
     for (auto & [leftKey, rightKey] : JoinKeys) {
-        leftJoinKeys.push_back(TJoinColumn(leftKey.Alias, leftKey.ColumnName));
-        rightJoinKeys.push_back(TJoinColumn(rightKey.Alias, rightKey.ColumnName));
+        leftJoinKeys.push_back(TJoinColumn(leftKey.GetAlias(), leftKey.GetColumnName()));
+        rightJoinKeys.push_back(TJoinColumn(rightKey.GetAlias(), rightKey.GetColumnName()));
     }
 
     TVector<TString> leftAliases;
@@ -404,8 +404,8 @@ void TOpJoin::ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) {
     TVector<TJoinColumn> rightJoinKeys;
 
     for (auto & [leftKey, rightKey] : JoinKeys) {
-        leftJoinKeys.push_back(TJoinColumn(leftKey.Alias, leftKey.ColumnName));
-        rightJoinKeys.push_back(TJoinColumn(rightKey.Alias, rightKey.ColumnName));
+        leftJoinKeys.push_back(TJoinColumn(leftKey.GetAlias(), leftKey.GetColumnName()));
+        rightJoinKeys.push_back(TJoinColumn(rightKey.GetAlias(), rightKey.GetColumnName()));
     }
 
     TVector<TString> leftAliases;

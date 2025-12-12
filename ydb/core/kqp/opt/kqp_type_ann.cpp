@@ -2289,10 +2289,10 @@ TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TSt
 
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
-    for (auto t : structItemTypes ) {
+    for (const auto *t : structItemTypes) {
         TString aliasName = TString(alias->Content());
         TString columnName = TString(t->GetName());
-        TString fullName = aliasName != "" ? ( "_alias_" + aliasName + "." + columnName ) : columnName;
+        TString fullName = aliasName != "" ? aliasName + "." + columnName : columnName;
         newItemTypes.push_back(ctx.MakeType<TItemExprType>(fullName, t->GetItemType()));
     }
 
@@ -2445,6 +2445,10 @@ TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+bool IsSupportedJoinKind(const TString &joinKind) {
+    return joinKind == "Left" || joinKind == "Inner" || joinKind == "Cross";
+}
+
 TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
     auto rightInputType = input->ChildPtr(TKqpOpJoin::idx_RightInput)->GetTypeAnn();
@@ -2452,10 +2456,19 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto leftItemType = leftInputType->Cast<TListExprType>()->GetItemType();
     auto rightItemType = rightInputType->Cast<TListExprType>()->GetItemType();
 
+    auto opJoin = TKqpOpJoin(input);
+    const TString joinKind = TString(opJoin.JoinKind().StringValue());
+    Y_ENSURE(IsSupportedJoinKind(joinKind), "Unsupported join kind");
+    const bool rightSideColumnsNeedsOptional = joinKind == "Left";
     TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
-
-    for (auto item : rightItemType->Cast<TStructExprType>()->GetItems()){
-        structItemTypes.push_back(item);
+    for (const auto *item : rightItemType->Cast<TStructExprType>()->GetItems()) {
+        if (item->GetItemType()->IsOptionalOrNull() || !rightSideColumnsNeedsOptional) {
+            structItemTypes.push_back(item);
+        } else {
+            auto colName = item->GetName();
+            const TTypeAnnotationNode* colType = item->GetItemType();
+            structItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, ctx.MakeType<TOptionalExprType>(colType)));
+        }
     }
 
     auto resultStructType = ctx.MakeType<TStructExprType>(structItemTypes);

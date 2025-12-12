@@ -412,15 +412,15 @@ TExprNode::TPtr BuildDqGraceJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExpr
     TVector<TCoAtom> rightKeyColumnNames;
 
     for (const auto &p : join.JoinKeys) {
-        TString leftFullName = "_alias_" + p.first.Alias + "." + p.first.ColumnName;
-        TString rightFullName = "_alias_" + p.second.Alias + "." + p.second.ColumnName;
+        TString leftFullName = p.first.GetFullName();
+        TString rightFullName = p.second.GetFullName();
 
         // clang-format off
         joinKeys.push_back(Build<TDqJoinKeyTuple>(ctx, pos)
-            .LeftLabel().Value("_alias_" + p.first.Alias).Build()
-            .LeftColumn().Value(p.first.ColumnName).Build()
-            .RightLabel().Value("_alias_" + p.second.Alias).Build()
-            .RightColumn().Value(p.second.ColumnName).Build()
+            .LeftLabel().Value(p.first.GetAlias()).Build()
+            .LeftColumn().Value(p.first.GetColumnName()).Build()
+            .RightLabel().Value(p.second.GetAlias()).Build()
+            .RightColumn().Value(p.second.GetColumnName()).Build()
         .Done());
 
         leftKeyColumnNames.push_back(Build<TCoAtom>(ctx, pos).Value(leftFullName).Done());

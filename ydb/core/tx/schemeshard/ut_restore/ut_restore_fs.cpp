@@ -17,9 +17,7 @@ namespace {
 
 class TTempBackupFiles {
 public:
-    explicit TTempBackupFiles()
-    {
-    }
+    explicit TTempBackupFiles() = default;
 
     const TString& GetBasePath() const {
         return TempDir.Name();
@@ -428,5 +426,3 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(table.GetKeyColumnNames(0), "id");
     }
 }
-
-

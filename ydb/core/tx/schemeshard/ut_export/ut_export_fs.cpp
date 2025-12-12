@@ -169,4 +169,3 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(settings.items_size(), 2);
     }
 }
-

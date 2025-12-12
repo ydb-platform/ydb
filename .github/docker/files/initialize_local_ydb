@@ -16,7 +16,7 @@ export YDB_PREINITSCRIPTS_DIR="${YDB_PREINITSCRIPTS_DIR:-/preinit.d}"
 export YDB_PDISKS_DIRECTORY="${YDB_WORKING_DIR}/pdisks"
 
 # Disable checking newest versions of YDB CLI
-/ydb version --disable-checks
+/ydb version --disable-checks >/dev/null 2>&1
 # Create and activate a YDB profile for simplified commands
 /ydb config profile create local \
     --endpoint grpcs://localhost:${GRPC_TLS_PORT} \

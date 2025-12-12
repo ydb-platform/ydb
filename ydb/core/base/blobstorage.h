@@ -780,6 +780,8 @@ struct TEvBlobStorage {
         EvSyncLogUpdateNeighbourSyncedLsn,
         EvLocalSyncFinished,
         EvFullSyncFinished,
+        EvAddFullSyncSsts,
+        EvAddFullSyncSstsResult,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,

@@ -18,7 +18,6 @@ class TIndexSstWriterActor :
     TIndexSstWriter<TKeyBlock, TMemRecBlock> BlockWriter;
     TIndexSstWriter<TKeyBarrier, TMemRecBarrier> BarrierWriter;
 
-    TVector<ui32> ChunkIds;
     bool Finished = false;
 
     enum class EWriterType : ui64 {
@@ -29,6 +28,7 @@ class TIndexSstWriterActor :
 
     TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>> MsgQueue;
 
+    ui32 CommitsInFlight = 0;
     ui32 WritesInFlight = 0;
     static const ui32 MaxWritesInFlight = 5; // TODO: config
 
@@ -41,7 +41,7 @@ class TIndexSstWriterActor :
         }
     }
 
-    void SendResponse() {
+    void SendLocalSyncDataResponse() {
         auto msg = std::make_unique<TEvLocalSyncDataResult>(
             NKikimrProto::OK,
             TAppData::TimeProvider->Now(),
@@ -59,15 +59,26 @@ class TIndexSstWriterActor :
     }
 
     void Commit() {
-        // TODO: commit ssts
+        auto commit = [this]<class TWriter>(TWriter& writer) {
+            auto msg = writer.GenerateCommitMessage(SelfId());
+            if (msg) {
+                Send(writer.GetLevelIndexActorId(), msg.release());
+                ++CommitsInFlight;
+            }
+        };
+
+        commit(LogoBlobWriter);
+        commit(BlockWriter);
+        commit(BarrierWriter);
+
+        if (CommitsInFlight == 0) {
+            Finish();
+        }
     }
 
-    void Finalize() {
+    void Finish() {
         Send(SyncerJobActorId, new TEvFullSyncFinished);
         PassAway();
-    }
-
-    void Bootstrap() {
     }
 
     void Handle(TEvLocalSyncData::TPtr& ev) {
@@ -90,15 +101,14 @@ class TIndexSstWriterActor :
 
         ProcessWrites();
         if (WritesInFlight == 0) {
-            SendResponse();
+            SendLocalSyncDataResponse();
         }
     }
 
     void Handle(TEvLocalSyncFinished::TPtr& /*ev*/) {
-        // TODO: check empty
-        LogoBlobWriter.FinishChunk();
-        BlockWriter.FinishChunk();
-        BarrierWriter.FinishChunk();
+        LogoBlobWriter.Finish();
+        BlockWriter.Finish();
+        BarrierWriter.Finish();
 
         Finished = true;
         ProcessWrites();
@@ -117,7 +127,7 @@ class TIndexSstWriterActor :
                 Commit();
                 return;
             }
-            SendResponse();
+            SendLocalSyncDataResponse();
         }
     }
 
@@ -143,6 +153,13 @@ class TIndexSstWriterActor :
         ProcessWrites();
     }
 
+    void Handle(TEvAddFullSyncSstsResult::TPtr& /*ev*/) {
+        Y_VERIFY_S(CommitsInFlight, VCtx->VDiskLogPrefix);
+        if (--CommitsInFlight == 0) {
+            Finish();
+        }
+    }
+
     void HandlePoison(TEvents::TEvPoisonPill::TPtr& /*ev*/, const TActorContext &ctx) {
         Die(ctx);
     }
@@ -152,6 +169,7 @@ class TIndexSstWriterActor :
         hFunc(TEvLocalSyncFinished, Handle)
         hFunc(NPDisk::TEvChunkReserveResult, Handle)
         hFunc(NPDisk::TEvChunkWriteResult, Handle)
+        hFunc(TEvAddFullSyncSstsResult, Handle)
         HFunc(TEvents::TEvPoisonPill, HandlePoison)
     )
 
@@ -159,7 +177,7 @@ class TIndexSstWriterActor :
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BS_SYNC_FULL_SST_WRITER;
+        return NKikimrServices::TActivity::BS_SYNC_SST_WRITER;
     }
 
     TIndexSstWriterActor(

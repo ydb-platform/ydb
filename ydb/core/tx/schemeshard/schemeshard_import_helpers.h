@@ -18,9 +18,17 @@
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::IMPORT, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, stream)
 
+namespace NKikimr::NSchemeShard {
+
 template <typename T>
 void AddIssue(T& response, const TString& message, NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR) {
     auto& issue = *response.AddIssues();
     issue.set_severity(severity);
     issue.set_message(message);
 }
+
+struct TImportInfo;
+
+bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx);
+
+} // NKikimr::NSchemeShard

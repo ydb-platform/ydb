@@ -213,4 +213,5 @@ message TFeatureFlags {
     optional bool EnableTopicCompactificationByKey = 196 [default = false];
     optional bool EnableCompactionOverloadDetection = 197 [default = false];
     reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns
+    optional bool EnableIndexMaterialization = 221 [default = false];
 }

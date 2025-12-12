@@ -35,6 +35,11 @@ struct TFullBackupMetadata : TSimpleRefCount<TFullBackupMetadata> {
     TString StoragePath;
 };
 
+struct TIndexMetadata {
+    TString ExportPrefix;
+    TString ImplTablePrefix;
+};
+
 class TMetadata {
 public:
     TMetadata() = default;
@@ -47,6 +52,9 @@ public:
     bool HasVersion() const;
     ui64 GetVersion() const;
 
+    void AddIndex(const TIndexMetadata& index);
+    const std::optional<std::vector<TIndexMetadata>>& GetIndexes() const;
+
     TString Serialize() const;
     static TMetadata Deserialize(const TString& metadata);
 private:
@@ -54,6 +62,12 @@ private:
     TMap<TVirtualTimestamp, TFullBackupMetadata::TPtr> FullBackups;
     TMap<TVirtualTimestamp, TLogMetadata::TPtr> Logs;
     TMaybeFail<ui64> Version;
+
+    // Indexes:
+    // Undefined (previous versions): we don't know if we see the export with _materialized_ indexes or without them, so list suitable S3 files to find out all materialized indexes
+    // []: The export has no materialized indexes
+    // [...]: The export must have all materialized indexes listed here
+    std::optional<std::vector<TIndexMetadata>> Indexes;
 };
 
 } // namespace NKikimr::NBackup

@@ -125,13 +125,19 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo::T
     }
 
     for (ui32 itemIdx : xrange(importInfo->Items.size())) {
-        const auto& item = importInfo->Items.at(itemIdx);
-
-        db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
-            NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
-            NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State))
-        );
+        PersistNewImportItem(db, importInfo, itemIdx);
     }
+}
+
+void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+    const auto& item = importInfo->Items.at(itemIdx);
+
+    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+        NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
+        NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
+        NIceDb::TUpdate<Schema::ImportItems::ParentIndex>(item.ParentIdx)
+    );
 }
 
 void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) {
@@ -178,11 +184,13 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
             NIceDb::TUpdate<Schema::ImportItems::CreationQuery>(item.CreationQuery)
         );
     }
+
     if (item.Permissions.Defined()) {
         record.Update(
             NIceDb::TUpdate<Schema::ImportItems::Permissions>(item.Permissions->SerializeAsString())
         );
     }
+
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize())
     );
@@ -266,6 +274,22 @@ void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* 
     auto waiters = std::move(TableProfilesWaiters);
     for (const auto& [importId, itemIdx] : waiters) {
         Execute(CreateTxProgressImport(importId, itemIdx), ctx);
+    }
+}
+
+bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
+    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+    auto& item = importInfo.Items.at(itemIdx);
+
+    switch (importInfo.Settings.index_filling_mode()) {
+        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD:
+            return true;
+        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+            return item.ChildItems.empty();
+        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
+            return false;
+        default:
+            return true;
     }
 }
 

@@ -158,7 +158,7 @@ Y_UNIT_TEST(RecreateConsumer) {
                 .BeginDeadLetterPolicy()
                     .Enable()
                     .BeginCondition()
-                        .MaxProcessingAttempts(17)
+                        .MaxProcessingAttempts(1000)
                     .EndCondition()
                     .DeleteAction()
                 .EndDeadLetterPolicy()
@@ -179,6 +179,27 @@ Y_UNIT_TEST(RecreateConsumer) {
 
         auto response = GetWriteResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    }
+
+    // many iteration for creating many WAL records
+    for (size_t i = 0; i < 120; ++i) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+        GetReadResponse(runtime);
+
+        CreateUnlockerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) }
+        });
+        GetChangeResponse(runtime);
     }
 
     {

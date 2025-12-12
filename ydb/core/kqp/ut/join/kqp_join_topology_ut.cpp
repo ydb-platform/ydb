@@ -8,10 +8,14 @@
 #include <ydb/core/kqp/ut/common/kqp_arg_parser.h>
 #include <ydb/core/kqp/ut/common/kqp_benches.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/join/kqp_join_hypergraph_generator.h>
+
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <ydb/library/yql/dq/opt/dq_opt_make_join_hypergraph.h>
 
 #include <cstdint>
 #include <exception>
@@ -548,6 +552,8 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                                 graph.DumpGraph(Cout);
                                                 graph.ReorderDFS();
                                             }
+
+                                            DoIt(ctx.RNG, graph, 0.5);
 
                                             auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, resultType, graph);
                                             if (!result) {

@@ -111,6 +111,9 @@ struct TTopicMetricCollector {
 
     void Finish() {
         for (auto& [partitionId, partitionMetrics] : ExistedPartitionMetrics) {
+            TopicMetrics.TotalDataSize += partitionMetrics.DataSize;
+            TopicMetrics.TotalUsedReserveSize += partitionMetrics.UsedReserveSize;
+
             TopicMetrics.PartitionMetrics[partitionId] = partitionMetrics;
         }
     }

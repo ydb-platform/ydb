@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             wrap.Next();
 
             if (wrap.GetReady() == EReady::Data && key.GetCells()) {
-                auto cmp = CompareTypedCellVectors(key.GetCells().data(), wrap->GetKey().Cells().data(), subset.Scheme->Keys->Types.data(), Min(key.GetCells().size(), wrap->GetKey().Cells().size()));
+                auto cmp = CompareKeys(key.GetCells(), wrap->GetKey().Cells(), subset.Scheme->Keys->Types);
                 if (cmp < 0) {
                     break;
                 }

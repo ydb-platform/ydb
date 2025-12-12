@@ -4344,6 +4344,134 @@ R"(CREATE TABLE `test_show_create` (
             [[0u]];
         ])", ysonString);
     }
+
+    Y_UNIT_TEST_TWIN(QueryMetricsLocksBroken, UseSink) {
+        TTestEnvSettings settings;
+        settings.EnableSVP = true;
+        settings.TableServiceConfig.SetEnableOltpSink(UseSink);
+        TTestEnv env(1, 2, settings);
+        CreateTenant(env, "Tenant1", true);
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase("/Root/Tenant1");
+        auto driver = TDriver(driverConfig);
+
+        TTableClient client(driver);
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        auto victimSession = client.CreateSession().GetValueSync().GetSession();
+
+        // Create table and insert initial data
+        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Tenant1/TableLocks` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync());
+
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
+            "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"Initial\")",
+            TTxControl::BeginTx().CommitTx()
+        ).GetValueSync());
+
+        // Establish locks by reading in a transaction (victim)
+        std::optional<TTransaction> victimTx;
+        while (!victimTx) {
+            auto result = victimSession.ExecuteDataQuery(
+                "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u /* victim-query */",
+                TTxControl::BeginTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+
+            TString yson = FormatResultSetYson(result.GetResultSet(0));
+            if (yson == "[]") {
+                continue;  // Data not visible yet, retry
+            }
+
+            victimTx = result.GetTransaction();
+            UNIT_ASSERT(victimTx);
+        }
+
+        // Breaker transaction: writes to key 1, breaking victim's read lock
+        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
+            "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\") /* lock-breaker */",
+            TTxControl::BeginTx().CommitTx()
+        ).GetValueSync());
+
+        // Victim tries to commit with write to the same key
+        // This triggers lock validation, which fails because the lock on key 1 was broken
+        auto commitResult = victimSession.ExecuteDataQuery(
+            "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\") /* victim-commit */",
+            TTxControl::Tx(*victimTx).CommitTx()
+        ).ExtractValueSync();
+
+        // Victim should be ABORTED because its locks were broken
+        UNIT_ASSERT_VALUES_EQUAL(commitResult.GetStatus(), EStatus::ABORTED);
+
+        // Wait for stats to be collected and check both LocksBrokenAsBreaker and LocksBrokenAsVictim
+        ui64 locksBrokenAsBreaker = 0;
+        ui64 locksBrokenAsVictim = 0;
+        bool foundBreaker = false;
+        bool foundVictim = false;
+
+        for (size_t iter = 0; iter < 30 && (!foundBreaker || !foundVictim); ++iter) {
+            // Query both breaker and victim metrics in one pass
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT QueryText, LocksBrokenAsBreaker, LocksBrokenAsVictim
+                FROM `/Root/Tenant1/.sys/query_metrics_one_minute`
+                WHERE QueryText LIKE '%lock-breaker%' OR QueryText LIKE '%victim-commit%';
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString ysonString = NKqp::StreamResultToYson(it);
+            Cerr << "Query metrics result: " << ysonString << Endl;
+
+            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+            UNIT_ASSERT(node.IsList());
+
+            for (const auto& row : node.AsList()) {
+                if (!row.IsList() || row.AsList().size() < 3) continue;
+
+                auto getStringValue = [](const NYT::TNode& n) -> TString {
+                    if (n.IsList() && !n.AsList().empty()) {
+                        return n.AsList()[0].AsString();
+                    }
+                    return n.AsString();
+                };
+                auto getUint64Value = [](const NYT::TNode& n) -> ui64 {
+                    if (n.IsList() && !n.AsList().empty()) {
+                        return n.AsList()[0].AsUint64();
+                    }
+                    return n.AsUint64();
+                };
+
+                TString queryText = getStringValue(row.AsList()[0]);
+                ui64 breaker = getUint64Value(row.AsList()[1]);
+                ui64 victim = getUint64Value(row.AsList()[2]);
+
+                if (queryText.Contains("lock-breaker") && !queryText.Contains("query_metrics")) {
+                    locksBrokenAsBreaker = breaker;
+                    foundBreaker = true;
+                }
+                if (queryText.Contains("victim-commit") && !queryText.Contains("query_metrics")) {
+                    locksBrokenAsVictim = victim;
+                    foundVictim = true;
+                }
+            }
+
+            if (!foundBreaker || !foundVictim) {
+                Sleep(TDuration::Seconds(5));
+            }
+        }
+
+        UNIT_ASSERT_C(foundBreaker, "Breaker not found in metrics");
+        UNIT_ASSERT_C(foundVictim, "Victim not found in metrics");
+
+        UNIT_ASSERT_VALUES_EQUAL(locksBrokenAsBreaker, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(locksBrokenAsVictim, 1u);
+    }
 }
 
 Y_UNIT_TEST_SUITE(ShowCreateView) {

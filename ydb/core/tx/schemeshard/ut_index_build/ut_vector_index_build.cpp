@@ -1473,16 +1473,12 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
             Cout << "BuildIndex 3 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
             UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLATION,
                 buildIndexOperation.DebugString()
             );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: YES");
         }
-
-        // but we need to turn EnableVectorIndex back to progress:
-        runtime.GetAppData().FeatureFlags.SetEnableVectorIndex(true);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
         env.TestWaitNotification(runtime, buildIndexTx);
 
@@ -1579,14 +1575,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
-    Y_UNIT_TEST(UnknownState) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
+    ui64 DoCreateBrokenIndex(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "vectors"
             Columns { Name: "id" Type: "Uint64" }
@@ -1652,6 +1641,19 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
         }
 
+        return buildIndexTx;
+    }
+
+    Y_UNIT_TEST(UnknownState) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        const ui64 buildIndexTx = DoCreateBrokenIndex(runtime, env, txId);
+
         {
             // set a known State but unknown SubState
             TString writeQuery = Sprintf(R"(
@@ -1709,6 +1711,29 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build kind");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
         }
+    }
+
+    Y_UNIT_TEST(CancelBroken) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        const ui64 buildIndexTx = DoCreateBrokenIndex(runtime, env, txId);
+
+        const ui64 cancelTxId = ++txId;
+        TestCancelBuildIndex(runtime, cancelTxId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_CANCELLED);
+
+        // Check that another index is built successfully (i.e. the table is not left in a locked state)
+        const ui64 buildIndex2Tx = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndex2Tx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndex2Tx);
     }
 
     Y_UNIT_TEST(CreateBuildProposeReject) {

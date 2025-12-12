@@ -204,8 +204,8 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           ydb_database_groups: 8
           ydb_cores_dynamic: 8
           ydb_dynnodes:
-            - { instance: 'a', offset: 0 }
-            - { instance: 'b', offset: 1 }
+            - { instance: 'a', offset: 1 }
+            - { instance: 'b', offset: 2 }
           ydb_brokers:
             - static-node-1.ydb-cluster.com
             - static-node-2.ydb-cluster.com
@@ -263,8 +263,8 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           ydb_database_groups: 8
           ydb_cores_dynamic: 8
           ydb_dynnodes:
-            - { instance: 'a', offset: 0 }
-            - { instance: 'b', offset: 1 }
+            - { instance: 'a', offset: 1 }
+            - { instance: 'b', offset: 2 }
           ydb_brokers:
             - static-node-1.ydb-cluster.com
             - static-node-2.ydb-cluster.com
@@ -320,8 +320,8 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           ydb_database_groups: 7
           ydb_cores_dynamic: 8
           ydb_dynnodes:
-            - { instance: 'a', offset: 0 }
-            - { instance: 'b', offset: 1 }
+            - { instance: 'a', offset: 1 }
+            - { instance: 'b', offset: 2 }
           ydb_brokers:
             - static-node-1.ydb-cluster.com
             - static-node-2.ydb-cluster.com
@@ -610,60 +610,196 @@ all:
 - mirror-3-dc-9-nodes
 
   ```yaml
-  all:
-    children:
-      ydb:
-        #Серверы
-        hosts:
-          static-node-1.ydb-cluster.com:
-          static-node-2.ydb-cluster.com:
-          static-node-3.ydb-cluster.com:
-          static-node-4.ydb-cluster.com:
-          static-node-5.ydb-cluster.com:
-          static-node-6.ydb-cluster.com:
-          static-node-7.ydb-cluster.com:
-          static-node-8.ydb-cluster.com:
-          static-node-9.ydb-cluster.com:
-
-        vars:
-          # Ansible
-          ansible_user: имя_пользователя
-          ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
-
-          # Система
-          system_timezone: UTC
-          system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
-          
-          # Узлы
-          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
-          ydb_version: "25.1.4.7"
-
-          # Хранилище
-          ydb_cores_static: 8
-          ydb_disks:
-            - name: /dev/vdb
-              label: ydb_disk_1
-          ydb_allow_format_drives: true
-          ydb_skip_data_loss_confirmation_prompt: false
-          ydb_pool_kind: ssd
-          ydb_database_groups: 8
-          ydb_cores_dynamic: 8
-          ydb_dynnodes:
-            - { instance: 'a', offset: 0 }
-            - { instance: 'b', offset: 1 }
-          ydb_brokers:
-            - static-node-1.ydb-cluster.com
-            - static-node-2.ydb-cluster.com
-            - static-node-3.ydb-cluster.com
-          
-          # База данных
-          ydb_user: root
-          ydb_domain: Root
-          ydb_dbname: database
-
-          #Настройки авторизации
-          ydb_enforce_user_token_requirement: true
-          ydb_request_client_certificate: true
+  storage_config_generation: 0
+  static_erasure: mirror-3-dc
+  host_configs:
+  - drive:
+    - path: /dev/disk/by-partlabel/ydb_disk_1
+      type: SSD
+    host_config_id: 1
+  hosts:
+  - host: static-node-1.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 1
+      data_center: 'zone-a'
+      rack: '1'
+  - host: static-node-2.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 2
+      data_center: 'zone-a'
+      rack: '2'
+  - host: static-node-3.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 3
+      data_center: 'zone-a'
+      rack: '3'
+  - host: static-node-4.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 4
+      data_center: 'zone-b'
+      rack: '4'
+  - host: static-node-5.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 5
+      data_center: 'zone-b'
+      rack: '5'
+  - host: static-node-6.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 6
+      data_center: 'zone-b'
+      rack: '6'
+  - host: static-node-7.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 7
+      data_center: 'zone-d'
+      rack: '7'
+  - host: static-node-8.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 8
+      data_center: 'zone-d'
+      rack: '8'
+  - host: static-node-9.ydb-cluster.com
+    host_config_id: 1
+    walle_location:
+      body: 9
+      data_center: 'zone-d'
+      rack: '9'
+  domains_config:
+    domain:
+    - name: Root
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: mirror-3-dc
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
+    - ring:
+        node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        nto_select: 9
+      ssid: 1
+    security_config:
+      enforce_user_token_requirement: true
+      monitoring_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      administration_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      viewer_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+      register_dynamic_node_allowed_sids:
+      - databaseNodes@cert
+      - root@builtin
+  blob_storage_config:
+    service_set:
+      groups:
+      - erasure_species: mirror-3-dc
+        rings:
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-1.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-2.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-3.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-4.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-5.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-6.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+        - fail_domains:
+          - vdisk_locations:
+            - node_id: static-node-7.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-8.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+          - vdisk_locations:
+            - node_id: static-node-9.ydb-cluster.com
+              pdisk_category: SSD
+              path: /dev/disk/by-partlabel/ydb_disk_1
+  channel_profile_config:
+    profile:
+    - channel:
+      - erasure_species: mirror-3-dc
+        pdisk_category: 1   # 0=ROT, 1=SSD, 2=NVME
+        storage_pool_kind: ssd
+      - erasure_species: mirror-3-dc
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      - erasure_species: mirror-3-dc
+        pdisk_category: 1
+        storage_pool_kind: ssd
+      profile_id: 0
+  interconnect_config:
+      start_tcp: true
+      encryption_mode: OPTIONAL
+      path_to_certificate_file: "/opt/ydb/certs/node.crt"
+      path_to_private_key_file: "/opt/ydb/certs/node.key"
+      path_to_ca_file: "/opt/ydb/certs/ca.crt"
+  grpc_config:
+      cert: "/opt/ydb/certs/node.crt"
+      key: "/opt/ydb/certs/node.key"
+      ca: "/opt/ydb/certs/ca.crt"
+      services_enabled:
+      - legacy
+  auth_config:
+    path_to_root_ca: /opt/ydb/certs/ca.crt    
+  client_certificate_authorization:
+    request_client_certificate: true
+    client_certificate_definitions:
+        - member_groups: ["databaseNodes@cert"]
+          subject_terms:
+          - short_name: "O"
+            values: ["YDB"]
+  query_service_config:
+    generic:
+      connector:
+        endpoint:
+          host: localhost
+          port: 19102
+        use_ssl: false
+      default_settings:
+        - name: DateTimeFormat
+          value: string
+        - name: UsePredicatePushdown
+          value: "true"
+  feature_flags:
+    enable_external_data_sources: true
+    enable_script_execution_operations: true
     ```
 - block-4-2
 

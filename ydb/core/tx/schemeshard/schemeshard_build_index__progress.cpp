@@ -1232,7 +1232,7 @@ private:
         return buildInfo.InProgressShards.empty() && buildInfo.ToUploadShards.empty();
     }
 
-    void AddShard(TIndexBuildInfo& buildInfo, const TShardIdx& idx, const TIndexBuildInfo::TShardStatus& status) {
+    void AddShard(TIndexBuildInfo& buildInfo, const TShardIdx& idx, const TIndexBuildShardStatus& status) {
         switch (status.Status) {
             case NKikimrIndexBuilder::EBuildStatus::INVALID:
             case NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
@@ -1929,7 +1929,7 @@ public:
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         Y_ENSURE(buildInfoPtr);
-        auto& buildInfo = *buildInfoPtr->Get();
+        auto& buildInfo = *buildInfoPtr->get();
 
         LOG_N("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State);
         LOG_D("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
@@ -2354,7 +2354,7 @@ public:
             } else {
                 LOG_D("InitiateShard " << x.ShardIdx);
             }
-            auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), ""});
+            auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
             if (!buildInfo.IsValidatingUniqueIndex()) {
                 shardRange.From = std::move(bound);
@@ -2395,7 +2395,7 @@ public:
         if (!buildInfoPtr) {
             return true;
         }
-        auto& buildInfo = *buildInfoPtr->Get();
+        auto& buildInfo = *buildInfoPtr->get();
 
         if (!GotScheduledBilling(buildInfo)) {
             return true;
@@ -2479,7 +2479,7 @@ public:
         if (!buildInfoPtr) {
             return true;
         }
-        auto& buildInfo = *buildInfoPtr->Get();
+        auto& buildInfo = *buildInfoPtr->get();
         LOG_D("TTxReply : PipeRetry"
             << ", TIndexBuildInfo: " << buildInfo
             << ", shardId# " << ShardId
@@ -2534,7 +2534,7 @@ public:
             return true;
         }
 
-        auto& buildInfo = *buildInfoPtr->Get();
+        auto& buildInfo = *buildInfoPtr->get();
         LOG_D("TTxReply : " << TypeName<TEvResponse>()
             << ", TIndexBuildInfo: " << buildInfo
             << ", record: " << ResponseShortDebugString()
@@ -2557,7 +2557,7 @@ public:
             return true;
         }
 
-        TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+        TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
         auto actualSeqNo = std::pair<ui64, ui64>(Self->Generation(), shardStatus.SeqNoRound);
         auto recordSeqNo = std::pair<ui64, ui64>(record.GetRequestSeqNoGeneration(), record.GetRequestSeqNoRound());
 
@@ -2636,7 +2636,7 @@ public:
         }
     }
 
-    virtual void HandleProgress(TIndexBuildInfo::TShardStatus& shardStatus, TIndexBuildInfo& buildInfo) {
+    virtual void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(false, TStringBuilder() << "HandleProgress is unreachable for " << TypeName<TEvResponse>()
             << ", TIndexBuildInfo: " << buildInfo
             << ", shardStatus: " << shardStatus.ToString());
@@ -2811,7 +2811,7 @@ public:
             return true;
         }
 
-        auto& buildInfo = *buildInfoPtr->Get();
+        auto& buildInfo = *buildInfoPtr->get();
         LOG_D("TTxReply : TEvUploadSampleKResponse"
             << ", TIndexBuildInfo: " << buildInfo
             << ", record: " << record.ShortDebugString());
@@ -2867,7 +2867,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplyValidateUniqueIndex: public TTxShard
         const auto& record = Response->Get()->Record;
         TTabletId shardId = TTabletId(record.GetTabletId());
         TShardIdx shardIdx = Self->GetShardIdx(shardId);
-        TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+        TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
 
         if (const TString& key = record.GetFirstIndexKey()) {
             shardStatus.Range.From = TSerializedCellVec(key);
@@ -2890,7 +2890,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplyFulltextIndex: public TTxShardReply<
         const auto& record = Response->Get()->Record;
         TTabletId shardId = TTabletId(record.GetTabletId());
         TShardIdx shardIdx = Self->GetShardIdx(shardId);
-        TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+        TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
 
         shardStatus.DocCount = record.GetDocCount();
         shardStatus.TotalDocLength = record.GetTotalDocLength();
@@ -2911,7 +2911,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplyFulltextDict: public TTxShardReply<T
         if (record.GetFirstTokenRows() || record.GetLastTokenRows()) {
             TTabletId shardId = TTabletId(record.GetTabletId());
             TShardIdx shardIdx = Self->GetShardIdx(shardId);
-            TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+            TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
 
             shardStatus.FirstToken = record.GetFirstToken();
             shardStatus.FirstTokenRows = record.GetFirstTokenRows();
@@ -2929,7 +2929,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDa
     {
     }
 
-    void HandleProgress(TIndexBuildInfo::TShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+    void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
         auto& record = Response->Get()->Record;
 
         if (record.HasLastKeyAck()) {
@@ -3354,7 +3354,7 @@ public:
             return true;
         }
 
-        auto& buildInfo = *buildInfoPtr->Get();
+        auto& buildInfo = *buildInfoPtr->get();
         LOG_I("TTxReply : TEvAllocateResult, id# " << BuildId
             << ", txId# " << txId);
         LOG_D("TTxReply : TEvAllocateResult"

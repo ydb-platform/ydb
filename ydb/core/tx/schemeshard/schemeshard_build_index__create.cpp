@@ -83,7 +83,7 @@ public:
             }
         }
 
-        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+        auto buildInfo = std::make_shared<TIndexBuildInfo>();
         buildInfo->Id = BuildId;
         buildInfo->Uid = uid;
         buildInfo->DomainPathId = domainPath.Base()->PathId;

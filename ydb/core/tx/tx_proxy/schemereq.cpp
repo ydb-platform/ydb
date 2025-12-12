@@ -450,6 +450,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery:
             return *modifyScheme.MutableCreateStreamingQuery()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpTruncateTable:
+            return *modifyScheme.MutableTruncateTable()->MutableTableName();
         }
         Y_UNREACHABLE();
     }
@@ -1083,6 +1086,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpTruncateTable: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::EraseRow;
             ResolveForACL.push_back(toResolve);
             break;
         }

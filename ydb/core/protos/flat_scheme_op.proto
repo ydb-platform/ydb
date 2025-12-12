@@ -1158,6 +1158,11 @@ message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
 }
 
+message TTruncateTable {
+    optional NKikimrProto.TPathID PathId = 1; // Using in DataShard
+    optional string TableName = 2;            // Using in KQP and SchemeShard
+}
+
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
@@ -1929,6 +1934,17 @@ message TModifyScheme {
     optional TSecretSchemaOp AlterSecret = 89;
 
     optional TStreamingQueryDescription CreateStreamingQuery = 90;
+
+    /*
+        The default behavior, which was implemented in the first version 
+        of the "truncate table" statement, 
+        does not provide for schema modification.
+
+        However, the "truncate table" can potentially change the scheme: 
+        for example, to reset sequences
+        (perhaps this option is not implemented at the time of reading this comment).
+    */
+    optional TTruncateTable TruncateTable = 92;
 
     // Some entries are grouped by semantics, so are out of order
 }

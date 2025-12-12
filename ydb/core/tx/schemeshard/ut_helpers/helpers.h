@@ -397,6 +397,11 @@ namespace NSchemeShardUT_Private {
     void TestMoveSequence(TTestActorRuntime& runtime, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
     void TestMoveSequence(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
 
+    TEvTx* TruncateTableRequest(ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard, const TApplyIf& applyIf = {});
+    void AsyncTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard);
+    void TestTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
+    void TestTruncateTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
+
     // locks
     TEvTx* LockRequest(ui64 txId, const TString &parentPath, const TString& name);
     void AsyncLock(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);

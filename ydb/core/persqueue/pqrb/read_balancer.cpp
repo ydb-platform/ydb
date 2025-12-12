@@ -49,7 +49,7 @@ TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletSt
         , StartPartitionIdForWrite(0)
         , TotalGroups(0)
         , ResourceMetrics(nullptr)
-        , TopicMetrics(std::make_unique<TTopicMetrics>())
+        , TopicMetricsHandler(std::make_unique<TTopicMetricsHandler>())
         , StatsReportRound(0)
     {
         Balancer = std::make_unique<TBalancer>(*this);
@@ -486,7 +486,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
             );
         }
 
-        TopicMetrics->Handle(std::move(partRes));
+        TopicMetricsHandler->Handle(std::move(partRes));
 
         // TODO delete
         AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
@@ -578,15 +578,15 @@ void TPersQueueReadBalancer::InitCounters(const TActorContext& ctx) {
         return;
     }
 
-    TopicMetrics->Initialize(TabletConfig, DatabaseInfo, Path, ctx);
+    TopicMetricsHandler->Initialize(TabletConfig, DatabaseInfo, Path, ctx);
 }
 
 void TPersQueueReadBalancer::UpdateConfigCounters() {
-    TopicMetrics->UpdateConfig(TabletConfig, DatabaseInfo, Path, ActorContext());
+    TopicMetricsHandler->UpdateConfig(TabletConfig, DatabaseInfo, Path, ActorContext());
 }
 
 void TPersQueueReadBalancer::UpdateCounters(const TActorContext&) {
-    TopicMetrics->UpdateMetrics();
+    TopicMetricsHandler->UpdateMetrics();
 }
 
 TEvPersQueue::TEvPeriodicTopicStats* TPersQueueReadBalancer::GetStatsEvent() {

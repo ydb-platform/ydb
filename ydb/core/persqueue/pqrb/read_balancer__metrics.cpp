@@ -139,7 +139,7 @@ void SetCounters(TCounters& counters, const TMetricCollector& metrics) {
 
 
 
-void TTopicMetrics::Initialize(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
+void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
     if (DynamicCounters) {
         return;
     }
@@ -166,7 +166,7 @@ void TTopicMetrics::Initialize(const NKikimrPQ::TPQTabletConfig& tabletConfig, c
     InitializeConsumerCounters(database.DatabasePath, tabletConfig, ctx);
 }
 
-void TTopicMetrics::InitializeConsumerCounters(const TString& databasePath, const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
+void TTopicMetricsHandler::InitializeConsumerCounters(const TString& databasePath, const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
     for (const auto& consumer : tabletConfig.GetConsumers()) {
         auto metricsConsumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
 
@@ -192,7 +192,7 @@ void TTopicMetrics::InitializeConsumerCounters(const TString& databasePath, cons
     }
 }
 
-void TTopicMetrics::InitializeKeyCompactionCounters(const TString& databasePath, const NKikimrPQ::TPQTabletConfig& tabletConfig) {
+void TTopicMetricsHandler::InitializeKeyCompactionCounters(const TString& databasePath, const NKikimrPQ::TPQTabletConfig& tabletConfig) {
     if (tabletConfig.GetEnableCompactification()) {
         PartitionKeyCompactionLabeledCounters = InitializeCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(DynamicCounters, databasePath, "topic", {}, true);
     } else {
@@ -200,7 +200,7 @@ void TTopicMetrics::InitializeKeyCompactionCounters(const TString& databasePath,
     }
 }
 
-void TTopicMetrics::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
+void TTopicMetricsHandler::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
     Y_UNUSED(topicPath);
 
     if (!DynamicCounters) {
@@ -217,11 +217,11 @@ void TTopicMetrics::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tabletConfig,
     InactivePartitionCountCounter->Set(inactiveCount);
 }
 
-void TTopicMetrics::Handle(NKikimrPQ::TStatusResponse::TPartResult&& partitionStatus) {
+void TTopicMetricsHandler::Handle(NKikimrPQ::TStatusResponse::TPartResult&& partitionStatus) {
     PartitionStatuses[partitionStatus.GetPartition()] = std::move(partitionStatus);
 }
 
-void TTopicMetrics::UpdateMetrics() {
+void TTopicMetricsHandler::UpdateMetrics() {
     if (PartitionStatuses.empty()) {
         return;
     }

@@ -30,7 +30,7 @@ class TBalancer;
 class TMLPBalancer;
 }
 
-class TTopicMetrics;
+class TTopicMetricsHandler;
 
 struct TDatabaseInfo {
     TString DatabasePath;
@@ -224,7 +224,7 @@ private:
 
     TDatabaseInfo DatabaseInfo;
 
-    std::unique_ptr<TTopicMetrics> TopicMetrics;
+    std::unique_ptr<TTopicMetricsHandler> TopicMetricsHandler;
 
     struct TPartitionStats {
         ui64 DataSize = 0;

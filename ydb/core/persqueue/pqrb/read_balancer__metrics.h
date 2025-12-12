@@ -14,15 +14,17 @@ namespace NKikimr::NPQ {
 
 struct TDatabaseInfo;
 
+
+
 struct TCounters {
     std::unique_ptr<TTabletLabeledCountersBase> Config;
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> Counters;
 };
 
-class TTopicMetrics {
+class TTopicMetricsHandler {
 public:
-    TTopicMetrics();
-    ~TTopicMetrics();
+    TTopicMetricsHandler();
+    ~TTopicMetricsHandler();
 
     void Initialize(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx);
     void UpdateConfig(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx);

@@ -245,7 +245,7 @@ TEST(TPrintDataTypesTest, TestEscape)
 {
     auto taggedType = TaggedLogicalType("'quote_and_single_slash\\", SimpleLogicalType(ESimpleLogicalValueType::Interval));
     auto typeString = ToString(*taggedType);
-    auto expected = TString("Tagged<Interval,'\\\'quote_and_single_slash\\\\'>");
+    auto expected = TStringBuf("Tagged<Interval,'\\\'quote_and_single_slash\\\\'>");
 
     EXPECT_EQ(typeString, expected);
 }

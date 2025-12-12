@@ -16,7 +16,7 @@ using namespace NYson;
 
 TEST(TColumnSortSchemaTest, Serialize)
 {
-    auto test = [] (TString name, ESortOrder sortOrder, TString expected) {
+    auto test = [] (std::string name, ESortOrder sortOrder, std::string expected) {
         TColumnSortSchema schema{
             .Name = name,
             .SortOrder = sortOrder
@@ -31,7 +31,7 @@ TEST(TColumnSortSchemaTest, Serialize)
 
 TEST(TColumnSortSchemaTest, Deserialize)
 {
-    auto test = [] (TString serialized, TString name, ESortOrder sortOrder) {
+    auto test = [] (std::string serialized, std::string name, ESortOrder sortOrder) {
         auto schema = ConvertTo<TColumnSortSchema>(TYsonString(serialized));
         EXPECT_EQ(schema.Name, name);
         EXPECT_EQ(schema.SortOrder, sortOrder);

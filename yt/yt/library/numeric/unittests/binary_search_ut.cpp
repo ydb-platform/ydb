@@ -17,7 +17,7 @@ TEST_F(TBinarySearchTest, TestDoubleToBitset)
 {
     struct TTestCase
     {
-        TString name;
+        std::string name;
         double value;
         uint64_t bitset;
     };
@@ -76,7 +76,7 @@ TEST_F(TBinarySearchTest, TestFloatingPointLowerBound)
 {
     struct TTestCase
     {
-        TString name;
+        std::string name;
         double lo;
         double hi;
         std::function<bool(double)> predicate;
@@ -203,7 +203,7 @@ TEST_F(TBinarySearchTest, TestFloatingPointInverseLowerBound)
 {
     struct TTestCase
     {
-        TString name;
+        std::string name;
         double lo;
         double hi;
         std::function<bool(double)> predicate;

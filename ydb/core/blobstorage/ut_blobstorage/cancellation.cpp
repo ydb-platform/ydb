@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(Cancellation) {
             TString data = MakeData(10);
             TLogoBlobID blobId(1, 1, 1, 1, data.size(), 1);
             TEvBlobStorage::TEvPut* ev = new TEvBlobStorage::TEvPut(
-                TEvBlobStorage::TEvPut::Parameters{
+                TEvBlobStorage::TEvPut::TParameters{
                     .BlobId = blobId,
                     .Buffer = TRope(data),
                     .Deadline = TInstant::Max(),

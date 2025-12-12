@@ -123,6 +123,9 @@ bool THive::TryToDeleteNode(TNodeInfo* node) {
             auto& pileInfo = GetPile(node->BridgePileId);
             pileInfo.Nodes.erase(node->Id);
         }
+        if (node->Down) {
+            UpdateCounterNodesDown(-1);
+        }
         DeleteNode(node->Id);
         return true;
     }

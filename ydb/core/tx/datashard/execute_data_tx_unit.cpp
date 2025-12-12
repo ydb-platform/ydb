@@ -157,6 +157,9 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
                     op->Result()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
                     return EExecutionStatus::Executed;
+
+                case EEnsureCurrentLock::Missing:
+                    Y_ENSURE(false, "unreachable");
             }
         }
     }

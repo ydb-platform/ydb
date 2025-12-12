@@ -1715,10 +1715,15 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
-    if (rec.GetLockMode() != NKikimrDataEvents::OPTIMISTIC) {
-        badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
-            "Only OPTIMISTIC lock mode is currently implemented");
-        return writeOp;
+    switch (rec.GetLockMode()) {
+        case NKikimrDataEvents::OPTIMISTIC:
+        case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            break;
+
+        default:
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented");
+            return writeOp;
     }
 
     if (!writeTx->Ready()) {

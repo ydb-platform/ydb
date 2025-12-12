@@ -199,8 +199,6 @@ namespace NKikimr {
             const ui64 SyncLogMaxEntryPointSize;
             // does it need initial commit?
             bool NeedsInitialCommit;
-            // Snapshot that can be used by Commiter and PhantomFlagStorageBuilder actors
-            TSyncLogSnapshotPtr Snapshot;
             // Id of Keeper actor which possesses the state
             TActorId SelfId;
 
@@ -226,12 +224,13 @@ namespace NKikimr {
             // The function fixes limitation excess by
             // 1. returning swapSnap to write to disk (frees memory)
             // 2. removing some old chunks (putting them to ChunksToDeleteDelayed)
-            TMemRecLogSnapshotPtr FixMemoryAndDiskOverflow();
+            TMemRecLogSnapshotPtr FixMemoryAndDiskOverflow(const TSyncLogSnapshotPtr& snapshot);
             // Calculate first lsn to keep in recovery log for _DATA_RECORDS_,
             // i.e. for those records in SyncLog which keep user data
             ui64 CalculateFirstDataInRecovLogLsnToKeep() const;
             // Schedule chunks deletion and activate PhantomFlagStorage if needed
-            void DropUnsyncedChunks(const TVector<ui32>& chunks);
+            void DropUnsyncedChunks(const TVector<ui32>& chunks,
+                    const TSyncLogSnapshotPtr& snapshot);
         };
 
     } // NSyncLog

@@ -316,12 +316,16 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                             CheckEquvalentLineages(*lineageOut, loaded->Value);
                             YQL_LOG(INFO) << "Lineage replay is the same";
                         } catch (const std::exception& e) {
+                            TStringStream outCalculated;
+                            TStringStream outLoaded;
+                            NYson::TYsonWriter(&outCalculated, NYson::EYsonFormat::Pretty).OnRaw(*lineageOut);
+                            NYson::TYsonWriter(&outLoaded, NYson::EYsonFormat::Pretty).OnRaw(loaded->Value);
                             YQL_LOG(ERROR) << "Lineage in replay is different for standalone mode:\n"
                                            << e.what()
                                            << "\nCalculated lineage:\n"
-                                           << *lineageOut
+                                           << outCalculated.Str()
                                            << "\nLoaded lineage:\n"
-                                           << loaded->Value;
+                                           << outLoaded.Str();
                             throw yexception() << "Lineage in replay is different";
                         }
                     }

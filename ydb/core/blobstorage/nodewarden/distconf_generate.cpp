@@ -483,11 +483,11 @@ namespace NKikimr::NStorage {
             return s.Str();
         };
 
-        TString error;
+        NBsController::TGroupMapperError error;
         const ui32 groupSizeInUnits = 1; // static groups are always single-unit
         if (!mapper.AllocateGroup(groupId.GetRawId(), groupDefinition, replacedDisks, forbid,
                 groupSizeInUnits, requiredSpace, false, {}, error)) {
-            throw TExConfigError() << "group allocation failed Error# " << error
+            throw TExConfigError() << "group allocation failed Error# " << error.ErrorMessage
                 << " groupDefinition# " << dumpGroupDefinition();
         }
 

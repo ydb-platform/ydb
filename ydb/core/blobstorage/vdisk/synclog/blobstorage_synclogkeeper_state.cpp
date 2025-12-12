@@ -324,12 +324,11 @@ namespace NKikimr {
             const ui64 refinedRecoveryLogConfirmedLsn = Max(LastCommit.EntryPointLsn, recoveryLogConfirmedLsn);
 
             TSyncLogKeeperCommitData result(
-                    Snapshot,
+                    std::move(Snapshot),
                     std::move(swapSnap),
                     std::move(deleteDelayed),
                     std::move(ChunksToDelete),
                     refinedRecoveryLogConfirmedLsn);
-
             return result;
         }
 
@@ -492,6 +491,9 @@ namespace NKikimr {
                 PhantomFlagStorageState.UpdateSyncedMask(SyncedMask);
                 if (!chunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
                     PhantomFlagStorageState.StartBuilding();
+                    if (!Snapshot) {
+                        Snapshot = SyncLogPtr->GetSnapshot();
+                    }
                     TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, Snapshot));
                 }
             }

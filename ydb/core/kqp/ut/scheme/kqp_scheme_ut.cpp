@@ -53,10 +53,9 @@ TStatus ExecuteGeneric(NYdb::NQuery::TQueryClient& queryClient, TSession& sessio
 }
 
 template<bool UseSchemaSecrets>
-void CreateSecret(TString& secretName, const TString& secretValue, TSession& session) {
+void CreateSecret(const TString& secretName, const TString& secretValue, TSession& session) {
     TString query;
     if constexpr (UseSchemaSecrets) {
-        secretName = "/Root/" + secretName;
         query = Sprintf("CREATE SECRET `%s` WITH (value=\"%s\")", secretName.c_str(), secretValue.c_str());
     } else {
         query = Sprintf("CREATE OBJECT %s (TYPE SECRET) WITH value=\"%s\"", secretName.c_str(), secretValue.c_str());
@@ -8319,66 +8318,62 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(DisableS3ExternalDataSource) {
+    Y_UNIT_TEST_TWIN(DisableS3ExternalDataSource, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
         TKikimrRunner kikimr(appCfg);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
-        {
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
+
+        const TString secretId = "secretName" + ToString(UseSchemaSecrets);
+        const TString secretValue = "MySecretData";
+        const auto okQueryTemplate = R"sql(
+            CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                SOURCE_TYPE="PostgreSQL",
+                LOCATION="my-bucket",
+                AUTH_METHOD="BASIC",
+                LOGIN="admin",
+                %s = "%s",
+                DATABASE_NAME="cheburashka"
+            );
+        )sql";
+        const auto failQueryTemplate = R"sql(
+            CREATE EXTERNAL DATA SOURCE `{}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );
+        )sql";
+
+        { // with table client
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             TString externalDataSourceName = "/Root/ExternalDataSource2";
-            auto query = TStringBuilder() << R"(
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
-                    SOURCE_TYPE="ObjectStorage",
-                    LOCATION="my-bucket",
-                    AUTH_METHOD="NONE"
-                );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            const auto failQuery = Sprintf(failQueryTemplate, externalDataSourceName.c_str());
+            auto result = session.ExecuteSchemeQuery(failQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
 
-            auto query2 = TStringBuilder() << R"(
-                CREATE OBJECT `baz2` (TYPE SECRET) WITH value=`MySecretData`;
+            CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
 
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
-                    SOURCE_TYPE="PostgreSQL",
-                    LOCATION="my-bucket",
-                    AUTH_METHOD="BASIC",
-                    LOGIN="admin",
-                    PASSWORD_SECRET_NAME = "baz2",
-                    DATABASE_NAME="cheburashka"
-                );)";
-            result = session.ExecuteSchemeQuery(query2).GetValueSync();
+            const auto okQuery = Sprintf(okQueryTemplate, externalDataSourceName.c_str(), UseSchemaSecrets ? "PASSWORD_SECRET_PATH" : "PASSWORD_SECRET_NAME", secretId.c_str());
+            result = session.ExecuteSchemeQuery(okQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        {
+        { // with query client
             auto client = kikimr.GetQueryClient();
             auto session = client.GetSession().GetValueSync().GetSession();
             TString externalDataSourceName = "/Root/ExternalDataSource";
-            auto query = TStringBuilder() << R"(
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
-                    SOURCE_TYPE="ObjectStorage",
-                    LOCATION="my-bucket",
-                    AUTH_METHOD="NONE"
-                );)";
-            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            const auto failQuery = Sprintf(failQueryTemplate, externalDataSourceName.c_str());
+            auto result = session.ExecuteQuery(failQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
 
-            auto query2 = TStringBuilder() << R"(
-                CREATE OBJECT `baz` (TYPE SECRET) WITH value=`MySecretData`;
-
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
-                    SOURCE_TYPE="PostgreSQL",
-                    LOCATION="my-bucket",
-                    AUTH_METHOD="BASIC",
-                    LOGIN="admin",
-                    PASSWORD_SECRET_NAME = "baz",
-                    DATABASE_NAME="cheburashka"
-                );)";
-            result = session.ExecuteQuery(query2, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            const auto okQuery = Sprintf(okQueryTemplate, externalDataSourceName.c_str(), UseSchemaSecrets ? "PASSWORD_SECRET_PATH" : "PASSWORD_SECRET_NAME", secretId.c_str());
+            result = session.ExecuteQuery(okQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -9245,7 +9240,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // ok
         {
-            TString secretId = "mysecretname";
+            const TString secretId = "mysecretname";
             const TString secretValue = "root@builtin";
             CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
 
@@ -9256,9 +9251,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root",
-                    TOKEN_SECRET_NAME = "%s"
+                    %s = "%s"
                 );
-            )", kikimr.GetEndpoint().c_str(), secretId.c_str());
+            )", kikimr.GetEndpoint().c_str(), UseSchemaSecrets ? "TOKEN_SECRET_PATH" : "TOKEN_SECRET_NAME", secretId.c_str());
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -9302,7 +9297,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAsyncReplicationWithPasswordSecret) {
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithPasswordSecret, UseSchemaSecrets) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9317,16 +9312,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     ENDPOINT = "%s",
                     DATABASE = "/Root",
                     USER = "user",
-                    PASSWORD_SECRET_NAME = "password_secret_name"
+                    %s = "password_secret"
                 );
-            )", kikimr.GetEndpoint().c_str());
+            )", kikimr.GetEndpoint().c_str(), UseSchemaSecrets ? "PASSWORD_SECRET_PATH" : "PASSWORD_SECRET_NAME");
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
-    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithIamAuth, UseQueryService) {
+    Y_UNIT_TEST_QUAD(CreateAsyncReplicationWithIamAuth, UseQueryService, UseSchemaSecrets) {
         TKikimrRunner kikimr;
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
@@ -9351,9 +9346,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 WITH (
                     CONNECTION_STRING = "grpcs://localhost:2135/?database=/Root",
                     SERVICE_ACCOUNT_ID = "foo",
-                    INITIAL_TOKEN_SECRET_NAME = "bar"
+                    %s = "bar"
                 );
-            )", kikimr.GetEndpoint().c_str());
+            )", UseSchemaSecrets ? "INITIAL_TOKEN_SECRET_PATH" : "INITIAL_TOKEN_SECRET_NAME");
 
             const auto result = executeQuery(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -9821,6 +9816,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER ASYNC REPLICATION `/Root/replication`
                 SET (
                     PASSWORD_SECRET_NAME = "password_secret_name"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER ASYNC REPLICATION `/Root/replication`
+                SET (
+                    PASSWORD_SECRET_PATH = "password_secret_path"
                 );
             )";
 
@@ -10423,6 +10431,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                   FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    USER = "user",
+                    PASSWORD_SECRET_PATH = "bar",
+                    PASSWORD_SECRET_NAME = "baz"
+                );
+            )";
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "PASSWORD_SECRET_NAME and PASSWORD_SECRET_PATH are mutually exclusive");
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     PASSWORD = "bar"
                 );
             )";
@@ -10924,6 +10948,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 ALTER TRANSFER `/Root/transfer`
                 SET (
                     PASSWORD_SECRET_NAME = "password_secret_name"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TRANSFER `/Root/transfer`
+                SET (
+                    PASSWORD_SECRET_PATH = "password_secret_path"
                 );
             )";
 

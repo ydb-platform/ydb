@@ -31,7 +31,6 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
-    ydb/tests/library/kv
     ydb/tests/library/clients
 )
 

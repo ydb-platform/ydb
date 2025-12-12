@@ -36,7 +36,7 @@ static std::tuple<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClust
     if (!buildInfo.KMeans.NeedsAnotherLevel() || count <= 1 || shards <= 1) {
         return {1, 1, 1};
     }
-    for (; 2 * shards <= parts; parts = (parts + 1) / 2) {
+    for (; 2 * shards <= parts || parts > 32768; parts = (parts + 1) / 2) {
         step *= 2;
     }
     return {count, parts, step};

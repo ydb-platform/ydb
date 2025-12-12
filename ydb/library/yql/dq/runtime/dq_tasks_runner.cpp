@@ -628,15 +628,16 @@ public:
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
 
-                    TDqChannelSettings settings;
-                    settings.ChannelId = channelId;
-                    settings.SrcStageId = inputChannelDesc.GetSrcStageId();
-                    settings.RowType = *inputType;
-                    settings.HolderFactory = &holderFactory;
-                    settings.MaxStoredBytes = memoryLimits.ChannelBufferSize;
-                    settings.TransportVersion = inputChannelDesc.GetTransportVersion();
-                    settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
-                    settings.PackerVersion = FromProto(task.GetValuePackerVersion());
+                    TDqChannelSettings settings = {
+                        .RowType = *inputType,
+                        .HolderFactory = &holderFactory,
+                        .ChannelId = channelId,
+                        .SrcStageId = inputChannelDesc.GetSrcStageId(),
+                        .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
+                        .TransportVersion = inputChannelDesc.GetTransportVersion(),
+                        .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                        .MaxStoredBytes = memoryLimits.ChannelBufferSize
+                    };
 
                     auto inputChannel = CreateDqInputChannel(settings, typeEnv);
 
@@ -743,23 +744,22 @@ public:
                 for (auto& outputChannelDesc : outputDesc.GetChannels()) {
                     ui64 channelId = outputChannelDesc.GetId();
 
-                    TDqChannelSettings settings;
-                    settings.ChannelId = channelId;
-                    settings.DstStageId = outputChannelDesc.GetDstStageId();
-                    settings.RowType = *taskOutputType;
-                    settings.HolderFactory = &holderFactory;
-                    settings.MaxStoredBytes = memoryLimits.ChannelBufferSize;
-                    settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
-                    settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
-                    settings.ArrayBufferMinFillPercentage = memoryLimits.ArrayBufferMinFillPercentage;
-                    settings.BufferPageAllocSize = memoryLimits.BufferPageAllocSize;
-                    settings.TransportVersion = outputChannelDesc.GetTransportVersion();
-                    settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
-                    settings.PackerVersion = FromProto(task.GetValuePackerVersion());
-
-                    if (!outputChannelDesc.GetInMemory()) {
-                        settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
-                    }
+                    TDqChannelSettings settings = {
+                        .RowType = *taskOutputType,
+                        .HolderFactory = &holderFactory,
+                        .ChannelId = channelId,
+                        .DstStageId = outputChannelDesc.GetDstStageId(),
+                        .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
+                        .TransportVersion = outputChannelDesc.GetTransportVersion(),
+                        .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                        .MaxStoredBytes = memoryLimits.ChannelBufferSize,
+                        .MaxChunkBytes = memoryLimits.OutputChunkMaxSize,
+                        .ChunkSizeLimit = memoryLimits.ChunkSizeLimit,
+                        .ChannelStorage = outputChannelDesc.GetInMemory() ? nullptr
+                            : execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling()),
+                        .ArrayBufferMinFillPercentage = memoryLimits.ArrayBufferMinFillPercentage,
+                        .BufferPageAllocSize = memoryLimits.BufferPageAllocSize
+                    };
 
                     if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
                         const auto srcNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId()).NodeId();

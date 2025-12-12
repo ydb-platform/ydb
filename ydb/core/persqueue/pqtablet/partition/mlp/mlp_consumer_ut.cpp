@@ -164,7 +164,8 @@ Y_UNIT_TEST(RecreateConsumer) {
                 .EndDeadLetterPolicy()
             .EndAddConsumer()).GetValueSync();
     
-    {
+    Cerr << ">>>>> Write many messages for creating WAL (if message count is small every will create the snapshot)" << Endl;
+    for (size_t i = 0; i < 50; ++i) {
         CreateWriterActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
@@ -172,7 +173,7 @@ Y_UNIT_TEST(RecreateConsumer) {
                 {
                     .Index = 0,
                     .MessageBody = "message_body",
-                    .MessageGroupId = "message_group_id"
+                    .MessageGroupId = TStringBuilder() << "message_group_id_" << i
                 },
             }
         });
@@ -181,8 +182,8 @@ Y_UNIT_TEST(RecreateConsumer) {
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
     }
 
-    // many iteration for creating many WAL records
-    for (size_t i = 0; i < 120; ++i) {
+    Cerr << ">>>>> many iteration for creating many WAL records" << Endl;
+    for (size_t i = 0; i < 50; ++i) {
         CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
@@ -202,6 +203,7 @@ Y_UNIT_TEST(RecreateConsumer) {
         GetChangeResponse(runtime);
     }
 
+    Cerr << ">>>>> Commit message" << Endl;
     {
         CreateCommitterActor(runtime, {
             .DatabasePath = "/Root",
@@ -214,11 +216,13 @@ Y_UNIT_TEST(RecreateConsumer) {
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     }
 
-    client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
+    Cerr << ">>>>> drop consumer" << Endl;
+    auto result = client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
             .SetRetentionPeriod(TDuration::Seconds(103))
             .AppendDropConsumers("mlp-consumer")
         ).GetValueSync();
 
+    Cerr << ">>>>> add consumer" << Endl;
     client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
             .SetRetentionPeriod(TDuration::Seconds(103))
             .BeginAddSharedConsumer("mlp-consumer")
@@ -234,6 +238,7 @@ Y_UNIT_TEST(RecreateConsumer) {
             .EndAddConsumer()
         ).GetValueSync();
 
+    Cerr << ">>>>> read message (write snapshot)" << Endl;
     {
         CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
@@ -249,6 +254,45 @@ Y_UNIT_TEST(RecreateConsumer) {
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
+    }
+
+    Cerr << ">>>>> read message (write WAL)" << Endl;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+        
+        auto result = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 1);
+    }
+
+    Cerr << ">>>>> reload pq tablet" << Endl;
+    ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
+
+    Cerr << ">>>>> read message after reload" << Endl;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+        
+        auto result = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 2);
     }
 }
 

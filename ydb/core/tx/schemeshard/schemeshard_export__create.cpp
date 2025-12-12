@@ -35,6 +35,11 @@ bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& it
         || item.SourcePathType == NKikimrSchemeOp::EPathTypeTableIndex;
 }
 
+template <typename T>
+concept HasMaterializeIndexes = requires(const T& t) {
+    { t.materialize_indexes() } -> std::same_as<bool>;
+};
+
 }
 
 namespace NKikimr {
@@ -115,20 +120,30 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         TExportInfo::TPtr exportInfo = nullptr;
 
+        auto processExportSettings = [&]<typename TSettings>(const TSettings& settings, TExportInfo::EKind kind, bool enableFeatureFlags) -> bool {
+            exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());
+            if constexpr (HasMaterializeIndexes<TSettings>) {
+                exportInfo->MaterializeIndexes = settings.materialize_indexes();
+            }
+            if (enableFeatureFlags) {
+                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
+                exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
+            }
+            TString explain;
+            if (!FillItems(*exportInfo, settings, explain)) {
+                return Reply(
+                    std::move(response),
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder() << "Failed item check: " << explain
+                );
+            }
+            return false;
+        };
+
         switch (request.GetRequest().GetSettingsCase()) {
         case NKikimrExport::TCreateExportRequest::kExportToYtSettings:
-            {
-                const auto& settings = request.GetRequest().GetExportToYtSettings();
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::YT, settings, domainPath.Base()->PathId, request.GetPeerName());
-
-                TString explain;
-                if (!FillItems(*exportInfo, settings, explain)) {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::BAD_REQUEST,
-                        TStringBuilder() << "Failed item check: " << explain
-                    );
-                }
+            if (processExportSettings(request.GetRequest().GetExportToYtSettings(), TExportInfo::EKind::YT, false)) {
+                return true;
             }
             break;
 
@@ -138,27 +153,25 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 if (!settings.scheme()) {
                     settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
                 }
-
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
-                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
-                exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
-                exportInfo->MaterializeIndexes = settings.materialize_indexes();
-                if (exportInfo->MaterializeIndexes && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
+                if (settings.materialize_indexes() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
                     return Reply(
                         std::move(response),
                         Ydb::StatusIds::PRECONDITION_FAILED,
                         "Index materialization is not enabled"
                     );
                 }
-
-                TString explain;
-                if (!FillItems(*exportInfo, settings, explain)) {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::BAD_REQUEST,
-                        TStringBuilder() << "Failed item check: " << explain
-                    );
+                if (processExportSettings(settings, TExportInfo::EKind::S3, true)) {
+                    return true;
                 }
+            }
+            break;
+
+        case NKikimrExport::TCreateExportRequest::kExportToFsSettings:
+            if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
+                return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
+            }
+            if (processExportSettings(request.GetRequest().GetExportToFsSettings(), TExportInfo::EKind::FS, true)) {
+                return true;
             }
             break;
 

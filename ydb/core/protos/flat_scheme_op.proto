@@ -5,6 +5,7 @@ import "ydb/core/protos/channel_purpose.proto";
 import "ydb/core/protos/compaction.proto";
 import "ydb/core/protos/filestore_config.proto";
 import "ydb/core/protos/follower_group.proto";
+import "ydb/core/protos/fs_settings.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/pqconfig.proto";
 import "ydb/core/protos/replication.proto";
@@ -1327,6 +1328,7 @@ message TBackupTask {
     oneof Settings {
         TYTSettings YTSettings = 4;
         NKikimrSchemeOp.TS3Settings S3Settings = 9;
+        NKikimrSchemeOp.TFSSettings FSSettings = 20;
     }
 
     optional TPathDescription Table = 10; // for further restore
@@ -1374,6 +1376,7 @@ message TRestoreTask {
 
     oneof Settings {
         NKikimrSchemeOp.TS3Settings S3Settings = 6;
+        NKikimrSchemeOp.TFSSettings FSSettings = 9;
     }
 
     optional bool ValidateChecksums = 7; // currently available for s3

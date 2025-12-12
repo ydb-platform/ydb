@@ -702,13 +702,6 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         }
     };
 
-    auto collect = [&](auto& aggregated, const auto& values) {
-        size_t count = std::min(aggregated.size(), values.size());
-        for (size_t i = 0; i < count; ++i) {
-            aggregated[i] += values[i];
-        }
-    };
-
     for (auto& [_, partitionStats] : AggregatedStats.Stats) {
         if (!partitionStats.HasCounters) {
             continue;
@@ -745,11 +738,9 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             }
 
             auto& consumerInfo = jt->second;
-            setCounters(labeledMLPConsumerCounters, consumerStats);
             for (ssize_t i = 0; i < labeledMLPConsumerCounters->GetCounters().Size() && i < consumerStats.GetCountersValues().size(); ++i) {
                 labeledMLPConsumerCounters->GetCounters()[i] = consumerStats.GetCountersValues(i);
             }
-    
             consumerInfo.Aggr->AggregateWith(*labeledConsumerCounters);
 
             consumerInfo.MessageLockAttemptsAggregator->PopulateFrom(consumerStats.GetMessageLocksValues().begin(), consumerStats.GetMessageLocksValues().end());

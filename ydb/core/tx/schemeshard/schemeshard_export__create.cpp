@@ -720,17 +720,17 @@ private:
             exportInfo.EndTime = TAppData::TimeProvider->Now();
         }
     }
-    
+
     TMaybe<TString> GetIssues(const TPathId& itemPathId, TTxId backupTxId, const TExportInfo::TItem& item) {
         if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
             if (!Self->ColumnTables.contains(item.SourcePathId)) {
                 return TStringBuilder() << "Cannot find table: " << item.SourcePathId;
             }
 
-            TColumnTableInfo::TPtr table = Self->ColumnTables.at(item.SourcePathId).GetPtr();            
+            TColumnTableInfo::TPtr table = Self->ColumnTables.at(item.SourcePathId).GetPtr();
             return GetIssues(table, item.SourcePathId, backupTxId);
         }
-        
+
         if (!Self->Tables.contains(itemPathId)) {
             return TStringBuilder() << "Cannot find table: " << itemPathId;
         }
@@ -738,7 +738,7 @@ private:
         TTableInfo::TPtr table = Self->Tables.at(itemPathId);
         return GetIssues(table, itemPathId, backupTxId);
     }
-    
+
     template<typename TTable>
     TMaybe<TString> GetIssues(const TTable& table, const TPathId& itemPathId, TTxId backupTxId) {
         if (!table->BackupHistory.contains(backupTxId)) {
@@ -923,13 +923,13 @@ private:
                 return;
             }
             itemIdx = PopFront(exportInfo->PendingItems);
-            if (const auto item = exportInfo->Items.at(itemIdx); IsPathTypeTransferrable(item)) {
+            if (IsPathTypeTransferrable(exportInfo->Items.at(itemIdx))) {
                 TransferData(*exportInfo, itemIdx, txId);
             } else {
                 LOG_W("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring"
                     << ": id# " << id
                     << ", itemIdx# " << itemIdx
-                    << ", type# " << item.SourcePathType
+                    << ", type# " << exportInfo->Items.at(itemIdx).SourcePathType
                 );
                 return;
             }

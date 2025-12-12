@@ -52,9 +52,20 @@ private:
     static constexpr unsigned Base_ = 'z' - 'a' + 1;
 };
 
+
+// Tables and columns are stored as numbers, this functions
+// convert them to strings for usage in queries and humans:
+std::string getTableName(unsigned tableID);
+std::string getColumnName(unsigned tableID, unsigned columnID);
+std::string getRelationName(unsigned tableID, unsigned columnID);
+std::string getTablePath(unsigned tableID);
+
+
 struct TPitmanYorConfig {
     double Alpha;
     double Theta;
+    // TODO: verify 0 <= discount < 1
+    // TODO: verify concentration > - discount
 
     void DumpParamsHeader(IOutputStream& os) {
         os << "alpha,theta";
@@ -170,7 +181,7 @@ public:
     using TAdjacencyList = std::vector<std::vector<TEdge>>;
 
 public:
-    TAdjacencyList& GetAdjacencyList() {
+    const TAdjacencyList& GetAdjacencyList() const {
         return AdjacencyList_;
     }
 
@@ -221,7 +232,10 @@ std::vector<int> SampleFromPMF(
     const std::vector<double>& probabilities,
     int numVertices, int minDegree);
 
+std::vector<double> GenerateLogNormalProbabilities(TRNG& rng, double mu, double sigma);
+
 // Sample a degree sequence from lognormal distribution
+// TODO: is it necessarily a degree sequence?
 std::vector<int> GenerateLogNormalDegrees(
     TRNG& rng, int numVertices,
     double mu = 1.0, double sigma = 0.5,

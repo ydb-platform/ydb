@@ -8,20 +8,20 @@
 
 namespace NKikimr::NKqp {
 
-static std::string getTableName(unsigned tableID) {
+std::string getTableName(unsigned tableID) {
     return TLexicographicalNameGenerator::getName(tableID, /*lowerCase=*/false);
 }
 
-static std::string getColumnName(unsigned tableID, unsigned columnID) {
+std::string getColumnName(unsigned tableID, unsigned columnID) {
     return TLexicographicalNameGenerator::getName(tableID, /*lowerCase=*/true) + "_" +
            TLexicographicalNameGenerator::getName(columnID, /*lowerCase=*/true);
 }
 
-static std::string getRelationName(unsigned tableID, unsigned columnID) {
+std::string getRelationName(unsigned tableID, unsigned columnID) {
     return getTableName(tableID) + "." + getColumnName(tableID, columnID);
 }
 
-static std::string getTablePath(unsigned tableID) {
+std::string getTablePath(unsigned tableID) {
     return "/Root/" + getTableName(tableID);
 }
 

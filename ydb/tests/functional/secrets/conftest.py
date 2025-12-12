@@ -8,7 +8,7 @@ pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
 DATABASE = "/Root/test"
 USE_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.select_row"]
 ALTER_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.alter_schema"]
-DROP_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.remove_schema"]
+DROP_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.create_table", "ydb.granular.remove_schema"]
 
 
 @pytest.fixture

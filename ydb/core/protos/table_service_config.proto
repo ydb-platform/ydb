@@ -478,4 +478,14 @@ message TTableServiceConfig {
     optional bool Antlr4ParserIsAmbiguityError = 119 [default = false, (InvalidateCompileCache) = true];
 
     optional bool DqHashOperatorsUseBlocks = 120 [default = false, (InvalidateCompileCache) = true];
+
+    message TWarmupConfig {
+        optional bool Enabled = 1 [default = false];
+        optional uint32 DeadlineSeconds = 2 [default = 30];
+        optional bool CompileCacheWarmupEnabled = 3 [default = true];
+        optional uint32 MaxNodesToQuery = 4 [default = 5];
+        optional uint32 MaxConcurrentCompilations = 5 [default = 5];
+    }
+
+    optional TWarmupConfig WarmupConfig = 121;
 };

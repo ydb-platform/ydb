@@ -191,11 +191,13 @@ private:
     bool RequestQueryText() {
         Cout << Endl;
 
-        const auto lineReader = CreateLineReader({.Driver = Driver, .Database = Database, .ContinueAfterCancel = false}, Log);
-        lineReader->Setup({
+        const auto lineReader = CreateLineReader({
+            .Driver = Driver,
+            .Database = Database,
             .Prompt = TStringBuilder() << Prompt << Colors.Yellow() << "YQL" << Colors.OldColor() << "> ",
             .EnableSwitchMode = false,
-        });
+            .ContinueAfterCancel = false,
+        }, Log);
 
         auto response = lineReader->ReadLine(Query);
         lineReader->Finish();

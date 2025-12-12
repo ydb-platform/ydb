@@ -2,6 +2,7 @@
 #include "session_runner_common.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
@@ -113,26 +114,33 @@ public:
 
         NQuery::TExecuteQuerySettings settings;
         settings.StatsMode(CollectStatsMode);
+        settings.ConcurrentResultSets(false);
         ExecuteRunner.Execute(line, {.Settings = settings});
     }
 
 private:
     static TString CreateHelpMessage() {
+        using TLog = TInteractiveLogger;
+
         return TStringBuilder() << Endl << "YDB CLI Interactive Mode – Hotkeys and Special Commands." << Endl
-            << Endl << PrintBold("Hotkeys:") << Endl
-            << "  " << PrintBold("Ctrl+T") << ": switch to AI interactive mode." << Endl
-            << "  " << PrintBold("TAB") << ": complete the current word based on YQL syntax." << Endl
+            << Endl << TLog::EntityName("Hotkeys:") << Endl
+            << "  " << TLog::EntityName("Ctrl+I") << " or " << TLog::EntityName("/switch") << ": switch to " << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::AI) << " interactive mode." << Endl
+            << "  " << TLog::EntityName("TAB") << ": complete the current word based on YQL syntax." << Endl
             << PrintCommonHotKeys()
-            << Endl << PrintBold("Special Commands:") << Endl
-            << "  " << PrintGreen("SET stats = ") << PrintBold("STATS_MODE") << ": set statistics collection mode, allowed modes: "
-            << PrintBold("none") << ", " << PrintBold("basic") << ", " << PrintBold("full") << ", " << PrintBold("profile") << "." << Endl
-            << "  " << PrintGreen("EXPLAIN") << " [" << PrintGreen("AST") << "] " << PrintBold("SQL_QUERY") << ": execute query in explain mode and optionally print AST." << Endl
+            << Endl << TLog::EntityName("Special Commands:") << Endl
+            << "  " << Colors.Green() << "SET stats = " << Colors.OldColor() << TLog::EntityName("STATS_MODE") << ": set statistics collection mode, allowed modes: "
+            << TLog::EntityName("none") << ", " << TLog::EntityName("basic") << ", " << TLog::EntityName("full") << ", " << TLog::EntityName("profile") << "." << Endl
+            << "  " << Colors.Green() << "EXPLAIN" << Colors.OldColor() << " [" << Colors.Green() << "AST" << Colors.OldColor() << "] " << TLog::EntityName("SQL_QUERY") << ": execute query in explain mode and optionally print AST." << Endl
+            << Endl << TLog::EntityName("Interactive Commands:") << Endl
+            << "  " << TLog::EntityName("/help") << ": print this help message." << Endl
             << Endl << "By default, any input is treated as an YQL query and sent directly to the YDB server." << Endl;
     }
 
-    static ILineReader::TSettings CreateSessionSettings(const TSqlSessionSettings& settings) {
+    static TLineReaderSettings CreateSessionSettings(const TSqlSessionSettings& settings) {
         return {
-            .Prompt = TStringBuilder() << Colors.LightGreen() << (settings.ProfileName ? settings.ProfileName : "ydb") << Colors.OldColor() << "> ",
+            .Driver = settings.Driver,
+            .Database = settings.Database,
+            .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
             .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_sql_history.txt",
             .HelpMessage = CreateHelpMessage(),
         };

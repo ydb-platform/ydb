@@ -7,6 +7,8 @@
 namespace NYdb::NConsoleClient {
 
 class TInteractiveLogger {
+    inline static const NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
+
     class TEntry : public TStringBuilder {
     public:
         TEntry(std::shared_ptr<TLog> log, ELogPriority priority);
@@ -33,6 +35,9 @@ public:
     TEntry Debug() const;
 
     bool IsVerbose() const;
+
+    static TString EntityName(const TString& name);
+    static TString EntityNameQuoted(const TString& name);
 
 private:
     std::shared_ptr<TLog> Log;

@@ -126,8 +126,8 @@ std::optional<TString> RunFtxuiInput(const TString& title, const TString& initia
 bool AskYesNoFtxui(const TString& question, bool defaultAnswer) {
     std::vector<TMenuEntry> options;
     options.reserve(2);
-    options.push_back({TStringBuilder() << "Yes" << (defaultAnswer ? " (default)" : ""), []() {}});
-    options.push_back({TStringBuilder() << "No" << (!defaultAnswer ? " (default)" : ""), []() {}});
+    options.emplace_back(TStringBuilder() << "Yes" << (defaultAnswer ? " (default)" : ""), []() {});
+    options.emplace_back(TStringBuilder() << "No" << (!defaultAnswer ? " (default)" : ""), []() {});
 
     auto idx = RunFtxuiMenu(question, {options[0].first, options[1].first});
     if (!idx) {

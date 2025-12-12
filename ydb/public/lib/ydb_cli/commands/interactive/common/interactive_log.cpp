@@ -33,26 +33,26 @@ void TInteractiveLogger::Setup(const TClientCommand::TConfig& config) {
         case TLOG_EMERG:
         case TLOG_ALERT:
         case TLOG_CRIT:
-            prefix << colors.Magenta() << "Critical error: " << colors.OldColor();
+            prefix << colors.Magenta() << "Critical error: ";
             break;
         case TLOG_ERR:
-            prefix << colors.Red() << "Error: " << colors.OldColor();
+            prefix << colors.Red() << "Error: ";
             break;
         case TLOG_WARNING:
-            prefix << colors.Yellow() << "Warning: " << colors.OldColor();
+            prefix << colors.Yellow() << "Warning: ";
             break;
         case TLOG_NOTICE:
-            prefix << colors.Blue() << "Notice: " << colors.OldColor();
+            prefix << colors.Blue() << "Notice: ";
             break;
         case TLOG_INFO:
-            prefix << colors.Green() << "Info: " << colors.OldColor();
+            prefix << colors.Green() << "Info: ";
             break;
         default:
-            prefix << colors.DarkGrayColor() << "Debug: " << colors.OldColor();
+            prefix << colors.DarkGrayColor() << "Debug: ";
             break;
         }
 
-        return TStringBuilder() << prefix << message << "\n";
+        return TStringBuilder() << prefix << message << colors.OldColor() << "\n";
     });
 }
 
@@ -82,6 +82,14 @@ TInteractiveLogger::TEntry TInteractiveLogger::Debug() const {
 
 bool TInteractiveLogger::IsVerbose() const {
     return Log->FiltrationLevel() < TLOG_CRIT;
+}
+
+TString TInteractiveLogger::EntityName(const TString& name) {
+    return TStringBuilder() << Colors.BoldColor() << name << Colors.OldColor();
+}
+
+TString TInteractiveLogger::EntityNameQuoted(const TString& name) {
+    return TStringBuilder() << '"' << Colors.BoldColor() << name << Colors.OldColor() << '"';
 }
 
 } // namespace NYdb::NConsoleClient

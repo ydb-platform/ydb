@@ -14,7 +14,7 @@ public:
 
     virtual ~ISessionRunner() = default;
 
-    virtual bool Setup(ILineReaderController::TPtr controller) = 0;
+    virtual ILineReader::TPtr Setup() = 0;
 
     virtual void HandleLine(const TString& line) = 0;
 };

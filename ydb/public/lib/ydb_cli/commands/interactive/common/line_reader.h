@@ -7,25 +7,7 @@
 
 namespace NYdb::NConsoleClient {
 
-class ILineReaderController {
-public:
-    using TPtr = std::shared_ptr<ILineReaderController>;
-
-    struct TSettings {
-        TString Prompt;
-        std::optional<TString> HistoryFilePath;
-        std::optional<TString> HelpMessage;
-        std::unordered_map<char, std::function<void()>> KeyHandlers;
-        bool EnableYqlCompletion = true;
-        bool EnableSwitchMode = true;
-    };
-
-    virtual ~ILineReaderController() = default;
-
-    virtual void Setup(const TSettings& settings) = 0;
-};
-
-class ILineReader : public ILineReaderController {
+class ILineReader {
 public:
     using TPtr = std::shared_ptr<ILineReader>;
 
@@ -46,6 +28,12 @@ public:
 struct TLineReaderSettings {
     TDriver Driver;
     TString Database;
+    TString Prompt;
+    std::optional<TString> HistoryFilePath;
+    std::optional<TString> HelpMessage;
+    std::vector<TString> AdditionalCommands;
+    bool EnableYqlCompletion = true;
+    bool EnableSwitchMode = true;
     bool ContinueAfterCancel = true;
 };
 

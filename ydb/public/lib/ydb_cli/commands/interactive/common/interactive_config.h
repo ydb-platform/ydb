@@ -14,23 +14,53 @@ class TInteractiveConfigurationManager : public std::enable_shared_from_this<TIn
 public:
     using TPtr = std::shared_ptr<TInteractiveConfigurationManager>;
 
+    enum class EAiApiType {
+        OpenAI,
+        Anthropic,
+        Invalid,
+    };
+
+    class TAiPresets {
+    public:
+        struct TInfo {
+            ui64 OrderIdx = 0;
+            TString Name;
+            EAiApiType ApiType;
+            TString ApiEndpoint;
+            TString ModelName;
+        };
+
+        static void ClearPresets();
+
+        static void AddPreset(const TString& id, const TInfo& info);
+
+        static std::optional<TInfo> GetPreset(const TString& id);
+
+        static std::vector<std::pair<TString, TInfo>> ListPresets();
+
+        static std::unordered_map<TString, TInfo> GetOssPresets();
+
+    private:
+        inline static std::unordered_map<TString, TInfo> Presets = GetOssPresets();
+    };
+
     class TAiProfile {
+        friend class TInteractiveConfigurationManager;
+
     public:
         using TPtr = std::shared_ptr<TAiProfile>;
-
-        enum class EApiType {
-            OpenAI,
-            Anthropic,
-            Invalid,
-        };
 
         TAiProfile(const TString& name, YAML::Node config, TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log);
 
         bool IsValid(TString& error) const;
 
+        TString GetPresetId() const;
+
         const TString& GetName() const;
 
-        std::optional<EApiType> GetApiType() const;
+        void SetName(const TString& name);
+
+        std::optional<EAiApiType> GetApiType() const;
 
         TString GetApiEndpoint() const;
 
@@ -38,19 +68,19 @@ public:
 
         TString GetModelName() const;
 
-        bool SetupProfile();
+        bool SetupProfile(const TString& preset = "");
 
     private:
-        bool SetupApiType();
+        bool SetupApiType(const std::optional<TAiPresets::TInfo>& presetInfo);
 
-        bool SetupApiEndpoint();
+        bool SetupApiEndpoint(const std::optional<TAiPresets::TInfo>& presetInfo);
 
         bool SetupApiToken();
 
-        bool SetupModelName();
+        bool SetupModelName(const std::optional<TAiPresets::TInfo>& presetInfo);
 
     private:
-        const TString Name;
+        TString Name;
         const TInteractiveConfigurationManager::TPtr Manager;
         const TInteractiveLogger Log;
         YAML::Node Config;
@@ -69,23 +99,25 @@ public:
 
     EMode GetDefaultMode() const;
 
+    void ChangeDefaultMode(EMode mode);
+
+    static TString ModeToString(EMode mode);
+
     TString GetActiveAiProfileName() const;
 
     TAiProfile::TPtr GetAiProfile(const TString& name);
 
     std::unordered_map<TString, TAiProfile::TPtr> ListAiProfiles();
 
-    TAiProfile::TPtr InitAiModelProfile();
-
-    TAiProfile::TPtr CreateNewAiModelProfile();
-
-    void RemoveAiModelProfile(const TString& name);
-
-    void ChangeDefaultMode(EMode mode);
+    TAiProfile::TPtr SelectAiModelProfile();
 
     void ChangeActiveAiProfile(const TString& name);
 
 private:
+    TAiProfile::TPtr CreateNewAiModelProfile(const TString& preset = "");
+
+    TString CreateAiProfileName(const TString& currentName, const TString& defaultName);
+
     void LoadProfile();
 
     void CanonizeStructure();

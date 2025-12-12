@@ -19,7 +19,9 @@
 
 namespace NYdb::NConsoleClient {
 
-    class TYQLCompleter: public IYQLCompleter {
+namespace {
+
+    class TYQLCompleter final : public IYQLCompleter {
     public:
         using TPtr = THolder<IYQLCompleter>;
 
@@ -121,6 +123,61 @@ namespace NYdb::NConsoleClient {
         TColorSchema Color;
     };
 
+    class TCompositeCommandCompleter final : public IYQLCompleter {
+    public:
+        TCompositeCommandCompleter(TColorSchema color, const std::vector<TString>& commands, const TDriver& driver, const TString& database, bool isVerbose)
+            : Commands(commands)
+            , YQLCompleter(MakeYQLCompleter(color, driver, database, isVerbose))
+        {}
+
+        TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) final {
+            if (!RunCommandCompletion(text)) {
+                return YQLCompleter->ApplyHeavy(text, prefix, contextLen);
+            }
+
+            auto completions = GetCommandCompletions(text, contextLen);
+
+            TCompletions result;
+            result.reserve(completions.size());
+            for (auto& completion : completions) {
+                result.emplace_back(std::move(completion));
+            }
+
+            return result;
+        }
+
+        THints ApplyLight(TStringBuf text, const std::string& prefix, int& contextLen) final {
+            if (!RunCommandCompletion(text)) {
+                return YQLCompleter->ApplyLight(text, prefix, contextLen);
+            }
+
+            return GetCommandCompletions(text, contextLen);
+        }
+
+    private:
+        bool RunCommandCompletion(TStringBuf text) const {
+            return text.StartsWith('/');
+        }
+
+        THints GetCommandCompletions(TStringBuf text, int& contextLen) const {
+            THints result;
+            result.reserve(Commands.size());
+
+            for (const auto& command : Commands) {
+                if (command.StartsWith(text)) {
+                    result.push_back(command);
+                }
+            }
+
+            contextLen = text.size();
+            return result;
+        }
+
+    private:
+        const std::vector<TString> Commands;
+        const IYQLCompleter::TPtr YQLCompleter;
+    };
+
     NSQLComplete::TLexerSupplier MakePureLexerSupplier() {
         NSQLTranslationV1::TLexers lexers;
         lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
@@ -150,8 +207,11 @@ namespace NYdb::NConsoleClient {
         };
     }
 
+} // anonymous namespace
+
     IYQLCompleter::TPtr MakeYQLCompleter(
-        TColorSchema color, TDriver driver, TString database, bool isVerbose) {
+        TColorSchema color, TDriver driver, TString database, bool isVerbose)
+    {
         NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
 
         auto ranking = NSQLComplete::MakeDefaultRanking(NSQLComplete::LoadFrequencyData());
@@ -180,10 +240,16 @@ namespace NYdb::NConsoleClient {
 
         auto config = NSQLComplete::MakeYDBConfiguration();
 
-        return IYQLCompleter::TPtr(new TYQLCompleter(
+        return MakeHolder<TYQLCompleter>(
             /* heavyEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, heavy, config),
             /* lightEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, light, config),
-            std::move(color)));
+            std::move(color));
+    }
+
+    IYQLCompleter::TPtr MakeYQLCompositeCompleter(
+        TColorSchema color, const std::vector<TString>& commands, TDriver driver, TString database, bool isVerbose)
+    {
+        return MakeHolder<TCompositeCommandCompleter>(color, commands, driver, database, isVerbose);
     }
 
 } // namespace NYdb::NConsoleClient

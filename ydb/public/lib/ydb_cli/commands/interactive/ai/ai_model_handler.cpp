@@ -62,9 +62,7 @@ void TModelHandler::HandleLine(const TString& input) {
             output = Model->HandleMessages(messages);
             messages.clear();
         } catch (const std::exception& e) {
-            Cerr << Colors.Red() << "Failed to perform model API request. "
-                << Colors.OldColor() << "Use " << Colors.BoldColor() << "Ctrl+G" << Colors.OldColor()
-                << " to change model settings. Error reason: " << e.what() << Endl;
+            Cerr << Colors.Red() << "Failed to perform model API request. " << " to change model settings. Error reason: " << e.what() << Colors.OldColor() << Endl;
             break;
         }
 
@@ -131,13 +129,13 @@ void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPt
     const auto& modelName = profile->GetModelName();
 
     switch (*apiType) {
-        case TInteractiveConfigurationManager::TAiProfile::EApiType::OpenAI:
+        case TInteractiveConfigurationManager::EAiApiType::OpenAI:
             Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey}, Log);
             break;
-        case TInteractiveConfigurationManager::TAiProfile::EApiType::Anthropic:
+        case TInteractiveConfigurationManager::EAiApiType::Anthropic:
             Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey}, Log);
             break;
-        case TInteractiveConfigurationManager::TAiProfile::EApiType::Invalid:
+        case TInteractiveConfigurationManager::EAiApiType::Invalid:
             Y_VALIDATE(false, "Invalid API type: " << *apiType);
     }
 }

@@ -1,16 +1,10 @@
 #pragma once
 #include "dq_output.h"
-#include "dq_channel_storage.h"
+#include "dq_channel_settings.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/mkql_node.h>
-
-#include <util/generic/size_literals.h>
-
 
 namespace NYql::NDq {
 
@@ -23,23 +17,6 @@ struct TDqOutputChannelStats : public TDqOutputStats {
     ui64 SpilledBytes = 0;
     ui64 SpilledRows = 0;
     ui64 SpilledBlobs = 0;
-};
-
-struct TDqOutputChannelSettings {
-    struct TMutable {
-        bool IsLocalChannel = false;
-    };
-
-    ui64 MaxStoredBytes = 8_MB;
-    ui64 MaxChunkBytes = 2_MB;
-    ui64 ChunkSizeLimit = 48_MB;
-    NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-    NDqProto::EValuePackerVersion ValuePackerVersion = NDqProto::EValuePackerVersion::VALUE_PACKER_VERSION_V0;
-    IDqChannelStorage::TPtr ChannelStorage;
-    TCollectStatsLevel Level = TCollectStatsLevel::None;
-    TMaybe<ui8> ArrayBufferMinFillPercentage;
-    TMaybe<size_t> BufferPageAllocSize;
-    TMutable MutableSettings;
 };
 
 class IDqOutputChannel : public IDqOutput {
@@ -73,14 +50,12 @@ public:
 
     virtual void Terminate() = 0;
 
-    virtual void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) = 0;
+    virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) = 0;
 };
 
 struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {
 };
 
-IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, ui32 dstStageId, NKikimr::NMiniKQL::TType* outputType,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const TDqOutputChannelSettings& settings, const TLogFunc& logFunc = {});
+IDqOutputChannel::TPtr CreateDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc = {});
 
 } // namespace NYql::NDq

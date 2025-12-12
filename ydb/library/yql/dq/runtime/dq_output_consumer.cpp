@@ -21,6 +21,15 @@
 
 namespace NYql::NDq {
 
+TString FillLevelToString(EDqFillLevel level) {
+    switch(level) {
+        case NoLimit : return "No";
+        case SoftLimit : return "Soft";
+        case HardLimit : return "Hard";
+        default: return "-";
+    }
+}
+
 namespace {
 
 using namespace NKikimr;

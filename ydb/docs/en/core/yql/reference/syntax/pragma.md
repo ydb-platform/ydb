@@ -447,7 +447,7 @@ SELECT $foo;
 | ----- | ------------------------ |
 | 0     | Cost-based optimizer is disabled. |
 | 1     | Cost-based optimizer is disabled, but estimates are computed and available. |
-| 2     | Cost-based optimizer is enabled only for queries that include [column-oriented tables](../concepts/glossary.md#column-oriented-table). |
+| 2     | Cost-based optimizer is enabled only for queries that include {% if backend_name == "YDB" and oss == true %}[column-oriented tables](../../../concepts/glossary.md#column-oriented-table-column-oriented-table) {% else %} column-oriented tables. |
 | 3     | Cost-based optimizer is enabled for all queries, but `LookupJoin` is preferred for row-oriented tables. |
 | 4     | Cost-based optimizer is enabled for all queries. |
 
@@ -483,7 +483,7 @@ An experimental pragma that allows you to reduce the isolation level of the curr
 | --- | --- |
 | Flag | false |
 
-An auxiliary setting for previewing tables in the [HTTP API](../interfaces/http.md) (both for the web interface and console client).
+An auxiliary setting for previewing tables in the [HTTP API](../) (both for the web interface and console client).
 {% endif %}
 
 ### `config.flags("ValidateUdf", "Lazy")`

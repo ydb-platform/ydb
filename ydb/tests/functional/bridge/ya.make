@@ -9,7 +9,7 @@ TEST_SRCS(
 SPLIT_FACTOR(10)
 
 REQUIREMENTS(ram:32 cpu:32)
-SIZE(LARGE)
+SIZE(MEDIUM)
 TAG(ya:fat)
 
 IF (SANITIZER_TYPE == "thread")
@@ -29,6 +29,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/kv
     ydb/tests/library/clients
 )
 

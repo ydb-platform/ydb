@@ -42,13 +42,14 @@ struct TMetricCollector {
     void Collect(auto begin, auto end) {
         ssize_t in_size = std::distance(begin, end);
         AFL_ENSURE(in_size >= 0)("in_size", in_size);
-        size_t count = std::min(static_cast<size_t>(Counters.GetCounters().Size()), static_cast<size_t>(in_size));
 
-        for (size_t i = 0; i < count; ++i) {
-            Counters.GetCounters()[i] += *begin;
+        ssize_t count = std::min<ssize_t>(Counters.GetCounters().Size(), in_size);
+        for (ssize_t i = 0; i < count; ++i) {
+            Counters.GetCounters()[i] = *begin;
             ++begin;
         }
 
+        // here, the aggregation function configured in the protofile for each counter is used for each counter.
         Aggregator.AggregateWith(Counters);
     }
 
@@ -57,10 +58,6 @@ struct TMetricCollector {
 };
 
 struct TConsumerMetricCollector {
-    TConsumerMetricCollector()
-    {
-    }
-
     TMetricCollector<EClientLabeledCounters_descriptor> ClientLabeledCounters;
     //TMetricCollector<EMLPConsumerLabeledCounters_descriptor> MLPConsumerLabeledCounters;
     //TMetricCollector MLPMessageLockAttemptsCounter;

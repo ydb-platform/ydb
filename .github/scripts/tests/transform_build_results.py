@@ -304,7 +304,7 @@ def main():
     parser.add_argument('--public_dir', help='root directory for publication')
     parser.add_argument("--public_dir_url", help="url prefix for root directory")
     parser.add_argument("--test_dir", help="directory with user properties JSON files")
-    parser.add_argument("--log_out_dir", help="out dir to store logs (symlinked), relative to public_dir")
+    parser.add_argument("--log_out_dir", required=True, help="out dir to store logs (symlinked), relative to public_dir")
     parser.add_argument(
         "--log_truncate_size",
         type=int,
@@ -312,7 +312,7 @@ def main():
         help="truncate log after specific size, 0 disables truncation",
     )
     parser.add_argument("--ya_out", help="ya make output dir (for searching logs and artifacts)")
-    parser.add_argument('--test_stuff_out', help='output dir for archive testing_out_stuff, relative to public_dir"')
+    parser.add_argument('--test_stuff_out', required=True, help='output dir for archive testing_out_stuff, relative to public_dir')
 
     args = parser.parse_args()
 

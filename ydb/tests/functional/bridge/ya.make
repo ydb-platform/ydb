@@ -9,13 +9,15 @@ TEST_SRCS(
 SPLIT_FACTOR(10)
 
 REQUIREMENTS(ram:32 cpu:32)
-SIZE(MEDIUM)
-TAG(ya:fat)
+
 
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
+    SIZE(LARGE)
+    TAG(ya:fat)
 ELSE()
-    TIMEOUT(1800)
+    SIZE(MEDIUM)
+    TIMEOUT(600)
 ENDIF()
 
 

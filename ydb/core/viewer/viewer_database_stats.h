@@ -192,7 +192,7 @@ public:
                 InitStorageNodeWhiteboardRequest(request->Record);
                 SystemStateResponse[nodeId] = MakeWhiteboardRequest(nodeId, request.release());
             }
-            if (NodeStateResponse.count(nodeId) == 0) {
+            if (PDiskStateResponse.count(nodeId) == 0) {
                 auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>();
                 PDiskStateResponse[nodeId] = MakeWhiteboardRequest(nodeId, request.release());
             }
@@ -517,20 +517,19 @@ public:
             MetricsHistory.pop_front();
         }
         const size_t count = MetricsHistory.size();
-        using ui128 = unsigned __int128;
-        ui128 sumGrpcRequestBytes = 0;
-        ui128 sumGrpcResponseBytes = 0;
+        ui64 sumGrpcRequestBytes = 0;
+        ui64 sumGrpcResponseBytes = 0;
         long double sumDatabaseCoresUsed = 0;
-        ui128 sumDatabaseMemoryUsed = 0;
-        ui128 sumDatabaseNetworkBytes = 0;
-        ui128 sumDatabaseToStorageBytes = 0;
-        ui128 sumStorageToDatabaseBytes = 0;
+        ui64 sumDatabaseMemoryUsed = 0;
+        ui64 sumDatabaseNetworkBytes = 0;
+        ui64 sumDatabaseToStorageBytes = 0;
+        ui64 sumStorageToDatabaseBytes = 0;
         long double sumStorageCoresUsed = 0;
-        ui128 sumStorageMemoryUsed = 0;
-        ui128 sumStorageNetworkBytes = 0;
-        ui128 sumDiskReadBytes = 0;
-        ui128 sumDiskWriteBytes = 0;
-        ui128 sumStorageConsumed = 0;
+        ui64 sumStorageMemoryUsed = 0;
+        ui64 sumStorageNetworkBytes = 0;
+        ui64 sumDiskReadBytes = 0;
+        ui64 sumDiskWriteBytes = 0;
+        ui64 sumStorageConsumed = 0;
         for (const auto& item : MetricsHistory) {
             sumGrpcRequestBytes += item.GrpcRequestBytes;
             sumGrpcResponseBytes += item.GrpcResponseBytes;
@@ -728,7 +727,6 @@ public:
             Schedule(RefreshPeriod, new TEvWakeup(EWakeupTag::Refresh));
             // continue to live for streaming
         } else {
-            ProcessWhiteboardResponses();
             TBase::ReplyAndPassAway(TBase::GetHTTPOKJSON(Result));
         }
     }

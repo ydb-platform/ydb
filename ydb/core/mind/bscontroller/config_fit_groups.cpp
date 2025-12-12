@@ -818,7 +818,7 @@ namespace NKikimr {
             }
             groupMapperErrorProto.SetMissingFailRealmsCount(error.MissingFailRealmsCount);
             groupMapperErrorProto.SetFailRealmsWithMissingDomainsCount(error.FailRealmsWithMissingDomainsCount);
-            groupMapperErrorProto.SetDomainsWithMissingDisksCount(error.DomainsWithMissingDisksCount);
+            groupMapperErrorProto.SetOkDisksCount(error.OkDisksCount);
             groupMapperErrorProto.SetRealmLocationKey(error.RealmLocationKey);
             groupMapperErrorProto.SetDomainLocationKey(error.DomainLocationKey);
         }

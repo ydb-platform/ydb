@@ -1037,6 +1037,8 @@ namespace NKikimr::NBsController {
             ui32 failRealmsWithMissingDomainsCount = 0;
             ui32 domainsWithMissingDisksCount = 0;
 
+            ui32 okDisksCount = 0;
+
             if (!PDiskByPosition.empty()) {
                 failRealmsSeen = 1;
                 failDomainsInCurrentRealmSeen = 1;
@@ -1074,21 +1076,23 @@ namespace NKikimr::NBsController {
                         }
 
                         if (domainChanged) {
+                            // If check is actually redundant, at least now, since any position change is a domain change
                             failDomainsInCurrentRealmSeen++;
                             if (disksInCurrentDomainSeen < disksPerDomainNeeded) {
                                 domainsWithMissingDisksCount++;
                             }
                             disksInCurrentDomainSeen = 0;
-                        }
 
-                        // Any position change is a domain change
-                        if (!domainAlreadyOccupied) {
-                            matchingDomainsStats.push_back(domainStats);
-                            domainStats = TGroupMapperError::TStats();
-                            domainStats.Domain = pdisk->Location.ToStringUpTo(domainKey);
+                            if (!domainAlreadyOccupied) {
+                                matchingDomainsStats.push_back(domainStats);
+                                domainStats = TGroupMapperError::TStats();
+                                domainStats.Domain = pdisk->Location.ToStringUpTo(domainKey);
+                            }
+                            domainAlreadyOccupied = false;
                         }
-                        domainAlreadyOccupied = false;
                     }
+
+                    bool diskIsOk = true;
 
                     disksInCurrentDomainSeen++;
 
@@ -1118,22 +1122,24 @@ namespace NKikimr::NBsController {
                             totalStats.Decommission++;
                             domainStats.Decommission++;
                         }
-
+                        diskIsOk = false;
                         s << std::exchange(minus, "") << pdisk->WhyUnusable;
                     }
                     if (pdisk->NumSlots >= pdisk->MaxSlots) {
                         totalStats.AllSlotsAreOccupied++;
                         domainStats.AllSlotsAreOccupied++;
+                        diskIsOk = false;
 
                         s << std::exchange(minus, "") << "s[" << pdisk->NumSlots << "/" << pdisk->MaxSlots << "]";
                     }
                     if (pdisk->SpaceAvailable < diskManager.RequiredSpace) {
                         totalStats.NotEnoughSpace++;
                         domainStats.NotEnoughSpace++;
-
+                        diskIsOk = false;
                         s << std::exchange(minus, "") << "v";
                     }
                     if (!pdisk->Operational) {
+                        diskIsOk = false;
                         s << std::exchange(minus, "") << "o";
                     }
                     if (pdisk->BridgePileId != diskManager.BridgePileId) {
@@ -1144,6 +1150,10 @@ namespace NKikimr::NBsController {
                     }
 
                     prevPosition = position;
+
+                    if (diskIsOk) {
+                        okDisksCount++;
+                    }
                 }
                 s << ")]}";
 
@@ -1172,6 +1182,7 @@ namespace NKikimr::NBsController {
             err.MissingFailRealmsCount = missingFailRealmsCount;
             err.FailRealmsWithMissingDomainsCount = failRealmsWithMissingDomainsCount;
             err.DomainsWithMissingDisksCount = domainsWithMissingDisksCount;
+            err.OkDisksCount = okDisksCount;
 
             err.RealmLocationKey = keyName(realmKey);
             err.DomainLocationKey = keyName(domainKey);

@@ -4,8 +4,6 @@
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
-#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
@@ -14,11 +12,11 @@
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_scheme_builders.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
-#include <ydb/core/ydb_convert/topic_description.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -188,57 +186,46 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         Become(&TThis::StateDescribe);
     }
 
-    static TString BuildViewScheme(const TString& path, const NKikimrSchemeOp::TViewDescription& viewDescription, const TString& database, const TString& backupRoot, TString& error) {
-        NYql::TIssues issues;
-        auto scheme = NYdb::NDump::BuildCreateViewQuery(viewDescription.GetName(), path, viewDescription.GetQueryText(), database, backupRoot, issues);
-        if (!scheme) {
-            error = issues.ToString();
-        }
-        return scheme;
-    }
+    bool FillExportProperties(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
+        struct ExportProperties {
+            TString FileName;
+            NBackup::EBackupFileType SchemeFileType;
+        };
 
-    bool BuildTopicScheme(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        const auto& pathDesc = describeResult.GetPathDescription();
-        if (!pathDesc.HasPersQueueGroup()) {
-            error = "Path description does not contain a description of PersQueueGroup";
+        PathType = GetPathType(describeResult);
+
+        static THashMap<NKikimrSchemeOp::EPathType, ExportProperties> TypeToProperties = {
+            {NKikimrSchemeOp::EPathType::EPathTypeView, {
+                NYdb::NDump::NFiles::CreateView().FileName,
+                NBackup::EBackupFileType::ViewCreate}
+            },
+            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, {
+                NYdb::NDump::NFiles::CreateTopic().FileName,
+                NBackup::EBackupFileType::TopicCreate}
+            },
+            {NKikimrSchemeOp::EPathType::EPathTypeReplication, {
+                NYdb::NDump::NFiles::CreateAsyncReplication().FileName,
+                NBackup::EBackupFileType::AsyncReplicationCreate}
+            },
+        };
+
+        auto* propertiesPtr = TypeToProperties.FindPtr(PathType);
+        if (!propertiesPtr) {
+            error = TStringBuilder() << "unable to find file properties for " << PathType;
             return false;
         }
-        Ydb::Topic::DescribeTopicResult descTopicResult;
-        Ydb::StatusIds::StatusCode status;
-        if (!FillTopicDescription(descTopicResult, pathDesc.GetPersQueueGroup(), pathDesc.GetSelf(), Nothing(), status, error)) {
-            return false;
-        }
 
-        Ydb::Topic::CreateTopicRequest request;
-        NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
-
-        request.clear_attributes();
-
-        return google::protobuf::TextFormat::PrintToString(request, &Scheme);
+        FileName = propertiesPtr->FileName;
+        SchemeFileType = propertiesPtr->SchemeFileType;
+        return true;
     }
 
     bool BuildSchemeToUpload(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        static THashMap<NKikimrSchemeOp::EPathType, TString> TypeToFileName = {
-            {NKikimrSchemeOp::EPathType::EPathTypeView, NYdb::NDump::NFiles::CreateView().FileName},
-            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, NYdb::NDump::NFiles::CreateTopic().FileName},
-        };
-
-        PathType = describeResult.GetPathDescription().GetSelf().GetPathType();
-        FileName = TypeToFileName[PathType];
-        switch (PathType) {
-            case NKikimrSchemeOp::EPathTypeView: {
-                SchemeFileType = NBackup::EBackupFileType::ViewCreate;
-                Scheme = BuildViewScheme(describeResult.GetPath(), describeResult.GetPathDescription().GetViewDescription(), DatabaseRoot, DatabaseRoot, error);
-                return !Scheme.empty();
-            }
-            case NKikimrSchemeOp::EPathTypePersQueueGroup: {
-                SchemeFileType = NBackup::EBackupFileType::TopicCreate;
-                return BuildTopicScheme(describeResult, error);
-            }
-            default:
-                error = TStringBuilder() << "unsupported path type: " << PathType;
-                return false;
+        if (!FillExportProperties(describeResult, error)) {
+            return false;
         }
+
+        return BuildScheme(describeResult, Scheme, DatabaseRoot, error);
     }
 
     void HandleSchemeDescription(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {

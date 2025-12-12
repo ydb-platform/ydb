@@ -1,0 +1,23 @@
+#pragma once
+
+#include <util/generic/fwd.h>
+
+namespace NKikimrScheme {
+    class TEvDescribeSchemeResult;
+}
+
+namespace NKikimrSchemeOp {
+    enum EPathType : int;
+}
+
+namespace NKikimr::NSchemeShard {
+
+bool BuildScheme(
+    const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
+    TString& scheme,
+    const TString& databaseRoot,
+    TString& error);
+
+NKikimrSchemeOp::EPathType GetPathType(const NKikimrScheme::TEvDescribeSchemeResult& describeResult);
+
+} // namespace NKikimr::NSchemeShard

@@ -84,6 +84,11 @@ TInteractiveConfigurationManager::TAiProfile::TAiProfile(const TString& name, YA
     Y_VALIDATE(Config.IsNull() || Config.IsMap(), "Unexpected config type: " << static_cast<ui64>(Config.Type()));
 }
 
+TInteractiveConfigurationManager::TAiProfile::TAiProfile(TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log)
+    : Manager(manager)
+    , Log(log)
+{}
+
 bool TInteractiveConfigurationManager::TAiProfile::IsValid(TString& error) const {
     if (!GetName()) {
         error = "AI profile name is empty";
@@ -473,15 +478,13 @@ TString TInteractiveConfigurationManager::ModeToString(EMode mode) {
 }
 
 TString TInteractiveConfigurationManager::GetActiveAiProfileName() const {
+    TString activeProfile;
     if (const auto& activeAiProfileNode = Config["active_ai_profile"]) {
-        if (auto activeProfile = activeAiProfileNode.as<TString>("")) {
-            return activeProfile;
-        }
-
-        YDB_CLI_LOG(Warning, "Current active profile has empty name, profile disabled");
+        activeProfile = activeAiProfileNode.as<TString>("");
     }
 
-    return "";
+    YDB_CLI_LOG(Debug, "Current active profile name: " << activeProfile);
+    return activeProfile;
 }
 
 TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationManager::GetAiProfile(const TString& name) {
@@ -505,8 +508,8 @@ std::unordered_map<TString, TInteractiveConfigurationManager::TAiProfile::TPtr> 
         }
 
         const auto& settings = profile.second;
-        if (!settings.IsMap()) {
-            YDB_CLI_LOG(Warning, "AI profile \"" << name << "\" has unexpected type " << static_cast<ui64>(settings.Type()) << " instead of map, profile skipped");
+        if (!settings.IsMap() && !settings.IsNull()) {
+            YDB_CLI_LOG(Warning, "AI profile \"" << name << "\" has unexpected type " << static_cast<ui64>(settings.Type()) << " instead of map or null, profile skipped");
             continue;
         }
 
@@ -585,8 +588,7 @@ void TInteractiveConfigurationManager::ChangeActiveAiProfile(const TString& name
 }
 
 TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationManager::CreateNewAiModelProfile(const TString& presetId) {
-    YAML::Node profileInfo;
-    auto aiProfile = std::make_shared<TAiProfile>("", profileInfo, shared_from_this(), Log);
+    auto aiProfile = std::make_shared<TAiProfile>(shared_from_this(), Log);
     if (!aiProfile->SetupProfile(presetId)) {
         YDB_CLI_LOG(Warning, "AI profile settings setup failed");
         return nullptr;
@@ -599,7 +601,7 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
     }
 
     aiProfile->SetName(profileName);
-    Config["ai_profiles"][profileName] = profileInfo;
+    Config["ai_profiles"][profileName] = aiProfile->Config;
     ConfigChanged = true;
 
     if (GetActiveAiProfileName() != profileName) {

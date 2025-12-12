@@ -62,7 +62,7 @@ void TModelHandler::HandleLine(const TString& input) {
             output = Model->HandleMessages(messages);
             messages.clear();
         } catch (const std::exception& e) {
-            Cerr << Colors.Red() << "Failed to perform model API request. " << " to change model settings. Error reason: " << e.what() << Colors.OldColor() << Endl;
+            Cerr << Colors.Red() << "Failed to perform model API request: " << e.what() << Colors.OldColor() << Endl;
             break;
         }
 

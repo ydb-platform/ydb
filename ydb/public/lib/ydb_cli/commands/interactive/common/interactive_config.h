@@ -52,6 +52,8 @@ public:
 
         TAiProfile(const TString& name, YAML::Node config, TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log);
 
+        TAiProfile(TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log);
+
         bool IsValid(TString& error) const;
 
         TString GetPresetId() const;

@@ -53,9 +53,7 @@ public:
                 ModelHandler = TModelHandler({.Profile = AiModel, .Prompt = Settings.Prompt, .Database = Database, .Driver = Driver}, Log);
             } catch (const std::exception& e) {
                 ModelHandler = std::nullopt;
-                Cerr << Colors.Red() << "Failed to setup AI model session. "
-                    << Colors.OldColor() << "Type " << Log.EntityName("/config")
-                    << " to change model settings. Error reason: " << e.what() << Endl;
+                Cerr << Colors.Red() << "Failed to setup AI model session:: " << e.what() << Colors.OldColor() << Endl;
                 return;
             }
         }

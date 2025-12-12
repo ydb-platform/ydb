@@ -16,7 +16,7 @@ bool EqualHistograms(const std::shared_ptr<TEqWidthHistogram>& left, const std::
         return false;
     }
 
-    for (ui64 i = 0; i < left->GetNumBuckets(); ++i) {
+    for (ui32 i = 0; i < left->GetNumBuckets(); ++i) {
         if (left->GetNumElementsInBucket(i) != right->GetNumElementsInBucket(i)) {
             return false;
         }
@@ -25,7 +25,7 @@ bool EqualHistograms(const std::shared_ptr<TEqWidthHistogram>& left, const std::
 }
 
 template <typename T>
-std::shared_ptr<TEqWidthHistogram> CreateHistogram(ui64 numBuckets, T start, T range, EHistogramValueType valueType) {
+std::shared_ptr<TEqWidthHistogram> CreateHistogram(ui32 numBuckets, T start, T range, EHistogramValueType valueType) {
     std::shared_ptr<TEqWidthHistogram> histogram(std::make_shared<TEqWidthHistogram>(numBuckets, valueType));
     histogram->InitializeBuckets(start, end);
     return histogram;
@@ -35,12 +35,12 @@ template <typename T>
 void PopulateHistogram(std::shared_ptr<TEqWidthHistogram> histogram, const std::pair<T, T>& range) {
     // NOTE: reconsider the loop on string and date due to i++
     for (T i = range.first; i < range.second; ++i) {
-        histogram->AddElement(reinterpret_cast<const char*>(&i), sizeof(i));
+        histogram->AddElement(i);
     }
 }
 
 template <typename T>
-void TestHistogramBasic(ui64 numBuckets, std::pair<T, T> range, std::pair<T, T> bucketRange,
+void TestHistogramBasic(ui32 numBuckets, std::pair<T, T> range, std::pair<T, T> bucketRange,
                         EHistogramValueType valueType, std::pair<T, ui64> less, std::pair<T, ui64> greater) {
     auto histogram = CreateHistogram<T>(numBuckets, domainRange.first, domainRange.second, valueType);
     UNIT_ASSERT_VALUES_EQUAL(histogram->GetNumBuckets(), numBuckets);
@@ -51,7 +51,7 @@ void TestHistogramBasic(ui64 numBuckets, std::pair<T, T> range, std::pair<T, T> 
 }
 
 template <typename T>
-void TestHistogramSerialization(ui64 numBuckets, std::pair<T, T> range, std::pair<T, T> bucketRange,
+void TestHistogramSerialization(ui32 numBuckets, std::pair<T, T> range, std::pair<T, T> bucketRange,
                                 EHistogramValueType valueType) {
     auto histogram = CreateHistogram<T>(numBuckets, domainRange.first, domainRange.second, valueType);
     UNIT_ASSERT(histogram);
@@ -65,7 +65,7 @@ void TestHistogramSerialization(ui64 numBuckets, std::pair<T, T> range, std::pai
 }
 
 template <typename T>
-void TestHistogramAggregate(ui64 numBuckets, std::pair<T, T> range, std::pair<T, T> bucketRange,
+void TestHistogramAggregate(ui32 numBuckets, std::pair<T, T> range, std::pair<T, T> bucketRange,
                             EHistogramValueType valueType, ui32 numCombine, const TVector<ui64>& resultCount) {
     auto histogram = CreateHistogram<T>(numBuckets, domainRange.first, domainRange.second, valueType);
     UNIT_ASSERT(histogram);
@@ -76,7 +76,7 @@ void TestHistogramAggregate(ui64 numBuckets, std::pair<T, T> range, std::pair<T,
     for (ui32 i = 0; i < numCombine; ++i) {
         histogram->Aggregate(*histogramToAdd);
     }
-    for (ui64 i = 0; i < histogram->GetNumBuckets(); ++i) {
+    for (ui32 i = 0; i < histogram->GetNumBuckets(); ++i) {
         UNIT_ASSERT(histogram->GetNumElementsInBucket(i) == resultCount[i]);
     }
 }

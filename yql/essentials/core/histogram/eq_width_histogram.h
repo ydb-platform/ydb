@@ -5,7 +5,6 @@
 #include <util/stream/output.h>
 #include <util/system/types.h>
 #include <util/system/unaligned_mem.h>
-#include <util/generic/yexception.h>
 #include <cmath>
 
 namespace NKikimr {
@@ -67,71 +66,42 @@ enum class EHistogramValueType: ui8 { Int8,
                                       Double,
                                       NotSupported };
 
-// clang-format off
-#define KNOWN_FIXED_HISTOGRAM_TYPES(xx) \
-xx(Int8, i8)                            \
-xx(Int16, i16)                          \
-xx(Int32, i32)                          \
-xx(Int64, i64)                          \
-xx(Uint8, ui8)                          \
-xx(Uint16, ui16)                        \
-xx(Uint32, ui32)                        \
-xx(Uint64, ui64)                        \
-xx(Float, float)                        \
-xx(Double, double)
-// clang-format on
-
-template <typename T>
+template<typename T>
 inline std::optional<EHistogramValueType> GetHistogramValueType() {
     return std::nullopt;
 }
 
-template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<i8>() {
-    return EHistogramValueType::Int8;
-}
-
-template <>
+template<>
 inline std::optional<EHistogramValueType> GetHistogramValueType<i16>() {
     return EHistogramValueType::Int16;
 }
 
-template <>
+template<>
 inline std::optional<EHistogramValueType> GetHistogramValueType<i32>() {
     return EHistogramValueType::Int32;
 }
 
-template <>
+template<>
 inline std::optional<EHistogramValueType> GetHistogramValueType<i64>() {
     return EHistogramValueType::Int64;
 }
 
-template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<ui8>() {
-    return EHistogramValueType::Uint8;
-}
-
-template <>
+template<>
 inline std::optional<EHistogramValueType> GetHistogramValueType<ui16>() {
     return EHistogramValueType::Uint16;
 }
 
-template <>
+template<>
 inline std::optional<EHistogramValueType> GetHistogramValueType<ui32>() {
     return EHistogramValueType::Uint32;
 }
 
-template <>
+template<>
 inline std::optional<EHistogramValueType> GetHistogramValueType<ui64>() {
     return EHistogramValueType::Uint64;
 }
 
-template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<float>() {
-    return EHistogramValueType::Float;
-}
-
-template <>
+template<>
 inline std::optional<EHistogramValueType> GetHistogramValueType<double>() {
     return EHistogramValueType::Double;
 }
@@ -156,19 +126,30 @@ public:
 #pragma pack(pop)
 
     // Have to specify the number of buckets and type of the values.
-    TEqWidthHistogram(ui64 numBuckets = 1, EHistogramValueType type = EHistogramValueType::Int32);
+    TEqWidthHistogram(ui32 numBuckets = 1, EHistogramValueType type = EHistogramValueType::Int32);
     // From serialized data.
     TEqWidthHistogram(const char* str, size_t size);
 
-    void AddElement(const char* data, size_t size);
+    // Adds the given `val` to a histogram.
+    template <typename T>
+    void AddElement(T val) {
+        const auto index = FindBucketIndex(val);
+        // The given `index` in range [0, numBuckets - 1].
+        const T bucketValue = LoadFrom<T>(Buckets_[index].Start);
+        if (!index || (CmpEqual<T>(bucketValue, val) || CmpLess<T>(bucketValue, val))) {
+            Buckets_[index].Count++;
+        } else {
+            Buckets_[index - 1].Count++;
+        }
+    }
 
     // Returns an index of the bucket which stores the given `val`.
     // Returned index in range [0, numBuckets - 1].
     // Not using `std::lower_bound()` here because need an index to map to `suffix` and `prefix` sum.
     template <typename T>
-    ui64 FindBucketIndex(T val) const {
-        ui64 start = 0;
-        ui64 end = GetNumBuckets() - 1;
+    ui32 FindBucketIndex(T val) const {
+        ui32 start = 0;
+        ui32 end = GetNumBuckets() - 1;
         while (start < end) {
             auto it = start + (end - start + 1) / 2;
             if (CmpLess<T>(val, LoadFrom<T>(Buckets_[it].Start))) {
@@ -181,24 +162,21 @@ public:
     }
 
     // Returns a number of buckets in a histogram.
-    ui64 GetNumBuckets() const {
+    ui32 GetNumBuckets() const {
         return Buckets_.size();
     }
 
     template <typename T>
-    ui64 GetBucketWidth() const {
-        if (ValueType_ == EHistogramValueType::NotSupported) {
-            Y_ABORT("Unsupported histogram type");
-        } else if (ValueType_ == EHistogramValueType::Double) {
+    ui32 GetBucketWidth() const {
+        if (ValueType_ == EHistogramValueType::Double) {
             return 1;
         }
-        Y_ASSERT(GetNumBuckets());
         if (GetNumBuckets() == 1) {
             auto val = LoadFrom<T>(Buckets_.front().Start);
             // to avoid returning zero value and casting negative values
-            return val > 0 ? static_cast<ui64>(val) : 1;
+            return val > 0 ? static_cast<ui32>(val) : 1;
         } else {
-            return static_cast<ui64>(LoadFrom<T>(Buckets_[1].Start) - LoadFrom<T>(Buckets_[0].Start));
+            return static_cast<ui32>(LoadFrom<T>(Buckets_[1].Start) - LoadFrom<T>(Buckets_[0].Start));
         }
         T bucketIndex = std::floor((val - domainStart) / LoadFrom<T>(bucketWidth.Value));
         bucketIndex = std::min<T>(GetNumBuckets() - 1, bucketIndex);
@@ -211,14 +189,14 @@ public:
     }
 
     // Returns a number of elements in a bucket by the given `index`.
-    ui64 GetNumElementsInBucket(ui64 index) const {
+    ui64 GetNumElementsInBucket(ui32 index) const {
         Y_ASSERT(index < GetNumBuckets());
         return Buckets_[index].Count;
     }
 
     // Returns the start boundary value of a bucket by the given `index`.
     template <typename T>
-    T GetBucketStartBoundary(ui64 index) const {
+    T GetBucketStartBoundary(ui32 index) const {
         Y_ASSERT(index < GetNumBuckets());
         return LoadFrom<T>(Buckets_[index].Start);
     }
@@ -229,10 +207,12 @@ public:
         TEqWidthHistogram::TBucketRange range;
         StoreTo<T>(range.Start, rangeStart);
         StoreTo<T>(range.End, rangeEnd);
-        Y_ASSERT(CmpLess<T>(LoadFrom<T>(range.Start), LoadFrom<T>(range.End)));
-        T rangeLen = LoadFrom<T>(range.End) - LoadFrom<T>(range.Start);
+        T start = LoadFrom<T>(range.Start);
+        T end = LoadFrom<T>(range.End);
+        Y_ASSERT(CmpLess<T>(start, end));
+        T rangeLen = end - start;
         std::memcpy(Buckets_[0].Start, range.Start, sizeof(range.Start));
-        for (ui64 i = 1; i < GetNumBuckets(); ++i) {
+        for (ui32 i = 1; i < GetNumBuckets(); ++i) {
             const T prevStart = LoadFrom<T>(Buckets_[i - 1].Start);
             StoreTo<T>(Buckets_[i].Start, prevStart + rangeLen);
         }
@@ -255,7 +235,7 @@ private:
         } else if (!CmpEqual<T>(LoadFrom<T>(DomainRange_.End), LoadFrom<T>(other.GetDomainRange().End))) {
             return false;
         }
-        for (ui64 i = 0; i < Buckets_.size(); ++i) {
+        for (ui32 i = 0; i < Buckets_.size(); ++i) {
             if (!CmpEqual<T>(LoadFrom<T>(Buckets_[i].Start), other.GetBucketStartBoundary<T>(i))) {
                 return false;
             }
@@ -263,21 +243,8 @@ private:
         return true;
     }
 
-    // Adds the given `val` to a histogram.
-    template <typename T>
-    void AddElementTyped(T val) {
-        const auto index = FindBucketIndex(val);
-        // The given `index` in range [0, numBuckets - 1].
-        const T bucketValue = LoadFrom<T>(Buckets_[index].Start);
-        if (!index || (CmpEqual<T>(bucketValue, val) || CmpLess<T>(bucketValue, val))) {
-            Buckets_[index].Count++;
-        } else {
-            Buckets_[index - 1].Count++;
-        }
-    }
-
     // Returns binary size of the histogram.
-    ui64 GetBinarySize(ui64 nBuckets) const;
+    ui64 GetBinarySize(ui32 nBuckets) const;
     EHistogramValueType ValueType_;
     TDomainRange DomainRange_;
     TVector<ui64> Buckets_;
@@ -346,8 +313,8 @@ private:
         return sumArray[index - 1];
     }
 
-    void CreatePrefixSum(ui64 numBuckets);
-    void CreateSuffixSum(ui64 numBuckets);
+    void CreatePrefixSum(ui32 numBuckets);
+    void CreateSuffixSum(ui32 numBuckets);
     std::shared_ptr<TEqWidthHistogram> Histogram_;
     TVector<ui64> PrefixSum_;
     TVector<ui64> SuffixSum_;

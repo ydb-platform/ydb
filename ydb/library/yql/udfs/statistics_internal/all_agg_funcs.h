@@ -22,6 +22,7 @@ public:
     }
     static auto CreateStateUpdater(TTypeId columnTypeId) {
         return [columnTypeId](TState& state, const TValue& val) {
+            Y_ENSURE(state);
             VisitValue(columnTypeId, val, RawDataVisitor(
                 [&state](const char* data, size_t size) {
                     state->Count(data, size);
@@ -29,10 +30,11 @@ public:
         };
     }
     static void MergeStates(const TState& left, TState& right) {
-        Y_ASSERT(left && right);
+        Y_ENSURE(left && right);
         *left += *right;
     }
     static TString SerializeState(const TState& state) {
+        Y_ENSURE(state);
         return TString(state->AsStringBuf());
     }
     static TState DeserializeState(const char* data, size_t size) {
@@ -54,64 +56,54 @@ public:
     static TState CreateState(
             TTypeId columnTypeId, const std::span<const TValue, ParamsCount>& params) {
         TState histogram;
+
         switch (columnTypeId) {
-            case NUdf::TDataType<i16>::Id: {
-                histogram = std::make_unique<NKikimr::TEqWidthHistogram>(params[0].Get<ui64>(), NKikimr::EHistogramValueType::Int16);
-                histogram->InitializeBuckets(params[1].Get<i16>(), params[2].Get<i16>());
-                break;
+#define CREATE_HISTOGRAM_CASE(type, layout)                                                                 \
+            case NUdf::TDataType<type>::Id: {                                                               \
+                auto valType = NKikimr::GetHistogramValueType<type>();                                      \
+                Y_ENSURE(valType, "Unsupported histogram data type");                                       \
+                histogram = std::make_unique<NKikimr::TEqWidthHistogram>(params[0].Get<ui32>(), *valType);  \
+                histogram->InitializeBuckets(params[1].Get<layout>(), params[2].Get<layout>());             \
+                break;                                                                                      \
             }
-            case NUdf::TDataType<i32>::Id: {
-                histogram = std::make_unique<NKikimr::TEqWidthHistogram>(params[0].Get<ui64>(), NKikimr::EHistogramValueType::Int32);
-                histogram->InitializeBuckets(params[1].Get<i32>(), params[2].Get<i32>());
-                break;
-            }
-            case NUdf::TDataType<i64>::Id: {
-                histogram = std::make_unique<NKikimr::TEqWidthHistogram>(params[0].Get<ui64>(), NKikimr::EHistogramValueType::Int64);
-                histogram->InitializeBuckets(params[1].Get<i64>(), params[2].Get<i64>());
-                break;
-            }
-            case NUdf::TDataType<ui16>::Id: {
-                histogram = std::make_unique<NKikimr::TEqWidthHistogram>(params[0].Get<ui64>(), NKikimr::EHistogramValueType::Uint16);
-                histogram->InitializeBuckets(params[1].Get<ui16>(), params[2].Get<ui16>());
-                break;
-            }
-            case NUdf::TDataType<ui32>::Id: {
-                histogram = std::make_unique<NKikimr::TEqWidthHistogram>(params[0].Get<ui64>(), NKikimr::EHistogramValueType::Uint32);
-                histogram->InitializeBuckets(params[1].Get<ui64>(), params[2].Get<ui64>());
-                break;
-            }
-            case NUdf::TDataType<ui64>::Id: {
-                histogram = std::make_unique<NKikimr::TEqWidthHistogram>(params[0].Get<ui64>(), NKikimr::EHistogramValueType::Uint64);
-                histogram->InitializeBuckets(params[1].Get<ui64>(), params[2].Get<ui64>());
-                break;
-            }
-            case NUdf::TDataType<double>::Id: {
-                histogram = std::make_unique<NKikimr::TEqWidthHistogram>(params[0].Get<ui64>(), NKikimr::EHistogramValueType::Double);
-                histogram->InitializeBuckets(params[1].Get<double>(), params[2].Get<double>());
-                break;
-            }
-            default: Y_ABORT("Unsupported histogram type");
+            KNOWN_FIXED_VALUE_TYPES(CREATE_HISTOGRAM_CASE)
+#undef CREATE_HISTOGRAM_CASE
+
+            default:
+                Y_ENSURE(false, "Unsupported histogram column type id");
         }
+
         return histogram;
     }
 
     static auto CreateStateUpdater(TTypeId columnTypeId) {
         return [columnTypeId](TState& state, const TValue& val) {
-            VisitValue(columnTypeId, val, RawDataVisitor(
-                [&state](const char* data, size_t size) {
-                    state->AddElement(data, size);
-                }));
+            Y_ENSURE(state);
+            switch (columnTypeId) {
+#define MAKE_PRIMITIVE_VISITOR(type, layout)                                                                \
+                case NUdf::TDataType<type>::Id: {                                                           \
+                    auto valType = NKikimr::GetHistogramValueType<type>();                                  \
+                    Y_ENSURE(valType, "Unsupported histogram data type");                                   \
+                    state->AddElement(val.Get<layout>());                                                   \
+                    break;                                                                                  \
+                }
+                KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_VISITOR)
+#undef MAKE_PRIMITIVE_VISITOR
+
+                default:
+                    Y_ENSURE(false, "Unsupported histogram column type id");
+            }
         };
     }
 
     static void MergeStates(const TState& left, TState& right) {
-        Y_ASSERT(left && right);
+        Y_ENSURE(left && right);
         left->Aggregate(*right);
     }
 
     static TString SerializeState(const TState& state) {
+        Y_ENSURE(state);
         auto [binaryData, binarySize] = state->Serialize();
-        Y_ASSERT(binaryData && binarySize);
         return TString(binaryData.get(), binarySize);
     }
 

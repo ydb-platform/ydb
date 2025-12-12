@@ -145,6 +145,7 @@ std::shared_ptr<IOperator> ConvertOptimizedTree(std::shared_ptr<TJoinOptimizerNo
             TInfoUnit target(alias, columnName);
 
             if (reverseJoinCondMap.contains(target)) {
+                YQL_CLOG(TRACE, CoreDq) << "Mapping from target: " << target.GetFullName() << ": " << reverseJoinCondMap.at(target).GetFullName() << " is different from: " << column.GetFullName();
                 Y_ENSURE(reverseJoinCondMap.at(target) == column);
             }
 

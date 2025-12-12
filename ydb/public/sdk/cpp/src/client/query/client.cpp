@@ -10,6 +10,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_sync.h>
 #include <ydb/public/sdk/cpp/src/client/impl/session/session_client.h>
 #include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
@@ -63,7 +64,7 @@ public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
         , Settings_(settings)
-        , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_)
+        , SessionPool_(Settings_.SessionPoolSettings_.MaxActiveSessions_, DbDriverState_)
     {
         SetStatCollector(DbDriverState_->StatCollector.GetClientStatCollector("Query"));
         SessionPool_.SetStatCollector(DbDriverState_->StatCollector.GetSessionPoolStatCollector("Query"));
@@ -354,6 +355,10 @@ public:
         const auto sessionId = resp->session_id();
         request.set_session_id(sessionId);
 
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+            TStringBuilder() << "[Query] AttachSession: session_id=" << sessionId
+                << ", endpoint=" << endpoint);
+
         auto args = std::make_shared<TSession::TImpl::TAttachSessionArgs>(promise, sessionId, endpoint, client, client);
 
         // Do not pass client timeout here. Session must be alive
@@ -368,9 +373,14 @@ public:
             std::move(request),
             [args] (TPlainStatus status, TStreamProcessorPtr processor) mutable {
             if (processor) {
+                LOG_LAZY(args->Client->DbDriverState_->Log, TLOG_DEBUG,
+                    TStringBuilder() << "[Query] Session attached: session_id=" << args->SessionId);
                 TSession::TImpl::MakeImplAsync(processor, args);
             } else {
                 TStatus st(std::move(status));
+                LOG_LAZY(args->Client->DbDriverState_->Log, TLOG_ERR,
+                    TStringBuilder() << "[Query] Failed to attach session: session_id=" << args->SessionId
+                        << ", " << st.GetStatus() << ", issues: " << st.GetIssues().ToOneLineString());
                 args->Promise.SetValue(TCreateSessionResult(std::move(st), TSession(args->Client)));
             }
         },
@@ -388,18 +398,30 @@ public:
 
         auto self = shared_from_this();
 
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+            TStringBuilder() << "[Query] CreateAttachedSession");
+
         auto extractor = [promise, self] (Ydb::Query::CreateSessionResponse* resp, TPlainStatus status) mutable {
             if (resp) {
                 if (resp->status() != Ydb::StatusIds::SUCCESS) {
                     NYdb::NIssue::TIssues opIssues;
                     NYdb::NIssue::IssuesFromMessage(resp->issues(), opIssues);
                     TStatus st(static_cast<EStatus>(resp->status()), std::move(opIssues));
+                    LOG_LAZY(self->DbDriverState_->Log, TLOG_ERR,
+                        TStringBuilder() << "[Query] Failed to create session: "
+                            << st.GetStatus() << ", issues: " << st.GetIssues().ToOneLineString());
                     promise.SetValue(TCreateSessionResult(std::move(st), TSession(self)));
                 } else {
+                    LOG_LAZY(self->DbDriverState_->Log, TLOG_INFO,
+                        TStringBuilder() << "[Query] Session created: id=" << resp->session_id()
+                            << ", endpoint=" << status.Endpoint);
                     self->DoAttachSession(resp, promise, status.Endpoint, self);
                 }
             } else {
                 TStatus st(std::move(status));
+                LOG_LAZY(self->DbDriverState_->Log, TLOG_ERR,
+                    TStringBuilder() << "[Query] Failed to create session: "
+                        << st.GetStatus() << ", issues: " << st.GetIssues().ToOneLineString());
                 promise.SetValue(TCreateSessionResult(std::move(st), TSession(self)));
             }
         };
@@ -417,6 +439,9 @@ public:
     TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings) {
         auto rpcSettings = TRpcRequestSettings::Make(settings);
 
+        LOG_LAZY(DbDriverState_->Log, TLOG_DEBUG,
+            TStringBuilder() << "[Query] GetSession from pool");
+
         class TQueryClientGetSessionCtx : public NSessionPool::IGetSessionCtx {
         public:
             TQueryClientGetSessionCtx(std::shared_ptr<TQueryClient::TImpl> client, const TRpcRequestSettings& settings)
@@ -430,11 +455,16 @@ public:
             }
 
             void ReplyError(TStatus status) override {
+                LOG_LAZY(Client->DbDriverState_->Log, TLOG_ERR,
+                    TStringBuilder() << "[Query] GetSession failed: "
+                        << status.GetStatus() << ", issues: " << status.GetIssues().ToOneLineString());
                 TSession session;
                 ScheduleReply(TCreateSessionResult(std::move(status), std::move(session)));
             }
 
             void ReplySessionToUser(TKqpSessionCommon* session) override {
+                LOG_LAZY(Client->DbDriverState_->Log, TLOG_DEBUG,
+                    TStringBuilder() << "[Query] Session from pool: id=" << session->GetId());
                 TCreateSessionResult val(
                     TStatus(TPlainStatus()),
                     TSession(

@@ -2,6 +2,7 @@
 #include "grpc_connections.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
 
 
 namespace NYdb::inline Dev {
@@ -204,9 +205,15 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
             DefaultCredentialsProviderFactory_
         );
     }
+    LOG_LAZY(Log, TLOG_INFO,
+        TStringBuilder() << "[Driver] Initialized driver: database=" << DefaultDatabase_
+            << ", discovery_endpoint=" << DefaultDiscoveryEndpoint_
+            << ", network_threads=" << NetworkThreadsNum_
+            << ", client_threads=" << ClientThreadsNum_);
 }
 
 TGRpcConnectionsImpl::~TGRpcConnectionsImpl() {
+    LOG_LAZY(Log, TLOG_INFO, TStringBuilder() << "[Driver] Shutting down driver");
     GRpcClientLow_.Stop(true);
     ResponseQueue_->Stop();
 }
@@ -311,6 +318,8 @@ bool TGRpcConnectionsImpl::TryCreateContext(IQueueClientContextPtr& context) {
         // Keep CQ running until the request is complete
         context = CreateContext();
         if (!context) {
+            LOG_LAZY(Log, TLOG_ERR,
+                TStringBuilder() << "[Driver] Failed to create context: gRPC client is stopping or stopped");
             return false;
         }
     }
@@ -322,6 +331,7 @@ void TGRpcConnectionsImpl::WaitIdle() {
 }
 
 void TGRpcConnectionsImpl::Stop(bool wait) {
+    LOG_LAZY(Log, TLOG_INFO, TStringBuilder() << "[Driver] Stop requested: wait=" << wait);
     StateTracker_.SendNotification(TDbDriverState::ENotifyType::STOP).Wait();
     GRpcClientLow_.Stop(wait);
 }
@@ -338,13 +348,26 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
     Ydb::Discovery::ListEndpointsRequest request;
     request.set_database(TStringType{dbState->Database});
 
-    auto promise = NThreading::NewPromise<TListEndpointsResult>();
+    LOG_LAZY(Log, TLOG_INFO,
+        TStringBuilder() << "[Driver] ListEndpoints request: database=" << dbState->Database);
 
-    auto extractor = [promise]
+    auto promise = NThreading::NewPromise<TListEndpointsResult>();
+    auto log = Log;
+
+    auto extractor = [promise, log, database = dbState->Database]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             Ydb::Discovery::ListEndpointsResult result;
             if (any) {
                 any->UnpackTo(&result);
+            }
+            if (status.Ok()) {
+                LOG_LAZY(log, TLOG_INFO,
+                    TStringBuilder() << "[Driver] ListEndpoints completed: database=" << database
+                        << ", endpoints_count=" << result.endpoints_size());
+            } else {
+                LOG_LAZY(log, TLOG_ERR,
+                    TStringBuilder() << "[Driver] ListEndpoints failed: database=" << database
+                        << ", " << status.Status << ", issues: " << status.Issues.ToOneLineString());
             }
             TListEndpointsResult val{result, status};
             promise.SetValue(std::move(val));

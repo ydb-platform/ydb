@@ -3,6 +3,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -38,14 +39,14 @@ TDbDriverState::TDbDriverState(
     , DiscoveryMode(discoveryMode)
     , SslCredentials(sslCredentials)
     , Client(client)
+    , StatCollector(database, client->GetMetricRegistry())
+    , Log(Client->GetLog())
     , EndpointPool([this, client]() mutable {
         // this callback will be called just after shared_ptr initialization
         // so this call is safe
         auto self = shared_from_this();
         return client->GetEndpoints(self);
-    }, client)
-    , StatCollector(database, client->GetMetricRegistry())
-    , Log(Client->GetLog())
+    }, client, Log)
     , DiscoveryCompletedPromise(NThreading::NewPromise<void>())
 {
     EndpointPool.SetStatCollector(StatCollector);
@@ -115,11 +116,25 @@ TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {
             }
 
             if (pessThreshold || expiration) {
+                LOG_LAZY(strong->Log, TLOG_INFO,
+                    TStringBuilder() << "[Driver] Discovery triggered: pess_threshold=" << pessThreshold
+                        << ", expiration=" << expiration
+                        << ", pess_ratio=" << strong->EndpointPool.GetPessimizationRatio());
                 auto asyncResult = strong->EndpointPool.UpdateAsync();
                 // true - we were first who run UpdateAsync
                 if (asyncResult.second) {
                     auto cb = [strong](const NThreading::TFuture<TEndpointUpdateResult>& future) {
                         const auto& updateResult = future.GetValue();
+                        if (updateResult.DiscoveryStatus.Ok()) {
+                            LOG_LAZY(strong->Log, TLOG_INFO,
+                                TStringBuilder() << "[Driver] Discovery completed successfully"
+                                    << ", removed_endpoints=" << updateResult.Removed.size());
+                        } else {
+                            LOG_LAZY(strong->Log, TLOG_ERR,
+                                TStringBuilder() << "[Driver] Discovery failed: "
+                                    << updateResult.DiscoveryStatus.Status
+                                    << ", issues: " << updateResult.DiscoveryStatus.Issues.ToOneLineString());
+                        }
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
                         strong->Client->DeleteChannels(updateResult.Removed);
 #endif

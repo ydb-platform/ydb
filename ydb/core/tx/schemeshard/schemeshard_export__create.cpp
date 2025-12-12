@@ -856,6 +856,7 @@ private:
             if (!exportInfo->AllItemsAreDropped()) {
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                     const auto& item = exportInfo->Items.at(itemIdx);
+
                     // Column Tables must be skiped here
                     if (!IsPathTypeTransferrable(item) || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable || item.State != EState::Dropping) {
                         continue;

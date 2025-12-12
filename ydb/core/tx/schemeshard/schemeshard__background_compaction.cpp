@@ -83,7 +83,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
         record.GetPathId().GetLocalId());
 
     // Check if this is a forced compaction result
-    bool isForcedCompaction = RunningForcedCompactions.contains(shardIdx);
+    bool isForcedCompaction = RunningForcedCompactions.find(shardIdx) != RunningForcedCompactions.end();
 
     if (isForcedCompaction) {
         // Handle forced compaction

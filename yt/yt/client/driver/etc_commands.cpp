@@ -92,6 +92,12 @@ constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
     {"user_tokens_metadata", true},
 });
 
+#ifdef OPENSOURCE
+constexpr bool FlowPipelinesListEnabled = false;
+#else
+constexpr bool FlowPipelinesListEnabled = true;
+#endif
+
 void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
 {
     TGetClusterMetaOptions options;
@@ -108,6 +114,12 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     for (auto staticFeature : StaticFeatures) {
         features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
     }
+    features->AddChild(
+        "flow_pipelines",
+        BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("pipeline_list_enabled").Value(FlowPipelinesListEnabled)
+            .EndMap());
     features->AddChild(
         "require_password_in_authentication_commands",
         BuildYsonNodeFluently().Value(context->GetConfig()->RequirePasswordInAuthenticationCommands));

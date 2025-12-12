@@ -11,6 +11,7 @@ RECURSE_FOR_TESTS(
     ut_cdc_stream
     ut_cdc_stream_reboots
     ut_column_build
+    ut_column_build_reboots
     ut_compaction
     ut_consistent_copy_tables
     ut_continuous_backup

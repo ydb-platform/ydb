@@ -4,5 +4,5 @@ message TEvCountersInfoRequest {
 }
 
 message TEvCountersInfoResponse {
-    optional string Response = 1;
+    optional bytes Response = 1;
 }

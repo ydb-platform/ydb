@@ -3116,6 +3116,21 @@ message TRspTransferPoolResources
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqTransferBundleResources
+{
+    required string src_bundle = 1;
+    required string dst_bundle = 2;
+    required bytes resource_delta = 3; // YSON
+
+    optional TMutatingOptions mutating_options = 103;
+}
+
+message TRspTransferBundleResources
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqCheckClusterLiveness
 {
     required bool check_cypress_root = 1;

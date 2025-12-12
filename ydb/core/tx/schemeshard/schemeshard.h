@@ -99,6 +99,11 @@ namespace TEvSchemeShard {
         EvListUsers,
         EvListUsersResult,
 
+        EvForceCompaction,
+        EvForceCompactionResult,
+        EvGetForceCompactionProgress,
+        EvGetForceCompactionProgressResult,
+
         EvTenantShredRequest,
         EvTenantShredResponse,
         EvWakeupToRunShred,
@@ -688,6 +693,42 @@ namespace TEvSchemeShard {
 
     struct TEvListUsersResult : TEventPB<TEvListUsersResult, NKikimrScheme::TEvListUsersResult, EvListUsersResult> {
         TEvListUsersResult() = default;
+    };
+
+    struct TEvForceCompaction : TEventPB<TEvForceCompaction, NKikimrScheme::TEvForceCompaction, EvForceCompaction> {
+        TEvForceCompaction() = default;
+        TEvForceCompaction(ui64 ownerId, ui64 localPathId) {
+            Record.MutablePathId()->SetOwnerId(ownerId);
+            Record.MutablePathId()->SetLocalId(localPathId);
+        }
+    };
+
+    struct TEvForceCompactionResult : TEventPB<TEvForceCompactionResult, NKikimrScheme::TEvForceCompactionResult, EvForceCompactionResult> {
+        TEvForceCompactionResult() = default;
+        TEvForceCompactionResult(ui64 ownerId, ui64 localPathId, ui64 totalShards) {
+            Record.MutablePathId()->SetOwnerId(ownerId);
+            Record.MutablePathId()->SetLocalId(localPathId);
+            Record.SetTotalShards(totalShards);
+        }
+    };
+
+    struct TEvGetForceCompactionProgress : TEventPB<TEvGetForceCompactionProgress, NKikimrScheme::TEvGetForceCompactionProgress, EvGetForceCompactionProgress> {
+        TEvGetForceCompactionProgress() = default;
+        TEvGetForceCompactionProgress(ui64 ownerId, ui64 localPathId) {
+            Record.MutablePathId()->SetOwnerId(ownerId);
+            Record.MutablePathId()->SetLocalId(localPathId);
+        }
+    };
+
+    struct TEvGetForceCompactionProgressResult : TEventPB<TEvGetForceCompactionProgressResult, NKikimrScheme::TEvGetForceCompactionProgressResult, EvGetForceCompactionProgressResult> {
+        TEvGetForceCompactionProgressResult() = default;
+        TEvGetForceCompactionProgressResult(ui64 ownerId, ui64 localPathId, ui64 totalShards, ui64 compactedShards, ui64 queuedShards) {
+            Record.MutablePathId()->SetOwnerId(ownerId);
+            Record.MutablePathId()->SetLocalId(localPathId);
+            Record.SetTotalShards(totalShards);
+            Record.SetCompactedShards(compactedShards);
+            Record.SetQueuedShards(queuedShards);
+        }
     };
 
     struct TEvTenantShredRequest : TEventPB<TEvTenantShredRequest, NKikimrScheme::TEvTenantShredRequest, EvTenantShredRequest> {

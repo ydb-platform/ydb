@@ -180,6 +180,28 @@ message TEvListUsersResult {
     repeated TUser Users = 1;
 }
 
+message TEvForceCompaction {
+    optional NKikimrProto.TPathID PathId = 1;
+}
+
+message TEvForceCompactionResult {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 TotalShards = 2;
+    optional string ErrorReason = 3;
+}
+
+message TEvGetForceCompactionProgress {
+    optional NKikimrProto.TPathID PathId = 1;
+}
+
+message TEvGetForceCompactionProgressResult {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 TotalShards = 2;
+    optional uint64 CompactedShards = 3;
+    optional uint64 QueuedShards = 4;
+    optional string ErrorReason = 5;
+}
+
 // Sending actor registers itself to be notified when tx completes
 message TEvNotifyTxCompletion {
     optional uint64 TxId = 1;

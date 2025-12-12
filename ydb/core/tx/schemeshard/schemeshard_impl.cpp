@@ -4949,6 +4949,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , PipeTracker(*PipeClientCache)
     , BackgroundCompactionStarter(this)
     , BorrowedCompactionStarter(this)
+    , ForcedCompactionStarter(this)
     , BackgroundCleaningStarter(this)
     , ShardDeleter(info->TabletID)
     , TableStatsQueue(this,
@@ -5321,6 +5322,10 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvMigrateSchemeShardResponse, Handle);
         HFuncTraced(TEvDataShard::TEvCompactTableResult, Handle);
         HFuncTraced(TEvDataShard::TEvCompactBorrowedResult, Handle);
+
+        // forced compaction
+        HFuncTraced(TEvSchemeShard::TEvForceCompaction, Handle);
+        HFuncTraced(TEvSchemeShard::TEvGetForceCompactionProgress, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvSyncTenantSchemeShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvProcessingRequest, Handle);
@@ -6151,6 +6156,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
                    << ", at schemeshard: " << TabletID());
 
     BorrowedCompactionHandleDisconnect(tabletId, clientId);
+    ForcedCompactionHandleDisconnect(tabletId, clientId);
     ConditionalEraseHandleDisconnect(tabletId, clientId, ctx);
     ShredManager->HandleDisconnect(tabletId, clientId, ctx);
     RestartPipeTx(tabletId, ctx);
@@ -6202,6 +6208,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
     }
 
     BorrowedCompactionHandleDisconnect(tabletId, clientId);
+    ForcedCompactionHandleDisconnect(tabletId, clientId);
     ConditionalEraseHandleDisconnect(tabletId, clientId, ctx);
     ShredManager->HandleDisconnect(tabletId, clientId, ctx);
     RestartPipeTx(tabletId, ctx);
@@ -7884,8 +7891,10 @@ void TSchemeShard::ConfigureCompactionQueues(
 
     if (compactionConfig.HasBorrowedCompactionConfig()) {
         ConfigureBorrowedCompactionQueue(compactionConfig.GetBorrowedCompactionConfig(), ctx);
+        ConfigureForcedCompactionQueue(compactionConfig.GetBorrowedCompactionConfig(), ctx);
     } else {
         ConfigureBorrowedCompactionQueue(NKikimrConfig::TCompactionConfig::TBorrowedCompactionConfig(), ctx);
+        ConfigureForcedCompactionQueue(NKikimrConfig::TCompactionConfig::TBorrowedCompactionConfig(), ctx);
     }
 }
 
@@ -7959,6 +7968,34 @@ void TSchemeShard::ConfigureBorrowedCompactionQueue(
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "BorrowedCompactionQueue configured: Timeout# " << compactionConfig.Timeout
                  << ", Rate# " << BorrowedCompactionQueue->GetRate()
+                 << ", WakeupInterval# " << compactionConfig.WakeupInterval
+                 << ", InflightLimit# " << compactionConfig.InflightLimit);
+}
+
+void TSchemeShard::ConfigureForcedCompactionQueue(
+    const NKikimrConfig::TCompactionConfig::TBorrowedCompactionConfig& config,
+    const TActorContext &ctx)
+{
+    TForcedCompactionQueue::TConfig compactionConfig;
+
+    compactionConfig.IsCircular = false;
+    compactionConfig.Timeout = TDuration::Seconds(config.GetTimeoutSeconds());
+    compactionConfig.MinWakeupInterval = TDuration::MilliSeconds(config.GetMinWakeupIntervalMs());
+    compactionConfig.InflightLimit = config.GetInflightLimit();
+    compactionConfig.MaxRate = config.GetMaxRate();
+
+    if (ForcedCompactionQueue) {
+        ForcedCompactionQueue->UpdateConfig(compactionConfig);
+    } else {
+        ForcedCompactionQueue = new TForcedCompactionQueue(
+            compactionConfig,
+            ForcedCompactionStarter);
+        ctx.RegisterWithSameMailbox(ForcedCompactionQueue);
+    }
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "ForcedCompactionQueue configured: Timeout# " << compactionConfig.Timeout
+                 << ", Rate# " << ForcedCompactionQueue->GetRate()
                  << ", WakeupInterval# " << compactionConfig.WakeupInterval
                  << ", InflightLimit# " << compactionConfig.InflightLimit);
 }

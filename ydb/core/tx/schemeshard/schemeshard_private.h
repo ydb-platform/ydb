@@ -34,6 +34,7 @@ namespace TEvPrivate {
         EvNotifyShardDeleted,
         EvRunBackgroundCompaction,
         EvRunBorrowedCompaction,
+        EvRunForcedCompaction,
         EvCompletePublication,
         EvCompleteBarrier,
         EvPersistTableStats,

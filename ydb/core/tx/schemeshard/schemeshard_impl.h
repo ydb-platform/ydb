@@ -163,6 +163,31 @@ private:
         TSchemeShard* Self;
     };
 
+    using TForcedCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
+        TShardIdx,
+        TFifoQueue<TShardIdx>,
+        TEvPrivate::EvRunForcedCompaction,
+        NKikimrServices::FLAT_TX_SCHEMESHARD,
+        NKikimrServices::TActivity::SCHEMESHARD_FORCED_COMPACTION>;
+
+    class TForcedCompactionStarter : public TForcedCompactionQueue::IStarter {
+    public:
+        TForcedCompactionStarter(TSchemeShard* self)
+            : Self(self)
+        { }
+
+        NOperationQueue::EStartStatus StartOperation(const TShardIdx& shardIdx) override {
+            return Self->StartForcedCompaction(shardIdx);
+        }
+
+        void OnTimeout(const TShardIdx& shardIdx) override {
+            Self->OnForcedCompactionTimeout(shardIdx);
+        }
+
+    private:
+        TSchemeShard* Self;
+    };
+
     using TBackgroundCleaningQueue = NOperationQueue::TOperationQueueWithTimer<
         TPathId,
         TFifoQueue<TPathId>,
@@ -329,6 +354,9 @@ public:
     TBorrowedCompactionStarter BorrowedCompactionStarter;
     TBorrowedCompactionQueue* BorrowedCompactionQueue = nullptr;
 
+    TForcedCompactionStarter ForcedCompactionStarter;
+    TForcedCompactionQueue* ForcedCompactionQueue = nullptr;
+
     TBackgroundCleaningStarter BackgroundCleaningStarter;
     TBackgroundCleaningQueue* BackgroundCleaningQueue = nullptr;
 
@@ -347,6 +375,17 @@ public:
 
     // shardIdx -> clientId
     THashMap<TShardIdx, TActorId> RunningBorrowedCompactions;
+
+    // forced compaction tracking
+    THashMap<TShardIdx, TActorId> RunningForcedCompactions;
+    
+    struct TForcedCompactionInfo {
+        ui64 TotalShards = 0;
+        ui64 CompactedShards = 0;
+        THashSet<TShardIdx> QueuedShards;
+        THashSet<TShardIdx> RunningShards;
+    };
+    THashMap<TPathId, TForcedCompactionInfo> ForcedCompactionsByTable;
 
     THashSet<TShardIdx> ShardsWithBorrowed; // shards have parts from another shards
     THashSet<TShardIdx> ShardsWithLoaned;   // shards have parts loaned to another shards
@@ -529,6 +568,10 @@ public:
         const TActorContext &ctx);
 
     void ConfigureBorrowedCompactionQueue(
+        const NKikimrConfig::TCompactionConfig::TBorrowedCompactionConfig& config,
+        const TActorContext &ctx);
+
+    void ConfigureForcedCompactionQueue(
         const NKikimrConfig::TCompactionConfig::TBorrowedCompactionConfig& config,
         const TActorContext &ctx);
 
@@ -998,6 +1041,9 @@ public:
     void EnqueueBorrowedCompaction(const TShardIdx& shardIdx);
     void RemoveBorrowedCompaction(const TShardIdx& shardIdx);
 
+    void EnqueueForcedCompaction(const TShardIdx& shardIdx);
+    void RemoveForcedCompaction(const TShardIdx& shardIdx);
+
     void EnqueueBackgroundCleaning(const TPathId& pathId);
     void RemoveBackgroundCleaning(const TPathId& pathId);
     std::optional<TTempDirInfo> ResolveTempDirInfo(const TPathId& pathId);
@@ -1013,6 +1059,11 @@ public:
     void OnBorrowedCompactionTimeout(const TShardIdx& shardIdx);
     void BorrowedCompactionHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
     void UpdateBorrowedCompactionQueueMetrics();
+
+    NOperationQueue::EStartStatus StartForcedCompaction(const TShardIdx& shardIdx);
+    void OnForcedCompactionTimeout(const TShardIdx& shardIdx);
+    void ForcedCompactionHandleDisconnect(TTabletId tabletId, const TActorId& clientId);
+    void UpdateForcedCompactionQueueMetrics();
 
     NOperationQueue::EStartStatus StartBackgroundCleaning(const TPathId& pathId);
     bool ContinueBackgroundCleaning(const TPathId& pathId);
@@ -1275,6 +1326,8 @@ public:
     void Handle(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvSchemeShard::TEvForceCompaction::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvSchemeShard::TEvGetForceCompactionProgress::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvTenantShredRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvVacuumResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvVacuumResponse__HandlePtr& ev, const TActorContext& ctx);

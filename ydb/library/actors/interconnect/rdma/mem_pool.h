@@ -43,8 +43,9 @@ namespace NInterconnect::NRdma {
         size_t GetOccupiedMemorySize() const override;
         EInnerType GetInnerType() const noexcept override;
         IContiguousChunk::TPtr Clone() noexcept override;
-    protected:
         TChunkPtr Chunk;
+        ui64 Generation = 0;
+    protected:
         const uint32_t Offset;
         uint32_t Size;
         const uint32_t OrigSize;
@@ -97,9 +98,9 @@ namespace NInterconnect::NRdma {
         virtual TString GetName() const noexcept = 0;
 
     protected:
-        virtual TMemRegion* AllocImpl(int size, ui32 flags) noexcept = 0;
+        virtual TMemRegionPtr AllocImpl(int size, ui32 flags) noexcept = 0;
         virtual void Free(TMemRegion&& mr, TChunk& chunk) noexcept = 0;
-        virtual void DealocateMr(std::vector<ibv_mr*>& mrs) noexcept = 0;
+        virtual void DealocateMr(TChunk*) noexcept = 0;
     private:
         virtual void Tick(NMonotonic::TMonotonic time) noexcept = 0;
     };

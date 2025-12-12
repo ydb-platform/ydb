@@ -1,9 +1,10 @@
 GTEST()
-
+#TIMEOUT(3600)
 IF (OS_LINUX AND SANITIZER_TYPE != "memory")
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
+    TIMEOUT(3600)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)

@@ -15,16 +15,16 @@ namespace NKikimr::NPQ {
 namespace {
 
 template<const NProtoBuf::EnumDescriptor* SimpleDesc()>
-TString GetLabels() {
+constexpr std::string GetLabels() {
     auto desc = NAux::GetLabeledCounterOpts<SimpleDesc>();
     auto groupNames = desc->GetGroupNames();
 
-    TStringBuilder labels;
+    std::string labels;
     for (size_t i = 0; i < desc->GetGroupNamesSize(); ++i) {
         if (i) {
-            labels << "|";
+            labels.push_back('|');
         }
-        labels << groupNames[i];
+        labels.append(groupNames[i]);
     }
 
     return labels;
@@ -169,6 +169,9 @@ void SetCounters(TCounters& counters, const auto& metrics) {
     auto& aggregatedCounters = metrics.Aggregator.GetCounters();
 
     for (size_t i = 0; i < counters.Counters.size(); ++i) {
+        if (!counters.Counters[i]) {
+            continue;
+        }
         if (aggregatedCounters.Size() == i) {
             break;
         }
@@ -286,7 +289,7 @@ void TTopicMetricsHandler::Handle(NKikimrPQ::TStatusResponse_TPartResult&& parti
 }
 
 void TTopicMetricsHandler::UpdateMetrics() {
-    if (PartitionStatuses.empty()) {
+    if (!DynamicCounters || PartitionStatuses.empty()) {
         return;
     }
 

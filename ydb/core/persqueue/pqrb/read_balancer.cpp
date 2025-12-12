@@ -442,14 +442,14 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
 
     NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
 
-    auto it = AggregatedStats.Cookies.find(tabletId);
-    if (!pipeReconnected || it != AggregatedStats.Cookies.end()) {
+    auto it = StatsRequestTracker.Cookies.find(tabletId);
+    if (!pipeReconnected || it != StatsRequestTracker.Cookies.end()) {
         ui64 cookie;
         if (pipeReconnected) {
             cookie = it->second;
         } else {
-            cookie = ++AggregatedStats.NextCookie;
-            AggregatedStats.Cookies[tabletId] = cookie;
+            cookie = ++StatsRequestTracker.NextCookie;
+            StatsRequestTracker.Cookies[tabletId] = cookie;
         }
 
         PQ_LOG_D("Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
@@ -463,11 +463,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
     ui64 tabletId = record.GetTabletId();
     ui64 cookie = ev->Cookie;
 
-    if ((0 != cookie && cookie != AggregatedStats.Cookies[tabletId]) || (0 == cookie && !AggregatedStats.Cookies.contains(tabletId))) {
+    if ((0 != cookie && cookie != StatsRequestTracker.Cookies[tabletId]) || (0 == cookie && !StatsRequestTracker.Cookies.contains(tabletId))) {
         return;
     }
 
-    AggregatedStats.Cookies.erase(tabletId);
+    StatsRequestTracker.Cookies.erase(tabletId);
 
     for (auto& partRes : *record.MutablePartResult()) {
         ui32 partitionId = partRes.GetPartition();
@@ -490,19 +490,19 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
     Balancer->Handle(ev, ctx);
 
-    if (AggregatedStats.Cookies.empty()) {
+    if (StatsRequestTracker.Cookies.empty()) {
         CheckStat(ctx);
         Balancer->ProcessPendingStats(ctx);
     }
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActorContext& ctx) {
-    if (AggregatedStats.Round != ev->Get()->Round) {
+    if (StatsRequestTracker.Round != ev->Get()->Round) {
         // old message
         return;
     }
 
-    if (AggregatedStats.Cookies.empty()) {
+    if (StatsRequestTracker.Cookies.empty()) {
         return;
     }
 
@@ -569,14 +569,14 @@ TEvPersQueue::TEvPeriodicTopicStats* TPersQueueReadBalancer::GetStatsEvent() {
 }
 
 void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
-    if (!AggregatedStats.Cookies.empty()) {
-        AggregatedStats.Cookies.clear();
+    if (!StatsRequestTracker.Cookies.empty()) {
+        StatsRequestTracker.Cookies.clear();
         CheckStat(ctx);
     }
 
     for (auto& p : PartitionsInfo) {
         const ui64& tabletId = p.second.TabletId;
-        if (AggregatedStats.Cookies.contains(tabletId)) { //already asked stat
+        if (StatsRequestTracker.Cookies.contains(tabletId)) { //already asked stat
             continue;
         }
         RequestTabletIfNeeded(tabletId, ctx);
@@ -588,7 +588,7 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
     auto stateWakeupInterval = std::max<ui64>(config.GetBalancerWakeupIntervalSec(), 1);
     ui64 delayMs = std::min(stateWakeupInterval * 1000, wakeupInterval * 500);
     if (0 < delayMs) {
-        Schedule(TDuration::MilliSeconds(delayMs), new TEvPQ::TEvStatsWakeup(++AggregatedStats.Round));
+        Schedule(TDuration::MilliSeconds(delayMs), new TEvPQ::TEvStatsWakeup(++StatsRequestTracker.Round));
     }
 }
 

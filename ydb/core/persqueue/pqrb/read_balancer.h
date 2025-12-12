@@ -226,13 +226,13 @@ private:
 
     std::unique_ptr<TTopicMetricsHandler> TopicMetricsHandler;
 
-    struct TAggregatedStats {
+    struct TStatsRequestTracker {
         std::unordered_map<ui64, ui64> Cookies;
 
         ui64 Round = 0;
         ui64 NextCookie = 0;
     };
-    TAggregatedStats AggregatedStats;
+    TStatsRequestTracker StatsRequestTracker;
 
     struct TTxWritePartitionStats;
     bool TTxWritePartitionStatsScheduled = false;

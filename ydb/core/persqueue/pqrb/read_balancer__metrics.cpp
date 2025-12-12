@@ -15,7 +15,7 @@ namespace NKikimr::NPQ {
 namespace {
 
 template<const NProtoBuf::EnumDescriptor* SimpleDesc()>
-TString GetLables() {
+TString GetLabels() {
     auto desc = NAux::GetLabeledCounterOpts<SimpleDesc>();
     auto groupNames = desc->GetGroupNames();
 
@@ -52,7 +52,7 @@ struct TMetricCollector {
         Aggregator.AggregateWith(Counters);
     }
 
-    TConfig Counters = TConfig(GetLables<SimpleDesc>(), 0, "");
+    TConfig Counters = TConfig(GetLabels<SimpleDesc>(), 0, "");
     TTabletLabeledCountersBase Aggregator;
 };
 
@@ -145,7 +145,7 @@ TCounters InitializeCounters(
     }
 
     using TConfig = TProtobufTabletLabeledCounters<SimpleDesc>;
-    auto config = std::make_unique<TConfig>(GetLables<SimpleDesc>(), 0, databasePath);
+    auto config = std::make_unique<TConfig>(GetLabels<SimpleDesc>(), 0, databasePath);
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> result;
     for (size_t i = 0; i < config->GetCounters().Size(); ++i) {
@@ -178,7 +178,7 @@ void SetCounters(TCounters& counters, const auto& metrics) {
         if (type == TLabeledCounterOptions::CT_TIMELAG) {
             value = value < now ? now - value : 0;
         }
- 
+
         counters.Counters[i]->Set(value);
     }
 }
@@ -281,7 +281,7 @@ void TTopicMetricsHandler::InitializePartitions(ui32 partitionId, ui64 dataSize,
     TopicMetrics.TotalUsedReserveSize += usedReserveSize;
 }
 
-void TTopicMetricsHandler::Handle(NKikimrPQ::TStatusResponse::TPartResult&& partitionStatus) {
+void TTopicMetricsHandler::Handle(NKikimrPQ::TStatusResponse_TPartResult&& partitionStatus) {
     PartitionStatuses[partitionStatus.GetPartition()] = std::move(partitionStatus);
 }
 

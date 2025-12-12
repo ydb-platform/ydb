@@ -515,7 +515,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TAc
 
 void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     Y_UNUSED(ctx);
-    //TODO: Deside about changing number of partitions and send request to SchemeShard
+    //TODO: Decide about changing number of partitions and send request to SchemeShard
     //TODO: make AlterTopic request via TX_PROXY
 
     if (!TTxWritePartitionStatsScheduled) {
@@ -537,7 +537,7 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
 }
 
 void TPersQueueReadBalancer::InitCounters(const TActorContext& ctx) {
-    if (!DatabaseInfo.DatabasePath.empty()) {
+    if (DatabaseInfo.DatabasePath.empty()) {
         return;
     }
 

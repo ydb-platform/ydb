@@ -1,14 +1,16 @@
 #include "interactive_config.h"
 #include "api_utils.h"
+#include "interactive_log_defs.h"
+#include "json_utils.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 
 #include <util/string/strip.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/yaml/as/tstring.h>
 
 namespace NYdb::NConsoleClient {
@@ -397,11 +399,46 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
         return true;
     }
 
+    const TString& apiEndpoint = GetApiEndpoint();
+    if (!apiEndpoint) {
+        YDB_CLI_LOG(Warning, "Can not setup model name, there is no API endpoint");
+        return false;
+    }
+
+    std::vector<TString> allowedModels;
+    try {
+        const auto response = NAi::THttpExecutor(NAi::CreateApiUrl(apiEndpoint, "/models"), GetApiToken(), Log).Get();
+
+        if (!response.IsSuccess()) {
+            throw yexception() << NAi::THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);
+        }
+
+        NJson::TJsonValue responseJson;
+        try {
+            NJson::ReadJsonTree(response.Content, &responseJson, /* throwOnError */ true);
+        } catch (const std::exception& e) {
+            throw yexception() << "Model API response is not valid JSON, reason: " << e.what();
+        }
+
+        NAi::TJsonParser parser(responseJson);
+        if (auto child = parser.MaybeKey("response")) {
+            parser = std::move(*child);
+        }
+
+        parser.GetKey("data").Iterate([&](NAi::TJsonParser item) {
+            if (const auto id = item.MaybeKey("id")) {
+                allowedModels.emplace_back(id->GetString());
+            }
+        });
+    } catch (const std::exception& e) {
+        Cerr << Colors.Yellow() << "Failed to list model names, maybe model API endpoint is not correct: " << e.what() << Colors.OldColor() << Endl;
+    }
+
     TString modelName;
     std::vector<TMenuEntry> options;
     const TString title = TStringBuilder() << "Pick desired action to configure model name:";
 
-    options.push_back({"Set a new model name", [&]() {
+    options.push_back({"Write a new model name", [&]() {
         auto value = RunFtxuiInput(TStringBuilder() << "Please enter model name: ", "", [&](const TString& input, TString& error) {
             modelName = Strip(input);
             if (!modelName) {
@@ -421,6 +458,16 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
     if (currentModelName) {
         options.push_back({TStringBuilder() << "Use current model name \"" << currentModelName << "\"", [&]() {
             modelName = currentModelName;
+        }});
+    }
+
+    for (const auto& allowedName : allowedModels) {
+        if (allowedName == currentModelName) {
+            continue;
+        }
+
+        options.push_back({TStringBuilder() << "Use new model name \"" << allowedName << "\"", [&modelName, allowedName]() {
+            modelName = allowedName;
         }});
     }
 
@@ -554,7 +601,7 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
 
         auto description = TStringBuilder() << name;
         if (activeAiProfile && activeAiProfile->GetName() == name) {
-            description << " (" << Colors.Green() << "active" << Colors.OldColor() << ")";
+            description << " (active)";
         }
 
         options.emplace_back(description, [&result, profile]() {

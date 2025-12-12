@@ -8,13 +8,14 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
 
 #include <util/folder/path.h>
+#include <util/generic/scope.h>
 #include <util/string/builder.h>
 
 namespace NYdb::NConsoleClient {
 
 namespace {
 
-class TSqlSessionRunner final : public TSessionRunnerBase {
+class TSqlSessionRunner final : public TSessionRunnerBase, public TInterruptableCommand {
     using TBase = TSessionRunnerBase;
 
     class TLexer {
@@ -80,6 +81,8 @@ public:
     {}
 
     void HandleLine(const TString& line) final {
+        Y_DEFER { ResetInterrupted(); };
+
         const auto& tokens = TLexer::Tokenize(line);
         if (tokens.empty()) {
             return;

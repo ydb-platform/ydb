@@ -14,39 +14,9 @@
 
 namespace NYdb::NConsoleClient::NAi {
 
-namespace {
-
-NYql::THttpHeader CreateApiHeaders(const TString& authToken) {
-    TSmallVec<TString> headers = {"Content-Type: application/json"};
-
-    if (authToken) {
-        headers.emplace_back(TStringBuilder() << "Authorization: Bearer " << authToken);
-    }
-
-    return {.Fields = std::move(headers)};
-}
-
-struct THttpResponse {
-    THttpResponse(TString&& content, ui64 httpCode)
-        : Content(std::move(content))
-        , HttpCode(httpCode)
-    {}
-
-    bool IsSuccess() const {
-        return HttpCode >= 200 && HttpCode < 300;
-    }
-
-    TString Content;
-    ui64 HttpCode = 0;
-};
-
-} // anonymous namespace
-
 TModelBase::TModelBase(const TString& apiUrl, const TString& authToken, const TInteractiveLogger& log)
     : Log(log)
-    , ApiUrl(apiUrl)
-    , ApiHeaders(CreateApiHeaders(authToken))
-    , HttpGateway(NYql::IHTTPGateway::Make())
+    , HttpExecutor(apiUrl, authToken, Log)
 {
     Y_VALIDATE(apiUrl, "Url should not be empty for model API");
     YDB_CLI_LOG(Notice, "Using model API url: \"" << apiUrl << "\" with " << (authToken ? TStringBuilder() << "auth token " << BlurSecret(authToken) : TStringBuilder() << "anonymous access"));
@@ -54,37 +24,15 @@ TModelBase::TModelBase(const TString& apiUrl, const TString& authToken, const TI
 
 TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& messages) {
     Y_VALIDATE(!messages.empty(), "Messages should not be empty for advance conversation");
-
     AdvanceConversation(messages);
-    YDB_CLI_LOG(Debug, "Request to model API body:\n" << FormatJsonValue(ChatCompletionRequest));
 
     NJsonWriter::TBuf requestJsonWriter;
     requestJsonWriter.WriteJsonValue(&ChatCompletionRequest);
     auto request = requestJsonWriter.Str();
+    const auto& response = HttpExecutor.Post(std::move(request));
 
-    auto responsePromise = NThreading::NewPromise<THttpResponse>();
-    auto httpCallback = [&responsePromise](NYql::IHTTPGateway::TResult result) -> void {
-        const auto curlCode = result.CurlResponseCode;
-        if (curlCode == CURLE_OK) {
-            auto& content = result.Content;
-            responsePromise.SetValue(THttpResponse(content.Extract(), content.HttpResponseCode));
-            return;
-        }
-
-        auto error = TStringBuilder() << "Failed to connect to API server or process response, internal code: " << static_cast<ui64>(curlCode);
-        if (result.Issues) {
-            error << ". Reason:\n" << result.Issues.ToString();
-        }
-        responsePromise.SetException(error);
-    };
-
-    HttpGateway->Upload(ApiUrl, ApiHeaders, std::move(request), std::move(httpCallback));
-    const auto response = responsePromise.GetFuture().ExtractValueSync();
-
-    YDB_CLI_LOG(Info, "Model API response http code: " << response.HttpCode);
-    YDB_CLI_LOG(Debug, "Model API response:" << Endl << FormatJsonValue(response.Content));
     if (!response.IsSuccess()) {
-        throw yexception() << HandleErrorResponse(response.HttpCode, response.Content);
+        throw yexception() << THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);
     }
 
     NJson::TJsonValue responseJson;
@@ -99,14 +47,6 @@ TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& me
     } catch (const std::exception& e) {
         throw yexception() << "Processing model response error. " << e.what();
     }
-}
-
-TString TModelBase::HandleErrorResponse(ui64 httpCode, const TString& response) {
-    auto error = TStringBuilder() << "Request to model API failed with code: " << httpCode;
-    if (response) {
-        error << ". Response:\n" << FormatJsonValue(response);
-    }
-    return error;
 }
 
 } // namespace NYdb::NConsoleClient::NAi

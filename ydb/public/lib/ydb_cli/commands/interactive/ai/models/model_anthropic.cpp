@@ -102,26 +102,6 @@ protected:
         return result;
     }
 
-    TString HandleErrorResponse(ui64 httpCode, const TString& response) final {
-        TJsonParser parser;
-        if (!parser.Parse(response)) {
-            return TBlase::HandleErrorResponse(httpCode, response);
-        }
-
-        auto error = TStringBuilder() << "Request to model API failed:\n";
-        if (const auto& info = parser.MaybeKey("error")) {
-            return error << info->ToString();
-        }
-        if (const auto& response = parser.MaybeKey("response")) {
-            if (const auto& info = parser.MaybeKey("error")) {
-                return error << info->ToString();
-            }
-            return error << response->ToString();
-        }
-
-        return TBlase::HandleErrorResponse(httpCode, response);
-    }
-
 private:
     static bool ValidateToolName(const TString& name) {
         return 1 <= name.size() && name.size() <= 128;

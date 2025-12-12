@@ -145,14 +145,18 @@ private:
             const auto& profile = ConfigurationManager->GetActiveAiProfileName();
             const auto& profiles = ConfigurationManager->ListAiProfiles();
             if (const auto it = profiles.find(profile); profile && it != profiles.end()) {
-                options.emplace_back(TStringBuilder() << "Change current AI model \"" << profile << "\" settings", [profile = it->second, this]() {
+                options.emplace_back(TStringBuilder() << "Change current AI model \"" << profile << "\" settings", [profile = it->second, &exit, this]() {
                     Cout << Endl << "Changing current AI model \"" << profile->GetName() << "\" settings." << Endl;
-                    profile->SetupProfile();
+                    if (!profile->SetupProfile()) {
+                        exit = true;
+                        return;
+                    }
+
                     ChangeAiProfile(profile);
                 });
             }
 
-            options.emplace_back("Switch AI model", [&]() { SwitchAiProfile(); });
+            options.emplace_back("Switch AI model", [&exit, this]() { exit = !SwitchAiProfile(); });
             options.push_back({"Don't do anything, just exit", [&]() { exit = true; }});
 
             if (!RunFtxuiMenuWithActions("Please choose desired action with AI model:", options)) {
@@ -161,10 +165,12 @@ private:
         }
     }
 
-    void SwitchAiProfile() {
+    bool SwitchAiProfile() {
         if (auto newProfile = ConfigurationManager->SelectAiModelProfile()) {
             ChangeAiProfile(std::move(newProfile));
+            return true;
         }
+        return false;
     }
 
     void ChangeAiProfile(TInteractiveConfigurationManager::TAiProfile::TPtr profile) {

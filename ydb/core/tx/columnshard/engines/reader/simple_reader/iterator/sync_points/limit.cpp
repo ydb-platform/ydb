@@ -53,7 +53,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("DebugOrder", it.DebugString());
         }
         for (auto it : SourcesSequentially) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("SourcesSequentially", it->GetSourceId());
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("SourcesSequentially", it->GetSourceIdx());
         }
         if (FindIf(Iterators, [&](const auto& item) {
                 return item.GetSourceIdx() == source->GetSourceIdx();

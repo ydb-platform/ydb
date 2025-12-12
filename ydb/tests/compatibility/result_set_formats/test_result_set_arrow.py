@@ -155,7 +155,8 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self._validate_schema_inclusion_mode(
             self._read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
             rows_count,
-            schema_inclusion_mode
+            schema_inclusion_mode,
+            stmt_cnt=1
         )
 
         self.change_cluster_version()
@@ -163,7 +164,8 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self._validate_schema_inclusion_mode(
             self._read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
             rows_count,
-            schema_inclusion_mode
+            schema_inclusion_mode,
+            stmt_cnt=1
         )
 
         self._drop_table(table_name)
@@ -181,18 +183,20 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self._create_table(table_name, store_type)
         self._fill_table(table_name, rows_count, store_type)
 
-        self._validate_multistatement(
+        self._validate_schema_inclusion_mode(
             self._multistatement_read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
             rows_count,
-            schema_inclusion_mode
+            schema_inclusion_mode,
+            stmt_cnt=2
         )
 
         self.change_cluster_version()
 
-        self._validate_multistatement(
+        self._validate_schema_inclusion_mode(
             self._multistatement_read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
             rows_count,
-            schema_inclusion_mode
+            schema_inclusion_mode,
+            stmt_cnt=2
         )
 
         self._drop_table(table_name)
@@ -244,6 +248,26 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
     # -------------------------- Methods to execute queries ---------------------------
 
+    def _try_execute(self, query, schema_inclusion_mode=None, arrow_format_settings=None):
+        may_throw = (
+            arrow_format_settings is not None
+            and arrow_format_settings.compression_codec is not None
+            and arrow_format_settings.compression_codec.type == ydb.ArrowCompressionCodecType.LZ4_FRAME
+            and arrow_format_settings.compression_codec.level is not None
+        )
+
+        with ydb.QuerySessionPool(self.driver) as pool:
+            try:
+                return pool.execute_with_retries(
+                    query,
+                    result_set_format=ydb.QueryResultSetFormat.ARROW,
+                    schema_inclusion_mode=schema_inclusion_mode,
+                    arrow_format_settings=arrow_format_settings
+                )
+            except Exception as e:
+                if not may_throw:
+                    assert False, f"Failed query `{query}`, error: {e}"
+
     def _create_table(self, table_name, store_type):
         query = create_table_sql_request(
             table_name,
@@ -254,27 +278,18 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             sync="",
             column_table=store_type == "COLUMN"
         )
-
-        try:
-            with ydb.QuerySessionPool(self.driver) as pool:
-                pool.execute_with_retries(query)
-        except Exception as e:
-            assert False, f"Failed to create table {table_name}: {e}"
+        self._try_execute(query)
 
     def _drop_table(self, table_name):
         query = f"DROP TABLE {table_name};"
-        try:
-            with ydb.QuerySessionPool(self.driver) as pool:
-                pool.execute_with_retries(query)
-        except Exception as e:
-            assert False, f"Failed to drop table {table_name}: {e}"
+        self._try_execute(query)
 
     def _fill_table(self, table_name, rows_count, store_type, batch_size=100, offset=0):
         type_names = list(self.all_types.keys())
+
         columns = ["pk_Uint64"]
         for type_name in type_names:
             columns.append(f"col_{cleanup_type_name(type_name)}")
-        columns_str = "(" + ", ".join(columns) + ")"
 
         values = []
         for i in range(rows_count):
@@ -286,16 +301,15 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
                     value.append('NULL')
             values.append("(" + ", ".join(value) + ")")
 
-        try:
-            with ydb.QuerySessionPool(self.driver) as pool:
-                for batch_start in range(0, rows_count, batch_size):
-                    batch_rows = values[batch_start:batch_start + batch_size]
-                    if not batch_rows:
-                        continue
-                    query = f"UPSERT INTO {table_name} {columns_str} VALUES {', '.join(batch_rows)};"
-                    pool.execute_with_retries(query)
-        except Exception as e:
-            assert False, f"Failed to fill table {table_name}: {e}"
+        query = ""
+        for batch_start in range(0, rows_count, batch_size):
+            batch_rows = values[batch_start:batch_start + batch_size]
+            if not batch_rows:
+                continue
+            query += f"UPSERT INTO {table_name} ({", ".join(columns)}) VALUES {", ".join(batch_rows)};\n"
+
+        assert len(query) != 0
+        self._try_execute(query)
 
     def _read_table(
         self,
@@ -306,50 +320,51 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         pragmas=[],
         ordered=True
     ):
-        pragmas_stmt = ";".join(f"PRAGMA {pragma}" for pragma in pragmas)
-        columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]] if ordered else ["*"]
-        query = f"""
-            {(pragmas_stmt + ";") if len(pragmas_stmt) > 0 else ""}
-            SELECT {", ".join(columns)} FROM {table_name}{f" LIMIT {limit}" if limit is not None else ""};
-        """
-        arrow_format_settings = ydb.ArrowFormatSettings(compression_codec=codec) if codec else None
+        all_columns = ", ".join(["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]]) if ordered else "*"
+        query = f"SELECT {all_columns} FROM {table_name}"
 
-        try:
-            with ydb.QuerySessionPool(self.driver) as pool:
-                result_sets = pool.execute_with_retries(
-                    query,
-                    result_set_format=ydb.QueryResultSetFormat.ARROW,
-                    arrow_format_settings=arrow_format_settings,
-                    schema_inclusion_mode=schema_inclusion_mode
-                )
-            return result_sets
-        except Exception as e:
-            if codec is None or (codec.type != ydb.ArrowCompressionCodecType.LZ4_FRAME or codec.level is None):
-                assert False, f"Failed to select table: {e}"
+        if limit is not None:
+            query += f" LIMIT {limit}"
+
+        if len(pragmas) != 0:
+            pragmas_stmt = "\n".join(f"PRAGMA {pragma};" for pragma in pragmas) + "\n"
+            query = pragmas_stmt + query
+
+        query += ";"
+
+        arrow_format_settings = ydb.ArrowFormatSettings(compression_codec=codec)
+        self._try_execute(
+            query,
+            schema_inclusion_mode=schema_inclusion_mode,
+            arrow_format_settings=arrow_format_settings
+        )
 
     def _multistatement_read_table(
         self,
         table_name,
         schema_inclusion_mode=None,
     ):
-        columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]]
+        all_columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]]
         query = f"""
-            UPDATE {table_name} SET {columns[1]} = {columns[1]} + 1 WHERE {columns[0]} >= 0 RETURNING {", ".join(columns)};
-            SELECT {", ".join(columns)} FROM {table_name};
+            UPDATE {table_name} SET {all_columns[1]} = {all_columns[1]} + 1 WHERE {all_columns[0]} >= 0 RETURNING {", ".join(all_columns)};
+            SELECT {", ".join(all_columns)} FROM {table_name};
         """
-
-        try:
-            with ydb.QuerySessionPool(self.driver) as pool:
-                result_sets = pool.execute_with_retries(
-                    query,
-                    result_set_format=ydb.QueryResultSetFormat.ARROW,
-                    schema_inclusion_mode=schema_inclusion_mode
-                )
-            return result_sets
-        except Exception as e:
-            assert False, f"Failed to select table: {e}"
+        self._try_execute(query, schema_inclusion_mode)
 
     # --------------------- Methods to validate results for tests ---------------------
+
+    @staticmethod
+    def validate_format_arrow(result_set, check_schema=True):
+        assert result_set.format == ydb.QueryResultSetFormat.ARROW
+        if check_schema:
+            assert (
+                result_set.arrow_format_meta is not None
+                and result_set.arrow_format_meta.schema is not None
+                and len(result_set.arrow_format_meta.schema) != 0
+            )
+
+        assert result_set.data is not None and len(result_set.data) != 0
+        assert len(result_set.rows) == 0
 
     def _validate_types_mapping(self, result_sets, rows_count):
         if result_sets is None:
@@ -359,22 +374,18 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         result_rows_count = 0
         for result_set in result_sets:
-            assert result_set.format == ydb.QueryResultSetFormat.ARROW
-            assert result_set.data is not None and len(result_set.data) != 0
-            assert result_set.arrow_format_meta is not None and len(result_set.arrow_format_meta.schema) != 0
+            self.validate_format_arrow(result_set)
 
-            try:
-                schema = pa.ipc.read_schema(pa.py_buffer(result_set.arrow_format_meta.schema))
-                batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
-                batch.validate()
+            schema = pa.ipc.read_schema(pa.py_buffer(result_set.arrow_format_meta.schema))
+            batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
+            batch.validate()
 
-                result_rows_count += batch.num_rows
-                assert batch.num_columns == len(self.all_types) + 1
+            result_rows_count += batch.num_rows
+            assert batch.num_columns == len(self.all_types) + 1
 
-                for type_name in self.all_types.keys():
-                    assert batch.schema.field(f"col_{cleanup_type_name(type_name)}").type == primitive_type_to_arrow_type[type_name]
-            except Exception as e:
-                assert False, f"Failed to read schema or batch from result set: {e}"
+            for type_name in self.all_types.keys():
+                field = batch.schema.field(f"col_{cleanup_type_name(type_name)}")
+                assert field.type == primitive_type_to_arrow_type[type_name]
 
         assert result_rows_count == rows_count
 
@@ -386,29 +397,24 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         result_rows_count = 0
         for result_set in result_sets:
-            assert result_set.format == ydb.QueryResultSetFormat.ARROW
-            assert result_set.data is not None and len(result_set.data) != 0
-            assert result_set.arrow_format_meta is not None and len(result_set.arrow_format_meta.schema) != 0
+            self.validate_format_arrow(result_set)
 
-            try:
-                schema = pa.ipc.read_schema(pa.py_buffer(result_set.arrow_format_meta.schema))
-                batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
-                batch.validate()
+            schema = pa.ipc.read_schema(pa.py_buffer(result_set.arrow_format_meta.schema))
+            batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
+            batch.validate()
 
-                # is there the best way to check if the compression is working?
-                if codec.type in [ydb.ArrowCompressionCodecType.UNSPECIFIED, ydb.ArrowCompressionCodecType.NONE]:
-                    assert len(result_set.data) == len(batch.serialize().to_pybytes())
-                else:
-                    assert len(result_set.data) < len(batch.serialize().to_pybytes())
+            # is there the best way to check if the compression is working?
+            if codec.type in [ydb.ArrowCompressionCodecType.UNSPECIFIED, ydb.ArrowCompressionCodecType.NONE]:
+                assert len(result_set.data) == len(batch.serialize().to_pybytes())
+            else:
+                assert len(result_set.data) < len(batch.serialize().to_pybytes())
 
-                result_rows_count += batch.num_rows
-                assert batch.num_columns == len(self.all_types) + 1
-            except Exception as e:
-                assert False, f"Failed to read schema or batch from result set: {e}"
+            result_rows_count += batch.num_rows
+            assert batch.num_columns == len(self.all_types) + 1
 
         assert result_rows_count == rows_count
 
-    def _validate_schema_inclusion_mode(self, result_sets, rows_count, schema_inclusion_mode):
+    def _validate_schema_inclusion_mode(self, result_sets, rows_count, schema_inclusion_mode, stmt_cnt):
         if result_sets is None:
             return
 
@@ -416,83 +422,40 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         # To detect the schema inclusion mode
         if self.channel_buffer_size == kb_to_b(2):
-            assert len(result_sets) > 1
+            assert len(result_sets) > stmt_cnt
 
-        first_schema = None
-        result_rows_count = 0
+        index_to_schema = dict()
+        result_rows_count = {}
 
         for result_set in result_sets:
-            assert result_set.format == ydb.QueryResultSetFormat.ARROW
-            assert len(result_set.rows) == 0
+            self.validate_format_arrow(result_set, check_schema=False)
 
             if schema_inclusion_mode in [ydb.QuerySchemaInclusionMode.UNSPECIFIED, ydb.QuerySchemaInclusionMode.ALWAYS]:
                 assert len(result_set.columns) == len(self.all_types) + 1
                 assert len(result_set.arrow_format_meta.schema) != 0
-                first_schema = result_set.arrow_format_meta.schema
+                index_to_schema[result_set.index] = result_set.arrow_format_meta.schema
             elif schema_inclusion_mode == ydb.QuerySchemaInclusionMode.FIRST_ONLY:
-                if first_schema is None:
+                if result_set.index not in index_to_schema:
                     assert len(result_set.columns) == len(self.all_types) + 1
                     assert len(result_set.arrow_format_meta.schema) != 0
-                    first_schema = result_set.arrow_format_meta.schema
+                    index_to_schema[result_set.index] = result_set.arrow_format_meta.schema
                 else:
                     assert len(result_set.columns) == 0
                     assert len(result_set.arrow_format_meta.schema) == 0
             else:
                 assert False, f"Unsupported schema inclusion mode: {schema_inclusion_mode}"
 
-            try:
-                schema = pa.ipc.read_schema(pa.py_buffer(first_schema))
-                batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
-                batch.validate()
+            assert result_set.index in index_to_schema
+            schema = pa.ipc.read_schema(pa.py_buffer(index_to_schema[result_set.index]))
+            batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
+            batch.validate()
 
-                result_rows_count += batch.num_rows
-                assert batch.num_columns == len(self.all_types) + 1
-            except Exception as e:
-                assert False, f"Failed to read schema or batch from result set: {e}"
+            result_rows_count[result_set.index] = result_rows_count.get(result_set.index, 0) + len(batch.num_rows)
+            assert batch.num_columns == len(self.all_types) + 1
 
-        assert result_rows_count == rows_count
-
-    def _validate_multistatement(self, result_sets, rows_count, schema_inclusion_mode):
-        if result_sets is None:
-            return
-
-        assert len(result_sets) > 2
-
-        first_schema = {0: None, 1: None}
-        result_rows_count = {0: 0, 1: 0}
-
-        for result_set in result_sets:
-            assert result_set.format == ydb.QueryResultSetFormat.ARROW
-            assert len(result_set.rows) == 0
-
-            if schema_inclusion_mode in [ydb.QuerySchemaInclusionMode.UNSPECIFIED, ydb.QuerySchemaInclusionMode.ALWAYS]:
-                assert len(result_set.columns) == len(self.all_types) + 1
-                assert len(result_set.arrow_format_meta.schema) != 0
-                first_schema[result_set.index] = result_set.arrow_format_meta.schema
-            elif schema_inclusion_mode == ydb.QuerySchemaInclusionMode.FIRST_ONLY:
-                if first_schema[result_set.index] is None:
-                    assert len(result_set.columns) == len(self.all_types) + 1
-                    assert len(result_set.arrow_format_meta.schema) != 0
-                    first_schema[result_set.index] = result_set.arrow_format_meta.schema
-                else:
-                    assert len(result_set.columns) == 0
-                    assert len(result_set.arrow_format_meta.schema) == 0
-            else:
-                assert False, f"Unsupported schema inclusion mode: {schema_inclusion_mode}"
-
-            try:
-                schema = pa.ipc.read_schema(pa.py_buffer(first_schema[result_set.index]))
-                batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
-                batch.validate()
-
-                result_rows_count[result_set.index] += batch.num_rows
-                assert batch.num_columns == len(self.all_types) + 1
-            except Exception as e:
-                assert False, f"Failed to read schema or batch from result set: {e}"
-
-        for index in [0, 1]:
-            assert first_schema[index] is not None
-            assert result_rows_count[index] == rows_count
+        assert len(index_to_schema) == stmt_cnt
+        for cnt in result_rows_count.values():
+            assert cnt == rows_count
 
     def _validate_empty_result(self, table_name):
         empty_response_queries = [
@@ -501,34 +464,28 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             f"ALTER TABLE {table_name} DROP COLUMN col_NewCol;",
         ]
 
-        with ydb.QuerySessionPool(self.driver) as pool:
-            for query in empty_response_queries:
-                try:
-                    result_sets = pool.execute_with_retries(query, result_set_format=ydb.QueryResultSetFormat.ARROW)
-                    assert len(result_sets) == 0, f"Expected 0 result sets for query: {query}"
-                except Exception as e:
-                    assert False, f"Failed to execute query: {query}: {e}"
+        for query in empty_response_queries:
+            result_sets = self._try_execute(query)
+            assert len(result_sets) == 0
 
         empty_result_queries = [
             f"SELECT * FROM {table_name} WHERE 1 = 0;",
             f"UPDATE {table_name} SET col_Int64 = 1234 WHERE pk_Uint64 > 1234567 RETURNING *;"
         ]
 
-        with ydb.QuerySessionPool(self.driver) as pool:
-            for query in empty_result_queries:
-                try:
-                    result_sets = pool.execute_with_retries(query, result_set_format=ydb.QueryResultSetFormat.ARROW)
-                    assert len(result_sets) == 1, f"Expected 1 result set for query: {query}"
-                    assert result_sets[0].format == ydb.QueryResultSetFormat.ARROW
+        for query in empty_result_queries:
+            result_sets = self._try_execute(query)
+            assert len(result_sets) == 1
 
-                    schema = pa.ipc.read_schema(pa.py_buffer(result_sets[0].arrow_format_meta.schema))
-                    batch = pa.ipc.read_record_batch(pa.py_buffer(result_sets[0].data), schema)
-                    batch.validate()
+            result = result_sets[0]
+            self.validate_format_arrow(result)
 
-                    assert batch.num_rows == 0
-                    assert batch.num_columns == len(self.all_types) + 1
-                except Exception as e:
-                    assert False, f"Failed to execute query: {query}: {e}"
+            schema = pa.ipc.read_schema(pa.py_buffer(result.arrow_format_meta.schema))
+            batch = pa.ipc.read_record_batch(pa.py_buffer(result.data), schema)
+            batch.validate()
+
+            assert batch.num_rows == 0
+            assert batch.num_columns == len(self.all_types) + 1
 
     def _validate_limit_ordered_columns(self, result_sets, rows_count):
         if result_sets is None:
@@ -538,22 +495,17 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         result_rows_count = 0
         for result_set in result_sets:
-            assert result_set.format == ydb.QueryResultSetFormat.ARROW
-            assert result_set.data is not None and len(result_set.data) != 0
-            assert result_set.arrow_format_meta is not None and len(result_set.arrow_format_meta.schema) != 0
+            self.validate_format_arrow(result_set)
 
-            try:
-                schema = pa.ipc.read_schema(pa.py_buffer(result_set.arrow_format_meta.schema))
-                batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
-                batch.validate()
+            schema = pa.ipc.read_schema(pa.py_buffer(result_set.arrow_format_meta.schema))
+            batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
+            batch.validate()
 
-                result_rows_count += batch.num_rows
-                assert batch.num_columns == len(self.all_types) + 1
+            result_rows_count += batch.num_rows
+            assert batch.num_columns == len(self.all_types) + 1
 
-                for i, col_name in enumerate(self.all_types.keys(), start=1):
-                    assert batch.schema.field(i).name == "col_" + cleanup_type_name(col_name)
-            except Exception as e:
-                assert False, f"Failed to read schema or batch from result set: {e}"
+            for i, col_name in enumerate(self.all_types.keys(), start=1):
+                assert batch.schema.field(i).name == "col_" + cleanup_type_name(col_name)
 
         assert result_rows_count == rows_count
 
@@ -562,27 +514,24 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         second_alias = "alias_col_String"
 
         query = f"SELECT col_Int64 AS {first_alias}, col_String AS {second_alias} FROM {table_name} LIMIT 1;"
+        result_sets = self._try_execute(query)
+        assert len(result_sets) == 1
 
-        with ydb.QuerySessionPool(self.driver) as pool:
-            try:
-                result_sets = pool.execute_with_retries(query, result_set_format=ydb.QueryResultSetFormat.ARROW)
-                assert len(result_sets) == 1, f"Expected 1 result set for query: {query}"
-                assert result_sets[0].format == ydb.QueryResultSetFormat.ARROW
+        result = result_sets[0]
+        self.validate_format_arrow(result)
 
-                schema = pa.ipc.read_schema(pa.py_buffer(result_sets[0].arrow_format_meta.schema))
-                batch = pa.ipc.read_record_batch(pa.py_buffer(result_sets[0].data), schema)
-                batch.validate()
+        schema = pa.ipc.read_schema(pa.py_buffer(result.arrow_format_meta.schema))
+        batch = pa.ipc.read_record_batch(pa.py_buffer(result.data), schema)
+        batch.validate()
 
-                assert batch.num_rows == 1
-                assert batch.num_columns == 2
+        assert batch.num_rows == 1
+        assert batch.num_columns == 2
 
-                first_array = batch.column(first_alias)
-                second_array = batch.column(second_alias)
+        first_array = batch.column(first_alias)
+        second_array = batch.column(second_alias)
 
-                assert first_array == batch.column(0)
-                assert second_array == batch.column(1)
+        assert first_array == batch.column(0)
+        assert second_array == batch.column(1)
 
-                assert first_array.type == pa.int64()
-                assert second_array.type == pa.binary()
-            except Exception as e:
-                assert False, f"Failed to execute query: {query}: {e}"
+        assert first_array.type == pa.int64()
+        assert second_array.type == pa.binary()

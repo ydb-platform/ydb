@@ -318,11 +318,6 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedPrefix << "/topic_description.pb";
     }
 
-    static TString ReplicaitonDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return SchemeKeyFromSettings(importInfo, itemIdx, NYdb::NDump::NFiles::CreateAsyncReplication().FileName);
-    }
-
     static bool IsView(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateView().FileName);
     }
@@ -362,6 +357,27 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         GetObject(MetadataKey, result.GetResult().GetContentLength());
     }
 
+    void UpdateAndHeadScheme(const TString& newFileName, NBackup::EBackupFileType newSchemeFileType) {
+        SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, newFileName);
+        SchemeFileType = newSchemeFileType;
+        HeadObject(SchemeKey);
+    }
+
+    void HeadNextScheme() {
+        if (IsTable(SchemeKey)) {
+            // try search for a view
+            UpdateAndHeadScheme(NYdb::NDump::NFiles::CreateView().FileName, NBackup::EBackupFileType::ViewCreate);
+        } else if (IsView(SchemeKey)) {
+            // try search for a topic
+            UpdateAndHeadScheme(NYdb::NDump::NFiles::CreateTopic().FileName, NBackup::EBackupFileType::TopicCreate);
+        } else if (IsTopic(SchemeKey)) {
+            // try search for a replication
+            UpdateAndHeadScheme(NYdb::NDump::NFiles::CreateAsyncReplication().FileName, NBackup::EBackupFileType::AsyncReplicationCreate);
+        } else {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
+        }
+    }
+
     void HandleScheme(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
@@ -370,24 +386,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", result# " << result);
 
         if (NoObjectFound(result.GetError().GetErrorType())) {
-            if (IsTable(SchemeKey)) {
-                // try search for a view
-                SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
-                SchemeFileType = NBackup::EBackupFileType::ViewCreate;
-                HeadObject(SchemeKey);
-            } else if (IsView(SchemeKey)) {
-                // try search for a topic
-                SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
-                SchemeFileType = NBackup::EBackupFileType::TopicCreate;
-                HeadObject(SchemeKey);
-            } else if (IsTopic(SchemeKey)) {
-                // try search for a replication
-                SchemeKey = ReplicaitonDescriptionKeyFromSettings(*ImportInfo, ItemIdx);
-                SchemeFileType = NBackup::EBackupFileType::AsyncReplicationCreate;
-                HeadObject(SchemeKey);
-            } else {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
-            }
+            HeadNextScheme();
             return;
         }
 

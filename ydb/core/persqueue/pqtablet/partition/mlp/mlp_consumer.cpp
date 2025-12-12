@@ -249,7 +249,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                             LastWALIndex = wal.GetWALIndex();
                             Storage->ApplyWAL(wal);
                         } else {
-                            LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << wal.GetGeneration());
+                            LOG_W("Received WAL from old consumer generation: " << Config.GetGeneration() << " vs " << wal.GetGeneration() << " key: " << w.key());
                         }
                     }
 
@@ -583,6 +583,7 @@ void TConsumerActor::Persist() {
         auto key = MakeWALKey(PartitionId, Config.GetName(), ++LastWALIndex);
 
         NKikimrPQ::TMLPStorageWAL wal;
+        wal.SetGeneration(Config.GetGeneration());
         wal.SetWALIndex(LastWALIndex);
         batch.SerializeTo(wal);
 
@@ -622,10 +623,16 @@ void TConsumerActor::Persist() {
         write->SetPriority(withWAL ? ::NKikimrClient::TKeyValueRequest::BACKGROUND : ::NKikimrClient::TKeyValueRequest::REALTIME);
         tryInlineChannel(write);
 
+
+        auto from = MinWALKey(PartitionId, Config.GetName());
+        auto to = MakeWALKey(PartitionId, Config.GetName(), LastWALIndex);
+
+        LOG_D("Delete old WAL: " << from << " - " << to);
+
         auto* del = request->Record.AddCmdDeleteRange();
-        del->MutableRange()->SetFrom(MinWALKey(PartitionId, Config.GetName()));
+        del->MutableRange()->SetFrom(std::move(from));
         del->MutableRange()->SetIncludeFrom(true);
-        del->MutableRange()->SetTo(MakeWALKey(PartitionId, Config.GetName(), LastWALIndex));
+        del->MutableRange()->SetTo(std::move(to));
         del->MutableRange()->SetIncludeTo(true);
 
         Send(TabletActorId, std::move(request));

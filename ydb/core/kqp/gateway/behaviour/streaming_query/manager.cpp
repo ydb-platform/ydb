@@ -58,10 +58,14 @@ struct TFeatureFlagExtractor : public IFeatureFlagExtractor {
     return TYqlConclusionStatus::Success();
 }
 
-TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, const TString& database, bool createDir) {
+TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& queryName, const TString& database, bool createDir) {
+    if (!queryName) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Streaming query name should not be empty");
+    }
+
     std::pair<TString, TString> pathPair;
     TString error;
-    if (!NSchemeHelpers::SplitTablePath(tableName, database, pathPair, error, createDir)) {
+    if (!NSchemeHelpers::SplitTablePath(queryName, database, pathPair, error, createDir)) {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid streaming query path: " << error);
     }
     return pathPair;

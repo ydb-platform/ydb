@@ -1,21 +1,9 @@
-#include "schemeshard_utils.h"
-
-#include "schemeshard_info_types.h"
+#include "schemeshard_index_utils.h"
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr {
-namespace NSchemeShard {
-
-PQGroupReserve::PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions, ui64 currentStorageUsage) {
-    Storage = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS == tabletConfig.GetMeteringMode()
-        ? currentStorageUsage : partitions * NPQ::TopicPartitionReserveSize(tabletConfig);
-    Throughput = partitions * NPQ::TopicPartitionReserveThroughput(tabletConfig);
-}
-
-}
-
 namespace NTableIndex {
 
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDescr) {

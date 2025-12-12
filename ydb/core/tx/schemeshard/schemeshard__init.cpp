@@ -1,6 +1,7 @@
 #include "schemeshard__shred_manager.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard_index_build_info.h"
+#include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
@@ -4705,7 +4706,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         "Init " << stepName << " BuildInfo not found: id#" << id);
                     return;
                 }
-                auto& buildInfo = *buildInfoPtr->Get();
+                auto& buildInfo = *buildInfoPtr->get();
                 if (!buildInfo.IsBroken) {
                     fillBuildInfoSafe(buildInfo, stepName, fill);
                 }
@@ -4719,13 +4720,24 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 while (!rowset.EndOfSet()) {
-                    TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+                    auto buildInfo = std::make_shared<TIndexBuildInfo>();
                     fillBuildInfoSafe(*buildInfo, "IndexBuild", [&](TIndexBuildInfo& buildInfo) {
                         TIndexBuildInfo::FillFromRow(rowset, &buildInfo);
                     });
 
-                    if (!Self->EnableVectorIndex) { // prevent build index from progress
+                    if (buildInfo->IsBuildColumns()) {
+                        if (!Self->PathsById.contains(buildInfo->TablePathId)) {
+                            buildInfo->IsBroken = true;
+                            buildInfo->AddIssue(TStringBuilder() << "Table path id not found: " << buildInfo->TablePathId.ToString());
+                        }
+
+                        buildInfo->TargetName = TPath::Init(buildInfo->TablePathId, Self).PathString();
+                    }
+
+                    // prevent build index from progress
+                    if (buildInfo->IsBuildVectorIndex() && !Self->EnableVectorIndex) {
                         buildInfo->IsBroken = true;
+                        buildInfo->AddIssue(TStringBuilder() << "Vector index is not enabled");
                     }
 
                     // Note: broken build are also added to IndexBuilds

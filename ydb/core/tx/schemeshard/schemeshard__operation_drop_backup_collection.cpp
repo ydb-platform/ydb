@@ -3,7 +3,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"
 
 #include <algorithm>
 

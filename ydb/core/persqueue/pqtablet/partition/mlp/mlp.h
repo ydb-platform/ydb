@@ -24,4 +24,8 @@ NActors::IActor* CreateConsumerActor(
     ui64 partitionEndOffset
 );
 
+TString MakeSnapshotKey(ui32 partitionId, const TString& consumerName);
+TString MinWALKey(ui32 partitionId, const TString& consumerName);
+TString MaxWALKey(ui32 partitionId, const TString& consumerName);
+
 } // namespace NKikimr::NPQ::NMLP

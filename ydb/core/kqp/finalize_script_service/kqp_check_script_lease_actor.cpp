@@ -20,9 +20,10 @@ class TScriptExecutionLeaseCheckActor : public TActorBootstrapped<TScriptExecuti
     };
 
 public:
-    TScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
+    TScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters)
         : QueryServiceConfig(queryServiceConfig)
         , Counters(counters)
+        , StartupTimeout(startupTimeout)
     {}
 
     void Bootstrap() {
@@ -30,7 +31,7 @@ public:
         Become(&TScriptExecutionLeaseCheckActor::MainState);
 
         RefreshNodesInfo();
-        ScheduleRefreshScriptExecutions();
+        Schedule(StartupTimeout, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
     }
 
     STRICT_STFUNC(MainState,
@@ -64,6 +65,7 @@ public:
 
         const auto nodesCount = ev->Get()->AssignedNodes.size();
         RefreshLeasePeriod = std::max(nodesCount, static_cast<size_t>(1)) * CHECK_PERIOD;
+        HasNodesInfo = true;
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Handle discover tenant nodes result, number of nodes #" << nodesCount << ", new RefreshLeasePeriod: " << RefreshLeasePeriod);
     }
@@ -92,6 +94,11 @@ private:
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Do ScheduleRefreshScriptExecutions (WaitRefreshScriptExecutions: " << WaitRefreshScriptExecutions << "), next refresh after " << RefreshLeasePeriod);
         Schedule(RefreshLeasePeriod, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
 
+        if (!HasNodesInfo) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Skip ScheduleRefreshScriptExecutions, node info is not arrived");
+            return;
+        }
+
         if (!WaitRefreshScriptExecutions) {
             WaitRefreshScriptExecutions = true;
 
@@ -110,17 +117,19 @@ private:
 private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     const TIntrusivePtr<TKqpCounters> Counters;
+    const TDuration StartupTimeout;
 
     TDuration RefreshLeasePeriod = CHECK_PERIOD;
 
     bool WaitRefreshNodes = false;
     bool WaitRefreshScriptExecutions = false;
+    bool HasNodesInfo = false;
 };
 
 }  // anonymous namespace
 
-IActor* CreateScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
-    return new TScriptExecutionLeaseCheckActor(queryServiceConfig, counters);
+IActor* CreateScriptExecutionLeaseCheckActor(const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration startupTimeout, TIntrusivePtr<TKqpCounters> counters) {
+    return new TScriptExecutionLeaseCheckActor(queryServiceConfig, startupTimeout, counters);
 }
 
 }  // namespace NKikimr::NKqp

@@ -6,8 +6,8 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
 std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
-    return std::make_shared<TSourceData>(
-        GetSourceId(), GetSourceIdx(), PathId, GetTabletId(), std::move(Portion), ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context, std::move(Schema));
+    return std::make_shared<TSourceData>(GetSourceIdx(), PathId, GetTabletId(), std::move(Portion), ExtractStart().ExtractValue(),
+        ExtractFinish().ExtractValue(), context, std::move(Schema));
 }
 
 std::shared_ptr<IDataSource> TPortionDataConstructor::Construct(

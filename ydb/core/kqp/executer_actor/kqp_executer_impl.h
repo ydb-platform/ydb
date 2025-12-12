@@ -1250,6 +1250,9 @@ protected:
         Counters->Counters->QueryStatMemFinishInflightBytes->Sub(StatFinishInflightBytes);
         StatFinishInflightBytes = 0;
 
+        ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
+        ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
+
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
 

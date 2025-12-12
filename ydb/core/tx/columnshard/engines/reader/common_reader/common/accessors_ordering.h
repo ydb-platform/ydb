@@ -9,7 +9,6 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
-    ui32 SourceId = 0;
     TReplaceKeyAdapter Start;
     TReplaceKeyAdapter Finish;
     ui32 SourceIdx = 0;
@@ -20,10 +19,6 @@ private:
     }
 
 public:
-    ui32 GetSourceId() const {
-        return SourceId;
-    }
-
     void SetIndex(const ui32 index) {
         AFL_VERIFY(!SourceIdxInitialized);
         SourceIdxInitialized = true;
@@ -43,12 +38,10 @@ public:
         return std::move(Finish);
     }
 
-    TDataSourceConstructor(const ui32 sourceId, TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish)
-        : SourceId(sourceId)
-        , Start(std::move(start))
+    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish)
+        : Start(std::move(start))
         , Finish(std::move(finish))
     {
-        AFL_VERIFY(SourceId);
     }
 
     const TReplaceKeyAdapter& GetStart() const {
@@ -56,6 +49,25 @@ public:
     }
     const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
+    }
+
+    virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const = 0;
+    virtual ~TDataSourceConstructor() = default;
+
+    TDataSourceConstructor(TDataSourceConstructor&& other)
+        : Start(std::move(other.Start))
+        , Finish(std::move(other.Finish))
+        , SourceIdx(other.SourceIdx)
+        , SourceIdxInitialized(other.SourceIdxInitialized)
+    {
+    }
+
+    TDataSourceConstructor& operator=(TDataSourceConstructor&& other) {
+        Start = std::move(other.Start);
+        Finish = std::move(other.Finish);
+        SourceIdx = other.SourceIdx;
+        SourceIdxInitialized = other.SourceIdxInitialized;
+        return *this;
     }
 
     class TComparator {
@@ -70,7 +82,14 @@ public:
         }
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
-            return std::make_pair(r.Start, r.SourceId) < std::make_pair(l.Start, l.SourceId);
+            auto cmp = l.Start.Compare(r.Start);
+            if (cmp == std::partial_ordering::less) {
+                return false;
+            } else if (cmp == std::partial_ordering::greater) {
+                return true;
+            } else {
+                return r.QueryAgnosticLess(l);
+            }
         }
     };
 };

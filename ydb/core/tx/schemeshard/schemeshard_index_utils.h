@@ -13,41 +13,6 @@
 
 
 namespace NKikimr {
-namespace NSchemeShard {
-
-inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
-    if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
-        return false;
-    }
-
-    for (auto c: name) {
-        if (!std::isalnum(c) && c != '_' && c != '-') {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& workingDir, NKikimrSchemeOp::EOperationType type) {
-    NKikimrSchemeOp::TModifyScheme tx;
-    tx.SetWorkingDir(workingDir);
-    tx.SetOperationType(type);
-
-    return tx;
-}
-
-class PQGroupReserve {
-public:
-    PQGroupReserve(const ::NKikimrPQ::TPQTabletConfig& tabletConfig, ui64 partitions, ui64 currentStorageUsage = 0);
-
-    ui64 Storage;
-    ui64 Throughput;
-};
-
-bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain);
-
-} // NSchemeShard
 
 namespace NTableIndex {
 
@@ -217,16 +182,16 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
-    
+
             if (indexKeys.KeyColumns.size() > 1 && !IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
                 return false;
             }
-    
+
             const TString& embeddingColumnName = indexKeys.KeyColumns.back();
             Y_ABORT_UNLESS(baseColumnTypes.contains(embeddingColumnName));
             auto typeInfo = baseColumnTypes.at(embeddingColumnName);
-    
+
             if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
                 status = NKikimrScheme::EStatus::StatusInvalidParameter;
                 error = TStringBuilder() << "Embedding column '" << embeddingColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
@@ -255,7 +220,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                     }
                 }
             }
-            
+
             break;
         }
         default:

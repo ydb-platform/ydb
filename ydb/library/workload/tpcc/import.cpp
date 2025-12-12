@@ -812,18 +812,18 @@ std::expected<double, std::string> GetIndexProgress(
     const TOperation::TOperationId& id,
     TLog* Log) noexcept
 {
+    NYdb::TStatus lastStatus(EStatus::STATUS_UNDEFINED, NIssue::TIssues());
     for (int i = 0; i < INDEX_CHECK_MAX_RETRIES; ++i) {
         try {
             auto operation = client.Get<NTable::TBuildIndexOperation>(id).GetValueSync();
+            lastStatus = operation.Status();
             if (operation.Ready()) {
-                if (operation.Status().IsSuccess() && operation.Metadata().State == NTable::EBuildIndexState::Done) {
+                if (lastStatus.IsSuccess() && operation.Metadata().State == NTable::EBuildIndexState::Done) {
                     return 100;
+                } else {
+                    // we don't check which kind of failure is in status,
+                    // because we expect only retryable errors here
                 }
-
-                TStringStream ss;
-                ss << "Failed to create index, operation id " << id.ToString() << ": " << operation.Status()
-                    << ", build state: " << operation.Metadata().State << ", " << operation.Metadata().Path;
-                return std::unexpected(ss.Str());
             } else {
                 return operation.Metadata().Progress;
             }
@@ -842,7 +842,9 @@ std::expected<double, std::string> GetIndexProgress(
     }
 
     TStringStream ss;
-    ss << "Failed to check index operation id " << id.ToString() << ", after " << INDEX_CHECK_MAX_RETRIES << " retries";
+    ss << "Failed to check index operation id " << id.ToString()
+       << ", after " << INDEX_CHECK_MAX_RETRIES << " retries. "
+       << "Last status: " << lastStatus;
 
     return std::unexpected(ss.Str());
 }

@@ -787,15 +787,13 @@ bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *act
 
     const auto& op = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc();
 
-    if (op.HasSendSnapshot()) {
-        const auto& snap = op.GetSendSnapshot();
-        ui64 tableId = snap.GetTableId_Deprecated();
-        if (snap.HasTableId()) {
-            Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
-            tableId = snap.GetTableId().GetTableId();
-        }
-        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
+    const auto& snap = op.GetSendSnapshot();
+    ui64 tableId = snap.GetTableId_Deprecated();
+    if (snap.HasTableId()) {
+        Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
+        tableId = snap.GetTableId().GetTableId();
     }
+    Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
     if (op.HasRotateCdcStreamNotice()) {
         const auto& notice = op.GetRotateCdcStreamNotice();

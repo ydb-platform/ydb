@@ -1290,6 +1290,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     // Key: index name (e.g., "age_index", "name_index")
     // Value: CDC stream configuration to create on that index's impl table
     map<string, TCreateCdcStream> IndexImplTableCdcStreams = 9;
+    // additionally rotates cdc stream on src table consistently with taking snapshot
     optional TRotateCdcStream RotateSrcCdcStream = 10;
 }
 

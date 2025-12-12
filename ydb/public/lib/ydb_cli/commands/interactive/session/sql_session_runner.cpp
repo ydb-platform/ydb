@@ -124,7 +124,7 @@ private:
 
         return TStringBuilder() << Endl << "YDB CLI Interactive Mode – Hotkeys and Special Commands." << Endl
             << Endl << TLog::EntityName("Hotkeys:") << Endl
-            << "  " << TLog::EntityName("Ctrl+I") << " or " << TLog::EntityName("/switch") << ": switch to " << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::AI) << " interactive mode." << Endl
+            << "  " << TLog::EntityName("Ctrl+T") << " or " << TLog::EntityName("/switch") << ": switch to " << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::AI) << " interactive mode." << Endl
             << "  " << TLog::EntityName("TAB") << ": complete the current word based on YQL syntax." << Endl
             << PrintCommonHotKeys()
             << Endl << TLog::EntityName("Special Commands:") << Endl

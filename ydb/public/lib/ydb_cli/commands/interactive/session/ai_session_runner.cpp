@@ -31,6 +31,7 @@ public:
 
         AiModel = ConfigurationManager->GetAiProfile(ConfigurationManager->GetActiveAiProfileName());
         if (!AiModel) {
+            Cout << "Welcome to AI interactive mode, please select AI model to continue. Type /config to setup AI mode by default." << Endl;
             AiModel = ConfigurationManager->SelectAiModelProfile();
         }
 
@@ -77,7 +78,7 @@ private:
 
         return TStringBuilder() << Endl << "YDB CLI AI Interactive Mode – Hotkeys." << Endl
             << Endl << TLog::EntityName("Hotkeys:") << Endl
-            << "  " << TLog::EntityName("Ctrl+I") << " or " << TLog::EntityName("/switch") << ": switch to basic " << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << " interactive mode." << Endl
+            << "  " << TLog::EntityName("Ctrl+T") << " or " << TLog::EntityName("/switch") << ": switch to basic " << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << " interactive mode." << Endl
             << PrintCommonHotKeys()
             << Endl << TLog::EntityName("Interactive Commands:") << Endl
             << "  " << TLog::EntityName("/model") << ": switch AI mode or setup new one." << Endl

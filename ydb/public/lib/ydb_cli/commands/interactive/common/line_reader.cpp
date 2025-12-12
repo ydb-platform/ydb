@@ -205,8 +205,9 @@ private:
         });
 
         if (EnableSwitchMode) {
-            Rx->bind_key(replxx::Replxx::KEY::control('I'), [&](char32_t) {
+            Rx->bind_key(replxx::Replxx::KEY::control('T'), [&](char32_t) {
                 SwitchRequested = true;
+                Rx->invoke(replxx::Replxx::ACTION::KILL_TO_BEGINING_OF_LINE, '\n');
                 ClearScreen();
                 return replxx::Replxx::ACTION_RESULT::BAIL;
             });

@@ -58,9 +58,13 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         Cout << "Database: " << Log.EntityName(config.Database) << Endl;
     }
 
-    Cout << "Write YQL query text or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl;
-
     ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
+    if (!activeSession) {
+        Cout << "Write YQL query text or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl;
+    } else {
+        Cout << "Write textual request or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl;
+    }
+
     Y_VALIDATE(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid), "Unexpected default mode: " << activeSession);
 
     const std::vector sessions = {

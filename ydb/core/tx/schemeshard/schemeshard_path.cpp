@@ -957,32 +957,40 @@ const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
-const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
+namespace {
 
-    static TVector availablePathTypes = {
+TVector<NKikimrSchemeOp::EPathType> AvailableInExportPathTypes() {
+    return {
         NKikimrSchemeOp::EPathTypeTable,
         NKikimrSchemeOp::EPathTypeView,
         NKikimrSchemeOp::EPathTypePersQueueGroup,
         NKikimrSchemeOp::EPathTypeReplication
     };
+}
 
-    static auto checkFeatureFlags = [](NKikimrSchemeOp::EPathType pathType) -> bool {
-        switch (pathType) {
-            case NKikimrSchemeOp::EPathTypeView:
-                return AppData()->FeatureFlags.GetEnableViewExport();
-            default:
-                return true;
-        };
+bool CheckExportFeatureFlags(NKikimrSchemeOp::EPathType pathType) {
+    switch (pathType) {
+        case NKikimrSchemeOp::EPathTypeView:
+            return AppData()->FeatureFlags.GetEnableViewExport();
+        default:
+            return true;
     };
+}
+
+} // anonymous namespace
+
+const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
 
     // Warning: scheme objects using YQL backups should only be allowed to be exported
     // when we can be certain that the database will never be downgraded to a version
     // which does not support the YQL export process. Otherwise, they will be considered as tables,
     // and we might cause the process to be aborted.
-    if (IsIn(availablePathTypes, Path.Base()->PathType) && checkFeatureFlags(Path.Base()->PathType))  {
+    if (IsIn(AvailableInExportPathTypes(), Path.Base()->PathType)
+        && CheckExportFeatureFlags(Path.Base()->PathType))  {
+
         return *this;
     }
 

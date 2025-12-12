@@ -183,7 +183,7 @@ message TStaticNameserviceConfig {
     optional ENameserviceType Type = 5;
     optional bool KeepSocket = 6 [default = true];
     optional bool ForceTcp = 7 [default = false];
-    optional EDnsResolverType DnsResolverType = 8 [default = ARES];
+    optional EDnsResolverType DnsResolverType = 8 [default = LIBC];
     optional bool AddTrailingDot = 9 [default = false];
 }
 

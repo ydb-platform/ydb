@@ -307,7 +307,8 @@ public:
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("tiling");
+        auto default_compaction = AppDataVerified().ColumnShardConfig.HasDefaultCompaction() ? AppDataVerified().ColumnShardConfig.GetDefaultCompaction() : "tiling";
+        auto result = TFactory::MakeHolder(default_compaction);
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }

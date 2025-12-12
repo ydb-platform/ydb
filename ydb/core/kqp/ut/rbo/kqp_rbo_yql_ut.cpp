@@ -478,6 +478,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[5u]])",
             R"([[[1];2u];[[2];3u]])",
             R"([[2u];[3u]])",
+            R"([[2u];[3u]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -490,9 +491,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST(Aggregation) {
-        //TestAggregation(/*columnstore=*/false);
-        TestAggregation(/*columnstore=*/true);
+    Y_UNIT_TEST_TWIN(Aggregation, ColumnStore) {
+        TestAggregation(ColumnStore);
     }
 
     /*

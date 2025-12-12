@@ -1110,7 +1110,7 @@ protected:
                 outputChannel->HasPeer = true;
                 outputChannel->PeerId = peer;
                 if (outputChannel->Channel) {
-                    outputChannel->Channel->UpdateSettings({.IsLocalChannel = peer.NodeId() == this->SelfId().NodeId()});
+                    outputChannel->Channel->Bind(this->SelfId(), peer);
                 }
 
                 continue;

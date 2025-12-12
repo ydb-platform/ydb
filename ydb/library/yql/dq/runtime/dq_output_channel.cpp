@@ -49,7 +49,6 @@ public:
         PushStats.Level = settings.Level;
         PopStats.ChannelId = settings.ChannelId;
         PopStats.DstStageId = settings.DstStageId;
-        UpdateSettings(settings.MutableSettings);
 
         if (Packer.IsBlock() && ArrayBufferMinFillPercentage && *ArrayBufferMinFillPercentage > 0) {
             BlockSplitter = NArrow::CreateBlockSplitter(OutputType, (ChunkSizeLimit - MaxChunkBytes) * *ArrayBufferMinFillPercentage / 100);
@@ -436,8 +435,8 @@ public:
     void Terminate() override {
     }
 
-    void UpdateSettings(const TDqChannelSettings::TMutable& settings) override {
-        IsLocalChannel = settings.IsLocalChannel;
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override {
+        IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
         if (Packer.IsBlock()) {
             Packer.SetMinFillPercentage(IsLocalChannel ? Nothing() : ArrayBufferMinFillPercentage);
         }

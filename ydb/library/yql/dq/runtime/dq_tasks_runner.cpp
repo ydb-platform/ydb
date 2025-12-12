@@ -761,13 +761,13 @@ public:
                         .BufferPageAllocSize = memoryLimits.BufferPageAllocSize
                     };
 
-                    if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
-                        const auto srcNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId()).NodeId();
-                        const auto dstNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetDstEndpoint().GetActorId()).NodeId();
-                        settings.MutableSettings.IsLocalChannel = srcNodeId == dstNodeId;
-                    }
-
                     auto outputChannel = CreateDqOutputChannel(settings, LogFunc);
+
+                    if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
+                        auto outputActorId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId());
+                        auto inputActorId = NActors::ActorIdFromProto(outputChannelDesc.GetDstEndpoint().GetActorId());
+                        outputChannel->Bind(outputActorId, inputActorId);
+                    }
 
                     auto ret = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << channelId);

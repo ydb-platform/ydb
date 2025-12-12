@@ -33,14 +33,6 @@ struct TDqChannelSettings {
     IDqChannelStorage::TPtr ChannelStorage;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMaybe<size_t> BufferPageAllocSize;
-
-    // Legacy, to be refactored
-
-    struct TMutable {
-        bool IsLocalChannel = false;
-    };
-
-    TMutable MutableSettings;
 };
 
 } // namespace NYql::NDq

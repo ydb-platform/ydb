@@ -24,6 +24,8 @@ public:
     virtual void Push(TInstant watermark) = 0;
 
     virtual void Finish() = 0;
+
+    virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) = 0;
 };
 
 IDqInputChannel::TPtr CreateDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);

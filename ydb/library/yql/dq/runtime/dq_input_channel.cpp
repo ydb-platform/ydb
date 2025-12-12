@@ -33,6 +33,11 @@ public:
         return PopStats;
     }
 
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
+    }
+
 private:
     void Push(TDqSerializedBatch&&) override {
         Y_ABORT("Not implemented");
@@ -191,6 +196,11 @@ public:
 
     void Finish() override {
         Impl.Finish();
+    }
+
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
     }
 
 private:

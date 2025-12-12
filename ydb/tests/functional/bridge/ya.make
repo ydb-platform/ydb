@@ -8,7 +8,7 @@ TEST_SRCS(
 
 SPLIT_FACTOR(10)
 
-REQUIREMENTS(ram:32 cpu:32)
+REQUIREMENTS(ram:32 cpu:4)
 
 
 IF (SANITIZER_TYPE == "thread")

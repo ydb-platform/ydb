@@ -131,27 +131,27 @@ namespace {
         {}
 
         TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) final {
-            if (!RunCommandCompletion(text) && YQLCompleter) {
-                return YQLCompleter->ApplyHeavy(text, prefix, contextLen);
+            if (RunCommandCompletion(text)) {
+                auto completions = GetCommandCompletions(text, contextLen);
+
+                TCompletions result;
+                result.reserve(completions.size());
+                for (auto& completion : completions) {
+                    result.emplace_back(std::move(completion));
+                }
+
+                return result;
             }
 
-            auto completions = GetCommandCompletions(text, contextLen);
-
-            TCompletions result;
-            result.reserve(completions.size());
-            for (auto& completion : completions) {
-                result.emplace_back(std::move(completion));
-            }
-
-            return result;
+            return YQLCompleter ? YQLCompleter->ApplyHeavy(text, prefix, contextLen) : TCompletions{};
         }
 
         THints ApplyLight(TStringBuf text, const std::string& prefix, int& contextLen) final {
-            if (!RunCommandCompletion(text) && YQLCompleter) {
-                return YQLCompleter->ApplyLight(text, prefix, contextLen);
+            if (RunCommandCompletion(text)) {
+                return GetCommandCompletions(text, contextLen);
             }
 
-            return GetCommandCompletions(text, contextLen);
+            return YQLCompleter ? YQLCompleter->ApplyLight(text, prefix, contextLen) : THints{};
         }
 
     private:

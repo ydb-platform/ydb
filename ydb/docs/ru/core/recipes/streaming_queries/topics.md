@@ -42,8 +42,8 @@
 Сначала нужно создать входной и выходной [топики](../../concepts/datamodel/topic.md) в {{ ydb-short-name }}. Из входного потоковый запрос будет читать данные; в выходной топик будет записывать данные. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-topic.md):
 
 ```yql
-CREATE TOPIC `streaming_recipe/input_topic`;
-CREATE TOPIC `streaming_recipe/output_topic`;
+CREATE TOPIC `streaming_test/input_topic`;
+CREATE TOPIC `streaming_test/output_topic`;
 ```
 
 ## Шаг 2. Создание внешнего источника данных {#step2}
@@ -51,7 +51,7 @@ CREATE TOPIC `streaming_recipe/output_topic`;
 После создания топиков нужно создать внешний источник данных. Это можно сделать с помощью SQL-запроса:
 
 ```yql
-CREATE EXTERNAL DATA SOURCE `streaming_test/source_name` WITH (
+CREATE EXTERNAL DATA SOURCE `streaming_test/ydb_source` WITH (
     SOURCE_TYPE = 'Ydb',
     LOCATION = 'localhost:2136',
     DATABASE_NAME = '/local',
@@ -70,7 +70,7 @@ $input = (
     SELECT
         *
     FROM
-        `streaming_test/source_name`.`streaming_recipe/input_topic` WITH (
+        `streaming_test/ydb_source`.`streaming_test/input_topic` WITH (
             FORMAT = 'json_each_row',
             SCHEMA = (time String NOT NULL, level String NOT NULL, host String NOT NULL)
         )
@@ -102,7 +102,7 @@ $json = (
         $number_errors
 );
 
-INSERT INTO `streaming_test/source_name`.`streaming_recipe/output_topic`
+INSERT INTO `streaming_test/ydb_source`.`streaming_test/output_topic`
 SELECT
     *
 FROM
@@ -128,11 +128,11 @@ SELECT Path, Status, Issues, Run FROM `.sys/streaming_queries`
 Записать в топик сообщения можно, например, с помощью [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md).
 
 ```bash
-echo '{"time": "2025-01-01T00:00:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_recipe/input_topic'
-echo '{"time": "2025-01-01T00:04:00.000000Z", "level": "error", "host": "host-2"}' | ./ydb --profile quickstart topic write 'streaming_recipe/input_topic'
-echo '{"time": "2025-01-01T00:08:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_recipe/input_topic'
-echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-2"}' | ./ydb --profile quickstart topic write 'streaming_recipe/input_topic'
-echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_recipe/input_topic'
+echo '{"time": "2025-01-01T00:00:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_test/input_topic'
+echo '{"time": "2025-01-01T00:04:00.000000Z", "level": "error", "host": "host-2"}' | ./ydb --profile quickstart topic write 'streaming_test/input_topic'
+echo '{"time": "2025-01-01T00:08:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_test/input_topic'
+echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-2"}' | ./ydb --profile quickstart topic write 'streaming_test/input_topic'
+echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_test/input_topic'
 ```
 
 ## Шаг 6. Проверка содержимого выходного топика {#step6}
@@ -140,7 +140,7 @@ echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"
 Прочитать данные из выходного топика можно через cli (читаем партицию с номером 0 c нулевого смещения):
 
 ```bash
-./ydb --profile quickstart topic read 'streaming_recipe/output_topic' --partition-ids=0 --start-offset 0 --limit 10 --format=newline-delimited
+./ydb --profile quickstart topic read 'streaming_test/output_topic' --partition-ids=0 --start-offset 0 --limit 10 --format=newline-delimited
 ```
 
 Ожидаемый результат:

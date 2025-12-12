@@ -23,7 +23,7 @@
 Для записи небходимо указывать одну колонку, поддерживаются типы: String, Json, Yson. При этом колонка должна быть неопциональная. Например:
 
 ```sql
-INSERT INTO source_name.output_topic_name
+INSERT INTO ydb_source.output_topic_name
 SELECT
     CAST(Data as String)
 FROM
@@ -34,7 +34,7 @@ FROM
 
 ```sql
 
-INSERT INTO source_name.output_topic_name
+INSERT INTO ydb_source.output_topic_name
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
@@ -62,7 +62,7 @@ Year,Manufacturer,Model,Price
 ```sql
 SELECT
     *
-FROM source_name.input_topic_name
+FROM ydb_source.input_topic_name
 WITH
 (
     FORMAT = "csv_with_names",
@@ -94,7 +94,7 @@ Year    Manufacturer    Model   Price
 ```sql
 SELECT
     *
-FROM source_name.input_topic_name
+FROM ydb_source.input_topic_name
 WITH
 (
     FORMAT = "tsv_with_names",
@@ -145,7 +145,7 @@ LIMIT 1;
 ```sql
 SELECT
     *
-FROM source_name.input_topic_name
+FROM ydb_source.input_topic_name
 WITH (
     FORMAT = 'json_each_row',
     SCHEMA =
@@ -184,7 +184,7 @@ LIMIT 1;
 ```sql
 SELECT
     *
-FROM source_name.input_topic_name
+FROM ydb_source.input_topic_name
 WITH
 (
     FORMAT = 'json_as_string',
@@ -206,7 +206,7 @@ LIMIT 1;
 ```sql
 SELECT
     *
-FROM source_name.input_topic_name
+FROM ydb_source.input_topic_name
 WITH
 (
     FORMAT = 'parquet',
@@ -230,7 +230,7 @@ LIMIT 1;
 ```sql
 SELECT
     *
-FROM source_name.input_topic_name
+FROM ydb_source.input_topic_name
 WITH
 (
     FORMAT = 'raw',
@@ -276,7 +276,7 @@ LIMIT 1;
 $input = 
 SELECT
     CAST(data AS Json) AS json
-FROM source_name.input_topic_name
+FROM ydb_source.input_topic_name
 WITH
 (
     FORMAT = 'raw',
@@ -313,7 +313,7 @@ LIMIT 1;
 $input = 
 SELECT 
     *
-FROM source_name.input_topic_name
+FROM ydb_source.input_topic_name
 WITH (
     FORMAT = json_as_string,
     SCHEMA = (Data Json));
@@ -353,7 +353,7 @@ $input =
 SELECT value FROM (
     SELECT
         String::SplitToList(Data, "\n", TRUE AS SkipEmpty) AS value
-    FROM source_name.input_topic_name
+    FROM ydb_source.input_topic_name
 )
 FLATTEN LIST BY value;
 

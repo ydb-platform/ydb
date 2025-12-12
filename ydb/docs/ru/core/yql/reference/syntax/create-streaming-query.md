@@ -35,8 +35,8 @@ END DO;
 ```sql
 CREATE STREAMING QUERY `streaming_test/query_name` AS
 DO BEGIN
-INSERT INTO source_name.output_topic_name
-SELECT Data FROM source_name.input_topic_name;
+INSERT INTO ydb_source.output_topic_name
+SELECT Data FROM ydb_source.input_topic_name;
 END DO;
 
 ```

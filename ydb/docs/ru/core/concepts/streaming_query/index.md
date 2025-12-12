@@ -101,7 +101,7 @@ LIMIT 1;
 
 ### Потоковая аггрегация
 
-Агрегация данных в потоковом режиме возможно с помощью:
+Агрегация данных в потоковом режиме возможна с помощью:
 
 - [GROUP BY HOP](../../../yql/reference/syntax/select/group-by#group-by-hop),
 - [MATCH_RECOGNIZE](../../../yql/reference/syntax/select/match_recognize).
@@ -115,9 +115,20 @@ LIMIT 1;
 {% cut "Пример запроса" %}
 
 ```sql
+
+CREATE SECRET `streaming_test/secrets/ydb_token` WITH (value = "<ydb_token>");
+
+CREATE EXTERNAL DATA SOURCE `streaming_test/ydb_source` WITH (
+    SOURCE_TYPE="Ydb",
+    LOCATION = "<location>",
+    DATABASE_NAME = "<db_name>",
+    AUTH_METHOD = "TOKEN",
+    TOKEN_SECRET_NAME = "streaming_test/secrets/ydb_token"
+);
+
 CREATE EXTERNAL DATA SOURCE `streaming_test/s3_source` WITH (
     SOURCE_TYPE = "ObjectStorage",
-    LOCATION = "https://storage.yandexcloud.net/my_bucket_name/",
+    LOCATION = "https://storage.yandexcloud.net/my_public_bucket/",
     AUTH_METHOD = "NONE"
 );
 
@@ -126,7 +137,7 @@ DO BEGIN
 $parsed =
     SELECT
         *
-    FROM`streaming_test/source_name`.`streaming_recipe/input_topic`
+    FROM`streaming_test/s3_source`.`streaming_test/input_topic`
     WITH (
         FORMAT = 'json_each_row',
         SCHEMA = (time String NOT NULL, service_id UInt32 NOT NULL, message String NOT NULL)
@@ -137,7 +148,7 @@ $lookup =
         service_id,
         name
     FROM
-      `streaming_test/s3_source`.`lookupnica/services`
+      `streaming_test/s3_source`.`lookupnica/file.csv`
     WITH (
         FORMAT = "csv_with_names",
         SCHEMA =
@@ -159,8 +170,7 @@ $parsed = (
         (lookup.service_id = p.service_id)
     );
 
-
-INSERT INTO `streaming_test/source_name`.`streaming_recipe/output_topic`
+INSERT INTO `streaming_test/ydb_source`.`streaming_test/output_topic`
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM

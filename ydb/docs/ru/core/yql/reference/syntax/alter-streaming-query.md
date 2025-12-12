@@ -40,8 +40,8 @@ ALTER STREAMING QUERY `my_queries/query_name` SET (
     FORCE = TRUE -- Allow to drop checkpoint in case of incompatible changes in query.
 ) AS
 DO BEGIN
-INSERT INTO source_name.output_topic_name
-SELECT Data FROM source_name.input_topic_name;
+INSERT INTO ydb_source.output_topic_name
+SELECT Data FROM ydb_source.input_topic_name;
 END DO;
 
 -- Change and start query

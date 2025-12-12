@@ -28,6 +28,6 @@
 CREATE OR REPLACE STREAMING QUERY `my_queries/query1` AS
 DO BEGIN
     PRAGMA ydb.DisableCheckpoints="True";
-    INSERT INTO source_name.output_topic_name SELECT * FROM source_name.input_topic_name;
+    INSERT INTO ydb_source.output_topic_name SELECT * FROM ydb_source.input_topic_name;
 END DO;
 ```

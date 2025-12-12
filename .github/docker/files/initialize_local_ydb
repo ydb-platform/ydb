@@ -222,6 +222,7 @@ ydb_custom_pre_init_scripts
 
 # Start YDB in a background process
 log init "Starting YDB..."
+mkdir -p "${YDB_PDISKS_DIRECTORY}"
 /local_ydb deploy --ydb-working-dir /ydb_data --ydb-binary-path /ydbd --fixed-ports "$@"
 
 # Stream logs to stdout

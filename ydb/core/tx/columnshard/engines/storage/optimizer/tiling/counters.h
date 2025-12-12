@@ -1,7 +1,9 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/counters/portions.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/library/actors/core/log.h>
+
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
@@ -13,10 +15,12 @@ private:
 
 public:
     const std::shared_ptr<NColumnShard::TValueAggregationAgent> Height;
+    const NColumnShard::TIncrementalHistogram BlobBytes;
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
-        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height")){
+        , Height(TBase::GetValueAutoAggregations("ByGranule/Level/Height"))
+        , BlobBytes("TilingCompactionOptimizer", "ByLevel/BlobBytes", categoryName, NColumnShard::THistorgamBorders::PortionSizeBorders){
     }
 };
 
@@ -24,15 +28,26 @@ class TPortionCategoryCounters: public NColumnShard::TPortionCategoryCounters {
 private:
     using TBase = NColumnShard::TPortionCategoryCounters;
     std::shared_ptr<NColumnShard::TValueAggregationClient> Height;
+    std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> BlobBytes;
 
 public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
         : TBase(agents) {
         Height = agents.Height->GetClient();
+        BlobBytes = agents.BlobBytes.BuildGuard();
     }
 
     void SetHeight(const i32 height) {
         Height->SetValue(height);
+    }
+
+    void AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
+        BlobBytes->Add(p->GetTotalBlobBytes(), 1);
+        TBase::AddPortion(p);
+    }
+    void RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
+        BlobBytes->Sub(p->GetTotalBlobBytes(), 1);
+        TBase::RemovePortion(p);
     }
 };
 

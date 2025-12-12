@@ -131,7 +131,6 @@ class ParallelWorkloadTestBase:
         logging.debug(f"Additional stats {additional_stats}")
 
         if stress_deployer.nemesis_started:
-            # TODO if all of them fail - mark recoverability testing as failed
             recoverability_result = self.stop_nemesis_check_recoverability(
                 stress_executor,
                 stress_deployer,

@@ -43,7 +43,7 @@ class HealthCheckReporter():
         def run_healthcheck_for_host(host):
             try:
                 cmd = [f'{self.ydb_path}', '--endpoint', f'grpc://{host}:2135', 'monitoring', 'healthcheck', '--format', 'json']
-                result = subprocess.run(cmd, check=True, text=True, capture_output=True, timeout=15)
+                result = subprocess.run(cmd, check=True, text=True, capture_output=True, timeout=45)
                 return host, json.loads(result.stdout)
             except Exception:
                 logging.error(f"Unexpected error during healthcheck for {host}: {traceback.format_exc()}")

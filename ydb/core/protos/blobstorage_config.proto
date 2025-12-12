@@ -856,8 +856,9 @@ message TGroupMapperError {
     uint32 MissingFailRealmsCount = 3;
     uint32 FailRealmsWithMissingDomainsCount = 4;
     uint32 DomainsWithMissingDisksCount = 5;
-    string RealmLocationKey = 6;
-    string DomainLocationKey = 7;
+    uint32 OkDisksCount = 6;
+    string RealmLocationKey = 7;
+    string DomainLocationKey = 8;
 }
 
 message TConfigResponse {

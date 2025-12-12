@@ -1385,6 +1385,7 @@ def dump_group_mapper_error(response: kikimr_bsconfig.TConfigResponse, args):
         table_generator(err.MatchingDomainsStats)
     else:
         print("No matching domains")
+    print(f"OK Discs Count: {err.OkDisksCount}")
     print(
         f"Missing {err.RealmLocationKey}s Count: {err.MissingFailRealmsCount}\n"
         f"{err.RealmLocationKey}s With Missing {err.DomainLocationKey}s Count: {err.FailRealmsWithMissingDomainsCount}\n"

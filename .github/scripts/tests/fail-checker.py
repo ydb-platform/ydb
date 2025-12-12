@@ -31,17 +31,12 @@ def check_for_fail(paths: List[str], output_path: str):
                 
                 # Format: path/name/subtest_name
                 test_name = path_str
-                if name:
-                    test_name = f"{path_str}/{name}"
                 if subtest_name:
                     test_name = f"{path_str}/{name}/{subtest_name}" if name else f"{path_str}/{subtest_name}"
                 
                 # Check for failures and errors
                 if status == "FAILED":
-                    if error_type == "REGULAR":
-                        failed_list.append((test_name, fn))
-                    else:
-                        error_list.append((test_name, fn))
+                    failed_list.append((test_name, fn))
                 elif status == "ERROR":
                     error_list.append((test_name, fn))
         except (json.JSONDecodeError, KeyError) as e:

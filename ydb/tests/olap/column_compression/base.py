@@ -11,7 +11,7 @@ from ydb.tests.olap.common.ydb_client import YdbClient
 logger = logging.getLogger(__name__)
 
 
-class ColumnFamilyTestBase(object):
+class ColumnTestBase(object):
     @classmethod
     def setup_class(cls):
         cls._setup_ydb()
@@ -32,7 +32,6 @@ class ColumnFamilyTestBase(object):
                 "compaction_actualization_lag_ms": 0,
                 "optimizer_freshness_check_duration_ms": 0,
                 "small_portion_detect_size_limit": 0,
-                "max_read_staleness_ms": 5000,
             },
         )
         cls.cluster = KiKiMR(config)

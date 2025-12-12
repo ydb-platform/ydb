@@ -5,7 +5,7 @@ FORK_SUBTESTS()
 
 TEST_SRCS(
     base.py
-    alter_compression.py
+    set_compression.py
 )
 
 SIZE(MEDIUM)
@@ -22,4 +22,3 @@ DEPENDS(
 )
 
 END()
-

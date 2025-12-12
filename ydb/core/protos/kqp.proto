@@ -208,6 +208,11 @@ message TIndexDescriptionProto {
     }
 };
 
+message TColumnCompression {
+    optional string Algorithm = 1;
+    optional int64 Level = 2;
+}
+
 message TKqpColumnMetadataProto {
     enum EDefaultKind {
         DEFAULT_KIND_UNSPECIFIED = 0;
@@ -230,6 +235,7 @@ message TKqpColumnMetadataProto {
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
     optional TKqpPathIdProto DefaultFromSequencePathId = 12;
+    optional TColumnCompression Compression = 13;
 };
 
 message TKqpTableMetadataProto {

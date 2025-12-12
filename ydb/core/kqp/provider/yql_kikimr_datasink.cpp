@@ -1363,6 +1363,7 @@ public:
                         .ExistingOk<TCoAtom>()
                             .Value(existringOk)
                             .Build()
+                        .ColumnCompression(settings.ColumnCompression.Cast())
                         .Done();
 
                     bool exprEvalNeeded = EvaluateDefaultValuesIfNeeded(ctx, createTable.Cast<TKiCreateTable>().Columns());

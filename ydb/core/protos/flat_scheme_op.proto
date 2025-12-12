@@ -93,6 +93,11 @@ enum EMvccState {
     MvccDisabled = 2;
 }
 
+message TColumnCompression {
+    optional string Algorithm = 1;
+    optional int64 Level = 2;
+}
+
 message TColumnDescription {
     optional string Name = 1;
     optional string Type = 2;
@@ -110,6 +115,7 @@ message TColumnDescription {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
+    optional TColumnCompression Compression = 13;
 }
 
 message TStorageSettings {

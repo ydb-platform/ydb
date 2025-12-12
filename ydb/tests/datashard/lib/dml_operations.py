@@ -117,7 +117,7 @@ class DMLOperations():
             rows = self.query(
                 f"SELECT COUNT(*) as count FROM `{table_name}` WHERE ttl_{cleanup_type_name(ttl)}={format_sql_value(ttl_types[ttl](count_assert), ttl)}")
             assert len(
-                rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in ttl_{cleanup_type_name(ttl)}, table {table_name}"
+                rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, failed in ttl_{cleanup_type_name(ttl)}, table {table_name}"
             count_assert += 1
 
         for type_name in all_types.keys():
@@ -125,14 +125,14 @@ class DMLOperations():
                 rows = self.query(
                     f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count_assert), type_name)}")
                 assert len(
-                    rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
+                    rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, failed in col_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
         if unique == "":
             for type_name in index.keys():
                 rows = self.query(
                     f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](count_assert), type_name)}")
                 assert len(
-                    rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
+                    rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, failed in col_index_{cleanup_type_name(type_name)}, table {table_name}"
                 count_assert += 1
         else:
             number_of_columns = len(pk_types) + len(all_types) + len(index) + 2
@@ -142,7 +142,7 @@ class DMLOperations():
                 rows = self.query(
                     f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](number_of_columns), type_name)}")
                 assert len(
-                    rows) == 1 and rows[0].count == 1, f"Expected {1} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
+                    rows) == 1 and rows[0].count == 1, f"Expected {1} rows after insert, failed in col_index_{cleanup_type_name(type_name)}, table {table_name}"
                 number_of_columns += 1
 
     def create_update(self, value: int, prefix: str, type_name: str, key: str, table_name: str):
@@ -175,7 +175,7 @@ class DMLOperations():
                                                         pk_types, count, index, number_of_columns - count + 1, ttl, number_of_columns - count + 1)
             rows = self.query(sql_select)
             assert len(
-                rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
+                rows) == 1 and rows[0].count == 1, f"Expected one rows, failed in {count} value, table {table_name}"
 
         for count in range(number_of_columns + 1, 2*number_of_columns + 1):
             create_all_type = []
@@ -204,7 +204,7 @@ class DMLOperations():
                 """
             rows = self.query(sql_select)
             assert len(
-                rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
+                rows) == 1 and rows[0].count == 1, f"Expected one rows, failed in {count} value, table {table_name}"
         rows = self.query(f"SELECT COUNT(*) as count FROM `{table_name}`")
         assert len(
             rows) == 1 and rows[0].count == 2*number_of_columns, f"Expected {2*number_of_columns} rows, after select all line"
@@ -285,13 +285,13 @@ class DMLOperations():
                                                         pk_types, count, index, number_of_columns - count + 1, ttl, number_of_columns - count + 1)
             rows = self.query(sql_select)
             assert len(
-                rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}, {len(rows)=}, {rows[0].count=}"
+                rows) == 1 and rows[0].count == 1, f"Expected one rows, failed in {count} value, table {table_name}, {len(rows)=}, {rows[0].count=}"
 
         for count in range(number_of_columns + 1, 2*number_of_columns + 1):
             sql_select = self.create_select_sql_request(table_name, all_types, count, pk_types, count, index, count, ttl, count)
             rows = self.query(sql_select)
             assert len(
-                rows) == 1 and rows[0].count == 0, f"Expected one rows, faild in {count} value, table {table_name}"
+                rows) == 1 and rows[0].count == 0, f"Expected one rows, failed in {count} value, table {table_name}"
         rows = self.query(f"SELECT COUNT(*) as count FROM `{table_name}`")
         assert len(
             rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows, after select all line"

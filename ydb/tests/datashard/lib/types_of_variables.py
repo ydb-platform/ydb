@@ -22,7 +22,7 @@ def format_sql_value(value, type_name, unwrap_after_cast: bool = False):
         return f"'{value}'"
 
     if type_name.startswith("pg"):
-        # make pg_type litheral
+        # make pg_type literal
         casted_value = f"{type_name}('{value}')"
     elif type_name in types_requiring_quotes_in_cast:
         # Use quoted values for types that require string representation
@@ -362,17 +362,17 @@ pk_pg_types = {
 
 pk_pg_types_no_bool = filter_dict(
     pk_pg_types,
-    "pgint2"
-    "pgint4"
-    "pgint8"
-    "pgnumeric"
-    "pgbytea"
-    "pgtext"
-    "pgvarchar"
-    "pguuid"
-    "pgdate"
-    "pgtimestamp"
-    "pginterval"
+    "pgint2",
+    "pgint4",
+    "pgint8",
+    "pgnumeric",
+    "pgbytea",
+    "pgtext",
+    "pgvarchar",
+    "pguuid",
+    "pgdate",
+    "pgtimestamp",
+    "pginterval",
 )
 
 non_pk_pg_types = {

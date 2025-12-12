@@ -114,7 +114,7 @@ TString THttpExecutor::PrettifyModelApiError(ui64 httpCode, const TString& respo
 }
 
 NYql::IHTTPGateway::TOnResult THttpExecutor::GetHttpCallback(NThreading::TPromise<TResponse> response) const {
-    return [&response, Log = Log](NYql::IHTTPGateway::TResult result) -> void {
+    return [response, Log = Log](NYql::IHTTPGateway::TResult result) mutable -> void {
         const auto curlCode = result.CurlResponseCode;
         if (curlCode == CURLE_OK) {
             if (result.Issues) {

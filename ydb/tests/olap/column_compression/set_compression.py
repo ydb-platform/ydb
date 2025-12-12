@@ -165,9 +165,9 @@ class TestCreateWithColumnCompression(TestCompressionBase):
 
         for col in ["vInt", "vStr", "vFlt", "vTs"]:
             col2 = col + "2"
-            volumes = table.get_volumes_column(col2)
-            koef: float = self.volumes_without_compression[col] / volumes[1]
+            volumes = table.get_columns_bytes(col, col2)
+            koef: float = volumes[col]["BlobRangeSize"] / volumes[col2]["BlobRangeSize"]
             logging.info(
-                f"column `{col2}` compression in `{table.path}` {self.volumes_without_compression[col]} / {volumes[1]}: {koef}"
+                f"column `{col2}` compression in `{table.path}` {volumes[col]["BlobRangeSize"]} / {volumes[col2]["BlobRangeSize"]}: {koef}"
             )
             assert koef > 1, col

@@ -37,6 +37,9 @@ using TEvGetOperationRequest = TGrpcRequestOperationCall<Ydb::Operations::GetOpe
 
 class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>,
                          public TExportConv {
+    ui32 GetRequiredAccessRights() const override {
+        return NACLib::GenericRead;
+    }
 
     TStringBuf GetLogPrefix() const override {
         switch (OperationId_.GetKind()) {

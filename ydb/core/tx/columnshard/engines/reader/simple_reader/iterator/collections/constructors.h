@@ -41,6 +41,24 @@ public:
     {
     }
 
+<<<<<<< HEAD
+=======
+    class TComparator {
+    private:
+        const ERequestSorting Sorting;
+
+    public:
+        TComparator(const ERequestSorting sorting)
+            : Sorting(sorting) {
+            AFL_VERIFY(Sorting != ERequestSorting::NONE);
+        }
+
+        bool operator()(const TSourceConstructor& l, const TSourceConstructor& r) const {
+            return std::make_pair(r.Start, r.GetSourceId()) < std::make_pair(l.Start, l.GetSourceId());
+        }
+    };
+
+>>>>>>> 77e7e8e7ccd (fix)
     std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const;
 
     virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const override {
@@ -51,6 +69,11 @@ public:
 class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSourceConstructor> {
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
+<<<<<<< HEAD
+=======
+    ui32 CurrentSourceIdx = 0;
+    std::vector<TInsertWriteId> Uncommitted;
+>>>>>>> 77e7e8e7ccd (fix)
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;

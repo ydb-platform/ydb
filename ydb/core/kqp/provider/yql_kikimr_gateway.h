@@ -502,8 +502,8 @@ struct TKikimrColumnMetadata {
             if (const auto maybeAlgorithm = Compression->Algorithm) {
                 compression->SetAlgorithm(maybeAlgorithm->c_str());
             }
-            if (const auto maybeLevel = Compression->Algorithm) {
-                compression->SetLevel(FromString<i64>(*maybeLevel));
+            if (const auto maybeLevel = Compression->Level) {
+                compression->SetLevel(*maybeLevel);
             }
         }
     }

@@ -66,11 +66,10 @@ struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Self->TTxWritePartitionStatsScheduled = false;
 
-        NIceDb::TNiceDb db(txc.DB);
-        for (auto& s : Self->AggregatedStats.Stats) {
-            auto partition = s.first;
-            auto& stats = s.second;
+        auto& metrics = Self->TopicMetricsHandler->GetTopicMetrics();
 
+        NIceDb::TNiceDb db(txc.DB);
+        for (auto& [partition, stats] : metrics.PartitionMetrics) {
             auto it = Self->PartitionsInfo.find(partition);
             if (it == Self->PartitionsInfo.end()) {
                 continue;
@@ -487,13 +486,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         }
 
         TopicMetricsHandler->Handle(std::move(partRes));
-
-        // TODO delete
-        AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
-        AggregatedStats.AggrStats(partRes.GetAvgWriteSpeedPerSec(), partRes.GetAvgWriteSpeedPerMin(),
-            partRes.GetAvgWriteSpeedPerHour(), partRes.GetAvgWriteSpeedPerDay());
-        AggregatedStats.Stats[partitionId].Counters = partRes.GetAggregatedCounters();
-        AggregatedStats.Stats[partitionId].HasCounters = true;
     }
 
     Balancer->Handle(ev, ctx);
@@ -521,34 +513,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TAc
     Send(ev.Get()->Sender, GetStatsEvent());
 }
 
-void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui32 partition, ui64 dataSize, ui64 usedReserveSize) {
-    AFL_ENSURE(dataSize >= usedReserveSize);
-
-    auto& oldValue = Stats[partition];
-
-    TPartitionStats newValue;
-    newValue.DataSize = dataSize;
-    newValue.UsedReserveSize = usedReserveSize;
-
-    TotalDataSize += (newValue.DataSize - oldValue.DataSize);
-    TotalUsedReserveSize += (newValue.UsedReserveSize - oldValue.UsedReserveSize);
-
-    AFL_ENSURE(TotalDataSize >= TotalUsedReserveSize);
-
-    oldValue = newValue;
-}
-
-void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui64 avgWriteSpeedPerSec, ui64 avgWriteSpeedPerMin, ui64 avgWriteSpeedPerHour, ui64 avgWriteSpeedPerDay) {
-        NewMetrics.TotalAvgWriteSpeedPerSec += avgWriteSpeedPerSec;
-        NewMetrics.MaxAvgWriteSpeedPerSec = Max<ui64>(NewMetrics.MaxAvgWriteSpeedPerSec, avgWriteSpeedPerSec);
-        NewMetrics.TotalAvgWriteSpeedPerMin += avgWriteSpeedPerMin;
-        NewMetrics.MaxAvgWriteSpeedPerMin = Max<ui64>(NewMetrics.MaxAvgWriteSpeedPerMin, avgWriteSpeedPerMin);
-        NewMetrics.TotalAvgWriteSpeedPerHour += avgWriteSpeedPerHour;
-        NewMetrics.MaxAvgWriteSpeedPerHour = Max<ui64>(NewMetrics.MaxAvgWriteSpeedPerHour, avgWriteSpeedPerHour);
-        NewMetrics.TotalAvgWriteSpeedPerDay += avgWriteSpeedPerDay;
-        NewMetrics.MaxAvgWriteSpeedPerDay = Max<ui64>(NewMetrics.MaxAvgWriteSpeedPerDay, avgWriteSpeedPerDay);
-}
-
 void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     Y_UNUSED(ctx);
     //TODO: Deside about changing number of partitions and send request to SchemeShard
@@ -559,18 +523,17 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
         Execute(new TTxWritePartitionStats(this));
     }
 
-    AggregatedStats.Metrics = AggregatedStats.NewMetrics;
+    UpdateCounters(ctx);
 
     TEvPersQueue::TEvPeriodicTopicStats* ev = GetStatsEvent();
     PQ_LOG_D("Send TEvPeriodicTopicStats PathId: " << PathId
             << " Generation: " << Generation
             << " StatsReportRound: " << StatsReportRound
-            << " DataSize: " << AggregatedStats.TotalDataSize
-            << " UsedReserveSize: " << AggregatedStats.TotalUsedReserveSize);
+            << " DataSize: " << TopicMetricsHandler->GetTopicMetrics().TotalDataSize
+            << " UsedReserveSize: " << TopicMetricsHandler->GetTopicMetrics().TotalUsedReserveSize);
 
     NTabletPipe::SendData(ctx, GetPipeClient(SchemeShardId, ctx), ev);
 
-    UpdateCounters(ctx);
 }
 
 void TPersQueueReadBalancer::InitCounters(const TActorContext& ctx) {
@@ -590,14 +553,16 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext&) {
 }
 
 TEvPersQueue::TEvPeriodicTopicStats* TPersQueueReadBalancer::GetStatsEvent() {
+    auto& metrics = TopicMetricsHandler->GetTopicMetrics();
+
     TEvPersQueue::TEvPeriodicTopicStats* ev = new TEvPersQueue::TEvPeriodicTopicStats();
     auto& rec = ev->Record;
     rec.SetPathId(PathId);
     rec.SetGeneration(Generation);
 
     rec.SetRound(++StatsReportRound);
-    rec.SetDataSize(AggregatedStats.TotalDataSize);
-    rec.SetUsedReserveSize(AggregatedStats.TotalUsedReserveSize);
+    rec.SetDataSize(metrics.TotalDataSize);
+    rec.SetUsedReserveSize(metrics.TotalUsedReserveSize);
     rec.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
 
     return ev;
@@ -609,12 +574,7 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
         CheckStat(ctx);
     }
 
-    TPartitionMetrics newMetrics;
-    AggregatedStats.NewMetrics = newMetrics;
-
     for (auto& p : PartitionsInfo) {
-        AggregatedStats.Stats[p.first].HasCounters = false;
-
         const ui64& tabletId = p.second.TabletId;
         if (AggregatedStats.Cookies.contains(tabletId)) { //already asked stat
             continue;

@@ -52,12 +52,17 @@ struct TConsumerMetricCollector {
 };
 
 struct TTopicMetricCollector {
-    TTopicMetricCollector()
-        : PartitionLabeledCounters(EPartitionLabeledCounters_descriptor()->value_count())
+    TTopicMetricCollector(absl::flat_hash_map<ui32, TTopicMetrics::TPartitionMetrics> partitionMetrics)
+        : ExistedPartitionMetrics(std::move(partitionMetrics))
+        , PartitionLabeledCounters(EPartitionLabeledCounters_descriptor()->value_count())
         , PartitionExtendedLabeledCounters(EPartitionExtendedLabeledCounters_descriptor()->value_count())
         , PartitionKeyCompactionLabeledCounters(EPartitionKeyCompactionLabeledCounters_descriptor()->value_count())
     {
     }
+
+    absl::flat_hash_map<ui32, TTopicMetrics::TPartitionMetrics> ExistedPartitionMetrics;
+
+    TTopicMetrics TopicMetrics;
 
     TMetricCollector PartitionLabeledCounters;
     TMetricCollector PartitionExtendedLabeledCounters;
@@ -66,7 +71,25 @@ struct TTopicMetricCollector {
     std::unordered_map<TString, TConsumerMetricCollector> Consumers;
 
     void Collect(const NKikimrPQ::TStatusResponse::TPartResult& partitionStatus) {
+        TopicMetrics.TotalDataSize += partitionStatus.GetPartitionSize();
+        TopicMetrics.TotalUsedReserveSize += partitionStatus.GetUsedReserveSize();
+
+        TopicMetrics.TotalAvgWriteSpeedPerSec += partitionStatus.GetAvgWriteSpeedPerSec();
+        TopicMetrics.MaxAvgWriteSpeedPerSec = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerSec, partitionStatus.GetAvgWriteSpeedPerSec());
+        TopicMetrics.TotalAvgWriteSpeedPerMin += partitionStatus.GetAvgWriteSpeedPerMin();
+        TopicMetrics.MaxAvgWriteSpeedPerMin = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerMin, partitionStatus.GetAvgWriteSpeedPerMin());
+        TopicMetrics.TotalAvgWriteSpeedPerHour += partitionStatus.GetAvgWriteSpeedPerHour();
+        TopicMetrics.MaxAvgWriteSpeedPerHour = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerHour, partitionStatus.GetAvgWriteSpeedPerHour());
+        TopicMetrics.TotalAvgWriteSpeedPerDay += partitionStatus.GetAvgWriteSpeedPerDay();
+        TopicMetrics.MaxAvgWriteSpeedPerDay = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerDay, partitionStatus.GetAvgWriteSpeedPerDay());
+
+        auto& partitionMetrics = TopicMetrics.PartitionMetrics[partitionStatus.GetPartition()];
+        partitionMetrics.DataSize = partitionStatus.GetPartitionSize();
+        partitionMetrics.UsedReserveSize = partitionStatus.GetUsedReserveSize();
+
         Collect(partitionStatus.GetAggregatedCounters());
+
+        ExistedPartitionMetrics.erase(partitionStatus.GetPartition());
     }
 
     void Collect(const NKikimrPQ::TAggregatedCounters& counters) {
@@ -78,11 +101,18 @@ struct TTopicMetricCollector {
             Consumers[consumer.GetConsumer()].ClientLabeledCounters.Collect(consumer.GetValues());
         }
 
+        // TODO MLP
         // for (const auto& consumer : counters.GetMLPConsumerCounters()) {
         //     auto& collector = Consumers[consumer.GetConsumer()];
         //     collector.MLPConsumerLabeledCounters.Collect(consumer.GetCountersValues());
         //     collector.MLPMessageLockAttemptsCounter.Collect(consumer.GetMessageLocksValues());
         // }
+    }
+
+    void Finish() {
+        for (auto& [partitionId, partitionMetrics] : ExistedPartitionMetrics) {
+            TopicMetrics.PartitionMetrics[partitionId] = partitionMetrics;
+        }
     }
 };
 
@@ -137,7 +167,12 @@ void SetCounters(TCounters& counters, const TMetricCollector& metrics) {
 
 }
 
+TTopicMetricsHandler::TTopicMetricsHandler() = default;
+TTopicMetricsHandler::~TTopicMetricsHandler() = default;
 
+const TTopicMetrics& TTopicMetricsHandler::GetTopicMetrics() const {
+    return TopicMetrics;
+}
 
 void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
     if (DynamicCounters) {
@@ -207,6 +242,7 @@ void TTopicMetricsHandler::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tablet
         return;
     }
 
+    InitializeKeyCompactionCounters(database.DatabasePath, tabletConfig);
     InitializeConsumerCounters(database.DatabasePath, tabletConfig, ctx);
 
     size_t inactiveCount = std::count_if(tabletConfig.GetAllPartitions().begin(), tabletConfig.GetAllPartitions().end(), [](auto& p) {
@@ -215,6 +251,16 @@ void TTopicMetricsHandler::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tablet
 
     ActivePartitionCountCounter->Set(tabletConfig.GetAllPartitions().size() - inactiveCount);
     InactivePartitionCountCounter->Set(inactiveCount);
+}
+
+void TTopicMetricsHandler::InitializePartitions(ui32 partitionId, ui64 dataSize, ui64 usedReserveSize) {
+    TopicMetrics.PartitionMetrics[partitionId] = {
+        .DataSize = dataSize,
+        .UsedReserveSize = usedReserveSize
+    };
+
+    TopicMetrics.TotalDataSize += dataSize;
+    TopicMetrics.TotalUsedReserveSize += usedReserveSize;
 }
 
 void TTopicMetricsHandler::Handle(NKikimrPQ::TStatusResponse::TPartResult&& partitionStatus) {
@@ -226,10 +272,14 @@ void TTopicMetricsHandler::UpdateMetrics() {
         return;
     }
 
-    TTopicMetricCollector collector;
+    TTopicMetricCollector collector(TopicMetrics.PartitionMetrics);
     for (auto& [_, partitionStatus] : PartitionStatuses) {
         collector.Collect(partitionStatus);
     }
+    collector.Finish();
+    PartitionStatuses.clear();
+
+    TopicMetrics = collector.TopicMetrics;
 
     SetCounters(PartitionLabeledCounters, collector.PartitionLabeledCounters);
     SetCounters(PartitionExtendedLabeledCounters, collector.PartitionExtendedLabeledCounters);

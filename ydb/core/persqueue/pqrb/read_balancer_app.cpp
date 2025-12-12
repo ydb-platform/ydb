@@ -1,6 +1,7 @@
 #include "read_balancer.h"
 
 #include "read_balancer__balancing.h"
+#include "read_balancer__metrics.h"
 
 #include <ydb/core/persqueue/common/common_app.h>
 
@@ -17,7 +18,7 @@ bool TPersQueueReadBalancer::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
 }
 
 TString TPersQueueReadBalancer::GenerateStat() {
-    auto& metrics = AggregatedStats.Metrics;
+    auto& metrics = TopicMetricsHandler->GetTopicMetrics();
 
     TStringStream str;
     HTML_APP_PAGE(str, "PersQueueReadBalancer " << TabletID() << " (" << Path << ")") {
@@ -45,9 +46,9 @@ TString TPersQueueReadBalancer::GenerateStat() {
                         PROPERTIES("Statistics") {
                             PROPERTY("Active pipes", Balancer->GetSessions().size());
                             PROPERTY("Active partitions", NumActiveParts);
-                            PROPERTY("Total data size", AggregatedStats.TotalDataSize);
+                            PROPERTY("Total data size", metrics.TotalDataSize);
                             PROPERTY("Reserve size", PartitionReserveSize());
-                            PROPERTY("Used reserve size", AggregatedStats.TotalUsedReserveSize);
+                            PROPERTY("Used reserve size", metrics.TotalUsedReserveSize);
                             PROPERTY("[Total/Max/Avg]WriteSpeedSec", metrics.TotalAvgWriteSpeedPerSec << "/" << metrics.MaxAvgWriteSpeedPerSec << "/" << metrics.TotalAvgWriteSpeedPerSec / NumActiveParts);
                             PROPERTY("[Total/Max/Avg]WriteSpeedMin", metrics.TotalAvgWriteSpeedPerMin << "/" << metrics.MaxAvgWriteSpeedPerMin << "/" << metrics.TotalAvgWriteSpeedPerMin / NumActiveParts);
                             PROPERTY("[Total/Max/Avg]WriteSpeedHour", metrics.TotalAvgWriteSpeedPerHour << "/" << metrics.MaxAvgWriteSpeedPerHour << "/" << metrics.TotalAvgWriteSpeedPerHour / NumActiveParts);
@@ -75,7 +76,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                     }
                     TABLEBODY() {
                         for (auto& [partitionId, partitionInfo] : PartitionsInfo) {
-                            const auto& stats = AggregatedStats.Stats[partitionId];
+                            const auto& stats = metrics.PartitionMetrics.find(partitionId);
                             const auto* node = PartitionGraph.GetPartition(partitionId);
                             TString style = node && node->DirectChildren.empty() ? "text-success" : "text-muted";
 
@@ -110,7 +111,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                         }
                                     }
                                 }
-                                TABLED() { str << stats.DataSize; }
+                                TABLED() { str << (stats == metrics.PartitionMetrics.end() ? 0 : stats->second.DataSize); }
                             }
                         }
                     }

@@ -14,7 +14,25 @@ namespace NKikimr::NPQ {
 
 struct TDatabaseInfo;
 
+struct TTopicMetrics {
+    ui64 TotalDataSize = 0;
+    ui64 TotalUsedReserveSize = 0;
 
+    ui64 TotalAvgWriteSpeedPerSec = 0;
+    ui64 MaxAvgWriteSpeedPerSec = 0;
+    ui64 TotalAvgWriteSpeedPerMin = 0;
+    ui64 MaxAvgWriteSpeedPerMin = 0;
+    ui64 TotalAvgWriteSpeedPerHour = 0;
+    ui64 MaxAvgWriteSpeedPerHour = 0;
+    ui64 TotalAvgWriteSpeedPerDay = 0;
+    ui64 MaxAvgWriteSpeedPerDay = 0;
+
+    struct TPartitionMetrics {
+        ui64 DataSize = 0;
+        ui64 UsedReserveSize = 0;
+    };
+    absl::flat_hash_map<ui32, TPartitionMetrics> PartitionMetrics;
+};
 
 struct TCounters {
     std::unique_ptr<TTabletLabeledCountersBase> Config;
@@ -26,8 +44,11 @@ public:
     TTopicMetricsHandler();
     ~TTopicMetricsHandler();
 
+    const TTopicMetrics& GetTopicMetrics() const;
+
     void Initialize(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx);
     void UpdateConfig(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx);
+    void InitializePartitions(ui32 partitionId, ui64 dataSize, ui64 usedReserveSize);
 
     void Handle(NKikimrPQ::TStatusResponse_TPartResult&& partitionStatus);
     void UpdateMetrics();
@@ -38,6 +59,8 @@ protected:
 
 private:
     NMonitoring::TDynamicCounterPtr DynamicCounters;
+
+    TTopicMetrics TopicMetrics;
 
     NMonitoring::TDynamicCounters::TCounterPtr ActivePartitionCountCounter;
     NMonitoring::TDynamicCounters::TCounterPtr InactivePartitionCountCounter;

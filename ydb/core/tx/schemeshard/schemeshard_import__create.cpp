@@ -62,14 +62,31 @@ bool IsCreatedByQuery(const TItem& item) {
     return !item.CreationQuery.empty();
 }
 
-bool IsView(const TItem& item) {
-    return item.CreationQuery.Contains("CREATE VIEW");
+bool IsCreateViewQuery(const TString& query) {
+    return query.Contains("CREATE VIEW");
 }
 
-bool IsReplication(const TItem& item) {
-    return item.CreationQuery.Contains("CREATE ASYNC REPLICATION");
+bool IsCreateReplicationQuery(const TString& query) {
+    return query.Contains("CREATE ASYNC REPLICATION");
 }
 
+bool RewriteCreateQuery(
+    TString& query,
+    const TString& dbRestoreRoot,
+    const TString& dbPath,
+    NYql::TIssues& issues) {
+
+    if (IsCreateViewQuery(query)) {
+        return NYdb::NDump::RewriteCreateViewQuery(query, dbRestoreRoot, true, dbPath, issues);
+    }
+    if (IsCreateReplicationQuery(query)) {
+        return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
+    }
+
+    issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
+    return false;
+
+}
 
 TString GetDatabase(TSchemeShard& ss) {
     return CanonizePath(ss.RootPathElements);
@@ -1112,19 +1129,11 @@ private:
                 << importInfo->GetItemSrcPrefix(msg.ItemIdx) << "/" << NYdb::NDump::NFiles::CreateView().FileName;
 
             NYql::TIssues issues;
-            if (IsView(item)) {
-                if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
-                    issues.AddIssue(TStringBuilder() << "path: " << source);
-                    return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid view creation query");
-                }
+            if (!RewriteCreateQuery(item.CreationQuery, database, item.DstPathName, issues)) {
+                issues.AddIssue(TStringBuilder() << "path: " << source);
+                return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid creation query");
             }
-            if (IsReplication(item)) {
-                if (!NYdb::NDump::RewriteCreateAsyncReplicationQuery(item.CreationQuery, database, item.DstPathName, issues)) {
-                    issues.AddIssue(TStringBuilder() << "path: " << source);
-                    return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid replication creation query");
-                }
-            }
-            
+
             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                 Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
             ));

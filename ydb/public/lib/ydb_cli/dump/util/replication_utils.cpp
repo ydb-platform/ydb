@@ -239,7 +239,7 @@ bool RewriteCreateAsyncReplicationQuery(
     const TString& dbRestoreRoot,
     const TString& dbPath,
     NYql::TIssues& issues) {
-    
+
     if (!RewriteSecretsNoCheck(query, dbRestoreRoot, issues)) {
         return false;
     }

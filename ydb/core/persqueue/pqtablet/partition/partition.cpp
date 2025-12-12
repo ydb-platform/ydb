@@ -1064,6 +1064,10 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         result.SetScaleStatus(NKikimrPQ::EScaleStatus::NORMAL);
     }
 
+    for (const auto& [_, consumer] : MLPConsumers) {
+        result.MutableAggregatedCounters()->AddMLPConsumerCounters()->CopyFrom(consumer.Metrics);
+    }
+
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionStatusResponse(result, Partition));
 }
 

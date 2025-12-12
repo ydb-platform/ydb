@@ -215,6 +215,7 @@ struct TEvPQ {
         EvMLPConsumerUpdateConfig,
         EvMLPDLQMoverResponse,
         EvEndOffsetChanged,
+        EvMLPConsumerState,
         EvEnd
     };
 
@@ -1619,6 +1620,15 @@ struct TEvPQ {
         }
 
         ui64 Offset;
+    };
+
+    struct TEvMLPConsumerState : TEventLocal<TEvMLPConsumerState, EvMLPConsumerState> {
+        TEvMLPConsumerState(NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters&& metrics)
+            : Metrics(std::move(metrics))
+        {
+        }
+
+        NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
     };
 };
 

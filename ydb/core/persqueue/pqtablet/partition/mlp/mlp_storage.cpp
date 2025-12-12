@@ -1,6 +1,7 @@
 #include "mlp_storage.h"
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/string/join.h>
@@ -24,6 +25,7 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     , Batch(this)
 {
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
+    Metrics.MessageLocks.Initialize(MLP_LOCKS_INTERVALS, std::size(MLP_LOCKS_INTERVALS), true);
 }
 
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
@@ -47,9 +49,10 @@ void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDe
             break;
         case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
             for (auto [offset, _] : std::exchange(DLQMessages, {})) {
-                Commit(offset);
+                size_t c = 0;
+                DoCommit(offset, c);
+                ++Metrics.TotalDeletedByDeadlinePolicyMessageCount;
             }
-            DLQQueue = {};
             break;
         case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
             WakeUpDLQ();
@@ -127,7 +130,7 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
 }
 
 bool TStorage::Commit(ui64 messageId) {
-    return DoCommit(messageId);
+    return DoCommit(messageId, Metrics.TotalCommittedMessageCount);
 }
 
 bool TStorage::Unlock(ui64 messageId) {
@@ -232,10 +235,23 @@ size_t TStorage::Compact() {
             RemoveMessage(it->first, message);
             it = SlowMessages.erase(it);
             ++removed;
+            ++Metrics.TotalDeletedByRetentionMessageCount;
         }
 
         while (!Messages.empty() && canRemove(Messages.front())) {
             auto& message = Messages.front();
+
+            switch (message.GetStatus()) {
+                case EMessageStatus::Unprocessed:
+                case EMessageStatus::Locked:
+                case EMessageStatus::Delayed:
+                    ++Metrics.TotalDeletedByRetentionMessageCount;
+                    break;
+                case EMessageStatus::Committed:
+                case EMessageStatus::DLQ:
+                    break;
+            }
+
             RemoveMessage(FirstOffset, message);
             Messages.pop_front();
             ++FirstOffset;
@@ -273,12 +289,14 @@ size_t TStorage::Compact() {
 }
 
 void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
-    AFL_ENSURE(Metrics.InflyMessageCount > 0);
-    --Metrics.InflyMessageCount;
+    AFL_ENSURE(Metrics.InflightMessageCount > 0);
+    --Metrics.InflightMessageCount;
+
     switch(message.GetStatus()) {
         case EMessageStatus::Unprocessed:
             AFL_ENSURE(Metrics.UnprocessedMessageCount > 0);
             --Metrics.UnprocessedMessageCount;
+            Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
             break;
         case EMessageStatus::Locked:
             AFL_ENSURE(Metrics.LockedMessageCount > 0);
@@ -287,6 +305,7 @@ void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
                 AFL_ENSURE(Metrics.LockedMessageGroupCount > 0);
                 --Metrics.LockedMessageGroupCount;
             }
+            Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
             break;
         case EMessageStatus::Delayed:
             AFL_ENSURE(Metrics.DelayedMessageCount > 0);
@@ -367,13 +386,14 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
 
     Batch.AddNewMessage(offset);
 
-    ++Metrics.InflyMessageCount;
+    ++Metrics.InflightMessageCount;
     if (deadlineDelta) {
         ++Metrics.DelayedMessageCount;
         Batch.AddChange(offset);
     } else {
         ++Metrics.UnprocessedMessageCount;
     }
+    Metrics.MessageLocks.IncrementFor(0);
 
     return true;
 }
@@ -396,6 +416,8 @@ bool TStorage::MarkDLQMoved(TDLQMessage message) {
 
     DLQQueue.pop_front();
 
+    ++Metrics.TotalMovedToDLQMessageCount;
+
     auto it = DLQMessages.find(message.Offset);
     if (it == DLQMessages.end() || it->second < message.SeqNo) {
         // message removed or message queued second time after changed dead letter policy
@@ -403,7 +425,7 @@ bool TStorage::MarkDLQMoved(TDLQMessage message) {
     }
 
     if (it != DLQMessages.end() && it->second == message.SeqNo) {
-        Commit(message.Offset);
+        DoCommit(message.Offset, Metrics.TotalMovedToDLQMessageCount);
         return true;
     }
 
@@ -423,6 +445,7 @@ bool TStorage::WakeUpDLQ() {
 
             --Metrics.DLQMessageCount;
             ++Metrics.UnprocessedMessageCount;
+            Metrics.MessageLocks.IncrementFor(message->ProcessingCount);
         }
     }
 
@@ -550,7 +573,9 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     message.SetStatus(EMessageStatus::Locked);
     message.DeadlineDelta = NormalizeDeadline(deadline);
     if (message.ProcessingCount < MAX_PROCESSING_COUNT) {
+        Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
         ++message.ProcessingCount;
+        Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
     }
 
     Batch.AddChange(offset);
@@ -568,7 +593,7 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     return offset;
 }
 
-bool TStorage::DoCommit(ui64 offset) {
+bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
     auto [message, slowZone] = GetMessageInt(offset);
     if (!message) {
         return false;
@@ -580,8 +605,11 @@ bool TStorage::DoCommit(ui64 offset) {
                 Batch.AddChange(offset);
                 ++Metrics.CommittedMessageCount;
             }
+
             AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
             --Metrics.UnprocessedMessageCount;
+            ++totalMetrics;
+            Metrics.MessageLocks.DecrementFor(message->ProcessingCount);
             break;
         case EMessageStatus::Locked:
             if (!slowZone) {
@@ -598,14 +626,19 @@ bool TStorage::DoCommit(ui64 offset) {
                 }
             }
 
+            ++totalMetrics;
+            Metrics.MessageLocks.DecrementFor(message->ProcessingCount);
+
             break;
         case EMessageStatus::Delayed:
             if (!slowZone) {
                 Batch.AddChange(offset);
                 ++Metrics.CommittedMessageCount;
             }
+
             AFL_ENSURE(Metrics.DelayedMessageCount > 0)("o", offset);
             --Metrics.DelayedMessageCount;
+            ++totalMetrics;
             break;
         case EMessageStatus::Committed:
             return false;
@@ -623,8 +656,8 @@ bool TStorage::DoCommit(ui64 offset) {
     if (slowZone) {
         SlowMessages.erase(offset);
         Batch.DeleteFromSlow(offset);
-        AFL_ENSURE(Metrics.InflyMessageCount > 0)("o", offset);
-        --Metrics.InflyMessageCount;
+        AFL_ENSURE(Metrics.InflightMessageCount > 0)("o", offset);
+        --Metrics.InflightMessageCount;
     } else {
         message->SetStatus(EMessageStatus::Committed);
         message->DeadlineDelta = 0;
@@ -681,10 +714,11 @@ void TStorage::DoUnlock(ui64 offset, TMessage& message) {
                     AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
                     --Metrics.UnprocessedMessageCount;
                     ++Metrics.DLQMessageCount;
+                    Metrics.MessageLocks.DecrementFor(message.ProcessingCount);
                     return;
                 }
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
-                    DoCommit(offset);
+                    DoCommit(offset, Metrics.TotalDeletedByDeadlinePolicyMessageCount);
                     return;
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
                     break;
@@ -773,7 +807,7 @@ TStorage::TBatch TStorage::GetBatch() {
     return std::exchange(Batch, {this});
 }
 
-const TStorage::TMetrics& TStorage::GetMetrics() const {
+const TMetrics& TStorage::GetMetrics() const {
     return Metrics;
 }
 
@@ -836,7 +870,7 @@ TString TStorage::DebugString() const {
     sb << " DLQQueue [" << JoinRange(", ", DLQQueue.begin(), DLQQueue.end()) << "]";
     sb << " DLQMessages [" << JoinRange(", ", DLQMessages.begin(), DLQMessages.end()) << "]";
     sb << " Metrics {"
-        << "Infly: " << Metrics.InflyMessageCount << ", "
+        << "Inflight: " << Metrics.InflightMessageCount << ", "
         << "Unprocessed: " << Metrics.UnprocessedMessageCount << ", "
         << "Locked: " << Metrics.LockedMessageCount << ", "
         << "LockedGroups: " << Metrics.LockedMessageGroupCount << ", "

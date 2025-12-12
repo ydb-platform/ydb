@@ -138,19 +138,6 @@ public:
         std::optional<TInstant> BaseWriteTimestamp;
     };
 
-    struct TMetrics {
-        size_t InflyMessageCount = 0;
-        size_t UnprocessedMessageCount = 0;
-        size_t LockedMessageCount = 0;
-        size_t LockedMessageGroupCount = 0;
-        size_t DelayedMessageCount = 0;
-        size_t CommittedMessageCount = 0;
-        size_t DeadlineExpiredMessageCount = 0;
-        size_t DLQMessageCount = 0;
-
-        size_t TotalScheduledToDLQMessageCount = 0;
-    };
-
     TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages = MIN_MESSAGES, size_t maxMessages = MAX_MESSAGES);
 
     void SetKeepMessageOrder(bool keepMessageOrder);
@@ -214,7 +201,7 @@ private:
     ui64 NormalizeDeadline(TInstant deadline);
 
     ui64 DoLock(ui64 offset, TMessage& message, TInstant& deadline);
-    bool DoCommit(ui64 offset);
+    bool DoCommit(ui64 offset, size_t& totalMetrics);
     bool DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
     bool DoUndelay(ui64 offset);

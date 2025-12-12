@@ -630,6 +630,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -704,6 +705,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -1235,6 +1237,7 @@ private:
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPConsumerState::TPtr&);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>
@@ -1246,6 +1249,7 @@ private:
 
     struct TMLPConsumerInfo {
         TActorId ActorId;
+        NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
     };
     std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
 

@@ -6,6 +6,7 @@
 #include "read_balancer_log.h"
 #include "mirror_describer_factory.h"
 
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/base/feature_flags.h>
@@ -268,12 +269,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     auto oldConsumers = std::move(Consumers);
     Consumers.clear();
-    for (auto& consumer : TabletConfig.GetConsumers()) {
+    for (const auto& consumer : TabletConfig.GetConsumers()) {
         auto it = oldConsumers.find(consumer.GetName());
         if (it != oldConsumers.end()) {
-            Consumers[consumer.GetName()] = std::move(it->second);
+            auto& newValue = Consumers[consumer.GetName()] = std::move(it->second);
+            newValue.Config = consumer;
         } else {
-            Consumers.insert(std::make_pair(consumer.GetName(), TConsumerInfo{}));
+            Consumers.insert(std::make_pair(consumer.GetName(), TConsumerInfo{.Config = consumer}));
         }
     }
 
@@ -486,7 +488,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
         AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
         AggregatedStats.AggrStats(partRes.GetAvgWriteSpeedPerSec(), partRes.GetAvgWriteSpeedPerMin(),
             partRes.GetAvgWriteSpeedPerHour(), partRes.GetAvgWriteSpeedPerDay());
-        AggregatedStats.Stats[partitionId].Counters = partRes.GetAggregatedCounters();
+        AggregatedStats.Stats[partitionId].Counters = std::move(partRes.GetAggregatedCounters());
         AggregatedStats.Stats[partitionId].HasCounters = true;
     }
 
@@ -652,10 +654,39 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
 
     using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
     auto labeledConsumerCounters = std::make_unique<TConsumerLabeledCounters>("topic|x|consumer", 0, DatabasePath);
+
+    using TMLPConsumerLabeledCounters = TProtobufTabletLabeledCounters<EMLPConsumerLabeledCounters_descriptor>;
+    auto labeledMLPConsumerCounters = std::make_unique<TMLPConsumerLabeledCounters>("topic|consumer", 0, DatabasePath);
+
     for (auto& [consumer, info]: Consumers) {
-        ensureCounters(info.AggregatedCounters, labeledConsumerCounters, {{"consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx)}});
+        auto consumerName = NPersQueue::ConvertOldConsumerName(consumer, ctx);
+
+        ensureCounters(info.AggregatedCounters, labeledConsumerCounters, {{"consumer", consumerName}});
         info.Aggr.Reset(new TTabletLabeledCountersBase{});
+
+        if (info.Config.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            ensureCounters(info.AggregatedMLPConsumerCounters, labeledMLPConsumerCounters, {{"consumer", consumerName}});
+            info.AggrMLP.Reset(new TTabletLabeledCountersBase{});
+
+            if (!info.MessageLockAttemptsCounter) {
+                auto collector = NMonitoring::ExplicitHistogram({
+                    0, 1, 4, 16, 64, 512
+                });
+                info.MessageLockAttemptsCounter = DynamicCounters->GetExpiringNamedHistogram("name", "topic.message_lock_attempts", std::move(collector));
+                info.MessageLockAttemptsAggregator.Reset(new TTabletPercentileCounter());
+                info.MessageLockAttemptsAggregator->Initialize(MLP_LOCKS_INTERVALS, std::size(MLP_LOCKS_INTERVALS), true);
+            }
+
+            info.MessageLockAttemptsAggregator->Clear();
+        } else {
+            info.AggregatedMLPConsumerCounters.clear();
+            info.AggrMLP.Reset();
+            info.MessageLockAttemptsCounter = nullptr;
+        }
     }
+
+    NKikimrPQ::TAggregatedCounters aggregatedCounters;
+    aggregatedCounters.MutableValues()->Resize(9, 0);
 
     /*** apply counters ****/
 
@@ -671,25 +702,25 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         }
     };
 
-    for (auto it = AggregatedStats.Stats.begin(); it != AggregatedStats.Stats.end(); ++it) {
-        auto& partitionStats = it->second;
-
+    for (auto& [_, partitionStats] : AggregatedStats.Stats) {
         if (!partitionStats.HasCounters) {
             continue;
         }
 
-        setCounters(labeledCounters, partitionStats.Counters);
+        auto& partitionCounters = partitionStats.Counters;
+
+        setCounters(labeledCounters, partitionCounters);
         aggr->AggregateWith(*labeledCounters);
 
-        setCounters(extendedLabeledCounters, partitionStats.Counters.GetExtendedCounters());
+        setCounters(extendedLabeledCounters, partitionCounters.GetExtendedCounters());
         aggrExtended->AggregateWith(*extendedLabeledCounters);
 
         if (TabletConfig.GetEnableCompactification()) {
-            setCounters(compactionCounters, partitionStats.Counters.GetCompactionCounters());
+            setCounters(compactionCounters, partitionCounters.GetCompactionCounters());
             compactionAggr->AggregateWith(*compactionCounters);
         }
 
-        for (const auto& consumerStats : partitionStats.Counters.GetConsumerAggregatedCounters()) {
+        for (const auto& consumerStats : partitionCounters.GetConsumerAggregatedCounters()) {
             auto jt = Consumers.find(consumerStats.GetConsumer());
             if (jt == Consumers.end()) {
                 continue;
@@ -698,6 +729,21 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
 
             setCounters(labeledConsumerCounters, consumerStats);
             consumerInfo.Aggr->AggregateWith(*labeledConsumerCounters);
+        }
+
+        for (const auto& consumerStats : partitionCounters.GetMLPConsumerCounters()) {
+            auto jt = Consumers.find(consumerStats.GetConsumer());
+            if (jt == Consumers.end()) {
+                continue;
+            }
+
+            auto& consumerInfo = jt->second;
+            for (ssize_t i = 0; i < labeledMLPConsumerCounters->GetCounters().Size() && i < consumerStats.GetCountersValues().size(); ++i) {
+                labeledMLPConsumerCounters->GetCounters()[i] = consumerStats.GetCountersValues(i);
+            }
+            consumerInfo.Aggr->AggregateWith(*labeledConsumerCounters);
+
+            consumerInfo.MessageLockAttemptsAggregator->PopulateFrom(consumerStats.GetMessageLocksValues().begin(), consumerStats.GetMessageLocksValues().end());
         }
     }
 
@@ -722,6 +768,14 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
 
     for (auto& [consumer, info] : Consumers) {
         processAggregators(info.Aggr, info.AggregatedCounters);
+        if (info.AggrMLP) {
+            processAggregators(info.AggrMLP, info.AggregatedMLPConsumerCounters);
+
+            for (size_t i = 0; i < info.MessageLockAttemptsAggregator->GetRangeCount(); ++i) {
+                info.MessageLockAttemptsCounter->Collect((i64)info.MessageLockAttemptsAggregator->GetRangeBound(i),
+                    (ui64)info.MessageLockAttemptsAggregator->GetRangeValue(i));
+            }
+        }
     }
 }
 

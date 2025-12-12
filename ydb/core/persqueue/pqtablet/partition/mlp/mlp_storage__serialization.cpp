@@ -269,12 +269,22 @@ struct TDeserializerWithOffset {
     }
 };
 
-void SerializeMetrics(const TStorage::TMetrics& metrics, NKikimrPQ::TMLPMetrics& storedMetrics) {
+void SerializeMetrics(const TMetrics& metrics, NKikimrPQ::TMLPMetrics& storedMetrics) {
+    storedMetrics.SetTotalCommittedMessageCount(metrics.TotalCommittedMessageCount);
+    storedMetrics.SetTotalMovedToDLQMessageCount(metrics.TotalMovedToDLQMessageCount);
     storedMetrics.SetTotalScheduledToDLQMessageCount(metrics.TotalScheduledToDLQMessageCount);
+    storedMetrics.SetTotalPurgedMessageCount(metrics.TotalPurgedMessageCount);
+    storedMetrics.SetTotalDeletedByDeadlinePolicyMessageCount(metrics.TotalDeletedByDeadlinePolicyMessageCount);
+    storedMetrics.SetTotalDeletedByRetentionMessageCount(metrics.TotalDeletedByRetentionMessageCount);
 }
 
-void DeserializeMetrics(TStorage::TMetrics& metrics, const NKikimrPQ::TMLPMetrics& storedMetrics) {
+void DeserializeMetrics(TMetrics& metrics, const NKikimrPQ::TMLPMetrics& storedMetrics) {
+    metrics.TotalCommittedMessageCount = storedMetrics.GetTotalCommittedMessageCount();
+    metrics.TotalMovedToDLQMessageCount = storedMetrics.GetTotalMovedToDLQMessageCount();
     metrics.TotalScheduledToDLQMessageCount = storedMetrics.GetTotalScheduledToDLQMessageCount();
+    metrics.TotalPurgedMessageCount = storedMetrics.GetTotalPurgedMessageCount();
+    metrics.TotalDeletedByDeadlinePolicyMessageCount = storedMetrics.GetTotalDeletedByDeadlinePolicyMessageCount();
+    metrics.TotalDeletedByRetentionMessageCount = storedMetrics.GetTotalDeletedByRetentionMessageCount();
 }
 
 }
@@ -329,9 +339,11 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                         ++Metrics.LockedMessageGroupCount;
                     }
                     moveUncommittedOffset = false;
+                    Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
                     break;
                 case EMessageStatus::Delayed:
                     ++Metrics.DelayedMessageCount;
+                    Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
                     moveUnlockedOffset = false;
                     break;
                 case EMessageStatus::Committed:
@@ -341,6 +353,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                     ++Metrics.UnprocessedMessageCount;
                     moveUnlockedOffset = false;
                     moveUncommittedOffset = false;
+                    Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
                     break;
                 case EMessageStatus::DLQ:
                     ++Metrics.DLQMessageCount;
@@ -371,15 +384,18 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                         LockedMessageGroupsId.insert(message.MessageGroupIdHash);
                         ++Metrics.LockedMessageGroupCount;
                     }
+                    Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
                     break;
                 case EMessageStatus::Delayed:
                     ++Metrics.DelayedMessageCount;
+                    Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
                     break;
                 case EMessageStatus::Committed:
                     ++Metrics.CommittedMessageCount;
                     break;
                 case EMessageStatus::Unprocessed:
                     ++Metrics.UnprocessedMessageCount;
+                    Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
                     break;
                 case EMessageStatus::DLQ:
                     ++Metrics.DLQMessageCount;
@@ -388,7 +404,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         }
     }
 
-    Metrics.InflyMessageCount = Messages.size() + SlowMessages.size();
+    Metrics.InflightMessageCount = Messages.size() + SlowMessages.size();
 
     {
         TDeserializer<TDLQMessageV1> deserializer(snapshot.GetDLQMessages());
@@ -451,7 +467,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
                 .WriteTimestampDelta = msg.WriteTimestampDelta
             };
 
-            ++Metrics.InflyMessageCount;
+            ++Metrics.InflightMessageCount;
             ++Metrics.UnprocessedMessageCount;
         }
     }
@@ -483,8 +499,9 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
                     .WriteTimestampDelta = msg.WriteTimestampDelta
                 });
 
-                ++Metrics.InflyMessageCount;
+                ++Metrics.InflightMessageCount;
                 ++Metrics.UnprocessedMessageCount;
+                Metrics.MessageLocks.IncrementFor(0);
             }
         }
     }
@@ -503,7 +520,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             auto statusChanged = message->Status != msg.Common.Fields.Status;
             if (statusChanged) {
                 RemoveMessage(offset, *message);
-                ++Metrics.InflyMessageCount;
+                ++Metrics.InflightMessageCount;
             }
 
             message->Status = msg.Common.Fields.Status;
@@ -518,15 +535,18 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
                             LockedMessageGroupsId.insert(message->MessageGroupIdHash);
                             ++Metrics.LockedMessageGroupCount;
                         }
+                        Metrics.MessageLocks.IncrementFor(message->ProcessingCount);
                         break;
                     case EMessageStatus::Delayed:
                         ++Metrics.DelayedMessageCount;
+                        Metrics.MessageLocks.IncrementFor(message->ProcessingCount);
                         break;
                     case EMessageStatus::Committed:
                         ++Metrics.CommittedMessageCount;
                         break;
                     case EMessageStatus::Unprocessed:
                         ++Metrics.UnprocessedMessageCount;
+                        Metrics.MessageLocks.IncrementFor(message->ProcessingCount);
                         break;
                     case EMessageStatus::DLQ:
                         ++Metrics.DLQMessageCount;

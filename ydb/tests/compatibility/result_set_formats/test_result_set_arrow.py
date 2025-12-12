@@ -77,7 +77,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self.channel_buffer_size = channel_buffer_size
 
         if min(self.versions) < (25, 3, 2):
-            pytest.skip("Arrow result set format is not supported in <= 25.3.1")
+            pytest.skip("Result set formats are not supported in <= 25.3.1")
 
         if min(self.versions) < (26, 1):
             types_not_supported_yet_in_columnshard.add("Bool")

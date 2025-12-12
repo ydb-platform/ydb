@@ -7,6 +7,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
+    test_result_set_value.py
     test_result_set_arrow.py
 )
 

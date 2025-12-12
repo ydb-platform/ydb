@@ -11,6 +11,7 @@ from ydb.tests.datashard.lib.types_of_variables import (
     index_first,
     index_second,
     ttl_types,
+    ttl_int_types,
     index_first_sync,
     index_second_sync,
     index_three_sync,
@@ -194,7 +195,7 @@ class TestParametrizedQueries(TestBase):
             sql_ttl = create_ttl_sql_request(
                 f"ttl_{cleanup_type_name(ttl)}",
                 {"P18262D": ""},
-                "SECONDS" if ttl == "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "",
+                "SECONDS" if ttl in ttl_int_types else "",
                 table_name,
             )
             self.query(sql_ttl)

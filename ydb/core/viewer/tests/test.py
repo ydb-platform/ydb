@@ -542,6 +542,10 @@ class TestViewer(object):
         # groups
         replace_with_values.update({'Available',
                                     'Limit',
+                                    'MaxPDiskUsage',
+                                    'MaxVDiskSlotUsage',
+                                    'MaxNormalizedOccupancy',
+                                    'MaxVDiskRawUsage',
                                     })
 
         # pdisks
@@ -552,6 +556,7 @@ class TestViewer(object):
                                     'SlotSize',
                                     'SlotCount',
                                     'EnforcedDynamicSlotSize',
+                                    'PDiskUsage',
                                     })
 
         result = cls.replace_values_by_key_and_value(result, {'Status'}, {'ACTIVE', 'INACTIVE'})
@@ -565,6 +570,9 @@ class TestViewer(object):
                                     'ReadThroughput',
                                     'StorageSize',
                                     'StorageCount',
+                                    'VDiskSlotUsage',
+                                    'NormalizedOccupancy',
+                                    'VDiskRawUsage',
                                     })
 
         # cluster
@@ -656,10 +664,46 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_nodes_group(cls):
+        return [
+            cls.get_viewer_normalized("/viewer/nodes", {
+                'group': 'CapacityAlert'
+            }),
+            cls.get_viewer_normalized("/viewer/nodes", {
+                'filter_group_by': 'CapacityAlert',
+                'filter_group': 'GREEN'
+            })
+        ]
+
+    @classmethod
     def test_storage_groups(cls):
         return cls.normalize_result(cls.get_viewer("/viewer/groups", {
             'fields_required': 'all'
         }))
+
+    @classmethod
+    def test_viewer_groups_group_by_pool_name(cls):
+        return [
+            cls.get_viewer_normalized("/viewer/groups", {
+                'group': 'PoolName'
+            }),
+            cls.get_viewer_normalized("/viewer/groups", {
+                'filter_group_by': 'PoolName',
+                'filter_group': 'static'
+            })
+        ]
+
+    @classmethod
+    def test_viewer_groups_group_by_capacity_alert(cls):
+        return [
+            cls.get_viewer_normalized("/viewer/groups", {
+                'group': 'CapacityAlert'
+            }),
+            cls.get_viewer_normalized("/viewer/groups", {
+                'filter_group_by': 'CapacityAlert',
+                'filter_group': 'GREEN'
+            })
+        ]
 
     @classmethod
     def test_viewer_sysinfo(cls):

@@ -155,7 +155,7 @@ jobs:
             --add-host "ydb:172.28.0.12" \
             --add-host "ydb:172.28.0.13" \
             --add-host "ydb:172.28.0.99" \
-            ydb-app-current create --connection-string grpc://ydb:2136/?database=/Root/testdb
+            ydb-app-current --connection-string grpc://ydb:2136/?database=/Root/testdb create
 
       - name: Run SLO Tests (parallel)
         timeout-minutes: 15
@@ -165,7 +165,7 @@ jobs:
           WRITE_RPS=${{ inputs.slo_workload_write_max_rps || 100 }}
 
           ARGS="--connection-string grpc://ydb:2136/?database=/Root/testdb run \
-            --metrics-push-url http://localhost:9090/api/v1/otlp/v1/metrics \
+            --metrics-push-url http://prometheus:9090/api/v1/otlp/v1/metrics \
             --report-period 250 \
             --time $DURATION \
             --read-rps $READ_RPS \

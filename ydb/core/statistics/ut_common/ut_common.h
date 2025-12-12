@@ -114,6 +114,10 @@ void PrepareUniformTable(TTestEnv& env, const TString& databaseName, const TStri
 
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName);
 
+std::vector<TResponse> GetStatistics(
+    TTestActorRuntime&, const TPathId&, EStatType,
+    const std::vector<std::optional<ui32>>& columnTags, ui32 nodeIdx = 1);
+
 std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag = 1);
 
 struct TCountMinSketchProbes {

@@ -428,26 +428,32 @@ void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableN
     )", databaseName.c_str(), tableName.c_str()));
 }
 
-std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag) {
-    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
-
-    NStat::TRequest req;
-    req.PathId = pathId;
-    req.ColumnTag = columnTag;
+std::vector<TResponse> GetStatistics(
+        TTestActorRuntime& runtime, const TPathId& pathId, EStatType statType,
+        const std::vector<std::optional<ui32>>& columnTags, ui32 nodeIdx) {
+    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(nodeIdx));
 
     auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
-    evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;
-    evGet->StatRequests.push_back(req);
+    evGet->StatType = statType;
+    for (auto tag : columnTags) {
+        evGet->StatRequests.push_back(TRequest{ .PathId = pathId, .ColumnTag = tag });
+    }
 
-    auto sender = runtime.AllocateEdgeActor(1);
-    runtime.Send(statServiceId, sender, evGet.release(), 1, true);
+    auto sender = runtime.AllocateEdgeActor(nodeIdx);
+    runtime.Send(statServiceId, sender, evGet.release(), nodeIdx, true);
     auto evResult = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
 
     UNIT_ASSERT(evResult);
     UNIT_ASSERT(evResult->Get());
-    UNIT_ASSERT(evResult->Get()->StatResponses.size() == 1);
+    return std::move(evResult->Get()->StatResponses);
+}
 
-    auto rsp = evResult->Get()->StatResponses[0];
+
+std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, const TPathId& pathId, ui64 columnTag) {
+    auto responses = GetStatistics(runtime, pathId, EStatType::COUNT_MIN_SKETCH, {{columnTag}});
+    UNIT_ASSERT(responses.size() == 1);
+
+    auto rsp = responses[0];
     auto stat = rsp.CountMinSketch;
     UNIT_ASSERT(rsp.Success);
     UNIT_ASSERT(stat.CountMin);
@@ -458,27 +464,15 @@ std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, con
 void CheckCountMinSketch(
         TTestActorRuntime& runtime, const TPathId& pathId,
         const std::vector<TCountMinSketchProbes>& expected) {
-    auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
-    evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;
-
+    std::vector<std::optional<ui32>> columnTags;
     for (auto item : expected) {
-        NStat::TRequest req;
-        req.PathId = pathId;
-        req.ColumnTag = item.Tag;
-        evGet->StatRequests.push_back(req);
+        columnTags.push_back(item.Tag);
     }
+    auto responses = GetStatistics(runtime, pathId, EStatType::COUNT_MIN_SKETCH, columnTags);
+    UNIT_ASSERT_VALUES_EQUAL(responses.size(), expected.size());
 
-    auto sender = runtime.AllocateEdgeActor();
-    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(0));
-    runtime.Send(statServiceId, sender, evGet.release(), 0, true);
-
-    auto res = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
-    auto msg = res->Get();
-
-    UNIT_ASSERT_VALUES_EQUAL(msg->StatResponses.size(), expected.size());
-
-    for (size_t i = 0; i < msg->StatResponses.size(); ++i) {
-        const auto& stat = msg->StatResponses[i];
+    for (size_t i = 0; i < responses.size(); ++i) {
+        const auto& stat = responses[i];
         const auto& probes = expected[i].Probes;
         if (probes) {
             UNIT_ASSERT(stat.Success);

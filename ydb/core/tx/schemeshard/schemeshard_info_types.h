@@ -3605,6 +3605,20 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
 
 NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 
+inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
+    if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
+        return false;
+    }
+
+    for (auto c: name) {
+        if (!std::isalnum(c) && c != '_' && c != '-') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 }
 
 }

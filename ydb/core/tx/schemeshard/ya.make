@@ -283,6 +283,8 @@ SRCS(
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_index_build_info.cpp
     schemeshard_index_build_info.h
+    schemeshard_index_utils.cpp
+    schemeshard_index_utils.h
     schemeshard_info_types.cpp
     schemeshard_info_types.h
     schemeshard_login_helper.cpp
@@ -292,6 +294,7 @@ SRCS(
     schemeshard_path_describer.cpp
     schemeshard_path_element.cpp
     schemeshard_path_element.h
+    schemeshard_pq_helpers.h
     schemeshard_schema.h
     schemeshard_self_pinger.cpp
     schemeshard_self_pinger.h
@@ -311,8 +314,6 @@ SRCS(
     schemeshard_types.cpp
     schemeshard_types.h
     schemeshard_user_attr_limits.h
-    schemeshard_utils.cpp
-    schemeshard_utils.h
     schemeshard_validate_ttl.cpp
     schemeshard_xxport__helpers.cpp
     user_attributes.cpp

@@ -3,7 +3,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_utils.h"
 #include "schemeshard_impl.h"
 
 

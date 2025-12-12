@@ -2,7 +2,6 @@
 
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/events.h>

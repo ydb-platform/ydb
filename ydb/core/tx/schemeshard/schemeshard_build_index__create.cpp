@@ -2,7 +2,7 @@
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for NTableIndex::CommonCheck
+#include "schemeshard_index_utils.h"
 #include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>

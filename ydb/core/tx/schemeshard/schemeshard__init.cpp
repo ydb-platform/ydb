@@ -1,7 +1,7 @@
 #include "schemeshard__shred_manager.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_index_build_info.h"
-#include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats

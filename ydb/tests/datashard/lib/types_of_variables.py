@@ -121,7 +121,7 @@ ttl_types = {
     "Date": generate_date_value,
     "Datetime": generate_datetime_value,
     "Timestamp": lambda i: 2696200000000000 + i * 100000000,
-    "pgint4": lambda i: 3742656 + i,
+    "pgint4": lambda i: 2147483000 + i,
     "pgint8": lambda i: 3742656000 + i,
     "pgdate": generate_date_value,
     "pgtimestamp": lambda i: generate_datetime_value(i).strftime("%Y-%m-%d %H:%M:%S"),

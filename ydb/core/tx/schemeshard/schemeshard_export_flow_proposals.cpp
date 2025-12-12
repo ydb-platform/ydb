@@ -53,7 +53,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
 
     for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
         const auto& item = exportInfo.Items.at(itemIdx);
-        if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable && item.SourcePathType != NKikimrSchemeOp::EPathTypeColumnTable) {
+        if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
             continue;
         }
 

@@ -9,7 +9,7 @@ RUN apt-get update \
 COPY build/ /build/
 COPY certs/ /certs/
 COPY contrib/ /contrib/
-COPY library/cpp /library/cpp/
+COPY library/cpp/ /library/cpp/
 COPY tools/ /tools/
 COPY util/ /util/
 COPY ydb/library/yverify_stream/ /ydb/library/yverify_stream/

@@ -741,10 +741,19 @@ public:
 
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
         queryProto.SetEnableWatermarks(Config->EnableWatermarks);
+        TVector<bool> resultDiscardFlags;
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
             if (queryBlockSettings.HasUncommittedChangesRead) {
                 queryProto.SetHasUncommittedChangesRead(true);
+            }
+
+            for (const auto& kiResult : queryBlock.Results()) {
+                if (kiResult.Maybe<TKiResult>()) {
+                    auto result = kiResult.Cast<TKiResult>();
+                    bool discard = result.Discard().Value() == "true";
+                    resultDiscardFlags.push_back(discard);
+                }
             }
 
             auto ops = TableOperationsToProto(queryBlock.Operations(), ctx);
@@ -759,8 +768,38 @@ public:
             }
         }
 
-        for (const auto& tx : query.Transactions()) {
-            CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
+        THashSet<std::pair<ui32, ui32>> createChannel;
+
+        for (ui32 txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
+            const auto& tx = query.Transactions().Item(txIdx);
+            for (const auto& paramBinding : tx.ParamBindings()) {
+                if (auto maybeResultBinding = paramBinding.Binding().Maybe<TKqpTxResultBinding>()) {
+                    auto resultBinding = maybeResultBinding.Cast();
+                    auto refTxIndex = FromString<ui32>(resultBinding.TxIndex());
+                    auto refResultIndex = FromString<ui32>(resultBinding.ResultIndex());
+                    createChannel.insert({refTxIndex, refResultIndex});
+                }
+            }
+        }
+
+        for (ui32 i = 0; i < query.Results().Size(); ++i) {
+            const auto& result = query.Results().Item(i);
+            if (result.Maybe<TKqpTxResultBinding>()) {
+                auto binding = result.Cast<TKqpTxResultBinding>();
+                auto txIndex = FromString<ui32>(binding.TxIndex().Value());
+                auto resultIndex = FromString<ui32>(binding.ResultIndex());
+                
+                bool isDiscard = (querySettings.Type == EPhysicalQueryType::GenericQuery) && 
+                                 (i < resultDiscardFlags.size() && resultDiscardFlags[i]);
+                if (!isDiscard) {
+                    createChannel.insert({txIndex, resultIndex});
+                }
+            }
+        }
+
+        for (ui32 txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
+            const auto& tx = query.Transactions().Item(txIdx);
+            CompileTransaction(tx, *queryProto.AddTransactions(), ctx, txIdx, createChannel);
         }
 
         if (const auto overridePlanner = Config->OverridePlanner.Get()) {
@@ -775,6 +814,8 @@ public:
             }
         }
 
+        ui32 resultIdx = 0;
+
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
 
@@ -788,12 +829,19 @@ public:
             auto& txResult = *queryProto.MutableTransactions(txIndex)->MutableResults(txResultIndex);
 
             YQL_ENSURE(txResult.GetIsStream());
-            txResult.SetQueryResultIndex(i);
 
+            if (querySettings.Type == EPhysicalQueryType::GenericQuery && 
+                i < resultDiscardFlags.size() && resultDiscardFlags[i]) {
+                continue;
+            }
+            
+            txResult.SetQueryResultIndex(resultIdx);
             auto& queryBindingProto = *queryProto.AddResultBindings();
             auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
             txBindingProto.SetTxIndex(txIndex);
             txBindingProto.SetResultIndex(txResultIndex);
+            
+            resultIdx++;
 
             auto type = binding.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             YQL_ENSURE(type);
@@ -1073,7 +1121,8 @@ private:
         stageProto.SetAllowWithSpilling(Config->EnableSpilling);
     }
 
-    void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx) {
+    void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx,
+                            ui32 txIdx, const THashSet<std::pair<ui32, ui32>>& createChannel) {
         auto txSettings = TKqpPhyTxSettings::Parse(tx);
         YQL_ENSURE(txSettings.Type);
         txProto.SetType(GetPhyTxType(*txSettings.Type));
@@ -1125,7 +1174,8 @@ private:
         }
 
         TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
-        for (const auto& resultNode : tx.Results()) {
+        for (ui32 resIdx = 0; resIdx < tx.Results().Size(); ++resIdx) {
+            const auto& resultNode = tx.Results().Item(resIdx);
             YQL_ENSURE(resultNode.Maybe<TDqConnection>(), "" << NCommon::ExprToPrettyString(ctx, tx.Ref()));
             auto connection = resultNode.Cast<TDqConnection>();
 
@@ -1169,6 +1219,8 @@ private:
                     columnHintsProto.Add(TString(columnHint.Value()));
                 }
             }
+            bool canSkip = (createChannel.find(std::make_pair(txIdx, resIdx)) == createChannel.end());
+            resultProto.SetCanSkipChannel(canSkip);
         }
 
         for (auto& [tablePath, tableColumns] : tablesMap) {

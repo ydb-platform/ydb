@@ -384,7 +384,8 @@
             "Children": [
                 {"Index": 0, "Name": "Value", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "RowsLimit", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "RowsLimit", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Discard", "Type": "TCoAtom"}
             ]
         },
         {

@@ -235,12 +235,7 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                 result["status"] = "FAILED"
                 log_print(f"Converted ERROR to FAILED for {suite_name}/{test_name_for_mute}")
 
-            # Check if test should be muted
-            if mute_check(suite_name, test_name_for_mute):
-                log_print("mute", suite_name, test_name_for_mute)
-                mute_test_result(result)
-
-            # Check if test failed
+            # Check if test failed (before muting, to preserve original status for link processing)
             status = result.get("status", "")
             is_fail = status in ("FAILED", "ERROR")
             has_fail_tests |= is_fail
@@ -248,6 +243,7 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             # Process links from build-results-report (they are arrays with file/directory paths)
             # Format: {"stdout": ["/path"], "stderr": ["/path"], "log": ["/path"], "logsdir": ["/path"]}
             # We update links directly, replacing local paths with URLs for all tests
+            # Process links BEFORE muting to ensure they're converted even for muted tests
             if "links" not in result:
                 result["links"] = {}
             
@@ -266,6 +262,17 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                             # Replace first path with URL
                             result["links"][link_type] = [url]
                             break
+                        else:
+                            # Directory doesn't exist, but create URL anyway for consistency
+                            try:
+                                rel_path = os.path.relpath(file_path, ya_out_dir)
+                                quoted_path = urllib.parse.quote(rel_path)
+                                url = f"{test_stuff_prefix}{quoted_path}.zip"
+                                result["links"][link_type] = [url]
+                                break
+                            except ValueError:
+                                # Path is not relative to ya_out_dir, skip
+                                pass
                     else:
                         # Other links are files
                         if os.path.isfile(file_path):
@@ -273,6 +280,22 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                             # Replace first path with URL
                             result["links"][link_type] = [url]
                             break
+                        else:
+                            # File doesn't exist, but create URL anyway for consistency
+                            try:
+                                rel_path = os.path.relpath(file_path, ya_out_dir)
+                                quoted_path = urllib.parse.quote(rel_path)
+                                url = f"{log_url_prefix}{quoted_path}"
+                                result["links"][link_type] = [url]
+                                break
+                            except ValueError:
+                                # Path is not relative to ya_out_dir, skip
+                                pass
+
+            # Check if test should be muted (after processing links)
+            if mute_check(suite_name, test_name_for_mute):
+                log_print("mute", suite_name, test_name_for_mute)
+                mute_test_result(result)
 
             # Initialize properties dict only for user properties (if needed)
             if test_dir and path_str in user_properties:

@@ -1,4 +1,5 @@
 import pytest
+import pyarrow as pa
 
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -10,9 +11,6 @@ from ydb.tests.datashard.lib.types_of_variables import (
     format_sql_value,
     types_not_supported_yet_in_columnshard
 )
-
-import pyarrow as pa
-from random import randint
 
 
 primitive_type_to_arrow_type = {
@@ -55,18 +53,28 @@ codec_to_string = {
 }
 
 
+def kb_to_b(n):
+    return n * 1024
+
+
+def mb_to_b(n):
+    return kb_to_b(n) * 1024
+
+
 class TestResultSetArrow(RestartToAnotherVersionFixture):
+
     @pytest.fixture()
     def store_type(self, request):
         return request.param
 
     @pytest.fixture()
     def channel_buffer_size(self, request):
-        return getattr(request, 'param', 8 * 1024 * 1024)
+        return getattr(request, 'param', mb_to_b(8))
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self, store_type, channel_buffer_size):
         self.store_type = store_type
+        self.channel_buffer_size = channel_buffer_size
 
         if min(self.versions) < (25, 3, 2):
             pytest.skip("Arrow result set format is not supported in <= 25.3.1")
@@ -92,58 +100,60 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             }
         )
 
-    @pytest.mark.parametrize("store_type", ["ROW", "COLUMM"])
-    def test_types_mapping(self):
+    # ------------------------------------- Tests -------------------------------------
+
+    @pytest.mark.parametrize("store_type", ["ROW", "COLUMN"])
+    def test_types_mapping(self, store_type):
         table_name = "test_arrow"
         rows_count = 500
 
-        self._create_table(table_name)
-        self._fill_table(table_name, rows_count)
+        self._create_table(table_name, store_type)
+        self._fill_table(table_name, rows_count, store_type)
 
-        self._validate_types_mapping(self._select_table(table_name), rows_count)
+        self._validate_types_mapping(self._read_table(table_name), rows_count)
         self.change_cluster_version()
-        self._validate_types_mapping(self._select_table(table_name), rows_count)
+        self._validate_types_mapping(self._read_table(table_name), rows_count)
 
         self._drop_table(table_name)
 
-    @pytest.mark.parametrize("store_type", ["ROW", "COLUMM"])
+    @pytest.mark.parametrize("store_type", ["ROW"])  # without COLUMN because too many result sets are returned
     @pytest.mark.parametrize("codec", [
-        ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.UNSPECIFIED), # UNSPECIFIED is the same as NONE
+        ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.UNSPECIFIED),  # UNSPECIFIED is the same as NONE
         ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.NONE),
         ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.ZSTD),
         ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.ZSTD, 10),
         ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.LZ4_FRAME),
-        ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.LZ4_FRAME, 10), # LZ4_FRAME with level is not supported
+        ydb.ArrowCompressionCodec(ydb.ArrowCompressionCodecType.LZ4_FRAME, 10),  # LZ4_FRAME with level is not supported
     ])
-    def test_compression(self, codec):
+    def test_compression(self, store_type, codec):
         table_name = "test_arrow"
         rows_count = 500
 
-        self._create_table(table_name)
-        self._fill_table(table_name, rows_count)
+        self._create_table(table_name, store_type)
+        self._fill_table(table_name, rows_count, store_type)
 
-        self._validate_compression(self._select_table(table_name, codec=codec), rows_count, codec)
+        self._validate_compression(self._read_table(table_name, codec=codec), rows_count, codec)
         self.change_cluster_version()
-        self._validate_compression(self._select_table(table_name, codec=codec), rows_count, codec)
+        self._validate_compression(self._read_table(table_name, codec=codec), rows_count, codec)
 
         self._drop_table(table_name)
 
-    @pytest.mark.parametrize("store_type", ["ROW", "COLUMM"])
-    @pytest.mark.parametrize("channel_buffer_size", [2 * 1024, 8 * 1024 * 1024]) # 2 KB, 8 MB
+    @pytest.mark.parametrize("store_type", ["ROW", "COLUMN"])
+    @pytest.mark.parametrize("channel_buffer_size", [kb_to_b(2), mb_to_b(8)])
     @pytest.mark.parametrize("schema_inclusion_mode", [
-        ydb.QuerySchemaInclusionMode.UNSPECIFIED, # UNSPECIFIED is the same as ALWAYS
+        ydb.QuerySchemaInclusionMode.UNSPECIFIED,  # UNSPECIFIED is the same as ALWAYS
         ydb.QuerySchemaInclusionMode.ALWAYS,
         ydb.QuerySchemaInclusionMode.FIRST_ONLY,
     ])
-    def test_schema_inclusion_mode(self, schema_inclusion_mode):
+    def test_schema_inclusion_mode(self, store_type, schema_inclusion_mode):
         table_name = "test_arrow"
         rows_count = 500
 
-        self._create_table(table_name)
-        self._fill_table(table_name, rows_count)
+        self._create_table(table_name, store_type)
+        self._fill_table(table_name, rows_count, store_type)
 
         self._validate_schema_inclusion_mode(
-            self._select_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
+            self._read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
             rows_count,
             schema_inclusion_mode
         )
@@ -151,28 +161,28 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self.change_cluster_version()
 
         self._validate_schema_inclusion_mode(
-            self._select_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
+            self._read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
             rows_count,
             schema_inclusion_mode
         )
 
         self._drop_table(table_name)
 
-    @pytest.mark.parametrize("store_type", ["ROW", "COLUMM"])
-    @pytest.mark.parametrize("channel_buffer_size", [2 * 1024]) # 2 KB
+    @pytest.mark.parametrize("store_type", ["ROW"])  # without COLUMN because DML
+    @pytest.mark.parametrize("channel_buffer_size", [kb_to_b(2)])
     @pytest.mark.parametrize("schema_inclusion_mode", [
         ydb.QuerySchemaInclusionMode.ALWAYS,
         ydb.QuerySchemaInclusionMode.FIRST_ONLY,
     ])
-    def test_multistatement(self, schema_inclusion_mode):
+    def test_multistatement(self, store_type, schema_inclusion_mode):
         table_name = "test_arrow"
         rows_count = 500
 
-        self._create_table(table_name)
-        self._fill_table(table_name, rows_count)
+        self._create_table(table_name, store_type)
+        self._fill_table(table_name, rows_count, store_type)
 
         self._validate_multistatement(
-            self._multistatement_read(table_name, schema_inclusion_mode=schema_inclusion_mode),
+            self._multistatement_read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
             rows_count,
             schema_inclusion_mode
         )
@@ -180,20 +190,20 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self.change_cluster_version()
 
         self._validate_multistatement(
-            self._multistatement_read(table_name, schema_inclusion_mode=schema_inclusion_mode),
+            self._multistatement_read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
             rows_count,
             schema_inclusion_mode
         )
 
         self._drop_table(table_name)
 
-    @pytest.mark.parametrize("store_type", ["ROW", "COLUMM"])
-    def test_empty_result(self):
+    @pytest.mark.parametrize("store_type", ["ROW"])  # without COLUMN because DML
+    def test_empty_result(self, store_type):
         table_name = "test_arrow"
         rows_count = 500
 
-        self._create_table(table_name)
-        self._fill_table(table_name, rows_count)
+        self._create_table(table_name, store_type)
+        self._fill_table(table_name, rows_count, store_type)
 
         self._validate_empty_result(table_name)
         self.change_cluster_version()
@@ -201,24 +211,40 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         self._drop_table(table_name)
 
-    @pytest.mark.parametrize("store_type", ["ROW", "COLUMM"])
-    def test_limit_ordered_columns(self):
+    @pytest.mark.parametrize("store_type", ["ROW", "COLUMN"])
+    def test_limit_ordered_columns(self, store_type):
         table_name = "test_arrow"
         rows_count = 500
         limit = 100
 
         assert limit < rows_count
 
-        self._create_table(table_name)
-        self._fill_table(table_name, rows_count)
+        self._create_table(table_name, store_type)
+        self._fill_table(table_name, rows_count, store_type)
 
-        self._validate_limit_ordered_columns(self._select_table(table_name, limit=limit, pragmas=["OrderedColumns"], ordered=False), limit)
+        self._validate_limit_ordered_columns(self._read_table(table_name, limit=limit, pragmas=["OrderedColumns"], ordered=False), limit)
         self.change_cluster_version()
-        self._validate_limit_ordered_columns(self._select_table(table_name, limit=limit, pragmas=["OrderedColumns"], ordered=False), limit)
+        self._validate_limit_ordered_columns(self._read_table(table_name, limit=limit, pragmas=["OrderedColumns"], ordered=False), limit)
 
         self._drop_table(table_name)
 
-    def _create_table(self, table_name):
+    @pytest.mark.parametrize("store_type", ["ROW", "COLUMN"])
+    def test_column_alias(self, store_type):
+        table_name = "test_arrow"
+        rows_count = 500
+
+        self._create_table(table_name, store_type)
+        self._fill_table(table_name, rows_count, store_type)
+
+        self._validate_column_alias(table_name)
+        self.change_cluster_version()
+        self._validate_column_alias(table_name)
+
+        self._drop_table(table_name)
+
+    # -------------------------- Methods to execute queries ---------------------------
+
+    def _create_table(self, table_name, store_type):
         query = create_table_sql_request(
             table_name,
             columns={"pk_": {"Uint64": None}, "col_": self.all_types.keys()},
@@ -226,7 +252,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             index_columns={},
             unique="",
             sync="",
-            column_table=self.store_type == "COLUMN"
+            column_table=store_type == "COLUMN"
         )
 
         try:
@@ -243,7 +269,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         except Exception as e:
             assert False, f"Failed to drop table {table_name}: {e}"
 
-    def _fill_table(self, table_name, rows_count, batch_size=100, offset=0):
+    def _fill_table(self, table_name, rows_count, store_type, batch_size=100, offset=0):
         type_names = list(self.all_types.keys())
         columns = ["pk_Uint64"]
         for type_name in type_names:
@@ -252,9 +278,9 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         values = []
         for i in range(rows_count):
-            value = [format_sql_value(i + offset, "Uint64", self.store_type != "COLUMN")]
+            value = [format_sql_value(i + offset, "Uint64", store_type == "COLUMN")]
             for type_name in type_names:
-                if i % 3 == 0:
+                if i % 4 != 3:
                     value.append(format_sql_value(self.all_types[type_name](i % 128), type_name))
                 else:
                     value.append('NULL')
@@ -271,13 +297,14 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         except Exception as e:
             assert False, f"Failed to fill table {table_name}: {e}"
 
-    def _select_table(self,
+    def _read_table(
+        self,
         table_name,
-        schema_inclusion_mode = None,
-        codec = None,
-        limit = None,
-        pragmas = [],
-        ordered = True
+        schema_inclusion_mode=None,
+        codec=None,
+        limit=None,
+        pragmas=[],
+        ordered=True
     ):
         pragmas_stmt = ";".join(f"PRAGMA {pragma}" for pragma in pragmas)
         columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]] if ordered else ["*"]
@@ -300,9 +327,10 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             if codec is None or (codec.type != ydb.ArrowCompressionCodecType.LZ4_FRAME or codec.level is None):
                 assert False, f"Failed to select table: {e}"
 
-    def _multistatement_read(self,
+    def _multistatement_read_table(
+        self,
         table_name,
-        schema_inclusion_mode = None,
+        schema_inclusion_mode=None,
     ):
         columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]]
         query = f"""
@@ -320,6 +348,8 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             return result_sets
         except Exception as e:
             assert False, f"Failed to select table: {e}"
+
+    # --------------------- Methods to validate results for tests ---------------------
 
     def _validate_types_mapping(self, result_sets, rows_count):
         if result_sets is None:
@@ -385,7 +415,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         assert len(result_sets) != 0
 
         # To detect the schema inclusion mode
-        if self.channel_buffer_size == 2 * 1024:
+        if self.channel_buffer_size == kb_to_b(2):
             assert len(result_sets) > 1
 
         first_schema = None
@@ -526,3 +556,33 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
                 assert False, f"Failed to read schema or batch from result set: {e}"
 
         assert result_rows_count == rows_count
+
+    def _validate_column_alias(self, table_name):
+        first_alias = "alias_col_Int64"
+        second_alias = "alias_col_String"
+
+        query = f"SELECT col_Int64 AS {first_alias}, col_String AS {second_alias} FROM {table_name} LIMIT 1;"
+
+        with ydb.QuerySessionPool(self.driver) as pool:
+            try:
+                result_sets = pool.execute_with_retries(query, result_set_format=ydb.QueryResultSetFormat.ARROW)
+                assert len(result_sets) == 1, f"Expected 1 result set for query: {query}"
+                assert result_sets[0].format == ydb.QueryResultSetFormat.ARROW
+
+                schema = pa.ipc.read_schema(pa.py_buffer(result_sets[0].arrow_format_meta.schema))
+                batch = pa.ipc.read_record_batch(pa.py_buffer(result_sets[0].data), schema)
+                batch.validate()
+
+                assert batch.num_rows == 1
+                assert batch.num_columns == 2
+
+                first_array = batch.column(first_alias)
+                second_array = batch.column(second_alias)
+
+                assert first_array == batch.column(0)
+                assert second_array == batch.column(1)
+
+                assert first_array.type == pa.int64()
+                assert second_array.type == pa.binary()
+            except Exception as e:
+                assert False, f"Failed to execute query: {query}: {e}"

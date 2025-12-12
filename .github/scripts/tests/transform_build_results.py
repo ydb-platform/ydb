@@ -247,33 +247,32 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
 
             # Process links from build-results-report (they are arrays with file/directory paths)
             # Format: {"stdout": ["/path"], "stderr": ["/path"], "log": ["/path"], "logsdir": ["/path"]}
-            # We update links directly, replacing local paths with URLs
-            if is_fail:
-                if "links" not in result:
-                    result["links"] = {}
+            # We update links directly, replacing local paths with URLs for all tests
+            if "links" not in result:
+                result["links"] = {}
+            
+            original_links = result.get("links", {})
+            
+            # Process all link types from links
+            for link_type, paths in original_links.items():
+                if not isinstance(paths, list):
+                    continue
                 
-                original_links = result.get("links", {})
-                
-                # Process all link types from links
-                for link_type, paths in original_links.items():
-                    if not isinstance(paths, list):
-                        continue
-                    
-                    for i, file_path in enumerate(paths):
-                        if link_type == "logsdir":
-                            # logsdir is a directory - archive it
-                            if os.path.isdir(file_path):
-                                url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, {file_path})
-                                # Replace first path with URL
-                                result["links"][link_type] = [url]
-                                break
-                        else:
-                            # Other links are files
-                            if os.path.isfile(file_path):
-                                url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
-                                # Replace first path with URL
-                                result["links"][link_type] = [url]
-                                break
+                for i, file_path in enumerate(paths):
+                    if link_type == "logsdir":
+                        # logsdir is a directory - archive it
+                        if os.path.isdir(file_path):
+                            url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, {file_path})
+                            # Replace first path with URL
+                            result["links"][link_type] = [url]
+                            break
+                    else:
+                        # Other links are files
+                        if os.path.isfile(file_path):
+                            url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
+                            # Replace first path with URL
+                            result["links"][link_type] = [url]
+                            break
 
             # Initialize properties dict only for user properties (if needed)
             if test_dir and path_str in user_properties:

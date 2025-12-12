@@ -135,6 +135,14 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
         stderr_url = get_link_url("stderr")
         stdout_url = get_link_url("stdout")
 
+        # Determine entity_type: suite, chunk, or test
+        if result.get("suite") == True:
+            entity_type = "suite"
+        elif result.get("chunk") == True:
+            entity_type = "chunk"
+        else:
+            entity_type = "test"
+
         # Build metadata JSON from available fields
         metadata = {
             "chunk_hid": result.get("chunk_hid"),
@@ -145,6 +153,7 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
             "name": result.get("name"),
             "id": result.get("id"),
             "hid": result.get("hid"),
+            "entity_type": entity_type,
         }
         # Remove None values from metadata
         metadata = {k: v for k, v in metadata.items() if v is not None}

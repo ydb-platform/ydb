@@ -11,8 +11,10 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/core/protos/counters_replication.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -393,7 +395,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         return it->second;
     }
 
-    std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings, bool autoCommit) {
+    std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings,
+                                          bool autoCommit, bool reportStats) {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
@@ -414,10 +417,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             .MaxMemoryUsageBytes(1_MB)
             .ConsumerName(settings.GetConsumerName())
             .AutoCommit(autoCommit)
+            .ReportStats(reportStats)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
             );
+        if (reportStats) {
+            topicReaderSettings.Decompress(false);
+        }
 
         return [ydbProxy, settings = std::move(topicReaderSettings)]() {
             return CreateRemoteTopicReader(ydbProxy, settings);
@@ -499,6 +506,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         // TODO: validate settings
         const auto& readerSettings = cmd.GetRemoteTopicReader();
         bool autoCommit = true;
+        bool reportStats = false;
         ui32 poolId = AppData()->UserPoolId;
         std::function<IActor*(void)> writerFn;
         if (cmd.HasLocalTableWriter()) {
@@ -513,13 +521,18 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 return;
             }
             autoCommit = false;
+            reportStats = true;
             poolId = AppData()->BatchPoolId;
             writerFn = TransferWriterFn(cmd.GetDatabase(), writerSettings, transferWriterFactory);
         } else {
             Y_ABORT("Unsupported");
         }
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit), std::move(writerFn)), poolId);
+            CreateWorker(
+                SelfId(),
+                ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit, reportStats),
+                std::move(writerFn)),
+            poolId);
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 
@@ -667,7 +680,27 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         auto* session = SessionFromWorker(ev->Sender);
         if (session && session->HasWorker(ev->Sender)) {
-            session->SendWorkerStatus(this, session->GetWorkerId(ev->Sender), ev->Get()->Lag);
+            if (ev->Get()->DetailedStats) {
+                TVector<std::pair<ui64, i64>> stats;
+                if (ev->Get()->DetailedStats->ReaderStats) {
+                    stats.emplace_back(NKikimrReplication::TWorkerStats::READ_TIME, ev->Get()->DetailedStats->ReaderStats->TotalReadTimeMs);
+                    stats.emplace_back(NKikimrReplication::TWorkerStats::DECOMPRESS_TIME, ev->Get()->DetailedStats->ReaderStats->TotalDecompressTimeMs);
+                    stats.emplace_back(NKikimrReplication::TWorkerStats::READ_ELAPSED_CPU, ev->Get()->DetailedStats->ReaderStats->ReadCpuMs);
+                    stats.emplace_back(NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU, ev->Get()->DetailedStats->ReaderStats->DecompressCpuMs);
+                } else if (ev->Get()->DetailedStats->WriterStats) {
+                    stats.emplace_back(NKikimrReplication::TWorkerStats::PROCESSING_TIME, ev->Get()->DetailedStats->WriterStats->ProcessDuration.MilliSeconds());
+                    stats.emplace_back(NKikimrReplication::TWorkerStats::WRITE_TIME, ev->Get()->DetailedStats->WriterStats->ProcessCpuMs);
+                    stats.emplace_back(NKikimrReplication::TWorkerStats::PROCESSING_ELAPSED_CPU, ev->Get()->DetailedStats->WriterStats->WriteDuration.MilliSeconds());
+                    stats.emplace_back(NKikimrReplication::TWorkerStats::WRITE_ELAPSED_CPU, ev->Get()->DetailedStats->WriterStats->WriteCpuMs);
+                }
+
+                session->SendWorkerStatus(
+                        this, session->GetWorkerId(ev->Sender), static_cast<ui64>(ev->Get()->DetailedStats->CurrentOperation),
+                        std::move(stats)
+                );
+            } else {
+                session->SendWorkerStatus(this, session->GetWorkerId(ev->Sender), ev->Get()->Lag);
+            }
         }
     }
 

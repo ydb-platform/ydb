@@ -6,7 +6,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/public/api/protos/ydb_issue_message.pb.h> 
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -101,6 +101,7 @@ private:
 
 }; // TTargetDescriber
 
+
 class TController::TTxDescribeReplication: public TTxBase {
     const TActorId Sender;
     TEvController::TEvDescribeReplication::TPtr PubEv;
@@ -166,7 +167,7 @@ public:
             }
         }
 
-        return DescribeReplication(Replication);
+        return DescribeReplication(Replication, record.GetIncludeStats());
     }
 
     bool ExecutePriv(TTransactionContext&, const TActorContext& ctx) {
@@ -181,10 +182,10 @@ public:
             return true;
         }
 
-        return DescribeReplication(Replication);
+        return DescribeReplication(Replication, false);
     }
 
-    bool DescribeReplication(TReplication::TPtr replication) {
+    bool DescribeReplication(TReplication::TPtr replication, bool includeDetailedStats) {
         Result = MakeHolder<TEvController::TEvDescribeReplicationResult>();
         Result->Record.SetStatus(NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         Result->Record.MutableConnectionParams()->CopyFrom(replication->GetConfig().GetSrcConnectionParams());
@@ -220,6 +221,11 @@ public:
 
                 auto& transferSpecific = *Result->Record.MutableTransferSpecific();
                 transferSpecific.MutableTarget()->SetConsumerName(target->GetStreamConsumerName() ? target->GetStreamConsumerName() : specific.GetTarget().GetConsumerName());
+
+                auto* stats = target->GetStats();
+                if (stats) {
+                    stats->FillToProto(Result->Record, includeDetailedStats);
+                }
             }
 
             auto& item = *Result->Record.AddTargets();

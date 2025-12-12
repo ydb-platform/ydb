@@ -14,11 +14,26 @@ namespace NKikimr::NPQ {
 
 namespace {
 
-struct TMetricCollector {
-    TMetricCollector(size_t size)
-        : Counters(size)
-    {
+template<const NProtoBuf::EnumDescriptor* SimpleDesc()>
+TString GetLables() {
+    auto desc = NAux::GetLabeledCounterOpts<SimpleDesc>();
+    auto groupNames = desc->GetGroupNames();
+
+    TStringBuilder labels;
+    for (size_t i = 0; i < desc->GetGroupNamesSize(); ++i) {
+        if (i) {
+            labels << "|";
+        }
+        labels << groupNames[i];
     }
+
+    return labels;
+}
+
+
+template<const NProtoBuf::EnumDescriptor* SimpleDesc()>
+struct TMetricCollector {
+    using TConfig = TProtobufTabletLabeledCounters<SimpleDesc>;
 
     void Collect(const auto& values) {
         Collect(values.begin(), values.end());
@@ -27,36 +42,33 @@ struct TMetricCollector {
     void Collect(auto begin, auto end) {
         ssize_t in_size = std::distance(begin, end);
         AFL_ENSURE(in_size >= 0)("in_size", in_size);
-        size_t count = std::min(Counters.size(), static_cast<size_t>(in_size));
+        size_t count = std::min(static_cast<size_t>(Counters.GetCounters().Size()), static_cast<size_t>(in_size));
 
         for (size_t i = 0; i < count; ++i) {
-            Counters[i] += *begin;
+            Counters.GetCounters()[i] += *begin;
             ++begin;
         }
+
+        Aggregator.AggregateWith(Counters);
     }
 
-    std::vector<ui64> Counters;
+    TConfig Counters = TConfig(GetLables<SimpleDesc>(), 0, "");
+    TTabletLabeledCountersBase Aggregator;
 };
 
 struct TConsumerMetricCollector {
     TConsumerMetricCollector()
-        : ClientLabeledCounters(EClientLabeledCounters_descriptor()->value_count())
-        //, MLPConsumerLabeledCounters(EMLPConsumerLabeledCounters_descriptor()->value_count())
-        //, MLPMessageLockAttemptsCounter(std::size(MLP_LOCKS_INTERVALS))
     {
     }
 
-    TMetricCollector ClientLabeledCounters;
-    //TMetricCollector MLPConsumerLabeledCounters;
+    TMetricCollector<EClientLabeledCounters_descriptor> ClientLabeledCounters;
+    //TMetricCollector<EMLPConsumerLabeledCounters_descriptor> MLPConsumerLabeledCounters;
     //TMetricCollector MLPMessageLockAttemptsCounter;
 };
 
 struct TTopicMetricCollector {
     TTopicMetricCollector(absl::flat_hash_map<ui32, TTopicMetrics::TPartitionMetrics> partitionMetrics)
         : ExistedPartitionMetrics(std::move(partitionMetrics))
-        , PartitionLabeledCounters(EPartitionLabeledCounters_descriptor()->value_count())
-        , PartitionExtendedLabeledCounters(EPartitionExtendedLabeledCounters_descriptor()->value_count())
-        , PartitionKeyCompactionLabeledCounters(EPartitionKeyCompactionLabeledCounters_descriptor()->value_count())
     {
     }
 
@@ -64,9 +76,9 @@ struct TTopicMetricCollector {
 
     TTopicMetrics TopicMetrics;
 
-    TMetricCollector PartitionLabeledCounters;
-    TMetricCollector PartitionExtendedLabeledCounters;
-    TMetricCollector PartitionKeyCompactionLabeledCounters;
+    TMetricCollector<EPartitionLabeledCounters_descriptor> PartitionLabeledCounters;
+    TMetricCollector<EPartitionExtendedLabeledCounters_descriptor> PartitionExtendedLabeledCounters;
+    TMetricCollector<EPartitionKeyCompactionLabeledCounters_descriptor> PartitionKeyCompactionLabeledCounters;
 
     std::unordered_map<TString, TConsumerMetricCollector> Consumers;
 
@@ -123,7 +135,6 @@ template<const NProtoBuf::EnumDescriptor* SimpleDesc()>
 TCounters InitializeCounters(
     NMonitoring::TDynamicCounterPtr root,
     const TString& databasePath,
-    const TString labels = "topic",
     const std::vector<std::pair<TString, TString>>& subgroups = {},
     bool skipPrefix = true
 ) {
@@ -134,7 +145,7 @@ TCounters InitializeCounters(
     }
 
     using TConfig = TProtobufTabletLabeledCounters<SimpleDesc>;
-    auto config = std::make_unique<TConfig>(labels, 0, databasePath);
+    auto config = std::make_unique<TConfig>(GetLables<SimpleDesc>(), 0, databasePath);
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> result;
     for (size_t i = 0; i < config->GetCounters().Size(); ++i) {
@@ -153,12 +164,16 @@ TCounters InitializeCounters(
     };
 }
 
-void SetCounters(TCounters& counters, const TMetricCollector& metrics) {
+void SetCounters(TCounters& counters, const auto& metrics) {
     ui64 now = TAppData::TimeProvider->Now().MilliSeconds();
+    auto& aggregatedCounters = metrics.Aggregator.GetCounters();
 
     for (size_t i = 0; i < counters.Counters.size(); ++i) {
-        auto value = metrics.Counters[i];
+        if (aggregatedCounters.Size() == i) {
+            break;
+        }
 
+        auto value = aggregatedCounters[i].Get();
         const auto& type = counters.Config->GetCounterType(i);
         if (type == TLabeledCounterOptions::CT_TIMELAG) {
             value = value < now ? now - value : 0;
@@ -199,7 +214,7 @@ void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletCo
     InactivePartitionCountCounter = DynamicCounters->GetExpiringNamedCounter("name", "topic.partition.inactive_count", false);
 
     PartitionLabeledCounters = InitializeCounters<EPartitionLabeledCounters_descriptor>(DynamicCounters, database.DatabasePath);
-    PartitionExtendedLabeledCounters = InitializeCounters<EPartitionExtendedLabeledCounters_descriptor>(DynamicCounters, database.DatabasePath, "topic", {}, true);
+    PartitionExtendedLabeledCounters = InitializeCounters<EPartitionExtendedLabeledCounters_descriptor>(DynamicCounters, database.DatabasePath, {}, true);
     InitializeKeyCompactionCounters(database.DatabasePath, tabletConfig);
     InitializeConsumerCounters(database.DatabasePath, tabletConfig, ctx);
 }
@@ -209,7 +224,7 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const TString& databasePat
         auto metricsConsumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
 
         auto& counters = ConsumerCounters[consumer.GetName()];
-        counters.ClientLabeledCounters = InitializeCounters<EClientLabeledCounters_descriptor>(DynamicCounters, databasePath, "topic|x|consumer",{{"consumer", metricsConsumerName}});
+        counters.ClientLabeledCounters = InitializeCounters<EClientLabeledCounters_descriptor>(DynamicCounters, databasePath, {{"consumer", metricsConsumerName}});
 
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
             //metrics.MLPClientLabeledCounters = InitializeCounters<EMLPConsumerLabeledCounters_descriptor>(DynamicCounters, databasePath, "topic|consumer", {{"consumer", metricsConsumerName}});
@@ -232,7 +247,7 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const TString& databasePat
 
 void TTopicMetricsHandler::InitializeKeyCompactionCounters(const TString& databasePath, const NKikimrPQ::TPQTabletConfig& tabletConfig) {
     if (tabletConfig.GetEnableCompactification()) {
-        PartitionKeyCompactionLabeledCounters = InitializeCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(DynamicCounters, databasePath, "topic", {}, true);
+        PartitionKeyCompactionLabeledCounters = InitializeCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(DynamicCounters, databasePath, {}, true);
     } else {
         PartitionKeyCompactionLabeledCounters.Counters.clear();
     }
@@ -297,10 +312,10 @@ void TTopicMetricsHandler::UpdateMetrics() {
         auto& consumerMetrics = it->second;
 
         SetCounters(consumerCounters.ClientLabeledCounters, consumerMetrics.ClientLabeledCounters);
-        if (!consumerCounters.MLPClientLabeledCounters.Counters.empty()) {
+        //if (!consumerCounters.MLPClientLabeledCounters.Counters.empty()) {
             // SetCounters(consumerCounters.MLPClientLabeledCounters, consumerMetrics.MLPConsumerLabeledCounters);
             // TODO MLPMessageLockAttemptsCounter
-        }
+        //}
     }
 }
 

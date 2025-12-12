@@ -4,14 +4,16 @@ export GRPC_TLS_PORT=${GRPC_TLS_PORT:-2135}
 export YDB_KAFKA_PROXY_PORT=${YDB_KAFKA_PROXY_PORT:-9092}
 
 export YDB_TINY_MODE=${YDB_TINY_MODE:-true}
-export YDB_WORKING_DIR=${YDB_WORKING_DIR:-/ydb_data}
+export YDB_WORKING_DIR="${YDB_WORKING_DIR:-/ydb_data}"
 
 export YDB_GRPC_ENABLE_TLS=${YDB_GRPC_ENABLE_TLS:-true}
-export YDB_GRPC_TLS_DATA_PATH=${YDB_GRPC_TLS_DATA_PATH:-/ydb_certs}
+export YDB_GRPC_TLS_DATA_PATH="${YDB_GRPC_TLS_DATA_PATH:-/ydb_certs}"
 
 export PYTHONWARNINGS=ignore
-export YDB_INITSCRIPTS_DIR=${YDB_INITSCRIPTS_DIR:-/init.d}
-export YDB_PREINITSCRIPTS_DIR=${YDB_PREINITSCRIPTS_DIR:-/preinit.d}
+export YDB_INITSCRIPTS_DIR="${YDB_INITSCRIPTS_DIR:-/init.d}"
+export YDB_PREINITSCRIPTS_DIR="${YDB_PREINITSCRIPTS_DIR:-/preinit.d}"
+
+export YDB_PDISKS_DIRECTORY="${YDB_WORKING_DIR}/pdisks"
 
 # Disable checking newest versions of YDB CLI
 /ydb version --disable-checks

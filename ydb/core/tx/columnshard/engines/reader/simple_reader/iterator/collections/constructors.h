@@ -77,10 +77,6 @@ class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSource
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
     ui32 CurrentSourceIdx = 0;
-<<<<<<< HEAD
-=======
-    std::vector<TInsertWriteId> Uncommitted;
->>>>>>> 77e7e8e7ccd (fix)
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;

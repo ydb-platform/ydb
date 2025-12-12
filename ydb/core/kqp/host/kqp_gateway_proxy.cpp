@@ -358,12 +358,13 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             ProtoFromTypeInfo(columnIt->second.TypeInfo, columnIt->second.TypeMod, *columnDesc.MutableTypeInfo());
         }
 
-        if (columnIt->second.Compression) {
+        const auto& maybeCompression = columnIt->second.Compression;
+        if (maybeCompression) {
             auto compression = columnDesc.MutableCompression();
-            if (const auto maybeAlgorithm = columnIt->second.Compression->Algorithm) {
+            if (const auto maybeAlgorithm = maybeCompression->Algorithm) {
                 compression->SetAlgorithm(maybeAlgorithm->c_str());
             }
-            if (const auto maybeLevel = columnIt->second.Compression->Level) {
+            if (const auto maybeLevel = maybeCompression->Level) {
                 compression->SetLevel(*maybeLevel);
             }
         }

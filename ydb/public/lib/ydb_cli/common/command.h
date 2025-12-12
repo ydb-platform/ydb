@@ -152,6 +152,7 @@ public:
         TString ChosenAuthMethod;
 
         TString ProfileFile;
+        TString AiProfileFile = GetHomeDir() + "/.config/ydb/ai_profiles.yaml";
         bool UseAccessToken = true;
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;

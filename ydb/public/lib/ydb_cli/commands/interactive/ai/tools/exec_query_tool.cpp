@@ -7,6 +7,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -113,6 +114,26 @@ Tool will return:
         Edit,
     };
 
+    static EAction RunFtxuiActionDialog() {
+        std::vector<TString> options = {
+            "Approve execution",
+            "Reject execution",
+            "Edit query",
+        };
+
+        auto result = RunFtxuiMenu("Approve query execution?", options);
+        if (!result) {
+            return EAction::Reject;
+        }
+
+        switch (*result) {
+            case 0: return EAction::Approve;
+            case 1: return EAction::Reject;
+            case 2: return EAction::Edit;
+            default: return EAction::Reject;
+        }
+    }
+
 public:
     TExecQueryTool(const TExecQueryToolSettings& settings, const TInteractiveLogger& log)
         : TBase(CreateParametersSchema(), DESCRIPTION, log)
@@ -142,25 +163,7 @@ protected:
 
         Cout << Endl << Colors.BoldColor() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << PrintAnsiColors(Query, colors) << Endl << Endl;
 
-        EAction action = EAction::Reject;
-        TString prompt = "Approve query execution? Type \"y\" (yes), \"n\" (no) or \"e\" (edit): ";
-        AskInputWithPrompt(prompt, [&](const TString& input) {
-            const auto choice = to_lower(Strip(input));
-            if (!IsIn({"y", "yes", "n", "no", "e", "edit"}, choice)) {
-                prompt = "Please type \"y\" (yes), \"n\" (no) or \"e\" (edit): ";
-                return false;
-            }
-
-            if (choice == "y" || choice == "yes") {
-                action = EAction::Approve;
-            } else if (choice == "n" || choice == "no") {
-                action = EAction::Reject;
-            } else {
-                action = EAction::Edit;
-            }
-
-            return true;
-        }, Log.IsVerbose(), /* exitOnError */ false);
+        const auto action = RunFtxuiActionDialog();
 
         if (action == EAction::Edit) {
             return RequestQueryText();

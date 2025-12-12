@@ -4,6 +4,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/ai_model_handler.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
+#include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
 namespace NYdb::NConsoleClient {
@@ -100,43 +101,43 @@ private:
 
     void ChangeSessionSettings() {
         for (bool exit = false; !exit;) {
-            Cout << Endl << "Please choose AI session setting to change:" << Endl;
-            TNumericOptionsPicker picker(Log.IsVerbose());
+            std::vector<TMenuEntry> options;
 
-            picker.AddOption("Clear session context", [&]() {
+            options.push_back({"Clear session context", [&]() {
                 Cout << "Session context cleared." << Endl;
                 if (ModelHandler) {
                     ModelHandler->ClearContext();
                 }
-            });
+            }});
 
             TString currentProfile;
             if (const auto& profile = ConfigurationManager->GetActiveAiProfileName()) {
                 currentProfile = TStringBuilder() << " (current profile: \"" << profile << "\")";
             }
-            picker.AddOption(TStringBuilder() << "Change AI profile settings" << currentProfile, [&]() {
+            options.push_back({TStringBuilder() << "Change AI profile settings" << currentProfile, [&]() {
                 ChangeProfileSettings();
-            });
+            }});
 
             switch (ConfigurationManager->GetDefaultMode()) {
                 case TInteractiveConfigurationManager::EMode::YQL:
-                    picker.AddOption("Set AI interactive mode by default", [config = ConfigurationManager]() {
+                    options.push_back({"Set AI interactive mode by default", [config = ConfigurationManager]() {
                         Cout << "Setting AI interactive mode by default." << Endl;
                         config->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::AI);
-                    });
+                    }});
                     break;
                 case TInteractiveConfigurationManager::EMode::AI:
-                    picker.AddOption("Set YQL interactive mode by default", [config = ConfigurationManager]() {
+                    options.push_back({"Set YQL interactive mode by default", [config = ConfigurationManager]() {
                         Cout << "Setting YQL interactive mode by default." << Endl;
                         config->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::YQL);
-                    });
+                    }});
                     break;
                 case TInteractiveConfigurationManager::EMode::Invalid:
                     Y_VALIDATE(false, "Invalid default mode: " << ConfigurationManager->GetDefaultMode());
             }
 
-            picker.AddOption("Don't do anything, just exit", [&]() { exit = true; });
-            if (!picker.PickOptionAndDoAction(/* exitOnError */ false)) {
+            options.push_back({"Don't do anything, just exit", [&]() { exit = true; }});
+
+            if (!RunFtxuiMenuWithActions("Please choose AI session setting to change:", options)) {
                 exit = true;
             }
         }
@@ -146,25 +147,24 @@ private:
 
     void ChangeProfileSettings() {
         for (bool exit = false; !exit;) {
-            Cout << Endl << "Please choose desired action with AI profiles:" << Endl;
-            TNumericOptionsPicker picker(Log.IsVerbose());
+            std::vector<TMenuEntry> options;
 
             const auto& profile = ConfigurationManager->GetActiveAiProfileName();
             const auto& profiles = ConfigurationManager->ListAiProfiles();
             if (const auto it = profiles.find(profile); profile && it != profiles.end()) {
-                picker.AddOption(TStringBuilder() << "Change current AI profile \"" << profile << "\" settings", [profile = it->second, this]() {
+                options.push_back({TStringBuilder() << "Change current AI profile \"" << profile << "\" settings", [profile = it->second, this]() {
                     Cout << Endl << "Changing current AI profile \"" << profile->GetName() << "\" settings." << Endl;
                     profile->SetupProfile();
                     ChangeAiProfile(profile);
-                });
+                }});
             }
 
             TInteractiveConfigurationManager::TAiProfile::TPtr otherProfile;
             for (const auto& [name, model] : profiles) {
                 if (name != profile) {
-                    picker.AddOption(TStringBuilder() << "Switch AI profile to \"" << name << "\"", [model, this]() {
+                    options.push_back({TStringBuilder() << "Switch AI profile to \"" << name << "\"", [model, this]() {
                         ChangeAiProfile(model);
-                    });
+                    }});
 
                     if (!otherProfile) {
                         otherProfile = model;
@@ -172,23 +172,24 @@ private:
                 }
             }
 
-            picker.AddOption("Create new AI profile", [&]() {
+            options.push_back({"Create new AI profile", [&]() {
                 Cout << Endl << "Creating new AI profile." << Endl;
-                if (const auto profile = ConfigurationManager->CreateNewAiModelProfile()) {
-                    ChangeAiProfile(profile);
+                if (const auto newProfile = ConfigurationManager->CreateNewAiModelProfile()) {
+                    ChangeAiProfile(newProfile);
                 }
-            });
+            }});
 
             if (profile && otherProfile) {
-                picker.AddOption(TStringBuilder() << "Remove current AI profile \"" << profile << "\"", [profile, otherProfile, this]() {
+                options.push_back({TStringBuilder() << "Remove current AI profile \"" << profile << "\"", [profile, otherProfile, this]() {
                     Cout << "Removing current AI profile \"" << profile << "\"" << Endl;
                     ConfigurationManager->RemoveAiModelProfile(profile);
                     ChangeAiProfile(std::move(otherProfile));
-                });
+                }});
             }
 
-            picker.AddOption("Don't do anything, just exit", [&]() { exit = true; });
-            if (!picker.PickOptionAndDoAction(/* exitOnError */ false)) {
+            options.push_back({"Don't do anything, just exit", [&]() { exit = true; }});
+
+            if (!RunFtxuiMenuWithActions("Please choose desired action with AI profiles:", options)) {
                 exit = true;
             }
         }

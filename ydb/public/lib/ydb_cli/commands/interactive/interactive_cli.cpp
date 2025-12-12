@@ -82,7 +82,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     Cout << "Press " << colors.BoldColor() << "Ctrl+K" << colors.OldColor() << " for more information." << Endl;
 
-    const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.ProfileFile, Log);
+    const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile, Log);
     ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
     Y_VALIDATE(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid), "Unexpected default mode: " << activeSession);
 

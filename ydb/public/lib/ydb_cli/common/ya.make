@@ -10,6 +10,7 @@ SRCS(
     csv_parser.cpp
     examples.cpp
     format.cpp
+    ftxui.cpp
     interactive.cpp
     interruptable.cpp
     normalize_path.cpp
@@ -38,6 +39,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
+    contrib/libs/ftxui
     contrib/libs/openssl
     library/cpp/getopt
     library/cpp/json/writer

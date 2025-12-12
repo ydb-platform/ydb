@@ -60,7 +60,8 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                     Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
 
                     if (SplitMergeEnabled(Self->TabletConfig)) {
-                        Self->PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Self->Topic, Self->Path, Self->DatabasePath, Self->PathId, Self->Version, Self->TabletConfig, Self->PartitionGraph);
+                        // TODO DatabasePath is not initialized yet
+                        Self->PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Self->Topic, Self->Path, Self->DatabaseInfo.DatabasePath, Self->PathId, Self->Version, Self->TabletConfig, Self->PartitionGraph);
                     }
                     Self->UpdateConfigCounters();
                 }

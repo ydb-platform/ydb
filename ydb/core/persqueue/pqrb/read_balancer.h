@@ -30,6 +30,15 @@ class TBalancer;
 class TMLPBalancer;
 }
 
+class TTopicMetrics;
+
+struct TDatabaseInfo {
+    TString DatabasePath;
+    TString DatabaseId;
+    TString FolderId;
+    TString CloudId;
+};
+
 
 class TMetricsTimeKeeper {
 public:
@@ -213,18 +222,9 @@ private:
     std::unordered_map<ui64, TPipeLocation> TabletPipes;
     std::unordered_set<ui64> PipesRequested;
 
-    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
-    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedExtendedCounters;
-    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCompactionCounters;
+    TDatabaseInfo DatabaseInfo;
 
-    NMonitoring::TDynamicCounterPtr DynamicCounters;
-    NMonitoring::TDynamicCounters::TCounterPtr ActivePartitionCountCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr InactivePartitionCountCounter;
-
-    TString DatabasePath;
-    TString DatabaseId;
-    TString FolderId;
-    TString CloudId;
+    std::unique_ptr<TTopicMetrics> TopicMetrics;
 
     struct TPartitionStats {
         ui64 DataSize = 0;

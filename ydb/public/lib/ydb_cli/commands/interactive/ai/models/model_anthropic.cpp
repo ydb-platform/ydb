@@ -21,7 +21,7 @@ class TModelAnthropic final : public TModelBase {
 
 public:
     TModelAnthropic(const TAnthropicModelSettings& settings, const TInteractiveLogger& log)
-        : TBlase(CreateApiUrl(settings.BaseUrl, "/v1/messages"), settings.ApiKey, log)
+        : TBlase(CreateApiUrl(settings.BaseUrl, "/messages"), settings.ApiKey, log)
         , Tools(ChatCompletionRequest["tools"].SetType(NJson::JSON_ARRAY).GetArraySafe())
         , Conversation(ChatCompletionRequest["messages"].SetType(NJson::JSON_ARRAY).GetArraySafe())
     {

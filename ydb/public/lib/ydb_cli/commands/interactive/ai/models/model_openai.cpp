@@ -21,7 +21,7 @@ class TModelOpenAi final : public TModelBase {
 
 public:
     TModelOpenAi(const TOpenAiModelSettings& settings, const TInteractiveLogger& log)
-        : TBlase(CreateApiUrl(settings.BaseUrl, "/v1/chat/completions"), settings.ApiKey, log)
+        : TBlase(CreateApiUrl(settings.BaseUrl, "/chat/completions"), settings.ApiKey, log)
         , Tools(ChatCompletionRequest["tools"].SetType(NJson::JSON_ARRAY).GetArraySafe())
         , Conversation(ChatCompletionRequest["messages"].SetType(NJson::JSON_ARRAY).GetArraySafe())
     {

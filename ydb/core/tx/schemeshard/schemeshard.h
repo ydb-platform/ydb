@@ -699,7 +699,7 @@ namespace TEvSchemeShard {
         TEvForceCompaction() = default;
         TEvForceCompaction(ui64 ownerId, ui64 localPathId) {
             Record.MutablePathId()->SetOwnerId(ownerId);
-            Record.MutablePathId()->SetLocalPathId(localPathId);
+            Record.MutablePathId()->SetLocalId(localPathId);
         }
     };
 
@@ -707,7 +707,7 @@ namespace TEvSchemeShard {
         TEvForceCompactionResult() = default;
         TEvForceCompactionResult(ui64 ownerId, ui64 localPathId, ui64 totalShards) {
             Record.MutablePathId()->SetOwnerId(ownerId);
-            Record.MutablePathId()->SetLocalPathId(localPathId);
+            Record.MutablePathId()->SetLocalId(localPathId);
             Record.SetTotalShards(totalShards);
         }
     };
@@ -716,7 +716,7 @@ namespace TEvSchemeShard {
         TEvGetForceCompactionProgress() = default;
         TEvGetForceCompactionProgress(ui64 ownerId, ui64 localPathId) {
             Record.MutablePathId()->SetOwnerId(ownerId);
-            Record.MutablePathId()->SetLocalPathId(localPathId);
+            Record.MutablePathId()->SetLocalId(localPathId);
         }
     };
 
@@ -724,7 +724,7 @@ namespace TEvSchemeShard {
         TEvGetForceCompactionProgressResult() = default;
         TEvGetForceCompactionProgressResult(ui64 ownerId, ui64 localPathId, ui64 totalShards, ui64 compactedShards, ui64 queuedShards) {
             Record.MutablePathId()->SetOwnerId(ownerId);
-            Record.MutablePathId()->SetLocalPathId(localPathId);
+            Record.MutablePathId()->SetLocalId(localPathId);
             Record.SetTotalShards(totalShards);
             Record.SetCompactedShards(compactedShards);
             Record.SetQueuedShards(queuedShards);

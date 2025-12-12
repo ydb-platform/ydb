@@ -70,10 +70,12 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
                 }
             }
 
-            const ui64 truncateId = ++t.TxId;
-            TestTruncateTable(runtime, truncateId, "/MyRoot", "TestTable");
+            const ui64 truncateTxId = ++t.TxId;
+
+            t.TestEnv->ReliablePropose(runtime, TruncateTableRequest(truncateTxId, "/MyRoot", "TestTable", TTestTxConfig::SchemeShard, {}),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             Cerr << "TestTruncateTable(runtime, truncateId..) finished" << Endl;
-            t.TestEnv->TestWaitNotification(runtime, truncateId);
+            t.TestEnv->TestWaitNotification(runtime, truncateTxId);
 
             {
                 TInactiveZone inactive(activeZone);

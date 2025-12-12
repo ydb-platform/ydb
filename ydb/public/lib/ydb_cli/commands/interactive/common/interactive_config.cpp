@@ -231,7 +231,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiType(const std::optio
     const auto currentApiType = GetApiType();
     TString title;
     if (currentApiType) {
-        title = TStringBuilder() << "Pick desired action to configure API type in AI profile \"" << Name << "\":";
+        title = TStringBuilder() << "Pick desired action to configure API type:";
 
         if (*currentApiType != EAiApiType::OpenAI) {
             options.push_back({TStringBuilder() << "Change API type to " << openAiDescription << ", all other settings will be removed", openAiAction});
@@ -243,7 +243,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiType(const std::optio
 
         options.push_back({TStringBuilder() << "Use current API type " << *currentApiType, [&]() { apiType = *currentApiType; }});
     } else {
-        title = TStringBuilder() << "Please choose desired API type for AI profile \"" << Name << "\":";
+        title = TStringBuilder() << "Please choose desired API type:";
         options.push_back({openAiDescription, openAiAction});
         options.push_back({anthropicDescription, anthropicAction});
     }
@@ -259,7 +259,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiType(const std::optio
             Config["api_token"] = "";
             Config["model_name"] = "";
         } else {
-            Cout << "Setting API type " << Colors.BoldColor() << *apiType << Colors.OldColor() << " for profile \"" << Name << "\"" << Endl;
+            Cout << "Setting API type " << Colors.BoldColor() << *apiType << Colors.OldColor() << Endl;
         }
 
         Config["api_type"] = static_cast<ui64>(*apiType);
@@ -278,13 +278,13 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint(const std::o
 
     const auto apiType = GetApiType();
     if (!apiType) {
-        YDB_CLI_LOG(Warning, "Can not setup API endpoint for AI profile \"" << Name << "\", there is no API type");
+        YDB_CLI_LOG(Warning, "Can not setup API endpoint, there is no API type");
         return false;
     }
 
     TString endpoint;
     std::vector<TMenuEntry> options;
-    const TString title = TStringBuilder() << "Pick desired action to configure API endpoint in AI profile \"" << Name << "\":";
+    const TString title = TStringBuilder() << "Pick desired action to configure API endpoint:";
 
     auto defaultEndpointInfo = TStringBuilder() << "Use default endpoint for " << *apiType << ": ";
     const TString openAiEndpoint = "https://api.openai.com";
@@ -303,22 +303,22 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint(const std::o
     }
 
     options.push_back({"Set a new endpoint value", [&]() {
-        auto value = RunFtxuiInput(TStringBuilder() << "Please enter API endpoint for AI profile \"" << Name << "\": ", "", [&](const TString& input, TString& error) {
+        auto value = RunFtxuiInput(TStringBuilder() << "Please enter API endpoint: ", "", [&](const TString& input, TString& error) {
             auto url = Strip(input);
             if (!url) {
-                error = TStringBuilder() << "Please enter non empty API endpoint for AI profile \"" << Name << "\": ";
+                error = TStringBuilder() << "Please enter non empty API endpoint: ";
                 return false;
             }
 
             if (!url.StartsWith("http://") && !url.StartsWith("https://")) {
-                error = TStringBuilder() << "API endpoint supports only http:// or https:// schema. Please enter API endpoint for AI profile \"" << Name << "\": ";
+                error = TStringBuilder() << "API endpoint supports only http:// or https:// schema. Please enter API endpoint: ";
                 return false;
             }
 
             try {
                 NAi::CreateApiUrl(url, "/");
             } catch (const std::exception& e) {
-                error = TStringBuilder() << "Invalid API endpoint: " << e.what() << ". Please enter API endpoint for AI profile \"" << Name << "\": ";
+                error = TStringBuilder() << "Invalid API endpoint: " << e.what() << ". Please enter API endpoint: ";
                 return false;
             }
 
@@ -342,7 +342,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint(const std::o
     }
 
     if (!currentEndpoint || currentEndpoint != endpoint) {
-        Cout << "Setting API endpoint value \"" << endpoint << "\" for profile \"" << Name << "\"" << Endl;
+        Cout << "Setting API endpoint value \"" << endpoint << "\"" << Endl;
         Config["api_endpoint"] = endpoint;
         Manager->ConfigChanged = true;
     }
@@ -353,7 +353,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint(const std::o
 bool TInteractiveConfigurationManager::TAiProfile::SetupApiToken() {
     TString token;
     std::vector<TMenuEntry> options;
-    const TString title = TStringBuilder() << "Pick desired action to configure API token in AI profile \"" << Name << "\":";
+    const TString title = TStringBuilder() << "Pick desired action to configure API token:";
 
     options.push_back({"Set a new token value", [&]() {
         auto value = RunFtxuiInput("Please enter token:", "", [](const TString& input, TString& error) {
@@ -368,7 +368,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiToken() {
         }
     }});
 
-    options.push_back({TStringBuilder() << "Don't save token for AI profile \"" << Name << "\"", []() {}});
+    options.push_back({TStringBuilder() << "Don't save token", []() {}});
 
     const auto currentToken = GetApiToken();
     if (currentToken) {
@@ -382,7 +382,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiToken() {
     }
 
     if (token && (!currentToken || currentToken != token)) {
-        Cout << "Setting API token value \"" << BlurSecret(token) << "\" for profile \"" << Name << "\"" << Endl;
+        Cout << "Setting API token value \"" << BlurSecret(token) << "\"" << Endl;
         Config["api_token"] = token;
         Manager->ConfigChanged = true;
     }
@@ -399,13 +399,13 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
 
     TString modelName;
     std::vector<TMenuEntry> options;
-    const TString title = TStringBuilder() << "Pick desired action to configure model name in AI profile \"" << Name << "\":";
+    const TString title = TStringBuilder() << "Pick desired action to configure model name:";
 
     options.push_back({"Set a new model name", [&]() {
-        auto value = RunFtxuiInput(TStringBuilder() << "Please enter model name for AI profile \"" << Name << "\": ", "", [&](const TString& input, TString& error) {
+        auto value = RunFtxuiInput(TStringBuilder() << "Please enter model name: ", "", [&](const TString& input, TString& error) {
             modelName = Strip(input);
             if (!modelName) {
-                error = TStringBuilder() << "Please enter non empty model name for AI profile \"" << Name << "\": ";
+                error = TStringBuilder() << "Please enter non empty model name: ";
                 return false;
             }
             return true;
@@ -415,7 +415,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
         }
     }});
 
-    options.push_back({TStringBuilder() << "Don't save model name for AI profile \"" << Name << "\"", []() {}});
+    options.push_back({TStringBuilder() << "Don't save model name", []() {}});
 
     const auto currentModelName = GetModelName();
     if (currentModelName) {
@@ -429,7 +429,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
     }
 
     if (modelName && (!currentModelName || currentModelName != modelName)) {
-        Cout << "Setting model name \"" << modelName << "\" for profile \"" << Name << "\"" << Endl;
+        Cout << "Setting model name \"" << modelName << "\"" << Endl;
         Config["model_name"] = modelName;
         Manager->ConfigChanged = true;
     }
@@ -535,7 +535,7 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
     for (const auto& [id, preset] : TAiPresets::ListPresets()) {
         auto description = TStringBuilder() << preset.Name;
         if (activeAiProfile && activeAiProfile->GetPresetId() == id) {
-            description << " (" << Colors.Green() << "active" << Colors.OldColor() << ")";
+            description << " (active)";
         }
 
         options.emplace_back(description, [&presetId, id]() {

@@ -94,7 +94,12 @@ public:
         for (const auto& command : settings.AdditionalCommands) {
             completionCommands.push_back(command);
         }
-        YQLCompleter = MakeYQLCompositeCompleter(TColorSchema::Monaco(), completionCommands, settings.Driver, settings.Database, Log.IsVerbose());
+
+        std::optional<TYQLCompleterConfig> yqlCompleterConfig;
+        if (settings.EnableYqlCompletion) {
+            yqlCompleterConfig = TYQLCompleterConfig{.Color = TColorSchema::Monaco(), .Driver = settings.Driver, .Database = settings.Database, .IsVerbose = Log.IsVerbose()};
+        }
+        YQLCompleter = MakeYQLCompositeCompleter(completionCommands, yqlCompleterConfig);
 
         InitReplxx(settings.EnableYqlCompletion);
         Y_VALIDATE(Rx, "Replxx is not initialized");
@@ -166,25 +171,27 @@ public:
     }
 
 private:
-    void InitReplxx(bool enableCompletion) {
+    void InitReplxx(bool enableYqlCompletion) {
         Rx = replxx::Replxx();
         Rx->install_window_change_handler();
 
-        if (enableCompletion) {
+        Rx->set_completion_callback([this](const std::string& prefix, int& contextLen) {
+            return YQLCompleter->ApplyHeavy(Rx->get_state().text(), prefix, contextLen);
+        });
+
+        Rx->set_hint_delay(100);
+        Rx->set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
+            return YQLCompleter->ApplyLight(Rx->get_state().text(), prefix, contextLen);
+        });
+
+        if (enableYqlCompletion) {
             Rx->set_complete_on_empty(true);
             Rx->set_word_break_characters(NSQLComplete::WordBreakCharacters);
-            Rx->set_completion_callback([this](const std::string& prefix, int& contextLen) {
-                return YQLCompleter->ApplyHeavy(Rx->get_state().text(), prefix, contextLen);
-            });
-
-            Rx->set_hint_delay(100);
-            Rx->set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
-                return YQLCompleter->ApplyLight(Rx->get_state().text(), prefix, contextLen);
-            });
-
             Rx->set_highlighter_callback([this](const auto& text, auto& colors) {
                 YQLHighlighter->Apply(text, colors);
             });
+        } else {
+            Rx->set_complete_on_empty(false);
         }
 
         Rx->bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) {

@@ -125,13 +125,13 @@ namespace {
 
     class TCompositeCommandCompleter final : public IYQLCompleter {
     public:
-        TCompositeCommandCompleter(TColorSchema color, const std::vector<TString>& commands, const TDriver& driver, const TString& database, bool isVerbose)
+        TCompositeCommandCompleter(const std::vector<TString>& commands, const std::optional<TYQLCompleterConfig>& yqlCompleterConfig)
             : Commands(commands)
-            , YQLCompleter(MakeYQLCompleter(color, driver, database, isVerbose))
+            , YQLCompleter(yqlCompleterConfig ? MakeYQLCompleter(*yqlCompleterConfig) : nullptr)
         {}
 
         TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) final {
-            if (!RunCommandCompletion(text)) {
+            if (!RunCommandCompletion(text) && YQLCompleter) {
                 return YQLCompleter->ApplyHeavy(text, prefix, contextLen);
             }
 
@@ -147,7 +147,7 @@ namespace {
         }
 
         THints ApplyLight(TStringBuf text, const std::string& prefix, int& contextLen) final {
-            if (!RunCommandCompletion(text)) {
+            if (!RunCommandCompletion(text) && YQLCompleter) {
                 return YQLCompleter->ApplyLight(text, prefix, contextLen);
             }
 
@@ -209,9 +209,7 @@ namespace {
 
 } // anonymous namespace
 
-    IYQLCompleter::TPtr MakeYQLCompleter(
-        TColorSchema color, TDriver driver, TString database, bool isVerbose)
-    {
+    IYQLCompleter::TPtr MakeYQLCompleter(const TYQLCompleterConfig& settings) {
         NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
 
         auto ranking = NSQLComplete::MakeDefaultRanking(NSQLComplete::LoadFrequencyData());
@@ -224,7 +222,7 @@ namespace {
                     NSQLComplete::MakeCachedSimpleSchema(
                         MakeSchemaCaches(),
                         /* zone = */ "",
-                        MakeYDBSchema(std::move(driver), std::move(database), isVerbose))));
+                        MakeYDBSchema(std::move(settings.Driver), std::move(settings.Database), settings.IsVerbose))));
 
         auto heavy = NSQLComplete::MakeUnionNameService(
             {
@@ -243,13 +241,11 @@ namespace {
         return MakeHolder<TYQLCompleter>(
             /* heavyEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, heavy, config),
             /* lightEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, light, config),
-            std::move(color));
+            std::move(settings.Color));
     }
 
-    IYQLCompleter::TPtr MakeYQLCompositeCompleter(
-        TColorSchema color, const std::vector<TString>& commands, TDriver driver, TString database, bool isVerbose)
-    {
-        return MakeHolder<TCompositeCommandCompleter>(color, commands, driver, database, isVerbose);
+    IYQLCompleter::TPtr MakeYQLCompositeCompleter(const std::vector<TString>& commands, const std::optional<TYQLCompleterConfig>& yqlCompleterConfig) {
+        return MakeHolder<TCompositeCommandCompleter>(commands, yqlCompleterConfig);
     }
 
 } // namespace NYdb::NConsoleClient

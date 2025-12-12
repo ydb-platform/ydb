@@ -100,48 +100,41 @@ private:
     }
 
     void ChangeSessionSettings() {
-        for (bool exit = false; !exit;) {
-            std::vector<TMenuEntry> options;
+        std::vector<TMenuEntry> options;
 
-            options.push_back({"Clear session context", [&]() {
-                Cout << "Session context cleared." << Endl;
-                if (ModelHandler) {
-                    ModelHandler->ClearContext();
-                }
-            }});
-
-            TString currentProfile;
-            if (const auto& profile = ConfigurationManager->GetActiveAiProfileName()) {
-                currentProfile = TStringBuilder() << " (current profile: \"" << profile << "\")";
+        options.push_back({"Clear session context", [&]() {
+            Cout << "Session context cleared." << Endl;
+            if (ModelHandler) {
+                ModelHandler->ClearContext();
             }
-            options.push_back({TStringBuilder() << "Change AI model settings" << currentProfile, [&]() {
-                ChangeProfileSettings();
-            }});
+        }});
 
-            switch (ConfigurationManager->GetDefaultMode()) {
-                case TInteractiveConfigurationManager::EMode::YQL:
-                    options.push_back({"Set AI interactive mode by default", [config = ConfigurationManager]() {
-                        Cout << "Setting AI interactive mode by default." << Endl;
-                        config->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::AI);
-                    }});
-                    break;
-                case TInteractiveConfigurationManager::EMode::AI:
-                    options.push_back({"Set YQL interactive mode by default", [config = ConfigurationManager]() {
-                        Cout << "Setting YQL interactive mode by default." << Endl;
-                        config->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::YQL);
-                    }});
-                    break;
-                case TInteractiveConfigurationManager::EMode::Invalid:
-                    Y_VALIDATE(false, "Invalid default mode: " << ConfigurationManager->GetDefaultMode());
-            }
+        TString currentProfile;
+        if (const auto& profile = ConfigurationManager->GetActiveAiProfileName()) {
+            currentProfile = TStringBuilder() << " (current profile: \"" << profile << "\")";
+        }
+        options.push_back({TStringBuilder() << "Change AI model settings" << currentProfile, [&]() {
+            ChangeProfileSettings();
+        }});
 
-            options.push_back({"Don't do anything, just exit", [&]() { exit = true; }});
-
-            if (!RunFtxuiMenuWithActions("Please choose AI session setting to change:", options)) {
-                exit = true;
-            }
+        switch (ConfigurationManager->GetDefaultMode()) {
+            case TInteractiveConfigurationManager::EMode::YQL:
+                options.push_back({"Set AI interactive mode by default", [config = ConfigurationManager]() {
+                    Cout << "Setting AI interactive mode by default." << Endl;
+                    config->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::AI);
+                }});
+                break;
+            case TInteractiveConfigurationManager::EMode::AI:
+                options.push_back({"Set YQL interactive mode by default", [config = ConfigurationManager]() {
+                    Cout << "Setting YQL interactive mode by default." << Endl;
+                    config->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::YQL);
+                }});
+                break;
+            case TInteractiveConfigurationManager::EMode::Invalid:
+                Y_VALIDATE(false, "Invalid default mode: " << ConfigurationManager->GetDefaultMode());
         }
 
+        RunFtxuiMenuWithActions("Please choose AI session setting to change:", options);
         Cout << Endl;
     }
 

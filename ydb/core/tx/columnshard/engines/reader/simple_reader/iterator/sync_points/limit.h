@@ -117,11 +117,7 @@ private:
     };
 
     std::vector<TSourceIterator> Iterators;
-<<<<<<< HEAD
-    std::vector<ui32> DebugOrder;
-=======
     std::vector<TSourceIterator> DebugOrder;
->>>>>>> 77e7e8e7ccd (fix)
 
     virtual bool IsFinished() const override {
         return FetchedCount >= Limit || TBase::IsFinished();
@@ -130,11 +126,7 @@ private:
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
         AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
         Iterators.emplace_back(TSourceIterator(source));
-<<<<<<< HEAD
-        DebugOrder.emplace_back(source->GetSourceIdx());
-=======
         DebugOrder.emplace_back(TSourceIterator(source));
->>>>>>> 77e7e8e7ccd (fix)
         std::push_heap(Iterators.begin(), Iterators.end());
         return TBase::OnAddSource(source);
     }

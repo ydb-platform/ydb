@@ -2005,13 +2005,15 @@
         "x": 0,
         "y": 27
       },
-      "id": 10,
+      "id": 11,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
           "placement": "right",
-          "showLegend": false
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
@@ -2025,9 +2027,11 @@
             "uid": "$ds"
           },
           "editorMode": "code",
-          "expr": "sum(ydb_resources_memory_limit_bytes{database=\"$database\",container=\"ydb-dynamic\"})",
+          "exemplar": false,
+          "expr": "min(ydb_resources_memory_limit_bytes{database=\"$database\",container=\"ydb-dynamic\"})",
           "hide": false,
-          "legendFormat": "limit sum",
+          "interval": "",
+          "legendFormat": "min limit",
           "range": true,
           "refId": "B"
         },
@@ -2038,14 +2042,120 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(ydb_resources_memory_used_bytes{database=\"$database\",container=\"ydb-dynamic\"})",
+          "expr": "max(ydb_resources_memory_limit_bytes{database=\"$database\",container=\"ydb-dynamic\"})",
+          "hide": false,
           "interval": "",
-          "legendFormat": "usage",
+          "legendFormat": "max limit",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "ydb_resources_memory_used_bytes{database=\"$database\",container=\"ydb-dynamic\"}",
+          "interval": "",
+          "legendFormat": "{{host}}{{pod}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Memory",
+      "title": "Memory by host",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 27
+      },
+      "id": 76,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by(activity, instance) (utils_tcmalloc_sampled_size_by_activity{database=\"$database\", container=\"ydb-dynamic\"})",
+          "legendFormat": "{{activity}} ({{instance}})",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Memory by activities and instances",
       "type": "timeseries"
     },
     {
@@ -2110,18 +2220,16 @@
       "gridPos": {
         "h": 5,
         "w": 12,
-        "x": 12,
-        "y": 27
+        "x": 0,
+        "y": 32
       },
-      "id": 11,
+      "id": 10,
       "options": {
         "legend": {
-          "calcs": [
-            "last"
-          ],
-          "displayMode": "table",
+          "calcs": [],
+          "displayMode": "list",
           "placement": "right",
-          "showLegend": true
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi",
@@ -2135,11 +2243,9 @@
             "uid": "$ds"
           },
           "editorMode": "code",
-          "exemplar": false,
-          "expr": "min(ydb_resources_memory_limit_bytes{database=\"$database\",container=\"ydb-dynamic\"})",
+          "expr": "sum(ydb_resources_memory_limit_bytes{database=\"$database\",container=\"ydb-dynamic\"})",
           "hide": false,
-          "interval": "",
-          "legendFormat": "min limit",
+          "legendFormat": "limit sum",
           "range": true,
           "refId": "B"
         },
@@ -2150,28 +2256,14 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "max(ydb_resources_memory_limit_bytes{database=\"$database\",container=\"ydb-dynamic\"})",
-          "hide": false,
+          "expr": "sum(ydb_resources_memory_used_bytes{database=\"$database\",container=\"ydb-dynamic\"})",
           "interval": "",
-          "legendFormat": "max limit",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$ds"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "ydb_resources_memory_used_bytes{database=\"$database\",container=\"ydb-dynamic\"}",
-          "interval": "",
-          "legendFormat": "{{host}}{{pod}}",
+          "legendFormat": "usage",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Memory by host",
+      "title": "Memory",
       "type": "timeseries"
     },
     {

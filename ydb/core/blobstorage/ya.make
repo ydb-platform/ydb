@@ -53,4 +53,5 @@ RECURSE_FOR_TESTS(
     ut_testshard
     ut_vdisk
     ut_vdisk2
+    ut_vdisk_io
 )

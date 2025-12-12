@@ -215,9 +215,9 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
             batch_rows = values[batch_start:batch_start + batch_size]
             if not batch_rows:
                 continue
-            query += f"UPSERT INTO {table_name} ({", ".join(columns)}) VALUES {", ".join(batch_rows)};"
+            query += f"UPSERT INTO {table_name} ({", ".join(columns)}) VALUES {", ".join(batch_rows)};\n"
 
-        assert len(query) > 0
+        assert len(query) != 0
         self._try_execute(query)
 
     def _read_table(
@@ -234,7 +234,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
         if limit is not None:
             query += f" LIMIT {limit}"
 
-        if len(pragmas) > 0:
+        if len(pragmas) != 0:
             pragmas_stmt = "\n".join(f"PRAGMA {pragma};" for pragma in pragmas) + "\n"
             query = pragmas_stmt + query
 

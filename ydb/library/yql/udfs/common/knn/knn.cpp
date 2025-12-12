@@ -1,6 +1,5 @@
-#include "knn-enumerator.h"
-#include "knn-serializer.h"
 #include "knn-distance.h"
+#include "knn-serializer.h"
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_printer.h>
@@ -113,7 +112,7 @@ public:
     }
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
-        return TKnnBitVectorSerializer<TFrom>::Serialize(valueBuilder, args[0]);
+        return TKnnVectorSerializer<bool, TFrom>::Serialize(valueBuilder, args[0]);
     }
 };
 
@@ -325,9 +324,10 @@ public:
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
-        const auto ret = KnnDotProduct(args[0].AsStringRef(), args[1].AsStringRef());
-        if (Y_UNLIKELY(!ret))
+        const auto ret = KnnDistance<>::DotProduct(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret)) {
             return {};
+        }
         return TUnboxedValuePod{*ret};
     }
 };
@@ -343,9 +343,10 @@ public:
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
-        const auto ret = KnnCosineSimilarity(args[0].AsStringRef(), args[1].AsStringRef());
-        if (Y_UNLIKELY(!ret))
+        const auto ret = KnnDistance<>::CosineSimilarity(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret)) {
             return {};
+        }
         return TUnboxedValuePod{*ret};
     }
 };
@@ -361,9 +362,10 @@ public:
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
-        const auto ret = KnnCosineSimilarity(args[0].AsStringRef(), args[1].AsStringRef());
-        if (Y_UNLIKELY(!ret))
+        const auto ret = KnnDistance<>::CosineSimilarity(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret)) {
             return {};
+        }
         return TUnboxedValuePod{1 - *ret};
     }
 };
@@ -379,9 +381,10 @@ public:
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
-        const auto ret = KnnManhattanDistance(args[0].AsStringRef(), args[1].AsStringRef());
-        if (Y_UNLIKELY(!ret))
+        const auto ret = KnnDistance<>::ManhattanDistance(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret)) {
             return {};
+        }
         return TUnboxedValuePod{*ret};
     }
 };
@@ -397,9 +400,10 @@ public:
 
     TUnboxedValue RunImpl(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
         Y_UNUSED(valueBuilder);
-        const auto ret = KnnEuclideanDistance(args[0].AsStringRef(), args[1].AsStringRef());
-        if (Y_UNLIKELY(!ret))
+        const auto ret = KnnDistance<>::EuclideanDistance(args[0].AsStringRef(), args[1].AsStringRef());
+        if (Y_UNLIKELY(!ret)) {
             return {};
+        }
         return TUnboxedValuePod{*ret};
     }
 };

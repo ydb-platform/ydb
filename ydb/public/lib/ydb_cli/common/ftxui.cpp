@@ -82,6 +82,7 @@ std::optional<TString> RunFtxuiInput(const TString& title, const TString& initia
 
     try {
         auto screen = ftxui::ScreenInteractive::FitComponent();
+        screen.TrackMouse(false);
         auto input = ftxui::Input(&value, "");
         auto exit = screen.ExitLoopClosure();
 

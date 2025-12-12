@@ -163,7 +163,7 @@ Y_UNIT_TEST(RecreateConsumer) {
                     .DeleteAction()
                 .EndDeadLetterPolicy()
             .EndAddConsumer()).GetValueSync();
-    
+
     Cerr << ">>>>> Write many messages for creating WAL (if message count is small every will create the snapshot)" << Endl;
     for (size_t i = 0; i < 50; ++i) {
         CreateWriterActor(runtime, {
@@ -248,7 +248,7 @@ Y_UNIT_TEST(RecreateConsumer) {
             .VisibilityTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1
         });
-        
+
         auto result = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);

@@ -85,16 +85,17 @@ ui64 TEqWidthHistogram::GetBinarySize(ui32 nBuckets) const {
 // Binary layout:
 // [4 byte: number of buckets][1 byte: value type]
 // [sizeof(Bucket)[0]... sizeof(Bucket)[n]].
-std::pair<std::unique_ptr<char>, ui64> TEqWidthHistogram::Serialize() const {
-    ui64 binarySize = GetBinarySize(GetNumBuckets());
-    std::unique_ptr<char> binaryData(new char[binarySize]);
-    ui32 offset = 0;
+TString TEqWidthHistogram::Serialize() const {
     const ui32 numBuckets = GetNumBuckets();
+    const ui64 binarySize = GetBinarySize(GetNumBuckets());
+    TString result = TString::Uninitialized(binarySize);
+    char* out = result.Detach();
+    ui32 offset = 0;
     // 4 byte - number of buckets.
-    std::memcpy(binaryData.get(), &numBuckets, sizeof(ui64));
-    offset += sizeof(ui32);
+    std::memcpy(out + offset, &numBuckets, sizeof(numBuckets));
+    offset += sizeof(numBuckets);
     // 1 byte - values type.
-    WriteUnaligned<EHistogramValueType>(out + offset, ValueType_);
+    std::memcpy(out + offset, &ValueType_, sizeof(EHistogramValueType));
     offset += sizeof(EHistogramValueType);
     // 16 byte - domain range.
     for (size_t i = 0; i < EqWidthHistogramBucketStorageSize; ++i) {
@@ -107,10 +108,11 @@ std::pair<std::unique_ptr<char>, ui64> TEqWidthHistogram::Serialize() const {
     }
     // Buckets.
     for (ui32 i = 0; i < numBuckets; ++i) {
-        std::memcpy(binaryData.get() + offset, &Buckets_[i], sizeof(TBucket));
+        std::memcpy(out + offset, &Buckets_[i], sizeof(TBucket));
         offset += sizeof(TBucket);
     }
-    return std::make_pair(std::move(binaryData), binarySize);
+    Y_ASSERT(offset == binarySize);
+    return result;
 }
 
 TEqWidthHistogramEstimator::TEqWidthHistogramEstimator(std::shared_ptr<TEqWidthHistogram> histogram)

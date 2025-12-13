@@ -7,6 +7,8 @@ YQL_ABI_VERSION(
 )
 
 SRCS(
+    cms_agg_func.h
+    ewh_agg_func.h
     all_agg_funcs.cpp
     all_agg_funcs.h
     common.h

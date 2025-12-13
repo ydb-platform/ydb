@@ -56,9 +56,8 @@ void TestHistogramSerialization(ui32 numBuckets, std::pair<T, T> range, std::pai
     auto histogram = CreateHistogram<T>(numBuckets, domainRange.first, domainRange.second, valueType);
     UNIT_ASSERT(histogram);
     PopulateHistogram<T>(histogram, range);
-    auto [binaryData, binarySize] = histogram->Serialize();
-    UNIT_ASSERT(binaryData && binarySize);
-    TString hString(binaryData.get(), binarySize);
+    TString hString = histogram->Serialize();
+    UNIT_ASSERT(!hString.empty());
     auto histogramFromString = std::make_shared<TEqWidthHistogram>(hString.data(), hString.size());
     UNIT_ASSERT(histogramFromString);
     UNIT_ASSERT(EqualHistograms<T>(histogram, histogramFromString));

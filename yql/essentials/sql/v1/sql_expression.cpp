@@ -1336,21 +1336,25 @@ TNodeResult TSqlExpression::LambdaRule(const TRule_lambda& rule) {
     return Wrap(lambdaNode);
 }
 
-TNodePtr TSqlExpression::CastRule(const TRule_cast_expr& rule) {
-    Ctx_.IncrementMonCounter("sql_features", "Cast");
+TNodeResult TSqlExpression::CastRule(const TRule_cast_expr& rule) {
     const auto& alt = rule;
+
     Token(alt.GetToken1());
     TPosition pos(Ctx_.Pos());
+
     TSqlExpression expr(Ctx_, Mode_);
-    auto exprNode = Unwrap(expr.Build(rule.GetRule_expr3()));
+    expr.SetYqlSelectProduced(IsYqlSelectProduced_);
+    TNodeResult exprNode = expr.Build(rule.GetRule_expr3());
     if (!exprNode) {
-        return {};
+        return std::unexpected(exprNode.error());
     }
-    auto type = TypeNodeOrBind(rule.GetRule_type_name_or_bind5());
+
+    TNodePtr type = TypeNodeOrBind(rule.GetRule_type_name_or_bind5());
     if (!type) {
-        return {};
+        return std::unexpected(ESQLError::Basic);
     }
-    return new TCallNodeImpl(pos, "SafeCast", {exprNode, type});
+
+    return TNonNull(TNodePtr(new TCallNodeImpl(pos, "SafeCast", {*exprNode, type})));
 }
 
 TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) {
@@ -1523,7 +1527,11 @@ TSQLResult<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, c
             }
             break;
         case TRule_atom_expr::kAltAtomExpr4:
-            result.Expr = CastRule(node.GetAlt_atom_expr4().GetRule_cast_expr1());
+            if (auto expected = CastRule(node.GetAlt_atom_expr4().GetRule_cast_expr1())) {
+                result.Expr = std::move(*expected);
+            } else {
+                return std::unexpected(expected.error());
+            }
             break;
         case TRule_atom_expr::kAltAtomExpr5:
             if (auto expected = ExistsRule(node.GetAlt_atom_expr5().GetRule_exists_expr1())) {
@@ -1627,7 +1635,11 @@ TSQLResult<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& no
             }
             break;
         case TRule_in_atom_expr::kAltInAtomExpr4:
-            result.Expr = CastRule(node.GetAlt_in_atom_expr4().GetRule_cast_expr1());
+            if (auto expected = CastRule(node.GetAlt_in_atom_expr4().GetRule_cast_expr1())) {
+                result.Expr = std::move(*expected);
+            } else {
+                return std::unexpected(expected.error());
+            }
             break;
         case TRule_in_atom_expr::kAltInAtomExpr5:
             if (auto expected = CaseRule(node.GetAlt_in_atom_expr5().GetRule_case_expr1())) {

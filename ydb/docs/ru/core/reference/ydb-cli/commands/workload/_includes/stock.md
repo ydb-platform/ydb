@@ -109,7 +109,7 @@ CREATE TABLE `orderLines`(
 В течение теста на экран выводится статистика по нагрузке для каждого временного окна.
 
 * `workload type` — [виды нагрузки](#workload_types).
-* `global workload options` - [общие параметры для всех видов нагрузки](#global_workload_options).
+* `global workload options` - [общие параметры для всех видов нагрузки](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options` - параметры конкретного вида нагрузки.
 
 Посмотрите описание команды для запуска нагрузки:
@@ -117,20 +117,6 @@ CREATE TABLE `orderLines`(
 ```bash
 {{ ydb-cli }} workload run --help
 ```
-
-### Общие параметры для всех видов нагрузки {#global_workload_options}
-
-Имя параметра | Короткое имя | Описание параметра
----|---|---
-`--seconds <значение>` | `-s <значение>` | Продолжительность теста, сек. Значение по умолчанию: 10.
-`--threads <значение>` | `-t <значение>` | Количество параллельных потоков, создающих нагрузку. Значение по умолчанию: 10.
-`--rate <значение>` | - | Суммарная частота запросов всех потоков, в транзакциях в секунду. Значение по умолчанию: 0 (не ограничена).
-`--quiet` | - | Выводит только итоговый результат теста.
-`--print-timestamp` | - | Печатать время вместе со статистикой каждого временного окна.
-`--client-timeout` | - | [Транспортный таймаут в миллисекундах](../../../../../dev/timeouts.md).
-`--operation-timeout` | - | [Таймаут на операцию в миллисекундах](../../../../../dev/timeouts.md).
-`--cancel-after` | - | [Таймаут отмены операции в миллисекундах](../../../../../dev/timeouts.md).
-`--window` | - | Длительность окна сбора статистики в секундах. Значение по умолчанию: 1.
 
 ## Нагрузка user-hist {#get-customer-history}
 
@@ -155,7 +141,7 @@ LIMIT $limit;
 {{ ydb-cli }} workload stock run user-hist [global workload options...] [specific workload options...]
 ```
 
-* `global workload options` - [общие параметры для всех видов нагрузки](#global_workload_options).
+* `global workload options` - [общие параметры для всех видов нагрузки](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options` - [параметры конкретного вида нагрузки](#customer_history_options)
 
 ### Параметры для user-hist {#customer_history_options}
@@ -187,7 +173,7 @@ LIMIT $limit;
 {{ ydb-cli }} workload stock run rand-user-hist [global workload options...] [specific workload options...]
 ```
 
-* `global workload options` - [общие параметры для всех видов нагрузки](#global_workload_options).
+* `global workload options` - [общие параметры для всех видов нагрузки](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options` - [параметры конкретного вида нагрузки](#random_customer_history_options)
 
 ### Параметры для rand-user-hist {#random_customer_history_options}
@@ -220,7 +206,7 @@ UPSERT INTO `orderLines`(id_order, product, quantity)
 {{ ydb-cli }} workload stock run add-rand-order [global workload options...] [specific workload options...]
 ```
 
-* `global workload options` - [общие параметры для всех видов нагрузки](#global_workload_options).
+* `global workload options` - [общие параметры для всех видов нагрузки](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options` - [параметры конкретного вида нагрузки](#insert_random_order_options)
 
 ### Параметры для add-rand-order {#insert_random_order_options}
@@ -277,7 +263,7 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 {{ ydb-cli }} workload stock run put-rand-order [global workload options...] [specific workload options...]
 ```
 
-* `global workload options` - [общие параметры для всех видов нагрузки](#global_workload_options).
+* `global workload options` - [общие параметры для всех видов нагрузки](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options` - [параметры конкретного вида нагрузки](#submit_random_order_options)
 
 ### Параметры для put-rand-order {#submit_random_order_options}
@@ -334,7 +320,7 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 {{ ydb-cli }} workload stock run put-same-order [global workload options...] [specific workload options...]
 ```
 
-* `global workload options` - [общие параметры для всех видов нагрузки](#global_workload_options).
+* `global workload options` - [общие параметры для всех видов нагрузки](../../../commands/workload/index.md#global_workload_options).
 * `specific workload options` - [параметры конкретного вида нагрузки](#submit_same_order_options)
 
 ### Параметры для put-same-order {#submit_same_order_options}

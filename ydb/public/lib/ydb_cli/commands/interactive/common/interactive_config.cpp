@@ -305,22 +305,22 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint(const std::o
     }
 
     options.push_back({"Set a new endpoint value", [&]() {
-        auto value = RunFtxuiInput(TStringBuilder() << "Please enter API endpoint: ", "", [&](const TString& input, TString& error) {
+        auto value = RunFtxuiInput("Please enter API endpoint:", "", [&](const TString& input, TString& error) {
             auto url = Strip(input);
             if (!url) {
-                error = TStringBuilder() << "Please enter non empty API endpoint: ";
+                error = "API endpoint can not be empty";
                 return false;
             }
 
             if (!url.StartsWith("http://") && !url.StartsWith("https://")) {
-                error = TStringBuilder() << "API endpoint supports only http:// or https:// schema. Please enter API endpoint: ";
+                error = "API endpoint supports only http:// or https:// schema";
                 return false;
             }
 
             try {
                 NAi::CreateApiUrl(url, "/");
             } catch (const std::exception& e) {
-                error = TStringBuilder() << "Invalid API endpoint: " << e.what() << ". Please enter API endpoint: ";
+                error = e.what();
                 return false;
             }
 
@@ -439,10 +439,10 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
     const TString title = TStringBuilder() << "Pick desired action to configure model name:";
 
     options.push_back({"Set custom model name", [&]() {
-        auto value = RunFtxuiInput(TStringBuilder() << "Please enter model name: ", "", [&](const TString& input, TString& error) {
+        auto value = RunFtxuiInput("Please enter model name:", "", [&](const TString& input, TString& error) {
             modelName = Strip(input);
             if (!modelName) {
-                error = TStringBuilder() << "Please enter non empty model name: ";
+                error = "Model name cannot be empty";
                 return false;
             }
             return true;
@@ -691,7 +691,7 @@ TString TInteractiveConfigurationManager::CreateAiProfileName(const TString& cur
                 return false;
             }
         } else if (existingAiProfiles.contains(newName)) {
-            error = "AI model with name \"" + newName + "\" already exists";
+            error = TStringBuilder() << "AI model with name \"" << newName << "\" already exists";
             return false;
         } else {
             name = newName;

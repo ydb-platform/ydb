@@ -116,7 +116,7 @@ void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc
 }
 
 void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
-    if (!sourcePath.IsResolved() || !exportItemPath.IsResolved()) {
+    if (!sourcePath.IsResolved() || (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved())) {
         return;
     }
 
@@ -159,10 +159,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     auto& task = *modifyScheme.MutableBackup();
 
     if (item.ParentIdx == Max<ui32>()) {
-        modifyScheme.SetWorkingDir(exportPath.PathString());
-        task.SetTableName(ToString(itemIdx));
+        const TPath sourcePath = TPath::Init(item.SourcePathId, ss);
+        TString exportPathName;
+        TString tableName;
+        if (sourcePath.IsResolved() && sourcePath->IsColumnTable()) {
+            exportPathName = sourcePath.Parent().PathString();
+            tableName = sourcePath->Name;
+        } else {
+            exportPathName = exportPath.PathString();
+            tableName = ToString(itemIdx);
+        }
+        modifyScheme.SetWorkingDir(exportPathName);
+        task.SetTableName(tableName);
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
+        FillTableDescription(ss, task, sourcePath, exportPath.Child(ToString(itemIdx)));
     } else {
         auto parentPath = exportPath.Child(ToString(item.ParentIdx));
 

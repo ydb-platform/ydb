@@ -66,6 +66,7 @@
 {% endif %}
 |#
 
+{% include [x](../_includes/type_literals_examples.md) %}
 
 ## Строковые типы {#string}
 

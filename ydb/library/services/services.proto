@@ -1139,6 +1139,5 @@ message TActivity {
         FILTER_KMEANS_SCAN_ACTOR = 675;
         BS_SYNC_SST_WRITER = 676;
         BS_ASYNC_SYNC_SST_COMMITTER = 677;
-        PASSWORD_HASHER = 678;
     };
 };

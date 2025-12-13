@@ -321,7 +321,7 @@ public:
         std::transform(GroupNamesStrings.begin(), GroupNamesStrings.end(),
                   std::back_inserter(GroupNames), [](auto& string) { return string.data(); } );
 
-        Groups = JoinRange("/", GroupNamesStrings.begin(), GroupNamesStrings.end());
+        Groups = JoinRange("|", GroupNamesStrings.begin(), GroupNamesStrings.end());
     }
 
     virtual ~TLabeledCounterParsedOpts()

@@ -212,8 +212,8 @@ private:
         Y_VALIDATE(std::holds_alternative<ILineReader::TLine>(*response), "Unexpected response alternative");
         TString newText = std::move(std::get<ILineReader::TLine>(*std::move(response)).Data);
         UserMessage = TStringBuilder()
-            << "I decided to change query text manually to:\n" << newText << "\nPrevious query text:\n" << Query
-            << "\n I already get query results (they connected to your tool call), so there is no need to execute query twice, you can continue task";
+            << "Query modified by user to:\n" << newText << "\n"
+            << "(Results correspond to this new query. IGNORE this change notification in your response and proceed directly to analyzing the results.)";
 
         Query = std::move(newText);
         return true;

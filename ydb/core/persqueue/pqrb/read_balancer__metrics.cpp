@@ -15,19 +15,8 @@ namespace NKikimr::NPQ {
 namespace {
 
 template<const NProtoBuf::EnumDescriptor* SimpleDesc()>
-constexpr std::string GetLabels() {
-    auto desc = NAux::GetLabeledCounterOpts<SimpleDesc>();
-    auto groupNames = desc->GetGroupNames();
-
-    std::string labels;
-    for (size_t i = 0; i < desc->GetGroupNamesSize(); ++i) {
-        if (i) {
-            labels.push_back('|');
-        }
-        labels.append(groupNames[i]);
-    }
-
-    return labels;
+const TString& GetLabels() {
+    return NAux::GetLabeledCounterOpts<SimpleDesc>()->GetGroups();
 }
 
 
@@ -53,7 +42,7 @@ struct TMetricCollector {
         Aggregator.AggregateWith(Counters);
     }
 
-    TConfig Counters = TConfig(GetLabels<SimpleDesc>(), 0, "");
+    TConfig Counters;
     TTabletLabeledCountersBase Aggregator;
 };
 
@@ -142,7 +131,7 @@ TCounters InitializeCounters(
     }
 
     using TConfig = TProtobufTabletLabeledCounters<SimpleDesc>;
-    auto config = std::make_unique<TConfig>(GetLabels<SimpleDesc>(), 0, databasePath);
+    auto config = std::make_unique<TConfig>(databasePath);
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> result;
     for (size_t i = 0; i < config->GetCounters().Size(); ++i) {

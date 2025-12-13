@@ -1,7 +1,7 @@
 import argparse
 
 from ydb.tests.stress.backup.workload import WorkloadRunnerBackup
-from ydb.tests.stress.common.common import YdbClient
+from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -12,7 +12,7 @@ if __name__ == "__main__":
     parser.add_argument("--duration", default=10 ** 9, type=lambda x: int(x), help="A duration of workload in seconds.")
     parser.add_argument("--backup-interval", default=10, type=lambda x: int(x), help="Seconds between triggering incremental backups")
     args = parser.parse_args()
-    client = YdbClient(args.endpoint, args.database, True)
+    client = InstrumentedYdbClient(args.endpoint, args.database, True)
     client.wait_connection()
     with WorkloadRunnerBackup(client, args.duration, args.backup_interval) as runner:
         runner.run()

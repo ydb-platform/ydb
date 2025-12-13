@@ -109,7 +109,7 @@ def _upload_results(
     stats["failed_iterations"] = stats["total_runs"] - stats["successful_runs"]
     stats["planned_duration"] = run_config.duration
     stats["actual_duration"] = result.end_time - result.start_time
-    stats["total_execution_time"] = sum(run.total_execution_time for run in result.node_runs.values())
+    stats["total_execution_time"] = max(run.total_execution_time for run in result.node_runs.values())
     stats["success_rate"] = stats["successful_runs"] / stats["total_runs"]
     # obsolete
     stats["avg_threads_per_iteration"] = 0

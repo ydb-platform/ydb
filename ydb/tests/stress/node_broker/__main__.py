@@ -2,7 +2,7 @@
 import argparse
 
 from ydb.tests.stress.node_broker.workload import WorkloadRunner
-from ydb.tests.stress.common.common import YdbClient
+from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 
 
 if __name__ == "__main__":
@@ -14,7 +14,7 @@ if __name__ == "__main__":
     parser.add_argument("--database", default="Root/test", help="A database to connect")
     parser.add_argument("--duration", default=10**9, type=lambda x: int(x), help="A duration of workload in seconds.")
     args = parser.parse_args()
-    client = YdbClient(args.endpoint, args.database, True)
+    client = InstrumentedYdbClient(args.endpoint, args.database, True)
     client.wait_connection()
     with WorkloadRunner(client, args.mon_endpoint, args.duration) as runner:
         runner.run()

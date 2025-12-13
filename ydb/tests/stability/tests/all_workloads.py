@@ -55,10 +55,15 @@ def _init_stress_utils():
         #     'args': ,
         #     'local_path': 'ydb/tests/stress/reconfig_state_storage_workload/reconfig_state_storage_workload'
         # },
-        'Show_Create': {
+        'ShowCreateView': {
             'args': ["--endpoint", "grpc://{node_host}:2135",
                      "--path-prefix", "workload_show_create_{node_host}_iter_{iteration_num}_{uuid}"],
             'local_path': 'ydb/tests/stress/show_create/view/show_create_view'
+        },
+        'ShowCreateTable': {
+            'args': ["--endpoint", "grpc://{node_host}:2135",
+                     "--path-prefix", "workload_show_create_{node_host}_iter_{iteration_num}_{uuid}"],
+            'local_path': 'ydb/tests/stress/show_create/table/show_create_table'
         },
         'Statistics': {
             'args': ["--host", "{node_host}",

@@ -39,6 +39,24 @@ class RemoteExecutor:
     """
 
     @staticmethod
+    def get_ssh_options() -> List[str]:
+        """
+        Returns common SSH options including ControlMaster configuration.
+        """
+        # Используем фиксированный путь для сокета, зависящий от пользователя, хоста и порта.
+        # %r - remote user name
+        # %h - remote host name
+        # %p - remote port
+        # os.getuid() добавляется для уникальности локального пользователя, запускающего тест.
+        return [
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "ControlMaster=auto",
+            "-o", "ControlPersist=60s",
+            "-o", f"ControlPath=/tmp/ssh-{os.getuid()}-%r@%h:%p"
+        ]
+
+    @staticmethod
     def _safe_decode(data) -> str:
         """
         Safely decodes data into a string.
@@ -304,7 +322,7 @@ class RemoteExecutor:
             """Executes command via SSH."""
             LOGGER.info(f"Executing SSH command on {host}: {cmd}")
 
-            ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+            ssh_cmd = ['ssh'] + cls.get_ssh_options()
 
             # Добавляем SSH пользователя и ключ
             ssh_user = os.getenv('SSH_USER')
@@ -523,7 +541,7 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
         tmp_path = f"/tmp/{filename}.{timestamp}.tmp"
 
         # SCP в /tmp
-        scp_cmd = ['scp', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+        scp_cmd = ['scp'] + RemoteExecutor.get_ssh_options()
 
         ssh_user = os.getenv('SSH_USER')
         scp_host = f"{ssh_user}@{host}" if ssh_user else host
@@ -660,7 +678,7 @@ def execute_ssh(host: str, cmd: str):
     if local:
         ssh_cmd = cmd
     else:
-        ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+        ssh_cmd = ['ssh'] + RemoteExecutor.get_ssh_options()
         ssh_user = os.getenv('SSH_USER')
         if ssh_user is not None:
             ssh_cmd += ['-l', ssh_user]

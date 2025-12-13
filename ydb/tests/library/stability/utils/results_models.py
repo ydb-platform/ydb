@@ -1,5 +1,4 @@
-from typing import Optional
-
+from typing import Optional, Self
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
@@ -11,7 +10,6 @@ class RunConfigInfo:
         nodes_percentage: Percentage of nodes used (1-100)
         nemesis_enabled: Whether nemesis was enabled
         table_type: Type of table used in test
-        stress_util_args: Stress utility arguments
         duration: Test duration in seconds
         all_hosts: List of all hostnames used
         stress_util_names: List of stress utility names
@@ -20,7 +18,6 @@ class RunConfigInfo:
     nodes_percentage: Optional[float] = None
     nemesis_enabled: Optional[bool] = None
     table_type: Optional[str] = None
-    stress_util_args: Optional[str] = None
     duration: Optional[float] = None
     all_hosts: Optional[list[str]] = None
     stress_util_names: Optional[list[str]] = None
@@ -190,6 +187,7 @@ class StressUtilTestResults:
     nemesis_deploy_results: dict[str, list[str]] = dict()
     errors: list[str] = []
     error_message: str = ''
+    recoverability_result: Optional[Self] = None
 
     def __init__(self) -> None:
         """Initialize StressUtilTestResults with empty collections."""

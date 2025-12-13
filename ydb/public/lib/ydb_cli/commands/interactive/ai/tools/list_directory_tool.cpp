@@ -85,7 +85,9 @@ protected:
             item["type"] = EntryTypeToString(child.Type);
         }
 
-        Cout << Endl << TAdaptiveTabbedTable(children);
+        if (Log.IsVerbose()) {
+            Cout << TAdaptiveTabbedTable(children) << Endl;
+        }
 
         return TResponse(std::move(result));
     }

@@ -81,7 +81,7 @@ TInteractiveLogger::TEntry TInteractiveLogger::Debug() const {
 }
 
 bool TInteractiveLogger::IsVerbose() const {
-    return Log->FiltrationLevel() < TLOG_CRIT;
+    return Log->FiltrationLevel() >= TLOG_ERR;
 }
 
 TString TInteractiveLogger::EntityName(const TString& name) {

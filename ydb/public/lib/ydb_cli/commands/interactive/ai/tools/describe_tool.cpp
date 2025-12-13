@@ -82,6 +82,21 @@ protected:
         TDescribeLogic describeLogic(Driver, outputStream);
         
         int status = describeLogic.Describe(Path, Options, EDataFormat::ProtoJsonBase64);
+        
+        if (Log.IsVerbose()) {
+            if (status == EXIT_SUCCESS) {
+                TStringStream prettyStream;
+                TDescribeLogic prettyLogic(Driver, prettyStream);
+                if (prettyLogic.Describe(Path, Options, EDataFormat::Pretty) == EXIT_SUCCESS) {
+                    Cout << prettyStream.Str() << Endl;
+                } else {
+                    Cout << FormatJsonValue(outputStream.Str()) << Endl << Endl;
+                }
+            } else {
+                Cout << FormatJsonValue(outputStream.Str()) << Endl << Endl;
+            }
+        }
+
         if (status != EXIT_SUCCESS) {
             outputStream << "\nCommand failed.";
         }

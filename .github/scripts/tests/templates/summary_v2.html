@@ -36,6 +36,18 @@
             margin: 20px 0;
             display: flex;
             gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .filter-buttons-left {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .filter-buttons-right {
+            display: flex;
+            gap: 10px;
+            align-items: center;
         }
         .filter-btn {
             padding: 8px 16px;
@@ -84,53 +96,6 @@
         }
         .filter-btn.sanitizer:hover {
             background-color: #cc3700;
-        }
-        .flaky-stable-badges {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin: 10px 0;
-            padding: 8px 0;
-        }
-        .flaky-stable-badge {
-            padding: 6px 12px;
-            border: 1px solid #d0d7de;
-            border-radius: 6px;
-            background-color: #f6f8fa;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        .flaky-stable-badge:hover {
-            background-color: #f3f4f6;
-        }
-        .flaky-stable-badge.active {
-            color: white;
-            border-color: #0969da;
-        }
-        .flaky-stable-badge.flaky-badge-btn.active {
-            background-color: #ffc107;
-            color: #000;
-            border-color: #ffc107;
-        }
-        .flaky-stable-badge.stable-badge-btn.active {
-            background-color: #28a745;
-            color: white;
-            border-color: #28a745;
-        }
-        .flaky-stable-badge.all-badge-btn.active {
-            background-color: #0969da;
-            border-color: #0969da;
-        }
-        .flaky-stable-badge.sanitizer-badge-btn.active {
-            background-color: #ff4500;
-            color: white;
-            border-color: #ff4500;
-        }
-        .badge-label {
-            font-size: 13px;
-            color: #656d76;
         }
         .success-rate-button {
             background-color: #0969da;
@@ -222,7 +187,6 @@
             align-items: center;
             gap: 12px;
             flex-wrap: wrap;
-            transition: padding 0.2s ease;
             width: 100%;
             max-width: 100%;
             box-sizing: border-box;
@@ -249,19 +213,6 @@
         .test-item.mute {
             border-left-color: blue;
         }
-        .test-item[data-is-flaky="true"] {
-            border-left-color: #ffc107;
-            border-left-width: 4px;
-        }
-        .flaky-badge {
-            background-color: #fff8c5;
-            color: #9a6700;
-            border: 1px solid #ffc107;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 11px;
-            font-weight: 500;
-        }
         .test-name {
             font-weight: 500;
             flex: 1;
@@ -279,27 +230,30 @@
         .test-name-toggle {
             font-size: 12px;
             color: #656d76;
-            transition: transform 0.2s;
         }
         .test-name-toggle.expanded {
             transform: rotate(90deg);
         }
         .group-by-selector {
-            margin: 20px 0 10px 0;
             display: flex;
             align-items: center;
             gap: 10px;
         }
         .group-by-selector select {
-            padding: 6px 12px;
+            padding: 8px 16px;
             border: 1px solid #d0d7de;
             border-radius: 6px;
             background-color: #f6f8fa;
             font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
         }
         .group-by-selector select:hover {
             background-color: #f3f4f6;
+        }
+        .group-by-selector label {
+            font-size: 14px;
+            font-weight: 500;
         }
         .tests-flat-container {
             display: none;
@@ -440,7 +394,6 @@
             font-weight: 500;
             padding: 3px 8px;
             margin-left: 8px;
-            transition: all 0.2s;
             display: inline-flex;
             align-items: center;
             gap: 4px;
@@ -646,7 +599,6 @@
         (function() {
             const urlParams = new URLSearchParams(window.location.search);
             const status = urlParams.get('status');
-            const flakyStable = urlParams.get('flakyStable');
             
             if (status) {
                 // Map status to filter name
@@ -663,8 +615,7 @@
                 
                 // Store filter state for later use
                 window.__initialFilter = {
-                    main: actualFilter,
-                    flakyStable: flakyStable || 'all'
+                    main: actualFilter
                 };
                 
                 // Add data attribute to body to hide all tests via CSS
@@ -689,39 +640,26 @@
     </div>
 
     <div class="filter-buttons">
-        <button class="filter-btn active all" onclick="setFilter('all', this)">All ({{ test_counts.all }})</button>
-        <button class="filter-btn passed" onclick="setFilter('passed', this)">Passed ({{ test_counts.passed }})</button>
-        <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }})</button>
-        <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }})</button>
-        <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }})</button>
-        <button class="filter-btn skipped" onclick="setFilter('skipped', this)">Skipped ({{ test_counts.skipped }})</button>
-    </div>
-    
-    <div class="group-by-selector">
-        <label for="groupBySelect" style="font-size: 14px; font-weight: 500;">Group by:</label>
-        <select id="groupBySelect" onchange="setGroupBy(this.value)">
-            <option value="none" selected>None</option>
-            <option value="suite">Suite</option>
-        </select>
-    </div>
-    
-    <!-- Flaky/Stable/Sanitizer badges - shown based on current filter -->
-    <div id="flaky-stable-badges" class="flaky-stable-badges" style="margin: 10px 0; display: none;">
-        <span class="badge-label" style="margin-right: 10px; font-weight: 500;">Filter by:</span>
-        <button id="badge-flaky" class="flaky-stable-badge flaky-badge-btn" onclick="setFlakyStableFilter('flaky', this)" style="display: none;">
-            Flaky - <span id="badge-flaky-count">0</span>
-        </button>
-        <button id="badge-stable" class="flaky-stable-badge stable-badge-btn" onclick="setFlakyStableFilter('stable', this)" style="display: none;">
-            Stable - <span id="badge-stable-count">0</span>
-        </button>
-        {% if test_counts.sanitizer > 0 %}
-        <button id="badge-sanitizer" class="flaky-stable-badge sanitizer-badge-btn" onclick="setFlakyStableFilter('sanitizer', this)" style="display: none;">
-            Sanitizer - <span id="badge-sanitizer-count">{{ test_counts.sanitizer }}</span>
-        </button>
-        {% endif %}
-        <button id="badge-all" class="flaky-stable-badge all-badge-btn" onclick="setFlakyStableFilter('all', this)" style="display: none;">
-            All
-        </button>
+        <div class="filter-buttons-left">
+            <button class="filter-btn active all" onclick="setFilter('all', this)">All ({{ test_counts.all }})</button>
+            <button class="filter-btn passed" onclick="setFilter('passed', this)">Passed ({{ test_counts.passed }})</button>
+            <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }})</button>
+            <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }})</button>
+            <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }})</button>
+            <button class="filter-btn skipped" onclick="setFilter('skipped', this)">Skipped ({{ test_counts.skipped }})</button>
+            {% if test_counts.sanitizer > 0 %}
+            <button class="filter-btn sanitizer" onclick="setFilter('sanitizer', this)">Sanitizer ({{ test_counts.sanitizer }})</button>
+            {% endif %}
+        </div>
+        <div class="filter-buttons-right">
+            <div class="group-by-selector">
+                <label for="groupBySelect">Group by:</label>
+                <select id="groupBySelect" onchange="setGroupBy(this.value)">
+                    <option value="none" selected>None</option>
+                    <option value="suite">Suite</option>
+                </select>
+            </div>
+        </div>
     </div>
 
     <!-- All view: grouped by suite -->
@@ -746,7 +684,7 @@
             </div>
             <div id="suite-{{ loop.index }}" class="suite-content">
                 {% for test in tests %}
-                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-is-flaky="{% if test.is_flaky %}true{% else %}false{% endif %}" data-suite-name="{{ suite_name }}" data-test-display-name="{{ test.name }}">
+                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-suite-name="{{ suite_name }}" data-test-display-name="{{ test.name }}">
                     <span class="searchable-full-path">{{ test.full_name }}</span>
                     <span class="test-name {% if test.status_description %}has-error{% endif %}" {% if test.status_description %}data-has-error="true" data-test-full-name="{{ test.full_name }}"{% endif %} title="{{ test.full_name }}">
                         {% if test.status_description %}<span class="test-name-toggle">▶</span>{% endif %}
@@ -758,9 +696,6 @@
                         <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
                         
                         <div class="test-badges">
-                            {% if test.is_flaky %}
-                            <span class="flaky-badge">FLAKY</span>
-                            {% endif %}
                             {% if test.is_sanitizer_issue %}
                             <span class="sanitizer-badge">SANITIZER</span>
                             {% endif %}
@@ -817,7 +752,7 @@
     <div id="tests-flat" class="tests-flat-container active"></div>
 
     <!-- Removed duplicate views (view-passed, view-failed, view-error, view-mute, view-sanitizer, view-flaky) to reduce HTML size -->
-    <!-- Filtering is now done via JavaScript using data-test-status, data-is-sanitizer, and data-is-flaky attributes -->
+    <!-- Filtering is now done via JavaScript using data-test-status and data-is-sanitizer attributes -->
     <!-- Modal for success rate and detailed history -->
     <div id="successRateModal" class="modal">
         <div class="modal-content" style="max-height: 90vh;">
@@ -875,7 +810,6 @@
         
         // Current filter state
         let currentMainFilter = 'all';
-        let currentFlakyStableFilter = 'all'; // 'all', 'flaky', or 'stable'
         let currentGroupBy = 'none'; // 'none' or 'suite'
         
         function getHistoryError(testName, timestamp) {
@@ -931,27 +865,15 @@
             if (window.__initialFilter) {
                 // Use pre-parsed filter from inline script
                 const filter = window.__initialFilter.main;
-                const flakyStable = window.__initialFilter.flakyStable;
                 const button = document.querySelector(`.filter-btn.${filter}`);
                 if (button) {
                     // Apply main filter immediately
                     setFilter(filter, button);
-                    // Apply flaky/stable/sanitizer filter if present
-                    if (flakyStable && flakyStable !== 'all') {
-                        const badgeButton = document.getElementById(`badge-${flakyStable}`);
-                        if (badgeButton) {
-                            setFlakyStableFilter(flakyStable, badgeButton);
-                        }
-                    }
                 }
             } else {
                 // Fallback to URL parsing if inline script didn't run
                 initFilterFromUrl();
             }
-            
-            // Always update badges visibility on page load
-            const currentFilter = currentMainFilter || 'all';
-            updateFlakyStableBadges(currentFilter);
             
             // Initialize group by mode
             setGroupBy('none');
@@ -967,10 +889,6 @@
             
             // Update current main filter
             currentMainFilter = filter;
-            currentFlakyStableFilter = 'all'; // Reset flaky/stable filter when main filter changes
-            
-            // Update flaky/stable badges visibility and counts
-            updateFlakyStableBadges(filter);
             
             // Re-render flat view if needed
             if (currentGroupBy === 'none') {
@@ -981,92 +899,6 @@
             applyFilters();
         }
         
-        function updateFlakyStableBadges(mainFilter) {
-            const badgesContainer = document.getElementById('flaky-stable-badges');
-            const badgeFlaky = document.getElementById('badge-flaky');
-            const badgeStable = document.getElementById('badge-stable');
-            const badgeSanitizer = document.getElementById('badge-sanitizer');
-            const badgeAll = document.getElementById('badge-all');
-            const badgeFlakyCount = document.getElementById('badge-flaky-count');
-            const badgeStableCount = document.getElementById('badge-stable-count');
-            const badgeSanitizerCount = document.getElementById('badge-sanitizer-count');
-            
-            // Always show badges container if there are any badges to show
-            let hasAnyBadge = false;
-            
-            // Show Flaky/Stable badges only for failed, error, and mute filters
-            if (mainFilter === 'failed' || mainFilter === 'error' || mainFilter === 'mute') {
-                // Get counts for current filter
-                const flakyKey = `flaky_${mainFilter}`;
-                const stableKey = `stable_${mainFilter}`;
-                const flakyCount = testCounts[flakyKey] || 0;
-                const stableCount = testCounts[stableKey] || 0;
-                
-                // Update counts
-                badgeFlakyCount.textContent = flakyCount;
-                badgeStableCount.textContent = stableCount;
-                
-                // Show/hide badges based on counts
-                badgeFlaky.style.display = flakyCount > 0 ? 'inline-block' : 'none';
-                badgeStable.style.display = stableCount > 0 ? 'inline-block' : 'none';
-                
-                if (flakyCount > 0 || stableCount > 0) {
-                    hasAnyBadge = true;
-                }
-            } else {
-                // Hide Flaky/Stable badges for other filters
-                badgeFlaky.style.display = 'none';
-                badgeStable.style.display = 'none';
-            }
-            
-            // Update Sanitizer badge count based on current filter
-            if (badgeSanitizer && badgeSanitizerCount) {
-                // Get sanitizer count for current filter
-                const sanitizerKey = mainFilter === 'all' ? 'sanitizer_all' : `sanitizer_${mainFilter}`;
-                const sanitizerCount = testCounts[sanitizerKey] || 0;
-                
-                // Update count
-                badgeSanitizerCount.textContent = sanitizerCount;
-                
-                // Show/hide badge based on count
-                badgeSanitizer.style.display = sanitizerCount > 0 ? 'inline-block' : 'none';
-                
-                if (sanitizerCount > 0) {
-                    hasAnyBadge = true;
-                }
-            }
-            
-            // Always show All badge
-            badgeAll.style.display = 'inline-block';
-            hasAnyBadge = true;
-            
-            // Show container if there are any badges to display
-            badgesContainer.style.display = hasAnyBadge ? 'flex' : 'none';
-            
-            // Reset badge states
-            badgeFlaky.classList.remove('active');
-            badgeStable.classList.remove('active');
-            if (badgeSanitizer) badgeSanitizer.classList.remove('active');
-            badgeAll.classList.add('active');
-        }
-        
-        function setFlakyStableFilter(type, button) {
-            // Update badge states
-            document.querySelectorAll('.flaky-stable-badge').forEach(badge => {
-                badge.classList.remove('active');
-            });
-            button.classList.add('active');
-            
-            currentFlakyStableFilter = type;
-            
-            // Re-render flat view if needed
-            if (currentGroupBy === 'none') {
-                renderFlatView();
-            }
-            
-            // Apply filters
-            applyFilters();
-        }
         
         function setGroupBy(mode) {
             currentGroupBy = mode;
@@ -1135,30 +967,17 @@
             allTestItems.forEach(testItem => {
                 const testStatus = testItem.getAttribute('data-test-status');
                 const isSanitizer = testItem.getAttribute('data-is-sanitizer') === 'true';
-                const isFlaky = testItem.getAttribute('data-is-flaky') === 'true';
                 let shouldShow = false;
                 
                 // First apply main filter
                 if (currentMainFilter === 'all') {
                     shouldShow = true;
+                } else if (currentMainFilter === 'sanitizer') {
+                    // Filter by sanitizer issues
+                    shouldShow = isSanitizer;
                 } else {
                     // Match status (failed, error, mute, passed, skipped)
                     shouldShow = testStatus === currentMainFilter;
-                }
-                
-                // Then apply flaky/stable filter if applicable
-                if (shouldShow && (currentMainFilter === 'failed' || currentMainFilter === 'error' || currentMainFilter === 'mute')) {
-                    if (currentFlakyStableFilter === 'flaky') {
-                        shouldShow = shouldShow && isFlaky;
-                    } else if (currentFlakyStableFilter === 'stable') {
-                        shouldShow = shouldShow && !isFlaky;
-                    }
-                    // 'all' means show both, so no additional filtering needed
-                }
-                
-                // Apply sanitizer filter if selected (works for all main filters)
-                if (shouldShow && currentFlakyStableFilter === 'sanitizer') {
-                    shouldShow = shouldShow && isSanitizer;
                 }
                 
                 // Use display property directly for better performance
@@ -1198,26 +1017,22 @@
             if (currentMainFilter === 'all') {
                 url.searchParams.delete('status');
             } else {
-                url.searchParams.set('status', currentMainFilter.charAt(0).toUpperCase() + currentMainFilter.slice(1));
-            }
-            if (currentFlakyStableFilter !== 'all') {
-                url.searchParams.set('flakyStable', currentFlakyStableFilter);
-            } else {
-                url.searchParams.delete('flakyStable');
+                // Capitalize first letter for status in URL
+                const statusInUrl = currentMainFilter.charAt(0).toUpperCase() + currentMainFilter.slice(1);
+                url.searchParams.set('status', statusInUrl);
             }
             if (currentGroupBy !== 'none') {
                 url.searchParams.set('groupBy', currentGroupBy);
             } else {
                 url.searchParams.delete('groupBy');
             }
-            window.history.pushState({filter: currentMainFilter, flakyStable: currentFlakyStableFilter, groupBy: currentGroupBy}, '', url);
+            window.history.pushState({filter: currentMainFilter, groupBy: currentGroupBy}, '', url);
         }
         
         // Handle URL parameters on load
         function initFilterFromUrl() {
             const urlParams = new URLSearchParams(window.location.search);
             const status = urlParams.get('status');
-            const flakyStable = urlParams.get('flakyStable');
             const groupBy = urlParams.get('groupBy');
             
             if (groupBy) {
@@ -1234,20 +1049,13 @@
                     'mut': 'mute',
                     'skip': 'skipped',
                     'fla': 'flaky',
-                    'san': 'sanitizer'
+                    'san': 'sanitizer',
+                    'sanitizer': 'sanitizer'
                 };
                 const actualFilter = filterMap[filter] || filter;
                 const button = document.querySelector(`.filter-btn.${actualFilter}`);
                 if (button) {
                     setFilter(actualFilter, button);
-                    
-                    // Apply flaky/stable/sanitizer filter if present
-                    if (flakyStable) {
-                        const badgeButton = document.getElementById(`badge-${flakyStable}`);
-                        if (badgeButton) {
-                            setFlakyStableFilter(flakyStable, badgeButton);
-                        }
-                    }
                     return;
                 }
             }
@@ -1280,19 +1088,26 @@
                         const preElement = document.createElement('pre');
                         preElement.appendChild(codeElement);
                         errorContent.appendChild(preElement);
-                        
-                        // Highlight syntax if Prism is available
-                        if (typeof Prism !== 'undefined') {
-                            Prism.highlightElement(codeElement);
-                        }
+                        // Mark for later highlighting (will be done after showing)
+                        codeElement.setAttribute('data-needs-highlight', 'true');
                     }
                     errorContent.setAttribute('data-loaded', 'true');
                 }
                 
+                // Show immediately without blocking
                 errorContent.classList.remove('hidden');
                 testItem.classList.remove('error-hidden');
                 if (toggle) toggle.classList.add('expanded');
+                // Highlight syntax asynchronously after showing
+                if (typeof Prism !== 'undefined' && errorContent.querySelector('code') && !errorContent.querySelector('code').hasAttribute('data-prism-loaded')) {
+                    const codeElement = errorContent.querySelector('code');
+                    requestAnimationFrame(() => {
+                        Prism.highlightElement(codeElement);
+                        codeElement.setAttribute('data-prism-loaded', 'true');
+                    });
+                }
             } else {
+                // Hide immediately without animation
                 errorContent.classList.add('hidden');
                 testItem.classList.add('error-hidden');
                 if (toggle) toggle.classList.remove('expanded');
@@ -1317,21 +1132,28 @@
                         const preElement = document.createElement('pre');
                         preElement.appendChild(codeElement);
                         errorContent.appendChild(preElement);
-                        
-                        // Highlight syntax if Prism is available
-                        if (typeof Prism !== 'undefined') {
-                            Prism.highlightElement(codeElement);
-                        }
+                        // Mark for later highlighting (will be done after showing)
+                        codeElement.setAttribute('data-needs-highlight', 'true');
                     }
                     errorContent.setAttribute('data-loaded', 'true');
                 }
                 
+                // Show immediately without blocking
                 errorContent.classList.remove('hidden');
                 testItem.classList.remove('error-hidden');
                 button.textContent = 'Hide';
                 const toggle = nameElement ? nameElement.querySelector('.test-name-toggle') : null;
                 if (toggle) toggle.classList.add('expanded');
+                // Highlight syntax asynchronously after showing
+                if (typeof Prism !== 'undefined' && errorContent.querySelector('code') && !errorContent.querySelector('code').hasAttribute('data-prism-loaded')) {
+                    const codeElement = errorContent.querySelector('code');
+                    requestAnimationFrame(() => {
+                        Prism.highlightElement(codeElement);
+                        codeElement.setAttribute('data-prism-loaded', 'true');
+                    });
+                }
             } else {
+                // Hide immediately without animation
                 errorContent.classList.add('hidden');
                 testItem.classList.add('error-hidden');
                 button.textContent = 'Error';

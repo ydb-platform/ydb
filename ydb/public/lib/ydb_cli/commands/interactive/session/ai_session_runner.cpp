@@ -7,11 +7,70 @@
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
+#include <util/string/printf.h>
+
+#include <thread>
+#include <atomic>
+#include <chrono>
+
 namespace NYdb::NConsoleClient {
 
 namespace NAi {
 
 namespace {
+
+class TSpinner {
+public:
+    TSpinner()
+        : Running(true)
+        , StartTime(std::chrono::steady_clock::now())
+    {
+        Worker = std::thread([this]() {
+            const char* frames[] = {"🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"};
+            int frameIndex = 0;
+            while (Running) {
+                auto now = std::chrono::steady_clock::now();
+                auto elapsed = std::chrono::duration<double>(now - StartTime).count();
+                Cout << "\r" << frames[frameIndex] << " Agent is thinking... " 
+                     << Sprintf("%.1fs", elapsed);
+                Cout.Flush();
+                
+                frameIndex = (frameIndex + 1) % std::size(frames);
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        });
+    }
+
+    void Stop(bool success = false) {
+        bool expected = true;
+        if (!Running.compare_exchange_strong(expected, false)) {
+            return;
+        }
+
+        if (Worker.joinable()) {
+            Worker.join();
+        }
+        
+        Cout << "\r\x1b[K"; // Clear line
+
+        if (success) {
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration<double>(now - StartTime).count();
+            Cout << "Agent thought for " << Sprintf("%.2fs", elapsed) << Endl;
+        } else {
+             Cout.Flush();
+        }
+    }
+
+    ~TSpinner() {
+        Stop(false);
+    }
+
+private:
+    std::atomic<bool> Running;
+    std::chrono::steady_clock::time_point StartTime;
+    std::thread Worker;
+};
 
 class TAiSessionRunner final : public TSessionRunnerBase {
     using TBase = TSessionRunnerBase;
@@ -69,7 +128,18 @@ public:
             return;
         }
 
-        ModelHandler->HandleLine(line);
+        std::shared_ptr<TSpinner> spinner;
+        auto onStart = [&spinner]() {
+            spinner = std::make_shared<TSpinner>();
+        };
+        auto onFinish = [&spinner]() {
+            if (spinner) {
+                spinner->Stop(true);
+                spinner.reset();
+            }
+        };
+
+        ModelHandler->HandleLine(line, onStart, onFinish);
     }
 
 private:

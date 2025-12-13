@@ -11,7 +11,7 @@ class TModelBase : public IModel {
 public:
     TModelBase(const TString& apiUrl, const TString& authToken, const TInteractiveLogger& log);
 
-    TResponse HandleMessages(const std::vector<TMessage>& messages) final;
+    TResponse HandleMessages(const std::vector<TMessage>& messages, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {}) final;
 
 protected:
     virtual void AdvanceConversation(const std::vector<TMessage>& messages) = 0;

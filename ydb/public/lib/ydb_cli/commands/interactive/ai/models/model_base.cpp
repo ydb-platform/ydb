@@ -22,14 +22,32 @@ TModelBase::TModelBase(const TString& apiUrl, const TString& authToken, const TI
     YDB_CLI_LOG(Notice, "Using model API url: \"" << apiUrl << "\" with " << (authToken ? TStringBuilder() << "auth token " << BlurSecret(authToken) : TStringBuilder() << "anonymous access"));
 }
 
-TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& messages) {
+TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& messages, std::function<void()> onStartWaiting, std::function<void()> onFinishWaiting) {
     Y_VALIDATE(!messages.empty(), "Messages should not be empty for advance conversation");
     AdvanceConversation(messages);
 
     NJsonWriter::TBuf requestJsonWriter;
     requestJsonWriter.WriteJsonValue(&ChatCompletionRequest);
     auto request = requestJsonWriter.Str();
-    const auto& response = HttpExecutor.Post(std::move(request));
+
+    if (onStartWaiting) {
+        onStartWaiting();
+    }
+
+    auto response = [&]() {
+        try {
+            auto res = HttpExecutor.Post(std::move(request));
+            if (onFinishWaiting) {
+                onFinishWaiting();
+            }
+            return res;
+        } catch (...) {
+            if (onFinishWaiting) {
+                onFinishWaiting();
+            }
+            throw;
+        }
+    }();
 
     if (!response.IsSuccess()) {
         throw yexception() << THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);

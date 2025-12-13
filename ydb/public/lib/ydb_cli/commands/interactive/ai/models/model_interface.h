@@ -37,7 +37,7 @@ public:
         std::vector<TToolCall> ToolCalls;
     };
 
-    virtual TResponse HandleMessages(const std::vector<TMessage>& messages) = 0;
+    virtual TResponse HandleMessages(const std::vector<TMessage>& messages, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {}) = 0;
 
     virtual void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) = 0;
 

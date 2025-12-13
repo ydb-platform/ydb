@@ -6,6 +6,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
 
 #include <util/generic/fwd.h>
+#include <functional>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -22,7 +23,7 @@ public:
 
     TModelHandler(const TSettings& settings, const TInteractiveLogger& log);
 
-    void HandleLine(const TString& input);
+    void HandleLine(const TString& input, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {});
 
     void ClearContext();
 

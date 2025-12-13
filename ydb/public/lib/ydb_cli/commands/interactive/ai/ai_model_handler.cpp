@@ -49,7 +49,7 @@ TModelHandler::TModelHandler(const TSettings& settings, const TInteractiveLogger
     SetupTools(settings);
 }
 
-void TModelHandler::HandleLine(const TString& input) {
+void TModelHandler::HandleLine(const TString& input, std::function<void()> onStartWaiting, std::function<void()> onFinishWaiting) {
     Y_VALIDATE(Model, "Model must be initialized before handling input");
 
     if (!input) {
@@ -60,7 +60,7 @@ void TModelHandler::HandleLine(const TString& input) {
     while (!messages.empty()) {
         IModel::TResponse output;
         try {
-            output = Model->HandleMessages(messages);
+            output = Model->HandleMessages(messages, onStartWaiting, onFinishWaiting);
             messages.clear();
         } catch (const std::exception& e) {
             Cerr << Colors.Red() << "Failed to perform model API request: " << e.what() << Colors.OldColor() << Endl;

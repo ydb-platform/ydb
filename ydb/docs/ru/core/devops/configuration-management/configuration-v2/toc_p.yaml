@@ -9,6 +9,8 @@ items:
   href: config-settings.md
 - name: Расширение кластера
   href: cluster-expansion.md
+- name: Конфигурирование State Storage
+  href: state-storage-reconfiguration.md
 - name: Перемещение State Storage
   href: state-storage-move.md
 - name: Перемещение статической группы

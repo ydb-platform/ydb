@@ -25,8 +25,9 @@ RECURSE_FOR_TESTS(
 )
 
 RECURSE(
-    hashes_checker
-    password_checker
     account_lockout
     cache
+    hashes_checker
+    password_checker
+    sasl
 )

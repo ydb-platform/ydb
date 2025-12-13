@@ -775,7 +775,7 @@ struct TTruncateTableSettings {
 struct TCreateUserSettings {
     TString UserName;
     TString Password;
-    bool IsHashedPassword = false;
+    TString HashedPassword;
     bool CanLogin;
 };
 
@@ -795,7 +795,7 @@ struct TModifyPermissionsSettings {
 struct TAlterUserSettings {
     TString UserName;
     std::optional<TString> Password;
-    bool IsHashedPassword = false;
+    std::optional<TString> HashedPassword;
     std::optional<bool> CanLogin;
 };
 

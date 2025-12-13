@@ -236,19 +236,25 @@ public:
         NYTree::INodePtr acl,
         const NApi::TCheckPermissionByAclOptions& options) override;
 
+    // Accounting.
     TFuture<void> TransferAccountResources(
         const std::string& srcAccount,
         const std::string& dstAccount,
         NYTree::INodePtr resourceDelta,
         const TTransferAccountResourcesOptions& options) override;
 
-    // Scheduler pools.
-    virtual TFuture<void> TransferPoolResources(
-        const TString& srcPool,
-        const TString& dstPool,
-        const TString& poolTree,
+    TFuture<void> TransferPoolResources(
+        const std::string& srcPool,
+        const std::string& dstPool,
+        const std::string& poolTree,
         NYTree::INodePtr resourceDelta,
         const TTransferPoolResourcesOptions& options) override;
+
+    TFuture<void> TransferBundleResources(
+        const std::string& srcBundle,
+        const std::string& dstBundle,
+        NYTree::INodePtr resourceDelta,
+        const TTransferBundleResourcesOptions& options) override;
 
     // Scheduler.
     TFuture<NScheduler::TOperationId> StartOperation(

@@ -305,7 +305,7 @@ TEST(TLogicalTypeTest, TestIsComparable) {
     EXPECT_TRUE(IsComparable(Decimal(3, 2)));
 }
 
-TString CanonizeYsonString(TString input)
+TString CanonizeYsonString(TStringBuf input)
 {
     auto node = ConvertToNode(TYsonString(input));
     auto binaryYson = ConvertToYsonString(node);
@@ -329,7 +329,7 @@ class TLogicalTypeYson
     : public ::testing::TestWithParam<bool>
 {
 public:
-    TLogicalTypePtr FromTypeV3(TString yson)
+    TLogicalTypePtr FromTypeV3(TStringBuf yson)
     {
         const auto parseFromNode = GetParam();
         const auto ysonStr = TYsonStringBuf(yson, EYsonType::Node);
@@ -646,7 +646,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 using TCombineTypeFunc = std::function<TLogicalTypePtr(const TLogicalTypePtr&)>;
 
-std::vector<std::pair<TString, TCombineTypeFunc>> CombineFunctions = {
+std::vector<std::pair<std::string, TCombineTypeFunc>> CombineFunctions = {
     {
         "optional",
         [] (const TLogicalTypePtr& type) {
@@ -724,7 +724,7 @@ TEST(TLogicalTypeTest, TestAllTypesInCombineFunctions)
 }
 
 class TCombineLogicalMetatypeTests
-    : public ::testing::TestWithParam<std::pair<TString, TCombineTypeFunc>>
+    : public ::testing::TestWithParam<std::pair<std::string, TCombineTypeFunc>>
 { };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1006,8 +1006,8 @@ TEST(TStructsValidationTest, TestRemovedFieldNames)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<std::vector<TString>> ParseData(TStringBuf data, int expectedFieldsCount) {
-    TString noComments;
+std::vector<std::vector<std::string>> ParseData(TStringBuf data, int expectedFieldsCount) {
+    std::string noComments;
     {
         TMemoryInput in(data);
         TString line;
@@ -1019,13 +1019,13 @@ std::vector<std::vector<TString>> ParseData(TStringBuf data, int expectedFieldsC
         }
     }
 
-    std::vector<std::vector<TString>> result;
+    std::vector<std::vector<std::string>> result;
     for (TStringBuf record : StringSplitter(noComments).SplitByString(";;")) {
         record = StripString(record);
         if (record.empty()) {
             continue;
         }
-        std::vector<TString> fields;
+        std::vector<std::string> fields;
         for (TStringBuf field : StringSplitter(record).SplitByString("::")) {
             fields.emplace_back(StripString(field));
         }
@@ -1043,12 +1043,8 @@ TEST(TTestLogicalTypesWithDataTest, GoodTypes)
 
     for (const auto& record : records) {
         const auto& typeYson = record.at(0);
-        // TODO(levysotsky): Remove when tz_* types are supported.
-        if (typeYson.Contains("tz_")) {
-            continue;
-        }
         const auto& typeText = record.at(1);
-        TString context = Format("text: %v\nyson: %v\n", typeText, typeYson);
+        auto context = Format("text: %v\nyson: %v\n", typeText, typeYson);
         auto wrapError = [&] (const std::exception& ex) {
             return yexception() << "Unexpected error: " << ex.what() << '\n' << context;
         };
@@ -1078,10 +1074,6 @@ TEST(TTestLogicalTypesWithDataTest, BadTypes)
 
     for (const auto& record : records) {
         const auto& typeYson = record.at(0);
-        // TODO(levysotsky): Remove when tz_* types are supported.
-        if (typeYson.Contains("tz_")) {
-            continue;
-        }
 
         EXPECT_THROW(ConvertTo<TLogicalTypePtr>(TYsonStringBuf(typeYson)), TErrorException);
     }

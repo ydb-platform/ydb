@@ -191,7 +191,7 @@ TEST(TValidateLogicalTypeTest, TestTimezoneType)
     EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate>(correctValue));
 
     // Short buffer.
-    TString shortValue = "1";
+    std::string shortValue = "1";
     EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate>(shortValue), "Not a valid timezone type");
 
     // Wrong timezone.

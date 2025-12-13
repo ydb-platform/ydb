@@ -43,46 +43,45 @@ class TNamedValue
 public:
     struct TAny
     {
-        TString Value;
+        std::string Value;
         friend bool operator ==(const TNamedValue::TAny& lhs, const TNamedValue::TAny& rhs) = default;
     };
 
     struct TComposite
     {
-        TString Value;
+        std::string Value;
         friend bool operator ==(const TNamedValue::TComposite& lhs, const TNamedValue::TComposite& rhs) = default;
     };
 
-    using TValue = std::variant<std::nullptr_t, i64, ui64, double, bool, TString, TAny, TComposite>;
+    using TValue = std::variant<std::nullptr_t, i64, ui64, double, bool, std::string, TAny, TComposite>;
 
 public:
     template <typename T>
-    TNamedValue(TString name, T value)
+    TNamedValue(std::string name, T value)
         : Name_(std::move(name))
         , Value_(std::move(value))
     { }
 
     template <>
-    TNamedValue(TString name, std::nullptr_t)
+    TNamedValue(std::string name, std::nullptr_t)
         : Name_(std::move(name))
-        , Value_()
     { }
 
     template <>
-    TNamedValue(TString name, unsigned value)
+    TNamedValue(std::string name, unsigned value)
         : Name_(std::move(name))
         , Value_(static_cast<ui64>(value))
     { }
 
     template <>
-    TNamedValue(TString name, TStringBuf value)
+    TNamedValue(std::string name, TStringBuf value)
         : Name_(std::move(name))
-        , Value_(TString(value))
+        , Value_(std::string(value))
     { }
 
-    TNamedValue(TString name, NTableClient::EValueType valueType, TStringBuf value)
+    TNamedValue(std::string name, NTableClient::EValueType valueType, TStringBuf value)
         : Name_(std::move(name))
-        , Value_(ToValue(valueType, TString(value)))
+        , Value_(ToValue(valueType, std::string(value)))
     { }
 
     NTableClient::TUnversionedValue ToUnversionedValue(const NTableClient::TNameTablePtr& nameTable) const;
@@ -93,7 +92,7 @@ private:
     TValue ToValue(NTableClient::EValueType valueType, TStringBuf value);
 
 private:
-    TString Name_;
+    std::string Name_;
     TValue Value_;
 
     friend bool operator ==(const TNamedValue& lhs, const TNamedValue& rhs) = default;

@@ -438,7 +438,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
     std::vector<TMenuEntry> options;
     const TString title = TStringBuilder() << "Pick desired action to configure model name:";
 
-    options.push_back({"Write a new model name", [&]() {
+    options.push_back({"Set custom model name", [&]() {
         auto value = RunFtxuiInput(TStringBuilder() << "Please enter model name: ", "", [&](const TString& input, TString& error) {
             modelName = Strip(input);
             if (!modelName) {
@@ -452,7 +452,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
         }
     }});
 
-    options.push_back({TStringBuilder() << "Don't save model name", []() {}});
+    options.push_back({TStringBuilder() << "Do not set model name", []() {}});
 
     const auto currentModelName = GetModelName();
     if (currentModelName) {
@@ -466,7 +466,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
             continue;
         }
 
-        options.push_back({TStringBuilder() << "Use new model name \"" << allowedName << "\"", [&modelName, allowedName]() {
+        options.push_back({TStringBuilder() << "Use model \"" << allowedName << "\"", [&modelName, allowedName]() {
             modelName = allowedName;
         }});
     }

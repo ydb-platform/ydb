@@ -200,11 +200,11 @@ private:
         elements.emplace_back(Menu->Render());
         elements.emplace_back(ftxui::separator());
 
-        auto info = ftxui::text("Use arrows to choose, Enter to confirm, Esc to cancel");
+        auto info = ftxui::text("Use arrows ↑ and ↓ to choose, Enter to confirm, Esc to cancel");
         if (PageCount > 1) {
             elements.emplace_back(ftxui::vbox({
                 std::move(info),
-                ftxui::text("PageUp for previous page, PageDown for next page")
+                ftxui::text("Use arrows ← and → to navigate through pages")
             }));
         } else {
             elements.emplace_back(std::move(info));

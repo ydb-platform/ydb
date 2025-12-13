@@ -1451,7 +1451,15 @@
             const historyByDate = {};
             for (const timestamp in history) {
                 const entry = history[timestamp];
-                const date = entry.date.split(' ')[0]; // Get date part only
+                if (!entry) continue; // Skip invalid entries
+                
+                // Safely get date - handle both 'date' and 'datetime' fields
+                const dateStr = entry.date || entry.datetime || '';
+                if (!dateStr) continue; // Skip entries without date
+                
+                const date = dateStr.split(' ')[0]; // Get date part only
+                if (!date) continue; // Skip if date is empty after split
+                
                 if (!historyByDate[date]) {
                     historyByDate[date] = {
                         pr_check: { passed: 0, total: 0 },
@@ -1525,13 +1533,17 @@
                 // Column 2: Runs in Branch (main) - иконки для Branch runs
                 html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
                 for (const { timestamp, entry } of otherEntries) {
-                    const statusColor = entry.status === 'passed' ? '#28a745' : 
-                                       entry.status === 'failure' ? '#dc3545' : '#007bff';
-                    const statusSymbol = entry.status === 'passed' ? '✓' : 
-                                        entry.status === 'failure' ? '✗' : '⊘';
+                    if (!entry) continue; // Skip invalid entries
+                    const status = entry.status || 'unknown';
+                    const date = entry.date || entry.datetime || '';
+                    const jobName = entry.job_name || '';
+                    const statusColor = status === 'passed' ? '#28a745' : 
+                                       status === 'failure' ? '#dc3545' : '#007bff';
+                    const statusSymbol = status === 'passed' ? '✓' : 
+                                        status === 'failure' ? '✗' : '⊘';
                     html += `<span style="cursor: pointer; padding: 4px 8px; border-radius: 3px; background-color: ${statusColor}; color: white; font-size: 11px;" `;
                     html += `onclick="showHistoryEntry('${testFullName}', '${timestamp}')" `;
-                    html += `title="${entry.status} - ${entry.date} - ${entry.job_name}">`;
+                    html += `title="${status} - ${date} - ${jobName}">`;
                     html += `${statusSymbol}</span>`;
                 }
                 html += '</div></td>';
@@ -1542,13 +1554,17 @@
                 // Column 4: Runs in PR-Check - иконки для PR-Check runs
                 html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
                 for (const { timestamp, entry } of prCheckEntries) {
-                    const statusColor = entry.status === 'passed' ? '#28a745' : 
-                                       entry.status === 'failure' ? '#dc3545' : '#007bff';
-                    const statusSymbol = entry.status === 'passed' ? '✓' : 
-                                        entry.status === 'failure' ? '✗' : '⊘';
+                    if (!entry) continue; // Skip invalid entries
+                    const status = entry.status || 'unknown';
+                    const date = entry.date || entry.datetime || '';
+                    const jobName = entry.job_name || '';
+                    const statusColor = status === 'passed' ? '#28a745' : 
+                                       status === 'failure' ? '#dc3545' : '#007bff';
+                    const statusSymbol = status === 'passed' ? '✓' : 
+                                        status === 'failure' ? '✗' : '⊘';
                     html += `<span style="cursor: pointer; padding: 4px 8px; border-radius: 3px; background-color: ${statusColor}; color: white; font-size: 11px;" `;
                     html += `onclick="showHistoryEntry('${testFullName}', '${timestamp}')" `;
-                    html += `title="${entry.status} - ${entry.date} - ${entry.job_name}">`;
+                    html += `title="${status} - ${date} - ${jobName}">`;
                     html += `${statusSymbol}</span>`;
                 }
                 html += '</div></td></tr>';
@@ -1581,12 +1597,12 @@
             
             showTestInfo({
                 testName: testName,
-                status: entry.status,
-                date: entry.date,
+                status: entry.status || '',
+                date: entry.date || entry.datetime || '',
                 errorText: errorText,
-                commit: entry.commit,
-                job_name: entry.job_name,
-                job_id: entry.job_id,
+                commit: entry.commit || '',
+                job_name: entry.job_name || '',
+                job_id: entry.job_id || '',
                 logUrls: logUrls
             });
         }

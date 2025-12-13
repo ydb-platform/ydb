@@ -15,12 +15,6 @@ namespace NKikimr::NPQ {
 namespace {
 
 template<const NProtoBuf::EnumDescriptor* SimpleDesc()>
-const TString& GetLabels() {
-    return NAux::GetLabeledCounterOpts<SimpleDesc>()->GetGroups();
-}
-
-
-template<const NProtoBuf::EnumDescriptor* SimpleDesc()>
 struct TMetricCollector {
     using TConfig = TProtobufTabletLabeledCounters<SimpleDesc>;
 

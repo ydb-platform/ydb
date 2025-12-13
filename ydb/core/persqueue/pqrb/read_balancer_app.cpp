@@ -19,6 +19,7 @@ bool TPersQueueReadBalancer::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
 
 TString TPersQueueReadBalancer::GenerateStat() {
     auto& metrics = TopicMetricsHandler->GetTopicMetrics();
+    auto& partitionMetrics = TopicMetricsHandler->GetPartitionMetrics();
 
     TStringStream str;
     HTML_APP_PAGE(str, "PersQueueReadBalancer " << TabletID() << " (" << Path << ")") {
@@ -76,7 +77,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                     }
                     TABLEBODY() {
                         for (auto& [partitionId, partitionInfo] : PartitionsInfo) {
-                            const auto& stats = metrics.PartitionMetrics.find(partitionId);
+                            const auto& stats = partitionMetrics.find(partitionId);
                             const auto* node = PartitionGraph.GetPartition(partitionId);
                             TString style = node && node->DirectChildren.empty() ? "text-success" : "text-muted";
 
@@ -111,7 +112,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                         }
                                     }
                                 }
-                                TABLED() { str << (stats == metrics.PartitionMetrics.end() ? 0 : stats->second.DataSize); }
+                                TABLED() { str << (stats == partitionMetrics.end() ? 0 : stats->second.DataSize); }
                             }
                         }
                     }

@@ -47,12 +47,12 @@ struct TConsumerMetricCollector {
 };
 
 struct TTopicMetricCollector {
-    TTopicMetricCollector(absl::flat_hash_map<ui32, TTopicMetrics::TPartitionMetrics> partitionMetrics)
-        : ExistedPartitionMetrics(std::move(partitionMetrics))
+    TTopicMetricCollector(absl::flat_hash_map<ui32, TPartitionMetrics>& partitionMetrics)
+        : PartitionMetrics(partitionMetrics)
     {
     }
 
-    absl::flat_hash_map<ui32, TTopicMetrics::TPartitionMetrics> ExistedPartitionMetrics;
+    absl::flat_hash_map<ui32, TPartitionMetrics>& PartitionMetrics;
 
     TTopicMetrics TopicMetrics;
 
@@ -63,25 +63,16 @@ struct TTopicMetricCollector {
     absl::flat_hash_map<TString, TConsumerMetricCollector> Consumers;
 
     void Collect(const NKikimrPQ::TStatusResponse::TPartResult& partitionStatus) {
-        TopicMetrics.TotalDataSize += partitionStatus.GetPartitionSize();
-        TopicMetrics.TotalUsedReserveSize += partitionStatus.GetUsedReserveSize();
-
-        TopicMetrics.TotalAvgWriteSpeedPerSec += partitionStatus.GetAvgWriteSpeedPerSec();
-        TopicMetrics.MaxAvgWriteSpeedPerSec = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerSec, partitionStatus.GetAvgWriteSpeedPerSec());
-        TopicMetrics.TotalAvgWriteSpeedPerMin += partitionStatus.GetAvgWriteSpeedPerMin();
-        TopicMetrics.MaxAvgWriteSpeedPerMin = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerMin, partitionStatus.GetAvgWriteSpeedPerMin());
-        TopicMetrics.TotalAvgWriteSpeedPerHour += partitionStatus.GetAvgWriteSpeedPerHour();
-        TopicMetrics.MaxAvgWriteSpeedPerHour = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerHour, partitionStatus.GetAvgWriteSpeedPerHour());
-        TopicMetrics.TotalAvgWriteSpeedPerDay += partitionStatus.GetAvgWriteSpeedPerDay();
-        TopicMetrics.MaxAvgWriteSpeedPerDay = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerDay, partitionStatus.GetAvgWriteSpeedPerDay());
-
-        auto& partitionMetrics = TopicMetrics.PartitionMetrics[partitionStatus.GetPartition()];
+        auto& partitionMetrics = PartitionMetrics[partitionStatus.GetPartition()];
         partitionMetrics.DataSize = partitionStatus.GetPartitionSize();
         partitionMetrics.UsedReserveSize = partitionStatus.GetUsedReserveSize();
 
-        Collect(partitionStatus.GetAggregatedCounters());
+        partitionMetrics.AvgWriteSpeedPerSec = partitionStatus.GetAvgWriteSpeedPerSec();
+        partitionMetrics.AvgWriteSpeedPerMin = partitionStatus.GetAvgWriteSpeedPerMin();
+        partitionMetrics.AvgWriteSpeedPerHour = partitionStatus.GetAvgWriteSpeedPerHour();
+        partitionMetrics.AvgWriteSpeedPerDay = partitionStatus.GetAvgWriteSpeedPerDay();
 
-        ExistedPartitionMetrics.erase(partitionStatus.GetPartition());
+        Collect(partitionStatus.GetAggregatedCounters());
     }
 
     void Collect(const NKikimrPQ::TAggregatedCounters& counters) {
@@ -102,11 +93,18 @@ struct TTopicMetricCollector {
     }
 
     void Finish() {
-        for (auto& [partitionId, partitionMetrics] : ExistedPartitionMetrics) {
+        for (auto& [_, partitionMetrics] : PartitionMetrics) {
             TopicMetrics.TotalDataSize += partitionMetrics.DataSize;
             TopicMetrics.TotalUsedReserveSize += partitionMetrics.UsedReserveSize;
 
-            TopicMetrics.PartitionMetrics[partitionId] = partitionMetrics;
+            TopicMetrics.TotalAvgWriteSpeedPerSec += partitionMetrics.AvgWriteSpeedPerSec;
+            TopicMetrics.MaxAvgWriteSpeedPerSec = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerSec, partitionMetrics.AvgWriteSpeedPerSec);
+            TopicMetrics.TotalAvgWriteSpeedPerMin += partitionMetrics.AvgWriteSpeedPerMin;
+            TopicMetrics.MaxAvgWriteSpeedPerMin = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerMin, partitionMetrics.AvgWriteSpeedPerMin);
+            TopicMetrics.TotalAvgWriteSpeedPerHour += partitionMetrics.AvgWriteSpeedPerHour;
+            TopicMetrics.MaxAvgWriteSpeedPerHour = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerHour, partitionMetrics.AvgWriteSpeedPerHour);
+            TopicMetrics.TotalAvgWriteSpeedPerDay += partitionMetrics.AvgWriteSpeedPerDay;
+            TopicMetrics.MaxAvgWriteSpeedPerDay = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerDay, partitionMetrics.AvgWriteSpeedPerDay);
         }
     }
 };
@@ -173,6 +171,10 @@ TTopicMetricsHandler::~TTopicMetricsHandler() = default;
 
 const TTopicMetrics& TTopicMetricsHandler::GetTopicMetrics() const {
     return TopicMetrics;
+}
+
+const absl::flat_hash_map<ui32, TPartitionMetrics>& TTopicMetricsHandler::GetPartitionMetrics() const {
+    return PartitionMetrics;
 }
 
 void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
@@ -255,7 +257,7 @@ void TTopicMetricsHandler::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tablet
 }
 
 void TTopicMetricsHandler::InitializePartitions(ui32 partitionId, ui64 dataSize, ui64 usedReserveSize) {
-    TopicMetrics.PartitionMetrics[partitionId] = {
+    PartitionMetrics[partitionId] = {
         .DataSize = dataSize,
         .UsedReserveSize = usedReserveSize
     };
@@ -273,7 +275,7 @@ void TTopicMetricsHandler::UpdateMetrics() {
         return;
     }
 
-    TTopicMetricCollector collector(TopicMetrics.PartitionMetrics);
+    TTopicMetricCollector collector(PartitionMetrics);
     for (auto& [_, partitionStatus] : PartitionStatuses) {
         collector.Collect(partitionStatus);
     }

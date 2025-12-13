@@ -66,10 +66,10 @@ struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Self->TTxWritePartitionStatsScheduled = false;
 
-        auto& metrics = Self->TopicMetricsHandler->GetTopicMetrics();
+        auto& metrics = Self->TopicMetricsHandler->GetPartitionMetrics();
 
         NIceDb::TNiceDb db(txc.DB);
-        for (auto& [partition, stats] : metrics.PartitionMetrics) {
+        for (auto& [partition, stats] : metrics) {
             auto it = Self->PartitionsInfo.find(partition);
             if (it == Self->PartitionsInfo.end()) {
                 continue;

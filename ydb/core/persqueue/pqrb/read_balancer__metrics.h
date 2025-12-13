@@ -25,12 +25,16 @@ struct TTopicMetrics {
     ui64 MaxAvgWriteSpeedPerHour = 0;
     ui64 TotalAvgWriteSpeedPerDay = 0;
     ui64 MaxAvgWriteSpeedPerDay = 0;
+};
 
-    struct TPartitionMetrics {
-        ui64 DataSize = 0;
-        ui64 UsedReserveSize = 0;
-    };
-    absl::flat_hash_map<ui32, TPartitionMetrics> PartitionMetrics;
+struct TPartitionMetrics {
+    ui64 DataSize = 0;
+    ui64 UsedReserveSize = 0;
+
+    ui64 AvgWriteSpeedPerSec = 0;
+    ui64 AvgWriteSpeedPerMin = 0;
+    ui64 AvgWriteSpeedPerHour = 0;
+    ui64 AvgWriteSpeedPerDay = 0;
 };
 
 struct TCounters {
@@ -44,6 +48,7 @@ public:
     ~TTopicMetricsHandler();
 
     const TTopicMetrics& GetTopicMetrics() const;
+    const absl::flat_hash_map<ui32, TPartitionMetrics>& GetPartitionMetrics() const;
 
     void Initialize(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx);
     void UpdateConfig(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx);
@@ -60,6 +65,7 @@ private:
     NMonitoring::TDynamicCounterPtr DynamicCounters;
 
     TTopicMetrics TopicMetrics;
+    absl::flat_hash_map<ui32, TPartitionMetrics> PartitionMetrics;
 
     NMonitoring::TDynamicCounters::TCounterPtr ActivePartitionCountCounter;
     NMonitoring::TDynamicCounters::TCounterPtr InactivePartitionCountCounter;

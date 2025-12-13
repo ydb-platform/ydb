@@ -11,6 +11,7 @@ namespace NYql::NDq {
 class TDqChannelStorageException : public yexception {
 };
 
+
 class IDqChannelStorage : public TSimpleRefCount<IDqChannelStorage> {
 public:
     using TPtr = TIntrusivePtr<IDqChannelStorage>;

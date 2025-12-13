@@ -42,6 +42,8 @@ struct TDqOutputChannelSettings {
     TMutable MutableSettings;
 };
 
+class IDqTaskRunnerExecutionContext;
+
 class IDqOutputChannel : public IDqOutput {
 public:
     using TPtr = TIntrusivePtr<IDqOutputChannel>;
@@ -74,6 +76,14 @@ public:
     virtual void Terminate() = 0;
 
     virtual void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) = 0;
+
+    // fast channels
+    virtual bool Bind(NActors::TActorId /* outputActorId */, NActors::TActorId /* inputActorId */ ) {
+        return false;
+    }
+    virtual bool GetIntrospectionInfo(TInstant& /* lastFinishCheckTime */, bool /* lastFinishCheckResult */ ) const {
+        return false;
+    }
 };
 
 struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {

@@ -234,6 +234,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         if (BufferPageAllocSize) {
             serializedTask->SetBufferPageAllocSize(*BufferPageAllocSize);
         }
+        serializedTask->SetFastChannels(TasksGraph.GetMeta().UseFastChannels);
         request.AddTasks()->Swap(serializedTask);
     }
 
@@ -497,6 +498,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         taskDesc->SetBufferPageAllocSize(*BufferPageAllocSize);
     }
 
+    taskDesc->SetFastChannels(TasksGraph.GetMeta().UseFastChannels);
     auto startResult = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,
@@ -531,6 +533,15 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     TActorId* actorId = std::get_if<TActorId>(&startResult);
     Y_ABORT_UNLESS(actorId);
     Y_ABORT_UNLESS(AcknowledgeCA(taskId, *actorId, nullptr));
+
+    for (auto& output : task.Outputs) {
+        for (auto channelId : output.Channels) {
+            auto& channel = TasksGraph.GetChannel(channelId);
+            if (!channel.DstTask) {
+                ResultChannels.emplace(channelId, task.ComputeActorId);
+            }
+        }
+    }
 
     THashMap<TActorId, THashSet<ui64>> updates;
     CollectTaskChannelsUpdates(task, updates);

@@ -167,7 +167,6 @@ public:
 
     void Finish() final  {
         Cout << Endl;
-        Rx->invoke(replxx::Replxx::ACTION::CLEAR_SELF, 0);
     }
 
 private:

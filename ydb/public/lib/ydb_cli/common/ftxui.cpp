@@ -9,6 +9,9 @@
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 
+#include <thread>
+#include <chrono>
+
 #if defined(_unix_)
 #include <termios.h>
 #include <unistd.h>
@@ -21,9 +24,25 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 void FlushStdin() {
+    // Wait a bit for any pending terminal responses (like CPR) to arrive
+    // and disable ECHO to prevent them from being printed to stdout
 #if defined(_unix_)
-    tcflush(STDIN_FILENO, TCIFLUSH);
+    struct termios t;
+    if (tcgetattr(STDIN_FILENO, &t) == 0) {
+        struct termios raw = t;
+        raw.c_lflag &= ~ECHO;
+        tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        tcflush(STDIN_FILENO, TCIFLUSH);
+
+        tcsetattr(STDIN_FILENO, TCSANOW, &t);
+    } else {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        tcflush(STDIN_FILENO, TCIFLUSH);
+    }
 #elif defined(_win_)
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
 #endif
 }

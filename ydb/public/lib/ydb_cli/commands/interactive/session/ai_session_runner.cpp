@@ -41,10 +41,10 @@ public:
         });
     }
 
-    void Stop(bool success = false) {
+    double Stop(bool success = false) {
         bool expected = true;
         if (!Running.compare_exchange_strong(expected, false)) {
-            return;
+            return 0.0;
         }
 
         if (Worker.joinable()) {
@@ -55,10 +55,10 @@ public:
 
         if (success) {
             auto now = std::chrono::steady_clock::now();
-            auto elapsed = std::chrono::duration<double>(now - StartTime).count();
-            Cout << "Agent thought for " << Sprintf("%.2fs", elapsed) << Endl;
+            return std::chrono::duration<double>(now - StartTime).count();
         } else {
              Cout.Flush();
+             return 0.0;
         }
     }
 
@@ -128,18 +128,21 @@ public:
             return;
         }
 
+        Cout << Endl;
+
         std::shared_ptr<TSpinner> spinner;
+        double lastThinkingTime = 0.0;
         auto onStart = [&spinner]() {
             spinner = std::make_shared<TSpinner>();
         };
-        auto onFinish = [&spinner]() {
+        auto onFinish = [&spinner, &lastThinkingTime]() {
             if (spinner) {
-                spinner->Stop(true);
+                lastThinkingTime = spinner->Stop(true);
                 spinner.reset();
             }
         };
 
-        ModelHandler->HandleLine(line, onStart, onFinish);
+        ModelHandler->HandleLine(line, onStart, onFinish, [&lastThinkingTime](){ return lastThinkingTime; });
     }
 
 private:

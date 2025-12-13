@@ -48,7 +48,14 @@ protected:
     }
 
     bool AskPermissions() final {
-        Cout << Endl << Colors.BoldColor() << "Agent wants to list directory: " << Colors.OldColor() << Directory << Endl;
+        TString message;
+        if (Directory == Database || Directory == Database + "/") {
+            message = "Listing database root directory";
+        } else {
+            message = TStringBuilder() << "Listing directory " << Directory;
+        }
+
+        Cout << Endl << Colors.Green() << message << Colors.OldColor() << Endl << Endl;
 
         // Directory listing is alway allowed
         return true;

@@ -60,9 +60,9 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
     if (!activeSession) {
-        Cout << "Write YQL query text or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl;
+        Cout << "Write YQL query text or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
     } else {
-        Cout << "Write textual request or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl;
+        Cout << "Write textual request or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
     }
 
     Y_VALIDATE(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid), "Unexpected default mode: " << activeSession);

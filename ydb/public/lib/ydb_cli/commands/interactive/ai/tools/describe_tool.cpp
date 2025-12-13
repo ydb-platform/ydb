@@ -32,7 +32,7 @@ Information provided by object type:
 - **View**: Query text.
 
 Use this tool to inspect table schema before executing `INSERT`, `SELECT`, `UPDATE`, `DELETE` or other SQL queries that need the knowledge of the schema.
-NEVER guess column names, types or keys - always verify them with this tool first.
+NEVER guess column names, types or keys without verifying them with this tool first.
 
 **Path Format**:
 - **Relative** (Preferred): Path relative to the database root (e.g., `my_dir/my_table`). Do NOT start with `/`.
@@ -73,6 +73,7 @@ protected:
     }
 
     bool AskPermissions() final {
+        Cout << Endl << Colors.Green() << "Calling describe tool for path " << Path << Colors.OldColor() << Endl << Endl;
         return true;
     }
 

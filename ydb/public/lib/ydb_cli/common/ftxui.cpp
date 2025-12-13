@@ -68,6 +68,7 @@ std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TStri
     std::optional<size_t> result;
     try {
         auto screen = ftxui::ScreenInteractive::FitComponent();
+        screen.TrackMouse(false);
         auto menu = ftxui::Menu(&labels, &selected);
         auto exit = screen.ExitLoopClosure();
 

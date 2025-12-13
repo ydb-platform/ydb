@@ -23,7 +23,7 @@ public:
 
     TModelHandler(const TSettings& settings, const TInteractiveLogger& log);
 
-    void HandleLine(const TString& input, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {});
+    void HandleLine(const TString& input, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {}, std::function<double()> getThinkingTime = {});
 
     void ClearContext();
 

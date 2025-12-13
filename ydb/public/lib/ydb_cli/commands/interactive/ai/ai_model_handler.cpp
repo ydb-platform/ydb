@@ -9,6 +9,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/describe_tool.h>
 
 #include <util/string/strip.h>
+#include <util/string/printf.h>
 
 namespace NYdb::NConsoleClient {
     void PrintFtxuiMessage(const TString& message, const TString& title = "");
@@ -70,7 +71,7 @@ TModelHandler::TModelHandler(const TSettings& settings, const TInteractiveLogger
     SetupTools(settings);
 }
 
-void TModelHandler::HandleLine(const TString& input, std::function<void()> onStartWaiting, std::function<void()> onFinishWaiting) {
+void TModelHandler::HandleLine(const TString& input, std::function<void()> onStartWaiting, std::function<void()> onFinishWaiting, std::function<double()> getThinkingTime) {
     Y_VALIDATE(Model, "Model must be initialized before handling input");
 
     if (!input) {
@@ -94,7 +95,13 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
         }
 
         if (output.Text) {
-            ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), "Agent response");
+            TString title = "Agent response";
+            if (getThinkingTime) {
+                if (double elapsed = getThinkingTime(); elapsed > 0.0) {
+                    title += Sprintf(" (after %.2fs)", elapsed);
+                }
+            }
+            ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), title);
         }
 
         std::vector<TString> userMessages;

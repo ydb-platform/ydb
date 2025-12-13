@@ -17,6 +17,8 @@ std::optional<TString> RunFtxuiInput(const TString& title, const TString& initia
 
 bool AskYesNoFtxui(const TString& question, bool defaultAnswer = false);
 
+void PrintFtxuiMessage(const TString& message, const TString& title = "");
+
 } // namespace NYdb::NConsoleClient
 
 

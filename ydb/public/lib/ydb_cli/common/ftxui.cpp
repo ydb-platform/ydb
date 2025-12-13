@@ -4,7 +4,10 @@
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
+#include <contrib/libs/ftxui/include/ftxui/dom/node.hpp>
 #include <contrib/libs/ftxui/include/ftxui/screen/color.hpp>
+
+#include <contrib/libs/ftxui/include/ftxui/screen/screen.hpp>
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
@@ -176,6 +179,26 @@ bool AskYesNoFtxui(const TString& question, bool defaultAnswer) {
         return defaultAnswer;
     }
     return *idx == 0;
+}
+
+void PrintFtxuiMessage(const TString& message, const TString& title) {
+    auto document = ftxui::window(
+        ftxui::hbox({
+            ftxui::text("─"),
+            ftxui::text(" " + std::string(title) + " ") | ftxui::bold
+        }) | ftxui::color(ftxui::Color::Cyan),
+        ftxui::paragraph(std::string(message)) | ftxui::color(ftxui::Color::White)
+    ) | ftxui::color(ftxui::Color::Cyan);
+
+    auto screen = ftxui::Screen::Create(ftxui::Dimension::Full(), ftxui::Dimension::Fit(document));
+    ftxui::Render(screen, document);
+    
+    // We need to print screen content manually to Cout to respect current terminal state/redirections if possible, 
+    // but Screen::Print() writes to stdout. 
+    // Let's use Screen::ToString() if available or just Print() and flush.
+    // FTXUI Screen::Print() writes to cout.
+    screen.Print();
+    Cout << Endl;
 }
 
 } // namespace NYdb::NConsoleClient

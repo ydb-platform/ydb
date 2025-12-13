@@ -10,6 +10,10 @@
 
 #include <util/string/strip.h>
 
+namespace NYdb::NConsoleClient {
+    void PrintFtxuiMessage(const TString& message, const TString& title = "");
+}
+
 namespace NYdb::NConsoleClient::NAi {
 
 namespace {
@@ -73,7 +77,7 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
         }
 
         if (output.Text) {
-            Cout << Endl << StripStringRight(output.Text) << Endl;
+            ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), "Agent response");
         }
 
         std::vector<TString> userMessages;

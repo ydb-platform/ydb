@@ -188,6 +188,7 @@ protected:
             return TResponse(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
+        Cout << Endl;
         return TResponse(ExecuteRunner.ExtractResults(), UserMessage);
     }
 

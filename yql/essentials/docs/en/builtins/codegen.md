@@ -1,6 +1,6 @@
 # Functions for code generation
 
-When running calculations, you can generate the code including [S-expressions](/docs/s_expressions) nodes. This uses a mechanism for packing the code in the [resource](../types/special.md). After building the code, you can insert it into the main program using the [EvaluateCode](#evaluatecode) function. For debugging purposes, you can convert the code to a string using the [FormatCode](#formatcode) function.
+When running calculations, you can generate the code including S-expressions nodes. This uses a mechanism for packing the code in the [resource](../types/special.md). After building the code, you can insert it into the main program using the [EvaluateCode](#evaluatecode) function. For debugging purposes, you can convert the code to a string using the [FormatCode](#formatcode) function.
 
 Possible node types in S-expressions that can be used for code generation:
 
@@ -24,7 +24,7 @@ In the text representation, S-expressions have the following format:
 
 ## FormatCode
 
-Serializing the code as [S-expressions](/docs/s_expressions). The code must not contain free arguments of functions, hence, to serialize the lambda function code, you must pass it completely, avoiding passing individual expressions that might contain lambda function arguments.
+Serializing the code as S-expressions. The code must not contain free arguments of functions, hence, to serialize the lambda function code, you must pass it completely, avoiding passing individual expressions that might contain lambda function arguments.
 
 ### Examples
 

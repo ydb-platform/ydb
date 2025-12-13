@@ -28,7 +28,7 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 
 ## Разрешения
 
-Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `ALL` на базу данных
+Требуется [разрешение](./grant#permissions-list) `ALL` на базу данных
 
 Пример выдачи такого разрешения:
 

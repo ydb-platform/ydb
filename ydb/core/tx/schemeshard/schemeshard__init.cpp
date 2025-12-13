@@ -4048,7 +4048,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& sid = *securityState.AddSids();
                 sid.SetName(rowset.GetValue<Schema::LoginSids::SidName>());
                 sid.SetType(rowset.GetValue<Schema::LoginSids::SidType>());
-                sid.SetHash(rowset.GetValue<Schema::LoginSids::SidHash>());
+                sid.SetArgonHash(rowset.GetValue<Schema::LoginSids::SidHash>());
+                sid.SetPasswordHashes(rowset.GetValue<Schema::LoginSids::PasswordHashes>());
                 sid.SetCreatedAt(rowset.GetValueOrDefault<Schema::LoginSids::CreatedAt>());
                 sid.SetFailedLoginAttemptCount(rowset.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>());
                 sid.SetLastFailedLogin(rowset.GetValueOrDefault<Schema::LoginSids::LastFailedAttempt>());

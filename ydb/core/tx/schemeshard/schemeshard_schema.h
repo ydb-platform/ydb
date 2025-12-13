@@ -1784,6 +1784,7 @@ struct Schema : NIceDb::Schema {
         struct FailedAttemptCount : Column<6, NScheme::NTypeIds::Uint32> {using Type = ui32; static constexpr Type Default = 0;};
         struct CreatedAt : Column<7, NScheme::NTypeIds::Timestamp> {};
         struct IsEnabled : Column<8, NScheme::NTypeIds::Bool> { using Type = bool; static constexpr Type Default = true; };
+        struct PasswordHashes : Column<9, NScheme::NTypeIds::Utf8> {}; // Base64 encoded JSON map with hash type and hash secrets
 
         using TKey = TableKey<SidName>;
         using TColumns = TableColumns<
@@ -1794,7 +1795,8 @@ struct Schema : NIceDb::Schema {
             LastFailedAttempt,
             FailedAttemptCount,
             CreatedAt,
-            IsEnabled
+            IsEnabled,
+            PasswordHashes
         >;
     };
 

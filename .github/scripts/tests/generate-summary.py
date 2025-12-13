@@ -535,7 +535,6 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     
     # Calculate success rates for all tests with history
     test_success_rates = {}
-    flaky_tests = set()  # Track tests that are flaky (non-pr-check success rate < 100%)
     
     print(f"Processing history for {len(history)} tests with history data")
     print(f"Total tests in statuses: {len(tests_in_statuses)}")
@@ -546,19 +545,8 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
             if test_history:  # Check that history is not empty
                 rates = calculate_success_rate(test_history)
                 test_success_rates[test.full_name] = rates
-                
-                # Mark as flaky if non-pr-check success rate is not 100%
-                if rates.get("other") and rates["other"]["rate"] < 100:
-                    flaky_tests.add(test.full_name)
     
     print(f"Calculated success rates for {len(test_success_rates)} tests")
-    
-    # Mark flaky tests in TestResult objects (for all tests, not just those with history)
-    for test in rows:
-        if test.full_name in flaky_tests:
-            test.is_flaky = True
-        else:
-            test.is_flaky = False
     
     # Group by status -> suite -> tests
     # Convert to dict with status enum as key for template
@@ -574,19 +562,6 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
         if t.status in [TestStatus.PASS, TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE, TestStatus.SKIP]
     ]
     
-    # Count flaky tests (for badge display)
-    flaky_tests_list = [t for t in visible_tests if getattr(t, 'is_flaky', False)]
-    
-    # Count flaky per status (for badge display)
-    flaky_failed = [t for t in status_test.get(TestStatus.FAIL, []) if getattr(t, 'is_flaky', False)]
-    flaky_error = [t for t in status_test.get(TestStatus.ERROR, []) if getattr(t, 'is_flaky', False)]
-    flaky_mute = [t for t in status_test.get(TestStatus.MUTE, []) if getattr(t, 'is_flaky', False)]
-    
-    # Count stable (non-flaky) per status
-    stable_failed = [t for t in status_test.get(TestStatus.FAIL, []) if not getattr(t, 'is_flaky', False)]
-    stable_error = [t for t in status_test.get(TestStatus.ERROR, []) if not getattr(t, 'is_flaky', False)]
-    stable_mute = [t for t in status_test.get(TestStatus.MUTE, []) if not getattr(t, 'is_flaky', False)]
-    
     # Count sanitizer per status (for badge display)
     sanitizer_failed = [t for t in status_test.get(TestStatus.FAIL, []) if t.is_sanitizer_issue]
     sanitizer_error = [t for t in status_test.get(TestStatus.ERROR, []) if t.is_sanitizer_issue]
@@ -594,21 +569,14 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     sanitizer_passed = [t for t in status_test.get(TestStatus.PASS, []) if t.is_sanitizer_issue]
     sanitizer_skipped = [t for t in status_test.get(TestStatus.SKIP, []) if t.is_sanitizer_issue]
     
-    # Count all tests including flaky (flaky tests remain in failed/error/mute filters)
+    # Count all tests
     test_counts = {
         'all': len(visible_tests),
         'passed': len(status_test.get(TestStatus.PASS, [])),
-        'failed': len(status_test.get(TestStatus.FAIL, [])),  # All failed including flaky
-        'error': len(status_test.get(TestStatus.ERROR, [])),  # All error including flaky
-        'mute': len(status_test.get(TestStatus.MUTE, [])),    # All mute including flaky
+        'failed': len(status_test.get(TestStatus.FAIL, [])),
+        'error': len(status_test.get(TestStatus.ERROR, [])),
+        'mute': len(status_test.get(TestStatus.MUTE, [])),
         'skipped': len(status_test.get(TestStatus.SKIP, [])),
-        'flaky': len(flaky_tests_list),
-        'flaky_failed': len(flaky_failed),  # Count of flaky within failed
-        'flaky_error': len(flaky_error),    # Count of flaky within error
-        'flaky_mute': len(flaky_mute),      # Count of flaky within mute
-        'stable_failed': len(stable_failed),  # Count of stable within failed
-        'stable_error': len(stable_error),   # Count of stable within error
-        'stable_mute': len(stable_mute),     # Count of stable within mute
         'sanitizer': len([t for t in rows if t.is_sanitizer_issue]),  # Total sanitizer count
         'sanitizer_failed': len(sanitizer_failed),  # Count of sanitizer within failed
         'sanitizer_error': len(sanitizer_error),    # Count of sanitizer within error
@@ -621,9 +589,6 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     # Group sanitizer tests by suite
     sanitizer_tests = [t for t in rows if t.is_sanitizer_issue]
     sanitizer_suites = group_tests_by_suite(sanitizer_tests) if sanitizer_tests else {}
-    
-    # Group flaky tests by suite (use flaky_tests_list already defined above)
-    flaky_suites = group_tests_by_suite(flaky_tests_list) if flaky_tests_list else {}
     
     # Build preset params
     buid_preset_params = '--build unknown_build_type'
@@ -677,10 +642,10 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
                     history_descriptions[test_name][timestamp_str] = desc
     
     # Prepare test descriptions for current tests (without embedding in HTML to reduce size)
-    # Store only for tests with errors (FAIL, ERROR, MUTE) and if not empty
+    # Store only for tests with errors (FAIL, ERROR, MUTE, SKIP) and if not empty
     test_descriptions = {}
     for test in rows:
-        if test.status in (TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE):
+        if test.status in (TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE, TestStatus.SKIP):
             desc = test.status_description
             if desc and desc.strip():
                 test_descriptions[test.full_name] = desc
@@ -693,7 +658,6 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
         all_tests_sorted=all_tests_sorted,  # Flat sorted list for default view
         status_suites=status_suites,
         sanitizer_suites=sanitizer_suites,
-        flaky_suites=flaky_suites,  # Flaky tests grouped by suite
         test_counts=test_counts,
         history=history,  # Keep for template checks (test.full_name in history)
         history_for_js=history_for_js,  # Optimized history for JS (without status_description)

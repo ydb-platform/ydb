@@ -4,6 +4,7 @@
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/system/types.h>
+#include <util/system/unaligned_mem.h>
 #include <cmath>
 
 namespace NKikimr {
@@ -42,6 +43,46 @@ enum class EHistogramValueType: ui8 { Int16,
                                       Double,
                                       NotSupported };
 
+template<typename T>
+inline std::optional<EHistogramValueType> GetHistogramValueType() {
+    return std::nullopt;
+}
+
+template<>
+inline std::optional<EHistogramValueType> GetHistogramValueType<i16>() {
+    return EHistogramValueType::Int16;
+}
+
+template<>
+inline std::optional<EHistogramValueType> GetHistogramValueType<i32>() {
+    return EHistogramValueType::Int32;
+}
+
+template<>
+inline std::optional<EHistogramValueType> GetHistogramValueType<i64>() {
+    return EHistogramValueType::Int64;
+}
+
+template<>
+inline std::optional<EHistogramValueType> GetHistogramValueType<ui16>() {
+    return EHistogramValueType::Uint16;
+}
+
+template<>
+inline std::optional<EHistogramValueType> GetHistogramValueType<ui32>() {
+    return EHistogramValueType::Uint32;
+}
+
+template<>
+inline std::optional<EHistogramValueType> GetHistogramValueType<ui64>() {
+    return EHistogramValueType::Uint64;
+}
+
+template<>
+inline std::optional<EHistogramValueType> GetHistogramValueType<double>() {
+    return EHistogramValueType::Double;
+}
+
 // Bucket storage size for Equal width histogram.
 constexpr const ui32 EqWidthHistogramBucketStorageSize = 8;
 
@@ -76,7 +117,7 @@ public:
         const auto index = FindBucketIndex(val);
         // The given `index` in range [0, numBuckets - 1].
         const T bucketValue = LoadFrom<T>(Buckets_[index].Start);
-        if (!index || ((CmpEqual<T>(bucketValue, val) || CmpLess<T>(bucketValue, val)))) {
+        if (!index || (CmpEqual<T>(bucketValue, val) || CmpLess<T>(bucketValue, val))) {
             Buckets_[index].Count++;
         } else {
             Buckets_[index - 1].Count++;
@@ -91,11 +132,11 @@ public:
         ui32 start = 0;
         ui32 end = GetNumBuckets() - 1;
         while (start < end) {
-            auto it = start + (end - start) / 2;
-            if (CmpLess<T>(LoadFrom<T>(Buckets_[it].Start), val)) {
-                start = it + 1;
+            auto it = start + (end - start + 1) / 2;
+            if (CmpLess<T>(val, LoadFrom<T>(Buckets_[it].Start))) {
+                end = it - 1;
             } else {
-                end = it;
+                start = it;
             }
         }
         return start;
@@ -108,33 +149,46 @@ public:
 
     template <typename T>
     ui32 GetBucketWidth() const {
-        Y_ASSERT(GetNumBuckets());
-        if (GetNumBuckets() == 1) {
-            return std::max(static_cast<ui32>(LoadFrom<T>(Buckets_.front().Start)), 1U);
-        } else {
-            return std::max(static_cast<ui32>(LoadFrom<T>(Buckets_[1].Start) - LoadFrom<T>(Buckets_[0].Start)), 1U);
+        if (ValueType_ == EHistogramValueType::Double) {
+            return 1;
         }
-    }
-
-    template <>
-    ui32 GetBucketWidth<double>() const {
-        return 1;
+        if (GetNumBuckets() == 1) {
+            auto val = LoadFrom<T>(Buckets_.front().Start);
+            // to avoid returning zero value and casting negative values
+            return val > 0 ? static_cast<ui32>(val) : 1;
+        } else {
+            return static_cast<ui32>(LoadFrom<T>(Buckets_[1].Start) - LoadFrom<T>(Buckets_[0].Start));
+        }
     }
 
     // Returns histogram type.
     EHistogramValueType GetType() const {
         return ValueType_;
     }
+
     // Returns a number of elements in a bucket by the given `index`.
     ui64 GetNumElementsInBucket(ui32 index) const {
+        Y_ASSERT(index < GetNumBuckets());
         return Buckets_[index].Count;
+    }
+
+    // Returns the start boundary value of a bucket by the given `index`.
+    template <typename T>
+    T GetBucketStartBoundary(ui32 index) const {
+        Y_ASSERT(index < GetNumBuckets());
+        return LoadFrom<T>(Buckets_[index].Start);
     }
 
     // Initializes buckets with a given `range`.
     template <typename T>
-    void InitializeBuckets(const TBucketRange& range) {
-        Y_ASSERT(CmpLess<T>(LoadFrom<T>(range.Start), LoadFrom<T>(range.End)));
-        T rangeLen = LoadFrom<T>(range.End) - LoadFrom<T>(range.Start);
+    void InitializeBuckets(T rangeStart, T rangeEnd) {
+        TEqWidthHistogram::TBucketRange range;
+        StoreTo<T>(range.Start, rangeStart);
+        StoreTo<T>(range.End, rangeEnd);
+        T start = LoadFrom<T>(range.Start);
+        T end = LoadFrom<T>(range.End);
+        Y_ASSERT(CmpLess<T>(start, end));
+        T rangeLen = end - start;
         std::memcpy(Buckets_[0].Start, range.Start, sizeof(range.Start));
         for (ui32 i = 1; i < GetNumBuckets(); ++i) {
             const T prevStart = LoadFrom<T>(Buckets_[i - 1].Start);
@@ -143,31 +197,22 @@ public:
     }
 
     // Seriailizes to a binary representation
-    std::unique_ptr<char> Serialize(ui64& binSize) const;
-    // Returns buckets.
-    const TVector<TBucket>& GetBuckets() const {
-        return Buckets_;
-    }
+    TString Serialize() const;
 
-    template <typename T>
-    void Aggregate(const TEqWidthHistogram& other) {
-        if ((this->ValueType_ != other.GetType()) || (!BucketsEqual<T>(other))) {
-            // Should we fail?
-            return;
-        }
-        for (ui32 i = 0; i < Buckets_.size(); ++i) {
-            Buckets_[i].Count += other.GetBuckets()[i].Count;
-        }
-    }
+    void Aggregate(const TEqWidthHistogram& other);
 
 private:
     template <typename T>
     bool BucketsEqual(const TEqWidthHistogram& other) {
         if (Buckets_.size() != other.GetNumBuckets()) {
             return false;
+        } else if (this->ValueType_ != other.GetType()) {
+            return false;
+        } else if (GetBucketWidth<T>() != other.GetBucketWidth<T>()) {
+            return false;
         }
         for (ui32 i = 0; i < Buckets_.size(); ++i) {
-            if (!CmpEqual<T>(LoadFrom<T>(Buckets_[i].Start), LoadFrom<T>(GetBuckets()[i].Start))) {
+            if (!CmpEqual<T>(LoadFrom<T>(Buckets_[i].Start), other.GetBucketStartBoundary<T>(i))) {
                 return false;
             }
         }

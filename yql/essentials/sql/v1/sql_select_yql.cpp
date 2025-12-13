@@ -315,8 +315,12 @@ private:
             return std::unexpected(expr.error());
         }
 
-        if (const auto label = Label(alt)) {
-            (*expr)->SetLabel(*label);
+        if (auto result = Label(alt)) {
+            if (*result) {
+                (*expr)->SetLabel(*(*result));
+            }
+        } else {
+            return std::unexpected(result.error());
         }
 
         return expr;
@@ -522,7 +526,13 @@ private:
             const auto& block = rule.GetBlock3();
 
             source.Alias.ConstructInPlace();
-            source.Alias->Name = TableAlias(block.GetBlock1());
+
+            if (auto name = TableAlias(block.GetBlock1())) {
+                source.Alias->Name = std::move(*name);
+            } else {
+                return std::unexpected(ESQLError::Basic);
+            }
+
             if (block.HasBlock2()) {
                 source.Alias->Columns = TableColumns(block.GetBlock2().GetRule_pure_column_list1());
             }
@@ -711,7 +721,7 @@ private:
         return sqlExpr.Build(rule);
     }
 
-    TMaybe<TString> Label(const TRule_result_column::TAlt2& rule) {
+    TSQLResult<TMaybe<TString>> Label(const TRule_result_column::TAlt2& rule) {
         if (!rule.HasBlock2()) {
             return Nothing();
         }
@@ -720,8 +730,17 @@ private:
         switch (block.Alt_case()) {
             case TRule_result_column_TAlt2_TBlock2::kAlt1:
                 return Id(block.GetAlt1().GetRule_an_id_or_type2(), *this);
-            case TRule_result_column_TAlt2_TBlock2::kAlt2:
+            case TRule_result_column_TAlt2_TBlock2::kAlt2: {
+                if (!Ctx_.AnsiOptionalAs) {
+                    Error() << "Expecting mandatory AS here. "
+                            << "Did you miss comma? "
+                            << "Please add PRAGMA AnsiOptionalAs; "
+                            << "for ANSI compatibility";
+                    return std::unexpected(ESQLError::Basic);
+                }
+
                 return Id(block.GetAlt2().GetRule_an_id_as_compat1(), *this);
+            }
             case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
                 Y_UNREACHABLE();
         }
@@ -738,12 +757,21 @@ private:
         }
     }
 
-    TString TableAlias(const TRule_named_single_source::TBlock3::TBlock1& block) {
+    TMaybe<TString> TableAlias(const TRule_named_single_source::TBlock3::TBlock1& block) {
         switch (block.GetAltCase()) {
             case TRule_named_single_source_TBlock3_TBlock1::kAlt1:
                 return Id(block.GetAlt1().GetRule_an_id2(), *this);
-            case TRule_named_single_source_TBlock3_TBlock1::kAlt2:
+            case TRule_named_single_source_TBlock3_TBlock1::kAlt2: {
+                if (!Ctx_.AnsiOptionalAs) {
+                    Error() << "Expecting mandatory AS here. "
+                            << "Did you miss comma? "
+                            << "Please add PRAGMA AnsiOptionalAs; "
+                            << "for ANSI compatibility";
+                    return Nothing();
+                }
+
                 return Id(block.GetAlt2().GetRule_an_id_as_compat1(), *this);
+            }
             case TRule_named_single_source_TBlock3_TBlock1::ALT_NOT_SET:
                 Y_UNREACHABLE();
         }

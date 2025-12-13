@@ -1,7 +1,7 @@
 PRAGMA YqlSelect = 'force';
 
 SELECT
-    CAST(a AS Int32) a,
+    CAST(a AS Int32) AS a,
 FROM (
     VALUES
         (1)

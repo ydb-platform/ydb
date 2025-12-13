@@ -67,6 +67,7 @@ SRCS(
     viewer_config.h
     viewer_content.h
     viewer_counters.h
+    viewer_database_stats.h
     viewer_describe_consumer.h
     viewer_describe.h
     viewer_describe_topic.h

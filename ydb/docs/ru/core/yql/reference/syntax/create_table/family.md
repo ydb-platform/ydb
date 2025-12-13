@@ -26,6 +26,14 @@
 
 {% endif %}
 
+* `CACHE_MODE` — [режим кэширования](../../../../concepts/datamodel/table.md#cache-modes). Допустимые значения: `"in_memory"`, `"regular"`.
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
 По умолчанию все колонки находятся в одной группе с именем `default`. При необходимости параметры этой группы тоже можно переопределить. В противном случае применяются предопределённые значения.
 
 В примерах ниже для создаваемых таблиц добавляется группа колонок `family_large`, которая устанавливается для колонки `series_info`, а также переопределяются параметры для группы `default`, которая по умолчанию применяется ко всем остальным колонкам.
@@ -44,11 +52,13 @@
         PRIMARY KEY (series_id),
         FAMILY default (
             DATA = "ssd",
-            COMPRESSION = "off"
+            COMPRESSION = "off",
+            CACHE_MODE = "in_memory"
         ),
         FAMILY family_large (
             DATA = "rot",
-            COMPRESSION = "lz4"
+            COMPRESSION = "lz4",
+            CACHE_MODE = "regular"
         )
     );
     ```

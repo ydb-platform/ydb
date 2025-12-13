@@ -43,7 +43,7 @@ template <class T>
 
     WaitUntilSet(future.AsVoid(), std::move(invoker));
 
-    return future.GetUnique();
+    return future.AsUnique().Get();
 }
 
 template <CFuture TFuture>

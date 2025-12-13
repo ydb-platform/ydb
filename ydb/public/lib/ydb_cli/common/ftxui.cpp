@@ -53,65 +53,209 @@ void FlushStdin() {
 #endif
 }
 
-} // namespace
+class TFtxuiMenuRunner {
+    static constexpr int MENU_EXTRA_HEIGHT = 8; // Header + footer + border
 
+public:
+    TFtxuiMenuRunner(const TString& title, const std::vector<TString>& options, size_t maxPageSize)
+        : Title(title)
+        , Options(options)
+        , PageSize(CalculatePageSize(std::min(options.size(), maxPageSize)))
+        , PageCount((std::max(static_cast<int>(Options.size()), 1) - 1) / PageSize + 1)
+        , Screen(ftxui::ScreenInteractive::FitComponent())
+        , Exit(Screen.ExitLoopClosure())
+    {
+        Y_VALIDATE(PageSize > 0, "PageSize must be greater than 0");
+        Y_VALIDATE(!Options.empty() && Options.size() <= std::numeric_limits<int>::max(), "Unexpected Options size: " << Options.size());
 
-std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TString>& options) {
+        Screen.TrackMouse(false);
+
+        SetupVisibleOptions();
+        Menu = ftxui::Menu(&VisibleOptions, &Selected);
+
+        auto component = ftxui::CatchEvent(Menu, [this](const ftxui::Event& event) { return CatchEventHandle(event); });
+
+        Renderer = ftxui::Renderer(component, [this]() { return Render(); });
+    }
+
+    std::optional<size_t> Run() {
+        if (PageCount > 1) {
+            // Clear screen first, because menu can be redrawn
+            Cout << "\033[2J\033[H" << Flush;
+        }
+
+        Screen.Loop(Renderer);
+        return Result;
+    }
+
+private:
+    static int CalculatePageSize(size_t maxPageSize) {
+        Y_VALIDATE(0 < maxPageSize && maxPageSize < std::numeric_limits<int>::max(), "Unexpected MaxPageSize: " << maxPageSize);
+
+        const auto h = ftxui::Terminal::Size().dimy;
+        return std::min(h > MENU_EXTRA_HEIGHT ? h - MENU_EXTRA_HEIGHT : 1, static_cast<int>(maxPageSize));
+    }
+
+    void SetupVisibleOptions() {
+        Y_VALIDATE(PageBegin >= 0 && PageSize > 0, "Unexpected PageBegin: " << PageBegin << " or PageSize: " << PageSize);
+
+        const size_t pageEnd = PageBegin + PageSize;
+        Y_VALIDATE(pageEnd <= Options.size(), "Unexpected PageBegin: " << PageBegin << ", number of options: " << Options.size() << ", PageSize: " << PageSize);
+
+        VisibleOptions.assign(Options.begin() + PageBegin, Options.begin() + pageEnd);
+    }
+
+    void MoveSelected(int delta, bool allowJump) {
+        Y_VALIDATE(!Options.empty(), "Options must not be empty");
+
+        int newRowIdx = PageBegin + Selected + delta;
+        if (allowJump) {
+            const int totalSize = Options.size();
+            newRowIdx = (newRowIdx % totalSize + totalSize) % totalSize;
+        } else {
+            newRowIdx = std::min(std::max(newRowIdx, 0), static_cast<int>(Options.size() - 1));
+        }
+        Y_VALIDATE(newRowIdx >= 0 && newRowIdx < static_cast<int>(Options.size()), "Unexpected newRowIdx: " << newRowIdx);
+
+        if (newRowIdx <= PageBegin) {
+            // Move page up
+            PageBegin = std::max(newRowIdx - 1, 0);
+        } else if (newRowIdx + 1 >= PageBegin + PageSize) {
+            // Move page down
+            PageBegin = std::min(newRowIdx - PageSize + 2, std::min(newRowIdx, static_cast<int>(Options.size()) - PageSize));
+        }
+
+        Selected = newRowIdx - PageBegin;
+        SetupVisibleOptions();
+
+        if (Options.size() > 1) {
+            // Preserve row highlighting
+            if (Selected <= 0) {
+                Selected++;
+                Screen.PostEvent(ftxui::Event::ArrowUp);
+            } else {
+                Selected--;
+                Screen.PostEvent(ftxui::Event::ArrowDown);
+            }
+        }
+    }
+
+    bool CatchEventHandle(const ftxui::Event& event) {
+        Y_VALIDATE(Selected >= 0, "Unexpected selected value: " << Selected);
+        const auto rowIdx = PageBegin + Selected;
+
+        if (event == ftxui::Event::Return) {
+            Result = rowIdx;
+            Exit();
+            return true;
+        }
+
+        if (event == ftxui::Event::Escape || event == ftxui::Event::CtrlC) {
+            Exit();
+            return true;
+        }
+
+        if (event == ftxui::Event::PageDown) {
+            if (rowIdx + 1 < static_cast<int>(Options.size())) {
+                MoveSelected(PageSize, /* allowJump */ false);
+            }
+            return true;
+        }
+
+        if (event == ftxui::Event::PageUp) {
+            if (rowIdx > 0) {
+                MoveSelected(-PageSize, /* allowJump */ false);
+            }
+            return true;
+        }
+
+        const bool atEndOfPage = Selected + 2 >= PageSize;
+        const bool isLastPage = PageBegin + PageSize == static_cast<int>(Options.size());
+        const bool jumpToTop = PageBegin + Selected + 1 == static_cast<int>(Options.size()) && Options.size() > 1;
+        if (event == ftxui::Event::ArrowDown && atEndOfPage && (!isLastPage || jumpToTop)) {
+            MoveSelected(1, /* allowJump */ true);
+            return true;
+        }
+
+        const bool atBeginOfPage = Selected < 2;
+        const bool isFirstPage = PageBegin == 0;
+        const bool jumpToBottom = PageBegin + Selected == 0 && Options.size() > 1;
+        if (event == ftxui::Event::ArrowUp && atBeginOfPage && (!isFirstPage || jumpToBottom)) {
+            MoveSelected(-1, /* allowJump */ true);
+            return true;
+        }
+
+        return false;
+    }
+
+    ftxui::Element Render() const {
+        std::vector<ftxui::Element> elements = {ftxui::text(std::string(Title)) | ftxui::bold};
+
+        if (PageCount > 1) {
+            std::string pageInfo = TStringBuilder() << "Page " << (PageBegin + Selected) / PageSize + 1 << "/" << PageCount;
+            elements.emplace_back(ftxui::text(pageInfo) | ftxui::bold);
+        }
+
+        elements.emplace_back(ftxui::separator());
+        elements.emplace_back(Menu->Render());
+        elements.emplace_back(ftxui::separator());
+
+        auto info = ftxui::text("Use arrows to choose, Enter to confirm, Esc to cancel");
+        if (PageCount > 1) {
+            elements.emplace_back(ftxui::vbox({
+                std::move(info),
+                ftxui::text("PageUp for previous page, PageDown for next page")
+            }));
+        } else {
+            elements.emplace_back(std::move(info));
+        }
+
+        return ftxui::vbox(elements) | ftxui::border | ftxui::center;
+    }
+
+private:
+    const TString Title;
+    const std::vector<TString> Options;
+    const int PageSize = 1;
+    const int PageCount = 1;
+
+    int Selected = 0; // Index of the selected option inside the current page over `VisibleOptions`
+    int PageBegin = 0; // Index of the first option in the current page over `Options`
+    std::vector<std::string> VisibleOptions;
+    std::optional<size_t> Result;
+
+    ftxui::Component Menu;
+    ftxui::Component Renderer;
+    ftxui::ScreenInteractive Screen;
+    ftxui::Closure Exit;
+};
+
+} // anonymous namespace
+
+std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TString>& options, size_t maxPageSize) {
     if (options.empty()) {
         return std::nullopt;
     }
 
-    std::optional<size_t> result;
     try {
-        int selected = 0;
-        auto menu = ftxui::Menu(std::vector<std::string>(options.begin(), options.end()), &selected);
-        auto screen = ftxui::ScreenInteractive::FitComponent();
-        screen.TrackMouse(false);
-        auto exit = screen.ExitLoopClosure();
-
-        ftxui::Component component = ftxui::CatchEvent(menu, [&result, &selected, exit](const ftxui::Event& event) mutable {
-            if (event == ftxui::Event::Return) {
-                Y_VALIDATE(selected >= 0, "Unexpected selected value: " << selected);
-                result = static_cast<size_t>(selected);
-                exit();
-                return true;
-            }
-            if (event == ftxui::Event::Escape || event == ftxui::Event::CtrlC) {
-                exit();
-                return true;
-            }
-            return false;
-        });
-
-        component = ftxui::Renderer(component, [title, menu] {
-            return ftxui::vbox({
-                ftxui::text(std::string(title)) | ftxui::bold,
-                ftxui::separator(),
-                menu->Render(),
-                ftxui::separator(),
-                ftxui::text("Use arrows to choose, Enter to confirm, Esc to cancel"),
-            }) | ftxui::border | ftxui::center;
-        });
-
-        screen.Loop(component);
+        return TFtxuiMenuRunner(title, options, maxPageSize).Run();
     } catch (const std::exception& e) {
         const auto& colors = NColorizer::AutoColors(Cerr);
         Cerr << colors.Yellow() << "FTXUI menu failed: " << e.what() << colors.OldColor() << Endl;
         return std::nullopt;
     }
 
-    FlushStdin();
     return result;
 }
 
-bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>& options) {
+bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>& options, size_t maxPageSize) {
     std::vector<TString> labels;
     labels.reserve(options.size());
     for (const auto& [label, _] : options) {
         labels.push_back(label);
     }
 
-    if (auto idx = RunFtxuiMenu(title, labels)) {
+    if (auto idx = RunFtxuiMenu(title, labels, maxPageSize)) {
         Y_VALIDATE(*idx < options.size(), "Unexpected option index: " << *idx);
         options[*idx].second();
         return true;
@@ -176,7 +320,7 @@ bool AskYesNoFtxui(const TString& question, bool defaultAnswer) {
     options.emplace_back(TStringBuilder() << "Yes" << (defaultAnswer ? " (default)" : ""), []() {});
     options.emplace_back(TStringBuilder() << "No" << (!defaultAnswer ? " (default)" : ""), []() {});
 
-    auto idx = RunFtxuiMenu(question, {options[0].first, options[1].first});
+    auto idx = RunFtxuiMenu(question, {options[0].first, options[1].first}, /* maxPageSize */ 2);
     if (!idx) {
         return defaultAnswer;
     }

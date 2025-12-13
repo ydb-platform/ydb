@@ -10,9 +10,9 @@ namespace NYdb::NConsoleClient {
 
 using TMenuEntry = std::pair<TString, std::function<void()>>;
 
-std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TString>& options);
+std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TString>& options, size_t maxPageSize = 20);
 
-bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>& options);
+bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>& options, size_t maxPageSize = 20);
 
 std::optional<TString> RunFtxuiInput(const TString& title, const TString& initial, const std::function<bool(const TString&, TString&)>& validator);
 

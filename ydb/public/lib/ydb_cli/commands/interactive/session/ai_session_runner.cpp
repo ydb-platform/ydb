@@ -173,45 +173,6 @@ private:
     }
 
     void ChangeSessionSettings() {
-        std::vector<TMenuEntry> options;
-
-        options.push_back({"Clear session context", [&]() {
-            Cout << "Session context cleared." << Endl;
-            if (ModelHandler) {
-                ModelHandler->ClearContext();
-            }
-        }});
-
-        TString currentProfile;
-        if (const auto& profile = ConfigurationManager->GetActiveAiProfileName()) {
-            currentProfile = TStringBuilder() << " (current profile: \"" << profile << "\")";
-        }
-        options.push_back({TStringBuilder() << "Change AI model settings" << currentProfile, [&]() {
-            ChangeProfileSettings();
-        }});
-
-        switch (ConfigurationManager->GetDefaultMode()) {
-            case TInteractiveConfigurationManager::EMode::YQL:
-                options.push_back({"Set AI interactive mode by default", [config = ConfigurationManager]() {
-                    Cout << "Setting AI interactive mode by default." << Endl;
-                    config->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::AI);
-                }});
-                break;
-            case TInteractiveConfigurationManager::EMode::AI:
-                options.push_back({"Set YQL interactive mode by default", [config = ConfigurationManager]() {
-                    Cout << "Setting YQL interactive mode by default." << Endl;
-                    config->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::YQL);
-                }});
-                break;
-            case TInteractiveConfigurationManager::EMode::Invalid:
-                Y_VALIDATE(false, "Invalid default mode: " << ConfigurationManager->GetDefaultMode());
-        }
-
-        RunFtxuiMenuWithActions("Please choose AI session setting to change:", options);
-        Cout << Endl;
-    }
-
-    void ChangeProfileSettings() {
         for (bool exit = false; !exit;) {
             std::vector<TMenuEntry> options;
 
@@ -229,13 +190,45 @@ private:
                 });
             }
 
-            options.emplace_back("Switch AI model", [&exit, this]() { exit = !SwitchAiProfile(); });
-            options.push_back({"Don't do anything, just exit", [&]() { exit = true; }});
+            options.emplace_back("Switch AI model", [&]() {
+                if (!SwitchAiProfile()) {
+                    exit = true;
+                }
+            });
 
-            if (!RunFtxuiMenuWithActions("Please choose desired action with AI model:", options)) {
+            options.push_back({"Clear session context", [&]() {
+                Cout << "Session context cleared." << Endl;
+                if (ModelHandler) {
+                    ModelHandler->ClearContext();
+                }
+                exit = true;
+            }});
+
+            switch (ConfigurationManager->GetDefaultMode()) {
+                case TInteractiveConfigurationManager::EMode::YQL:
+                    options.push_back({"Set AI interactive mode by default", [&]() {
+                        Cout << "Setting AI interactive mode by default." << Endl;
+                        ConfigurationManager->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::AI);
+                        exit = true;
+                    }});
+                    break;
+                case TInteractiveConfigurationManager::EMode::AI:
+                    options.push_back({"Set YQL interactive mode by default", [&]() {
+                        Cout << "Setting YQL interactive mode by default." << Endl;
+                        ConfigurationManager->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::YQL);
+                        exit = true;
+                    }});
+                    break;
+                case TInteractiveConfigurationManager::EMode::Invalid:
+                    Y_VALIDATE(false, "Invalid default mode: " << ConfigurationManager->GetDefaultMode());
+            }
+
+            if (!RunFtxuiMenuWithActions("Please choose AI session setting to change:", options)) {
                 exit = true;
             }
         }
+
+        Cout << Endl;
     }
 
     bool SwitchAiProfile() {

@@ -55,7 +55,7 @@ protected:
             message = TStringBuilder() << "Listing directory " << Directory;
         }
 
-        Cout << Endl << Colors.Green() << message << Colors.OldColor() << Endl << Endl;
+        Cout << Colors.Green() << message << Colors.OldColor() << Endl << Endl;
 
         // Directory listing is alway allowed
         return true;

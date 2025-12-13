@@ -165,7 +165,7 @@ protected:
             colors.assign(Query.size(), replxx::Replxx::Color::DEFAULT);
         }
 
-        Cout << Endl << Colors.Green() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << PrintAnsiColors(Query, colors) << Endl << Endl;
+        Cout << Colors.Green() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << PrintAnsiColors(Query, colors) << Endl << Endl;
 
         const auto action = RunFtxuiActionDialog();
 

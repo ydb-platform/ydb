@@ -46,18 +46,6 @@ template <class T>
     return future.GetUnique();
 }
 
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUniqueFast(TFuture<T> future)
-{
-    YT_ASSERT(future);
-
-    if (!future.IsSet()) {
-        WaitUntilSet(future.AsVoid(), GetCurrentInvoker());
-    }
-
-    return future.GetUnique();
-}
-
 template <CFuture TFuture>
 TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(TFuture future, EWaitForStrategy strategy)
 {

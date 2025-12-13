@@ -1,13 +1,16 @@
 #include "ftxui.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/node.hpp>
 #include <contrib/libs/ftxui/include/ftxui/screen/color.hpp>
-
 #include <contrib/libs/ftxui/include/ftxui/screen/screen.hpp>
+
+#include <library/cpp/colorizer/colors.h>
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
@@ -58,22 +61,17 @@ std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TStri
         return std::nullopt;
     }
 
-    std::vector<std::string> labels;
-    labels.reserve(options.size());
-    for (const auto& opt : options) {
-        labels.emplace_back(opt.c_str());
-    }
-
-    int selected = 0;
     std::optional<size_t> result;
     try {
+        int selected = 0;
+        auto menu = ftxui::Menu(std::vector<std::string>(options.begin(), options.end()), &selected);
         auto screen = ftxui::ScreenInteractive::FitComponent();
         screen.TrackMouse(false);
-        auto menu = ftxui::Menu(&labels, &selected);
         auto exit = screen.ExitLoopClosure();
 
-        ftxui::Component component = ftxui::CatchEvent(menu, [&, exit](const ftxui::Event& event) mutable {
+        ftxui::Component component = ftxui::CatchEvent(menu, [&result, &selected, exit](const ftxui::Event& event) mutable {
             if (event == ftxui::Event::Return) {
+                Y_VALIDATE(selected >= 0, "Unexpected selected value: " << selected);
                 result = static_cast<size_t>(selected);
                 exit();
                 return true;
@@ -97,7 +95,8 @@ std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TStri
 
         screen.Loop(component);
     } catch (const std::exception& e) {
-        Cerr << "FTXUI menu failed: " << e.what() << Endl;
+        const auto& colors = NColorizer::AutoColors(Cerr);
+        Cerr << colors.Yellow() << "FTXUI menu failed: " << e.what() << colors.OldColor() << Endl;
         return std::nullopt;
     }
 
@@ -113,9 +112,11 @@ bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>
     }
 
     if (auto idx = RunFtxuiMenu(title, labels)) {
+        Y_VALIDATE(*idx < options.size(), "Unexpected option index: " << *idx);
         options[*idx].second();
         return true;
     }
+
     return false;
 }
 

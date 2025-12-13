@@ -62,6 +62,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/status
     ydb/library/arrow_parquet
     ydb/library/plan2svg
+    ydb/library/yverify_stream
     ydb/public/lib/ydb_cli/common/ini_config
     ydb/public/lib/ydb_cli/common/yql_parser
 )

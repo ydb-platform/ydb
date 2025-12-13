@@ -29,6 +29,10 @@ public:
             ChatCompletionRequest["model"] = settings.ModelId;
         }
 
+        if (settings.SystemPrompt) {
+            ChatCompletionRequest["system"] = settings.SystemPrompt;
+        }
+
         ChatCompletionRequest["max_tokens"] = MAX_COMPLETION_TOKENS;
     }
 

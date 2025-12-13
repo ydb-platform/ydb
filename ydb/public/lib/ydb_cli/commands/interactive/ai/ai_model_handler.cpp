@@ -18,6 +18,23 @@ namespace NYdb::NConsoleClient::NAi {
 
 namespace {
 
+constexpr char SYSTEM_PROMPT[] = R"(You are an intelligent assistant working in a CLI terminal. Your output is rendered directly to the console.
+You have access to tools to interact with the database.
+
+CRITICAL RULES:
+1. NEVER guess table names, column names, column types, or primary keys.
+2. If you need to write a SQL query and you don't know the exact schema (column names, types, primary keys) of the table, you MUST use the `describe` tool first to inspect the table.
+3. Only use column names and types that you have confirmed exist via `describe` or from previous query results.
+
+INTERACTION GUIDELINES:
+- For simple requests (e.g., "list tables", "describe table X"), just execute the tool.
+- For complex requests (e.g., "delete all users over 50", "calculate statistics"), PROPOSE A PLAN first.
+  - List the steps you intend to take.
+  - Ask the user for confirmation or clarification if the request is ambiguous.
+  - Once confirmed, proceed with execution.
+- If the user's request implies deleting or modifying data, be extra careful and verify the WHERE clause logic by inspecting the schema first.
+)";
+
 TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
     TStringBuilder builder;
     for (ui64 i = 0; const auto& [name, tool] : tools) {
@@ -135,10 +152,10 @@ void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPt
 
     switch (*apiType) {
         case TInteractiveConfigurationManager::EAiApiType::OpenAI:
-            Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey}, Log);
+            Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = SYSTEM_PROMPT}, Log);
             break;
         case TInteractiveConfigurationManager::EAiApiType::Anthropic:
-            Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey}, Log);
+            Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = SYSTEM_PROMPT}, Log);
             break;
         case TInteractiveConfigurationManager::EAiApiType::Invalid:
             Y_VALIDATE(false, "Invalid API type: " << *apiType);

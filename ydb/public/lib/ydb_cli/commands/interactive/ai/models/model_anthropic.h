@@ -10,6 +10,7 @@ struct TAnthropicModelSettings {
     TString BaseUrl;
     TString ModelId;
     TString ApiKey;
+    TString SystemPrompt;
 };
 
 IModel::TPtr CreateAnthropicModel(const TAnthropicModelSettings& settings, const TInteractiveLogger& log);

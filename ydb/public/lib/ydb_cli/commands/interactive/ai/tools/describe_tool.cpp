@@ -31,7 +31,8 @@ Information provided by object type:
 - **External Table/Data Source**: Configuration.
 - **View**: Query text.
 
-Use this tool to inspect table schema before executing `INSERT`, `SELECT` or other SQL queries that need the knowledge of the schema.
+Use this tool to inspect table schema before executing `INSERT`, `SELECT`, `UPDATE`, `DELETE` or other SQL queries that need the knowledge of the schema.
+NEVER guess column names, types or keys - always verify them with this tool first.
 
 **Path Format**:
 - **Relative** (Preferred): Path relative to the database root (e.g., `my_dir/my_table`). Do NOT start with `/`.

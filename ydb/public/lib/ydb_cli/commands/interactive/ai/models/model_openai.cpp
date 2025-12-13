@@ -29,6 +29,12 @@ public:
             ChatCompletionRequest["model"] = settings.ModelId;
         }
 
+        if (settings.SystemPrompt) {
+            auto& systemMessage = Conversation.emplace_back();
+            systemMessage["role"] = "system";
+            systemMessage["content"] = settings.SystemPrompt;
+        }
+
         ChatCompletionRequest["max_completion_tokens"] = MAX_COMPLETION_TOKENS;
     }
 

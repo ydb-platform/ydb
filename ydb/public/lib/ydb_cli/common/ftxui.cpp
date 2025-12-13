@@ -155,14 +155,14 @@ private:
             return true;
         }
 
-        if (event == ftxui::Event::PageDown) {
+        if (event == ftxui::Event::PageDown || event == ftxui::Event::ArrowRight) {
             if (rowIdx + 1 < static_cast<int>(Options.size())) {
                 MoveSelected(PageSize, /* allowJump */ false);
             }
             return true;
         }
 
-        if (event == ftxui::Event::PageUp) {
+        if (event == ftxui::Event::PageUp || event == ftxui::Event::ArrowLeft) {
             if (rowIdx > 0) {
                 MoveSelected(-PageSize, /* allowJump */ false);
             }

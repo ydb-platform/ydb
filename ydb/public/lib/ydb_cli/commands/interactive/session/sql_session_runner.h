@@ -8,9 +8,9 @@
 namespace NYdb::NConsoleClient {
 
 struct TSqlSessionSettings {
-    TString ProfileName;
     TString YdbPath;
     TDriver Driver;
+    TString Database;
 };
 
 ISessionRunner::TPtr CreateSqlSessionRunner(const TSqlSessionSettings& settings, const TInteractiveLogger& log);

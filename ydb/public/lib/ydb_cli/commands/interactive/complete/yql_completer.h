@@ -23,7 +23,15 @@ namespace NYdb::NConsoleClient {
         virtual ~IYQLCompleter() = default;
     };
 
-    IYQLCompleter::TPtr MakeYQLCompleter(
-        TColorSchema color, TDriver driver, TString database, bool isVerbose);
+    struct TYQLCompleterConfig {
+        TColorSchema Color;
+        TDriver Driver;
+        TString Database;
+        bool IsVerbose;
+    };
+
+    IYQLCompleter::TPtr MakeYQLCompleter(const TYQLCompleterConfig& config);
+
+    IYQLCompleter::TPtr MakeYQLCompositeCompleter(const std::vector<TString>& commands, const std::optional<TYQLCompleterConfig>& yqlCompleterConfig);
 
 } // namespace NYdb::NConsoleClient

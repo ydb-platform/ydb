@@ -2,7 +2,7 @@
 
 #include "model_interface.h"
 
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/public/lib/ydb_cli//commands/interactive/common/api_utils.h>
 #include <ydb/public/lib/ydb_cli//commands/interactive/common/interactive_log.h>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -18,16 +18,12 @@ protected:
 
     virtual TResponse HandleModelResponse(const NJson::TJsonValue& response) = 0;
 
-    virtual TString HandleErrorResponse(ui64 httpCode, const TString& response);
-
 protected:
     NJson::TJsonValue ChatCompletionRequest;
 
 private:
     const TInteractiveLogger Log;
-    const TString ApiUrl;
-    const NYql::THttpHeader ApiHeaders;
-    const NYql::IHTTPGateway::TPtr HttpGateway;
+    THttpExecutor HttpExecutor;
 };
 
 } // namespace NYdb::NConsoleClient::NAi

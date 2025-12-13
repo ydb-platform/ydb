@@ -15,21 +15,17 @@ protected:
     inline const static NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
 
 public:
-    TSessionRunnerBase(const ILineReader::TSettings& settings, const TInteractiveLogger& log);
+    TSessionRunnerBase(const TLineReaderSettings& settings, const TInteractiveLogger& log);
 
-    virtual bool Setup(ILineReaderController::TPtr controller) override;
+    virtual ILineReader::TPtr Setup() override;
 
 protected:
     static TString PrintCommonHotKeys();
 
-    static TString PrintBold(const TString& text);
-
-    static TString PrintGreen(const TString& text);
-
 protected:
     TInteractiveLogger Log;
-    ILineReaderController::TPtr Controller;
-    ILineReader::TSettings Settings;
+    ILineReader::TPtr LineReader;
+    TLineReaderSettings Settings;
 };
 
 } // namespace NYdb::NConsoleClient

@@ -1,17 +1,81 @@
 #include "interactive_config.h"
 #include "api_utils.h"
+#include "interactive_log_defs.h"
+#include "json_utils.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 
 #include <util/string/strip.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/yaml/as/tstring.h>
 
 namespace NYdb::NConsoleClient {
+
+namespace {
+
+TInteractiveConfigurationManager::TAiPresets::TInfo CreateOpenAiPreset(ui64 idx, const TString& name, const TString& id, const TString& endpoint = "https://api.openai.com/v1") {
+    return {
+        .OrderIdx = idx,
+        .Name = name,
+        .ApiType = TInteractiveConfigurationManager::EAiApiType::OpenAI,
+        .ApiEndpoint = endpoint,
+        .ModelName = id
+    };
+}
+
+TInteractiveConfigurationManager::TAiPresets::TInfo CreateAnthropicPreset(ui64 idx, const TString& name, const TString& id, const TString& endpoint = "https://api.anthropic.com/v1") {
+    return {
+        .OrderIdx = idx,
+        .Name = name,
+        .ApiType = TInteractiveConfigurationManager::EAiApiType::Anthropic,
+        .ApiEndpoint = endpoint,
+        .ModelName = id
+    };
+}
+
+} // anonymous namespace
+
+void TInteractiveConfigurationManager::TAiPresets::ClearPresets() {
+    Presets.clear();
+}
+
+void TInteractiveConfigurationManager::TAiPresets::AddPreset(const TString& id, const TInfo& info) {
+    Y_VALIDATE(Presets.emplace(id, std::move(info)).second, "Preset with id " << id << " already exists");
+}
+
+std::optional<TInteractiveConfigurationManager::TAiPresets::TInfo> TInteractiveConfigurationManager::TAiPresets::GetPreset(const TString& id) {
+    const auto it = Presets.find(id);
+    if (it == Presets.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
+std::vector<std::pair<TString, TInteractiveConfigurationManager::TAiPresets::TInfo>> TInteractiveConfigurationManager::TAiPresets::ListPresets() {
+    std::vector<std::pair<TString, TInfo>> result;
+    for (const auto& [id, info] : Presets) {
+        result.emplace_back(id, info);
+    }
+    std::sort(result.begin(), result.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.second.OrderIdx < rhs.second.OrderIdx;
+    });
+    return result;
+}
+
+std::unordered_map<TString, TInteractiveConfigurationManager::TAiPresets::TInfo> TInteractiveConfigurationManager::TAiPresets::GetOssPresets() {
+    return {
+        {"gpt-5.2", CreateOpenAiPreset(0, "GPT 5.2", "gpt-5.2")},
+        {"claude-opus-4.5", CreateAnthropicPreset(1, "Claude Opus 4.5", "claude-opus-4-5-20251101")},
+        {"claude-sonnet-4.5", CreateAnthropicPreset(2, "Claude Sonnet 4.5", "claude-sonnet-4-5-20250929")},
+        {"qwen2-coder-plus", CreateOpenAiPreset(3, "Qwen3 Coder Plus", "qwen3-coder-plus", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1")},
+        {"gemeni-2.5-pro", CreateOpenAiPreset(4, "Gemeni 2.5 Pro", "gemini-2.0-pro", "https://generativelanguage.googleapis.com/v1beta/openai")},
+        {"glm-4.5", CreateOpenAiPreset(5, "GLM 4.5", "glm-4-0520,", "https://open.bigmodel.cn/api/paas/v4")},
+    };
+}
 
 TInteractiveConfigurationManager::TAiProfile::TAiProfile(const TString& name, YAML::Node config, TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log)
     : Name(name)
@@ -21,6 +85,11 @@ TInteractiveConfigurationManager::TAiProfile::TAiProfile(const TString& name, YA
 {
     Y_VALIDATE(Config.IsNull() || Config.IsMap(), "Unexpected config type: " << static_cast<ui64>(Config.Type()));
 }
+
+TInteractiveConfigurationManager::TAiProfile::TAiProfile(TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log)
+    : Manager(manager)
+    , Log(log)
+{}
 
 bool TInteractiveConfigurationManager::TAiProfile::IsValid(TString& error) const {
     if (!GetName()) {
@@ -41,19 +110,30 @@ bool TInteractiveConfigurationManager::TAiProfile::IsValid(TString& error) const
     return true;
 }
 
+TString TInteractiveConfigurationManager::TAiProfile::GetPresetId() const {
+    if (auto presetIdNode = Config["preset_id"]) {
+        return presetIdNode.as<TString>("");
+    }
+    return "";
+}
+
 const TString& TInteractiveConfigurationManager::TAiProfile::GetName() const {
     return Name;
 }
 
-std::optional<TInteractiveConfigurationManager::TAiProfile::EApiType> TInteractiveConfigurationManager::TAiProfile::GetApiType() const {
+void TInteractiveConfigurationManager::TAiProfile::SetName(const TString& name) {
+    Name = name;
+}
+
+std::optional<TInteractiveConfigurationManager::EAiApiType> TInteractiveConfigurationManager::TAiProfile::GetApiType() const {
     if (auto apiTypeNode = Config["api_type"]) {
-        auto apiType = apiTypeNode.as<ui64>(static_cast<ui64>(EApiType::Invalid));
+        auto apiType = apiTypeNode.as<ui64>(static_cast<ui64>(EAiApiType::Invalid));
         if (apiType >= static_cast<ui64>(EMode::Invalid)) {
             YDB_CLI_LOG(Debug, "AI profile \"" << Name << "\" has invalid API type: " << apiType << ", API type will be removed");
             return std::nullopt;
         }
 
-        return static_cast<EApiType>(apiType);
+        return static_cast<EAiApiType>(apiType);
     }
 
     YDB_CLI_LOG(Debug, "AI profile \"" << Name << "\" has no API type");
@@ -100,14 +180,21 @@ TString TInteractiveConfigurationManager::TAiProfile::GetModelName() const {
     return modelName;
 }
 
-bool TInteractiveConfigurationManager::TAiProfile::SetupProfile() {
-    if (!SetupApiType()) {
+bool TInteractiveConfigurationManager::TAiProfile::SetupProfile(const TString& preset) {
+    auto presetInfo = TAiPresets::GetPreset(preset);
+    if (presetInfo) {
+        Name = presetInfo->Name;
+        Config["preset_id"] = preset;
+        Manager->ConfigChanged = true;
+    }
+
+    if (!SetupApiType(presetInfo)) {
         YDB_CLI_LOG(Notice, "AI profile \"" << Name << "\" is not configured, no API type provided");
         return false;
     }
 
     Cout << Endl;
-    if (!SetupApiEndpoint()) {
+    if (!SetupApiEndpoint(presetInfo)) {
         YDB_CLI_LOG(Notice, "AI profile \"" << Name << "\" is not configured, no API endpoint provided");
         return false;
     }
@@ -119,7 +206,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupProfile() {
     }
 
     Cout << Endl;
-    if (!SetupModelName()) {
+    if (!SetupModelName(presetInfo)) {
         YDB_CLI_LOG(Notice, "AI profile \"" << Name << "\" is not configured, no model name provided");
         return false;
     }
@@ -127,32 +214,38 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupProfile() {
     return true;
 }
 
-bool TInteractiveConfigurationManager::TAiProfile::SetupApiType() {
-    std::optional<EApiType> apiType;
+bool TInteractiveConfigurationManager::TAiProfile::SetupApiType(const std::optional<TAiPresets::TInfo>& presetInfo) {
+    if (presetInfo) {
+        Config["api_type"] = static_cast<ui64>(presetInfo->ApiType);
+        Manager->ConfigChanged = true;
+        return true;
+    }
+
+    std::optional<EAiApiType> apiType;
     std::vector<TMenuEntry> options;
 
-    const TString openAiDescription = TStringBuilder() << EApiType::OpenAI << " (e. g. for models on Yandex Cloud or openai.com)";
-    const auto openAiAction = [&]() { apiType = EApiType::OpenAI; };
+    const TString openAiDescription = TStringBuilder() << EAiApiType::OpenAI << " (e. g. for models on Yandex Cloud or openai.com)";
+    const auto openAiAction = [&]() { apiType = EAiApiType::OpenAI; };
 
-    const TString anthropicDescription = TStringBuilder() << EApiType::Anthropic << " (e. g. for models on anthropic.com)";
-    const auto anthropicAction = [&]() { apiType = EApiType::Anthropic; };
+    const TString anthropicDescription = TStringBuilder() << EAiApiType::Anthropic << " (e. g. for models on anthropic.com)";
+    const auto anthropicAction = [&]() { apiType = EAiApiType::Anthropic; };
 
     const auto currentApiType = GetApiType();
     TString title;
     if (currentApiType) {
-        title = TStringBuilder() << "Pick desired action to configure API type in AI profile \"" << Name << "\":";
+        title = TStringBuilder() << "Pick desired action to configure API type:";
 
-        if (*currentApiType != EApiType::OpenAI) {
+        if (*currentApiType != EAiApiType::OpenAI) {
             options.push_back({TStringBuilder() << "Change API type to " << openAiDescription << ", all other settings will be removed", openAiAction});
         }
 
-        if (*currentApiType != EApiType::Anthropic) {
+        if (*currentApiType != EAiApiType::Anthropic) {
             options.push_back({TStringBuilder() << "Change API type to " << anthropicDescription << ", all other settings will be removed", anthropicAction});
         }
 
         options.push_back({TStringBuilder() << "Use current API type " << *currentApiType, [&]() { apiType = *currentApiType; }});
     } else {
-        title = TStringBuilder() << "Please choose desired API type for AI profile \"" << Name << "\":";
+        title = TStringBuilder() << "Please choose desired API type:";
         options.push_back({openAiDescription, openAiAction});
         options.push_back({anthropicDescription, anthropicAction});
     }
@@ -168,7 +261,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiType() {
             Config["api_token"] = "";
             Config["model_name"] = "";
         } else {
-            Cout << "Setting API type " << Colors.BoldColor() << *apiType << Colors.OldColor() << " for profile \"" << Name << "\"" << Endl;
+            Cout << "Setting API type " << Colors.BoldColor() << *apiType << Colors.OldColor() << Endl;
         }
 
         Config["api_type"] = static_cast<ui64>(*apiType);
@@ -178,50 +271,56 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiType() {
     return true;
 }
 
-bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint() {
+bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint(const std::optional<TAiPresets::TInfo>& presetInfo) {
+    if (presetInfo) {
+        Config["api_endpoint"] = presetInfo->ApiEndpoint;
+        Manager->ConfigChanged = true;
+        return true;
+    }
+
     const auto apiType = GetApiType();
     if (!apiType) {
-        YDB_CLI_LOG(Warning, "Can not setup API endpoint for AI profile \"" << Name << "\", there is no API type");
+        YDB_CLI_LOG(Warning, "Can not setup API endpoint, there is no API type");
         return false;
     }
 
     TString endpoint;
     std::vector<TMenuEntry> options;
-    const TString title = TStringBuilder() << "Pick desired action to configure API endpoint in AI profile \"" << Name << "\":";
+    const TString title = TStringBuilder() << "Pick desired action to configure API endpoint:";
 
     auto defaultEndpointInfo = TStringBuilder() << "Use default endpoint for " << *apiType << ": ";
     const TString openAiEndpoint = "https://api.openai.com";
     const TString anthropicEndpoint = "https://api.anthropic.com";
     switch (*apiType) { 
-        case EApiType::OpenAI: {
+        case EAiApiType::OpenAI: {
             options.push_back({defaultEndpointInfo << openAiEndpoint, [&]() { endpoint = openAiEndpoint; }});
             break;
         }
-        case EApiType::Anthropic: {
+        case EAiApiType::Anthropic: {
             options.push_back({defaultEndpointInfo << anthropicEndpoint, [&]() { endpoint = anthropicEndpoint; }});
             break;
         }
-        case EApiType::Invalid:
+        case EAiApiType::Invalid:
             Y_VALIDATE(false, "Invalid API type: " << *apiType);
     }
 
     options.push_back({"Set a new endpoint value", [&]() {
-        auto value = RunFtxuiInput(TStringBuilder() << "Please enter API endpoint for AI profile \"" << Name << "\": ", "", [&](const TString& input, TString& error) {
+        auto value = RunFtxuiInput(TStringBuilder() << "Please enter API endpoint: ", "", [&](const TString& input, TString& error) {
             auto url = Strip(input);
             if (!url) {
-                error = TStringBuilder() << "Please enter non empty API endpoint for AI profile \"" << Name << "\": ";
+                error = TStringBuilder() << "Please enter non empty API endpoint: ";
                 return false;
             }
 
             if (!url.StartsWith("http://") && !url.StartsWith("https://")) {
-                error = TStringBuilder() << "API endpoint supports only http:// or https:// schema. Please enter API endpoint for AI profile \"" << Name << "\": ";
+                error = TStringBuilder() << "API endpoint supports only http:// or https:// schema. Please enter API endpoint: ";
                 return false;
             }
 
             try {
                 NAi::CreateApiUrl(url, "/");
             } catch (const std::exception& e) {
-                error = TStringBuilder() << "Invalid API endpoint: " << e.what() << ". Please enter API endpoint for AI profile \"" << Name << "\": ";
+                error = TStringBuilder() << "Invalid API endpoint: " << e.what() << ". Please enter API endpoint: ";
                 return false;
             }
 
@@ -245,7 +344,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint() {
     }
 
     if (!currentEndpoint || currentEndpoint != endpoint) {
-        Cout << "Setting API endpoint value \"" << endpoint << "\" for profile \"" << Name << "\"" << Endl;
+        Cout << "Setting API endpoint value \"" << endpoint << "\"" << Endl;
         Config["api_endpoint"] = endpoint;
         Manager->ConfigChanged = true;
     }
@@ -256,7 +355,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint() {
 bool TInteractiveConfigurationManager::TAiProfile::SetupApiToken() {
     TString token;
     std::vector<TMenuEntry> options;
-    const TString title = TStringBuilder() << "Pick desired action to configure API token in AI profile \"" << Name << "\":";
+    const TString title = TStringBuilder() << "Pick desired action to configure API token:";
 
     options.push_back({"Set a new token value", [&]() {
         auto value = RunFtxuiInput("Please enter token:", "", [](const TString& input, TString& error) {
@@ -271,7 +370,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiToken() {
         }
     }});
 
-    options.push_back({TStringBuilder() << "Don't save token for AI profile \"" << Name << "\"", []() {}});
+    options.push_back({TStringBuilder() << "Don't save token", []() {}});
 
     const auto currentToken = GetApiToken();
     if (currentToken) {
@@ -285,7 +384,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiToken() {
     }
 
     if (token && (!currentToken || currentToken != token)) {
-        Cout << "Setting API token value \"" << BlurSecret(token) << "\" for profile \"" << Name << "\"" << Endl;
+        Cout << "Setting API token value \"" << BlurSecret(token) << "\"" << Endl;
         Config["api_token"] = token;
         Manager->ConfigChanged = true;
     }
@@ -293,16 +392,57 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiToken() {
     return true;
 }
 
-bool TInteractiveConfigurationManager::TAiProfile::SetupModelName() {
+bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::optional<TAiPresets::TInfo>& presetInfo) {
+    if (presetInfo) {
+        Config["model_name"] = presetInfo->ModelName;
+        Manager->ConfigChanged = true;
+        return true;
+    }
+
+    const TString& apiEndpoint = GetApiEndpoint();
+    if (!apiEndpoint) {
+        YDB_CLI_LOG(Warning, "Can not setup model name, there is no API endpoint");
+        return false;
+    }
+
+    std::vector<TString> allowedModels;
+    try {
+        const auto response = NAi::THttpExecutor(NAi::CreateApiUrl(apiEndpoint, "/models"), GetApiToken(), Log).Get();
+
+        if (!response.IsSuccess()) {
+            throw yexception() << NAi::THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);
+        }
+
+        NJson::TJsonValue responseJson;
+        try {
+            NJson::ReadJsonTree(response.Content, &responseJson, /* throwOnError */ true);
+        } catch (const std::exception& e) {
+            throw yexception() << "Model API response is not valid JSON, reason: " << e.what();
+        }
+
+        NAi::TJsonParser parser(responseJson);
+        if (auto child = parser.MaybeKey("response")) {
+            parser = std::move(*child);
+        }
+
+        parser.GetKey("data").Iterate([&](NAi::TJsonParser item) {
+            if (const auto id = item.MaybeKey("id")) {
+                allowedModels.emplace_back(id->GetString());
+            }
+        });
+    } catch (const std::exception& e) {
+        Cerr << Colors.Yellow() << "Failed to list model names, maybe model API endpoint is not correct: " << e.what() << Colors.OldColor() << Endl;
+    }
+
     TString modelName;
     std::vector<TMenuEntry> options;
-    const TString title = TStringBuilder() << "Pick desired action to configure model name in AI profile \"" << Name << "\":";
+    const TString title = TStringBuilder() << "Pick desired action to configure model name:";
 
-    options.push_back({"Set a new model name", [&]() {
-        auto value = RunFtxuiInput(TStringBuilder() << "Please enter model name for AI profile \"" << Name << "\": ", "", [&](const TString& input, TString& error) {
+    options.push_back({"Write a new model name", [&]() {
+        auto value = RunFtxuiInput(TStringBuilder() << "Please enter model name: ", "", [&](const TString& input, TString& error) {
             modelName = Strip(input);
             if (!modelName) {
-                error = TStringBuilder() << "Please enter non empty model name for AI profile \"" << Name << "\": ";
+                error = TStringBuilder() << "Please enter non empty model name: ";
                 return false;
             }
             return true;
@@ -312,7 +452,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName() {
         }
     }});
 
-    options.push_back({TStringBuilder() << "Don't save model name for AI profile \"" << Name << "\"", []() {}});
+    options.push_back({TStringBuilder() << "Don't save model name", []() {}});
 
     const auto currentModelName = GetModelName();
     if (currentModelName) {
@@ -321,12 +461,22 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName() {
         }});
     }
 
+    for (const auto& allowedName : allowedModels) {
+        if (allowedName == currentModelName) {
+            continue;
+        }
+
+        options.push_back({TStringBuilder() << "Use new model name \"" << allowedName << "\"", [&modelName, allowedName]() {
+            modelName = allowedName;
+        }});
+    }
+
     if (!RunFtxuiMenuWithActions(title, options)) {
         return false;
     }
 
     if (modelName && (!currentModelName || currentModelName != modelName)) {
-        Cout << "Setting model name \"" << modelName << "\" for profile \"" << Name << "\"" << Endl;
+        Cout << "Setting model name \"" << modelName << "\"" << Endl;
         Config["model_name"] = modelName;
         Manager->ConfigChanged = true;
     }
@@ -349,8 +499,8 @@ TInteractiveConfigurationManager::~TInteractiveConfigurationManager() {
 }
 
 TInteractiveConfigurationManager::EMode TInteractiveConfigurationManager::GetDefaultMode() const {
-    if (Config["interactive_settings"] && Config["interactive_settings"]["default_mode"]) {
-        auto defaultMode = Config["interactive_settings"]["default_mode"].as<ui64>(static_cast<ui64>(EMode::Invalid));
+    if (const auto& defaultModeNode = Config["default_mode"]) {
+        auto defaultMode = defaultModeNode.as<ui64>(static_cast<ui64>(EMode::Invalid));
         if (defaultMode >= static_cast<ui64>(EMode::Invalid)) {
             YDB_CLI_LOG(Warning, "Interactive config has invalid default mode: " << defaultMode << ", falling back to YQL mode");
             defaultMode = static_cast<ui64>(EMode::YQL);
@@ -362,16 +512,26 @@ TInteractiveConfigurationManager::EMode TInteractiveConfigurationManager::GetDef
     return EMode::YQL;
 }
 
-TString TInteractiveConfigurationManager::GetActiveAiProfileName() const {
-    if (auto interactiveSettings = Config["interactive_settings"]; interactiveSettings && interactiveSettings["active_ai_profile"]) {
-        if (auto activeProfile = interactiveSettings["active_ai_profile"].as<TString>("")) {
-            return activeProfile;
-        }
+void TInteractiveConfigurationManager::ChangeDefaultMode(EMode mode) {
+    Config["default_mode"] = static_cast<ui64>(mode);
+    ConfigChanged = true;
+    YDB_CLI_LOG(Info, "Default interactive mode was changed to " << mode);
+}
 
-        YDB_CLI_LOG(Warning, "Current active profile has empty name, profile disabled");
+TString TInteractiveConfigurationManager::ModeToString(EMode mode) {
+    return mode == EMode::YQL
+        ? TStringBuilder() << Colors.Green() << "YQL" << Colors.OldColor()
+        : TStringBuilder() << Colors.Cyan() << "AI" << Colors.OldColor();
+}
+
+TString TInteractiveConfigurationManager::GetActiveAiProfileName() const {
+    TString activeProfile;
+    if (const auto& activeAiProfileNode = Config["active_ai_profile"]) {
+        activeProfile = activeAiProfileNode.as<TString>("");
     }
 
-    return "";
+    YDB_CLI_LOG(Debug, "Current active profile name: " << activeProfile);
+    return activeProfile;
 }
 
 TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationManager::GetAiProfile(const TString& name) {
@@ -381,13 +541,13 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
 }
 
 std::unordered_map<TString, TInteractiveConfigurationManager::TAiProfile::TPtr> TInteractiveConfigurationManager::ListAiProfiles() {
-    auto interactiveSettings = Config["interactive_settings"];
-    if (!interactiveSettings || !interactiveSettings["ai_profiles"]) {
+    auto aiProfiles = Config["ai_profiles"];
+    if (!aiProfiles) {
         return {};
     }
 
     std::unordered_map<TString, TAiProfile::TPtr> existingAiProfiles;
-    for (const auto& profile : interactiveSettings["ai_profiles"]) {
+    for (const auto& profile : aiProfiles) {
         const auto& name = profile.first.as<TString>("");
         if (!name) {
             YDB_CLI_LOG(Warning, "AI profile has no name, profile skipped");
@@ -395,8 +555,8 @@ std::unordered_map<TString, TInteractiveConfigurationManager::TAiProfile::TPtr> 
         }
 
         const auto& settings = profile.second;
-        if (!settings.IsMap()) {
-            YDB_CLI_LOG(Warning, "AI profile \"" << name << "\" has unexpected type " << static_cast<ui64>(settings.Type()) << " instead of map, profile skipped");
+        if (!settings.IsMap() && !settings.IsNull()) {
+            YDB_CLI_LOG(Warning, "AI profile \"" << name << "\" has unexpected type " << static_cast<ui64>(settings.Type()) << " instead of map or null, profile skipped");
             continue;
         }
 
@@ -414,114 +574,133 @@ std::unordered_map<TString, TInteractiveConfigurationManager::TAiProfile::TPtr> 
     return existingAiProfiles;
 }
 
-TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationManager::InitAiModelProfile() {
-    const auto& existingAiProfiles = ListAiProfiles();
-    auto activeAiProfile = GetActiveAiProfileName();
-    if (!activeAiProfile && existingAiProfiles.size() == 1) {
-        activeAiProfile = existingAiProfiles.begin()->first;
-        ChangeActiveAiProfile(activeAiProfile);
+TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationManager::SelectAiModelProfile() {
+    std::vector<TMenuEntry> options;
+
+    const auto activeAiProfile = GetAiProfile(GetActiveAiProfileName());
+    TString presetId;
+    for (const auto& [id, preset] : TAiPresets::ListPresets()) {
+        auto description = TStringBuilder() << preset.Name;
+        if (activeAiProfile && activeAiProfile->GetPresetId() == id) {
+            description << " (active)";
+        }
+
+        options.emplace_back(description, [&presetId, id]() {
+            presetId = id;
+        });
     }
 
-    if (activeAiProfile) {
-        if (auto it = existingAiProfiles.find(activeAiProfile); it != existingAiProfiles.end()) {
+    const auto& existingAiProfiles = ListAiProfiles();
+    TAiProfile::TPtr result;
+    std::unordered_map<TString, TAiProfile::TPtr> presets;
+    for (const auto& [name, profile] : existingAiProfiles) {
+        if (const auto& id = profile->GetPresetId()) {
+            presets.emplace(id, profile);
+            continue;
+        }
+
+        auto description = TStringBuilder() << name;
+        if (activeAiProfile && activeAiProfile->GetName() == name) {
+            description << " (active)";
+        }
+
+        options.emplace_back(description, [&result, profile]() {
+            result = profile;
+        });
+    }
+
+    options.emplace_back("Setup custom model", []() {});
+
+    if (!RunFtxuiMenuWithActions("Please choose AI model:", options)) {
+        return nullptr;
+    }
+
+    if (result) {
+        return result;
+    }
+
+    if (presetId) {
+        if (const auto it = presets.find(presetId); it != presets.end()) {
             return it->second;
         }
     }
 
-    if (!existingAiProfiles.empty()) {
-        TAiProfile::TPtr resultProfile;
-        std::vector<TMenuEntry> options;
-        options.reserve(existingAiProfiles.size() + 2);
-        for (const auto& [name, profile] : existingAiProfiles) {
-            options.push_back({name, [&resultProfile, profile]() {
-                resultProfile = profile;
-            }});
-        }
-        options.push_back({"Create a new profile", [&]() { resultProfile = CreateNewAiModelProfile(); }});
-        options.push_back({"Return to YQL mode", []() {}});
-
-        RunFtxuiMenuWithActions("Please choose AI profile to continue:", options);
-
-        if (resultProfile) {
-            ChangeActiveAiProfile(resultProfile->GetName());
-        }
-
-        return resultProfile;
-    }
-
-    Cout << Endl << "Welcome to AI mode! This command will take you through the configuration process." << Endl;
-    Cout << "You have no existing AI profiles yet, configure new profile or return to YQL mode by using " << Colors.BoldColor() << "Ctrl+C" << Colors.OldColor() << Endl;
-
-    auto result = CreateNewAiModelProfile();
-    if (result && GetDefaultMode() == EMode::YQL) {
-        if (AskYesNoFtxui("Activate AI interactive mode by default?", /* defaultAnswer */ false)) {
-            ChangeDefaultMode(EMode::AI);
-            Cout << "AI interactive mode is set by default, you can change it by using " << Colors.BoldColor() << "Ctrl+G" << Colors.OldColor() << " hotkey in AI interactive mode." << Endl;
-        }
-    }
-
-    return result;
-}
-
-TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationManager::CreateNewAiModelProfile() {
-    TString profileName;
-    auto name = RunFtxuiInput("Please enter name for a new AI profile:", "", [](const TString& input, TString& error) {
-        auto value = Strip(input);
-        if (!value) {
-            error = "Name cannot be empty";
-            return false;
-        }
-        return true;
-    });
-    if (!name) {
-        return nullptr;
-    }
-    profileName = *name;
-
-    Y_VALIDATE(profileName, "Profiles with empty names are not allowed");
-    Cout << "Configuring new AI profile \"" << profileName << "\"." << Endl << Endl;
-
-    Config["interactive_settings"]["ai_profiles"][profileName] = YAML::Node();
-    ConfigChanged = true;
-    auto aiProfile = std::make_shared<TAiProfile>(profileName, Config["interactive_settings"]["ai_profiles"][profileName], shared_from_this(), Log);
-    if (!aiProfile->SetupProfile()) {
-        return nullptr;
-    }
-
-    Cout << "Configuration process for AI profile \"" << profileName << "\" is complete." << Endl;
-
-    if (const auto activeProfile = GetActiveAiProfileName(); activeProfile && activeProfile != profileName) {
-        if (AskYesNoFtxui(TStringBuilder() << "Activate AI profile \"" << profileName << "\" to use by default? (current active AI profile is \"" << activeProfile << "\")", /* defaultAnswer */ true)) {
-            ChangeActiveAiProfile(profileName);
-            Cout << "AI profile \"" << profileName << "\" was set as active." << Endl;
-        }
-    } else if (!activeProfile) {
-        ChangeActiveAiProfile(profileName);
-    }
-
-    YDB_CLI_LOG(Notice, "AI profile \"" << profileName << "\" was created");
-    return aiProfile;
-}
-
-void TInteractiveConfigurationManager::RemoveAiModelProfile(const TString& name) {
-    if (Config["interactive_settings"] && Config["interactive_settings"]["ai_profiles"]) {
-        if (!Config["interactive_settings"]["ai_profiles"].remove(name)) {
-            YDB_CLI_LOG(Warning, "AI profile \"" << name << "\" doesn't exist, profile removal skipped");       
-        }
-        ConfigChanged = true;
-    }
-}
-
-void TInteractiveConfigurationManager::ChangeDefaultMode(EMode mode) {
-    Config["interactive_settings"]["default_mode"] = static_cast<ui64>(mode);
-    ConfigChanged = true;
-    YDB_CLI_LOG(Info, "Default interactive mode was changed to " << mode);
+    return CreateNewAiModelProfile(presetId);
 }
 
 void TInteractiveConfigurationManager::ChangeActiveAiProfile(const TString& name) {
-    Config["interactive_settings"]["active_ai_profile"] = name;
+    Config["active_ai_profile"] = name;
     ConfigChanged = true;
-    YDB_CLI_LOG(Info, "Active AI profile was changed to \"" << name << "\"");
+    YDB_CLI_LOG(Info, "Active AI model was changed to \"" << name << "\"");
+}
+
+TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationManager::CreateNewAiModelProfile(const TString& presetId) {
+    auto aiProfile = std::make_shared<TAiProfile>(shared_from_this(), Log);
+    if (!aiProfile->SetupProfile(presetId)) {
+        YDB_CLI_LOG(Warning, "AI profile settings setup failed");
+        return nullptr;
+    }
+
+    const auto& profileName = CreateAiProfileName(aiProfile->GetName(), aiProfile->GetModelName());
+    if (!profileName) {
+        YDB_CLI_LOG(Warning, "AI profile has no name, profile creation failed");
+        return nullptr;
+    }
+
+    aiProfile->SetName(profileName);
+    Config["ai_profiles"][profileName] = aiProfile->Config;
+    ConfigChanged = true;
+
+    if (GetActiveAiProfileName() != profileName) {
+        ChangeActiveAiProfile(profileName);
+    }
+
+    Cout << "Current AI model is \"" << profileName << "\"." << Endl;
+    YDB_CLI_LOG(Notice, "AI model \"" << profileName << "\" was created");
+    return aiProfile;
+}
+
+TString TInteractiveConfigurationManager::CreateAiProfileName(const TString& currentName, const TString& defaultName) {
+    TStringBuilder promptBuilder;
+    TString name = defaultName;
+
+    const auto& existingAiProfiles = ListAiProfiles();
+    if (currentName) {
+        if (!existingAiProfiles.contains(currentName)) {
+            return currentName;
+        }
+
+        promptBuilder << "Current name \"" << currentName << "\" already exists, please enter name for a new AI model";
+    } else {
+        promptBuilder << "Please enter name for a new AI model";
+    }
+
+    if (name) {
+        if (!existingAiProfiles.contains(name)) {
+            promptBuilder << " (\"" << name << "\" by default)";
+        } else {
+            name = "";
+        }
+    }
+
+    RunFtxuiInput(promptBuilder << ":", "", [&name, &existingAiProfiles](const TString& input, TString& error) {
+        const auto& newName = Strip(input);
+        if (!newName) {
+            if (!name) {
+                error = "AI model name cannot be empty";
+                return false;
+            }
+        } else if (existingAiProfiles.contains(newName)) {
+            error = "AI model with name \"" + newName + "\" already exists";
+            return false;
+        } else {
+            name = newName;
+        }
+
+        return true;
+    });
+
+    return name;
 }
 
 void TInteractiveConfigurationManager::LoadProfile() {
@@ -538,21 +717,9 @@ void TInteractiveConfigurationManager::LoadProfile() {
 }
 
 void TInteractiveConfigurationManager::CanonizeStructure() {
-    auto interactiveSettings = Config["interactive_settings"];
-    if (!interactiveSettings) {
-        return;
-    }
-
-    if (!interactiveSettings.IsMap()) {
-        YDB_CLI_LOG(Error, "$.interactive_settings section has unexpected type " << static_cast<ui64>(interactiveSettings.Type()) << ", changed to map and cleared");
-        Config["interactive_settings"] = YAML::Node();
-        interactiveSettings = Config["interactive_settings"];
-        ConfigChanged = true;
-    }
-
-    if (auto aiProfiles = interactiveSettings["ai_profiles"]; aiProfiles && !aiProfiles.IsMap()) {
-        YDB_CLI_LOG(Error, "$.interactive_settings.ai_profiles section has unexpected type " << static_cast<ui64>(interactiveSettings.Type()) << ", changed to map and cleared");
-        Config["interactive_settings"]["ai_profiles"] = YAML::Node();
+    if (auto aiProfiles = Config["ai_profiles"]; aiProfiles && !aiProfiles.IsMap()) {
+        YDB_CLI_LOG(Error, "$.ai_profiles section has unexpected type " << static_cast<ui64>(aiProfiles.Type()) << ", changed to map and cleared");
+        Config["ai_profiles"] = YAML::Node();
         ConfigChanged = true;
     }
 }

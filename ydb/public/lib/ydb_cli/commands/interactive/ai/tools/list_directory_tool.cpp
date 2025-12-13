@@ -3,17 +3,19 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/tabbed_table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
+#include <util/generic/scope.h>
 #include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
 namespace {
 
-class TListDirectoryTool final : public TToolBase {
+class TListDirectoryTool final : public TToolBase, public TInterruptableCommand {
     using TBase = TToolBase;
 
     static constexpr char DESCRIPTION[] = R"(
@@ -53,7 +55,14 @@ protected:
     }
 
     TResponse DoExecute() final {
-        const auto response = Client.ListDirectory(Directory).ExtractValueSync();
+        Y_DEFER { ResetInterrupted(); };
+
+        auto feature = Client.ListDirectory(Directory);
+        if (!WaitInterruptable(feature)) {
+            return TResponse(TStringBuilder() << "Listing directory \"" << Directory << "\" was interrupted by user");
+        }
+
+        const auto& response = feature.GetValue();
         if (!response.IsSuccess()) {
             Cout << Colors.Red() << "Listing directory \"" << Directory << "\" failed: " << Colors.OldColor() << response.GetStatus() << Endl;
             return TResponse(TStringBuilder() << "Listing directory \"" << Directory << "\" failed with status " << response.GetStatus() << ", reason:\n" << response.GetIssues().ToString());

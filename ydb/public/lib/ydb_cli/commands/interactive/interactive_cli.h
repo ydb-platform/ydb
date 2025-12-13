@@ -13,10 +13,19 @@ namespace NYdb::NConsoleClient {
 class TInteractiveCLI {
     inline const static NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
 
+    struct TVersionInfo {
+        TString CliVersion;
+        TString ServerVersion;
+        TString ServerAvailableCheckFail;
+    };
+
 public:
     TInteractiveCLI(const TString& profileName, const TString& ydbPath);
 
     int Run(TClientCommand::TConfig& config);
+
+private:
+    TVersionInfo ResolveVersionInfo(const TDriver& driver) const;
 
 private:
     const TString Profile;

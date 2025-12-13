@@ -33,67 +33,47 @@ TInteractiveCLI::TInteractiveCLI(const TString& profileName, const TString& ydbP
 int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     Log.Setup(config);
 
-    TString cliVersion;
-    try {
-        cliVersion = StripString(NResource::Find(TStringBuf(VersionResourceName)));
-    } catch (const std::exception& e) {
-        YDB_CLI_LOG(Error, "Couldn't read version from resource: " << e.what());
-        cliVersion.clear();
-    }
-
-    const auto& colors = NColorizer::AutoColors(Cout);
-    Cout << "Welcome to YDB CLI";
-    if (!cliVersion.empty()) {
-        Cout << " " << colors.BoldColor() << cliVersion << colors.OldColor();
-    }
-    Cout << " interactive mode";
-
-    TDriver driver(config.CreateDriverConfig());
-    NQuery::TQueryClient client(driver);
-
-    const auto selectVersionResult = client.RetryQuery([](NQuery::TSession session) {
-        return session.ExecuteQuery("SELECT version()", NQuery::TTxControl::NoTx());
-    }).ExtractValueSync();
-    TString serverVersion;
-    if (selectVersionResult.IsSuccess()) {
-        try {
-            auto parser = selectVersionResult.GetResultSetParser(0);
-            parser.TryNextRow();
-            serverVersion = parser.ColumnParser(0).GetString();
-        } catch (const std::exception& e) {
-            Cerr << Endl << colors.Red() << "Couldn't parse server version: " << colors.OldColor() << e.what() << Endl;
-        }
-    } else {
-        YDB_CLI_LOG(Error, "Couldn't read version from YDB server:" << Endl << TStatus(selectVersionResult));
-    }
-
-    if (!serverVersion.empty()) {
-        Cout << " (YDB Server " << colors.BoldColor() << serverVersion << colors.OldColor() << ")" << Endl;
-    } else {
-        Cout << Endl;
-        const auto select1Status = client.RetryQuery([](NQuery::TSession session) {
-            return session.ExecuteQuery("SELECT 1", NQuery::TTxControl::NoTx());
-        }).ExtractValueSync();
-        if (!select1Status.IsSuccess()) {
-            Cerr << colors.Red() << "Couldn't connect to YDB server:" << colors.OldColor() << Endl << TStatus(select1Status) << Endl;
-            return EXIT_FAILURE;
-        }
-    }
-
-    Cout << "Press " << colors.BoldColor() << "Ctrl+K" << colors.OldColor() << " for more information." << Endl;
-
+    const TDriver driver(config.CreateDriverConfig());
+    const auto versionInfo = ResolveVersionInfo(driver);
     const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile, Log);
+
+    Cout << "Welcome to YDB CLI";
+    if (versionInfo.CliVersion) {
+        Cout << " " << Log.EntityName(versionInfo.CliVersion);
+    }
+    Cout << " " << configurationManager->ModeToString(configurationManager->GetDefaultMode()) << " interactive mode";
+
+    if (versionInfo.ServerVersion) {
+        Cout << " (YDB Server " << Log.EntityName(versionInfo.ServerVersion) << ")" << Endl;
+    } else if (versionInfo.ServerAvailableCheckFail) {
+        Cout << Endl;
+        Cerr << Colors.Red() << "Couldn't connect to YDB server:\n" << versionInfo.ServerAvailableCheckFail << Colors.OldColor() << Endl;
+        return EXIT_FAILURE;
+    }
+
+    if (Profile) {
+        Cout << "Connection profile: " << Log.EntityName(Profile) << Endl;
+    } else {
+        Cout << "Endpoint: " << Log.EntityName(config.Address) << Endl;
+        Cout << "Database: " << Log.EntityName(config.Database) << Endl;
+    }
+
     ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
+    if (!activeSession) {
+        Cout << "Write YQL query text or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl;
+    } else {
+        Cout << "Write textual request or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl;
+    }
+
     Y_VALIDATE(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid), "Unexpected default mode: " << activeSession);
 
     const std::vector sessions = {
         CreateSqlSessionRunner({
-            .ProfileName = Profile,
             .YdbPath = YdbPath,
             .Driver = driver,
+            .Database = config.Database,
         }, Log),
         CreateAiSessionRunner({
-            .ProfileName = Profile,
             .YdbPath = YdbPath,
             .ConfigurationManager = configurationManager,
             .Database = config.Database,
@@ -102,26 +82,26 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     };
     Y_VALIDATE(sessions.size() > activeSession, "Unexpected number of sessions: " << sessions.size() << " for default mode: " << activeSession);
 
-    const auto lineReader = CreateLineReader({.Driver = driver, .Database = config.Database}, Log);
-    if (!sessions[activeSession]->Setup(lineReader)) {
+    ILineReader::TPtr lineReader;
+    if (lineReader = sessions[activeSession]->Setup(); !lineReader) {
         YDB_CLI_LOG(Error, "Failed to perform initial setup in " << (activeSession ? "AI" : "SQL") << " mode");
-        Y_VALIDATE(sessions[activeSession ^= 1]->Setup(lineReader), "Failed to change session to " << activeSession << " after error");
+        Y_VALIDATE(lineReader = sessions[activeSession ^= 1]->Setup(), "Failed to change session to " << activeSession << " after error");
     }
 
     while (const auto inputOptional = lineReader->ReadLine()) {
         const auto& input = *inputOptional;
         if (std::holds_alternative<ILineReader::TSwitch>(input)) {
             activeSession ^= 1;
-            if (sessions[activeSession]->Setup(lineReader)) {
+            if (lineReader = sessions[activeSession]->Setup()) {
                 YDB_CLI_LOG(Info, "Switching to " << (activeSession ? "AI" : "SQL") << " mode");
             } else {
                 YDB_CLI_LOG(Error, "Failed to switch to " << (activeSession ? "AI" : "SQL") << " mode");
-                Y_VALIDATE(sessions[activeSession ^= 1]->Setup(lineReader), "Failed to change session to " << activeSession << " after error");
+                Y_VALIDATE(lineReader = sessions[activeSession ^= 1]->Setup(), "Failed to change session to " << activeSession << " after error");
             }
             continue;
         }
 
-        const auto& line = Strip(std::get<ILineReader::TLine>(input).Data);
+        const auto& line = std::get<ILineReader::TLine>(input).Data;
         if (line.empty()) {
             continue;
         }
@@ -133,9 +113,9 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         try {
             sessions[activeSession]->HandleLine(line);
         } catch (NStatusHelpers::TYdbErrorException& error) {
-            Cerr << colors.Red() << "Failed to handle command:" << colors.OldColor() << Endl << error << Endl;
+            Cerr << Colors.Red() << "Failed to handle command:" << Colors.OldColor() << Endl << error << Endl;
         } catch (std::exception& error) {
-            Cerr << colors.Red() << "Failed to handle command:" << colors.OldColor() << Endl << error.what() << Endl;
+            Cerr << Colors.Red() << "Failed to handle command:" << Colors.OldColor() << Endl << error.what() << Endl;
         }
     }
 
@@ -144,6 +124,46 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     Cout << "Bye!" << Endl;
 
     return EXIT_SUCCESS;
+}
+
+TInteractiveCLI::TVersionInfo TInteractiveCLI::ResolveVersionInfo(const TDriver& driver) const {
+    TVersionInfo result;
+
+    try {
+        result.CliVersion = StripString(NResource::Find(TStringBuf(VersionResourceName)));
+    } catch (const std::exception& e) {
+        YDB_CLI_LOG(Error, "Couldn't read version from resource: " << e.what());
+        result.CliVersion.clear();
+    }
+
+    NQuery::TQueryClient client(driver);
+    const auto selectVersionResult = client.RetryQuery([](NQuery::TSession session) {
+        return session.ExecuteQuery("SELECT version()", NQuery::TTxControl::NoTx());
+    }).ExtractValueSync();
+
+    if (selectVersionResult.IsSuccess()) {
+        try {
+            auto parser = selectVersionResult.GetResultSetParser(0);
+            parser.TryNextRow();
+            result.ServerVersion = parser.ColumnParser(0).GetString();
+        } catch (const std::exception& e) {
+            YDB_CLI_LOG(Error, "Couldn't read version from YDB server:\n" << TStatus(selectVersionResult));
+        }
+    } else {
+        YDB_CLI_LOG(Error, "Couldn't read version from YDB server:\n" << TStatus(selectVersionResult));
+    }
+
+    if (!result.ServerVersion) {
+        const auto select1Status = client.RetryQuery([](NQuery::TSession session) {
+            return session.ExecuteQuery("SELECT 1", NQuery::TTxControl::NoTx());
+        }).ExtractValueSync();
+
+        if (!select1Status.IsSuccess()) {
+            result.ServerAvailableCheckFail = ToString(select1Status.GetStatus());
+        }
+    }
+
+    return result;
 }
 
 } // namespace NYdb::NConsoleClient

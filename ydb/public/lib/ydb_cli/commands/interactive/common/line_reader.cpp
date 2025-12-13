@@ -78,33 +78,33 @@ class TLineReader final : public ILineReader {
 public:
     TLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log)
         : Log(log)
-        , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco(), settings.Driver, settings.Database, Log.IsVerbose()))
         , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
         , ContinueAfterCancel(settings.ContinueAfterCancel)
-    {}
-
-    void Setup(const TSettings& settings) final {
-        Prompt = settings.Prompt;
-        HelpMessage = settings.HelpMessage;
-
-        if (!Rx || settings.EnableYqlCompletion != EnableYqlCompletion || settings.EnableSwitchMode != EnableSwitchMode) {
-            InitReplxx(settings.EnableYqlCompletion, settings.EnableSwitchMode);
+        , EnableSwitchMode(settings.EnableSwitchMode)
+        , Prompt(settings.Prompt)
+        , HelpMessage(settings.HelpMessage)
+    {
+        std::vector<TString> completionCommands;
+        if (HelpMessage) {
+            completionCommands.push_back("/help");
         }
+        if (EnableSwitchMode) {
+            completionCommands.push_back("/switch");
+        }
+        for (const auto& command : settings.AdditionalCommands) {
+            completionCommands.push_back(command);
+        }
+
+        std::optional<TYQLCompleterConfig> yqlCompleterConfig;
+        if (settings.EnableYqlCompletion) {
+            yqlCompleterConfig = TYQLCompleterConfig{.Color = TColorSchema::Monaco(), .Driver = settings.Driver, .Database = settings.Database, .IsVerbose = Log.IsVerbose()};
+        }
+        YQLCompleter = MakeYQLCompositeCompleter(completionCommands, yqlCompleterConfig);
+
+        InitReplxx(settings.EnableYqlCompletion);
         Y_VALIDATE(Rx, "Replxx is not initialized");
 
-        for (const auto& [key, action] : settings.KeyHandlers) {
-            Rx->bind_key(replxx::Replxx::KEY::control(key), [&, action](char32_t code) {
-                action();
-                return Rx->invoke(replxx::Replxx::ACTION::ABORT_LINE, code);
-            });
-            KeyHandlers.erase(key);
-        }
-        for (const auto& [key, action] : KeyHandlers) {
-            Rx->bind_key(replxx::Replxx::KEY::control(key), [](char32_t) { return replxx::Replxx::ACTION_RESULT::CONTINUE; });
-        }
-        KeyHandlers = settings.KeyHandlers;
-
-        if (!History || !settings.HistoryFilePath || History->GetPath() != *settings.HistoryFilePath) {
+        if (settings.HistoryFilePath) {
             UpdateHistoryPath(settings.HistoryFilePath);
             if (History) {
                 if (const auto fileLockGuard = TFileHandlerLockGuard::Lock(History->GetHandle())) {
@@ -143,6 +143,16 @@ public:
             }
 
             TString line = Strip(input);
+            if (HelpMessage && to_lower(line) == "/help") {
+                Cout << HelpMessage << Endl;
+                continue;
+            }
+
+            if (EnableSwitchMode && to_lower(line) == "/switch") {
+                SwitchRequested = true;
+                break;
+            }
+
             AddToHistory(line);
             return TLine{std::move(line)};
         }
@@ -161,32 +171,27 @@ public:
     }
 
 private:
-    void InitReplxx(bool enableCompletion, bool enableSwitchMode) {
-        if (Rx) {
-            Finish();
-            Rx.reset();
-        }
-
-        EnableYqlCompletion = enableCompletion;
-        EnableSwitchMode = enableSwitchMode;
+    void InitReplxx(bool enableYqlCompletion) {
         Rx = replxx::Replxx();
         Rx->install_window_change_handler();
 
-        if (enableCompletion) {
+        Rx->set_completion_callback([this](const std::string& prefix, int& contextLen) {
+            return YQLCompleter->ApplyHeavy(Rx->get_state().text(), prefix, contextLen);
+        });
+
+        Rx->set_hint_delay(100);
+        Rx->set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
+            return YQLCompleter->ApplyLight(Rx->get_state().text(), prefix, contextLen);
+        });
+
+        if (enableYqlCompletion) {
             Rx->set_complete_on_empty(true);
             Rx->set_word_break_characters(NSQLComplete::WordBreakCharacters);
-            Rx->set_completion_callback([this](const std::string& prefix, int& contextLen) {
-                return YQLCompleter->ApplyHeavy(Rx->get_state().text(), prefix, contextLen);
-            });
-
-            Rx->set_hint_delay(100);
-            Rx->set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
-                return YQLCompleter->ApplyLight(Rx->get_state().text(), prefix, contextLen);
-            });
-
             Rx->set_highlighter_callback([this](const auto& text, auto& colors) {
                 YQLHighlighter->Apply(text, colors);
             });
+        } else {
+            Rx->set_complete_on_empty(false);
         }
 
         Rx->bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) {
@@ -201,33 +206,18 @@ private:
             return replxx::Replxx::ACTION_RESULT::BAIL;
         });
 
-        Rx->bind_key(replxx::Replxx::KEY::control('J'), [&](char32_t code) {
-            return Rx->invoke(replxx::Replxx::ACTION::COMMIT_LINE, code);
-        });
-
-        Rx->bind_key(replxx::Replxx::KEY::control('O'), [&](char32_t) {
+        Rx->bind_key(replxx::Replxx::KEY::control('J'), [&](char32_t) {
             Rx->invoke(replxx::Replxx::ACTION::INSERT_CHARACTER, '\n');
             return replxx::Replxx::ACTION_RESULT::CONTINUE;
         });
 
-        if (HelpMessage) {
-            Rx->bind_key(replxx::Replxx::KEY::control('K'), [&](char32_t code) {
-                ClearScreen();
-                Cout << Endl << HelpMessage << Endl;
-                return Rx->invoke(replxx::Replxx::ACTION::ABORT_LINE, code);
-            });
-        } else {
-            ResetKeyHandler('K');
-        }
-
-        if (enableSwitchMode) {
+        if (EnableSwitchMode) {
             Rx->bind_key(replxx::Replxx::KEY::control('T'), [&](char32_t) {
                 SwitchRequested = true;
+                Rx->invoke(replxx::Replxx::ACTION::KILL_TO_BEGINING_OF_LINE, '\n');
                 ClearScreen();
                 return replxx::Replxx::ACTION_RESULT::BAIL;
             });
-        } else {
-            ResetKeyHandler('T');
         }
 
         for (const auto [lhs, rhs] : THashMap<char, char>{
@@ -245,11 +235,6 @@ private:
         }
 
         Rx->enable_bracketed_paste();
-    }
-
-    void ResetKeyHandler(char key) {
-        Y_VALIDATE(Rx, "Replxx is not initialized");
-        Rx->bind_key(replxx::Replxx::KEY::control(key), [](char32_t) { return replxx::Replxx::ACTION_RESULT::CONTINUE; });
     }
 
     void UpdateHistoryPath(const std::optional<TString>& path) {
@@ -288,17 +273,14 @@ private:
 
 private:
     const TInteractiveLogger Log;
-    const IYQLCompleter::TPtr YQLCompleter;
+    IYQLCompleter::TPtr YQLCompleter;
     const IYQLHighlighter::TPtr YQLHighlighter;
     const bool ContinueAfterCancel = true;
+    const bool EnableSwitchMode = true;
+    const TString Prompt;
+    const std::optional<TString> HelpMessage;
     std::optional<replxx::Replxx> Rx;
-
-    TString Prompt;
-    std::optional<TString> HelpMessage;
     std::optional<THistory> History;
-    std::unordered_map<char, std::function<void()>> KeyHandlers;
-    bool EnableYqlCompletion = true;
-    bool EnableSwitchMode = true;
     bool SwitchRequested = false;
 };
 

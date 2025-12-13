@@ -12,6 +12,7 @@
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
+#include <util/generic/scope.h>
 #include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -68,7 +69,7 @@ private:
     std::unordered_set<ui64> InittedResultSets;
 };
 
-class TExecQueryTool final : public TToolBase {
+class TExecQueryTool final : public TToolBase, public TInterruptableCommand {
     using TBase = TToolBase;
 
     static constexpr char DESCRIPTION[] = R"(
@@ -174,6 +175,8 @@ protected:
     }
 
     TResponse DoExecute() final {
+        Y_DEFER { ResetInterrupted(); };
+
         try {
             if (ExecuteRunner.Execute(Query, {}) != EXIT_SUCCESS) {
                 Log.Notice() << "Query execution was interrupted by user";
@@ -191,11 +194,13 @@ private:
     bool RequestQueryText() {
         Cout << Endl;
 
-        const auto lineReader = CreateLineReader({.Driver = Driver, .Database = Database, .ContinueAfterCancel = false}, Log);
-        lineReader->Setup({
+        const auto lineReader = CreateLineReader({
+            .Driver = Driver,
+            .Database = Database,
             .Prompt = TStringBuilder() << Prompt << Colors.Yellow() << "YQL" << Colors.OldColor() << "> ",
             .EnableSwitchMode = false,
-        });
+            .ContinueAfterCancel = false,
+        }, Log);
 
         auto response = lineReader->ReadLine(Query);
         lineReader->Finish();

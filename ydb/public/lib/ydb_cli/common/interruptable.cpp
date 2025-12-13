@@ -9,8 +9,18 @@ void TInterruptableCommand::OnTerminate(int) {
 }
 
 void TInterruptableCommand::SetInterruptHandlers() {
-    signal(SIGINT, &TInterruptableCommand::OnTerminate);
-    signal(SIGTERM, &TInterruptableCommand::OnTerminate);
+    SignalHandlers[SIGINT] = std::signal(SIGINT, &TInterruptableCommand::OnTerminate);
+    SignalHandlers[SIGTERM] = std::signal(SIGTERM, &TInterruptableCommand::OnTerminate);
+}
+
+void TInterruptableCommand::ResetInterrupted() {
+    AtomicSet(Interrupted, false);
+
+    for (const auto& [signal, handler] : SignalHandlers) {
+        std::signal(signal, handler);
+    }
+
+    SignalHandlers.clear();
 }
 
 bool TInterruptableCommand::IsInterrupted() {

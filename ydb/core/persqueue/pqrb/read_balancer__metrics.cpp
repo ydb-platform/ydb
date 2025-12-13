@@ -77,7 +77,7 @@ struct TTopicMetricCollector {
     TMetricCollector<EPartitionExtendedLabeledCounters_descriptor> PartitionExtendedLabeledCounters;
     TMetricCollector<EPartitionKeyCompactionLabeledCounters_descriptor> PartitionKeyCompactionLabeledCounters;
 
-    std::unordered_map<TString, TConsumerMetricCollector> Consumers;
+    absl::flat_hash_map<TString, TConsumerMetricCollector> Consumers;
 
     void Collect(const NKikimrPQ::TStatusResponse::TPartResult& partitionStatus) {
         TopicMetrics.TotalDataSize += partitionStatus.GetPartitionSize();
@@ -232,13 +232,13 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const TString& databasePat
         }
     }
 
-    std::unordered_set<std::string_view> existedConsumers;
+    absl::flat_hash_set<std::string_view> existedConsumers;
     for (const auto& consumer : tabletConfig.GetConsumers()) {
         existedConsumers.insert(consumer.GetName());
     }
     for (auto it = ConsumerCounters.begin(); it != ConsumerCounters.end();) {
         if (!existedConsumers.contains(it->first)) {
-            it = ConsumerCounters.erase(it);
+            ConsumerCounters.erase(it++);
         } else {
             ++it;
         }
@@ -295,7 +295,7 @@ void TTopicMetricsHandler::UpdateMetrics() {
         collector.Collect(partitionStatus);
     }
     collector.Finish();
-    PartitionStatuses.clear();
+    PartitionStatuses.erase(PartitionStatuses.begin(), PartitionStatuses.end());
 
     TopicMetrics = collector.TopicMetrics;
 

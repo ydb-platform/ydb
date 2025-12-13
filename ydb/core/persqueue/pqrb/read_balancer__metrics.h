@@ -7,7 +7,6 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-#include <unordered_map>
 #include <vector>
 
 namespace NKikimr::NPQ {
@@ -74,8 +73,8 @@ private:
         TCounters MLPClientLabeledCounters;
         ::NMonitoring::TDynamicCounters::TCounterPtr MLPMessageLockAttemptsCounter;
     };
-    std::unordered_map<TString, TConsumerCounters> ConsumerCounters;
+    absl::flat_hash_map<TString, TConsumerCounters> ConsumerCounters;
 
-    std::unordered_map<ui32, NKikimrPQ::TStatusResponse_TPartResult> PartitionStatuses;
+    absl::flat_hash_map<ui32, NKikimrPQ::TStatusResponse_TPartResult> PartitionStatuses;
 };
 }

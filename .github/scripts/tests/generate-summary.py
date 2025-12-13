@@ -685,8 +685,12 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
             if desc and desc.strip():
                 test_descriptions[test.full_name] = desc
     
+    # Prepare flat sorted list of all visible tests (for default "no grouping" view)
+    all_tests_sorted = sorted(visible_rows, key=attrgetter("full_name"))
+    
     content = env.get_template("summary_v2.html").render(
         suites=suites_dict,
+        all_tests_sorted=all_tests_sorted,  # Flat sorted list for default view
         status_suites=status_suites,
         sanitizer_suites=sanitizer_suites,
         flaky_suites=flaky_suites,  # Flaky tests grouped by suite

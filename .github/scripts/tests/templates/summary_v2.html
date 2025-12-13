@@ -266,6 +266,49 @@
             font-weight: 500;
             flex: 1;
             min-width: 200px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .test-name.has-error {
+            cursor: pointer;
+        }
+        .test-name.has-error:hover {
+            text-decoration: underline;
+        }
+        .test-name-toggle {
+            font-size: 12px;
+            color: #656d76;
+            transition: transform 0.2s;
+        }
+        .test-name-toggle.expanded {
+            transform: rotate(90deg);
+        }
+        .group-by-selector {
+            margin: 20px 0 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .group-by-selector select {
+            padding: 6px 12px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            background-color: #f6f8fa;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .group-by-selector select:hover {
+            background-color: #f3f4f6;
+        }
+        .tests-flat-container {
+            display: none;
+        }
+        .tests-flat-container.active {
+            display: block;
+        }
+        .suite-group.hidden-group {
+            display: none;
         }
         .test-status {
             font-weight: bold;
@@ -654,6 +697,14 @@
         <button class="filter-btn skipped" onclick="setFilter('skipped', this)">Skipped ({{ test_counts.skipped }})</button>
     </div>
     
+    <div class="group-by-selector">
+        <label for="groupBySelect" style="font-size: 14px; font-weight: 500;">Group by:</label>
+        <select id="groupBySelect" onchange="setGroupBy(this.value)">
+            <option value="none" selected>None</option>
+            <option value="suite">Suite</option>
+        </select>
+    </div>
+    
     <!-- Flaky/Stable/Sanitizer badges - shown based on current filter -->
     <div id="flaky-stable-badges" class="flaky-stable-badges" style="margin: 10px 0; display: none;">
         <span class="badge-label" style="margin-right: 10px; font-weight: 500;">Filter by:</span>
@@ -676,7 +727,7 @@
     <!-- All view: grouped by suite -->
     <div id="view-all" class="view">
         {% for suite_name, tests in suites.items()|sort %}
-        <div class="suite-group">
+        <div class="suite-group" data-suite-name="{{ suite_name }}">
             <div class="suite-header" onclick="toggleSuite('suite-{{ loop.index }}')">
                 <span class="suite-toggle">&#9660;</span>
                 <span>{{ suite_name }}</span>
@@ -695,12 +746,12 @@
             </div>
             <div id="suite-{{ loop.index }}" class="suite-content">
                 {% for test in tests %}
-                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-is-flaky="{% if test.is_flaky %}true{% else %}false{% endif %}">
+                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name }}" data-test-owner="{{ test.owners }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-is-flaky="{% if test.is_flaky %}true{% else %}false{% endif %}" data-suite-name="{{ suite_name }}" data-test-display-name="{{ test.name }}">
                     <span class="searchable-full-path">{{ test.full_name }}</span>
-                    <span class="test-name" title="{{ test.full_name }}">{{ test.name }}</span>
-                    {% if test.status_description %}
-                    <button class="error-button" onclick="toggleError(this)" data-test-name="{{ test.full_name }}" title="Show/hide error">Error</button>
-                    {% endif %}
+                    <span class="test-name {% if test.status_description %}has-error{% endif %}" {% if test.status_description %}data-has-error="true" data-test-full-name="{{ test.full_name }}"{% endif %} title="{{ test.full_name }}">
+                        {% if test.status_description %}<span class="test-name-toggle">▶</span>{% endif %}
+                        <span class="test-name-text">{{ test.name }}</span>
+                    </span>
                     
                     <div class="test-meta">
                         <span class="test-status {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}">{{ test.status_display }}</span>
@@ -761,6 +812,9 @@
         </div>
         {% endfor %}
     </div>
+    
+    <!-- Flat view: no grouping, sorted alphabetically -->
+    <div id="tests-flat" class="tests-flat-container active"></div>
 
     <!-- Removed duplicate views (view-passed, view-failed, view-error, view-mute, view-sanitizer, view-flaky) to reduce HTML size -->
     <!-- Filtering is now done via JavaScript using data-test-status, data-is-sanitizer, and data-is-flaky attributes -->
@@ -822,6 +876,7 @@
         // Current filter state
         let currentMainFilter = 'all';
         let currentFlakyStableFilter = 'all'; // 'all', 'flaky', or 'stable'
+        let currentGroupBy = 'none'; // 'none' or 'suite'
         
         function getHistoryError(testName, timestamp) {
             if (!historyDescriptions || !historyDescriptions[testName]) return '';
@@ -861,6 +916,17 @@
                     testItem.classList.add('error-hidden');
                 }
             });
+            
+            // Add click handlers for test names with errors
+            document.addEventListener('click', function(e) {
+                const testName = e.target.closest('.test-name.has-error');
+                if (testName && testName.hasAttribute('data-has-error')) {
+                    const fullName = testName.getAttribute('data-test-full-name');
+                    if (fullName) {
+                        toggleErrorByName(fullName, testName);
+                    }
+                }
+            });
             // Initialize filter from URL - apply immediately to prevent showing all tests
             if (window.__initialFilter) {
                 // Use pre-parsed filter from inline script
@@ -886,6 +952,9 @@
             // Always update badges visibility on page load
             const currentFilter = currentMainFilter || 'all';
             updateFlakyStableBadges(currentFilter);
+            
+            // Initialize group by mode
+            setGroupBy('none');
         });
         
         // Also expand when filter changes - now filters tests via data attributes
@@ -902,6 +971,11 @@
             
             // Update flaky/stable badges visibility and counts
             updateFlakyStableBadges(filter);
+            
+            // Re-render flat view if needed
+            if (currentGroupBy === 'none') {
+                renderFlatView();
+            }
             
             // Apply filters
             applyFilters();
@@ -985,8 +1059,65 @@
             
             currentFlakyStableFilter = type;
             
+            // Re-render flat view if needed
+            if (currentGroupBy === 'none') {
+                renderFlatView();
+            }
+            
             // Apply filters
             applyFilters();
+        }
+        
+        function setGroupBy(mode) {
+            currentGroupBy = mode;
+            const select = document.getElementById('groupBySelect');
+            if (select) select.value = mode;
+            
+            const suiteView = document.getElementById('view-all');
+            const flatView = document.getElementById('tests-flat');
+            
+            if (mode === 'suite') {
+                suiteView.style.display = 'block';
+                flatView.classList.remove('active');
+                flatView.innerHTML = '';
+            } else {
+                suiteView.style.display = 'none';
+                renderFlatView();
+            }
+            
+            // Re-apply filters after switching view
+            applyFilters();
+        }
+        
+        function renderFlatView() {
+            const flatView = document.getElementById('tests-flat');
+            const allTestItems = Array.from(document.querySelectorAll('#view-all .test-item'));
+            
+            // Sort alphabetically by full_name
+            allTestItems.sort((a, b) => {
+                const nameA = a.getAttribute('data-test-name') || '';
+                const nameB = b.getAttribute('data-test-name') || '';
+                return nameA.localeCompare(nameB);
+            });
+            
+            // Clone and update test items for flat view
+            flatView.innerHTML = '';
+            allTestItems.forEach(testItem => {
+                const clone = testItem.cloneNode(true);
+                const nameText = clone.querySelector('.test-name-text');
+                const fullName = clone.getAttribute('data-test-name');
+                if (nameText && fullName) {
+                    nameText.textContent = fullName;
+                }
+                // Ensure data attributes are set for cloned element
+                const nameElement = clone.querySelector('.test-name.has-error');
+                if (nameElement && nameElement.hasAttribute('data-has-error')) {
+                    nameElement.setAttribute('data-test-full-name', fullName);
+                }
+                flatView.appendChild(clone);
+            });
+            
+            flatView.classList.add('active');
         }
         
         function applyFilters() {
@@ -996,11 +1127,10 @@
             }
             
             // Filter tests using data attributes
-            const allTestItems = document.querySelectorAll('.test-item');
+            const allTestItems = currentGroupBy === 'suite' 
+                ? document.querySelectorAll('#view-all .test-item')
+                : document.querySelectorAll('#tests-flat .test-item');
             const allSuites = document.querySelectorAll('.suite-group');
-            
-            // Use DocumentFragment for better performance when many tests
-            const fragment = document.createDocumentFragment();
             
             allTestItems.forEach(testItem => {
                 const testStatus = testItem.getAttribute('data-test-status');
@@ -1035,32 +1165,33 @@
                 testItem.style.display = shouldShow ? '' : 'none';
             });
             
-            // Show/hide suites based on visible tests, update counts
-            allSuites.forEach(suiteGroup => {
-                const suiteContent = suiteGroup.querySelector('.suite-content');
-                const allTestsInSuite = suiteContent.querySelectorAll('.test-item');
-                const visibleCount = Array.from(allTestsInSuite).filter(item => 
-                    item.style.display !== 'none'
-                ).length;
-                
-                // Update suite header count
-                const countSpan = suiteGroup.querySelector('.suite-header span:nth-of-type(2)');
-                if (countSpan && countSpan.textContent.includes('(')) {
-                    const suiteName = suiteGroup.querySelector('.suite-header span:nth-of-type(1)').textContent.trim();
-                    countSpan.textContent = ` (${visibleCount} test${visibleCount !== 1 ? 's' : ''})`;
-                }
-                
-                // Show/hide suite based on visible tests
-                if (visibleCount > 0) {
-                    suiteGroup.style.display = '';
-                    // Expand all suites when filtering
-                    suiteContent.classList.remove('hidden');
-                    const toggle = suiteGroup.querySelector('.suite-toggle');
-                    if (toggle) toggle.textContent = '\u25BC';
-                } else {
-                    suiteGroup.style.display = 'none';
-                }
-            });
+            // Show/hide suites based on visible tests, update counts (only for suite view)
+            if (currentGroupBy === 'suite') {
+                allSuites.forEach(suiteGroup => {
+                    const suiteContent = suiteGroup.querySelector('.suite-content');
+                    const allTestsInSuite = suiteContent.querySelectorAll('.test-item');
+                    const visibleCount = Array.from(allTestsInSuite).filter(item => 
+                        item.style.display !== 'none'
+                    ).length;
+                    
+                    // Update suite header count
+                    const countSpan = suiteGroup.querySelector('.suite-header span:nth-of-type(2)');
+                    if (countSpan && countSpan.textContent.includes('(')) {
+                        countSpan.textContent = ` (${visibleCount} test${visibleCount !== 1 ? 's' : ''})`;
+                    }
+                    
+                    // Show/hide suite based on visible tests
+                    if (visibleCount > 0) {
+                        suiteGroup.style.display = '';
+                        // Expand all suites when filtering
+                        suiteContent.classList.remove('hidden');
+                        const toggle = suiteGroup.querySelector('.suite-toggle');
+                        if (toggle) toggle.textContent = '\u25BC';
+                    } else {
+                        suiteGroup.style.display = 'none';
+                    }
+                });
+            }
             
             // Update URL without reload
             const url = new URL(window.location);
@@ -1074,7 +1205,12 @@
             } else {
                 url.searchParams.delete('flakyStable');
             }
-            window.history.pushState({filter: currentMainFilter, flakyStable: currentFlakyStableFilter}, '', url);
+            if (currentGroupBy !== 'none') {
+                url.searchParams.set('groupBy', currentGroupBy);
+            } else {
+                url.searchParams.delete('groupBy');
+            }
+            window.history.pushState({filter: currentMainFilter, flakyStable: currentFlakyStableFilter, groupBy: currentGroupBy}, '', url);
         }
         
         // Handle URL parameters on load
@@ -1082,6 +1218,11 @@
             const urlParams = new URLSearchParams(window.location.search);
             const status = urlParams.get('status');
             const flakyStable = urlParams.get('flakyStable');
+            const groupBy = urlParams.get('groupBy');
+            
+            if (groupBy) {
+                setGroupBy(groupBy);
+            }
             
             if (status) {
                 const filter = status.toLowerCase();
@@ -1117,10 +1258,52 @@
             initFilterFromUrl();
         });
 
+        function toggleErrorByName(testName, nameElement) {
+            // Find test item in current view (suite or flat)
+            const testItem = nameElement.closest('.test-item');
+            if (!testItem) return;
+            
+            const errorContent = testItem.querySelector('.error-content');
+            if (!errorContent) return;
+            
+            const toggle = nameElement.querySelector('.test-name-toggle');
+            
+            if (errorContent.classList.contains('hidden')) {
+                // Load error description on demand if not already loaded
+                if (!errorContent.hasAttribute('data-loaded')) {
+                    const errorText = testDescriptions[testName] || '';
+                    if (errorText) {
+                        const isPython = testName.includes('.py');
+                        const codeElement = document.createElement('code');
+                        codeElement.className = 'language-' + (isPython ? 'python' : 'cpp');
+                        codeElement.textContent = errorText;
+                        const preElement = document.createElement('pre');
+                        preElement.appendChild(codeElement);
+                        errorContent.appendChild(preElement);
+                        
+                        // Highlight syntax if Prism is available
+                        if (typeof Prism !== 'undefined') {
+                            Prism.highlightElement(codeElement);
+                        }
+                    }
+                    errorContent.setAttribute('data-loaded', 'true');
+                }
+                
+                errorContent.classList.remove('hidden');
+                testItem.classList.remove('error-hidden');
+                if (toggle) toggle.classList.add('expanded');
+            } else {
+                errorContent.classList.add('hidden');
+                testItem.classList.add('error-hidden');
+                if (toggle) toggle.classList.remove('expanded');
+            }
+        }
+        
         function toggleError(button) {
             const testItem = button.closest('.test-item');
             const errorContent = testItem.querySelector('.error-content');
             const testName = button.getAttribute('data-test-name');
+            const nameElement = testItem.querySelector('.test-name');
             
             if (errorContent.classList.contains('hidden')) {
                 // Load error description on demand if not already loaded
@@ -1146,10 +1329,14 @@
                 errorContent.classList.remove('hidden');
                 testItem.classList.remove('error-hidden');
                 button.textContent = 'Hide';
+                const toggle = nameElement ? nameElement.querySelector('.test-name-toggle') : null;
+                if (toggle) toggle.classList.add('expanded');
             } else {
                 errorContent.classList.add('hidden');
                 testItem.classList.add('error-hidden');
                 button.textContent = 'Error';
+                const toggle = nameElement ? nameElement.querySelector('.test-name-toggle') : null;
+                if (toggle) toggle.classList.remove('expanded');
             }
         }
         

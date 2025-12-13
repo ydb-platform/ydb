@@ -646,8 +646,8 @@ public:
 
     TProtobufTabletLabeledCounters(TMaybe<TString> databasePath = Nothing(), const ui64 id = 0)
         : TTabletLabeledCountersBase(
-              SimpleOpts()->Size, SimpleOpts()->GetNames(), SimpleOpts()->GetCounterTypes(),
-              SimpleOpts()->GetAggregateFuncs(), SimpleOpts()->GetGroups(), SimpleOpts()->GetGroupNames(), id, std::move(databasePath))
+            SimpleOpts()->Size, SimpleOpts()->GetSVNames(), SimpleOpts()->GetCounterTypes(),
+            SimpleOpts()->GetAggregateFuncs(), SimpleOpts()->GetGroups(), SimpleOpts()->GetGroupNames(), id, std::move(databasePath))
     {
     }
 

@@ -34,7 +34,7 @@ struct TTopicMetrics {
 };
 
 struct TCounters {
-    std::unique_ptr<TTabletLabeledCountersBase> Config;
+    TTabletLabeledCountersBase Config;
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> Counters;
 };
 

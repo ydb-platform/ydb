@@ -125,11 +125,11 @@ TCounters InitializeCounters(
     }
 
     using TConfig = TProtobufTabletLabeledCounters<SimpleDesc>;
-    auto config = std::make_unique<TConfig>(databasePath);
+    TConfig config(databasePath);
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> result;
-    for (size_t i = 0; i < config->GetCounters().Size(); ++i) {
-        TString name = config->GetNames()[i];
+    for (size_t i = 0; i < config.GetCounters().Size(); ++i) {
+        TString name = config.GetNames()[i];
         if (skipPrefix) {
             TStringBuf nameBuf = name;
             nameBuf.SkipPrefix("PQ/");
@@ -157,7 +157,7 @@ void SetCounters(TCounters& counters, const auto& metrics) {
         }
 
         auto value = aggregatedCounters[i].Get();
-        const auto& type = counters.Config->GetCounterType(i);
+        const auto& type = counters.Config.GetCounterType(i);
         if (type == TLabeledCounterOptions::CT_TIMELAG) {
             value = value < now ? now - value : 0;
         }

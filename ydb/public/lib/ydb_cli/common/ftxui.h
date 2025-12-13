@@ -19,3 +19,4 @@ bool AskYesNoFtxui(const TString& question, bool defaultAnswer = false);
 
 } // namespace NYdb::NConsoleClient
 
+

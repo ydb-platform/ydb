@@ -8,6 +8,7 @@ SRCS(
     command_utils.cpp
     common.cpp
     csv_parser.cpp
+    describe.cpp
     examples.cpp
     format.cpp
     ftxui.cpp

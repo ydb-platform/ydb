@@ -12,8 +12,16 @@ TString FormatDuration(TDuration duration);
 TString PrettySize(ui64 size);
 TString PrettyNumber(ui64 number);
 TString EntryTypeToString(NScheme::ESchemeEntryType entry);
-int PrintProtoJsonBase64(const google::protobuf::Message& msg);
-FHANDLE GetStdinFileno();
-TString BlurSecret(const TString& in);
+    int PrintProtoJsonBase64(const google::protobuf::Message& msg, IOutputStream& out);
+    FHANDLE GetStdinFileno();
+    TString BlurSecret(const TString& in);
+
+    void PrintPermissions(const std::vector<NScheme::TPermissions>& permissions, IOutputStream& out);
+    void PrintAllPermissions(
+        const std::string& owner,
+        const std::vector<NScheme::TPermissions>& permissions,
+        const std::vector<NScheme::TPermissions>& effectivePermissions,
+        IOutputStream& out = Cout
+    );
 
 } // namespace NYdb::NConsoleClient

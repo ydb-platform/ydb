@@ -76,7 +76,8 @@ class TExecQueryTool final : public TToolBase, public TInterruptableCommand {
 Execute query in Yandex Data Base (YDB) on YQL (SQL dialect). Use cases:
 - Execute data query to fetch or modify data in database tables
 - Execute DDL query to create new scheme entities e. g. tablas, topics e. t. c.
-- Get scheme entity info by running `SHOW CREATE ...`
+
+To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
 
 Returns list of result sets for query, each contains list of rows and column metadata.
 For example if there exists table 'my_table' with string column 'Data' and we execute query:

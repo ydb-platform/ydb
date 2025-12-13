@@ -30,6 +30,8 @@ public:
 
     TString GetString() const;
 
+    bool GetBooleanSafe(bool defaultValue) const;
+
     bool IsNull() const;
 
     void ValidateType(NJson::EJsonValueType expectedType) const;
@@ -54,6 +56,7 @@ public:
     enum class EType {
         Undefined,
         String,
+        Boolean,
         Object,
     };
 
@@ -67,7 +70,9 @@ public:
 
     TJsonSchemaBuilder& Property(const TString& name, bool required = true);
 
-    TJsonSchemaBuilder& Done() const;
+    TJsonSchemaBuilder& Done();
+
+    TJsonSchemaBuilder& Required(const TString& name);
 
     NJson::TJsonValue Build() const;
 

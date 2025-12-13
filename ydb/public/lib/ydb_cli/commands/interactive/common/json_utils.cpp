@@ -101,6 +101,13 @@ TString TJsonParser::GetString() const {
     return State->GetString();
 }
 
+bool TJsonParser::GetBooleanSafe(bool defaultValue) const {
+    if (State->IsBoolean()) {
+        return State->GetBoolean();
+    }
+    return defaultValue;
+}
+
 bool TJsonParser::IsNull() const {
     return State->IsNull();
 }
@@ -148,9 +155,14 @@ TJsonSchemaBuilder& TJsonSchemaBuilder::Description(const TString& description) 
     return *this;
 }
 
-TJsonSchemaBuilder& TJsonSchemaBuilder::Done() const {
+TJsonSchemaBuilder& TJsonSchemaBuilder::Done() {
     Y_VALIDATE(Parent, "Done should be called only on child objects");
     return *Parent;
+}
+
+TJsonSchemaBuilder& TJsonSchemaBuilder::Required(const TString& name) {
+    RequiredProperties.emplace_back(name);
+    return *this;
 }
 
 NJson::TJsonValue TJsonSchemaBuilder::Build() const {
@@ -168,6 +180,10 @@ NJson::TJsonValue TJsonSchemaBuilder::Build() const {
         }
         case EType::String: {
             type = "string";
+            break;
+        }
+        case EType::Boolean: {
+            type = "boolean";
             break;
         }
         case EType::Object: {

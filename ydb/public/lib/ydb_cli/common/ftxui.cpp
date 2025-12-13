@@ -237,14 +237,15 @@ std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TStri
         return std::nullopt;
     }
 
+    std::optional<size_t> result;
     try {
-        return TFtxuiMenuRunner(title, options, maxPageSize).Run();
+        result = TFtxuiMenuRunner(title, options, maxPageSize).Run();
     } catch (const std::exception& e) {
         const auto& colors = NColorizer::AutoColors(Cerr);
         Cerr << colors.Yellow() << "FTXUI menu failed: " << e.what() << colors.OldColor() << Endl;
-        return std::nullopt;
     }
 
+    FlushStdin();
     return result;
 }
 

@@ -3,74 +3,16 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/ai_model_handler.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/api_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
-
-#include <util/string/printf.h>
-
-#include <thread>
-#include <atomic>
-#include <chrono>
 
 namespace NYdb::NConsoleClient {
 
 namespace NAi {
 
 namespace {
-
-class TSpinner {
-public:
-    TSpinner()
-        : Running(true)
-        , StartTime(std::chrono::steady_clock::now())
-    {
-        Worker = std::thread([this]() {
-            const char* frames[] = {"🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"};
-            int frameIndex = 0;
-            while (Running) {
-                auto now = std::chrono::steady_clock::now();
-                auto elapsed = std::chrono::duration<double>(now - StartTime).count();
-                Cout << "\r" << frames[frameIndex] << " Agent is thinking... " 
-                     << Sprintf("%.1fs", elapsed);
-                Cout.Flush();
-                
-                frameIndex = (frameIndex + 1) % std::size(frames);
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-        });
-    }
-
-    double Stop(bool success = false) {
-        bool expected = true;
-        if (!Running.compare_exchange_strong(expected, false)) {
-            return 0.0;
-        }
-
-        if (Worker.joinable()) {
-            Worker.join();
-        }
-        
-        Cout << "\r\x1b[K"; // Clear line
-
-        if (success) {
-            auto now = std::chrono::steady_clock::now();
-            return std::chrono::duration<double>(now - StartTime).count();
-        } else {
-             Cout.Flush();
-             return 0.0;
-        }
-    }
-
-    ~TSpinner() {
-        Stop(false);
-    }
-
-private:
-    std::atomic<bool> Running;
-    std::chrono::steady_clock::time_point StartTime;
-    std::thread Worker;
-};
 
 class TAiSessionRunner final : public TSessionRunnerBase {
     using TBase = TSessionRunnerBase;
@@ -113,7 +55,7 @@ public:
                 ModelHandler = TModelHandler({.Profile = AiModel, .Prompt = Settings.Prompt, .Database = Database, .Driver = Driver}, Log);
             } catch (const std::exception& e) {
                 ModelHandler = std::nullopt;
-                Cerr << Colors.Red() << "Failed to setup AI model session:: " << e.what() << Colors.OldColor() << Endl;
+                Cerr << Colors.Red() << "Failed to setup AI model session: " << e.what() << Colors.OldColor() << Endl;
                 return;
             }
         }
@@ -130,14 +72,14 @@ public:
 
         Cout << Endl;
 
-        std::shared_ptr<TSpinner> spinner;
+        std::shared_ptr<TProgressWaiterBase> spinner;
         double lastThinkingTime = 0.0;
         auto onStart = [&spinner]() {
-            spinner = std::make_shared<TSpinner>();
+            spinner = std::make_shared<TStaticProgressWaiter>("Agent is thinking...");
         };
         auto onFinish = [&spinner, &lastThinkingTime]() {
             if (spinner) {
-                lastThinkingTime = spinner->Stop(true);
+                lastThinkingTime = spinner->Stop(true).SecondsFloat();
                 spinner.reset();
             }
         };

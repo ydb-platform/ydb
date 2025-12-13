@@ -53,14 +53,8 @@ TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
 
 FEATURES-TODO:
 
-- Formating of tool params
-- Approving before tool use + rewriting request
-- Config time validation and advanced suggestions
 - Streamable model response printing
-- Progress printing
 - Think about robust
-- Provide system prompt
-- Somehow render markdown
 
 */
 

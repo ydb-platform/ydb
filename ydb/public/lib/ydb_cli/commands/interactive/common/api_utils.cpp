@@ -9,7 +9,9 @@
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <util/string/printf.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/url/url.h>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -27,6 +29,57 @@ NYql::THttpHeader CreateApiHeaders(const TString& authToken) {
 }
 
 } // anonymous namespace
+
+TProgressWaiterBase::TProgressWaiterBase(TDuration granularity)
+    : Granularity(granularity)
+{
+    Worker = std::thread([this]() {
+        const char* frames[] = {"🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"};
+        int frameIndex = 0;
+        while (Running) {
+            Cout << "\r" << frames[frameIndex] << PrintProgress(TInstant::Now() - StartTime) << Flush;
+
+            frameIndex = (frameIndex + 1) % std::size(frames);
+            Sleep(Granularity);
+        }
+    });
+}
+
+TProgressWaiterBase::~TProgressWaiterBase() {
+    try {
+        Stop(false);
+    } catch (...) {
+        // ¯\_(ツ)_/¯
+    }
+}
+
+TDuration TProgressWaiterBase::Stop(bool success) {
+    bool expected = true;
+    if (!Running.compare_exchange_strong(expected, false)) {
+        return TDuration::Zero();
+    }
+
+    if (Worker.joinable()) {
+        Worker.join();
+    }
+
+    Cout << "\r\x1b[K"; // Clear line
+
+    if (success) {
+        return TInstant::Now() - StartTime;
+    }
+
+    Cout << Flush;
+    return TDuration::Zero();
+}
+
+TStaticProgressWaiter::TStaticProgressWaiter(const TString& message)
+    : Message(message)
+{}
+
+TString TStaticProgressWaiter::PrintProgress(TDuration elapsed) {
+    return TStringBuilder() << " " << Message << " " << Sprintf("%.1fs", elapsed.SecondsFloat());
+}
 
 THttpExecutor::TResponse::TResponse(TString&& content, ui64 httpCode)
     : Content(std::move(content))
@@ -154,6 +207,39 @@ TString CreateApiUrl(const TString& baseUrl, const TString& uri) {
     }
 
     return TStringBuilder() << RemoveFinalSlash(sanitizedUrl) << uri;
+}
+
+std::vector<TString> ListModelNames(const TString& apiBaseEndpoint, const TString& authToken, const TInteractiveLogger& log) {
+    THttpExecutor::TResponse response;
+    {
+        const auto spinner = std::make_shared<TStaticProgressWaiter>("Listing models...");
+        response = NAi::THttpExecutor(NAi::CreateApiUrl(apiBaseEndpoint, "/models"), authToken, log).Get();
+    }
+
+    if (!response.IsSuccess()) {
+        throw yexception() << NAi::THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);
+    }
+
+    NJson::TJsonValue responseJson;
+    try {
+        NJson::ReadJsonTree(response.Content, &responseJson, /* throwOnError */ true);
+    } catch (const std::exception& e) {
+        throw yexception() << "Model API response is not valid JSON, reason: " << e.what();
+    }
+
+    NAi::TJsonParser parser(responseJson);
+    if (auto child = parser.MaybeKey("response")) {
+        parser = std::move(*child);
+    }
+
+    std::vector<TString> allowedModels;
+    parser.GetKey("data").Iterate([&](NAi::TJsonParser item) {
+        if (const auto id = item.MaybeKey("id")) {
+            allowedModels.emplace_back(id->GetString());
+        }
+    });
+
+    return allowedModels;
 }
 
 } // namespace NYdb::NConsoleClient::NAi

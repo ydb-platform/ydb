@@ -12,8 +12,12 @@ bool TInteractiveLogger::TEntry::LogEnabled() const {
 }
 
 TInteractiveLogger::TEntry::~TEntry() {
-    if (LogEnabled()) {
-        Log->Write(Priority, *this);
+    try {
+        if (LogEnabled()) {
+            Log->Write(Priority, *this);
+        }
+    } catch (...) {
+        // ¯\_(ツ)_/¯
     }
 }
 

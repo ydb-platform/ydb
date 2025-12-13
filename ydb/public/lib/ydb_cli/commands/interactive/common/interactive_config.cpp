@@ -1,7 +1,6 @@
 #include "interactive_config.h"
 #include "api_utils.h"
 #include "interactive_log_defs.h"
-#include "json_utils.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
@@ -10,7 +9,6 @@
 
 #include <util/string/strip.h>
 
-#include <library/cpp/json/json_reader.h>
 #include <library/cpp/yaml/as/tstring.h>
 
 namespace NYdb::NConsoleClient {
@@ -407,29 +405,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
 
     std::vector<TString> allowedModels;
     try {
-        const auto response = NAi::THttpExecutor(NAi::CreateApiUrl(apiEndpoint, "/models"), GetApiToken(), Log).Get();
-
-        if (!response.IsSuccess()) {
-            throw yexception() << NAi::THttpExecutor::PrettifyModelApiError(response.HttpCode, response.Content);
-        }
-
-        NJson::TJsonValue responseJson;
-        try {
-            NJson::ReadJsonTree(response.Content, &responseJson, /* throwOnError */ true);
-        } catch (const std::exception& e) {
-            throw yexception() << "Model API response is not valid JSON, reason: " << e.what();
-        }
-
-        NAi::TJsonParser parser(responseJson);
-        if (auto child = parser.MaybeKey("response")) {
-            parser = std::move(*child);
-        }
-
-        parser.GetKey("data").Iterate([&](NAi::TJsonParser item) {
-            if (const auto id = item.MaybeKey("id")) {
-                allowedModels.emplace_back(id->GetString());
-            }
-        });
+        allowedModels = NAi::ListModelNames(apiEndpoint, GetApiToken(), Log);
     } catch (const std::exception& e) {
         Cerr << Colors.Yellow() << "Failed to list model names, maybe model API endpoint is not correct: " << e.what() << Colors.OldColor() << Endl;
     }

@@ -8,13 +8,46 @@
 #include <util/generic/fwd.h>
 #include <util/generic/size_literals.h>
 
+#include <thread>
+
 namespace NYdb::NConsoleClient::NAi {
+
+class TProgressWaiterBase {
+public:
+    explicit TProgressWaiterBase(TDuration granularity = TDuration::MilliSeconds(100));
+
+    virtual ~TProgressWaiterBase();
+
+    TDuration Stop(bool success = false);
+
+protected:
+    virtual TString PrintProgress(TDuration elapsed) = 0;
+
+private:
+    const TDuration Granularity;
+    const TInstant StartTime = TInstant::Now();
+    std::atomic<bool> Running = true;
+    std::thread Worker;
+};
+
+class TStaticProgressWaiter final : public TProgressWaiterBase {
+public:
+    explicit TStaticProgressWaiter(const TString& message);
+
+protected:
+    TString PrintProgress(TDuration elapsed) final;
+
+private:
+    const TString Message;
+};
 
 class THttpExecutor : public TInterruptableCommand {
 public:
     THttpExecutor(const TString& apiUrl, const TString& authToken, const TInteractiveLogger& log);
 
     struct TResponse {
+        TResponse() = default;
+
         TResponse(TString&& content, ui64 httpCode);
 
         bool IsSuccess() const;
@@ -40,5 +73,7 @@ private:
 };
 
 TString CreateApiUrl(const TString& baseUrl, const TString& uri);
+
+std::vector<TString> ListModelNames(const TString& apiBaseEndpoint, const TString& authToken, const TInteractiveLogger& log);
 
 } // namespace NYdb::NConsoleClient::NAi

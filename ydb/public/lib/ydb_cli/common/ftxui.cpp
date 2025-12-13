@@ -9,7 +9,27 @@
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 
+#if defined(_unix_)
+#include <termios.h>
+#include <unistd.h>
+#elif defined(_win_)
+#include <windows.h>
+#endif
+
 namespace NYdb::NConsoleClient {
+
+namespace {
+
+void FlushStdin() {
+#if defined(_unix_)
+    tcflush(STDIN_FILENO, TCIFLUSH);
+#elif defined(_win_)
+    FlushConsoleInputBuffer(GetStdHandle(STD_INPUT_HANDLE));
+#endif
+}
+
+} // namespace
+
 
 std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TString>& options) {
     if (options.empty()) {
@@ -58,6 +78,7 @@ std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TStri
         return std::nullopt;
     }
 
+    FlushStdin();
     return result;
 }
 
@@ -121,6 +142,7 @@ std::optional<TString> RunFtxuiInput(const TString& title, const TString& initia
         return std::nullopt;
     }
 
+    FlushStdin();
     return result;
 }
 

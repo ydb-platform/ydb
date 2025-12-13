@@ -661,6 +661,11 @@ private:
     TNodePtr Node_;
 };
 
+bool IsYqlSubQuery(const TNodePtr& node) {
+    return IsYqlSource(node) ||
+           dynamic_cast<TYqlSubLinkNode*>(node.Get());
+}
+
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args) {
     return new TYqlTableRefNode(std::move(position), std::move(args));
 }

@@ -1,5 +1,5 @@
-#include "sql_expression.h"
 
+#include "sql_expression.h"
 #include "select_yql.h"
 #include "sql_select_yql.h"
 #include "sql_call_expr.h"
@@ -2218,7 +2218,25 @@ TNodeResult TSqlExpression::YqlXorSubExpr(
         return std::unexpected(rhs.error());
     }
 
-    TNodePtr expr = BuildYqlInSubquery(std::move(*rhs), std::move(lhs));
+    TNodePtr expr;
+    if (IsYqlSubQuery(*rhs)) {
+        expr = BuildYqlInSubquery(std::move(*rhs), std::move(lhs));
+    } else {
+        TNodePtr hints = BuildTuple(Ctx_.Pos(), {});
+        TVector<TNodePtr> args = {
+            std::move(lhs),
+            std::move(*rhs),
+            std::move(hints),
+        };
+
+        TNodeResult result = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "In", std::move(args), /*isYqlSelect=*/true);
+        if (!result) {
+            return std::unexpected(result.error());
+        }
+
+        expr = std::move(*result);
+    }
+
     if (negation) {
         expr = expr->ApplyUnaryOp(Ctx_, *negation, "Not");
     }

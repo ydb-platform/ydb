@@ -31,6 +31,7 @@ SRCS(
     list_builtin.cpp
     match_recognize.cpp
     node.cpp
+    secret_settings.cpp
     select.cpp
     source.cpp
     sql.cpp

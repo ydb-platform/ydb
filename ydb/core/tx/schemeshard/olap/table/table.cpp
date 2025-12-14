@@ -19,7 +19,7 @@ std::set<ui64> TColumnTableInfo::GetShardIdsSet() const {
     return std::set<ui64>(Description.GetSharding().GetColumnShards().begin(), Description.GetSharding().GetColumnShards().end());
 }
 
-const auto& TColumnTableInfo::GetColumnShards() const {
+const google::protobuf::RepeatedField<arc_ui64>& TColumnTableInfo::GetColumnShards() const {
     return Description.GetSharding().GetColumnShards();
 }
 
@@ -61,7 +61,7 @@ const NKikimrSchemeOp::TColumnStoreSharding& TColumnTableInfo::GetStandaloneShar
     return *StandaloneSharding;
 }
 
-const auto& TColumnTableInfo::GetOwnedColumnShardsVerified() const {
+const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TShardIdx>& TColumnTableInfo::GetOwnedColumnShardsVerified() const {
     AFL_VERIFY(IsStandalone());
     return StandaloneSharding->GetColumnShards();
 }

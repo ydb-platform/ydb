@@ -97,7 +97,10 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
                 }
             }
             ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), title);
-            Cout << Endl;
+
+            if (!output.ToolCalls.empty()) {
+                Cout << Endl;
+            }
         }
 
         bool interrupted = false;

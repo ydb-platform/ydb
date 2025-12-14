@@ -2199,13 +2199,35 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
         auto arguments = ctx.NewArguments(pos, { arg });
         TExprNode::TListType newColumns;
         for (ui32 i = 0; i < aggs.size(); ++i) {
-            if (!GetSetting(*aggs[i].first->Child(1), "distinct")) {
+            const TExprNode::TPtr& agg = aggs[i].first;
+
+            if (!GetSetting(*agg->Child(1), "distinct")) {
+                continue;
+            }
+
+
+            YQL_ENSURE(agg->IsCallable({"YqlAgg", "PgAgg"}));
+            const bool isYql = agg->IsCallable("YqlAgg");
+            if (isYql) {
+                YQL_ENSURE(
+                    agg->ChildrenSize() == 4,
+                    "Only 1-arg aggregations are supported for YqlSelect");
+
+                TExprNode::TPtr arg0 = agg->Child(3);
+                arg0 = ctx.ReplaceNode(std::move(arg0), *aggs[i].second, arg);
+
+                newColumns.push_back(ctx.Builder(pos)
+                    .List()
+                        .Atom(0, "_yql_distinct_" + ToString(i))
+                        .Add(1, std::move(arg0))
+                    .Seal()
+                    .Build());
                 continue;
             }
 
             TExprNode::TListType tupleArgs;
-            for (ui32 j = 2; j < aggs[i].first->ChildrenSize(); ++j) {
-                tupleArgs.push_back(ctx.ReplaceNode(aggs[i].first->ChildPtr(j), *aggs[i].second, arg));
+            for (ui32 j = 2; j < agg->ChildrenSize(); ++j) {
+                tupleArgs.push_back(ctx.ReplaceNode(agg->ChildPtr(j), *aggs[i].second, arg));
             }
 
             auto tuple = ctx.NewList(pos, std::move(tupleArgs));

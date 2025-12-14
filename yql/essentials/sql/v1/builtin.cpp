@@ -2887,6 +2887,7 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
                 .FunctionName = std::move(realFunctionName),
                 .FactoryName = std::move(factoryName),
                 .Type = type,
+                .Mode = aggMode,
                 .Args = args,
             };
             return BuildYqlAggregation(std::move(pos), std::move(aggregation));

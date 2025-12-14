@@ -27,7 +27,7 @@ public:
 
     std::set<ui64> GetShardIdsSet() const;
 
-    const auto& GetColumnShards() const;
+    const google::protobuf::RepeatedField<arc_ui64>& GetColumnShards() const;
 
     void SetColumnShards(const std::vector<ui64>& columnShards);
 
@@ -48,7 +48,7 @@ public:
 
     const NKikimrSchemeOp::TColumnStoreSharding& GetStandaloneShardingVerified() const;
 
-    const auto& GetOwnedColumnShardsVerified() const;
+    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TShardIdx>& GetOwnedColumnShardsVerified() const;
 
     std::vector<TShardIdx> BuildOwnedColumnShardsVerified() const;
 

@@ -80,6 +80,7 @@ Execute query in Yandex Data Base (YDB) on YQL (SQL dialect). Use cases:
 IMPORTANT:
 - NEVER guess column names, types or keys. If you do not know the exact schema of a table, use the `describe` tool FIRST.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
+- If path to table contains '/', wrap it into back ticks, for example `path/to/table`.
 
 Returns list of result sets for query, each contains list of rows and column metadata.
 For example if there exists table 'my_table' with string column 'Data' and we execute query:
@@ -186,12 +187,12 @@ protected:
             IsSkipped = true;
             return true;
         }
-
-        Cout << Endl;
         
         if (action == EAction::Approve) {
             return true;
         }
+
+        Cout << Endl;
 
         IsSkipped = true;
         return true;
@@ -216,7 +217,6 @@ protected:
             return TResponse::Error(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
-        Cout << Endl;
         return TResponse::Success(ExecuteRunner.ExtractResults(), UserMessage);
     }
 
@@ -246,7 +246,6 @@ private:
             << "(Results correspond to this new query. IGNORE this change notification in your response and proceed directly to analyzing the results.)";
 
         Query = std::move(newText);
-        Cout << Endl;
         return true;
     }
 

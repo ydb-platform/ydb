@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <util/generic/scope.h>
 #include <util/string/escape.h>
 
 #include <library/cpp/json/json_prettifier.h>
@@ -96,11 +97,14 @@ NQuery::TAsyncExecuteQueryIterator TExecuteGenericQuery::StartQuery(const TStrin
 }
 
 int TExecuteGenericQuery::PrintResponse(NQuery::TExecuteQueryIterator& result, const TString& query, const TSettings& execSettings) {
+    Y_DEFER { Cout << Endl; };
+
     std::optional<std::string> stats;
     std::optional<std::string> plan;
     std::optional<std::string> ast;
     std::optional<std::string> meta;
     {
+        bool printedSomething = false;
         ui64 currentResultSet = 0;
         TResultSetPrinter printer(execSettings.OutputFormat, &IsInterrupted);
 
@@ -132,6 +136,11 @@ int TExecuteGenericQuery::PrintResponse(NQuery::TExecuteQueryIterator& result, c
             }
 
             if (streamPart.HasResultSet() && !execSettings.ExplainAnalyzeMode) {
+                if (!printedSomething) {
+                    Cout << Endl;
+                    printedSomething = true;
+                }
+
                 if (streamPart.GetResultSetIndex() != currentResultSet) {
                     currentResultSet = streamPart.GetResultSetIndex();
                     printer.Reset();

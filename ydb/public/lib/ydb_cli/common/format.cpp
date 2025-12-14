@@ -693,9 +693,9 @@ TResultSetPrinter::TResultSetPrinter(const TSettings& settings)
 
 TResultSetPrinter::TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted)
     : TResultSetPrinter(TSettings()
-            .SetFormat(format)
-            .SetIsInterrupted(isInterrupted)
-       )
+        .SetFormat(format)
+        .SetIsInterrupted(isInterrupted)
+    )
 {}
 
 TResultSetPrinter::~TResultSetPrinter() {

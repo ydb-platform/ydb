@@ -32,7 +32,7 @@ struct TMetricCollector {
             ++begin;
         }
 
-        // here, the aggregation function configured in the protofile for each counter is used for each counter.
+        // The aggregation function configured in the protofile is used for each counter.
         Aggregator.AggregateWith(Counters);
     }
 
@@ -107,7 +107,6 @@ struct TTopicMetricCollector {
 template<const NProtoBuf::EnumDescriptor* SimpleDesc()>
 TCounters InitializeCounters(
     NMonitoring::TDynamicCounterPtr root,
-    const TString& databasePath,
     const std::vector<std::pair<TString, TString>>& subgroups = {},
     bool skipPrefix = true
 ) {
@@ -117,12 +116,11 @@ TCounters InitializeCounters(
         group = group->GetSubgroup(subgroup.first, subgroup.second);
     }
 
-    using TConfig = TProtobufTabletLabeledCounters<SimpleDesc>;
-    TConfig config(databasePath);
+    const auto* config = NAux::GetLabeledCounterOpts<SimpleDesc>();
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> result;
-    for (size_t i = 0; i < config.GetCounters().Size(); ++i) {
-        TString name = config.GetNames()[i];
+    for (size_t i = 0; i < config->Size; ++i) {
+        TString name = config->GetSVNames()[i];
         if (skipPrefix) {
             TStringBuf nameBuf = name;
             nameBuf.SkipPrefix("PQ/");
@@ -132,7 +130,7 @@ TCounters InitializeCounters(
     }
 
     return {
-        .Config = std::move(config),
+        .Types = config->GetTypes(),
         .Counters = std::move(result)
     };
 }
@@ -150,7 +148,7 @@ void SetCounters(TCounters& counters, const auto& metrics) {
         }
 
         auto value = aggregatedCounters[i].Get();
-        const auto& type = counters.Config.GetCounterType(i);
+        const auto& type = counters.Types[i];
         if (type == TLabeledCounterOptions::CT_TIMELAG) {
             value = value < now ? now - value : 0;
         }
@@ -193,22 +191,22 @@ void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletCo
     ActivePartitionCountCounter = DynamicCounters->GetExpiringNamedCounter("name", "topic.partition.active_count", false);
     InactivePartitionCountCounter = DynamicCounters->GetExpiringNamedCounter("name", "topic.partition.inactive_count", false);
 
-    PartitionLabeledCounters = InitializeCounters<EPartitionLabeledCounters_descriptor>(DynamicCounters, database.DatabasePath);
-    PartitionExtendedLabeledCounters = InitializeCounters<EPartitionExtendedLabeledCounters_descriptor>(DynamicCounters, database.DatabasePath, {}, true);
-    InitializeKeyCompactionCounters(database.DatabasePath, tabletConfig);
-    InitializeConsumerCounters(database.DatabasePath, tabletConfig, ctx);
+    PartitionLabeledCounters = InitializeCounters<EPartitionLabeledCounters_descriptor>(DynamicCounters);
+    PartitionExtendedLabeledCounters = InitializeCounters<EPartitionExtendedLabeledCounters_descriptor>(DynamicCounters, {}, true);
+    InitializeKeyCompactionCounters(tabletConfig);
+    InitializeConsumerCounters(tabletConfig, ctx);
 }
 
-void TTopicMetricsHandler::InitializeConsumerCounters(const TString& databasePath, const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
+void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
     for (const auto& consumer : tabletConfig.GetConsumers()) {
         auto metricsConsumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
 
         auto& counters = ConsumerCounters[consumer.GetName()];
-        counters.ClientLabeledCounters = InitializeCounters<EClientLabeledCounters_descriptor>(DynamicCounters, databasePath, {{"consumer", metricsConsumerName}});
+        counters.ClientLabeledCounters = InitializeCounters<EClientLabeledCounters_descriptor>(DynamicCounters, {{"consumer", metricsConsumerName}});
 
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-            //metrics.MLPClientLabeledCounters = InitializeCounters<EMLPConsumerLabeledCounters_descriptor>(DynamicCounters, databasePath, "topic|consumer", {{"consumer", metricsConsumerName}});
-            //metrics.MLPMessageLockAttemptsCounter = InitializeCounters<EMLPMessageLockAttemptsLabeledCounters_descriptor>(DynamicCounters, databasePath, {{"consumer", metricsConsumerName}});
+            //metrics.MLPClientLabeledCounters = InitializeCounters<EMLPConsumerLabeledCounters_descriptor>(DynamicCounters, {{"consumer", metricsConsumerName}});
+            //metrics.MLPMessageLockAttemptsCounter = InitializeCounters<EMLPMessageLockAttemptsLabeledCounters_descriptor>(DynamicCounters,  {{"consumer", metricsConsumerName}});
         }
     }
 
@@ -225,23 +223,24 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const TString& databasePat
     }
 }
 
-void TTopicMetricsHandler::InitializeKeyCompactionCounters(const TString& databasePath, const NKikimrPQ::TPQTabletConfig& tabletConfig) {
+void TTopicMetricsHandler::InitializeKeyCompactionCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig) {
     if (tabletConfig.GetEnableCompactification()) {
-        PartitionKeyCompactionLabeledCounters = InitializeCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(DynamicCounters, databasePath, {}, true);
+        PartitionKeyCompactionLabeledCounters = InitializeCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(DynamicCounters, {}, true);
     } else {
         PartitionKeyCompactionLabeledCounters.Counters.clear();
     }
 }
 
 void TTopicMetricsHandler::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tabletConfig, const TDatabaseInfo& database, const TString& topicPath, const NActors::TActorContext& ctx) {
+    Y_UNUSED(database);
     Y_UNUSED(topicPath);
 
     if (!DynamicCounters) {
         return;
     }
 
-    InitializeKeyCompactionCounters(database.DatabasePath, tabletConfig);
-    InitializeConsumerCounters(database.DatabasePath, tabletConfig, ctx);
+    InitializeKeyCompactionCounters(tabletConfig);
+    InitializeConsumerCounters(tabletConfig, ctx);
 
     size_t inactiveCount = std::count_if(tabletConfig.GetAllPartitions().begin(), tabletConfig.GetAllPartitions().end(), [](auto& p) {
         return p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Inactive;

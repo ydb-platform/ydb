@@ -33,7 +33,7 @@ struct TPartitionMetrics {
 };
 
 struct TCounters {
-    TTabletLabeledCountersBase Config;
+    std::vector<ui8> Types;
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> Counters;
 };
 
@@ -53,8 +53,8 @@ public:
     void UpdateMetrics();
 
 protected:
-    void InitializeKeyCompactionCounters(const TString& databasePath, const NKikimrPQ::TPQTabletConfig& tabletConfig);
-    void InitializeConsumerCounters(const TString& databasePath, const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx);
+    void InitializeKeyCompactionCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig);
+    void InitializeConsumerCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx);
 
 private:
     NMonitoring::TDynamicCounterPtr DynamicCounters;

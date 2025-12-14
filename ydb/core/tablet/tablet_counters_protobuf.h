@@ -362,6 +362,11 @@ public:
         return Groups;
     }
 
+    const TVector<ui8>& GetTypes() const
+    {
+        return Types;
+    }
+
 protected:
     TString GetFilePrefix(const NProtoBuf::FileDescriptor* desc) {
         if (desc->options().HasExtension(TabletTypeName)) {

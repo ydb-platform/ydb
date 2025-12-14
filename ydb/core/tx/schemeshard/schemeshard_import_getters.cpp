@@ -288,6 +288,20 @@ protected:
 
 // Downloads scheme-related objects from S3
 class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
+    struct ImportProperties {
+        TString FileName;
+        NBackup::EBackupFileType FileType;
+    };
+
+    static TVector<ImportProperties> SchemeProperties() {
+        return {
+            {NYdb::NDump::NFiles::TableScheme().FileName, NBackup::EBackupFileType::TableSchema},
+            {NYdb::NDump::NFiles::CreateView().FileName, NBackup::EBackupFileType::ViewCreate},
+            {NYdb::NDump::NFiles::CreateTopic().FileName, NBackup::EBackupFileType::TopicCreate},
+            {NYdb::NDump::NFiles::CreateAsyncReplication().FileName, NBackup::EBackupFileType::AsyncReplicationCreate},
+        };
+    }
+
     static TString MetadataKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
         return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/metadata.json";
@@ -357,25 +371,14 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         GetObject(MetadataKey, result.GetResult().GetContentLength());
     }
 
-    void UpdateAndHeadScheme(const TString& newFileName, NBackup::EBackupFileType newSchemeFileType) {
-        SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, newFileName);
-        SchemeFileType = newSchemeFileType;
-        HeadObject(SchemeKey);
-    }
-
     void HeadNextScheme() {
-        if (IsTable(SchemeKey)) {
-            // try search for a view
-            UpdateAndHeadScheme(NYdb::NDump::NFiles::CreateView().FileName, NBackup::EBackupFileType::ViewCreate);
-        } else if (IsView(SchemeKey)) {
-            // try search for a topic
-            UpdateAndHeadScheme(NYdb::NDump::NFiles::CreateTopic().FileName, NBackup::EBackupFileType::TopicCreate);
-        } else if (IsTopic(SchemeKey)) {
-            // try search for a replication
-            UpdateAndHeadScheme(NYdb::NDump::NFiles::CreateAsyncReplication().FileName, NBackup::EBackupFileType::AsyncReplicationCreate);
-        } else {
+        if (++SchemePropertyIdx >= SchemeProperties().size()) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
         }
+
+        SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, SchemeProperties()[SchemePropertyIdx].FileName);
+        SchemeFileType = SchemeProperties()[SchemePropertyIdx].FileType;
+        HeadObject(SchemeKey);
     }
 
     void HandleScheme(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -1035,6 +1038,7 @@ private:
     TString SchemeKey;
     NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
+    ui32 SchemePropertyIdx = 0;
 
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;

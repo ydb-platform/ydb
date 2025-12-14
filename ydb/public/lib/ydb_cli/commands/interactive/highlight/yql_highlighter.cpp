@@ -25,13 +25,13 @@ namespace {
         return index;
     }
 
-    ftxui::Color ToFtxuiColor(replxx::Replxx::Color r_color) {
-        int color_index = static_cast<int>(r_color);
-        // Replxx uses -1 (DEFAULT) and sometimes -2 (ERROR)
-        if (color_index < 0) {
-            return ftxui::Color::White;
+    ftxui::Color ToFtxuiColor(replxx::Replxx::Color rColor) {
+        const int colorIndex = static_cast<int>(rColor);
+        if (rColor == replxx::Replxx::Color::DEFAULT || colorIndex < 0) {
+            return ftxui::Color::Default;
         }
-        return ftxui::Color::Palette256(static_cast<uint8_t>(color_index));
+
+        return ftxui::Color::Palette256(static_cast<uint8_t>(colorIndex));
     }
 
 } // anonymous namespace

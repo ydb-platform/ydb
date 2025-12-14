@@ -4,6 +4,8 @@
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
 
+#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
+
 #include <util/stream/output.h>
 
 #include <library/cpp/colorizer/colors.h>
@@ -20,7 +22,13 @@ public:
     virtual ILineReader::TPtr Setup() override;
 
 protected:
-    static TString PrintCommonHotKeys();
+    static void PrintCommonHotKeys(std::vector<ftxui::Element>& elements);
+
+    static void PrintCommonInteractiveCommands(std::vector<ftxui::Element>& elements);
+
+    static ftxui::Element CreateListItem(ftxui::Element element);
+
+    static ftxui::Element CreateEntityName(const TString& name);
 
 protected:
     TInteractiveLogger Log;

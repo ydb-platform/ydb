@@ -7,6 +7,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 
+#include <util/generic/scope.h>
 #include <util/string/strip.h>
 
 #include <library/cpp/yaml/as/tstring.h>
@@ -185,6 +186,8 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupProfile(const TString& p
         Config["preset_id"] = preset;
         Manager->ConfigChanged = true;
     }
+
+    Y_DEFER { Cout << Endl; };
 
     if (!SetupApiType(presetInfo)) {
         YDB_CLI_LOG(Notice, "AI profile \"" << Name << "\" is not configured, no API type provided");
@@ -586,6 +589,8 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
     }
 
     options.emplace_back("Setup custom model", []() {});
+
+    Y_DEFER { Cout << Endl; };
 
     if (!RunFtxuiMenuWithActions("Please choose AI model:", options)) {
         return nullptr;

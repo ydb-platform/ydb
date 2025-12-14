@@ -4,6 +4,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
 
@@ -83,6 +84,13 @@ public:
     void HandleLine(const TString& line) final {
         Y_DEFER { ResetInterrupted(); };
 
+        if (to_lower(line) == "/help") {
+            Cout << Endl;
+            PrintFtxuiMessage(CreateHelpMessage(), "YDB CLI Interactive Mode – Hotkeys and Special Commands", ftxui::Color::White);
+            Cout << Endl;
+            return;
+        }
+
         const auto& tokens = TLexer::Tokenize(line);
         if (tokens.empty()) {
             return;
@@ -122,21 +130,47 @@ public:
     }
 
 private:
-    static TString CreateHelpMessage() {
-        using TLog = TInteractiveLogger;
+    static ftxui::Element CreateHelpMessage() {
+        using namespace ftxui;
 
-        return TStringBuilder() << Endl << "YDB CLI Interactive Mode – Hotkeys and Special Commands." << Endl
-            << Endl << TLog::EntityName("Hotkeys:") << Endl
-            << "  " << TLog::EntityName("Ctrl+T") << " or " << TLog::EntityName("/switch") << ": switch to " << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::AI) << " interactive mode." << Endl
-            << "  " << TLog::EntityName("TAB") << ": complete the current word based on YQL syntax." << Endl
-            << PrintCommonHotKeys()
-            << Endl << TLog::EntityName("Special Commands:") << Endl
-            << "  " << Colors.Green() << "SET stats = " << Colors.OldColor() << TLog::EntityName("STATS_MODE") << ": set statistics collection mode, allowed modes: "
-            << TLog::EntityName("none") << ", " << TLog::EntityName("basic") << ", " << TLog::EntityName("full") << ", " << TLog::EntityName("profile") << "." << Endl
-            << "  " << Colors.Green() << "EXPLAIN" << Colors.OldColor() << " [" << Colors.Green() << "AST" << Colors.OldColor() << "] " << TLog::EntityName("SQL_QUERY") << ": execute query in explain mode and optionally print AST." << Endl
-            << Endl << TLog::EntityName("Interactive Commands:") << Endl
-            << "  " << TLog::EntityName("/help") << ": print this help message." << Endl
-            << Endl << "By default, any input is treated as an YQL query and sent directly to the YDB server." << Endl;
+        std::vector<ftxui::Element> elements = {
+            paragraph("By default, any input is treated as an YQL query and sent directly to the YDB server."),
+            text(""),
+            CreateEntityName("Hotkeys:"),
+            CreateListItem(hbox({
+                CreateEntityName("Ctrl+T"), text(" or "), CreateEntityName("/switch"), 
+                text(": switch to "), 
+                text(ToString(TInteractiveConfigurationManager::EMode::AI)) | color(Color::Cyan), 
+                text(" interactive mode.")
+            })),
+            CreateListItem(hbox({
+                CreateEntityName("TAB"), text(": complete the current word based on YQL syntax.")
+            })),
+        };
+
+        PrintCommonHotKeys(elements);
+
+        elements.emplace_back(text(""));
+        elements.emplace_back(CreateEntityName("Special Commands:"));
+
+        const auto keyword = [](const std::string& s) { return text(s) | color(Color::Green); };
+        elements.emplace_back(CreateListItem(hbox({
+            keyword("SET stats = "), CreateEntityName("STATS_MODE"), 
+            text(": set statistics collection mode, allowed modes: "),
+            CreateEntityName("none"), text(", "), CreateEntityName("basic"), text(", "), 
+            CreateEntityName("full"), text(", "), CreateEntityName("profile"), text(".")
+        })));
+
+        elements.emplace_back(CreateListItem(hbox({
+            keyword("EXPLAIN"), text(" ["), keyword("AST"), text("] "), CreateEntityName("SQL_QUERY"),
+            text(": execute query in explain mode and optionally print AST.")
+        })));
+
+        elements.emplace_back(text(""));
+        elements.emplace_back(CreateEntityName("Interactive Commands:"));
+        PrintCommonInteractiveCommands(elements);
+
+        return vbox(elements);
     }
 
     static TLineReaderSettings CreateSessionSettings(const TSqlSessionSettings& settings) {
@@ -145,7 +179,7 @@ private:
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
             .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_sql_history.txt",
-            .HelpMessage = CreateHelpMessage(),
+            .AdditionalCommands = {"/help"},
         };
     }
 

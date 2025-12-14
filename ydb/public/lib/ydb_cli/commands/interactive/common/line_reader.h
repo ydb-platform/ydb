@@ -30,7 +30,6 @@ struct TLineReaderSettings {
     TString Database;
     TString Prompt;
     std::optional<TString> HistoryFilePath;
-    std::optional<TString> HelpMessage;
     std::vector<TString> AdditionalCommands;
     bool EnableYqlCompletion = true;
     bool EnableSwitchMode = true;

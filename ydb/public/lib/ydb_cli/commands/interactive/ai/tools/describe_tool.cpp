@@ -74,7 +74,7 @@ protected:
     }
 
     bool AskPermissions() final {
-        PrintFtxuiMessage("", TStringBuilder() << "Calling describe tool for path " << Path, ftxui::Color::Green);
+        PrintFtxuiMessage("", TStringBuilder() << "Describing path " << Path, ftxui::Color::Green);
         Cout << Endl;
 
         return true;

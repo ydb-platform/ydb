@@ -82,17 +82,10 @@ public:
         , ContinueAfterCancel(settings.ContinueAfterCancel)
         , EnableSwitchMode(settings.EnableSwitchMode)
         , Prompt(settings.Prompt)
-        , HelpMessage(settings.HelpMessage)
     {
-        std::vector<TString> completionCommands;
-        if (HelpMessage) {
-            completionCommands.push_back("/help");
-        }
+        std::vector<TString> completionCommands(settings.AdditionalCommands.begin(), settings.AdditionalCommands.end());
         if (EnableSwitchMode) {
             completionCommands.push_back("/switch");
-        }
-        for (const auto& command : settings.AdditionalCommands) {
-            completionCommands.push_back(command);
         }
 
         std::optional<TYQLCompleterConfig> yqlCompleterConfig;
@@ -143,11 +136,6 @@ public:
             }
 
             TString line = Strip(input);
-            if (HelpMessage && to_lower(line) == "/help") {
-                Cout << HelpMessage << Endl;
-                continue;
-            }
-
             if (EnableSwitchMode && to_lower(line) == "/switch") {
                 SwitchRequested = true;
                 break;
@@ -281,7 +269,6 @@ private:
     const bool ContinueAfterCancel = true;
     const bool EnableSwitchMode = true;
     const TString Prompt;
-    const std::optional<TString> HelpMessage;
     std::optional<replxx::Replxx> Rx;
     std::optional<THistory> History;
     bool SwitchRequested = false;

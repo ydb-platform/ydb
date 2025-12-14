@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/ftxui
     library/cpp/colorizer
     library/cpp/yaml/as
     ydb/library/yverify_stream

@@ -60,6 +60,13 @@ public:
             }
         }
 
+        if (to_lower(line) == "/help") {
+            Cout << Endl;
+            PrintFtxuiMessage(CreateHelpMessage(), "YDB CLI AI Interactive Mode – Hotkeys", ftxui::Color::White);
+            Cout << Endl;
+            return;
+        }
+
         if (to_lower(line) == "/model") {
             SwitchAiProfile();
             return;
@@ -88,18 +95,35 @@ public:
     }
 
 private:
-    static TString CreateHelpMessage() {
-        using TLog = TInteractiveLogger;
+    static ftxui::Element CreateHelpMessage() {
+        using namespace ftxui;
 
-        return TStringBuilder() << Endl << "YDB CLI AI Interactive Mode – Hotkeys." << Endl
-            << Endl << TLog::EntityName("Hotkeys:") << Endl
-            << "  " << TLog::EntityName("Ctrl+T") << " or " << TLog::EntityName("/switch") << ": switch to basic " << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << " interactive mode." << Endl
-            << PrintCommonHotKeys()
-            << Endl << TLog::EntityName("Interactive Commands:") << Endl
-            << "  " << TLog::EntityName("/model") << ": switch AI mode or setup new one." << Endl
-            << "  " << TLog::EntityName("/config") << ": change AI mode settings, e. g. change AI model or clear model context." << Endl
-            << "  " << TLog::EntityName("/help") << ": print this help message." << Endl
-            << Endl << "All input is sent to the AI API. The AI will respond with YQL queries or answers to your questions." << Endl;
+        std::vector<ftxui::Element> elements = {
+            paragraph("All input is sent to the AI API. The AI will respond with YQL queries or answers to your questions."),
+            text(""),
+            CreateEntityName("Hotkeys:"),
+            CreateListItem(hbox({
+                CreateEntityName("Ctrl+T"), text(" or "), CreateEntityName("/switch"), 
+                text(": switch to "), 
+                text(ToString(TInteractiveConfigurationManager::EMode::YQL)) | color(Color::Green), 
+                text(" interactive mode.")
+            })),
+        };
+
+        PrintCommonHotKeys(elements);
+
+        elements.emplace_back(text(""));
+        elements.emplace_back(CreateEntityName("Interactive Commands:"));
+        elements.emplace_back(CreateListItem(hbox({
+            CreateEntityName("/model"), text(": switch AI mode or setup new one.")
+        })));
+        elements.emplace_back(CreateListItem(hbox({
+            CreateEntityName("/config"), text(": change AI mode settings, e. g. change AI model or clear model context.")
+        })));
+
+        PrintCommonInteractiveCommands(elements);
+
+        return vbox(elements);
     }
 
     static TLineReaderSettings CreateSessionSettings(const TAiSessionSettings& settings) {
@@ -108,13 +132,14 @@ private:
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::AI) << "> ",
             .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_ai_history.txt",
-            .HelpMessage = CreateHelpMessage(),
-            .AdditionalCommands = {"/model", "/config"},
+            .AdditionalCommands = {"/help", "/model", "/config"},
             .EnableYqlCompletion = false,
         };
     }
 
     void ChangeSessionSettings() {
+        Cout << Endl;
+
         for (bool exit = false; !exit;) {
             std::vector<TMenuEntry> options;
 
@@ -122,7 +147,7 @@ private:
             const auto& profiles = ConfigurationManager->ListAiProfiles();
             if (const auto it = profiles.find(profile); profile && it != profiles.end()) {
                 options.emplace_back(TStringBuilder() << "Change current AI model \"" << profile << "\" settings", [profile = it->second, &exit, this]() {
-                    Cout << Endl << "Changing current AI model \"" << profile->GetName() << "\" settings." << Endl;
+                    Cout << Endl << "Changing current AI model \"" << profile->GetName() << "\" settings." << Endl << Endl;
                     if (!profile->SetupProfile()) {
                         exit = true;
                         return;
@@ -139,7 +164,7 @@ private:
             });
 
             options.push_back({"Clear session context", [&]() {
-                Cout << "Session context cleared." << Endl;
+                Cout << Endl << "Session context cleared." << Endl << Endl;
                 if (ModelHandler) {
                     ModelHandler->ClearContext();
                 }
@@ -149,14 +174,14 @@ private:
             switch (ConfigurationManager->GetDefaultMode()) {
                 case TInteractiveConfigurationManager::EMode::YQL:
                     options.push_back({"Set AI interactive mode by default", [&]() {
-                        Cout << "Setting AI interactive mode by default." << Endl;
+                        Cout << Endl << "Setting AI interactive mode by default." << Endl << Endl;
                         ConfigurationManager->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::AI);
                         exit = true;
                     }});
                     break;
                 case TInteractiveConfigurationManager::EMode::AI:
                     options.push_back({"Set YQL interactive mode by default", [&]() {
-                        Cout << "Setting YQL interactive mode by default." << Endl;
+                        Cout << Endl << "Setting YQL interactive mode by default." << Endl << Endl;
                         ConfigurationManager->ChangeDefaultMode(TInteractiveConfigurationManager::EMode::YQL);
                         exit = true;
                     }});
@@ -167,17 +192,20 @@ private:
 
             if (!RunFtxuiMenuWithActions("Please choose AI session setting to change:", options)) {
                 exit = true;
+                Cout << Endl;
             }
         }
-
-        Cout << Endl;
     }
 
     bool SwitchAiProfile() {
-        if (auto newProfile = ConfigurationManager->SelectAiModelProfile()) {
+        Cout << Endl;
+        auto newProfile = ConfigurationManager->SelectAiModelProfile();
+
+        if (newProfile) {
             ChangeAiProfile(std::move(newProfile));
             return true;
         }
+
         return false;
     }
 
@@ -189,9 +217,9 @@ private:
         if (ModelHandler) {
             Cout << Colors.Yellow() << "Active AI profile is changed"
                 << (newProfileName != AiModel->GetName() ? TStringBuilder() << " to \"" << newProfileName << "\"" : TStringBuilder())
-                << ", session context will be reset" << Colors.OldColor();
+                << ", session context will be reset" << Colors.OldColor() << Endl << Endl;
         } else if (newProfileName != AiModel->GetName()) {
-            Cout << "Switching AI profile to \"" << newProfileName << "\"";
+            Cout << "Switching AI profile to \"" << newProfileName << "\"" << Endl << Endl;
         }
 
         ConfigurationManager->ChangeActiveAiProfile(newProfileName);

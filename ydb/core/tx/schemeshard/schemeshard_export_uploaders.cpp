@@ -1,6 +1,7 @@
 #include "schemeshard_export_uploaders.h"
 
 #include "schemeshard.h"
+#include "schemeshard_xxport_common.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
@@ -187,36 +188,16 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
     }
 
     bool FillExportProperties(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        struct ExportProperties {
-            TString FileName;
-            NBackup::EBackupFileType SchemeFileType;
-        };
-
         PathType = GetPathType(describeResult);
 
-        static THashMap<NKikimrSchemeOp::EPathType, ExportProperties> TypeToProperties = {
-            {NKikimrSchemeOp::EPathType::EPathTypeView, {
-                NYdb::NDump::NFiles::CreateView().FileName,
-                NBackup::EBackupFileType::ViewCreate}
-            },
-            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, {
-                NYdb::NDump::NFiles::CreateTopic().FileName,
-                NBackup::EBackupFileType::TopicCreate}
-            },
-            {NKikimrSchemeOp::EPathType::EPathTypeReplication, {
-                NYdb::NDump::NFiles::CreateAsyncReplication().FileName,
-                NBackup::EBackupFileType::AsyncReplicationCreate}
-            },
-        };
-
-        auto* propertiesPtr = TypeToProperties.FindPtr(PathType);
-        if (!propertiesPtr) {
+        auto properties = PathTypeToXxportProperties(PathType);
+        if (!properties) {
             error = TStringBuilder() << "unable to find file properties for " << PathType;
             return false;
         }
 
-        FileName = propertiesPtr->FileName;
-        SchemeFileType = propertiesPtr->SchemeFileType;
+        FileName = properties->FileName;
+        SchemeFileType = properties->FileType;
         return true;
     }
 

@@ -18,6 +18,4 @@ bool BuildScheme(
     const TString& databaseRoot,
     TString& error);
 
-NKikimrSchemeOp::EPathType GetPathType(const NKikimrScheme::TEvDescribeSchemeResult& describeResult);
-
 } // namespace NKikimr::NSchemeShard

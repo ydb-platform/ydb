@@ -271,6 +271,7 @@ SRCS(
     schemeshard_export__forget.cpp
     schemeshard_export__get.cpp
     schemeshard_export__list.cpp
+    schemeshard_export_helpers.cpp
     schemeshard_export_flow_proposals.cpp
     schemeshard_identificators.cpp
     schemeshard_impl.cpp
@@ -319,6 +320,8 @@ SRCS(
     schemeshard_user_attr_limits.h
     schemeshard_validate_ttl.cpp
     schemeshard_xxport__helpers.cpp
+    schemeshard_xxport_common.h
+    schemeshard_xxport_common.cpp
     user_attributes.cpp
     schemeshard__operation_create_set_constraint.cpp
     schemeshard__operation_create_set_constraint_check.cpp

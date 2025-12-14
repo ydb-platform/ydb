@@ -1,8 +1,9 @@
 #include "describe_tool.h"
 #include "tool_base.h"
 
-#include <ydb/public/lib/ydb_cli/common/describe.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/common/describe.h>
+#include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/core/base/path.h>
 
 #include <util/string/strip.h>
@@ -73,16 +74,18 @@ protected:
     }
 
     bool AskPermissions() final {
-        Cout << Endl << Colors.Green() << "Calling describe tool for path " << Path << Colors.OldColor() << Endl << Endl;
+        PrintFtxuiMessage("", TStringBuilder() << "Calling describe tool for path " << Path, ftxui::Color::Green);
+        Cout << Endl;
+
         return true;
     }
 
     TResponse DoExecute() final {
         TStringStream outputStream;
         TDescribeLogic describeLogic(Driver, outputStream);
-        
+
         int status = describeLogic.Describe(Path, Options, EDataFormat::ProtoJsonBase64);
-        
+
         if (Log.IsVerbose()) {
             if (status == EXIT_SUCCESS) {
                 TStringStream prettyStream;
@@ -99,8 +102,10 @@ protected:
 
         if (status != EXIT_SUCCESS) {
             outputStream << "\nCommand failed.";
+            return TResponse::Error(outputStream.Str());
         }
-        return TResponse(outputStream.Str());
+
+        return TResponse::Success(outputStream.Str());
     }
 
 private:

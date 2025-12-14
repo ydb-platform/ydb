@@ -13,9 +13,7 @@ public:
 
     TResponse HandleMessages(const std::vector<TMessage>& messages, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {}) final;
 
-    void AddMessage(const TMessage& message) final {
-        AdvanceConversation({message});
-    }
+    void AddMessages(const std::vector<TMessage>& messages) final;
 
 protected:
     virtual void AdvanceConversation(const std::vector<TMessage>& messages) = 0;

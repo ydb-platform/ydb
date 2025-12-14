@@ -169,7 +169,8 @@ protected:
             colors.assign(Query.size(), replxx::Replxx::Color::DEFAULT);
         }
 
-        Cout << Endl << Colors.Green() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << PrintAnsiColors(Query, colors) << Endl << Endl;
+        PrintFtxuiMessage(PrintYqlHighlightFtxuiColors(Query, colors), "Agent wants to execute query", ftxui::Color::Green);
+        Cout << Endl;
 
         const auto action = RunFtxuiActionDialog();
 
@@ -200,7 +201,7 @@ protected:
         if (IsSkipped) {
             NJson::TJsonValue jsonResult;
             jsonResult["status"] = "skipped";
-            return TResponse(jsonResult, "User explicitly skipped execution of this query. The query was NOT executed. (Please continue in the primary language of the conversation)");
+            return TResponse::Success(jsonResult, "User explicitly skipped execution of this query. The query was NOT executed. (Please continue in the primary language of the conversation)");
         }
 
         Y_DEFER { ResetInterrupted(); };
@@ -208,15 +209,15 @@ protected:
         try {
             if (ExecuteRunner.Execute(Query, {}) != EXIT_SUCCESS) {
                 Log.Notice() << "Query execution was interrupted by user";
-                return TResponse(TStringBuilder() << "Query execution was interrupted by user", UserMessage);
+                return TResponse::Error(TStringBuilder() << "Query execution was interrupted by user", UserMessage);
             }
         } catch (const std::exception& e) {
             Cout << Colors.Red() << "Query execution failed:\n" << Colors.OldColor() << e.what() << Endl;
-            return TResponse(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
+            return TResponse::Error(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
         Cout << Endl;
-        return TResponse(ExecuteRunner.ExtractResults(), UserMessage);
+        return TResponse::Success(ExecuteRunner.ExtractResults(), UserMessage);
     }
 
 private:

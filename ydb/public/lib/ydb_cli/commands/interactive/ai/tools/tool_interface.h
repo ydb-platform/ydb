@@ -12,15 +12,21 @@ public:
 
     virtual ~ITool() = default;
 
-    struct TResponse {
+    class TResponse {
+    public:
         // Response will be sent into API in order ToolResult -> UserMessage
         TString UserMessage;
         TString ToolResult;
         bool IsSuccess = true;
 
-        explicit TResponse(const TString& error, const TString& userMessage = "");
+        static TResponse Error(const TString& error, const TString& userMessage = "");
 
-        explicit TResponse(const NJson::TJsonValue& result, const TString& userMessage = "");
+        static TResponse Success(const TString& result, const TString& userMessage = "");
+
+        static TResponse Success(const NJson::TJsonValue& result, const TString& userMessage = "");
+
+    private:
+        TResponse(const TString& result, const TString& userMessage, bool isSuccess);
     };
 
     virtual const NJson::TJsonValue& GetParametersSchema() const = 0;

@@ -7,13 +7,10 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_query_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/list_directory_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/describe_tool.h>
+#include <ydb/public/lib/ydb_cli/common/ftxui.h>
 
 #include <util/string/strip.h>
 #include <util/string/printf.h>
-
-namespace NYdb::NConsoleClient {
-    void PrintFtxuiMessage(const TString& message, const TString& title = "");
-}
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -100,49 +97,24 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
                 }
             }
             ::NYdb::NConsoleClient::PrintFtxuiMessage(StripStringRight(output.Text), title);
+            Cout << Endl;
         }
 
+        bool interrupted = false;
         std::vector<TString> userMessages;
         for (const auto& toolCall : output.ToolCalls) {
-            NAi::IModel::TToolResponse response = {.ToolCallId = toolCall.Id};
-
-            if (const auto it = Tools.find(toolCall.Name); it != Tools.end()) {
-                std::optional<NAi::ITool::TResponse> result;
-                try {
-                    result.emplace(it->second->Execute(toolCall.Parameters));
-                } catch (const yexception& e) {
-                    if (TString(e.what()).Contains("Interrupted by user")) {
-                        response.IsSuccess = false;
-                        response.Text = "Tool execution interrupted by user.";
-                        Model->AddMessage(response);
-                        messages.clear();
-                        break;
-                    }
-                    throw;
-                }
-
-                if (result->UserMessage) {
-                    YDB_CLI_LOG(Debug, "User message during tool call: " << result->ToolResult);
-                    userMessages.emplace_back(std::move(result->UserMessage));
-                }
-                if (!result->IsSuccess) {
-                    YDB_CLI_LOG(Warning, "Tool call failed: " << result->ToolResult);
-                }
-                response.IsSuccess = result->IsSuccess;
-                response.Text = std::move(result->ToolResult);
-            } else {
-                YDB_CLI_LOG(Warning, "Call to unknown tool: " << toolCall.Name);
-                response.IsSuccess = false;
-                response.Text = TStringBuilder() << "Call to unknown tool: " << toolCall.Name << ". Only allowed tools: " << PrintToolsNames(Tools);
-            }
-
-            messages.emplace_back(std::move(response));
+            messages.emplace_back(CallTool(toolCall, userMessages, interrupted));
         }
 
         for (auto& message : userMessages) {
             messages.emplace_back(IModel::TUserMessage{.Text = std::move(message)});
         }
         userMessages.clear();
+
+        if (interrupted) {
+            Model->AddMessages(messages);
+            break;
+        }
     }
 
     Cout << Endl;
@@ -151,6 +123,48 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
 void TModelHandler::ClearContext() {
     Y_VALIDATE(Model, "Model must be initialized before handling clearing context");
     Model->ClearContext();
+}
+
+IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted) const {
+    IModel::TToolResponse response = {.ToolCallId = toolCall.Id};
+
+    const auto it = Tools.find(toolCall.Name);
+    if (it == Tools.end()) {
+        response.IsSuccess = false;
+        response.Text = TStringBuilder() << "Call to unknown tool: " << toolCall.Name << ". Only allowed tools: " << PrintToolsNames(Tools);
+        return response;
+    }
+
+    std::optional<ITool::TResponse> result;
+    if (!interrupted) {
+        try {
+            result.emplace(it->second->Execute(toolCall.Parameters));
+        } catch (const yexception& e) {
+            if (TString(e.what()).Contains("Interrupted by user")) {
+                interrupted = true;
+            } else {
+                throw;
+            }
+        }
+    }
+
+    if (interrupted) {
+        response.IsSuccess = false;
+        response.Text = "Tool execution interrupted by user.";
+        return response;
+    }
+
+    if (result->UserMessage) {
+        YDB_CLI_LOG(Debug, "User message during tool call: " << result->ToolResult);
+        userMessages.emplace_back(std::move(result->UserMessage));
+    }
+    if (!result->IsSuccess) {
+        YDB_CLI_LOG(Warning, "Tool call failed: " << result->ToolResult);
+    }
+    response.IsSuccess = result->IsSuccess;
+    response.Text = std::move(result->ToolResult);
+
+    return response;
 }
 
 void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPtr profile) {
@@ -184,9 +198,9 @@ void TModelHandler::SetupTools(const TSettings& settings) {
     Y_VALIDATE(Model, "Model must be initialized before initializing tools");
 
     Tools = {
-        {"list_directory", NAi::CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
-        {"exec_query", NAi::CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver}, Log)},
-        {"describe", NAi::CreateDescribeTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
+        {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
+        {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver}, Log)},
+        {"describe", CreateDescribeTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
     };
 
     for (const auto& [name, tool] : Tools) {

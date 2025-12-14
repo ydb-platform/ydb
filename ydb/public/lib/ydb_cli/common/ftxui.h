@@ -1,5 +1,8 @@
 #pragma once
 
+#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
+#include <contrib/libs/ftxui/include/ftxui/screen/color.hpp>
+
 #include <util/generic/string.h>
 
 #include <functional>
@@ -18,7 +21,9 @@ std::optional<TString> RunFtxuiInput(const TString& title, const TString& initia
 
 bool AskYesNoFtxui(const TString& question, bool defaultAnswer = false);
 
-void PrintFtxuiMessage(const TString& message, const TString& title = "");
+void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& title = "", ftxui::Color color = ftxui::Color::Cyan);
+
+void PrintFtxuiMessage(const TString& body, const TString& title = "", ftxui::Color color = ftxui::Color::Cyan);
 
 } // namespace NYdb::NConsoleClient
 

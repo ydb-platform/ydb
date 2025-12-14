@@ -28,6 +28,8 @@ public:
     void ClearContext();
 
 private:
+    IModel::TToolResponse CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted) const;
+
     void SetupModel(TInteractiveConfigurationManager::TAiProfile::TPtr profile);
 
     void SetupTools(const TSettings& settings);

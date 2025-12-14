@@ -328,25 +328,43 @@ bool AskYesNoFtxui(const TString& question, bool defaultAnswer) {
     return *idx == 0;
 }
 
-void PrintFtxuiMessage(const TString& message, const TString& title) {
-    auto document = ftxui::window(
-        ftxui::hbox({
-            ftxui::text("─"),
-            ftxui::text(" " + std::string(title) + " ") | ftxui::bold
-        }) | ftxui::color(ftxui::Color::Cyan),
-        ftxui::paragraph(std::string(message)) | ftxui::color(ftxui::Color::White)
-    ) | ftxui::color(ftxui::Color::Cyan);
+void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& title, ftxui::Color color) {
+    const auto screenWidth = ftxui::Terminal::Size().dimx;
+    std::string separator;
+    separator.reserve(screenWidth);
+    for (int i = 0; i < screenWidth - static_cast<int>(title.size()) - 4; ++i) {
+        separator += "─";
+    }
 
+    std::vector<ftxui::Element> elements = {
+        ftxui::hbox({
+            ftxui::text("──"),
+            ftxui::text(" " + std::string(title) + " ") | ftxui::bold,
+            ftxui::text(separator),
+        }) | ftxui::color(color),
+    };
+
+    if (message) {
+        elements.push_back(*message);
+        elements.push_back(ftxui::separator() | ftxui::color(color));
+    }
+
+    auto document = ftxui::vbox(elements) | ftxui::bgcolor(ftxui::Color::Grey11);
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Full(), ftxui::Dimension::Fit(document));
     ftxui::Render(screen, document);
-    
-    // We need to print screen content manually to Cout to respect current terminal state/redirections if possible, 
-    // but Screen::Print() writes to stdout. 
-    // Let's use Screen::ToString() if available or just Print() and flush.
-    // FTXUI Screen::Print() writes to cout.
+
     screen.Print();
     Cout << Endl;
 }
 
+void PrintFtxuiMessage(const TString& body, const TString& title, ftxui::Color color) {
+    std::optional<ftxui::Element> message;
+    if (body) {
+        message = ftxui::paragraph(std::string(body)) | ftxui::color(ftxui::Color::White);
+    }
+    PrintFtxuiMessage(message, title, color);
+}
+
 } // namespace NYdb::NConsoleClient
+
 

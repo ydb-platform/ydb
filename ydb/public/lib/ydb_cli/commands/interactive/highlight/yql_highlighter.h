@@ -1,8 +1,9 @@
 #pragma once
 
-#include <contrib/restricted/patched/replxx/include/replxx.hxx>
-
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
+
+#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
+#include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
 #include <util/generic/fwd.h>
 
@@ -19,7 +20,9 @@ namespace NYdb::NConsoleClient {
         virtual ~IYQLHighlighter() = default;
     };
 
-    TString PrintAnsiColors(const TString& queryUtf8, const TColors& colors);
+    TString PrintYqlHighlightAnsiColors(const TString& queryUtf8, const TColors& colors);
+
+    ftxui::Element PrintYqlHighlightFtxuiColors(const TString& queryUtf8, const TColors& colors);
 
     IYQLHighlighter::TPtr MakeYQLHighlighter(TColorSchema color);
 

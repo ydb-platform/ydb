@@ -67,4 +67,8 @@ TModelBase::TResponse TModelBase::HandleMessages(const std::vector<TMessage>& me
     }
 }
 
+void TModelBase::AddMessages(const std::vector<TMessage>& messages) {
+    AdvanceConversation(messages);
+}
+
 } // namespace NYdb::NConsoleClient::NAi

@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/tabbed_table.h>
@@ -55,7 +56,8 @@ protected:
             message = TStringBuilder() << "Listing directory " << Directory;
         }
 
-        Cout << Colors.Green() << message << Colors.OldColor() << Endl << Endl;
+        PrintFtxuiMessage("", message, ftxui::Color::Green);
+        Cout << Endl;
 
         // Directory listing is always allowed
         return true;
@@ -66,13 +68,13 @@ protected:
 
         auto feature = Client.ListDirectory(Directory);
         if (!WaitInterruptable(feature)) {
-            return TResponse(TStringBuilder() << "Listing directory \"" << Directory << "\" was interrupted by user");
+            return TResponse::Error(TStringBuilder() << "Listing directory \"" << Directory << "\" was interrupted by user");
         }
 
         const auto& response = feature.GetValue();
         if (!response.IsSuccess()) {
             Cout << Colors.Red() << "Listing directory \"" << Directory << "\" failed: " << Colors.OldColor() << response.GetStatus() << Endl;
-            return TResponse(TStringBuilder() << "Listing directory \"" << Directory << "\" failed with status " << response.GetStatus() << ", reason:\n" << response.GetIssues().ToString());
+            return TResponse::Error(TStringBuilder() << "Listing directory \"" << Directory << "\" failed with status " << response.GetStatus() << ", reason:\n" << response.GetIssues().ToString());
         }
 
         const auto& children = response.GetChildren();
@@ -89,7 +91,7 @@ protected:
             Cout << TAdaptiveTabbedTable(children) << Endl;
         }
 
-        return TResponse(std::move(result));
+        return TResponse::Success(std::move(result));
     }
 
 private:

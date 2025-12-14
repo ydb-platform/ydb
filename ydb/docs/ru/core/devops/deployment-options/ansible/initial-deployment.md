@@ -172,7 +172,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
         system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
         
         # Узлы
-        ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+        ydb_config: "{% raw %}{{ ansible_config_file | dirname }}{% endraw %}/files/config.yaml"
         ydb_version: "25.1.4.7"
 
         # Хранилище

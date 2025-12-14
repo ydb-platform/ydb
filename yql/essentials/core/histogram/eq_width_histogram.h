@@ -212,7 +212,7 @@ public:
         const T end = LoadFrom<T>(range.End);
         Y_ASSERT(CmpLess<T>(start, end));
         const T rangeLen = end - start;
-        std::memcpy(Buckets_[0].Start, range.Start, sizeof(range.Start));
+        WriteUnaligned<ui8[EqWidthHistogramBucketStorageSize]>(Buckets_[0].Start, range.Start);
         for (ui32 i = 1; i < GetNumBuckets(); ++i) {
             const T prevStart = LoadFrom<T>(Buckets_[i - 1].Start);
             StoreTo<T>(Buckets_[i].Start, prevStart + rangeLen);

@@ -16,12 +16,12 @@ TEqWidthHistogram::TEqWidthHistogram(const char* str, size_t size) {
     const ui32 numBuckets = ReadUnaligned<ui32>(str);
     Y_ENSURE(GetBinarySize(numBuckets) == size);
     ui32 offset = sizeof(ui32);
-    ValueType_ = *reinterpret_cast<const EHistogramValueType*>(str + offset);
+    ValueType_ = ReadUnaligned<EHistogramValueType>(str + offset);
     Y_ENSURE(ValueType_ != EHistogramValueType::NotSupported, "Unsupported histogram type");
     offset += sizeof(EHistogramValueType);
     Buckets_ = TVector<TBucket>(numBuckets);
     for (ui32 i = 0; i < numBuckets; ++i) {
-        std::memcpy(&Buckets_[i], reinterpret_cast<const char*>(str + offset), sizeof(TBucket));
+        Buckets_[i] = ReadUnaligned<TBucket>(str + offset);
         offset += sizeof(TBucket);
     }
 }
@@ -92,10 +92,10 @@ TString TEqWidthHistogram::Serialize() const {
     char* out = result.Detach();
     ui32 offset = 0;
     // 4 byte - number of buckets.
-    std::memcpy(out + offset, &numBuckets, sizeof(numBuckets));
+    WriteUnaligned<ui32>(out + offset, numBuckets);
     offset += sizeof(numBuckets);
     // 1 byte - values type.
-    std::memcpy(out + offset, &ValueType_, sizeof(EHistogramValueType));
+    WriteUnaligned<EHistogramValueType>(out + offset, ValueType_);
     offset += sizeof(EHistogramValueType);
     // 16 byte - domain range.
     for (size_t i = 0; i < EqWidthHistogramBucketStorageSize; ++i) {
@@ -108,7 +108,7 @@ TString TEqWidthHistogram::Serialize() const {
     }
     // Buckets.
     for (ui32 i = 0; i < numBuckets; ++i) {
-        std::memcpy(out + offset, &Buckets_[i], sizeof(TBucket));
+        WriteUnaligned<TBucket>(out + offset, Buckets_[i]);
         offset += sizeof(TBucket);
     }
     Y_ASSERT(offset == binarySize);

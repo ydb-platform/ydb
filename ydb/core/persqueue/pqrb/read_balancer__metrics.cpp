@@ -67,10 +67,14 @@ struct TTopicMetricCollector {
         partitionMetrics.DataSize = partitionStatus.GetPartitionSize();
         partitionMetrics.UsedReserveSize = partitionStatus.GetUsedReserveSize();
 
-        partitionMetrics.AvgWriteSpeedPerSec = partitionStatus.GetAvgWriteSpeedPerSec();
-        partitionMetrics.AvgWriteSpeedPerMin = partitionStatus.GetAvgWriteSpeedPerMin();
-        partitionMetrics.AvgWriteSpeedPerHour = partitionStatus.GetAvgWriteSpeedPerHour();
-        partitionMetrics.AvgWriteSpeedPerDay = partitionStatus.GetAvgWriteSpeedPerDay();
+        TopicMetrics.TotalAvgWriteSpeedPerSec += partitionStatus.GetAvgWriteSpeedPerSec();
+        TopicMetrics.MaxAvgWriteSpeedPerSec = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerSec, partitionStatus.GetAvgWriteSpeedPerSec());
+        TopicMetrics.TotalAvgWriteSpeedPerMin += partitionStatus.GetAvgWriteSpeedPerMin();
+        TopicMetrics.MaxAvgWriteSpeedPerMin = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerMin, partitionStatus.GetAvgWriteSpeedPerMin());
+        TopicMetrics.TotalAvgWriteSpeedPerHour += partitionStatus.GetAvgWriteSpeedPerHour();
+        TopicMetrics.MaxAvgWriteSpeedPerHour = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerHour, partitionStatus.GetAvgWriteSpeedPerHour());
+        TopicMetrics.TotalAvgWriteSpeedPerDay += partitionStatus.GetAvgWriteSpeedPerDay();
+        TopicMetrics.MaxAvgWriteSpeedPerDay = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerDay, partitionStatus.GetAvgWriteSpeedPerDay());
 
         Collect(partitionStatus.GetAggregatedCounters());
     }
@@ -96,15 +100,6 @@ struct TTopicMetricCollector {
         for (auto& [_, partitionMetrics] : PartitionMetrics) {
             TopicMetrics.TotalDataSize += partitionMetrics.DataSize;
             TopicMetrics.TotalUsedReserveSize += partitionMetrics.UsedReserveSize;
-
-            TopicMetrics.TotalAvgWriteSpeedPerSec += partitionMetrics.AvgWriteSpeedPerSec;
-            TopicMetrics.MaxAvgWriteSpeedPerSec = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerSec, partitionMetrics.AvgWriteSpeedPerSec);
-            TopicMetrics.TotalAvgWriteSpeedPerMin += partitionMetrics.AvgWriteSpeedPerMin;
-            TopicMetrics.MaxAvgWriteSpeedPerMin = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerMin, partitionMetrics.AvgWriteSpeedPerMin);
-            TopicMetrics.TotalAvgWriteSpeedPerHour += partitionMetrics.AvgWriteSpeedPerHour;
-            TopicMetrics.MaxAvgWriteSpeedPerHour = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerHour, partitionMetrics.AvgWriteSpeedPerHour);
-            TopicMetrics.TotalAvgWriteSpeedPerDay += partitionMetrics.AvgWriteSpeedPerDay;
-            TopicMetrics.MaxAvgWriteSpeedPerDay = Max<ui64>(TopicMetrics.MaxAvgWriteSpeedPerDay, partitionMetrics.AvgWriteSpeedPerDay);
         }
     }
 };

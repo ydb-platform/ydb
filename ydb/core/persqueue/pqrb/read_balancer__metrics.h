@@ -30,11 +30,6 @@ struct TTopicMetrics {
 struct TPartitionMetrics {
     ui64 DataSize = 0;
     ui64 UsedReserveSize = 0;
-
-    ui64 AvgWriteSpeedPerSec = 0;
-    ui64 AvgWriteSpeedPerMin = 0;
-    ui64 AvgWriteSpeedPerHour = 0;
-    ui64 AvgWriteSpeedPerDay = 0;
 };
 
 struct TCounters {

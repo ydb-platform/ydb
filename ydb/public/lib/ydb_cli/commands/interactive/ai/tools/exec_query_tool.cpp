@@ -3,6 +3,7 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
@@ -57,7 +58,7 @@ protected:
                 Y_VALIDATE(row.Parse(FormatResultRowJson(parser, resultSet.GetColumnsMeta(), EBinaryStringEncoding::Unicode)), "Invalid serialized JSON row value");
                 rows.emplace_back(row.GetValue());
             } catch (const std::exception& e) {
-                Log.Warning() << "Error parsing result #" << resultSetIndex << " row #" << rows.size() << ": " << e.what() << Endl;
+                YDB_CLI_LOG(Warning, "Error parsing result #" << resultSetIndex << " row #" << rows.size() << ": " << e.what());
                 rows.emplace_back(TStringBuilder() << "Row conversion to JSON format failed: " << e.what() << ". Try to simplify result column types");
             }
         }
@@ -166,7 +167,7 @@ protected:
             colors.resize(Query.size(), replxx::Replxx::Color::DEFAULT);
             YQLHighlighter->Apply(Query, colors);
         } catch (const std::exception& e) {
-            Log.Warning() << "Error highlighting query: " << e.what() << Endl;
+            YDB_CLI_LOG(Warning, "Error highlighting query: " << e.what());
             colors.assign(Query.size(), replxx::Replxx::Color::DEFAULT);
         }
 
@@ -209,7 +210,7 @@ protected:
 
         try {
             if (ExecuteRunner.Execute(Query, {}) != EXIT_SUCCESS) {
-                Log.Notice() << "Query execution was interrupted by user";
+                YDB_CLI_LOG(Notice, "Query execution was interrupted by user");
                 return TResponse::Error(TStringBuilder() << "Query execution was interrupted by user", UserMessage);
             }
         } catch (const std::exception& e) {

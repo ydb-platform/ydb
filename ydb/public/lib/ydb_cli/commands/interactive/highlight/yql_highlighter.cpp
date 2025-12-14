@@ -103,8 +103,8 @@ namespace {
         const TVector<std::ptrdiff_t> symbolIndexByByte = BuildSymbolByByteIndex(queryUtf8);
         for (size_t i = 0; i < queryUtf8.length(); ++i) {
             if (symbolIndexByByte[i] != InvalidPosition && colors[symbolIndexByByte[i]] != lastColor) {
-                result << replxx::ansi_color(colors[i]);
-                lastColor = colors[i];
+                result << replxx::ansi_color(colors[symbolIndexByByte[i]]);
+                lastColor = colors[symbolIndexByByte[i]];
             }
             result << queryUtf8[i];
         }

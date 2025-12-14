@@ -2883,6 +2883,7 @@ public:
     ui32 TabletsTotal = 0;
     ui32 TabletsDone = 0;
     THive* Hive;
+    NJson::TJsonValue Response;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::HIVE_MON_REQUEST;
@@ -2912,9 +2913,14 @@ public:
         ++TabletsTotal;
     }
 
+    void AddContext(const TString& key, const TString& value) {
+        Response[key] = value;
+    }
+
     void CheckCompletion() {
         if (TabletsDone >= TabletsTotal) {
-            Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"total\":" << TabletsDone << "}"));
+            Response["total"] = TabletsDone;
+            Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Response, false)));
             PassAway();
         }
     }
@@ -2934,32 +2940,77 @@ public:
 
 class TTxMonEvent_ReassignTablet : public TTransactionBase<THive> {
 public:
+    struct TTabletFilter {
+        struct TAllTablets {};
+
+        std::variant<std::monostate, TTabletId, TAllTablets> TabletId;
+        TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
+
+        explicit TTabletFilter(const TCgiParameters& cgi) {
+            auto tablet = cgi.Get("tablet");
+            if (tablet == "all") {
+                TabletId = TAllTablets();
+            } else if (auto tabletId = TryFromString<TTabletId>(tablet)) {
+                TabletId = *tabletId;
+            }
+
+            TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(cgi.Get("type"), TabletType);
+        }
+
+        bool CheckTabletId(const TLeaderTabletInfo* tablet) const {
+            if (auto* tabletId = std::get_if<TTabletId>(&TabletId)) {
+                return tablet->Id == *tabletId;
+            }
+            return true;
+        }
+
+        bool CheckTabletType(const TLeaderTabletInfo* tablet) const {
+            return TabletType == TTabletTypes::TypeInvalid || TabletType == tablet->Type;
+        }
+
+        bool operator()(const TLeaderTabletInfo* tablet) const {
+            return CheckTabletId(tablet) && CheckTabletType(tablet);
+        }
+
+        bool IsValidFilter(TString& error) const {
+            if (std::holds_alternative<std::monostate>(TabletId)) {
+                error = "must specify tablet";
+                return false;
+            }
+            return true;
+        }
+
+        bool AllowsEverything() const {
+            return std::holds_alternative<TAllTablets>(TabletId) && TabletType == TTabletTypes::TypeInvalid;
+        }
+
+    };
+
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     const TActorId Source;
-    TTabletId TabletId = 0;
-    TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
+    TTabletFilter TabletFilter;
     TVector<ui32> TabletChannels;
     ui32 GroupId = 0;
     TVector<ui32> ForcedGroupIds;
-    int TabletPercent = 100;
     TString Error;
     bool Wait = true;
     bool Async = false;
+    bool BypassLimit = false;
+
+    static constexpr size_t REASSIGN_SOFT_LIMIT = 500;
 
     TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
         , Event(ev->Release())
         , Source(source)
+        , TabletFilter(Event->Cgi())
     {
-        TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
-        TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(Event->Cgi().Get("type"), TabletType);
         TabletChannels = Scan<ui32>(SplitString(Event->Cgi().Get("channel"), ","));
-        TabletPercent = FromStringWithDefault<int>(Event->Cgi().Get("percent"), TabletPercent);
         GroupId = FromStringWithDefault(Event->Cgi().Get("group"), GroupId);
         ForcedGroupIds = Scan<ui32>(SplitString(Event->Cgi().Get("forcedGroup"), ","));
-        TabletPercent = std::min(std::abs(TabletPercent), 100);
         Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
         Async = FromStringWithDefault(Event->Cgi().Get("async"), Async);
+        BypassLimit = FromStringWithDefault(Event->Cgi().Get("bypassLimit"), BypassLimit);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
@@ -2993,29 +3044,17 @@ public:
             Error = "cannot provide force groups in async mode";
             return true;
         }
-        TVector<TLeaderTabletInfo*> tablets;
-        if (TabletId != 0) {
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
-            if (tablet != nullptr) {
-                tablets.push_back(tablet);
-            }
-        } else if (TabletType != TTabletTypes::TypeInvalid) {
-            for (auto& pr : Self->Tablets) {
-                if (pr.second.Type == TabletType) {
-                    tablets.push_back(&pr.second);
-                }
-            }
-        } else {
-            for (auto& pr : Self->Tablets) {
-                tablets.push_back(&pr.second);
-            }
+        if (!TabletFilter.IsValidFilter(Error)) {
+            return true;
         }
-        if (TabletPercent != 100) {
-            std::sort(tablets.begin(), tablets.end(), [this](TLeaderTabletInfo* a, TLeaderTabletInfo* b) -> bool {
-                return GetMaxTimestamp(a) < GetMaxTimestamp(b);
-            });
-            tablets.resize(tablets.size() * TabletPercent / 100);
+        if (TabletFilter.AllowsEverything() && GroupId == 0) {
+            Error = "cannot reassign all tablets";
+            return true;
         }
+        auto tablets = Self->Tablets
+            | std::views::transform([](auto&& p) -> TLeaderTabletInfo* { return &p.second; })
+            | std::views::filter(TabletFilter);
+
         TVector<THolder<TEvHive::TEvReassignTablet>> operations;
         TActorId waitActorId;
         TReassignTabletWaitActor* waitActor = nullptr;
@@ -3054,6 +3093,12 @@ public:
                 waitActor->AddTablet(tablet);
             }
             operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds, Async));
+            if (!BypassLimit && operations.size() >= REASSIGN_SOFT_LIMIT) {
+                if (Wait) {
+                    waitActor->AddContext("limit_reached", "true");
+                }
+                break;
+            }
         }
         if (Wait) {
             waitActor->CheckCompletion();

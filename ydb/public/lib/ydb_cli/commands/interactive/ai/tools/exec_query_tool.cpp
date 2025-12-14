@@ -171,6 +171,8 @@ protected:
             colors.assign(Query.size(), replxx::Replxx::Color::DEFAULT);
         }
 
+        YDB_CLI_LOG(Notice, "Agent wnt to execute query:\n" << PrintYqlHighlightAnsiColors(Query, colors));
+
         PrintFtxuiMessage(PrintYqlHighlightFtxuiColors(Query, colors), "Agent wants to execute query", ftxui::Color::Green);
         Cout << Endl;
 

@@ -63,17 +63,17 @@ TDuration TProgressWaiterBase::Stop(bool success) {
         Worker.join();
     }
 
-    Cout << "\r\x1b[K"; // Clear line
+    Cout << "\r\x1b[K" << Flush; // Clear line
+    Cerr << Flush;
 
     if (success) {
         return TInstant::Now() - StartTime;
     } else {
         auto now = TInstant::Now();
         auto elapsed = (now - StartTime).SecondsFloat();
-        Cout << "Error after " << Sprintf("%.2fs", elapsed) << ": ";
+        Cout << "Error after " << Sprintf("%.2fs", elapsed) << ": " << Flush;
     }
 
-    Cout << Flush;
     return TDuration::Zero();
 }
 

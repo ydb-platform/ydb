@@ -200,7 +200,7 @@ protected:
         if (IsSkipped) {
             NJson::TJsonValue jsonResult;
             jsonResult["status"] = "skipped";
-            return TResponse(jsonResult, "User explicitly skipped execution of this query. The query was NOT executed.");
+            return TResponse(jsonResult, "User explicitly skipped execution of this query. The query was NOT executed. (Please continue in the primary language of the conversation)");
         }
 
         Y_DEFER { ResetInterrupted(); };
@@ -215,6 +215,7 @@ protected:
             return TResponse(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
+        Cout << Endl;
         return TResponse(ExecuteRunner.ExtractResults(), UserMessage);
     }
 
@@ -244,6 +245,7 @@ private:
             << "(Results correspond to this new query. IGNORE this change notification in your response and proceed directly to analyzing the results.)";
 
         Query = std::move(newText);
+        Cout << Endl;
         return true;
     }
 

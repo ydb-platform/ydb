@@ -34,7 +34,7 @@ INTERACTION GUIDELINES:
   - Ask the user for confirmation or clarification if the request is ambiguous.
   - Once confirmed, proceed with execution.
 - If the user's request implies deleting or modifying data, be extra careful and verify the WHERE clause logic by inspecting the schema first.
-- If a tool returns "skipped" status or "User skipped execution", DO NOT treat it as an error. Do NOT apologize. Just consider it as a user request to skip the tool execution.
+- If a tool returns "skipped" status or "User skipped execution", DO NOT treat it as an error. Do NOT apologize. Just consider it as a user request to skip the tool execution. Do not output verbose confirmations like "I acknowledge that the user skipped". Proceed directly to the next logical step or ask what to do next.
 )";
 
 TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {

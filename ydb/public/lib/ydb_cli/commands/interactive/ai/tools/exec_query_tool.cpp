@@ -80,7 +80,7 @@ Execute query in Yandex Data Base (YDB) on YQL (SQL dialect). Use cases:
 IMPORTANT:
 - NEVER guess column names, types or keys. If you do not know the exact schema of a table, use the `describe` tool FIRST.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
-- If path to table contains '/', wrap it into back ticks, for example `path/to/table`.
+- If path to table contains '/' or '@', wrap it into back ticks, for example `path/to/table`. Add back ticks only if they are really needed, for example table some_table do not need backticks. 
 
 Returns list of result sets for query, each contains list of rows and column metadata.
 For example if there exists table 'my_table' with string column 'Data' and we execute query:

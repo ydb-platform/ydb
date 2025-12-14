@@ -170,6 +170,7 @@ protected:
         }
 
         PrintFtxuiMessage(PrintYqlHighlightFtxuiColors(Query, colors), "Agent wants to execute query", ftxui::Color::Green);
+        Cout << Endl;
 
         const auto action = RunFtxuiActionDialog();
 

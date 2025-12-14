@@ -29,7 +29,7 @@ namespace {
         int color_index = static_cast<int>(r_color);
         // Replxx uses -1 (DEFAULT) and sometimes -2 (ERROR)
         if (color_index < 0) {
-            return ftxui::Color::Default;
+            return ftxui::Color::White;
         }
         return ftxui::Color::Palette256(static_cast<uint8_t>(color_index));
     }

@@ -128,7 +128,6 @@ int TExecuteGenericQuery::PrintResponse(NQuery::TExecuteQueryIterator& result, c
                 }
                 progressIndication.SetDurationUs(protoStats.total_duration_us());
 
-
                 progressIndication.Render();
             }
 

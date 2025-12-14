@@ -1104,13 +1104,6 @@ const TErrorOr<T>& TFutureBase<T>::Get() const
 }
 
 template <class T>
-TErrorOr<T> TFutureBase<T>::GetUnique() const
-{
-    YT_ASSERT(Impl_);
-    return Impl_->GetUnique();
-}
-
-template <class T>
 bool TFutureBase<T>::Wait(TDuration timeout) const
 {
     YT_ASSERT(Impl_);

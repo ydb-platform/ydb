@@ -43,19 +43,7 @@ template <class T>
 
     WaitUntilSet(future.AsVoid(), std::move(invoker));
 
-    return future.GetUnique();
-}
-
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUniqueFast(TFuture<T> future)
-{
-    YT_ASSERT(future);
-
-    if (!future.IsSet()) {
-        WaitUntilSet(future.AsVoid(), GetCurrentInvoker());
-    }
-
-    return future.GetUnique();
+    return future.AsUnique().Get();
 }
 
 template <CFuture TFuture>

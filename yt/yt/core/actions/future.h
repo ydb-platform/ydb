@@ -214,13 +214,6 @@ public:
      */
     const TErrorOr<T>& Get() const;
 
-    //! Extracts the value by moving it out of the future state.
-    /*!
-     *  This call will block until the value is set.
-     */
-    // TODO(babenko): deprecated, see YT-26319
-    TErrorOr<T> GetUnique() const;
-
     //! Waits for the value to become set.
     /*!
      *  This call blocks until either the value is set or #timeout (if given) expires.

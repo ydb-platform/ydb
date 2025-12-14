@@ -1933,6 +1933,20 @@
             "uri": "https://{canondata_backend}/1784117/59a1ed654cc7cf541c3d0bbf8b3a41883b0b9464/resource.tar.gz#test.test_select_yql-projection_alias_case_sensivity-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-projection_in_expr-default.txt-Debug]": [
+        {
+            "checksum": "f860e5769f0cb2cc649800d2e2e767ae",
+            "size": 484,
+            "uri": "https://{canondata_backend}/1031349/9a162bf46ddefb28cb1e4f995394146d52c6555c/resource.tar.gz#test.test_select_yql-projection_in_expr-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-projection_in_expr-default.txt-Results]": [
+        {
+            "checksum": "4183adf9082428c3ed5429ceb096726f",
+            "size": 1090,
+            "uri": "https://{canondata_backend}/1031349/9a162bf46ddefb28cb1e4f995394146d52c6555c/resource.tar.gz#test.test_select_yql-projection_in_expr-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[simple_pg-date_trunc-default.txt-Debug]": [
         {
             "checksum": "50e36df1df38d9b76cb793c4bb9b6931",

@@ -81,9 +81,7 @@ protected:
         }
 
         parser = parser.GetKey("content");
-        auto& conversationItem = Conversation.emplace_back();
-        conversationItem["role"] = "assistant";
-        conversationItem["content"] = parser.GetValue();
+        auto conversationPart = parser.GetValue();
 
         parser.Iterate([&](TJsonParser item) {
             const auto& type = item.GetKey("type").GetString();
@@ -93,9 +91,14 @@ protected:
                 }
                 result.Text = Strip(item.GetKey("text").GetString());
             } else if (type == "tool_use") {
+                auto name = item.GetKey("name").GetString();
+                if (!ValidateToolName(name)) {
+                    throw yexception() << "Invalid tool name requested: " << name;
+                }
+
                 result.ToolCalls.push_back({
                     .Id = item.GetKey("id").GetString(),
-                    .Name = item.GetKey("name").GetString(),
+                    .Name = std::move(name),
                     .Parameters = item.GetKey("input").GetValue(),
                 });
             } else {
@@ -103,6 +106,9 @@ protected:
             }
         });
 
+        auto& conversationItem = Conversation.emplace_back();
+        conversationItem["role"] = "assistant";
+        conversationItem["content"] = std::move(conversationPart);
         return result;
     }
 

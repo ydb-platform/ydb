@@ -236,9 +236,9 @@ private:
         }, Log);
 
         auto response = lineReader->ReadLine(Query);
-        lineReader->Finish(!response.has_value());
+        lineReader->Finish(false);
         if (!response) {
-            Cout << "<Interrupted by user>" << Endl;
+            Cout << Endl << "<Interrupted by user>" << Endl << Endl;
             return false;
         }
 

@@ -82,7 +82,7 @@ protected:
         }
 
         parser = parser.GetKey("choices").GetElement(0).GetKey("message");
-        Conversation.emplace_back(parser.GetValue());
+        auto conversationPart = parser.GetValue();
 
         const auto& content = parser.MaybeKey("content");
         const bool hasContent = content && !content->IsNull();
@@ -103,9 +103,14 @@ protected:
                     throw yexception() << "Tool call arguments is not valid JSON, reason: " << e.what();
                 }
 
+                auto name = function.GetKey("name").GetString();
+                if (!ValidateToolName(name)) {
+                    throw yexception() << "Invalid tool name requested: " << name;
+                }
+
                 result.ToolCalls.push_back({
                     .Id = toolCall.GetKey("id").GetString(),
-                    .Name = function.GetKey("name").GetString(),
+                    .Name = std::move(name),
                     .Parameters = std::move(argumentsJson),
                 });
             });
@@ -115,6 +120,7 @@ protected:
             throw yexception() << "Not found either content or tool_calls keys in field " << parser.GetFieldName();
         }
 
+        Conversation.emplace_back(std::move(conversationPart));
         return result;
     }
 

@@ -585,6 +585,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     Y_UNIT_TEST(Discard) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
+
         auto result = db.ExecuteQuery(R"(
             DISCARD SELECT 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();

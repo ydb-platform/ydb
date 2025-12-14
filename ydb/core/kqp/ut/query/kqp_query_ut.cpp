@@ -39,7 +39,7 @@ static void CheckStatusAfterTimeout(TSession& session, const TString& query, con
     }
 }
 
-static auto ExecuteQueryAndCheckResultSets(NYdb::NQuery::TQueryClient& db, const TString& query,ui32 expectedResultSetsCount, const TString& testCaseName = "")
+static auto ExecuteQueryAndCheckResultSets(NYdb::NQuery::TQueryClient& db, const TString& query, ui32 expectedResultSetsCount, const TString& testCaseName = "")
 {
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     TString prefix = testCaseName.empty() ? "" : testCaseName + ": ";
@@ -3448,7 +3448,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
                 "expect 2 result sets, got " << result.GetResultSets().size() << " instead");
         }
 
-        // INTO RESULT в скобках - проверка backward compatibility
+        //  backward compatibility: INTO RESULT in parentheses
         for (const auto& query : intoResultQueries) {
             auto result = db.ExecuteQuery(query,
                     NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();

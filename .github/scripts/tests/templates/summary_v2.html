@@ -377,6 +377,9 @@
             margin-left: auto;
             flex-shrink: 0;
             white-space: nowrap;
+            min-width: 120px;
+            text-align: right;
+            padding-right: 20px;
         }
         .test-owner a {
             color: #656d76;
@@ -514,6 +517,7 @@
             gap: 4px;
             align-items: center;
             flex-shrink: 0;
+            margin-right: auto;
         }
         .test-action-btn {
             background: none;
@@ -810,14 +814,14 @@
                             {% if test.status.value == 1 or test.status.value == 2 or test.status.value == 4 %}
                             {% if test.full_name in test_success_rates %}
                             {% set rates = test_success_rates[test.full_name] %}
-                            <button class="success-rate-button" onclick="showSuccessRateModal('{{ test.full_name }}')" title="View success rate and history">
+                            <button class="success-rate-button" onclick="showSuccessRateModal({{ test.full_name|tojson }})" title="View success rate and history">
                                 <span class="emoji">&#128202;</span> 
                                 {% if rates.other %}{{ branch|upper }}:{{ rates.other.rate }}%{% endif %}
                                 {% if rates.other and rates.pr_check %} | {% endif %}
                                 {% if rates.pr_check %}PR:{{ rates.pr_check.rate }}%{% endif %}
                             </button>
                             {% else %}
-                            <button class="success-rate-button" onclick="showSuccessRateModal('{{ test.full_name }}')" title="View success rate and history">
+                            <button class="success-rate-button" onclick="showSuccessRateModal({{ test.full_name|tojson }})" title="View success rate and history">
                                 <span class="emoji">&#128202;</span> No history
                             </button>
                             {% endif %}
@@ -831,12 +835,12 @@
                                 {% endfor %}
                             </span>
                             {% endif %}
-                        </div>
-                        
-                        <div class="test-actions">
-                            <button class="test-action-btn" onclick="copyTestName('{{ test.full_name }}')" title="Copy full test name"><span class="emoji">&#128203;</span> Copy name</button>
-                            <button class="test-action-btn" onclick="copyRunCommand('{{ test.full_name }}')" title="Copy run command"><span class="emoji">&#128203;</span> Copy cmd</button>
-                            <button class="test-action-btn" onclick="openHistory('{{ test.full_name }}')" title="Open history"><span class="emoji">&#128202;</span> History</button>
+                            
+                            <div class="test-actions">
+                                <button class="test-action-btn" onclick="copyTestName({{ test.full_name|tojson }})" title="Copy full test name"><span class="emoji">&#128203;</span> Copy name</button>
+                                <button class="test-action-btn" onclick="copyRunCommand({{ test.full_name|tojson }})" title="Copy run command"><span class="emoji">&#128203;</span> Copy cmd</button>
+                                <button class="test-action-btn" onclick="openHistory({{ test.full_name|tojson }})" title="Open history"><span class="emoji">&#128202;</span> History</button>
+                            </div>
                         </div>
                         
                         {% if test.status_description %}

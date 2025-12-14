@@ -7,6 +7,8 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_query_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/list_directory_tool.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/describe_tool.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/ydb_help_tool.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/exec_shell_tool.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 
 #include <util/string/strip.h>
@@ -16,21 +18,45 @@ namespace NYdb::NConsoleClient::NAi {
 
 namespace {
 
-constexpr char SYSTEM_PROMPT[] = R"(You are an intelligent assistant working in a CLI terminal. Your output is rendered directly to the console.
-You have access to tools to interact with the database.
+constexpr char SYSTEM_PROMPT[] = R"(You are an intelligent assistant working in a CLI terminal.
+You have access to tools to interact with the YDB database.
 
-CRITICAL RULES:
-1. NEVER guess table names, column names, column types, or primary keys.
-2. If you need to write a SQL query and you don't know the exact schema (column names, types, primary keys) of the table, you MUST use the `describe` tool first to inspect the table.
-3. Only use column names and types that you have confirmed exist via `describe` or from previous query results.
-4. Your output will be printed directly into terminal console, do not try to use markdown or LaTeX special symbols or constructions. Also try to separate your paragraphs with extra new line.
+*** IMPORTANT: YOU DO NOT KNOW THE YDB CLI COMMAND SYNTAX. ***
+*** YOU MUST DISCOVER IT USING TOOLS. DO NOT HALLUCINATE COMMANDS. ***
+
+OUTPUT FORMATTING:
+- Your output is printed directly to the terminal console.
+- Do NOT use Markdown formatting (no bold **, no headers #, no code blocks ```).
+- Do NOT use LaTeX or special symbols.
+- Separate paragraphs with an extra blank line for better readability.
+
+CRITICAL EXECUTION RULES:
+
+1. **MANDATORY DISCOVERY**: You are PROHIBITED from executing any `ydb` shell command unless you have successfully run `ydb_help` in this session to verify its syntax.
+   - WRONG: "I will import..." -> `exec_shell("ydb import ...")` (HALLUCINATION - STOP!)
+   - CORRECT: "I need to check import syntax..." -> `ydb_help()` -> `ydb_help("import")` -> `exec_shell("ydb import file") -> etc.`
+
+2. **UNKNOWN SCHEMA**: You are PROHIBITED from writing SQL queries or importing data without first inspecting the table schema using `describe`.
+
+3. **CONNECTION PARAMETERS**:
+   - The user's connection parameters are provided in the [CONTEXT] below.
+   - You MUST use ONLY those parameters.
+   - NEVER add `-p`, `--profile`, `--endpoint`, etc., unless they are explicitly in the [CONTEXT].
+
+STRATEGY FOR ANY REQUEST:
+1. Can I use native tools (`list_directory`, `describe`, `exec_query`)? If yes, use them.
+2. If not, maybe I can use YDB CLI binary? If I need the YDB CLI binary:
+   a. Call `ydb_help` (empty) to list all available commands.
+   b. Call `ydb_help <subcommand>` to learn syntax.
+   c. ONLY THEN construct and execute the `exec_shell` command.
 
 INTERACTION GUIDELINES:
 - For simple requests (e.g., "list tables", "describe table X"), just execute the tool.
-- For complex requests (e.g., "delete all users over 50", "calculate statistics"), PROPOSE A PLAN first.
+- For complex requests (e.g., "delete all users over 50", "calculate statistics", "import data"), PROPOSE A PLAN first.
   - List the steps you intend to take.
   - Ask the user for confirmation or clarification if the request is ambiguous.
-  - Once confirmed, proceed with execution.
+  - Determine all the necessary tools you need to use to complete the request and get their full descriptions.
+  - Once confirmed and all the necessary tools are determined, proceed with executions.
 - If the user's request implies deleting or modifying data, be extra careful and verify the WHERE clause logic by inspecting the schema first.
 - If a tool returns "skipped" status or "User skipped execution", DO NOT treat it as an error. Do NOT apologize. Just consider it as a user request to skip the tool execution. Do not output verbose confirmations like "I acknowledge that the user skipped". Proceed directly to the next logical step or ask what to do next.
 )";
@@ -60,7 +86,7 @@ FEATURES-TODO:
 TModelHandler::TModelHandler(const TSettings& settings, const TInteractiveLogger& log)
     : Log(log)
 {
-    SetupModel(settings.Profile);
+    SetupModel(settings.Profile, settings);
     SetupTools(settings);
 }
 
@@ -171,7 +197,7 @@ IModel::TToolResponse TModelHandler::CallTool(const IModel::TResponse::TToolCall
     return response;
 }
 
-void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPtr profile) {
+void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPtr profile, const TSettings& settings) {
     Y_VALIDATE(profile, "AI profile must be initialized");
 
     TString ValidationError;
@@ -186,12 +212,19 @@ void TModelHandler::SetupModel(TInteractiveConfigurationManager::TAiProfile::TPt
     const auto& apiKey = profile->GetApiToken();
     const auto& modelName = profile->GetModelName();
 
+    TString systemPrompt = SYSTEM_PROMPT;
+    if (!settings.ConnectionString.empty()) {
+        systemPrompt += "\n[CONTEXT] The user is connected to YDB with this command line prefix: " + settings.ConnectionString + "\n"
+                        "When using `exec_shell` to run `ydb` commands, you MUST prepend this prefix (it includes binary path and global options).\n"
+                        "Do NOT add any other connection parameters (like -p, --endpoint, --database) unless they are explicitly present in this prefix. If no connection options are provided, it means the environment is already configured (e.g., via default profile or environment variables).\n";
+    }
+
     switch (*apiType) {
         case TInteractiveConfigurationManager::EAiApiType::OpenAI:
-            Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = SYSTEM_PROMPT}, Log);
+            Model = CreateOpenAiModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = systemPrompt}, Log);
             break;
         case TInteractiveConfigurationManager::EAiApiType::Anthropic:
-            Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = SYSTEM_PROMPT}, Log);
+            Model = CreateAnthropicModel({.BaseUrl = endpoint, .ModelId = modelName, .ApiKey = apiKey, .SystemPrompt = systemPrompt}, Log);
             break;
         case TInteractiveConfigurationManager::EAiApiType::Invalid:
             Y_VALIDATE(false, "Invalid API type: " << *apiType);
@@ -205,6 +238,8 @@ void TModelHandler::SetupTools(const TSettings& settings) {
         {"list_directory", CreateListDirectoryTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
         {"exec_query", CreateExecQueryTool({.Prompt = settings.Prompt, .Database = settings.Database, .Driver = settings.Driver}, Log)},
         {"describe", CreateDescribeTool({.Database = settings.Database, .Driver = settings.Driver}, Log)},
+        {"ydb_help", CreateYdbHelpTool({.Driver = settings.Driver}, Log)},
+        {"exec_shell", CreateExecShellTool({.Driver = settings.Driver}, Log)},
     };
 
     for (const auto& [name, tool] : Tools) {

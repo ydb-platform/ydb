@@ -23,6 +23,7 @@ public:
         , ConfigurationManager(settings.ConfigurationManager)
         , Database(settings.Database)
         , Driver(settings.Driver)
+        , ConnectionString(settings.ConnectionString)
     {
         Y_VALIDATE(ConfigurationManager, "ConfigurationManager is not initialized");
     }
@@ -52,7 +53,7 @@ public:
 
         if (!ModelHandler) {
             try {
-                ModelHandler = TModelHandler({.Profile = AiModel, .Prompt = Settings.Prompt, .Database = Database, .Driver = Driver}, Log);
+                ModelHandler = TModelHandler({.Profile = AiModel, .Prompt = Settings.Prompt, .Database = Database, .Driver = Driver, .ConnectionString = ConnectionString}, Log);
             } catch (const std::exception& e) {
                 ModelHandler = std::nullopt;
                 Cerr << Colors.Red() << "Failed to setup AI model session: " << e.what() << Colors.OldColor() << Endl;
@@ -231,6 +232,7 @@ private:
     const TInteractiveConfigurationManager::TPtr ConfigurationManager;
     const TString Database;
     const TDriver Driver;
+    const TString ConnectionString;
 
     TInteractiveConfigurationManager::TAiProfile::TPtr AiModel;
     std::optional<TModelHandler> ModelHandler;

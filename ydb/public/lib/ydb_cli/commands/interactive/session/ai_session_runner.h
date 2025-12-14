@@ -12,6 +12,7 @@ struct TAiSessionSettings {
     TInteractiveConfigurationManager::TPtr ConfigurationManager;
     TString Database;
     TDriver Driver;
+    TString ConnectionString;
 };
 
 ISessionRunner::TPtr CreateAiSessionRunner(const TAiSessionSettings& settings, const TInteractiveLogger& log);

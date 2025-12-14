@@ -58,6 +58,21 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         Cout << "Database: " << Log.EntityName(config.Database) << Endl;
     }
 
+    TStringBuilder connectionStringBuilder;
+    // config.InitialArgC and config.InitialArgV contain all arguments passed to the CLI
+    for (int i = 0; i < config.InitialArgC; ++i) {
+        if (i > 0) {
+            connectionStringBuilder << " ";
+        }
+        TString arg = config.InitialArgV[i];
+        if (arg.Contains(' ')) {
+             connectionStringBuilder << "\"" << arg << "\"";
+        } else {
+             connectionStringBuilder << arg;
+        }
+    }
+    TString connectionString = connectionStringBuilder;
+
     ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
     if (!activeSession) {
         Cout << "Write YQL query text or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
@@ -78,6 +93,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
             .ConfigurationManager = configurationManager,
             .Database = config.Database,
             .Driver = driver,
+            .ConnectionString = connectionString,
         }, Log),
     };
     Y_VALIDATE(sessions.size() > activeSession, "Unexpected number of sessions: " << sessions.size() << " for default mode: " << activeSession);

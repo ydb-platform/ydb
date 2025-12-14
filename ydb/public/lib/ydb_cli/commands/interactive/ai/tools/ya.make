@@ -6,6 +6,8 @@ SRCS(
     list_directory_tool.cpp
     tool_base.cpp
     tool_interface.cpp
+    ydb_help_tool.cpp
+    exec_shell_tool.cpp
 )
 
 PEERDIR(

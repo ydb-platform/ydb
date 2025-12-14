@@ -19,6 +19,7 @@ public:
         TString Prompt; // Current interactive CLI prompt
         TString Database;
         TDriver Driver;
+        TString ConnectionString;
     };
 
     TModelHandler(const TSettings& settings, const TInteractiveLogger& log);
@@ -30,7 +31,7 @@ public:
 private:
     IModel::TToolResponse CallTool(const IModel::TResponse::TToolCall& toolCall, std::vector<TString>& userMessages, bool& interrupted) const;
 
-    void SetupModel(TInteractiveConfigurationManager::TAiProfile::TPtr profile);
+    void SetupModel(TInteractiveConfigurationManager::TAiProfile::TPtr profile, const TSettings& settings);
 
     void SetupTools(const TSettings& settings);
 

@@ -38,6 +38,9 @@ IMPORTANT:
 - If you use this tool to run `ydb` commands, you MUST include the same global options as the current session.
 - Global options are provided in the System Prompt context.
 - Do NOT add any extra global options (like -p, --endpoint) if they are not provided in the context.
+- COMMAND COMPATIBILITY:
+  - The shell environment (sh) may not support `echo -e`. Use `printf` or `cat <<EOF` for multiline strings.
+  - Avoid complex shell substitutions or terminal-specific formatting codes.
 )";
 
     static constexpr char COMMAND_PROPERTY[] = "command";

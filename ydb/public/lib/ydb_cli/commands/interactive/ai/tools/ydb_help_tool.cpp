@@ -61,7 +61,7 @@ protected:
         if (Command.empty() || Command == "ydb") {
             PrintFtxuiMessage("", "Listing all YDB CLI commands...", ftxui::Color::Green);
         } else {
-            PrintFtxuiMessage("", TStringBuilder() << "Analyzing ydb " << Command << " command description...", ftxui::Color::Green);
+            PrintFtxuiMessage("", TStringBuilder() << "Analyzing 'ydb " << Command << "' command description...", ftxui::Color::Green);
         }
         Cout << Endl;
         return true;

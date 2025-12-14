@@ -34,6 +34,7 @@ INTERACTION GUIDELINES:
   - Ask the user for confirmation or clarification if the request is ambiguous.
   - Once confirmed, proceed with execution.
 - If the user's request implies deleting or modifying data, be extra careful and verify the WHERE clause logic by inspecting the schema first.
+- If a tool returns "skipped" status or "User skipped execution", DO NOT treat it as an error. Do NOT apologize. Just consider it as a user request to skip the tool execution.
 )";
 
 TString PrintToolsNames(const std::unordered_map<TString, ITool::TPtr>& tools) {
@@ -79,6 +80,9 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
             output = Model->HandleMessages(messages, onStartWaiting, onFinishWaiting);
             messages.clear();
         } catch (const std::exception& e) {
+            if (onFinishWaiting) {
+                onFinishWaiting();
+            }
             Cerr << Colors.Red() << "Failed to perform model API request: " << e.what() << Colors.OldColor() << Endl;
             break;
         }
@@ -103,16 +107,29 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
             NAi::IModel::TToolResponse response = {.ToolCallId = toolCall.Id};
 
             if (const auto it = Tools.find(toolCall.Name); it != Tools.end()) {
-                auto result = it->second->Execute(toolCall.Parameters);
-                if (result.UserMessage) {
-                    YDB_CLI_LOG(Debug, "User message during tool call: " << result.ToolResult);
-                    userMessages.emplace_back(std::move(result.UserMessage));
+                std::optional<NAi::ITool::TResponse> result;
+                try {
+                    result.emplace(it->second->Execute(toolCall.Parameters));
+                } catch (const yexception& e) {
+                    if (TString(e.what()).Contains("Interrupted by user")) {
+                        response.IsSuccess = false;
+                        response.Text = "Tool execution interrupted by user.";
+                        Model->AddMessage(response);
+                        messages.clear();
+                        break;
+                    }
+                    throw;
                 }
-                if (!result.IsSuccess) {
-                    YDB_CLI_LOG(Warning, "Tool call failed: " << result.ToolResult);
+
+                if (result->UserMessage) {
+                    YDB_CLI_LOG(Debug, "User message during tool call: " << result->ToolResult);
+                    userMessages.emplace_back(std::move(result->UserMessage));
                 }
-                response.IsSuccess = result.IsSuccess;
-                response.Text = std::move(result.ToolResult);
+                if (!result->IsSuccess) {
+                    YDB_CLI_LOG(Warning, "Tool call failed: " << result->ToolResult);
+                }
+                response.IsSuccess = result->IsSuccess;
+                response.Text = std::move(result->ToolResult);
             } else {
                 YDB_CLI_LOG(Warning, "Call to unknown tool: " << toolCall.Name);
                 response.IsSuccess = false;

@@ -57,7 +57,7 @@ protected:
 
         Cout << Colors.Green() << message << Colors.OldColor() << Endl << Endl;
 
-        // Directory listing is alway allowed
+        // Directory listing is always allowed
         return true;
     }
 

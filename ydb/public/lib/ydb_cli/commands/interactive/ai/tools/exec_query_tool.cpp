@@ -116,25 +116,28 @@ Tool will return:
         Approve,
         Reject,
         Edit,
+        Abort,
     };
 
     static EAction RunFtxuiActionDialog() {
         std::vector<TString> options = {
             "Approve execution",
-            "Reject execution",
             "Edit query",
+            "Skip query (don't execute, let agent retry)",
+            "Abort operation",
         };
 
         auto result = RunFtxuiMenu("Approve query execution?", options);
         if (!result) {
-            return EAction::Reject;
+            return EAction::Abort;
         }
 
         switch (*result) {
             case 0: return EAction::Approve;
-            case 1: return EAction::Reject;
-            case 2: return EAction::Edit;
-            default: return EAction::Reject;
+            case 1: return EAction::Edit;
+            case 2: return EAction::Reject;
+            case 3: return EAction::Abort;
+            default: return EAction::Abort;
         }
     }
 
@@ -153,6 +156,7 @@ protected:
         TJsonParser parser(parameters);
         Query = Strip(parser.GetKey(QUERY_PROPERTY).GetString());
         UserMessage = "";
+        IsSkipped = false;
     }
 
     bool AskPermissions() final {
@@ -165,19 +169,40 @@ protected:
             colors.assign(Query.size(), replxx::Replxx::Color::DEFAULT);
         }
 
-        Cout << Colors.Green() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << PrintAnsiColors(Query, colors) << Endl << Endl;
+        Cout << Endl << Colors.Green() << "Agent wants to execute query:\n" << Colors.OldColor() << Endl << PrintAnsiColors(Query, colors) << Endl << Endl;
 
         const auto action = RunFtxuiActionDialog();
 
+        if (action == EAction::Abort) {
+            Cout << "<Interrupted by user>" << Endl;
+            throw yexception() << "Interrupted by user";
+        }
+
         if (action == EAction::Edit) {
-            return RequestQueryText();
+            if (RequestQueryText()) {
+                return true;
+            }
+            IsSkipped = true;
+            return true;
         }
 
         Cout << Endl;
-        return action == EAction::Approve;
+        
+        if (action == EAction::Approve) {
+            return true;
+        }
+
+        IsSkipped = true;
+        return true;
     }
 
     TResponse DoExecute() final {
+        if (IsSkipped) {
+            NJson::TJsonValue jsonResult;
+            jsonResult["status"] = "skipped";
+            return TResponse(jsonResult, "User explicitly skipped execution of this query. The query was NOT executed.");
+        }
+
         Y_DEFER { ResetInterrupted(); };
 
         try {
@@ -190,7 +215,6 @@ protected:
             return TResponse(TStringBuilder() << "Query execution failed with error:\n" << e.what(), UserMessage);
         }
 
-        Cout << Endl;
         return TResponse(ExecuteRunner.ExtractResults(), UserMessage);
     }
 
@@ -207,8 +231,9 @@ private:
         }, Log);
 
         auto response = lineReader->ReadLine(Query);
-        lineReader->Finish();
+        lineReader->Finish(!response.has_value());
         if (!response) {
+            Cout << "<Interrupted by user>" << Endl;
             return false;
         }
 
@@ -241,6 +266,7 @@ private:
 
     TString Query;
     TString UserMessage;
+    bool IsSkipped = false;
 };
 
 } // anonymous namespace

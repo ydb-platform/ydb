@@ -73,7 +73,7 @@ protected:
     }
 
     bool AskPermissions() final {
-        Cout << Colors.Green() << "Calling describe tool for path " << Path << Colors.OldColor() << Endl << Endl;
+        Cout << Endl << Colors.Green() << "Calling describe tool for path " << Path << Colors.OldColor() << Endl << Endl;
         return true;
     }
 

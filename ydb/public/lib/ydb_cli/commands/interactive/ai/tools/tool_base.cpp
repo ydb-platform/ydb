@@ -29,7 +29,7 @@ TToolBase::TResponse TToolBase::Execute(const NJson::TJsonValue& parameters) {
 
     if (!AskPermissions()) {
         YDB_CLI_LOG(Notice, "Tool execution cancelled by user");
-        return TResponse(TStringBuilder() << "Tool execution request was rejected by the user (execution is not permited)");
+        return TResponse(TString("Tool execution cancelled by user"));
     }
 
     try {

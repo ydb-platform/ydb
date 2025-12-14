@@ -41,6 +41,8 @@ public:
 
     virtual void RegisterTool(const TString& name, const NJson::TJsonValue& parametersSchema, const TString& description) = 0;
 
+    virtual void AddMessage(const TMessage& message) = 0;
+
     virtual void ClearContext() = 0;
 };
 

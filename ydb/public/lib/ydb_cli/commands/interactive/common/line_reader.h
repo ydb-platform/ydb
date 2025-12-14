@@ -20,7 +20,7 @@ public:
 
     virtual std::optional<std::variant<TLine, TSwitch>> ReadLine(const TString& defaultValue = "") = 0;
 
-    virtual void Finish() = 0;
+    virtual void Finish(bool clear = false) = 0;
 
     virtual ~ILineReader() = default;
 };

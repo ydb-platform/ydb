@@ -165,8 +165,12 @@ public:
         return std::nullopt;
     }
 
-    void Finish() final  {
-        Cout << Endl;
+    void Finish(bool clear) final {
+        if (clear) {
+            Rx->invoke(replxx::Replxx::ACTION::CLEAR_SELF, 0);
+        } else {
+            Cout << Flush;
+        }
     }
 
 private:

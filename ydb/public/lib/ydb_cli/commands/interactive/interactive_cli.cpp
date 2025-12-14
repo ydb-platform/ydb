@@ -120,7 +120,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     }
 
     // Clear line (hints can be still present)
-    lineReader->Finish();
+    lineReader->Finish(true);
     Cout << "Bye!" << Endl;
 
     return EXIT_SUCCESS;

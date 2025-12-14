@@ -5,6 +5,7 @@
 #include <util/stream/output.h>
 #include <util/system/types.h>
 #include <util/system/unaligned_mem.h>
+#include <util/generic/yexception.h>
 #include <cmath>
 
 namespace NKikimr {
@@ -66,42 +67,42 @@ enum class EHistogramValueType: ui8 { Int8,
                                       Double,
                                       NotSupported };
 
-template<typename T>
+template <typename T>
 inline std::optional<EHistogramValueType> GetHistogramValueType() {
     return std::nullopt;
 }
 
-template<>
+template <>
 inline std::optional<EHistogramValueType> GetHistogramValueType<i16>() {
     return EHistogramValueType::Int16;
 }
 
-template<>
+template <>
 inline std::optional<EHistogramValueType> GetHistogramValueType<i32>() {
     return EHistogramValueType::Int32;
 }
 
-template<>
+template <>
 inline std::optional<EHistogramValueType> GetHistogramValueType<i64>() {
     return EHistogramValueType::Int64;
 }
 
-template<>
+template <>
 inline std::optional<EHistogramValueType> GetHistogramValueType<ui16>() {
     return EHistogramValueType::Uint16;
 }
 
-template<>
+template <>
 inline std::optional<EHistogramValueType> GetHistogramValueType<ui32>() {
     return EHistogramValueType::Uint32;
 }
 
-template<>
+template <>
 inline std::optional<EHistogramValueType> GetHistogramValueType<ui64>() {
     return EHistogramValueType::Uint64;
 }
 
-template<>
+template <>
 inline std::optional<EHistogramValueType> GetHistogramValueType<double>() {
     return EHistogramValueType::Double;
 }
@@ -207,10 +208,10 @@ public:
         TEqWidthHistogram::TBucketRange range;
         StoreTo<T>(range.Start, rangeStart);
         StoreTo<T>(range.End, rangeEnd);
-        T start = LoadFrom<T>(range.Start);
-        T end = LoadFrom<T>(range.End);
+        const T start = LoadFrom<T>(range.Start);
+        const T end = LoadFrom<T>(range.End);
         Y_ASSERT(CmpLess<T>(start, end));
-        T rangeLen = end - start;
+        const T rangeLen = end - start;
         std::memcpy(Buckets_[0].Start, range.Start, sizeof(range.Start));
         for (ui32 i = 1; i < GetNumBuckets(); ++i) {
             const T prevStart = LoadFrom<T>(Buckets_[i - 1].Start);

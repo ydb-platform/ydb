@@ -7,17 +7,17 @@ TEqWidthHistogram::TEqWidthHistogram(ui32 numBuckets, EHistogramValueType valueT
     , Buckets_(numBuckets, 0)
 {
     // Exptected at least one bucket for histogram.
-    Y_ASSERT(numBuckets >= 1);
-    Y_ABORT_UNLESS(ValueType_ != EHistogramValueType::NotSupported);
+    Y_ENSURE(numBuckets >= 1);
+    Y_ENSURE(ValueType_ != EHistogramValueType::NotSupported, "Unsupported histogram type");
 }
 
-TEqWidthHistogram::TEqWidthHistogram(const char* str, ui64 size) {
-    Y_ASSERT(str && size);
+TEqWidthHistogram::TEqWidthHistogram(const char* str, size_t size) {
+    Y_ENSURE(str && size);
     const ui32 numBuckets = ReadUnaligned<ui32>(str);
-    Y_ABORT_UNLESS(GetBinarySize(numBuckets) == size);
+    Y_ENSURE(GetBinarySize(numBuckets) == size);
     ui32 offset = sizeof(ui32);
     ValueType_ = *reinterpret_cast<const EHistogramValueType*>(str + offset);
-    Y_ABORT_UNLESS(ValueType_ != EHistogramValueType::NotSupported);
+    Y_ENSURE(ValueType_ != EHistogramValueType::NotSupported, "Unsupported histogram type");
     offset += sizeof(EHistogramValueType);
     Buckets_ = TVector<TBucket>(numBuckets);
     for (ui32 i = 0; i < numBuckets; ++i) {
@@ -71,7 +71,7 @@ void TEqWidthHistogram::Aggregate(const TEqWidthHistogram& other) {
             break;
         }
         default:
-            Y_ABORT_UNLESS(ValueType_ != EHistogramValueType::NotSupported);
+            Y_ENSURE(ValueType_ != EHistogramValueType::NotSupported, "Unsupported histogram type");
     }
     for (ui32 i = 0; i < Buckets_.size(); ++i) {
         Buckets_[i].Count += other.GetNumElementsInBucket(i);

@@ -20,7 +20,7 @@ public:
             params[0].Get<ui64>(), params[1].Get<ui64>()));
     }
     static auto CreateStateUpdater(TTypeId columnTypeId) {
-        return [columnTypeId](TState& state, const TValue& val) {
+        return [columnTypeId](const TState& state, const TValue& val) {
             Y_ENSURE(state);
             VisitValue(columnTypeId, val, RawDataVisitor(
                 [&state](const char* data, size_t size) {
@@ -28,7 +28,7 @@ public:
                 }));
         };
     }
-    static void MergeStates(const TState& left, TState& right) {
+    static void MergeStates(const TState& left, const TState& right) {
         Y_ENSURE(left && right);
         *left += *right;
     }

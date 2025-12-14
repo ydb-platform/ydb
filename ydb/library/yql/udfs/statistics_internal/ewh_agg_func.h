@@ -21,7 +21,7 @@ public:
         switch (columnTypeId) {
 #define CREATE_HISTOGRAM_CASE(type, layout)                                                                 \
             case NUdf::TDataType<type>::Id: {                                                               \
-                auto valType = NKikimr::GetHistogramValueType<type>();                                      \
+                const auto valType = NKikimr::GetHistogramValueType<type>();                                      \
                 Y_ENSURE(valType, "Unsupported histogram data type");                                       \
                 histogram = std::make_unique<NKikimr::TEqWidthHistogram>(params[0].Get<ui32>(), *valType);  \
                 histogram->InitializeBuckets(params[1].Get<layout>(), params[2].Get<layout>());             \
@@ -38,12 +38,12 @@ public:
     }
 
     static auto CreateStateUpdater(TTypeId columnTypeId) {
-        return [columnTypeId](TState& state, const TValue& val) {
+        return [columnTypeId](const TState& state, const TValue& val) {
             Y_ENSURE(state);
             switch (columnTypeId) {
 #define MAKE_PRIMITIVE_VISITOR(type, layout)                                                                \
                 case NUdf::TDataType<type>::Id: {                                                           \
-                    auto valType = NKikimr::GetHistogramValueType<type>();                                  \
+                    const auto valType = NKikimr::GetHistogramValueType<type>();                                  \
                     Y_ENSURE(valType, "Unsupported histogram data type");                                   \
                     state->AddElement(val.Get<layout>());                                                   \
                     break;                                                                                  \
@@ -57,7 +57,7 @@ public:
         };
     }
 
-    static void MergeStates(const TState& left, TState& right) {
+    static void MergeStates(const TState& left, const TState& right) {
         Y_ENSURE(left && right);
         left->Aggregate(*right);
     }

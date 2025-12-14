@@ -157,8 +157,11 @@ TString THttpExecutor::PrettifyModelApiError(ui64 httpCode, const TString& respo
             return error << response->ToString();
         }
 
-        if (const auto& info = parser.MaybeKey("message")) {
-            return error << info->ToString();
+        if (const auto& response = parser.MaybeKey("message")) {
+            if (const auto& info = parser.MaybeKey("error")) {
+                return error << info->ToString();
+            }
+            return error << response->ToString();
         }
     }
 

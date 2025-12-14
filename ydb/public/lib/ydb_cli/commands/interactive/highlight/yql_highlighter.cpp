@@ -127,44 +127,47 @@ namespace {
 
         replxx::Replxx::Color lastColor = replxx::Replxx::Color::DEFAULT;
         const TVector<std::ptrdiff_t> symbolIndexByByte = BuildSymbolByByteIndex(queryUtf8);
+
+        auto flushSegment = [&]() {
+            if (!currentSegment.empty()) {
+                currentRow.push_back(
+                    ftxui::text(currentSegment) | ftxui::color(ToFtxuiColor(lastColor))
+                );
+                currentSegment.clear();
+            }
+        };
+
         for (size_t i = 0; i < queryUtf8.length(); ++i) {
             const char c = queryUtf8[i];
 
             if (c == '\n') {
-                if (!currentSegment.empty()) {
-                    currentRow.push_back(
-                        ftxui::text(currentSegment) | ftxui::color(ToFtxuiColor(lastColor))
-                    );
-                    currentSegment.clear();
-                }
-
-                rows.push_back(ftxui::hbox(std::move(currentRow)));
+                flushSegment();
+                rows.push_back(ftxui::hflow(std::move(currentRow)));
                 currentRow = {};
                 continue;
             }
 
             if (const auto symbolIndex = symbolIndexByByte[i]; symbolIndex != InvalidPosition) {
                 if (const auto currentColor = colors[symbolIndex]; currentColor != lastColor) {
-                    if (!currentSegment.empty()) {
-                        currentRow.push_back(
-                            ftxui::text(currentSegment) | ftxui::color(ToFtxuiColor(lastColor))
-                        );
-                        currentSegment.clear();
-                    }
+                    flushSegment();
                     lastColor = currentColor;
                 }
+            }
+
+            if (c == ' ') {
+                flushSegment();
+                currentRow.push_back(ftxui::text(" ") | ftxui::color(ToFtxuiColor(lastColor)));
+                continue; 
             }
 
             currentSegment += c;
         }
 
-        if (!currentSegment.empty()) {
-            currentRow.push_back(
-                ftxui::text(currentSegment) | ftxui::color(ToFtxuiColor(lastColor))
-            );
-        }
+        flushSegment();
 
-        rows.push_back(ftxui::hbox(std::move(currentRow)));
+        if (!currentRow.empty()) {
+            rows.push_back(ftxui::hflow(std::move(currentRow)));
+        }
 
         return ftxui::vbox(std::move(rows));
     }

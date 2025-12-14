@@ -81,7 +81,7 @@ void TModelHandler::HandleLine(const TString& input, std::function<void()> onSta
             if (onFinishWaiting) {
                 onFinishWaiting();
             }
-            Cerr << Colors.Red() << "Failed to perform model API request: " << e.what() << Colors.OldColor() << Endl;
+            Cerr << Colors.Red() << e.what() << Colors.OldColor() << Endl;
             break;
         }
 

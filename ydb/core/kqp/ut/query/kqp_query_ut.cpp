@@ -3471,10 +3471,10 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 UNIT_ASSERT_C(result.GetResultSets().size() > 0,
-                    "DISCARD SELECT should return result sets for dml (backward compability) but got: " << result.GetResultSets().size() << " for query " << query);
+                    "DISCARD SELECT should return result sets for dml (backward compatibility) but got: " << result.GetResultSets().size() << " for query " << query);
             }
         }
-        // backward compability test: scan
+        // backward compatibility test: scan
         for (auto& query : Concatenate(queries, invalidQueries)) {
             auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

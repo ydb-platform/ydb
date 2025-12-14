@@ -551,12 +551,6 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
             if (!source) {
                 return nullptr;
             }
-            auto writeSettings = source->GetWriteSettings();
-            if (writeSettings.Discard) {
-                Ctx_.Warning(source->GetPos(), TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
-                    out << "DISCARD can only be used at the top level, not inside subqueries";
-                });
-            }
             return BuildInnerSource(pos, BuildSourceNode(pos, std::move(source)), Ctx_.Scoped->CurrService, Ctx_.Scoped->CurrCluster);
         }
         case TRule_single_source::kAltSingleSource3: {
@@ -1326,7 +1320,9 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
         } else if (settings.Discard) {
             auto discardPos = Ctx_.TokenPosition(node.GetBlock1().GetToken1());
             Ctx_.Error(discardPos) << "DISCARD within UNION ALL is only allowed before first subquery";
+            return {};
         }
+
         if (placement->IsLastInSelectOp) {
             res.Settings.Label = settings.Label;
         } else if (!settings.Label.Empty()) {
@@ -1365,14 +1361,15 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
     } else {
         const auto& partial = node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
         const auto& innerSelectKind = partial.GetRule_select_kind1();
-
+        // filter only discard
         if (innerSelectKind.HasBlock1() && placement.Defined() && !placement->IsFirstInSelectOp) {
-            auto discardPos = Ctx_.TokenPosition(innerSelectKind.GetBlock1().GetToken1());
-            Ctx_.Warning(discardPos, TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
-                out << "DISCARD within UNION ALL is only allowed before first subquery";
-            });
+            auto discardPos = Ctx_.TokenPosition(partial.GetRule_select_kind1().GetBlock1().GetToken1());
+            if (!Ctx_.Warning(discardPos, TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
+                    out << "DISCARD within set operators has no effect in second or later subqueries";
+                })) {
+                return {};
+            }
         }
-        
         return SelectKind(partial, selectPos, {});
     }
 }

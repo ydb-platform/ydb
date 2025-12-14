@@ -2,6 +2,7 @@
 
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
+#include "schemeshard_xxport_common.h"
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
@@ -288,20 +289,6 @@ protected:
 
 // Downloads scheme-related objects from S3
 class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
-    struct ImportProperties {
-        TString FileName;
-        NBackup::EBackupFileType FileType;
-    };
-
-    static TVector<ImportProperties> SchemeProperties() {
-        return {
-            {NYdb::NDump::NFiles::TableScheme().FileName, NBackup::EBackupFileType::TableSchema},
-            {NYdb::NDump::NFiles::CreateView().FileName, NBackup::EBackupFileType::ViewCreate},
-            {NYdb::NDump::NFiles::CreateTopic().FileName, NBackup::EBackupFileType::TopicCreate},
-            {NYdb::NDump::NFiles::CreateAsyncReplication().FileName, NBackup::EBackupFileType::AsyncReplicationCreate},
-        };
-    }
-
     static TString MetadataKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
         return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/metadata.json";
@@ -372,12 +359,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
     void HeadNextScheme() {
-        if (++SchemePropertyIdx >= SchemeProperties().size()) {
+        if (++SchemePropertiesIdx >= GetXxportProperties().size()) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
         }
 
-        SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, SchemeProperties()[SchemePropertyIdx].FileName);
-        SchemeFileType = SchemeProperties()[SchemePropertyIdx].FileType;
+        SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, GetXxportProperties()[SchemePropertiesIdx].FileName);
+        SchemeFileType = GetXxportProperties()[SchemePropertiesIdx].FileType;
         HeadObject(SchemeKey);
     }
 
@@ -1038,7 +1025,7 @@ private:
     TString SchemeKey;
     NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
-    ui32 SchemePropertyIdx = 0;
+    ui32 SchemePropertiesIdx = 0;
 
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;

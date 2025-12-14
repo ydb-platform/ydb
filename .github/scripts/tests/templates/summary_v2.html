@@ -315,12 +315,15 @@
             font-size: 12px;
             white-space: nowrap;
             flex-shrink: 0;
+            min-width: 50px;
+            text-align: center;
         }
         .test-duration {
             font-size: 12px;
             color: #656d76;
             white-space: nowrap;
             flex-shrink: 0;
+            min-width: 50px;
         }
         .suite-duration {
             font-size: 12px;
@@ -351,17 +354,16 @@
         .test-meta {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
             flex-wrap: nowrap;
             flex: 1;
             min-width: 0;
         }
-        .test-badges {
-            display: inline-flex;
-            gap: 6px;
-            align-items: center;
-            flex-wrap: nowrap;
+        .test-meta > * {
             flex-shrink: 0;
+        }
+        .test-meta > .test-owner {
+            margin-left: auto;
         }
         .test-badges {
             display: inline-flex;
@@ -369,6 +371,9 @@
             align-items: center;
             flex-wrap: nowrap;
             flex-shrink: 0;
+        }
+        .test-badges:empty {
+            display: none;
         }
         .test-owner {
             font-size: 12px;
@@ -395,6 +400,9 @@
             flex-wrap: nowrap;
             flex-shrink: 0;
         }
+        .log-links:empty {
+            display: none;
+        }
         .log-link {
             font-size: 11px;
             color: #0969da;
@@ -420,7 +428,7 @@
             cursor: pointer;
             font-size: 12px;
             font-weight: 500;
-            margin-left: 8px;
+            white-space: nowrap;
         }
         .success-rate-button:hover {
             background-color: #0256cc;
@@ -512,17 +520,16 @@
             min-width: 0;
         }
         .test-actions {
-            margin-left: 12px;
             display: inline-flex;
             gap: 4px;
             align-items: center;
             flex-shrink: 0;
-            margin-right: auto;
         }
         .test-action-btn {
             background: none;
             border: none;
             cursor: pointer;
+            white-space: nowrap;
             padding: 2px 4px;
             display: inline-flex;
             align-items: center;
@@ -748,13 +755,13 @@
     <div class="filter-buttons">
         <div class="filter-buttons-row">
             <div class="filter-buttons-left">
-                <button class="filter-btn active all" onclick="setFilter('all', this)">All ({{ test_counts.all }})</button>
-                <button class="filter-btn passed" onclick="setFilter('passed', this)">Passed ({{ test_counts.passed }})</button>
-                <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }})</button>
-                <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }})</button>
-                <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }})</button>
-                <button class="filter-btn skipped" onclick="setFilter('skipped', this)">Skipped ({{ test_counts.skipped }})</button>
-            </div>
+        <button class="filter-btn active all" onclick="setFilter('all', this)">All ({{ test_counts.all }})</button>
+        <button class="filter-btn passed" onclick="setFilter('passed', this)">Passed ({{ test_counts.passed }})</button>
+        <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }})</button>
+        <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }})</button>
+        <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }})</button>
+        <button class="filter-btn skipped" onclick="setFilter('skipped', this)">Skipped ({{ test_counts.skipped }})</button>
+    </div>
         </div>
         <div class="filter-buttons-row">
             <div class="group-by-selector">
@@ -814,34 +821,36 @@
                             {% if test.status.value == 1 or test.status.value == 2 or test.status.value == 4 %}
                             {% if test.full_name in test_success_rates %}
                             {% set rates = test_success_rates[test.full_name] %}
-                            <button class="success-rate-button" onclick="showSuccessRateModal({{ test.full_name|tojson }})" title="View success rate and history">
+                            <button class="success-rate-button" data-test-full-name="{{ test.full_name|e }}" data-action="show-success-rate" title="View success rate and history">
                                 <span class="emoji">&#128202;</span> 
                                 {% if rates.other %}{{ branch|upper }}:{{ rates.other.rate }}%{% endif %}
                                 {% if rates.other and rates.pr_check %} | {% endif %}
                                 {% if rates.pr_check %}PR:{{ rates.pr_check.rate }}%{% endif %}
                             </button>
                             {% else %}
-                            <button class="success-rate-button" onclick="showSuccessRateModal({{ test.full_name|tojson }})" title="View success rate and history">
+                            <button class="success-rate-button" data-test-full-name="{{ test.full_name|e }}" data-action="show-success-rate" title="View success rate and history">
                                 <span class="emoji">&#128202;</span> No history
                             </button>
                             {% endif %}
                             {% endif %}
                         </div>
-                            
-                            {% if test.log_urls %}
-                            <span class="log-links">
-                                {% for log_name, log_url in test.log_urls.items() %}
-                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
-                                {% endfor %}
-                            </span>
-                            {% endif %}
-                            
-                            <div class="test-actions">
-                                <button class="test-action-btn" onclick="copyTestName({{ test.full_name|tojson }})" title="Copy full test name"><span class="emoji">&#128203;</span> Copy name</button>
-                                <button class="test-action-btn" onclick="copyRunCommand({{ test.full_name|tojson }})" title="Copy run command"><span class="emoji">&#128203;</span> Copy cmd</button>
-                                <button class="test-action-btn" onclick="openHistory({{ test.full_name|tojson }})" title="Open history"><span class="emoji">&#128202;</span> History</button>
-                            </div>
+                        
+                        {% if test.log_urls %}
+                        <span class="log-links">
+                            {% for log_name, log_url in test.log_urls.items() %}
+                            <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
+                            {% endfor %}
+                        </span>
+                        {% else %}
+                        <span class="log-links"></span>
+                        {% endif %}
+                        
+                        <div class="test-actions">
+                            <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="copy-name" title="Copy full test name"><span class="emoji">&#128203;</span> Copy name</button>
+                            <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="copy-cmd" title="Copy run command"><span class="emoji">&#128203;</span> Copy cmd</button>
+                            <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="open-history" title="Open history"><span class="emoji">&#128202;</span> History</button>
                         </div>
+                    </div>
                         
                         {% if test.status_description %}
                         <div class="error-section">
@@ -971,6 +980,33 @@
                     }
                 }
             });
+            
+            // Add click handlers for action buttons using event delegation
+            document.addEventListener('click', function(e) {
+                const button = e.target.closest('[data-action]');
+                if (!button) return;
+                
+                const action = button.getAttribute('data-action');
+                const testFullName = button.getAttribute('data-test-full-name');
+                
+                if (!testFullName) return;
+                
+                switch(action) {
+                    case 'show-success-rate':
+                        showSuccessRateModal(testFullName);
+                        break;
+                    case 'copy-name':
+                        copyTestName(testFullName);
+                        break;
+                    case 'copy-cmd':
+                        copyRunCommand(testFullName);
+                        break;
+                    case 'open-history':
+                        openHistory(testFullName);
+                        break;
+                }
+            });
+            
             // Initialize filter from URL - apply immediately to prevent showing all tests
             if (window.__initialFilter) {
                 // Use pre-parsed filter from inline script
@@ -988,11 +1024,11 @@
                 
                 // Handle status filter
                 if (filter && filter !== 'sanitizer') {
-                    const button = document.querySelector(`.filter-btn.${filter}`);
-                    if (button) {
-                        // Apply main filter immediately
-                        setFilter(filter, button);
-                    }
+                const button = document.querySelector(`.filter-btn.${filter}`);
+                if (button) {
+                    // Apply main filter immediately
+                    setFilter(filter, button);
+                        }
                 } else {
                     // No status filter, just apply sanitizer if needed
                     applyFilters();
@@ -1221,30 +1257,30 @@
             
             // Show/hide suites based on visible tests, update counts (only for suite view)
             if (currentGroupBy === 'suite') {
-                allSuites.forEach(suiteGroup => {
-                    const suiteContent = suiteGroup.querySelector('.suite-content');
-                    const allTestsInSuite = suiteContent.querySelectorAll('.test-item');
-                    const visibleCount = Array.from(allTestsInSuite).filter(item => 
-                        item.style.display !== 'none'
-                    ).length;
-                    
-                    // Update suite header count
-                    const countSpan = suiteGroup.querySelector('.suite-header span:nth-of-type(2)');
-                    if (countSpan && countSpan.textContent.includes('(')) {
-                        countSpan.textContent = ` (${visibleCount} test${visibleCount !== 1 ? 's' : ''})`;
-                    }
-                    
-                    // Show/hide suite based on visible tests
-                    if (visibleCount > 0) {
-                        suiteGroup.style.display = '';
-                        // Expand all suites when filtering
-                        suiteContent.classList.remove('hidden');
-                        const toggle = suiteGroup.querySelector('.suite-toggle');
-                        if (toggle) toggle.textContent = '\u25BC';
-                    } else {
-                        suiteGroup.style.display = 'none';
-                    }
-                });
+            allSuites.forEach(suiteGroup => {
+                const suiteContent = suiteGroup.querySelector('.suite-content');
+                const allTestsInSuite = suiteContent.querySelectorAll('.test-item');
+                const visibleCount = Array.from(allTestsInSuite).filter(item => 
+                    item.style.display !== 'none'
+                ).length;
+                
+                // Update suite header count
+                const countSpan = suiteGroup.querySelector('.suite-header span:nth-of-type(2)');
+                if (countSpan && countSpan.textContent.includes('(')) {
+                    countSpan.textContent = ` (${visibleCount} test${visibleCount !== 1 ? 's' : ''})`;
+                }
+                
+                // Show/hide suite based on visible tests
+                if (visibleCount > 0) {
+                    suiteGroup.style.display = '';
+                    // Expand all suites when filtering
+                    suiteContent.classList.remove('hidden');
+                    const toggle = suiteGroup.querySelector('.suite-toggle');
+                    if (toggle) toggle.textContent = '\u25BC';
+                } else {
+                    suiteGroup.style.display = 'none';
+                }
+            });
             }
             
             // Update URL without reload
@@ -1344,7 +1380,7 @@
                 if (typeof Prism !== 'undefined' && errorContent.querySelector('code') && !errorContent.querySelector('code').hasAttribute('data-prism-loaded')) {
                     const codeElement = errorContent.querySelector('code');
                     requestAnimationFrame(() => {
-                        Prism.highlightElement(codeElement);
+                            Prism.highlightElement(codeElement);
                         codeElement.setAttribute('data-prism-loaded', 'true');
                     });
                 }

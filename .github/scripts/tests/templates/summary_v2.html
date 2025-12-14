@@ -60,12 +60,21 @@
             gap: 10px;
             align-items: center;
         }
+        .filter-by-section label {
+            font-size: 14px;
+            font-weight: 500;
+        }
         .filter-by-btn {
-            padding: 6px 12px;
+            padding: 8px 16px;
             border: 1px solid #d0d7de;
-            border-radius: 4px;
-            background-color: #ffffff;
+            border-radius: 6px;
+            background-color: #f6f8fa;
             cursor: pointer;
+            font-size: 14px;
+            min-height: 36px;
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
             font-size: 13px;
             font-weight: normal;
             color: #24292f;
@@ -289,6 +298,8 @@
             border-radius: 6px;
             background-color: #f6f8fa;
             font-size: 14px;
+            min-height: 36px;
+            box-sizing: border-box;
             font-weight: 500;
             cursor: pointer;
         }
@@ -834,23 +845,23 @@
                             {% endif %}
                             {% endif %}
                         </div>
-                        
-                        {% if test.log_urls %}
-                        <span class="log-links">
-                            {% for log_name, log_url in test.log_urls.items() %}
-                            <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
-                            {% endfor %}
-                        </span>
+                            
+                            {% if test.log_urls %}
+                            <span class="log-links">
+                                {% for log_name, log_url in test.log_urls.items() %}
+                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
+                                {% endfor %}
+                            </span>
                         {% else %}
                         <span class="log-links"></span>
-                        {% endif %}
+                            {% endif %}
                         
                         <div class="test-actions">
                             <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="copy-name" title="Copy full test name"><span class="emoji">&#128203;</span> Copy name</button>
                             <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="copy-cmd" title="Copy run command"><span class="emoji">&#128203;</span> Copy cmd</button>
                             <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="open-history" title="Open history"><span class="emoji">&#128202;</span> History</button>
                         </div>
-                    </div>
+                        </div>
                         
                         {% if test.status_description %}
                         <div class="error-section">

@@ -12,6 +12,7 @@
 
 #include <library/cpp/colorizer/colors.h>
 
+#include <util/charset/utf8.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 
@@ -329,10 +330,15 @@ bool AskYesNoFtxui(const TString& question, bool defaultAnswer) {
 }
 
 void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& title, ftxui::Color color) {
+    int titleUtf8Size = 0;
+    for (size_t i = 0; i < title.size(); i += UTF8RuneLen(title[i])) {
+        titleUtf8Size++;
+    }
+
     const auto screenWidth = ftxui::Terminal::Size().dimx;
     std::string separator;
     separator.reserve(screenWidth);
-    for (int i = 0; i < screenWidth - static_cast<int>(title.size()) - 4; ++i) {
+    for (int i = 0; i < screenWidth - titleUtf8Size - 4; ++i) {
         separator += "─";
     }
 

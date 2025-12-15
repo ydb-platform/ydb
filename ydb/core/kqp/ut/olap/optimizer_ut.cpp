@@ -301,7 +301,18 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
-        auto tableClient = kikimr.GetTableClient();
+        auto tableClient = kikimr.GetTableClient(); 
+
+        for (ui32 i = 0; i < 100; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 100 * i, 1000);
+        }
+
+        {
+            auto queryClient = kikimr.GetQueryClient();
+            auto it = queryClient.ExecuteQuery("DELETE FROM `/Root/olapStore/olapTable`", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
 
         {
             auto alterQuery =
@@ -313,17 +324,6 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
-
-        for (ui32 i = 0; i < 100; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 100 * i, 1000);
-        }
-
-        {
-            auto queryClient = kikimr.GetQueryClient();
-            auto it = queryClient.ExecuteQuery("DELETE FROM `/Root/olapStore/olapTable`", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                          .ExtractValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
 
         csController->WaitCompactions(TDuration::Seconds(25));

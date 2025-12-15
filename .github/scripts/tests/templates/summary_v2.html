@@ -1069,7 +1069,27 @@
             });
             button.classList.add('active', filter);
             
-            // Don't deactivate sanitizer filter - it's independent
+            // When switching status filter, deactivate timeout and sanitizer filters
+            // They should be independent per status, not persist across status changes
+            if (currentMainFilter !== filter) {
+                // Deactivate timeout filter when switching status
+                if (currentTimeoutFilter) {
+                    const timeoutBtn = document.getElementById('timeout-filter-btn');
+                    if (timeoutBtn) {
+                        timeoutBtn.classList.remove('active');
+                    }
+                    currentTimeoutFilter = false;
+                }
+                // Deactivate sanitizer filter when switching status
+                if (currentSanitizerFilter) {
+                    const sanitizerBtn = document.getElementById('sanitizer-filter-btn');
+                    if (sanitizerBtn) {
+                        sanitizerBtn.classList.remove('active');
+                    }
+                    currentSanitizerFilter = false;
+                }
+            }
+            
             // Update current main filter
             currentMainFilter = filter;
             

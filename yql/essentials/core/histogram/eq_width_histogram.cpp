@@ -28,7 +28,7 @@ TEqWidthHistogram::TEqWidthHistogram(const char* str, size_t size) {
 
 void TEqWidthHistogram::Aggregate(const TEqWidthHistogram& other) {
     switch (ValueType_) {
-#define HIST_TYPE_CHECK(type, layout)        \
+#define HIST_TYPE_CHECK(layout, type)        \
     case EHistogramValueType::layout: {      \
         Y_ENSURE(BucketsEqual<type>(other)); \
     }

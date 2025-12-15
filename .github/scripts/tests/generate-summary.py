@@ -86,6 +86,7 @@ class TestResult:
     status_description: str
     error_type: str = ""
     is_sanitizer_issue: bool = False
+    is_timeout_issue: bool = False
 
     @property
     def status_display(self):
@@ -197,7 +198,8 @@ class TestResult:
             owners='',
             status_description=status_description or '',
             error_type=error_type or '',
-            is_sanitizer_issue=is_sanitizer_issue(status_description or '')
+            is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
+            is_timeout_issue=(error_type or '').lower() == 'timeout'
         )
 
 
@@ -484,6 +486,9 @@ def iter_build_results_files(path):
             
             for result in report.get("results") or []:
                 if result.get("type") == "test":
+                    # Skip suite-level entries (they are aggregates, not individual tests)
+                    if result.get("suite") == True:
+                        continue
                     yield fn, result
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)

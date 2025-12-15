@@ -98,6 +98,16 @@ void THive::RestartPipeTx(ui64 tabletId) {
 bool THive::TryToDeleteNode(TNodeInfo* node) {
     if (node->CanBeDeleted(TActivationContext::Now())) {
         BLOG_I("TryToDeleteNode(" << node->Id << "): deleting");
+<<<<<<< HEAD
+=======
+        if (BridgeInfo) {
+            auto& pileInfo = GetPile(node->BridgePileId);
+            pileInfo.Nodes.erase(node->Id);
+        }
+        if (node->Down) {
+            UpdateCounterNodesDown(-1);
+        }
+>>>>>>> b318bf4e910 (fixes for down/frozen node counters (#30599))
         DeleteNode(node->Id);
         return true;
     }

@@ -727,6 +727,10 @@ public:
                 future = DoTouch(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtDropTable>()) {
                 future = DoDrop(op.Cast(), execCtx);
+            } else if (auto op = opBase.Maybe<TYtDropView>()) {
+                future = DoDrop(op.Cast(), execCtx);
+            } else if (auto op = opBase.Maybe<TYtCreateView>()) {
+                future = DoCreateView(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtStatOut>()) {
                 future = DoStatOut(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtDqProcessWrite>()) {
@@ -4953,7 +4957,7 @@ private:
         });
     }
 
-    TFuture<void> DoDrop(TYtDropTable drop, const TExecContext<TRunOptions>::TPtr& execCtx) {
+    TFuture<void> DoDrop(TYtIsolatedOpBase drop, const TExecContext<TRunOptions>::TPtr& execCtx) {
         TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
         auto table = drop.Table();
         bool isAnonymous = NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous);
@@ -4964,6 +4968,23 @@ private:
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             auto entry = execCtx->GetEntry();
             entry->Tx->Remove(path, TRemoveOptions().Force(true));
+        });
+    }
+
+    TFuture<void> DoCreateView(TYtCreateView create, const TExecContext<TRunOptions>::TPtr& execCtx) {
+        const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
+        const auto table = create.Table();
+        const bool isAnonymous = NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous);
+        const auto path = NYql::TransformPath(tmpFolder, table.Name().Value(), isAnonymous, execCtx->Session_->UserName_);
+        YQL_CLOG(INFO, ProviderYt) << "Creating: " << execCtx->Cluster_ << '.' << path;
+
+        auto attrs = YqlOpOptionsToAttrs(execCtx->Session_->OperationOptions_);
+        attrs[YqlTypeAttribute] = "view";
+        attrs["value"] = create.Original().Value();
+
+        return execCtx->Session_->Queue_->Async([path, attrs, execCtx]() {
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->GetEntry()->Tx->Create(path, NT_DOCUMENT, TCreateOptions().Force(true).Attributes(attrs));
         });
     }
 

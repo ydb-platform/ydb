@@ -92,9 +92,14 @@ struct TTopicMetricCollector {
             auto& collector = Consumers[consumer.GetConsumer()];
             collector.MLPConsumerLabeledCounters.Collect(consumer.GetCountersValues());
 
-            const size_t count = std::min<size_t>(consumer.GetMessageLocksValues().size(), MLP_LOCKS_BOUNDS.size());
-            for (size_t i = 0; i < count; ++i) {
-                collector.MLPMessageLockAttemptsCounter[i] += consumer.GetMessageLocksValues()[i];
+            if (collector.MLPMessageLockAttemptsCounter.empty()) {
+                collector.MLPMessageLockAttemptsCounter.resize(MLP_LOCKS_BOUNDS.size() + 1);
+            }
+
+            if (size_t(consumer.GetMessageLocksValues().size()) == collector.MLPMessageLockAttemptsCounter.size()) {
+                for (size_t i = 0; i <= MLP_LOCKS_BOUNDS.size(); ++i) {
+                    collector.MLPMessageLockAttemptsCounter[i] += consumer.GetMessageLocksValues()[i];
+                }
             }
         }
     }
@@ -299,10 +304,13 @@ void TTopicMetricsHandler::UpdateMetrics() {
         if (!consumerCounters.MLPClientLabeledCounters.Counters.empty()) {
             SetCounters(consumerCounters.MLPClientLabeledCounters, consumerMetrics.MLPConsumerLabeledCounters);
 
-            for (size_t i = 0; i < MLP_LOCKS_BOUNDS.size(); ++i) {
-                consumerCounters.MLPMessageLockAttemptsCounter->Collect(MLP_LOCKS_BOUNDS[i], consumerMetrics.MLPMessageLockAttemptsCounter[i]);
+            if (!consumerMetrics.MLPMessageLockAttemptsCounter.empty()) {
+                consumerCounters.MLPMessageLockAttemptsCounter->Reset();
+                for (size_t i = 0; i < MLP_LOCKS_BOUNDS.size(); ++i) {
+                    consumerCounters.MLPMessageLockAttemptsCounter->Collect(MLP_LOCKS_BOUNDS[i], consumerMetrics.MLPMessageLockAttemptsCounter[i]);
+                }
+                consumerCounters.MLPMessageLockAttemptsCounter->Collect(Max<double>(), consumerMetrics.MLPMessageLockAttemptsCounter[MLP_LOCKS_BOUNDS.size()]);
             }
-            consumerCounters.MLPMessageLockAttemptsCounter->Collect(Max<double>(), consumerMetrics.MLPMessageLockAttemptsCounter[MLP_LOCKS_BOUNDS.size()]);
         }
     }
 }

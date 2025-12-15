@@ -836,15 +836,15 @@ void TConsumerActor::UpdateMetrics() {
     auto* values = counters.MutableCountersValues();
     values->Resize(10, 0);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_COMMITTED_COUNT, metrics.CommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_LOCKED_COUNT, metrics.CommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_DELAYED_COUNT, metrics.CommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_UNLOCKED_COUNT, metrics.CommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT, metrics.CommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_COMMITTED_COUNT, metrics.CommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_MOVED_TO_DLQ_COUNT, metrics.CommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_DELETED_BY_RETENTION_COUNT, metrics.CommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_DELETED_BY_DEADLINE_POLICY_COUNT, metrics.CommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_PURGED_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_LOCKED_COUNT, metrics.LockedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_DELAYED_COUNT, metrics.DelayedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_UNLOCKED_COUNT, metrics.UnprocessedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT, metrics.TotalScheduledToDLQMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_COMMITTED_COUNT, metrics.TotalCommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_MOVED_TO_DLQ_COUNT, metrics.TotalMovedToDLQMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_DELETED_BY_RETENTION_COUNT, metrics.TotalDeletedByRetentionMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_DELETED_BY_DEADLINE_POLICY_COUNT, metrics.TotalDeletedByDeadlinePolicyMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_PURGED_COUNT, metrics.TotalPurgedMessageCount);
 
     for (size_t i = 0; i < metrics.MessageLocks.GetRangeCount(); ++i) {
         counters.AddMessageLocksValues(metrics.MessageLocks.GetRangeValue(i));

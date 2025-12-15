@@ -274,6 +274,9 @@ private:
         if (req->include_shard_key_bounds()) {
             record->MutableOptions()->SetReturnBoundaries(true);
         }
+        if (req->return_cached_result()) {
+            record->MutableOptions()->SetReturnCachedResult(true);
+        }
 
         if (req->include_partition_stats() && req->include_table_stats()) {
             record->MutableOptions()->SetReturnPartitionStats(true);

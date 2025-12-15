@@ -1285,7 +1285,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional bool AllowUnderSameOperation = 7 [default = false];
 
     optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
-    
+
     // Map from index name to CDC stream config for incremental backups
     // Key: index name (e.g., "age_index", "name_index")
     // Value: CDC stream configuration to create on that index's impl table
@@ -1955,6 +1955,10 @@ message TDescribeOptions {
     optional bool ReturnSetVal = 10 [default = false];
     optional bool ReturnIndexTableBoundaries = 11 [default = false];
     optional bool ReturnSecretValue = 12 [default = false];
+    // ReturnCachedResult have no effect at schemeshard.
+    // This option is intended for tx-proxy, which can respond
+    // with data from either schemeshard or scheme-cache.
+    optional bool ReturnCachedResult = 13 [default = false];
 }
 
 // Request to read scheme for a specific path

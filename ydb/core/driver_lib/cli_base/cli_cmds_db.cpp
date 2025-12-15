@@ -185,25 +185,18 @@ public:
 
     TAutoPtr<NKikimrClient::TSchemeDescribe> Request;
     TString Path;
-    bool Tree;
-    bool Details;
-    bool AccessRights;
-    bool AccessRightsEffective;
-    bool BackupInfo;
-    bool Protobuf;
-    bool PartitionStats;
-    bool Boundaries;
+    bool Tree = false;
+    bool Details = false;
+    bool AccessRights = false;
+    bool AccessRightsEffective = false;
+    bool BackupInfo = false;
+    bool Protobuf = false;
+    bool PartitionStats = false;
+    bool Boundaries = false;
+    bool CachedResult = false;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        Tree = false;
-        Details = false;
-        AccessRights = false;
-        AccessRightsEffective = false;
-        BackupInfo = false;
-        Protobuf = false;
-        PartitionStats = false;
-        Boundaries = false;
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<PATH>", "Schema path or pathId (e.g. 72075186232623600/1225)");
         config.Opts->AddLongOption('t', "tree", "Show schema path tree").StoreTrue(&Tree);
@@ -214,6 +207,7 @@ public:
         config.Opts->AddLongOption('P', "protobuf", "Debug print all info as is").StoreTrue(&Protobuf);
         config.Opts->AddLongOption('s', "stats", "Return partition stats").StoreTrue(&PartitionStats);
         config.Opts->AddLongOption("boundaries", "Return boundaries").StoreTrue(&Boundaries);
+        config.Opts->AddLongOption("cached", "Return result from cache").StoreTrue(&CachedResult);
     }
 
     virtual void Parse(TConfig& config) override {
@@ -236,11 +230,12 @@ public:
             Request->SetPathId(pathId);
         }
         auto options = Request->MutableOptions();
+        options->SetShowPrivateTable(true);
         options->SetBackupInfo(BackupInfo);
         options->SetReturnPartitionStats(PartitionStats);
         options->SetReturnBoundaries(Boundaries);
         options->SetReturnPartitioningInfo(!Boundaries);
-        options->SetShowPrivateTable(true);
+        options->SetReturnCachedResult(CachedResult);
 
         Protobuf = Protobuf || PartitionStats || Boundaries;
     }

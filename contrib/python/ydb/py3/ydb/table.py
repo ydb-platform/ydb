@@ -59,9 +59,14 @@ class DescribeTableSettings(settings_impl.BaseRequestSettings):
         super(DescribeTableSettings, self).__init__()
         self.include_shard_key_bounds = False
         self.include_table_stats = False
+        self.return_cached_result = False
 
     def with_include_shard_key_bounds(self, value):
         self.include_shard_key_bounds = value
+        return self
+
+    def with_return_cached_result(self, value):
+        self.return_cached_result = value
         return self
 
     def with_include_table_stats(self, value):

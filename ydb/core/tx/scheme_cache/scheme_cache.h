@@ -235,6 +235,12 @@ struct TSchemeCacheNavigate {
         NKikimrSubDomains::TDomainDescription Description;
     };
 
+    struct TTableInfo : public TAtomicRefCount<TTableInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TTableDescription Description;
+        std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    };
+
     struct TPQGroupInfo : public TAtomicRefCount<TPQGroupInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TPersQueueGroupDescription Description;
@@ -367,14 +373,17 @@ struct TSchemeCacheNavigate {
         TIntrusivePtr<TSecurityObject> SecurityObject;
         TIntrusiveConstPtr<TDirEntryInfo> Self;
         TIntrusiveConstPtr<TListNodeEntry> ListNodeEntry;
+        THashMap<TString, TString> Attributes;
 
         // table specific
-        THashMap<TString, TString> Attributes;
+        TIntrusiveConstPtr<TTableInfo> TableInfo;
+        //TODO: move all the following to TableInfo?
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
+
         ETableKind TableKind = ETableKind::KindUnknown;
 
         // other

@@ -389,10 +389,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         assert len(result_set.rows) == 0
 
     def _validate_types_mapping(self, result_sets, rows_count):
-        if result_sets is None:
-            return
-
-        assert len(result_sets) != 0
+        assert result_sets is not None and len(result_sets) != 0
 
         result_rows_count = 0
         for result_set in result_sets:
@@ -412,10 +409,10 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         assert result_rows_count == rows_count
 
     def _validate_compression(self, result_sets, rows_count, codec):
-        if result_sets is None:
+        if result_sets is None and codec.type == ydb.ArrowCompressionCodecType.LZ4_FRAME and codec.level is not None:
             return
 
-        assert len(result_sets) != 0
+        assert result_sets is not None and len(result_sets) != 0
 
         result_rows_count = 0
         for result_set in result_sets:
@@ -437,10 +434,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         assert result_rows_count == rows_count
 
     def _validate_schema_inclusion_mode(self, result_sets, rows_count, schema_inclusion_mode, stmt_cnt):
-        if result_sets is None:
-            return
-
-        assert len(result_sets) != 0
+        assert result_sets is not None and len(result_sets) != 0
 
         # To detect the schema inclusion mode
         if self.channel_buffer_size == kb_to_b(2):
@@ -488,7 +482,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         for query in empty_response_queries:
             result_sets = self._try_execute(query)
-            assert len(result_sets) == 0
+            assert result_sets is not None and len(result_sets) == 0
 
         empty_result_queries = [
             f"SELECT * FROM {table_name} WHERE 1 = 0;",
@@ -497,7 +491,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         for query in empty_result_queries:
             result_sets = self._try_execute(query)
-            assert len(result_sets) == 1
+            assert result_sets is not None and len(result_sets) == 1
 
             result = result_sets[0]
             self.validate_format_arrow(result)
@@ -510,10 +504,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             assert batch.num_columns == len(self.all_types) + 1
 
     def _validate_limit_ordered_columns(self, result_sets, rows_count):
-        if result_sets is None:
-            return
-
-        assert len(result_sets) != 0
+        assert result_sets is not None and len(result_sets) != 0
 
         result_rows_count = 0
         for result_set in result_sets:
@@ -537,7 +528,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
         query = f"SELECT col_Int64 AS {first_alias}, col_String AS {second_alias} FROM {table_name} LIMIT 1;"
         result_sets = self._try_execute(query)
-        assert len(result_sets) == 1
+        assert result_sets is not None and len(result_sets) == 1
 
         result = result_sets[0]
         self.validate_format_arrow(result)

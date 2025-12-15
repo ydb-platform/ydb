@@ -289,10 +289,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
         assert result_set.data is None or len(result_set.data) == 0
 
     def _validate_schema_inclusion_mode(self, result_sets, rows_count, schema_inclusion_mode, stmt_cnt):
-        if result_sets is None:
-            return
-
-        assert len(result_sets) != 0
+        assert result_sets is not None and len(result_sets) != 0
 
         # To detect the schema inclusion mode
         if self.channel_buffer_size == kb_to_b(2):
@@ -330,7 +327,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
 
         for query in empty_response_queries:
             result_sets = self._try_execute(query)
-            assert len(result_sets) == 0
+            assert result_sets is not None and len(result_sets) == 0
 
         empty_result_queries = [
             f"SELECT * FROM {table_name} WHERE 1 = 0;",
@@ -339,7 +336,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
 
         for query in empty_result_queries:
             result_sets = self._try_execute(query)
-            assert len(result_sets) == 1
+            assert result_sets is not None and len(result_sets) == 1
 
             result = result_sets[0]
             self.validate_format_value(result)
@@ -347,10 +344,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
             assert len(result.rows) == 0
 
     def _validate_limit_ordered_columns(self, result_sets, rows_count):
-        if result_sets is None:
-            return
-
-        assert len(result_sets) != 0
+        assert result_sets is not None and len(result_sets) != 0
 
         result_rows_count = 0
         all_columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]]
@@ -371,7 +365,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
 
         query = f"SELECT col_Int64 AS {first_alias}, col_String AS {second_alias} FROM {table_name} LIMIT 1;"
         result_sets = self._try_execute(query)
-        assert len(result_sets) == 1
+        assert result_sets is not None and len(result_sets) == 1
 
         result = result_sets[0]
         self.validate_format_value(result)

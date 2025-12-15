@@ -330,7 +330,7 @@ def main():
     parser.add_argument(
         "--log_truncate_size",
         type=int,
-        default=134217728,  # 128 kb
+        default=134217728,  # 128 MB
         help="truncate log after specific size, 0 disables truncation",
     )
     parser.add_argument("--ya_out", help="ya make output dir (for searching logs and artifacts)")

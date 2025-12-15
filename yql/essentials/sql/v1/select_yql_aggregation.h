@@ -9,6 +9,7 @@ struct TYqlAggregationArgs {
     TString FunctionName;
     TString FactoryName;
     EAggregationType Type;
+    EAggregateMode Mode;
     TVector<TNodePtr> Args;
 };
 

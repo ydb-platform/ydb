@@ -6084,8 +6084,11 @@ IGraphTransformer::TStatus PgSubLinkWrapper(const TExprNode::TPtr& input, TExprN
 
         input->SetTypeAnn(valueType);
     } else {
-        auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("bool").TypeId);
-        input->SetTypeAnn(result);
+        if (isYql) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
+        } else {
+            input->SetTypeAnn(ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("bool").TypeId));
+        }
     }
 
     return IGraphTransformer::TStatus::Ok;

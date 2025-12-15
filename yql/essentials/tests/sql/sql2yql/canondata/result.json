@@ -8546,6 +8546,13 @@
             "uri": "https://{canondata_backend}/1784117/01d5a74e6d83f8c3d38e7fc80ab9529f2963f1fb/resource.tar.gz#test_sql2yql.test_select_yql-group_by_a_sum_b_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-group_by_a_sum_distinct_b]": [
+        {
+            "checksum": "55378a2f5ecb58579de82655dbbfa21a",
+            "size": 1416,
+            "uri": "https://{canondata_backend}/1925821/e15a824de419c2d5911f7386b08f58e851d50955/resource.tar.gz#test_sql2yql.test_select_yql-group_by_a_sum_distinct_b_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-group_by_a_where_count_b]": [
         {
             "checksum": "684d876784cfeefa2318be43a2fcf5fb",
@@ -8789,6 +8796,13 @@
             "checksum": "8ed13acec68a3cb3bb3226795619c283",
             "size": 2549,
             "uri": "https://{canondata_backend}/1924537/d8a92a2e519e59785f71da8d5ba57ab890e2c729/resource.tar.gz#test_sql2yql.test_select_yql_tpch-q12_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql_tpch-tpch_q04]": [
+        {
+            "checksum": "69e5a3142071e1dbfb1b405496584885",
+            "size": 2092,
+            "uri": "https://{canondata_backend}/1925821/a9f649e2711b6d56ff3834e109b88adf155f3115/resource.tar.gz#test_sql2yql.test_select_yql_tpch-tpch_q04_/sql.yql"
         }
     ],
     "test_sql2yql.test[seq_mode-shared_named_expr]": [
@@ -14143,6 +14157,11 @@
             "uri": "file://test_sql_format.test_select_yql-group_by_a_sum_b_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select_yql-group_by_a_sum_distinct_b]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-group_by_a_sum_distinct_b_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select_yql-group_by_a_where_count_b]": [
         {
             "uri": "file://test_sql_format.test_select_yql-group_by_a_where_count_b_/formatted.sql"
@@ -14316,6 +14335,11 @@
     "test_sql_format.test[select_yql_tpch-q12]": [
         {
             "uri": "file://test_sql_format.test_select_yql_tpch-q12_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql_tpch-tpch_q04]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql_tpch-tpch_q04_/formatted.sql"
         }
     ],
     "test_sql_format.test[seq_mode-shared_named_expr]": [

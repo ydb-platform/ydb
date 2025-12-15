@@ -232,13 +232,6 @@ public:
      */
     std::optional<TErrorOr<T>> TryGet() const;
 
-    //! Extracts the value by moving it out of the future state; returns null if the value is not set yet.
-    /*!
-     *  This call does not block.
-     */
-    // TODO(babenko): deprecated, see YT-26319
-    std::optional<TErrorOr<T>> TryGetUnique() const;
-
     //! Attaches a result handler.
     /*!
      *  \param handler A callback to call when the value gets set

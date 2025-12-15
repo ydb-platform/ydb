@@ -1125,13 +1125,6 @@ std::optional<TErrorOr<T>> TFutureBase<T>::TryGet() const
 }
 
 template <class T>
-std::optional<TErrorOr<T>> TFutureBase<T>::TryGetUnique() const
-{
-    YT_ASSERT(Impl_);
-    return Impl_->TryGetUnique();
-}
-
-template <class T>
 TFutureCallbackCookie TFutureBase<T>::Subscribe(TCallback<void(const TErrorOr<T>&)> handler) const
 {
     YT_ASSERT(Impl_);

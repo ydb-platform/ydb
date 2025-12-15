@@ -12004,6 +12004,23 @@ Y_UNIT_TEST(GroupByImplicitWithHaving) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 2 * (1 + 1));
 }
 
+Y_UNIT_TEST(GroupByDistinctArgument) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT Avg(DISTINCT a) FROM (VALUES (1)) AS x(a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {"YqlSelect", "YqlGroup", "YqlWhere", "YqlAgg"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"], 0);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlAgg"], 1 + 1);
+}
+
 Y_UNIT_TEST(DiagnosticMandatoryAsColumn) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();

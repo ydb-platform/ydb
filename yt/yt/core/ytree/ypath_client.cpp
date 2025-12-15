@@ -466,7 +466,7 @@ TString SyncYPathGetKey(const IYPathServicePtr& service, const TYPath& path)
 {
     auto request = TYPathProxy::GetKey(path);
     auto future = ExecuteVerb(service, request);
-    auto optionalResult = future.TryGetUnique();
+    auto optionalResult = future.AsUnique().TryGet();
     YT_VERIFY(optionalResult);
     return FromProto<TString>(optionalResult->ValueOrThrow()->value());
 }
@@ -478,7 +478,7 @@ TYsonString SyncYPathGet(
     const IAttributeDictionaryPtr& options)
 {
     auto future = AsyncYPathGet(service, path, attributeFilter, options);
-    auto optionalResult = future.TryGetUnique();
+    auto optionalResult = future.AsUnique().TryGet();
     YT_VERIFY(optionalResult);
     return optionalResult->ValueOrThrow();
 }
@@ -499,7 +499,7 @@ bool SyncYPathExists(
     const TYPath& path)
 {
     auto future = AsyncYPathExists(service, path);
-    auto optionalResult = future.TryGetUnique();
+    auto optionalResult = future.AsUnique().TryGet();
     YT_VERIFY(optionalResult);
     return optionalResult->ValueOrThrow();
 }
@@ -523,7 +523,7 @@ void SyncYPathSet(
     bool recursive)
 {
     auto future = AsyncYPathSet(service, path, value, recursive);
-    auto optionalResult = future.TryGetUnique();
+    auto optionalResult = future.AsUnique().TryGet();
     YT_VERIFY(optionalResult);
     optionalResult->ThrowOnError();
 }
@@ -547,7 +547,7 @@ void SyncYPathRemove(
     bool force)
 {
     auto future = AsyncYPathRemove(service, path, recursive, force);
-    auto optionalResult = future.TryGetUnique();
+    auto optionalResult = future.AsUnique().TryGet();
     YT_VERIFY(optionalResult);
     optionalResult->ThrowOnError();
 }
@@ -558,7 +558,7 @@ std::vector<TString> SyncYPathList(
     std::optional<i64> limit)
 {
     auto future = AsyncYPathList(service, path, limit);
-    auto optionalResult = future.TryGetUnique();
+    auto optionalResult = future.AsUnique().TryGet();
     YT_VERIFY(optionalResult);
     return optionalResult->ValueOrThrow();
 }

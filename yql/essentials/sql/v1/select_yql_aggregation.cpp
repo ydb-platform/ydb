@@ -14,7 +14,7 @@ public:
               GetPos(),
               /*realFunctionName=*/FunctionName,
               /*factoryName=*/FactoryName,
-              EAggregateMode::Normal))
+              Mode))
     {
     }
 
@@ -53,7 +53,11 @@ private:
     }
 
     TNodePtr Options() const {
-        return Q(Y());
+        TNodePtr options = Y();
+        if (Mode == EAggregateMode::Distinct) {
+            options = L(std::move(options), Q(Y(Q("distinct"))));
+        }
+        return Q(std::move(options));
     }
 
     TNodePtr TypeStub() const {
@@ -73,12 +77,18 @@ bool IsSupported(EAggregationType type) {
            type == COUNT;
 }
 
+bool IsSupported(EAggregateMode mode) {
+    return mode == EAggregateMode::Normal ||
+           mode == EAggregateMode::Distinct;
+}
+
 bool IsSupported(const TVector<TNodePtr>& args) {
     return args.size() == 1;
 }
 
 bool IsSupported(TYqlAggregationArgs& args) {
     return IsSupported(args.Type) &&
+           IsSupported(args.Mode) &&
            IsSupported(args.Args);
 }
 

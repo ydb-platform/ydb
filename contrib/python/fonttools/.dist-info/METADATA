@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: fonttools
-Version: 4.60.1
+Version: 4.61.0
 Summary: Tools to manipulate font files
 Home-page: http://github.com/fonttools/fonttools
 Author: Just van Rossum
@@ -17,7 +17,6 @@ Classifier: Intended Audience :: End Users/Desktop
 Classifier: Natural Language :: English
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
@@ -26,7 +25,7 @@ Classifier: Programming Language :: Python :: 3
 Classifier: Topic :: Text Processing :: Fonts
 Classifier: Topic :: Multimedia :: Graphics
 Classifier: Topic :: Multimedia :: Graphics :: Graphics Conversion
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 License-File: LICENSE.external
@@ -38,7 +37,7 @@ Requires-Dist: brotli>=1.0.1; platform_python_implementation == "CPython" and ex
 Requires-Dist: brotlicffi>=0.8.0; platform_python_implementation != "CPython" and extra == "woff"
 Requires-Dist: zopfli>=0.1.4; extra == "woff"
 Provides-Extra: unicode
-Requires-Dist: unicodedata2>=15.1.0; python_version <= "3.12" and extra == "unicode"
+Requires-Dist: unicodedata2>=17.0.0; python_version <= "3.14" and extra == "unicode"
 Provides-Extra: graphite
 Requires-Dist: lz4>=1.7.4.2; extra == "graphite"
 Provides-Extra: interpolatable
@@ -54,13 +53,13 @@ Requires-Dist: xattr; sys_platform == "darwin" and extra == "type1"
 Provides-Extra: pathops
 Requires-Dist: skia-pathops>=0.5.0; extra == "pathops"
 Provides-Extra: repacker
-Requires-Dist: uharfbuzz>=0.23.0; extra == "repacker"
+Requires-Dist: uharfbuzz>=0.45.0; extra == "repacker"
 Provides-Extra: all
 Requires-Dist: lxml>=4.0; extra == "all"
 Requires-Dist: brotli>=1.0.1; platform_python_implementation == "CPython" and extra == "all"
 Requires-Dist: brotlicffi>=0.8.0; platform_python_implementation != "CPython" and extra == "all"
 Requires-Dist: zopfli>=0.1.4; extra == "all"
-Requires-Dist: unicodedata2>=15.1.0; python_version <= "3.12" and extra == "all"
+Requires-Dist: unicodedata2>=17.0.0; python_version <= "3.14" and extra == "all"
 Requires-Dist: lz4>=1.7.4.2; extra == "all"
 Requires-Dist: scipy; platform_python_implementation != "PyPy" and extra == "all"
 Requires-Dist: munkres; platform_python_implementation == "PyPy" and extra == "all"
@@ -69,7 +68,7 @@ Requires-Dist: matplotlib; extra == "all"
 Requires-Dist: sympy; extra == "all"
 Requires-Dist: xattr; sys_platform == "darwin" and extra == "all"
 Requires-Dist: skia-pathops>=0.5.0; extra == "all"
-Requires-Dist: uharfbuzz>=0.23.0; extra == "all"
+Requires-Dist: uharfbuzz>=0.45.0; extra == "all"
 Dynamic: author
 Dynamic: author-email
 Dynamic: classifier
@@ -105,7 +104,7 @@ are available at `Read the Docs <https://fonttools.readthedocs.io/>`_.
 Installation
 ~~~~~~~~~~~~
 
-FontTools requires `Python <http://www.python.org/download/>`__ 3.9
+FontTools requires `Python <http://www.python.org/download/>`__ 3.10
 or later. We try to follow the same schedule of minimum Python version support as
 NumPy (see `NEP 29 <https://numpy.org/neps/nep-0029-deprecation_policy.html>`__).
 
@@ -196,7 +195,7 @@ are required to unlock the extra features named "ufo", etc.
 
   * `unicodedata2 <https://pypi.python.org/pypi/unicodedata2>`__:
     ``unicodedata`` backport for Python 3.x updated to the latest Unicode
-    version 15.0.
+    version 17.0.
 
   *Extra:* ``unicode``
 
@@ -391,6 +390,22 @@ Have fun!
 
 Changelog
 ~~~~~~~~~
+
+4.61.0 (released 2025-11-28)
+----------------------------
+
+- [varLib.main]: **SECURITY** Only use basename(vf.filename) to prevent path traversal attacks when
+  running `fonttools varLib` command. Fixes CVE-2025-66034, see:
+  https://github.com/fonttools/fonttools/security/advisories/GHSA-768j-98cg-p3fv.
+- [feaLib] Sort BaseLangSysRecords by tag (#3986).
+- Drop support for EOL Python 3.9 (#3982).
+- [instancer] Support --remove-overlaps for fonts with CFF2 table (#3975).
+- [CFF2ToCFF] Add --remove-overlaps option (#3976).
+- [feaLib] Raise an error for rsub with NULL target (#3979).
+- [bezierTools] Fix logic bug in curveCurveIntersections (#3963).
+- [feaLib] Error when condition sets have the same name (#3958).
+- [cu2qu.ufo] skip processing empty glyphs to support sparse kerning masters (#3956).
+- [unicodedata] Update to Unicode 17. Require ``unicodedata2 >= 17.0.0`` when installed with 'unicode' extra.
 
 4.60.1 (released 2025-09-29)
 ----------------------------

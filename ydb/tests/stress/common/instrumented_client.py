@@ -70,7 +70,7 @@ class InstrumentedYdbClient(YdbClient):
         if operation_name is None:
             operation_name = 'ddl' if is_ddl else 'dml'
         if not self.enable_metrics:
-            super(InstrumentedYdbClient, self).query(statement, is_ddl, retry_settings)
+            return super(InstrumentedYdbClient, self).query(statement, is_ddl, retry_settings)
 
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).query(
@@ -88,7 +88,7 @@ class InstrumentedYdbClient(YdbClient):
             operation_name: Operation name for metrics
         """
         if not self.enable_metrics:
-            super(InstrumentedYdbClient, self).drop_table(path_to_table)
+            return super(InstrumentedYdbClient, self).drop_table(path_to_table)
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).drop_table(path_to_table),
             operation_name
@@ -106,7 +106,7 @@ class InstrumentedYdbClient(YdbClient):
             operation_name: Operation name for metrics
         """
         if not self.enable_metrics:
-            super(InstrumentedYdbClient, self).replace_index(table, src, dst)
+            return super(InstrumentedYdbClient, self).replace_index(table, src, dst)
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).replace_index(table, src, dst),
             operation_name
@@ -121,7 +121,7 @@ class InstrumentedYdbClient(YdbClient):
             operation_name: Operation name for metrics
         """
         if not self.enable_metrics:
-            super(InstrumentedYdbClient, self).describe(path)
+            return super(InstrumentedYdbClient, self).describe(path)
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).describe(path),
             operation_name
@@ -136,7 +136,7 @@ class InstrumentedYdbClient(YdbClient):
             operation_name: Operation name for metrics
         """
         if not self.enable_metrics:
-            super(InstrumentedYdbClient, self).remove_recursively(path)
+            return super(InstrumentedYdbClient, self).remove_recursively(path)
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).remove_recursively(path),
             operation_name

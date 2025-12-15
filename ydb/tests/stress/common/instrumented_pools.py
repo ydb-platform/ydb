@@ -61,8 +61,10 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
         """
         if operation_name is None:
             operation_name = 'query_pool_execute'
+        if not self.enable_metrics:
+            return super(InstrumentedQuerySessionPool, self).execute_with_retries(query, parameters, retry_settings, settings)
 
-        return self._instrument_call(
+        return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedQuerySessionPool, self).execute_with_retries(
                 query, parameters, retry_settings, settings
             ),
@@ -83,7 +85,7 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
             EXPLAIN result
         """
         if not self.enable_metrics:
-            super(InstrumentedSessionPool, self).explain_with_retries(query, retry_settings)
+            return super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings)
 
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings),
@@ -150,7 +152,7 @@ class InstrumentedSessionPool(ydb.SessionPool):
             operation_name = 'session_pool_operation'
 
         if not self.enable_metrics:
-            super(InstrumentedSessionPool, self).retry_operation_sync(callee, *args, **kwargs)
+            return super(InstrumentedSessionPool, self).retry_operation_sync(callee, *args, **kwargs)
 
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedSessionPool, self).retry_operation_sync(callee, *args, **kwargs),

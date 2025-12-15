@@ -612,7 +612,8 @@ private:
     }
 
     void RelinkSubscribers(TDescription* fromDesc, const TString& path) {
-        for (const auto& [subscriber, info] : fromDesc->GetSubscribers(SUBSCRIPTION_BY_PATH)) {
+        auto subscribers = fromDesc->GetSubscribers(SUBSCRIPTION_BY_PATH);
+        for (const auto& [subscriber, info] : subscribers) {
             fromDesc->Unsubscribe(subscriber);
             Subscribers.erase(subscriber);
             SubscribeBy(subscriber, path, info.GetDomainOwnerId(), info.GetCapabilities(), false);
@@ -627,11 +628,15 @@ private:
             return;
         }
 
+        std::vector<TPathId> deletePathIds;
         const auto endIt = pathIdIndex.upper_bound(end);
         while (it != endIt) {
-            SoftDeleteDescription(it->first);
+            deletePathIds.push_back(it->first);
             ++it;
         }
+
+        for(auto pathId: deletePathIds)
+            SoftDeleteDescription(pathId);
     }
 
     // call it _after_ Subscribe() & _before_ Unsubscribe()
@@ -946,8 +951,8 @@ private:
         } else if (curDomainId < domainId) {
             log("Update description by newest path with newer domainId");
             Descriptions.DeleteIndex(path);
-            RelinkSubscribers(desc, path);
             UpsertDescription(path, pathId, std::move(pathDescription));
+            RelinkSubscribers(desc, path);
             return AckUpdate(ev);
         } else {
             log("Totally ignore description, path with obsolete domainId");

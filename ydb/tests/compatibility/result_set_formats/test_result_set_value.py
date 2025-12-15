@@ -11,6 +11,7 @@ from ydb.tests.datashard.lib.types_of_variables import (
     types_not_supported_yet_in_columnshard
 )
 
+
 def kb_to_b(n):
     return n * 1024
 
@@ -77,7 +78,8 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
         self._validate_schema_inclusion_mode(
             self._read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
             rows_count,
-            schema_inclusion_mode
+            schema_inclusion_mode,
+            stmt_cnt=1
         )
 
         self.change_cluster_version()
@@ -85,36 +87,48 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
         self._validate_schema_inclusion_mode(
             self._read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
             rows_count,
-            schema_inclusion_mode
+            schema_inclusion_mode,
+            stmt_cnt=1
         )
 
         self._drop_table(table_name)
 
     @pytest.mark.parametrize("store_type", ["ROW"])  # without COLUMN because DML
     @pytest.mark.parametrize("channel_buffer_size", [kb_to_b(2)])
+    @pytest.mark.parametrize("concurrent_result_sets", [True, False])
     @pytest.mark.parametrize("schema_inclusion_mode", [
         ydb.QuerySchemaInclusionMode.ALWAYS,
         ydb.QuerySchemaInclusionMode.FIRST_ONLY,
     ])
-    def test_multistatement(self, store_type, schema_inclusion_mode):
+    def test_multistatement(self, store_type, schema_inclusion_mode, concurrent_result_sets):
         table_name = "test_value"
         rows_count = 500
 
         self._create_table(table_name, store_type)
         self._fill_table(table_name, rows_count, store_type)
 
-        self._validate_multistatement(
-            self._multistatement_read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
+        self._validate_schema_inclusion_mode(
+            self._multistatement_read_table(
+                table_name,
+                schema_inclusion_mode=schema_inclusion_mode,
+                concurrent_result_sets=concurrent_result_sets
+            ),
             rows_count,
-            schema_inclusion_mode
+            schema_inclusion_mode,
+            stmt_cnt=3
         )
 
         self.change_cluster_version()
 
-        self._validate_multistatement(
-            self._multistatement_read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
+        self._validate_schema_inclusion_mode(
+            self._multistatement_read_table(
+                table_name,
+                schema_inclusion_mode=schema_inclusion_mode,
+                concurrent_result_sets=concurrent_result_sets
+            ),
             rows_count,
-            schema_inclusion_mode
+            schema_inclusion_mode,
+            stmt_cnt=3
         )
 
         self._drop_table(table_name)
@@ -166,13 +180,19 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
 
     # -------------------------- Methods to execute queries ---------------------------
 
-    def _try_execute(self, query, schema_inclusion_mode=None):
+    def _try_execute(
+        self,
+        query,
+        schema_inclusion_mode=None,
+        concurrent_result_sets=False,
+    ):
         with ydb.QuerySessionPool(self.driver) as pool:
             try:
                 return pool.execute_with_retries(
                     query,
                     result_set_format=ydb.QueryResultSetFormat.VALUE,
-                    schema_inclusion_mode=schema_inclusion_mode
+                    schema_inclusion_mode=schema_inclusion_mode,
+                    concurrent_result_sets=concurrent_result_sets
                 )
             except Exception as e:
                 assert False, f"Failed query `{query}`, error: {e}"
@@ -239,19 +259,25 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
             query = pragmas_stmt + query
 
         query += ";"
-        self._try_execute(query, schema_inclusion_mode)
+        return self._try_execute(query, schema_inclusion_mode)
 
     def _multistatement_read_table(
         self,
         table_name,
         schema_inclusion_mode=None,
+        concurrent_result_sets=False,
     ):
         all_columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]]
-        query = f"""
-            UPDATE {table_name} SET {all_columns[1]} = {all_columns[1]} + 1 WHERE {all_columns[0]} >= 0 RETURNING {", ".join(all_columns)};
-            SELECT {", ".join(all_columns)} FROM {table_name};
-        """
-        self._try_execute(query, schema_inclusion_mode)
+        queries = [
+            f"SELECT {", ".join(all_columns)} FROM {table_name};",
+            f"UPDATE {table_name} SET {all_columns[1]} = {all_columns[1]} + 1 WHERE {all_columns[0]} >= 0 RETURNING {", ".join(all_columns)};",
+            f"SELECT * FROM {table_name} ORDER BY {all_columns[0]};"
+        ]
+        return self._try_execute(
+            "\n".join(queries),
+            schema_inclusion_mode=schema_inclusion_mode,
+            concurrent_result_sets=concurrent_result_sets
+        )
 
     # --------------------- Methods to validate results for tests ---------------------
 
@@ -262,7 +288,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
         assert result_set.arrow_format_meta is None or len(result_set.arrow_format_meta.schema) == 0
         assert result_set.data is None or len(result_set.data) == 0
 
-    def _validate_schema_inclusion_mode(self, result_sets, rows_count, schema_inclusion_mode):
+    def _validate_schema_inclusion_mode(self, result_sets, rows_count, schema_inclusion_mode, stmt_cnt):
         if result_sets is None:
             return
 
@@ -270,39 +296,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
 
         # To detect the schema inclusion mode
         if self.channel_buffer_size == kb_to_b(2):
-            assert len(result_sets) > 1
-
-        result_set_indexes = set()
-        result_rows_count = 0
-
-        for result_set in result_sets:
-            self.validate_format_value(result_set)
-
-            if schema_inclusion_mode in [ydb.QuerySchemaInclusionMode.UNSPECIFIED, ydb.QuerySchemaInclusionMode.ALWAYS]:
-                assert len(result_set.columns) == len(self.all_types) + 1
-            elif schema_inclusion_mode == ydb.QuerySchemaInclusionMode.FIRST_ONLY:
-                if result_set.index in result_set_indexes:
-                    assert len(result_set.columns) == 0
-                else:
-                    assert len(result_set.columns) == len(self.all_types) + 1
-            else:
-                assert False, f"Unsupported schema inclusion mode: {schema_inclusion_mode}"
-
-            result_rows_count += len(result_set.rows)
-            result_set_indexes.add(result_set.index)
-
-        assert len(result_set_indexes) == 1
-        assert result_rows_count == rows_count
-
-    def _validate_multistatement(self, result_sets, rows_count, schema_inclusion_mode):
-        if result_sets is None:
-            return
-
-        assert len(result_sets) != 0
-
-        # To detect the schema inclusion mode
-        if self.channel_buffer_size == kb_to_b(2):
-            assert len(result_sets) > 2
+            assert len(result_sets) > stmt_cnt
 
         result_set_indexes = set()
         result_rows_count = {}
@@ -313,19 +307,19 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
             if schema_inclusion_mode in [ydb.QuerySchemaInclusionMode.UNSPECIFIED, ydb.QuerySchemaInclusionMode.ALWAYS]:
                 assert len(result_set.columns) == len(self.all_types) + 1
             elif schema_inclusion_mode == ydb.QuerySchemaInclusionMode.FIRST_ONLY:
-                if result_set.index in result_set_indexes:
-                    assert len(result_set.columns) == 0
-                else:
+                if result_set.index not in result_set_indexes:
                     assert len(result_set.columns) == len(self.all_types) + 1
+                else:
+                    assert len(result_set.columns) == 0
             else:
                 assert False, f"Unsupported schema inclusion mode: {schema_inclusion_mode}"
 
-            result_rows_count[result_set.index] = result_rows_count.get(result_set.index, 0) + len(result_set.rows)
             result_set_indexes.add(result_set.index)
+            result_rows_count[result_set.index] = result_rows_count.get(result_set.index, 0) + len(result_set.rows)
 
-        assert len(result_set_indexes) == 2
-        for index in result_set_indexes:
-            assert result_rows_count[index] == rows_count
+        assert len(result_set_indexes) == stmt_cnt
+        for cnt in result_rows_count.values():
+            assert cnt == rows_count
 
     def _validate_empty_result(self, table_name):
         empty_response_queries = [

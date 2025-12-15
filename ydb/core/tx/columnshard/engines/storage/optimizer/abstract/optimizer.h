@@ -305,19 +305,19 @@ public:
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto e_default_compaction = [] {
+        auto enumDefaultCompaction = [] {
             if (!HasAppData()) {
                 return NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompaction();
             }
             return AppDataVerified().ColumnShardConfig.GetDefaultCompaction();
         }();
-        auto default_compaction = [&] {
-            if (e_default_compaction == NKikimrConfig::TColumnShardConfig::TILING) {
+        auto strDefaultCompaction = [&] {
+            if (enumDefaultCompaction == NKikimrConfig::TColumnShardConfig::TILING) {
                 return "tiling";
             }
             return "lc-buckets";
         }();
-        auto result = TFactory::MakeHolder(default_compaction);
+        auto result = TFactory::MakeHolder(strDefaultCompaction);
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }

@@ -515,7 +515,7 @@ class TestWorkloadManagerOltpTpch20s100(WorkloadManagerOltpTpch20Base):
 
 class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):
     workload_type = WorkloadType.EXTERNAL
-    iterations = 300
+    iterations = 1200
     threads = 5
 
     @classmethod

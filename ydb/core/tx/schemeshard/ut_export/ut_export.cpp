@@ -2836,8 +2836,17 @@ attributes {
     }
 
     Y_UNIT_TEST(IndexMaterializationDisabled) {
-        EnvOptions().EnableIndexMaterialization(false);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), false, R"(
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(false);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, false, R"(
             IndexDescription {
               Name: "index"
               KeyColumnNames: ["value"]
@@ -2846,8 +2855,17 @@ attributes {
     }
 
     Y_UNIT_TEST(IndexMaterialization) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, true, R"(
             IndexDescription {
               Name: "index"
               KeyColumnNames: ["value"]
@@ -2856,8 +2874,17 @@ attributes {
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobal) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, true, R"(
             IndexDescription {
               Name: "index"
               KeyColumnNames: ["value"]
@@ -2867,8 +2894,17 @@ attributes {
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalAsync) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, true, R"(
             IndexDescription {
               Name: "index"
               KeyColumnNames: ["value"]
@@ -2878,8 +2914,17 @@ attributes {
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTree) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, true, R"(
             IndexDescription {
               Name: "index"
               KeyColumnNames: ["embedding"]
@@ -2900,8 +2945,17 @@ attributes {
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTreePrefix) {
-        EnvOptions().EnableIndexMaterialization(true);
-        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, true, R"(
             IndexDescription {
               Name: "index"
               KeyColumnNames: ["prefix", "embedding"]

@@ -461,7 +461,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         fp.write(content)
 
 
-def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None):
+def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None, public_dir=None):
     """New version: Group tests by suite with filters"""
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
@@ -664,6 +664,7 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     all_tests_sorted = sorted(visible_rows, key=attrgetter("full_name"))
     
     # Save data to separate JSON file to reduce HTML size
+    # fn is the full path to HTML file (e.g., /path/to/public_dir/try_1/ya-test.html)
     data_file = fn.replace('.html', '_data.json')
     data_to_save = {
         'history_for_js': history_for_js,
@@ -674,7 +675,12 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     with open(data_file, "w", encoding="utf-8") as f:
         json.dump(data_to_save, f, separators=(',', ':'))  # Minified JSON
     
-    # Calculate data file URL (relative to HTML file)
+    # Calculate data file URL (relative to HTML file location)
+    # JSON file is in the same directory as HTML file, so we use just the filename
+    # This way fetch() in browser will load JSON from the same directory as HTML
+    # Example: if HTML is at /path/to/try_1/ya-test.html,
+    #          JSON is at /path/to/try_1/ya-test_data.json,
+    #          and URL should be "ya-test_data.json" (relative to HTML location)
     data_file_url = os.path.basename(data_file)
     
     content = env.get_template("summary_v2.html").render(
@@ -825,7 +831,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
         report_url = f"{public_dir_url}/{html_fn}"
 
         # Use new version v2 for rendering
-        render_testlist_html_v2(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id)
+        render_testlist_html_v2(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id, public_dir)
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 

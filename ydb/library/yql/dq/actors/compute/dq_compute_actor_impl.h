@@ -1110,7 +1110,7 @@ protected:
                 outputChannel->HasPeer = true;
                 outputChannel->PeerId = peer;
                 if (outputChannel->Channel) {
-                    outputChannel->Channel->UpdateSettings({.IsLocalChannel = peer.NodeId() == this->SelfId().NodeId()});
+                    outputChannel->Channel->Bind(this->SelfId(), peer);
                 }
 
                 continue;
@@ -1322,10 +1322,12 @@ protected:
             DUMP_PREFIXED(prefix, asyncStats, WaitTime, .ToString());
         };
 
-        auto dumpOutputStats = [&](auto prefix, auto& outputStats) {
-            DUMP_PREFIXED(prefix, outputStats, MaxMemoryUsage);
-            DUMP_PREFIXED(prefix, outputStats, MaxRowsInMemory);
-            dumpAsyncStats(prefix, outputStats);
+        auto dumpOutputStats = dumpAsyncStats;
+
+        auto dumpSinkPopStats = [&](auto prefix, auto& popStats) {
+            DUMP_PREFIXED(prefix, popStats, MaxMemoryUsage);
+            DUMP_PREFIXED(prefix, popStats, MaxRowsInMemory);
+            dumpAsyncStats(prefix, popStats);
         };
 
         auto dumpInputChannelStats = [&](auto prefix, auto& pushStats) {
@@ -1511,7 +1513,7 @@ protected:
                 dumpOutputStats("DqOutputBuffer.PushStats."sv, pushStats);
 
                 const auto& popStats = buffer.GetPopStats();
-                dumpOutputStats("DqOutputBuffer.PopStats."sv, popStats);
+                dumpSinkPopStats("DqOutputBuffer.PopStats."sv, popStats);
             }
             if (info.AsyncOutput) {
                 const auto& output = *info.AsyncOutput;

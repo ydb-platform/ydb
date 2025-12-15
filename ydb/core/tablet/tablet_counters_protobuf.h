@@ -3,8 +3,9 @@
 #include "tablet_counters.h"
 #include "tablet_counters_aggregator.h"
 #include <ydb/core/tablet_flat/defs.h>
-#include <util/string/vector.h>
+#include <util/string/join.h>
 #include <util/string/split.h>
+#include <util/string/vector.h>
 
 namespace NKikimr {
 
@@ -275,6 +276,7 @@ protected:
     TVector<ui8> Types;
     TVector<TString> GroupNamesStrings;
     TVector<const char*> GroupNames;
+    TString Groups;
 public:
     explicit TLabeledCounterParsedOpts()
         : Size(LabeledCountersDesc()->value_count())
@@ -319,7 +321,9 @@ public:
         std::transform(GroupNamesStrings.begin(), GroupNamesStrings.end(),
                   std::back_inserter(GroupNames), [](auto& string) { return string.data(); } );
 
+        Groups = JoinRange("|", GroupNamesStrings.begin(), GroupNamesStrings.end());
     }
+
     virtual ~TLabeledCounterParsedOpts()
     {}
 
@@ -351,6 +355,16 @@ public:
     const ui8* GetAggregateFuncs() const
     {
         return AggregateFuncs.begin();
+    }
+
+    const TString& GetGroups() const
+    {
+        return Groups;
+    }
+
+    const TVector<ui8>& GetTypes() const
+    {
+        return Types;
     }
 
 protected:
@@ -633,6 +647,13 @@ public:
 
     static TLabeledCounterOpts* SimpleOpts() {
         return NAux::GetLabeledCounterOpts<SimpleDesc>();
+    }
+
+    TProtobufTabletLabeledCounters(TMaybe<TString> databasePath = Nothing(), const ui64 id = 0)
+        : TTabletLabeledCountersBase(
+            SimpleOpts()->Size, SimpleOpts()->GetSVNames(), SimpleOpts()->GetCounterTypes(),
+            SimpleOpts()->GetAggregateFuncs(), SimpleOpts()->GetGroups(), SimpleOpts()->GetGroupNames(), id, std::move(databasePath))
+    {
     }
 
     TProtobufTabletLabeledCounters(const TString& group, const ui64 id)

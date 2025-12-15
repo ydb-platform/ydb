@@ -666,9 +666,4 @@ namespace NInterconnect::NRdma {
         static TSlotMemPool pool(MakeCounters(counters), settings);
         return std::shared_ptr<TSlotMemPool>(&pool, [](TSlotMemPool*) {});
     }
-
-    // Just for UT
-    std::shared_ptr<IMemPool> CreateNonStaticSlotMemPool(TDynamicCounters* counters, std::optional<TMemPoolSettings> settings) noexcept {
-        return std::make_shared<TSlotMemPool>(MakeCounters(counters), settings);
-    }
 }

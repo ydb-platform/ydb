@@ -35,9 +35,14 @@ Y_UNIT_TEST_SUITE(Cancellation) {
         {
             TString data = MakeData(10);
             TLogoBlobID blobId(1, 1, 1, 1, data.size(), 1);
-            TEvBlobStorage::TEvPut* ev = new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max(),
-                    NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault,
-                    false, owner);
+            TEvBlobStorage::TEvPut* ev = new TEvBlobStorage::TEvPut(
+                TEvBlobStorage::TEvPut::TParameters{
+                    .BlobId = blobId,
+                    .Buffer = TRope(data),
+                    .Deadline = TInstant::Max(),
+                    .ExternalRelevanceWatcher = owner,
+                }
+            );
             owner.reset();
             ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
                 SendToBSProxy(ctx.Edge, ctx.GroupId, ev);

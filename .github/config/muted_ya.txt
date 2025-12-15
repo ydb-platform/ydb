@@ -5,8 +5,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_comp_defrag CompDefrag.DefragThrottling
 ydb/core/blobstorage/ut_blobstorage/ut_comp_defrag unittest.sole chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
-ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
@@ -30,7 +28,6 @@ ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec+UseSink
 ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec-UseSink
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanClientOperationTimeoutBruteForce
-ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanClientTimeoutBruteForce
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/persqueue/ut TPQTest.TestPartitionWriteQuota
@@ -60,6 +57,7 @@ ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots
 ydb/core/tx/schemeshard/ut_system_names unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed+Overlap[PipeResets]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed+Overlap[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed-Overlap[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[PipeResets]
@@ -99,12 +97,12 @@ ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects-IsOlap
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility py3test.[test_statistics.py */*] chunk
+ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-25-2-1_to_stable-25-3-1]
 ydb/tests/compatibility test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-25-2-1_to_stable-25-3-1-COLUMN]
 ydb/tests/compatibility test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-25-3-1_to_stable-25-2-1-COLUMN]
 ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[rolling_stable-25-2-1_to_stable-25-3-1]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_prestable-25-4_to_stable-25-3-1]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_stable-25-2-1_to_stable-25-3-1]
-ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_stable-25-3-1_to_prestable-25-4]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_stable-25-3-1_to_stable-25-2-1]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-25-2-1_to_stable-25-3-1]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_topics[mixed_stable-25-3-1_and_stable-25-2-1]
@@ -133,6 +131,7 @@ ydb/tests/functional/backup_collection basic_user_scenarios.py.TestBackupCollect
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestIncrementalChainRestoreAfterDeletion.test_incremental_chain_restore_when_tables_deleted
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration.test_state_storage
+ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage
 ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
@@ -150,12 +149,10 @@ ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLe
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[21]
 ydb/tests/functional/tpcc py3test.[test.py */*] chunk
 ydb/tests/functional/tpcc test.py.test_run_benchmark
-ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap test_create.py.TestCreate.test_create_all_opt_ints
 ydb/tests/olap test_create.py.TestCreate.test_create_real_opt
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_uniform
-ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_workload[1000-1]
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap/s3_import py3test.sole chunk
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_unavailable_during_import

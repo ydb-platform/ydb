@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace NYdb::inline Dev::NTestShard {
+namespace NYdb::NTestShard {
 
 struct TCreateTestShardSettings : public TOperationRequestSettings<TCreateTestShardSettings> {};
 
@@ -53,4 +53,4 @@ private:
     std::unique_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::inline Dev::NTestShard
+} // namespace NYdb::NTestShard

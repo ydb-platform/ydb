@@ -1,12 +1,12 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_test_shard.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/test_shard/test_shard.h>
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 
-#include <ydb/public/api/grpc/draft/ydb_test_shard_v1.grpc.pb.h>
-#include <ydb/public/api/protos/draft/ydb_test_shard.pb.h>
+#include <ydb/public/api/grpc/ydb_test_shard_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_test_shard.pb.h>
 
-namespace NYdb::inline Dev::NTestShard {
+namespace NYdb::NTestShard {
 
 class TTestShardClient::TImpl : public TClientImplCommon<TTestShardClient::TImpl> {
 public:
@@ -85,4 +85,4 @@ TAsyncStatus TTestShardClient::DeleteTestShard(const std::string& path,
     return Impl_->DeleteTestShard(path, settings);
 }
 
-} // namespace NYdb::inline Dev::NTestShard
+} // namespace NYdb::NTestShard

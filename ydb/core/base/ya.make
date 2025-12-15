@@ -16,6 +16,7 @@ SRCS(
     blobstorage.h
     blobstorage.cpp
     blobstorage_grouptype.cpp
+    blobstorage_relevance.cpp
     channel_profiles.h
     counters.cpp
     counters.h

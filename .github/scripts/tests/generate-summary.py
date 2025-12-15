@@ -86,6 +86,7 @@ class TestResult:
     status_description: str
     error_type: str = ""
     is_sanitizer_issue: bool = False
+    is_timeout_issue: bool = False
 
     @property
     def status_display(self):
@@ -96,9 +97,6 @@ class TestResult:
             TestStatus.SKIP: "SKIP",
             TestStatus.MUTE: "MUTE",
         }[self.status]
-        # For ERROR add error_type suffix if present (e.g., ERROR-TIMEOUT)
-        if self.status == TestStatus.ERROR and self.error_type:
-            return f"{base}-{self.error_type}"
         return base
 
     @property
@@ -158,12 +156,11 @@ class TestResult:
             status_str = "PASSED"
         
         # Map status to TestStatus enum
+        # All ERROR statuses are treated as FAIL
         if is_muted:
             status = TestStatus.MUTE
-        elif status_str == "FAILED":
-            status = TestStatus.FAIL if error_type == "REGULAR" else TestStatus.ERROR
-        elif status_str == "ERROR":
-            status = TestStatus.ERROR
+        elif status_str == "FAILED" or status_str == "ERROR":
+            status = TestStatus.FAIL
         elif status_str == "SKIPPED":
             status = TestStatus.SKIP
         else:
@@ -208,7 +205,8 @@ class TestResult:
             owners='',
             status_description=status_description or '',
             error_type=error_type or '',
-            is_sanitizer_issue=is_sanitizer_issue(status_description or '')
+            is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
+            is_timeout_issue=(error_type or '').upper() == 'TIMEOUT'
         )
 
 
@@ -566,6 +564,13 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     sanitizer_passed = [t for t in status_test.get(TestStatus.PASS, []) if t.is_sanitizer_issue]
     sanitizer_skipped = [t for t in status_test.get(TestStatus.SKIP, []) if t.is_sanitizer_issue]
     
+    # Count timeout per status (for badge display)
+    timeout_failed = [t for t in status_test.get(TestStatus.FAIL, []) if t.is_timeout_issue]
+    timeout_error = [t for t in status_test.get(TestStatus.ERROR, []) if t.is_timeout_issue]
+    timeout_mute = [t for t in status_test.get(TestStatus.MUTE, []) if t.is_timeout_issue]
+    timeout_passed = [t for t in status_test.get(TestStatus.PASS, []) if t.is_timeout_issue]
+    timeout_skipped = [t for t in status_test.get(TestStatus.SKIP, []) if t.is_timeout_issue]
+    
     # Count all tests
     test_counts = {
         'all': len(visible_tests),
@@ -580,7 +585,14 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
         'sanitizer_mute': len(sanitizer_mute),     # Count of sanitizer within mute
         'sanitizer_passed': len(sanitizer_passed),  # Count of sanitizer within passed
         'sanitizer_skipped': len(sanitizer_skipped),  # Count of sanitizer within skipped
-        'sanitizer_all': len([t for t in visible_tests if t.is_sanitizer_issue])  # Count of sanitizer in visible tests
+        'sanitizer_all': len([t for t in visible_tests if t.is_sanitizer_issue]),  # Count of sanitizer in visible tests
+        'timeout': len([t for t in rows if t.is_timeout_issue]),  # Total timeout count
+        'timeout_failed': len(timeout_failed),  # Count of timeout within failed
+        'timeout_error': len(timeout_error),    # Count of timeout within error
+        'timeout_mute': len(timeout_mute),     # Count of timeout within mute
+        'timeout_passed': len(timeout_passed),  # Count of timeout within passed
+        'timeout_skipped': len(timeout_skipped),  # Count of timeout within skipped
+        'timeout_all': len([t for t in visible_tests if t.is_timeout_issue])  # Count of timeout in visible tests
     }
     
     # Group sanitizer tests by suite

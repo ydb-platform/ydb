@@ -7,11 +7,11 @@
 ```yaml
 cms_config:
   tenant_limits:
-    disabled_nodes_limit: 100
-    disabled_nodes_ratio_limit: 30
+    disabled_nodes_limit: 2
+    disabled_nodes_ratio_limit: 5
   cluster_limits:
-    disabled_nodes_limit: 1000
-    disabled_nodes_ratio_limit: 30
+    disabled_nodes_limit: 3
+    disabled_nodes_ratio_limit: 5
   disable_maintenance: true
 ```
 

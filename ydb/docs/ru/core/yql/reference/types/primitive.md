@@ -64,6 +64,11 @@
 {% endif %}
 |#
 
+<<<<<<< HEAD
+=======
+{% include [x](../_includes/type_literals_examples.md) %}
+
+>>>>>>> e161490e3a4 (Extract type literal examples into shared include files (#30277))
 ## Строковые типы {#string}
 
 | Тип | Описание | Примечания |

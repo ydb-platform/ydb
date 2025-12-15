@@ -83,7 +83,7 @@ Y_UNIT_TEST(TokensAsColumnNameInAddColumn) { // id_schema
                                   "SET", "STREAM", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"},
                                  [](const TString& token) {
                                      TStringBuilder req;
-                                     req << "ALTER TABLE Plato.Input ADD COLUMN " << token << " Bool";
+                                     req << "ALTER TABLE ydb.Input ADD COLUMN " << token << " Bool";
                                      return req;
                                  });
     UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
@@ -1722,6 +1722,11 @@ Y_UNIT_TEST(CreateTableWithIfNotExists) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
 }
 
+Y_UNIT_TEST(CreateTableWithIfNotExistsYtNotSupported) {
+    ExpectFailWithError("CREATE TABLE IF NOT EXISTS plato.t (a int32);",
+                        "<main>:1:34: Error: CREATE TABLE IF NOT EXISTS is not supported for yt provider.\n");
+}
+
 Y_UNIT_TEST(CreateTempTable) {
     NYql::TAstParseResult res = SqlToYql("USE ydb; CREATE TEMP TABLE t (a int32, primary key(a));");
     UNIT_ASSERT(res.Root);
@@ -3143,7 +3148,7 @@ Y_UNIT_TEST(TtlTieringParseCorrect) {
 
 Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
-        R"( USE plato;
+        R"( USE ydb;
                 ALTER TABLE tableName
                     ADD FAMILY cold (DATA = "rot"),
                     SET TTL
@@ -3785,7 +3790,7 @@ Y_UNIT_TEST(AlterTableAddIndexDifferentSettings) {
 }
 
 Y_UNIT_TEST(AlterTableAddIndexDuplicatedSetting) {
-    ExpectFailWithError(R"sql(USE plato;
+    ExpectFailWithError(R"sql(USE ydb;
             ALTER TABLE table ADD INDEX idx
                 GLOBAL USING vector_kmeans_tree
                 ON (col) COVER (col)
@@ -3882,6 +3887,11 @@ Y_UNIT_TEST(AlterTableAlterColumnSetNotNullAstCorrect) {
     TWordCountHive elementStat({TString("\'mode \'alter")});
     VerifyProgram(reqSetNotNull, elementStat, verifyLine);
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'mode \'alter"]);
+}
+
+Y_UNIT_TEST(AlterTableYtNotSupported) {
+    ExpectFailWithError("ALTER TABLE plato.table ADD COLUMN a int32",
+                        "<main>:1:19: Error: ALTER TABLE is not supported for yt provider.\n");
 }
 
 Y_UNIT_TEST(AlterSequence) {
@@ -8727,7 +8737,7 @@ Y_UNIT_TEST(CreateExternalTableObjectStorage) {
 
 Y_UNIT_TEST(CreateExternalTableIfNotExists) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
-            USE plato;
+            USE ydb;
             CREATE EXTERNAL TABLE IF NOT EXISTS mytable (
                 a int
             ) WITH (
@@ -10037,7 +10047,7 @@ Y_UNIT_TEST(FieldCacheModeIsNotString) {
 }
 
 Y_UNIT_TEST(AlterCompressionCorrectUsage) {
-    NYql::TAstParseResult res = SqlToYql(R"( use plato;
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
             ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION "lz4";
         )");
     UNIT_ASSERT(res.IsOk());
@@ -10045,7 +10055,7 @@ Y_UNIT_TEST(AlterCompressionCorrectUsage) {
 }
 
 Y_UNIT_TEST(AlterCompressionFieldIsNotString) {
-    NYql::TAstParseResult res = SqlToYql(R"( use plato;
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
             ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION lz4;
         )");
     UNIT_ASSERT(!res.IsOk());
@@ -10058,7 +10068,7 @@ Y_UNIT_TEST(AlterCompressionFieldIsNotString) {
 }
 
 Y_UNIT_TEST(AlterCompressionLevelCorrectUsage) {
-    NYql::TAstParseResult res = SqlToYql(R"( use plato;
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
             ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL 5;
         )");
     UNIT_ASSERT(res.IsOk());
@@ -10066,7 +10076,7 @@ Y_UNIT_TEST(AlterCompressionLevelCorrectUsage) {
 }
 
 Y_UNIT_TEST(AlterCompressionLevelFieldIsNotInteger) {
-    NYql::TAstParseResult res = SqlToYql(R"( use plato;
+    NYql::TAstParseResult res = SqlToYql(R"( use ydb;
             ALTER TABLE tableName ALTER FAMILY default SET COMPRESSION_LEVEL "5";
         )");
     UNIT_ASSERT(!res.IsOk());
@@ -10075,7 +10085,7 @@ Y_UNIT_TEST(AlterCompressionLevelFieldIsNotInteger) {
 }
 
 Y_UNIT_TEST(AlterCompressionLevelFieldRedefinition) {
-    NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+    NYql::TAstParseResult res = SqlToYql(R"sql( use ydb;
             ALTER TABLE tableName
                 ALTER FAMILY default SET COMPRESSION_LEVEL 3,
                 ALTER FAMILY default SET COMPRESSION_LEVEL 5;
@@ -10086,7 +10096,7 @@ Y_UNIT_TEST(AlterCompressionLevelFieldRedefinition) {
 }
 
 Y_UNIT_TEST(AlterCacheModeCorrectUsage) {
-    NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+    NYql::TAstParseResult res = SqlToYql(R"sql( use ydb;
             ALTER TABLE tableName ALTER FAMILY default SET CACHE_MODE "in_memory";
         )sql");
     UNIT_ASSERT(res.IsOk());
@@ -10094,7 +10104,7 @@ Y_UNIT_TEST(AlterCacheModeCorrectUsage) {
 }
 
 Y_UNIT_TEST(AlterCacheModeFieldIsNotInteger) {
-    NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+    NYql::TAstParseResult res = SqlToYql(R"sql( use ydb;
             ALTER TABLE tableName ALTER FAMILY default SET CACHE_MODE 42;
         )sql");
     UNIT_ASSERT(!res.IsOk());
@@ -10103,7 +10113,7 @@ Y_UNIT_TEST(AlterCacheModeFieldIsNotInteger) {
 }
 
 Y_UNIT_TEST(AlterCacheModeFieldRedefinition) {
-    NYql::TAstParseResult res = SqlToYql(R"sql( use plato;
+    NYql::TAstParseResult res = SqlToYql(R"sql( use ydb;
             ALTER TABLE tableName
                 ALTER FAMILY default SET CACHE_MODE "in_memory",
                 ALTER FAMILY default SET CACHE_MODE "regular";

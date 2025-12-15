@@ -808,7 +808,6 @@ class WorkloadSecondaryIndex(WorkloadBase):
             if index_desc.unique:
                 self._verify_index_uniqueness(index_rows, index_desc, index_id, table_name)
         except:
-            logger.error("Expection")
             logger.error(f"Main: {main_data}")
             logger.error(f"Index: {index_data}")
             raise

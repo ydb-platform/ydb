@@ -8,7 +8,8 @@ namespace NDataShard {
 
 class TCreateCdcStreamUnit : public TExecutionUnit {
     THolder<TEvChangeExchange::TEvAddSender> AddSender;
-    THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender; 
+    // Заменили одиночный Holder на вектор, так как DropNotice может содержать несколько стримов
+    TVector<THolder<TEvChangeExchange::TEvRemoveSender>> RemoveSenders; 
 
 public:
     TCreateCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
@@ -31,62 +32,132 @@ public:
             return EExecutionStatus::Executed;
         }
 
+        // Логика для инкрементального бэкапа (CopyTable + CDC)
         if (schemeTx.HasCreateIncrementalBackupSrc()) {
             const auto& backup = schemeTx.GetCreateIncrementalBackupSrc();
-            if (backup.HasRotateCdcStreamNotice()) {
-                const auto& params = backup.GetRotateCdcStreamNotice();
-                const auto& newStreamDesc = params.GetNewStreamDescription();
-                const auto oldStreamPathId = TPathId::FromProto(params.GetOldStreamPathId());
-                const auto newStreamPathId = TPathId::FromProto(newStreamDesc.GetPathId());
-                const auto pathId = TPathId::FromProto(params.GetPathId());
-                const auto version = params.GetTableSchemaVersion();
+            
+            // Определяем PathId таблицы (он должен быть одинаковым и в Drop, и в Create)
+            TPathId pathId;
+            ui64 schemaVersion = 0;
+            bool hasWork = false;
 
-                Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
-                Y_ENSURE(version);
+            if (backup.HasDropCdcStreamNotice()) {
+                const auto& notice = backup.GetDropCdcStreamNotice();
+                pathId = TPathId::FromProto(notice.GetPathId());
+                schemaVersion = notice.GetTableSchemaVersion();
+                hasWork = true;
+            } else if (backup.HasCreateCdcStreamNotice()) {
+                const auto& notice = backup.GetCreateCdcStreamNotice();
+                pathId = TPathId::FromProto(notice.GetPathId());
+                schemaVersion = notice.GetTableSchemaVersion();
+                hasWork = true;
+            }
 
-                DataShard.AlterTableDropCdcStreams(ctx, txc, pathId, version, {oldStreamPathId});
+            if (!hasWork) {
+                return EExecutionStatus::Executed;
+            }
 
-                auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, newStreamDesc);
-                Y_ENSURE(tableInfo, "Table info not found during atomic rotation");
+            Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
+            Y_ENSURE(schemaVersion);
 
-                TDataShardLocksDb locksDb(DataShard, txc);
-                DataShard.AddUserTable(pathId, tableInfo, &locksDb);
+            TUserTable::TPtr tableInfo;
 
-                if (tableInfo->NeedSchemaSnapshots()) {
-                    DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+            // 1. Обработка DROP (удаление старых стримов)
+            if (backup.HasDropCdcStreamNotice()) {
+                const auto& notice = backup.GetDropCdcStreamNotice();
+                // Проверка на совпадение версий и ID, если вдруг пришли разные (не должно случаться)
+                Y_VERIFY_S(TPathId::FromProto(notice.GetPathId()) == pathId, "PathId mismatch in DropNotice");
+                
+                TVector<TPathId> streamsToDrop;
+                for (const auto& protoId : notice.GetStreamPathId()) {
+                    streamsToDrop.push_back(TPathId::FromProto(protoId));
                 }
 
-                auto& scanManager = DataShard.GetCdcStreamScanManager();
-                scanManager.Forget(txc.DB, pathId, oldStreamPathId);
-                if (const auto* info = scanManager.Get(oldStreamPathId)) {
-                    DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
-                    scanManager.Complete(oldStreamPathId);
-                }
+                if (!streamsToDrop.empty()) {
+                    tableInfo = DataShard.AlterTableDropCdcStreams(ctx, txc, pathId, schemaVersion, streamsToDrop);
 
-                DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, oldStreamPathId);
-                if (newStreamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
-                    if (const auto heartbeatInterval = TDuration::MilliSeconds(newStreamDesc.GetResolvedTimestampsIntervalMs())) {
-                        DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, pathId, newStreamPathId, heartbeatInterval);
+                    for (const auto& oldStreamPathId : streamsToDrop) {
+                        auto& scanManager = DataShard.GetCdcStreamScanManager();
+                        scanManager.Forget(txc.DB, pathId, oldStreamPathId);
+                        
+                        if (const auto* info = scanManager.Get(oldStreamPathId)) {
+                            // Если скан активен, отменяем его
+                            if (tableInfo) {
+                                DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
+                            }
+                            scanManager.Complete(oldStreamPathId);
+                        }
+
+                        DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, oldStreamPathId);
+                        RemoveSenders.emplace_back(new TEvChangeExchange::TEvRemoveSender(oldStreamPathId));
                     }
                 }
 
-                RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(oldStreamPathId));
+                if (notice.HasDropSnapshot()) {
+                    const auto& snapshot = notice.GetDropSnapshot();
+                    if (snapshot.GetStep() != 0) {
+                        const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
+                        DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
+                    }
+                }
+            }
+
+            // 2. Обработка CREATE (добавление нового стрима)
+            if (backup.HasCreateCdcStreamNotice()) {
+                const auto& notice = backup.GetCreateCdcStreamNotice();
+                Y_VERIFY_S(TPathId::FromProto(notice.GetPathId()) == pathId, "PathId mismatch in CreateNotice");
+
+                const auto& streamDesc = notice.GetStreamDescription();
+                const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
+
+                // Этот вызов вернет актуальный tableInfo (включающий изменения от Drop, если он был)
+                tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, schemaVersion, streamDesc);
+
+                if (notice.HasSnapshotName()) {
+                    Y_ENSURE(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateScan);
+                    Y_ENSURE(tx->GetStep() != 0);
+
+                    DataShard.GetSnapshotManager().AddSnapshot(txc.DB,
+                        TSnapshotKey(pathId, tx->GetStep(), tx->GetTxId()),
+                        notice.GetSnapshotName(), TSnapshot::FlagScheme, TDuration::Zero());
+
+                    DataShard.GetCdcStreamScanManager().Add(txc.DB,
+                        pathId, streamPathId, TRowVersion(tx->GetStep(), tx->GetTxId()));
+                }
+
+                if (streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
+                    if (const auto heartbeatInterval = TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs())) {
+                        DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, pathId, streamPathId, heartbeatInterval);
+                    }
+                }
 
                 AddSender.Reset(new TEvChangeExchange::TEvAddSender(
-                    pathId, TEvChangeExchange::ESenderType::CdcStream, newStreamPathId
+                    pathId, TEvChangeExchange::ESenderType::CdcStream, streamPathId
                 ));
-
-                BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
-                op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
-
-                return EExecutionStatus::DelayCompleteNoMoreRestarts;
             }
+
+            // Финализация
+            Y_ENSURE(tableInfo, "Table info must be initialized by Drop or Create action");
+
+            TDataShardLocksDb locksDb(DataShard, txc);
+            DataShard.AddUserTable(pathId, tableInfo, &locksDb);
+
+            if (tableInfo->NeedSchemaSnapshots()) {
+                DataShard.AddSchemaSnapshot(pathId, schemaVersion, op->GetStep(), op->GetTxId(), txc, ctx);
+            }
+
+            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
+            op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
+
+            return EExecutionStatus::DelayCompleteNoMoreRestarts;
         }
 
+        // Стандартная логика для обычного CreateCdcStream (не бэкап)
         const auto& params =
             schemeTx.HasCreateCdcStreamNotice() ?
             schemeTx.GetCreateCdcStreamNotice() :
-            schemeTx.GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
+            schemeTx.GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice(); // Fallback, хотя выше обработано
+            
         const auto& streamDesc = params.GetStreamDescription();
         const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
 
@@ -133,8 +204,15 @@ public:
     }
 
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
-        if (RemoveSender) {
-            ctx.Send(DataShard.GetChangeSender(), RemoveSender.Release());
+        // Отправляем события удаления (может быть несколько)
+        if (!RemoveSenders.empty()) {
+            const auto& changeSender = DataShard.GetChangeSender();
+            if (changeSender) {
+                for (auto& holder : RemoveSenders) {
+                    ctx.Send(changeSender, holder.Release());
+                }
+            }
+            RemoveSenders.clear();
         }
 
         if (AddSender) {

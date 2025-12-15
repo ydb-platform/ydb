@@ -795,12 +795,14 @@ bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *act
     }
     Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
-    if (op.HasRotateCdcStreamNotice()) {
-        const auto& notice = op.GetRotateCdcStreamNotice();
-        if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc (Rotate)")) {
+    if (op.HasDropCdcStreamNotice()) {
+        const auto& notice = op.GetDropCdcStreamNotice();
+        if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc (Drop)")) {
             return false;
         }
-    } else {
+    }
+
+    if (op.HasCreateCdcStreamNotice()) {
         const auto& notice = op.GetCreateCdcStreamNotice();
         if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc (Create)")) {
             return false;

@@ -37,8 +37,8 @@ static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath
         auto* coOp = scheme.MutableCreateCdcStream();
         coOp->CopyFrom(descr.GetCreateSrcCdcStream());
     }
-    if (descr.HasRotateSrcCdcStream()) {
-        operation->MutableRotateSrcCdcStream()->CopyFrom(descr.GetRotateSrcCdcStream());
+    if (descr.HasDropSrcCdcStream()) {
+        operation->MutableDropSrcCdcStream()->CopyFrom(descr.GetDropSrcCdcStream());
     }
     if (descr.HasTargetPathTargetState()) {
         operation->SetPathState(descr.GetTargetPathTargetState());

@@ -299,7 +299,6 @@ namespace NKikimr::NPQ {
                     reqData.RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), nullptr);
                 }
 
-                // reqBlob.ExtractBatches();
                 auto cached = std::make_shared<TCacheValue>(reqBlob.Batches, ctx.SelfID, TAppData::TimeProvider->Now());
                 TValueL1 valL1(cached, cached->GetDataSize(), TValueL1::SourceHead);
                 Cache[blob] = valL1; // weak

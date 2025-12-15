@@ -42,9 +42,9 @@ struct TCacheValue : TNonCopyable {
         , AccessCount(0)
     {
         AFL_VERIFY(value != nullptr);
-        for (const auto& batch : *Value) {
-            DataSize += batch.GetUnpackedSize();
-        }
+        DataSize = std::accumulate(Value->begin(), Value->end(), 0, [](ui32 sum, const TBatch& batch) {
+            return sum + batch.GetPackedSize();
+        });
     }
 
     TInstant GetAccessTime() const {

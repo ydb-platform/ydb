@@ -463,10 +463,9 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         }
 
         auto blobBatches = blobs[pos].Batches;
-        ui32 totalSize = 0;
-        for (const auto& batch : *blobBatches) {
-            totalSize += batch.GetUnpackedSize();
-        }
+        ui32 totalSize = std::accumulate(blobBatches->begin(), blobBatches->end(), 0, [](ui32 sum, const TBatch& batch) {
+            return sum + batch.GetUnpackedSize();
+        });
 
         AFL_ENSURE(totalSize <= blobs[pos].Size)("value for offset", offset)("count", count)
             ("size must be",  blobs[pos].Size)("got", totalSize);

@@ -1125,8 +1125,7 @@ private:
         if (IsCreatedByQuery(item)) {
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
-            const TString source = TStringBuilder()
-                << importInfo->GetItemSrcPrefix(msg.ItemIdx) << "/" << NYdb::NDump::NFiles::CreateView().FileName;
+            const TString source = TStringBuilder() << item.SrcPath;
 
             NYql::TIssues issues;
             if (!RewriteCreateQuery(item.CreationQuery, database, item.DstPathName, issues)) {

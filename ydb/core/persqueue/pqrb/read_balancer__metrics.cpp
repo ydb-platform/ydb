@@ -43,7 +43,7 @@ struct TMetricCollector {
 struct TConsumerMetricCollector {
     TMetricCollector<EClientLabeledCounters_descriptor> ClientLabeledCounters;
     TMetricCollector<EMLPConsumerLabeledCounters_descriptor> MLPConsumerLabeledCounters;
-    //TMetricCollector MLPMessageLockAttemptsCounter;
+    std::vector<ui64> MLPMessageLockAttemptsCounter;
 };
 
 struct TTopicMetricCollector {
@@ -91,7 +91,11 @@ struct TTopicMetricCollector {
         for (const auto& consumer : counters.GetMLPConsumerCounters()) {
             auto& collector = Consumers[consumer.GetConsumer()];
             collector.MLPConsumerLabeledCounters.Collect(consumer.GetCountersValues());
-        //     collector.MLPMessageLockAttemptsCounter.Collect(consumer.GetMessageLocksValues());
+
+            const size_t count = std::min<size_t>(consumer.GetMessageLocksValues().size(), MLP_LOCKS_BOUNDS.size());
+            for (size_t i = 0; i < count; ++i) {
+                collector.MLPMessageLockAttemptsCounter[i] += consumer.GetMessageLocksValues()[i];
+            }
         }
     }
 
@@ -205,7 +209,8 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTablet
 
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
             counters.MLPClientLabeledCounters = InitializeCounters<EMLPConsumerLabeledCounters_descriptor>(DynamicCounters, {{"consumer", metricsConsumerName}});
-            //metrics.MLPMessageLockAttemptsCounter = InitializeCounters<EMLPMessageLockAttemptsLabeledCounters_descriptor>(DynamicCounters,  {{"consumer", metricsConsumerName}});
+            counters.MLPMessageLockAttemptsCounter = DynamicCounters->GetSubgroup("consumer", metricsConsumerName)
+                ->GetExpiringNamedHistogram("name", "topic.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
         }
     }
 
@@ -293,7 +298,11 @@ void TTopicMetricsHandler::UpdateMetrics() {
         SetCounters(consumerCounters.ClientLabeledCounters, consumerMetrics.ClientLabeledCounters);
         if (!consumerCounters.MLPClientLabeledCounters.Counters.empty()) {
             SetCounters(consumerCounters.MLPClientLabeledCounters, consumerMetrics.MLPConsumerLabeledCounters);
-            // TODO MLPMessageLockAttemptsCounter
+
+            for (size_t i = 0; i < MLP_LOCKS_BOUNDS.size(); ++i) {
+                consumerCounters.MLPMessageLockAttemptsCounter->Collect(MLP_LOCKS_BOUNDS[i], consumerMetrics.MLPMessageLockAttemptsCounter[i]);
+            }
+            consumerCounters.MLPMessageLockAttemptsCounter->Collect(Max<double>(), consumerMetrics.MLPMessageLockAttemptsCounter[MLP_LOCKS_BOUNDS.size()]);
         }
     }
 }

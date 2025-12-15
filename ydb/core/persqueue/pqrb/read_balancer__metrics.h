@@ -72,7 +72,7 @@ private:
     struct TConsumerCounters {
         TCounters ClientLabeledCounters;
         TCounters MLPClientLabeledCounters;
-        ::NMonitoring::TDynamicCounters::TCounterPtr MLPMessageLockAttemptsCounter;
+        ::NMonitoring::THistogramPtr MLPMessageLockAttemptsCounter;
     };
     absl::flat_hash_map<TString, TConsumerCounters> ConsumerCounters;
 

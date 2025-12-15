@@ -121,4 +121,8 @@ namespace NKikimr::NBsController {
         hostConfigs.erase(it);
     }
 
+    // void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TInferPDiskSlotCountSettings& cmd, TStatus& /*status*/) {
+    //     Y_UNUSED(cmd);
+    // }
+
 } // NKikimr::NBsController

@@ -376,6 +376,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(MovePDisk)
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
                     HANDLE_COMMAND(ReconfigureVirtualGroup)
+                    // HANDLE_COMMAND(UpdateInferPDiskSlotCountSettings)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

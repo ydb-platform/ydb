@@ -608,8 +608,8 @@ namespace NKikimr::NBsController {
                 x->SetDriveStatus(NKikimrBlobStorage::EDriveStatus::ACTIVE);
                 x->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
                 x->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE);
-                x->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
-                x->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
+                // x->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+                // x->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
                 if (pdisk.PDiskMetrics) {
                     x->MutablePDiskMetrics()->CopyFrom(*pdisk.PDiskMetrics);
                     x->MutablePDiskMetrics()->ClearPDiskId();

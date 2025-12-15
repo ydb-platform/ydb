@@ -331,7 +331,8 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
     info->SetSlotSizeInUnits(slotSizeInUnits);
-    info->SetInferPDiskSlotCountFromUnitSize(pDiskInfo->InferPDiskSlotCountFromUnitSize);
+    // PDisk slot count settings are now stored in the global configuration
+    // and accessed through StorageConfig->GetBlobStorageConfig().GetInferPDiskSlotCountSettings()
 }
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
@@ -553,13 +554,18 @@ void TBlobStorageController::UpdateSystemViews() {
                 pb->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(NKikimrBlobStorage::EDriveStatus::ACTIVE));
                 pb->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE));
 
+
+                // TODO
+                //
+                // bool shouldInfer = inferSettingsForDriveType && (!explicitSlotCount || preferInferred);
                 ui32 slotCount = 0;
                 ui32 slotSizeInUnits = 0;
                 pdisk.ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
 
                 pb->SetExpectedSlotCount(slotCount);
                 pb->SetSlotSizeInUnits(slotSizeInUnits);
-                pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+                // PDisk slot count settings are now stored in the global configuration
+                // and accessed through StorageConfig->GetBlobStorageConfig().GetInferPDiskSlotCountSettings()
                 pb->SetNumActiveSlots(pdisk.StaticSlotUsage);
             }
         }

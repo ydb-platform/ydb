@@ -754,8 +754,8 @@ message TBaseConfig {
         string LastSeenSerial = 18;
         bool ReadOnly = 19;
         TMaintenanceStatus.E MaintenanceStatus = 20;
-        uint64 InferPDiskSlotCountFromUnitSize = 21;
-        uint32 InferPDiskSlotCountMax = 22;
+        reserved 21; // uint64 InferPDiskSlotCountFromUnitSize = 21
+        reserved 22; // uint32 InferPDiskSlotCountMax = 22
     }
     message TVSlot {
         message TDonorDisk {

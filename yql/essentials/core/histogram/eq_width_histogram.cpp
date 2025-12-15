@@ -28,48 +28,13 @@ TEqWidthHistogram::TEqWidthHistogram(const char* str, size_t size) {
 
 void TEqWidthHistogram::Aggregate(const TEqWidthHistogram& other) {
     switch (ValueType_) {
-        case EHistogramValueType::Int16: {
-            if (!BucketsEqual<i16>(other)) {
-                return;
-            }
-            break;
-        }
-        case EHistogramValueType::Int32: {
-            if (!BucketsEqual<i32>(other)) {
-                return;
-            }
-            break;
-        }
-        case EHistogramValueType::Int64: {
-            if (!BucketsEqual<i64>(other)) {
-                return;
-            }
-            break;
-        }
-        case EHistogramValueType::Uint16: {
-            if (!BucketsEqual<ui16>(other)) {
-                return;
-            }
-            break;
-        }
-        case EHistogramValueType::Uint32: {
-            if (!BucketsEqual<ui32>(other)) {
-                return;
-            }
-            break;
-        }
-        case EHistogramValueType::Uint64: {
-            if (!BucketsEqual<ui64>(other)) {
-                return;
-            }
-            break;
-        }
-        case EHistogramValueType::Double: {
-            if (!BucketsEqual<double>(other)) {
-                return;
-            }
-            break;
-        }
+#define HIST_TYPE_CHECK(type, layout)        \
+    case EHistogramValueType::layout: {      \
+        Y_ENSURE(BucketsEqual<type>(other)); \
+    }
+        KNOWN_FIXED_HISTOGRAM_TYPES(HIST_TYPE_CHECK)
+#undef HIST_TYPE_CHECK
+
         default:
             Y_ENSURE(ValueType_ != EHistogramValueType::NotSupported, "Unsupported histogram type");
     }

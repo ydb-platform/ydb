@@ -67,6 +67,15 @@ enum class EHistogramValueType: ui8 { Int8,
                                       Double,
                                       NotSupported };
 
+#define KNOWN_FIXED_HISTOGRAM_TYPES(xx)  \
+    xx(i16, Int16)                       \
+        xx(i32, Int32)                   \
+            xx(i64, Int64)               \
+                xx(ui16, Uint16)         \
+                    xx(ui32, Uint32)     \
+                        xx(ui64, Uint64) \
+                            xx(double, Double)
+
 template <typename T>
 inline std::optional<EHistogramValueType> GetHistogramValueType() {
     return std::nullopt;

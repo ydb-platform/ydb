@@ -494,11 +494,7 @@ class TestWorkloadManagerOltp50(TestWorkloadManagerOltp100):
     tpcc_pool_perc = 50
 
 
-class TestWorkloadManagerOltpTpch20s1(WorkloadManagerTpchBase, WorkloadManagerOltp):
-    tables_size = tpch.TestTpch1.tables_size
-    scale = tpch.TestTpch1.scale
-    timeout = tpch.TestTpch1.timeout
-
+class WorkloadManagerOltpTpch20Base(WorkloadManagerTpchBase, WorkloadManagerOltp):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
@@ -511,9 +507,15 @@ class TestWorkloadManagerOltpTpch20s1(WorkloadManagerTpchBase, WorkloadManagerOl
         cls.run_tpcc(cls.timeout, user='')
 
 
+class TestWorkloadManagerOltpTpch20s100(WorkloadManagerOltpTpch20Base):
+    tables_size = tpch.TestTpch100.tables_size
+    scale = tpch.TestTpch100.scale
+    timeout = tpch.TestTpch100.timeout
+
+
 class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):
     workload_type = WorkloadType.EXTERNAL
-    iterations = 3
+    iterations = 300
     threads = 5
 
     @classmethod

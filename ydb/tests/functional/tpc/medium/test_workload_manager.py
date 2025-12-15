@@ -73,7 +73,7 @@ class TestWMOltp50(wm.TestWorkloadManagerOltp50, FunctionalTestBase):
         super().setup_class()
 
 
-class TestWMOltpTpchS0_1(wm.TestWorkloadManagerOltpTpch20s1, FunctionalTestBase):
+class TestWMOltpTpchS0_1(wm.WorkloadManagerOltpTpch20Base, FunctionalTestBase):
     tables_size: dict[str, int] = {
         'lineitem': 600572,
     }
@@ -99,6 +99,7 @@ class TestWMOltpTpchS0_1(wm.TestWorkloadManagerOltpTpch20s1, FunctionalTestBase)
 
 class TestWMOltpAdHoc(wm.TestWorkloadManagerOltpAdHoc, FunctionalTestBase):
     tpcc_warehouses: int = 10
+    iterations = 3
 
     @classmethod
     def get_resource_pools(cls) -> list[wm.ResourcePool]:

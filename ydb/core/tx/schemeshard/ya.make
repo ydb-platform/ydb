@@ -320,8 +320,6 @@ SRCS(
     schemeshard_user_attr_limits.h
     schemeshard_validate_ttl.cpp
     schemeshard_xxport__helpers.cpp
-    schemeshard_xxport_common.h
-    schemeshard_xxport_common.cpp
     user_attributes.cpp
     schemeshard__operation_create_set_constraint.cpp
     schemeshard__operation_create_set_constraint_check.cpp

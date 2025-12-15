@@ -6,10 +6,6 @@ namespace NKikimrScheme {
     class TEvDescribeSchemeResult;
 }
 
-namespace NKikimrSchemeOp {
-    enum EPathType : int;
-}
-
 namespace NKikimr::NSchemeShard {
 
 bool BuildScheme(

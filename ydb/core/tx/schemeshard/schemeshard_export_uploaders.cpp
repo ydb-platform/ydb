@@ -1,7 +1,7 @@
 #include "schemeshard_export_uploaders.h"
 
 #include "schemeshard.h"
-#include "schemeshard_xxport_common.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>

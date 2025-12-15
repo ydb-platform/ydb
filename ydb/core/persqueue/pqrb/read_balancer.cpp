@@ -268,19 +268,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     PartitionGraph = MakePartitionGraph(record);
 
-    auto oldConsumers = std::move(Consumers);
-    Consumers.clear();
-    for (const auto& consumer : TabletConfig.GetConsumers()) {
-        auto it = oldConsumers.find(consumer.GetName());
-        if (it != oldConsumers.end()) {
-            auto& newValue = Consumers[consumer.GetName()] = std::move(it->second);
-            newValue.Config = consumer;
-        } else {
-            Consumers.insert(std::make_pair(consumer.GetName(), TConsumerInfo{.Config = consumer}));
-        }
-    }
-
-
     std::vector<std::pair<ui64, TTabletInfo>> newTablets;
     std::vector<std::pair<ui32, ui32>> newGroups;
     std::vector<std::pair<ui64, TTabletInfo>> reallocatedTablets;

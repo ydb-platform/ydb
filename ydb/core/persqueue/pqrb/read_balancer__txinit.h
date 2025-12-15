@@ -54,10 +54,6 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                     AFL_ENSURE(res)("tablet_id", Self->TabletID())("path", Self->Path)("topic", Self->Topic);
 
                     Migrate(Self->TabletConfig);
-                    Self->Consumers.clear();
-                    for (auto& consumer : Self->TabletConfig.GetConsumers()) {
-                        Self->Consumers[consumer.GetName()].Config = consumer;
-                    }
                     Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
 
                     if (SplitMergeEnabled(Self->TabletConfig)) {

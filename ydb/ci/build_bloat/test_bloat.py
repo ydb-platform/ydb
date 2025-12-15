@@ -18,7 +18,9 @@ def generate(report_path, output_dir):
     tree_paths.append([["/", "dir", 0]])
 
     for result in report.get("results", []):
-        if result.get("type") != "test":
+        # Skip non-test entries and suite-level aggregations
+        # Suite-level entries (suite: true or chunk: true) are aggregations, not individual tests
+        if result.get("type") != "test" or result.get("suite") or result.get("chunk"):
             continue
         
         suite_name = result.get("path", "")
@@ -41,7 +43,12 @@ def generate(report_path, output_dir):
         test_name = test_name.split("[")[0]
 
         root_name = "/"
-        path = [root_name] + suite_name.split("/") + [test_name] if test_name else [root_name] + suite_name.split("/")
+        # Build path: root + suite parts + test_name (if present)
+        path = [root_name] + suite_name.split("/")
+        if test_name:
+            path.append(test_name)
+        # Filter out empty strings from split (e.g., "ydb//core" -> ['ydb', '', 'core'])
+        path = [chunk for chunk in path if chunk]
         path_with_info = [[chunk, "dir", 0] for chunk in path]
         if test_name:
             path_with_info[-1][1] = "testcase"

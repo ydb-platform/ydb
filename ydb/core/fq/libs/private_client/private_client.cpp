@@ -28,7 +28,7 @@ public:
     {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
         auto weakConnections = std::weak_ptr<TGRpcConnectionsImpl>(Connections_);
-        auto channelPoolUpdateWrapper = [weakConnections, ptr = this]
+        auto channelPoolUpdateWrapper = [weakConnections, knownEndpoints = KnownEndpoints]
             (NYdb::NIssue::TIssues&&, EStatus status) mutable {
                 if (status != EStatus::SUCCESS) {
                     return false;
@@ -39,9 +39,9 @@ public:
             }
             std::vector<std::string> endpoints;
             {
-                std::lock_guard lock(ptr->KnownEndpointsLock);
-                endpoints.assign(ptr->KnownEndpoints.begin(), ptr->KnownEndpoints.end());
-                ptr->KnownEndpoints.clear();
+                std::lock_guard lock(knownEndpoints->Lock);
+                endpoints.assign(knownEndpoints->Endpoints.begin(), knownEndpoints->Endpoints.end());
+                knownEndpoints->Endpoints.clear();
             }
             connections->DeleteChannels(endpoints);
             return true;
@@ -219,10 +219,16 @@ public:
 private:
     void UpdateKnownEndpoints([[maybe_unused]] const std::string& endpoint) {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-        std::lock_guard lock(KnownEndpointsLock);
-        KnownEndpoints.emplace(endpoint);
+        std::lock_guard lock(KnownEndpoints->Lock);
+        KnownEndpoints->Endpoints.emplace(endpoint);
 #endif
     }
+
+private:
+struct TKnownEndpoints {
+    std::unordered_set<std::string> Endpoints;
+    std::mutex Lock;
+};
 
 private:
     const NMonitoring::TDynamicCounterPtr Counters;
@@ -232,8 +238,7 @@ private:
     const NMonitoring::THistogramPtr NodesHealthCheckTime;
     const NMonitoring::THistogramPtr CreateRateLimiterResourceTime;
     const NMonitoring::THistogramPtr DeleteRateLimiterResourceTime;
-    std::unordered_set<std::string> KnownEndpoints;
-    std::mutex KnownEndpointsLock;
+    std::shared_ptr<TKnownEndpoints> KnownEndpoints = std::make_shared<TKnownEndpoints>();
 };
 
 TPrivateClient::TPrivateClient(

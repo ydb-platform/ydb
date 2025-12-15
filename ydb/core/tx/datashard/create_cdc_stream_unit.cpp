@@ -44,7 +44,9 @@ public:
                 Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
                 Y_ENSURE(version);
 
-                auto tableInfo = DataShard.AlterTableRotateCdcStream(ctx, txc, pathId, version, oldStreamPathId, newStreamDesc);
+                DataShard.AlterTableDropCdcStreams(ctx, txc, pathId, version, {oldStreamPathId});
+
+                auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, newStreamDesc);
                 Y_ENSURE(tableInfo, "Table info not found during atomic rotation");
 
                 TDataShardLocksDb locksDb(DataShard, txc);

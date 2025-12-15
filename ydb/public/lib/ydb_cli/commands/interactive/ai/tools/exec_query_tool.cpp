@@ -80,6 +80,8 @@ Execute query in Yandex Data Base (YDB) on YQL (SQL dialect). Use cases:
 
 IMPORTANT:
 - NEVER guess column names, types or keys. If you do not know the exact schema of a table, use the `describe` tool FIRST.
+- NEVER guess data values for filtering. Do not assume specific values exist in the table.
+  Instead, query the distinct values first (e.g., `SELECT DISTINCT column_name FROM my_table LIMIT 20`) to verify the actual values in the database.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
 - If path to table contains '/' or '@', wrap it into back ticks, for example `path/to/table`. Add back ticks only if they are really needed, for example table some_table do not need backticks. 
 

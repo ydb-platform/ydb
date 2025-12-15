@@ -38,6 +38,7 @@ IMPORTANT:
 - Do NOT guess command names. First, call this tool with empty arguments to see the list of available commands.
 - If you are unsure about command syntax or options, ALWAYS use this tool to verify them before execution.
 - NEVER invent commands or options. Only use those that are documented in the help output.
+- Do NOT use 'ydb sql' or 'ydb table query execute' to execute queries. Use the 'exec_query' tool instead.
 
 Examples:
 - To get help for `ydb scheme`: call with 'scheme'.

@@ -693,9 +693,9 @@ namespace NYdb::NConsoleClient {
             consumerSettings.AvailabilityPeriod(*AvailabilityPeriod_);
         }
 
-        auto consumerType = TryFromString<NTopic::EConsumerType>(ConsumerType_);
+        auto consumerType = TryFromString<NTopic::EConsumerType>(to_title(ConsumerType_));
         if (!consumerType.Defined()) {
-            throw TMisuseException() << "Invalid consumer type: " << ConsumerType_ << ". Valid types: " << JoinSeq(", ", GetEnumAllNames<NTopic::EConsumerType>());
+            throw TMisuseException() << "Invalid consumer type: " << to_title(ConsumerType_) << ". Valid types: " << GetEnumAllNames<NTopic::EConsumerType>();
         }
 
         consumerSettings.ConsumerType(*consumerType);

@@ -69,12 +69,12 @@ namespace NYdb::NConsoleClient {
 
         Aws::Vector<Aws::SQS::Model::DeleteMessageBatchRequestEntry>
             deleteMessageBatchRequestEntries;
-        for (const auto& message : messages) {
-            if (params.ValidateFifo && !ValidateFifo(params, message, sendMessageTime)) {
+        for (size_t i = 0; i < messages.size(); ++i) {
+            if (params.ValidateFifo && !ValidateFifo(params, messages[i], sendMessageTime)) {
                 params.Log->Write(ELogPriority::TLOG_ERR,
                                   TStringBuilder()
                                       << "FIFO validation failed for message: "
-                                      << message.GetMessageId());
+                                      << messages[i].GetMessageId());
                 params.ErrorFlag->store(true);
                 DecrementStartedCountAndNotify(params);
                 params.StatsCollector->AddFinishProcessMessagesEvent(
@@ -82,7 +82,7 @@ namespace NYdb::NConsoleClient {
                 return;
             }
 
-            if (ShouldFail(params, sendMessageTime)) {
+            if (ShouldFail(params, i, sendMessageTime)) {
                 params.StatsCollector->AddErrorWhileProcessingMessagesEvent(TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent());
 
                 continue;
@@ -95,8 +95,8 @@ namespace NYdb::NConsoleClient {
 
             deleteMessageBatchRequestEntries.push_back(
                 Aws::SQS::Model::DeleteMessageBatchRequestEntry()
-                    .WithReceiptHandle(message.GetReceiptHandle())
-                    .WithId(message.GetMessageId()));
+                    .WithReceiptHandle(messages[i].GetReceiptHandle())
+                    .WithId(messages[i].GetMessageId()));
         }
 
         if (!deleteMessageBatchRequestEntries.empty()) {
@@ -133,12 +133,12 @@ namespace NYdb::NConsoleClient {
         DecrementStartedCountAndNotify(params);
     }
 
-    bool TSqsWorkloadReader::ShouldFail(const TSqsWorkloadReaderParams& params, ui64 sendMessageTime) {
+    bool TSqsWorkloadReader::ShouldFail(const TSqsWorkloadReaderParams& params, ui64 batchIndex, ui64 sendMessageTime) {
         if (!params.ErrorMessagesRate || *params.ErrorMessagesRate == 0) {
             return false;
         }
 
-        auto shouldFail = (sendMessageTime %
+        auto shouldFail = ((sendMessageTime + batchIndex) %
                            *params.ErrorMessagesRate) == 0;
         if (!shouldFail) {
             return false;

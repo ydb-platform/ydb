@@ -23,7 +23,8 @@ namespace NYdb::NConsoleClient {
 
         Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry>
         CreateSendMessageBatchRequestEntries(ui64 now, ui32 batchSize, ui32 messageSize,
-                                             ui32 messageGroups, ui32& messageGroupID) {
+                                             ui32 messageGroups, ui32& messageGroupID,
+                                             ui64& messageDeduplicationID, ui64 maxUniqueMessages) {
             Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry> entries;
             for (ui32 i = 0; i < batchSize; ++i) {
                 auto messageBody =
@@ -36,12 +37,15 @@ namespace NYdb::NConsoleClient {
                 entry.WithMessageBody(messageBody).WithId(fmt::format("{}", i));
                 if (messageGroups > 0) {
                     entry.WithMessageGroupId(fmt::format("{}", messageGroupID));
+                    messageGroupID = (messageGroupID + 1) % messageGroups;
+                }
+
+                if (maxUniqueMessages > 0) {
+                    entry.WithMessageDeduplicationId(std::format("{}", messageDeduplicationID));
+                    messageDeduplicationID = (messageDeduplicationID + 1) % maxUniqueMessages;
                 }
 
                 entries.push_back(std::move(entry));
-                if (messageGroups > 0) {
-                    messageGroupID = (messageGroupID + 1) % messageGroups;
-                }
             }
             return entries;
         }
@@ -74,6 +78,7 @@ namespace NYdb::NConsoleClient {
     void TSqsWorkloadWriter::RunLoop(const TSqsWorkloadWriterParams& params,
                                      TInstant endTime) {
         ui32 messageGroupID = 0;
+        ui64 messageDeduplicationID = 0;
 
         while (Now() < endTime && !params.ErrorFlag->load()) {
             auto now = Now().MilliSeconds();
@@ -81,8 +86,9 @@ namespace NYdb::NConsoleClient {
             Aws::SQS::Model::SendMessageBatchRequest sendMessageBatchRequest;
             sendMessageBatchRequest.SetQueueUrl(params.QueueUrl.c_str());
             sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(
-                now, params.BatchSize, params.MessageSize, params.GroupsAmount,
-                messageGroupID));
+                now, params.BatchSize, params.MessageSize,
+                params.GroupsAmount, messageGroupID,
+                messageDeduplicationID, params.MaxUniqueMessages));
             sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_SEND_MESSAGE_BATCH);
 

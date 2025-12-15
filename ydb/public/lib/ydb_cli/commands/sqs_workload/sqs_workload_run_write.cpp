@@ -77,6 +77,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("set-subject-token", "Set subject token.")
             .DefaultValue(false)
             .StoreTrue(&Scenario.SetSubjectToken);
+        config.Opts->AddLongOption("max-unique-messages", "Max unique messages.")
+            .DefaultValue(0)
+            .StoreResult(&Scenario.MaxUniqueMessages);
     }
 
     void TCommandWorkloadSqsRunWrite::Parse(TConfig& config) {

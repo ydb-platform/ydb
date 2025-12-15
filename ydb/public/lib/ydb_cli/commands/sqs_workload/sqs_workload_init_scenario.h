@@ -6,16 +6,20 @@
 namespace NYdb::NConsoleClient {
 
     class TSqsWorkloadInitScenario: public TSqsWorkloadScenario {
+    private:
+        void AddCreateTopicSettings(NTopic::TCreateTopicSettings& createTopicSettings);
+        void AddCreateConsumerSettings(NTopic::TCreateTopicSettings& createTopicSettings);
+
     public:
         int Run(TClientCommand::TConfig&);
 
         TString TopicPath;
-        TString QueueName;
+        TString Consumer;
         bool KeepMessagesOrder;
-        bool DeduplicationOn; // ?
         TMaybe<TDuration> DefaultProcessingTimeout;
         TMaybe<TString> DlqQueueName;
         ui32 MaxReceiveCount;
+        ui32 TopicPartitionCount;
     };
 
 } // namespace NYdb::NConsoleClient

@@ -25,6 +25,7 @@ namespace NYdb::NConsoleClient {
             .ErrorFlag = ErrorFlag,
             .SqsClient = SqsClient,
             .StatsCollector = statsCollector,
+            .MaxUniqueMessages = MaxUniqueMessages,
             .BatchSize = BatchSize,
             .Concurrency = Concurrency,
             .GroupsAmount = GroupsAmount,

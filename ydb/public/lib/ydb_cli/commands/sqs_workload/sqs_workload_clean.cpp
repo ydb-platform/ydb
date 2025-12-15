@@ -12,13 +12,8 @@ namespace NYdb::NConsoleClient {
 
         config.SetFreeArgsNum(0);
 
-        config.Opts->AddLongOption('n', "queue-name", "SQS queue name.")
-            .Required()
-            .Hidden()
-            .StoreResult(&Scenario.QueueName);
         config.Opts->AddLongOption("topic-path", "YDB topic path.")
-            .Required()
-            .Hidden()
+            .DefaultValue("sqs-workload-topic")
             .StoreResult(&Scenario.TopicPath);
     }
 

@@ -1,5 +1,4 @@
 #include "sqs_workload_scenario.h"
-#include "consts.h"
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentials.h>
@@ -22,7 +21,7 @@ namespace NYdb::NConsoleClient {
 
     TSqsWorkloadScenario::TSqsWorkloadScenario()
         : Log(std::make_shared<TLog>(CreateLogBackend(
-              SQS_WORKLOAD_LOG_FILE_NAME, ELogPriority::TLOG_DEBUG, true))),
+              "stderr", ELogPriority::TLOG_DEBUG, true))),
         ErrorFlag(std::make_shared<std::atomic_bool>(false)),
         AwsOptions(),
         Mutex(std::make_shared<std::mutex>()),

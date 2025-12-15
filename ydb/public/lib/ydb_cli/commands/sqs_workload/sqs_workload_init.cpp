@@ -15,34 +15,27 @@ namespace NYdb::NConsoleClient {
         config.SetFreeArgsNum(0);
 
         config.Opts->AddLongOption("topic-path", "YDB topic path.")
-            .Required()
-            .Hidden()
+            .DefaultValue("sqs-workload-topic")
             .StoreResult(&Scenario.TopicPath);
-        config.Opts->AddLongOption('n', "queue-name", "SQS queue name.")
-            .Required()
-            .Hidden()
-            .StoreResult(&Scenario.QueueName);
+        config.Opts->AddLongOption('c', "consumer", "SQS consumer name.")
+            .DefaultValue("sqs-workload-consumer")
+            .StoreResult(&Scenario.Consumer);
+        config.Opts->AddLongOption("topic-partition-count", "YDB topic partition count.")
+            .DefaultValue(1)
+            .StoreResult(&Scenario.TopicPartitionCount);
         config.Opts->AddLongOption("keep-messages-order", "Keep messages order.")
             .DefaultValue(false)
-            .Hidden()
             .StoreTrue(&Scenario.KeepMessagesOrder);
         config.Opts
             ->AddLongOption("default-processing-timeout",
                             "Default processing timeout.")
             .Optional()
-            .Hidden()
             .StoreMappedResult(&Scenario.DefaultProcessingTimeout, ParseDuration);
-        config.Opts->AddLongOption("deduplication-on", "SQS deduplication on.")
-            .DefaultValue(false)
-            .Hidden()
-            .StoreTrue(&Scenario.DeduplicationOn);
         config.Opts->AddLongOption("dlq-queue-name", "SQS DLQ queue name.")
             .Optional()
-            .Hidden()
             .StoreResult(&Scenario.DlqQueueName);
         config.Opts->AddLongOption("max-receive-count", "SQS max receive count.")
             .DefaultValue(0)
-            .Hidden()
             .StoreResult(&Scenario.MaxReceiveCount);
     }
 

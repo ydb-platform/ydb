@@ -29,6 +29,7 @@ namespace NYdb::NConsoleClient {
         TString Account;
         TMaybe<TString> Region;
         TMaybe<TString> EndpointOverride;
+        ui64 MaxUniqueMessages;
         ui32 BatchSize;
         ui32 MessageSize;
         ui32 GroupsAmount;

@@ -68,7 +68,7 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
             lambda: super(InstrumentedQuerySessionPool, self).execute_with_retries(
                 query, parameters, retry_settings, settings
             ),
-            operation_name
+            operation_name, self.full_name
         )
 
     def explain_with_retries(self, query: str, retry_settings=None,
@@ -89,7 +89,7 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
 
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings),
-            operation_name
+            operation_name, self.full_name
         )
 
     def get_metrics_summary(self) -> str:
@@ -156,7 +156,7 @@ class InstrumentedSessionPool(ydb.SessionPool):
 
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedSessionPool, self).retry_operation_sync(callee, *args, **kwargs),
-            operation_name
+            operation_name, self.full_name
         )
 
     def get_metrics_summary(self) -> str:

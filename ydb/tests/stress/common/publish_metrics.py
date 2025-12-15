@@ -186,7 +186,7 @@ class MetricsCollector:
         }
         self.publisher = publisher or _global_publisher
 
-    def wrap_call(self, method: Callable, operation_name: str) -> Any:
+    def wrap_call(self, method: Callable, operation_name: str, stress_util_name: str) -> Any:
         """
         Wrapper for instrumenting call with automatic metrics collection.
 
@@ -212,7 +212,7 @@ class MetricsCollector:
                 operation=operation_name,
                 success=success,
                 error_type=error_type,
-                stress_util_name=self.full_name,
+                stress_util_name=stress_util_name,
             )
 
     def record_query(self, operation: str, success: bool, error_type: str = None,

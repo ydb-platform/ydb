@@ -76,7 +76,7 @@ class InstrumentedYdbClient(YdbClient):
             lambda: super(InstrumentedYdbClient, self).query(
                 statement, is_ddl, retry_settings
             ),
-            operation_name
+            operation_name, self.full_name
         )
 
     def drop_table(self, path_to_table: str, operation_name: str = 'drop_table'):
@@ -91,7 +91,7 @@ class InstrumentedYdbClient(YdbClient):
             return super(InstrumentedYdbClient, self).drop_table(path_to_table)
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).drop_table(path_to_table),
-            operation_name
+            operation_name, self.full_name
         )
 
     def replace_index(self, table: str, src: str, dst: str,
@@ -109,7 +109,7 @@ class InstrumentedYdbClient(YdbClient):
             return super(InstrumentedYdbClient, self).replace_index(table, src, dst)
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).replace_index(table, src, dst),
-            operation_name
+            operation_name, self.full_name
         )
 
     def describe(self, path: str, operation_name: str = 'describe_path'):
@@ -124,7 +124,7 @@ class InstrumentedYdbClient(YdbClient):
             return super(InstrumentedYdbClient, self).describe(path)
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).describe(path),
-            operation_name
+            operation_name, self.full_name
         )
 
     def remove_recursively(self, path: str, operation_name: str = 'remove_recursively'):
@@ -139,7 +139,7 @@ class InstrumentedYdbClient(YdbClient):
             return super(InstrumentedYdbClient, self).remove_recursively(path)
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).remove_recursively(path),
-            operation_name
+            operation_name, self.full_name
         )
 
     def get_metrics_summary(self) -> str:

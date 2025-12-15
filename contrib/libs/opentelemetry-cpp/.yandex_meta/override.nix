@@ -8,10 +8,7 @@ pkgs: attrs: with pkgs; rec {
     hash = "sha256-rVR8JWNoT5mxIgzynY8VzlZ4QxhWIEFBqogi+WFDcF0=";
   };
 
-  patches = [
-    ./revert-pr3661-aggregate.patch
-    ./revert-pr3687-aggregate.patch
-  ];
+  patches = [];
 
   nativeBuildInputs = [ cmake ninja pkg-config git cacert];
 

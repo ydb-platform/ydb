@@ -1074,7 +1074,7 @@ struct TEvBlobStorage {
         std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
 
         struct TParameters {
-            const TLogoBlobID& BlobId;
+            TLogoBlobID BlobId;
             TRope Buffer;
             TInstant Deadline;
             NKikimrBlobStorage::EPutHandleClass HandleClass = NKikimrBlobStorage::TabletLog;

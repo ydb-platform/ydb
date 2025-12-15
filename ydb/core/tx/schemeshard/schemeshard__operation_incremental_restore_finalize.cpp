@@ -277,6 +277,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             LOG_I("SyncIndexSchemaVersions: Processing " << finalize.GetTargetTablePaths().size() << " target table paths");
             
             NIceDb::TNiceDb db(context.GetDB());
+            THashSet<TPathId> publishedMainTables;
 
             // Iterate through all target table paths and finalize their alters
             for (const auto& tablePath : finalize.GetTargetTablePaths()) {
@@ -332,12 +333,25 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                         
                         LOG_I("SyncIndexSchemaVersions: Index AlterVersion incremented from "
                               << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);
-                        
+
                         context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
+
+                        // Publish the main table that owns this index
+                        // The main table's TIndexDescription.SchemaVersion must match index's AlterVersion
+                        TPath mainTablePath = indexPath.Parent();
+                        if (mainTablePath.IsResolved() && mainTablePath.Base()->PathType == NKikimrSchemeOp::EPathTypeTable) {
+                            TPathId mainTablePathId = mainTablePath.Base()->PathId;
+                            if (!publishedMainTables.contains(mainTablePathId)) {
+                                publishedMainTables.insert(mainTablePathId);
+                                context.SS->ClearDescribePathCaches(mainTablePath.Base());
+                                context.OnComplete.PublishToSchemeBoard(OperationId, mainTablePathId);
+                                LOG_I("SyncIndexSchemaVersions: Published main table: " << mainTablePathId);
+                            }
+                        }
                     }
                 }
             }
-            
+
             LOG_I("SyncIndexSchemaVersions: Finished schema version sync");
         }
 

@@ -299,7 +299,9 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
         for result in results:
             status = result.get("status", "")
             is_fail = status in ("FAILED", "ERROR")
-            if not is_fail:
+            is_muted = result.get("muted", False)
+            # Keep all logs for muted tests (they were failed before muting)
+            if not is_fail and not is_muted:
                 processed_link_types = set()
                 if "links" in result:
                     processed_link_types.add("logsdir")

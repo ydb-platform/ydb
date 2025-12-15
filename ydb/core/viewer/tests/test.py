@@ -1463,7 +1463,7 @@ def test_security():
         'Cookie': 'ydb_session_id=' + database_session_id,
     })
 
-    result['down_node_root'] = get_viewer("/tablets/app", params={
+    result['down_node_root'] = post_viewer("/tablets/app", params={
         'TabletID': '72057594037968897',
         'page': 'SetDown',
         'node': '1',
@@ -1471,7 +1471,7 @@ def test_security():
     }, headers={
         'Cookie': 'ydb_session_id=' + root_session_id,
     })
-    result['down_node_monitoring'] = get_viewer("/tablets/app", params={
+    result['down_node_monitoring'] = post_viewer("/tablets/app", params={
         'TabletID': '72057594037968897',
         'page': 'SetDown',
         'node': '1',
@@ -1479,7 +1479,7 @@ def test_security():
     }, headers={
         'Cookie': 'ydb_session_id=' + monitoring_session_id,
     })
-    result['down_node_viewer'] = get_viewer("/tablets/app", params={
+    result['down_node_viewer'] = post_viewer("/tablets/app", params={
         'TabletID': '72057594037968897',
         'page': 'SetDown',
         'node': '1',
@@ -1487,7 +1487,7 @@ def test_security():
     }, headers={
         'Cookie': 'ydb_session_id=' + viewer_session_id,
     })
-    result['down_node_database'] = get_viewer("/tablets/app", params={
+    result['down_node_database'] = post_viewer("/tablets/app", params={
         'TabletID': '72057594037968897',
         'page': 'SetDown',
         'node': '1',
@@ -1496,7 +1496,6 @@ def test_security():
         'Cookie': 'ydb_session_id=' + database_session_id,
     })
 
-<<<<<<< HEAD
     result['restart_pdisk_root'] = replace_values_by_key(post_viewer("/pdisk/restart", body={
         'node_id': '1',
         'pdisk_id': '1',
@@ -1526,183 +1525,3 @@ def test_security():
         'Cookie': 'ydb_session_id=' + database_session_id,
     })
     return result
-=======
-    @classmethod
-    def test_security(cls):
-        result = {}
-        result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'database': cls.dedicated_db,
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
-        result['database_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'database': cls.dedicated_db,
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        result['database_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'database': cls.dedicated_db,
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
-        result['database_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'database': cls.dedicated_db,
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
-
-        result['cluster_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
-        result['cluster_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        result['cluster_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
-        result['cluster_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
-
-        result['storage_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-            'database': cls.dedicated_db,
-            'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
-        result['storage_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-            'database': cls.dedicated_db,
-            'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        result['storage_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-            'database': cls.dedicated_db,
-            'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
-        result['storage_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-            'database': cls.dedicated_db,
-            'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
-
-        result['down_node_root'] = cls.post_viewer("/tablets/app", params={
-            'TabletID': '72057594037968897',
-            'page': 'SetDown',
-            'node': '1',
-            'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
-        result['down_node_monitoring'] = cls.post_viewer("/tablets/app", params={
-            'TabletID': '72057594037968897',
-            'page': 'SetDown',
-            'node': '1',
-            'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        result['down_node_viewer'] = cls.post_viewer("/tablets/app", params={
-            'TabletID': '72057594037968897',
-            'page': 'SetDown',
-            'node': '1',
-            'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
-        result['down_node_database'] = cls.post_viewer("/tablets/app", params={
-            'TabletID': '72057594037968897',
-            'page': 'SetDown',
-            'node': '1',
-            'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
-
-        result['restart_pdisk_root'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        }), ['debugMessage'])
-        result['restart_pdisk_monitoring'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        }), ['debugMessage'])
-        result['restart_pdisk_viewer'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        }), ['debugMessage'])
-        result['restart_pdisk_database'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        }), ['debugMessage'])
-
-        result['restart_pdisk_database_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'pdisk_id': '1-1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        }), ['debugMessage'])
-        result['restart_pdisk_viewer_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'pdisk_id': '1-1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        }), ['debugMessage'])
-        result['restart_pdisk_monitoring_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'pdisk_id': '1-1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        }), ['debugMessage'])
-        result['restart_pdisk_root_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'pdisk_id': '1-1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        }), ['debugMessage'])
-        return result
-
-    @classmethod
-    def test_storage_stats(cls):
-        result = {}
-        tries = 15
-        while tries > 0:
-            result = cls.get_viewer_normalized("/viewer/storage_stats", {
-                'database': cls.dedicated_db,
-                'path': '.,table1,topic1',
-            })
-            if result['Paths'][2]['Groups'] != 0:
-                break
-            tries -= 1
-            time.sleep(1)
-        return result
-
-    @classmethod
-    def test_viewer_peers(cls):
-        result = cls.get_viewer_normalized("/viewer/peers")
-        cls.delete_keys_recursively(result, {'ScopeId', 'PoolStats'})
-        return result
->>>>>>> 94fcb4ae8fb (only accept post requests in hive for effectful http operations (#30038))

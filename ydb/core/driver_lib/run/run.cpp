@@ -117,7 +117,8 @@
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/fq/ydb_over_fq.h>
 #include <ydb/services/kesus/grpc_service.h>
-#include <ydb/services/keyvalue/grpc_service.h>
+#include <ydb/services/keyvalue/grpc_service_v1.h>
+#include <ydb/services/keyvalue/grpc_service_v2.h>
 #include <ydb/services/local_discovery/grpc_service.h>
 #include <ydb/services/maintenance/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
@@ -1087,7 +1088,9 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         }
 
         if (hasKeyValue) {
-            server.AddService(new NGRpcService::TKeyValueGRpcService(ActorSystem.Get(), Counters,
+            server.AddService(new NGRpcService::TKeyValueGRpcServiceV1(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0]));
+            server.AddService(new NGRpcService::TKeyValueGRpcServiceV2(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0]));
         }
 

@@ -1,4 +1,4 @@
-#include "grpc_service.h"
+#include "grpc_service_v1.h"
 
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -8,21 +8,21 @@
 
 namespace NKikimr::NGRpcService {
 
-TKeyValueGRpcService::TKeyValueGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
+TKeyValueGRpcServiceV1::TKeyValueGRpcServiceV1(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
     : ActorSystem_(actorSystem)
     , Counters_(std::move(counters))
     , GRpcRequestProxyId_(grpcRequestProxyId)
 {
 }
 
-TKeyValueGRpcService::~TKeyValueGRpcService() = default;
+TKeyValueGRpcServiceV1::~TKeyValueGRpcServiceV1() = default;
 
-void TKeyValueGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
+void TKeyValueGRpcServiceV1::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
-void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+void TKeyValueGRpcServiceV1::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace Ydb::KeyValue;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 

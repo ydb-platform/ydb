@@ -234,6 +234,18 @@ bool RewriteSecretsNoCheck(TString& query, const TString& dbRestoreRoot, NYql::T
 
 } // anonymous namespace
 
+bool RewriteCreateAsyncReplicationQueryNoSecrets(
+    TString& query,
+    const TString& dbRestoreRoot,
+    const TString& dbPath,
+    NYql::TIssues& issues) {
+
+    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
+        return false;
+    }
+    return RewriteCreateQuery(query, "CREATE ASYNC REPLICATION `{}`", dbPath, issues);
+}
+
 bool RewriteCreateAsyncReplicationQuery(
     TString& query,
     const TString& dbRestoreRoot,
@@ -243,10 +255,7 @@ bool RewriteCreateAsyncReplicationQuery(
     if (!RewriteSecretsNoCheck(query, dbRestoreRoot, issues)) {
         return false;
     }
-    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
-        return false;
-    }
-    return RewriteCreateQuery(query, "CREATE ASYNC REPLICATION `{}`", dbPath, issues);
+    return RewriteCreateAsyncReplicationQueryNoSecrets(query, dbRestoreRoot, dbPath, issues);
 }
 
 } // namespace NYdb::NDump

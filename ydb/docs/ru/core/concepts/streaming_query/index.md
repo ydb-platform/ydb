@@ -21,7 +21,7 @@
 - не имеют максимальной длительности (таймаута),
 - сами производят перезапуск в случае ошибок (падений нод, дисконнектов),
 - периодически сохраняют свое состояние (чекпойнты),
-- не могут иметь результата. Посчитанные данные следует явно вставить в другой топик.
+- результат запроса в виде посчитанных данных следует явно вставить в другой топик или таблицу.
 
 В качестве входных данных могут быть использованы:
 - [топики](../topic),
@@ -29,7 +29,7 @@
 
 Для выходных данных могут быть использованы
  - топики,
- - таблицы.
+ - таблицы (локальные, в текущей БД).
 
 Текущие ограничения:
 - чтение локальных таблиц в качестве основного потока не поддерживается,
@@ -63,7 +63,7 @@
 SELECT Path, Status, Text, Run FROM `.sys/streaming_queries`;
 ```
 
-### Поддерживаемые типы данных
+### Поддерживаемые типы данных для топиков
 
 Топики {{ ydb-short-name }} хранят неструктурированные данные. Поэтому при чтении необоходимо указывать формат и схему данных (см. [Форматы данных](formats.md)). Запись можно выполнять только в виде неструктурированных данных (например как строка или JSON).
 
@@ -128,7 +128,6 @@ LIMIT 1;
 {% cut "Пример запроса" %}
 
 ```sql
-
 CREATE SECRET `streaming_test/secrets/ydb_token` WITH (value = "<ydb_token>");
 
 CREATE EXTERNAL DATA SOURCE `streaming_test/ydb_source` WITH (
@@ -194,6 +193,42 @@ END DO;
 {% endcut %}
 
 На данный момент `JOIN` потока с таблицами {{ ydb-short-name }} (как локальными, так и внешними) не поддерживается (в разработке).
+
+### Запись в таблицы {#table-write} 
+
+Запись результата в таблицу {{ ydb-short-name }} возможна с помощью [UPSERT INTO](../../../yql/reference/syntax/upsert-into).
+
+{% cut "Пример запроса" %}
+
+```sql
+CREATE STREAMING QUERY my_query AS
+DO BEGIN
+$input = SELECT
+    *
+    FROM ydb_source.my_topic WITH
+    (
+        FORMAT = "json_each_row",
+        SCHEMA =
+        (
+            ts String NOT NULL,
+            count UInt64 NOT NULL,
+            country Utf8 NOT NULL
+        )
+    );
+
+$table_data = SELECT
+       Unwrap(CAST(ts as Timestamp)) as time,
+       country as country,
+       count
+    FROM $input;
+
+UPSERT INTO my_table
+SELECT * FROM $table_data;
+```
+{% endcut %}
+
+[INSERT INTO](../../../yql/reference/syntax/insert-into) не поддерживается.
+Запись во таблицы {{ ydb-short-name }}, находящихся во внешних БД не поддерживается.
 
 ### См. также
 

@@ -10,7 +10,6 @@ ELSE()
 ENDIF()
 
 SRCS(
-    allocator_ut.cpp
     ibv_ut.cpp
     utils.cpp
     rdma_low_ut.cpp

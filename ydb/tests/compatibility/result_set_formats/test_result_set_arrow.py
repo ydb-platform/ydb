@@ -172,11 +172,12 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
     @pytest.mark.parametrize("store_type", ["ROW"])  # without COLUMN because DML
     @pytest.mark.parametrize("channel_buffer_size", [kb_to_b(2)])
+    @pytest.mark.parametrize("concurrent_result_sets", [True, False])
     @pytest.mark.parametrize("schema_inclusion_mode", [
         ydb.QuerySchemaInclusionMode.ALWAYS,
         ydb.QuerySchemaInclusionMode.FIRST_ONLY,
     ])
-    def test_multistatement(self, store_type, schema_inclusion_mode):
+    def test_multistatement(self, store_type, schema_inclusion_mode, concurrent_result_sets):
         table_name = "test_arrow"
         rows_count = 500
 
@@ -184,19 +185,27 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self._fill_table(table_name, rows_count, store_type)
 
         self._validate_schema_inclusion_mode(
-            self._multistatement_read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
+            self._multistatement_read_table(
+                table_name,
+                schema_inclusion_mode=schema_inclusion_mode,
+                concurrent_result_sets=concurrent_result_sets
+            ),
             rows_count,
             schema_inclusion_mode,
-            stmt_cnt=2
+            stmt_cnt=3
         )
 
         self.change_cluster_version()
 
         self._validate_schema_inclusion_mode(
-            self._multistatement_read_table(table_name, schema_inclusion_mode=schema_inclusion_mode),
+            self._multistatement_read_table(
+                table_name,
+                schema_inclusion_mode=schema_inclusion_mode,
+                concurrent_result_sets=concurrent_result_sets
+            ),
             rows_count,
             schema_inclusion_mode,
-            stmt_cnt=2
+            stmt_cnt=3
         )
 
         self._drop_table(table_name)
@@ -248,7 +257,13 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
 
     # -------------------------- Methods to execute queries ---------------------------
 
-    def _try_execute(self, query, schema_inclusion_mode=None, arrow_format_settings=None):
+    def _try_execute(
+        self,
+        query,
+        schema_inclusion_mode=None,
+        arrow_format_settings=None,
+        concurrent_result_sets=False,
+    ):
         may_throw = (
             arrow_format_settings is not None
             and arrow_format_settings.compression_codec is not None
@@ -262,7 +277,8 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
                     query,
                     result_set_format=ydb.QueryResultSetFormat.ARROW,
                     schema_inclusion_mode=schema_inclusion_mode,
-                    arrow_format_settings=arrow_format_settings
+                    arrow_format_settings=arrow_format_settings,
+                    concurrent_result_sets=concurrent_result_sets
                 )
             except Exception as e:
                 if not may_throw:
@@ -333,7 +349,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         query += ";"
 
         arrow_format_settings = ydb.ArrowFormatSettings(compression_codec=codec)
-        self._try_execute(
+        return self._try_execute(
             query,
             schema_inclusion_mode=schema_inclusion_mode,
             arrow_format_settings=arrow_format_settings
@@ -343,13 +359,19 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
         self,
         table_name,
         schema_inclusion_mode=None,
+        concurrent_result_sets=False,
     ):
         all_columns = ["pk_Uint64", *[f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()]]
-        query = f"""
-            UPDATE {table_name} SET {all_columns[1]} = {all_columns[1]} + 1 WHERE {all_columns[0]} >= 0 RETURNING {", ".join(all_columns)};
-            SELECT {", ".join(all_columns)} FROM {table_name};
-        """
-        self._try_execute(query, schema_inclusion_mode)
+        queries = [
+            f"SELECT {", ".join(all_columns)} FROM {table_name};",
+            f"UPDATE {table_name} SET {all_columns[1]} = {all_columns[1]} + 1 WHERE {all_columns[0]} >= 0 RETURNING {", ".join(all_columns)};",
+            f"SELECT * FROM {table_name} ORDER BY {all_columns[0]};"
+        ]
+        return self._try_execute(
+            "\n".join(queries),
+            schema_inclusion_mode=schema_inclusion_mode,
+            concurrent_result_sets=concurrent_result_sets
+        )
 
     # --------------------- Methods to validate results for tests ---------------------
 
@@ -450,7 +472,7 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
             batch = pa.ipc.read_record_batch(pa.py_buffer(result_set.data), schema)
             batch.validate()
 
-            result_rows_count[result_set.index] = result_rows_count.get(result_set.index, 0) + len(batch.num_rows)
+            result_rows_count[result_set.index] = result_rows_count.get(result_set.index, 0) + batch.num_rows
             assert batch.num_columns == len(self.all_types) + 1
 
         assert len(index_to_schema) == stmt_cnt

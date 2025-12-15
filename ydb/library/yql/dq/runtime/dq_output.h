@@ -22,11 +22,7 @@ class TUnboxedValue;
 
 namespace NDq {
 
-struct TDqOutputStats : public TDqAsyncStats {
-    // profile stats
-    ui64 MaxMemoryUsage = 0;
-    ui64 MaxRowsInMemory = 0;
-};
+using TDqOutputStats = TDqAsyncStats;
 
 enum EDqFillLevel {
     NoLimit,
@@ -50,6 +46,12 @@ struct TDqFillAggregator {
         ui32 index = static_cast<ui32>(level);
         YQL_ENSURE(index < FILL_COUNTERS_SIZE);
         Counts[index]++;
+    }
+
+    void SubCount(EDqFillLevel level) {
+        ui32 index = static_cast<ui32>(level);
+        YQL_ENSURE(index < FILL_COUNTERS_SIZE);
+        Counts[index]--;
     }
 
     void UpdateCount(EDqFillLevel prevLevel, EDqFillLevel level) {
@@ -79,6 +81,8 @@ struct TDqFillAggregator {
             << " }";
     }
 };
+
+TString FillLevelToString(EDqFillLevel level);
 
 class IDqOutput : public TSimpleRefCount<IDqOutput> {
 public:

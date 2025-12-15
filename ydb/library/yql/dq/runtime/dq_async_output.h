@@ -9,6 +9,8 @@
 namespace NYql::NDq {
 
 struct TDqAsyncOutputBufferStats : TDqOutputStats {
+    ui64 MaxMemoryUsage = 0;
+    ui64 MaxRowsInMemory = 0;
     ui64 OutputIndex = 0;
     TString Type;
 };

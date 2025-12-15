@@ -32,15 +32,13 @@ public:
     TDqOutputStats PushStats;
     TDqOutputChannelStats PopStats;
 
-    TDqOutputChannel(ui64 channelId, ui32 dstStageId, NMiniKQL::TType* outputType,
-        const NMiniKQL::THolderFactory& holderFactory, const TDqOutputChannelSettings& settings, const TLogFunc& logFunc,
-        NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
-        : OutputType(outputType)
-        , Packer(OutputType, packerVersion, settings.BufferPageAllocSize)
-        , Width(OutputType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(OutputType)->GetElementsCount() : 1u)
+    TDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc)
+        : OutputType(settings.RowType)
+        , Packer(settings.RowType, settings.PackerVersion, settings.BufferPageAllocSize)
+        , Width(settings.RowType->IsMulti() ? static_cast<NMiniKQL::TMultiType*>(settings.RowType)->GetElementsCount() : 1u)
         , Storage(settings.ChannelStorage)
-        , HolderFactory(holderFactory)
-        , TransportVersion(transportVersion)
+        , HolderFactory(settings.HolderFactory)
+        , TransportVersion(settings.TransportVersion)
         , MaxStoredBytes(settings.MaxStoredBytes)
         , MaxChunkBytes(std::min(settings.MaxChunkBytes, settings.ChunkSizeLimit / 2))
         , ChunkSizeLimit(settings.ChunkSizeLimit)
@@ -49,9 +47,8 @@ public:
     {
         PopStats.Level = settings.Level;
         PushStats.Level = settings.Level;
-        PopStats.ChannelId = channelId;
-        PopStats.DstStageId = dstStageId;
-        UpdateSettings(settings.MutableSettings);
+        PopStats.ChannelId = settings.ChannelId;
+        PopStats.DstStageId = settings.DstStageId;
 
         if (Packer.IsBlock() && ArrayBufferMinFillPercentage && *ArrayBufferMinFillPercentage > 0) {
             BlockSplitter = NArrow::CreateBlockSplitter(OutputType, (ChunkSizeLimit - MaxChunkBytes) * *ArrayBufferMinFillPercentage / 100);
@@ -161,7 +158,7 @@ public:
         NKikimr::NMiniKQL::TUnboxedValueVector outputValues;
         outputValues.reserve(data.size());
         for (auto& datum : data) {
-            outputValues.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum)));
+            outputValues.emplace_back(HolderFactory->CreateArrowBlock(std::move(datum)));
         }
         Packer.AddWideItem(outputValues.data(), outputValues.size());
 
@@ -365,7 +362,7 @@ public:
             }
             repackedChunkCount += batch.ChunkCount();
             repackedRowCount += batch.RowCount();
-            Packer.UnpackBatch(batch.PullPayload(), HolderFactory, rows);
+            Packer.UnpackBatch(batch.PullPayload(), *HolderFactory, rows);
         }
 
         if (OutputType->IsMulti()) {
@@ -438,8 +435,8 @@ public:
     void Terminate() override {
     }
 
-    void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
-        IsLocalChannel = settings.IsLocalChannel;
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override {
+        IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
         if (Packer.IsBlock()) {
             Packer.SetMinFillPercentage(IsLocalChannel ? Nothing() : ArrayBufferMinFillPercentage);
         }
@@ -450,7 +447,7 @@ private:
     NKikimr::NMiniKQL::TValuePackerTransport<FastPack> Packer;
     const ui32 Width;
     const IDqChannelStorage::TPtr Storage;
-    const NMiniKQL::THolderFactory& HolderFactory;
+    const NMiniKQL::THolderFactory* HolderFactory;
     const NDqProto::EDataTransportVersion TransportVersion;
     const ui64 MaxStoredBytes;
     const ui64 MaxChunkBytes;
@@ -489,10 +486,10 @@ private:
 } // anonymous namespace
 
 
-IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, ui32 dstStageId, NKikimr::NMiniKQL::TType* outputType,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const TDqOutputChannelSettings& settings, const TLogFunc& logFunc)
+IDqOutputChannel::TPtr CreateDqOutputChannel(const TDqChannelSettings& settings, const TLogFunc& logFunc)
 {
+    YQL_ENSURE(settings.HolderFactory);
+
     auto transportVersion = settings.TransportVersion;
     switch(transportVersion) {
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED:
@@ -500,10 +497,10 @@ IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, ui32 dstStageId, NK
             [[fallthrough]];
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0:
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_PICKLE_1_0:
-            return new TDqOutputChannel<false>(channelId, dstStageId, outputType, holderFactory, settings, logFunc, transportVersion, FromProto(settings.ValuePackerVersion));
+            return new TDqOutputChannel<false>(settings, logFunc);
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0:
         case NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0:
-            return new TDqOutputChannel<true>(channelId, dstStageId, outputType, holderFactory, settings, logFunc, transportVersion, FromProto(settings.ValuePackerVersion));
+            return new TDqOutputChannel<true>(settings, logFunc);
         default:
             YQL_ENSURE(false, "Unsupported transport version " << (ui32)transportVersion);
     }

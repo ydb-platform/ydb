@@ -3,7 +3,6 @@ import argparse
 
 from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 from ydb.tests.stress.oltp_workload.workload import WorkloadRunner
-from ydb.tests.stress.common.common import YdbClient
 
 
 if __name__ == "__main__":

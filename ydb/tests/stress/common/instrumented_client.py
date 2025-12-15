@@ -7,7 +7,7 @@ and automatically collects metrics for all database operations.
 
 import inspect
 import os
-from typing import Optional, Any, Callable
+from typing import Optional
 from .common import YdbClient
 from .publish_metrics import get_metrics_collector
 

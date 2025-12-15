@@ -197,9 +197,6 @@ class MetricsCollector:
         Returns:
             Method execution result
         """
-        if self.mode is None:
-            return method()
-
         success = True
         error_type = None
 

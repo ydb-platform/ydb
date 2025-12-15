@@ -10,7 +10,7 @@ class TEWHAggFunc {
 public:
     static constexpr std::string_view GetName() { return "EquiWidthHistogram"; }
 
-    using TState = std::unique_ptr<NKikimr::TEqWidthHistogram>;
+    using TState = NKikimr::TEqWidthHistogram;
 
     static constexpr size_t ParamsCount = 3;
 
@@ -19,13 +19,13 @@ public:
         TState histogram;
 
         switch (columnTypeId) {
-#define CREATE_HISTOGRAM_CASE(type, layout)                                                                 \
-            case NUdf::TDataType<type>::Id: {                                                               \
-                const auto valType = NKikimr::GetHistogramValueType<type>();                                \
-                Y_ENSURE(valType, "Unsupported histogram data type");                                       \
-                histogram = std::make_unique<NKikimr::TEqWidthHistogram>(params[0].Get<ui32>(), *valType);  \
-                histogram->InitializeBuckets(params[1].Get<layout>(), params[2].Get<layout>());             \
-                break;                                                                                      \
+#define CREATE_HISTOGRAM_CASE(type, layout)                                                     \
+            case NUdf::TDataType<type>::Id: {                                                   \
+                const auto valType = NKikimr::GetHistogramValueType<layout>();                  \
+                Y_ENSURE(valType, "Unsupported histogram data type");                           \
+                histogram = NKikimr::TEqWidthHistogram(params[0].Get<ui32>(), *valType);        \
+                histogram.InitializeBuckets(params[1].Get<layout>(), params[2].Get<layout>());  \
+                break;                                                                          \
             }
             KNOWN_FIXED_VALUE_TYPES(CREATE_HISTOGRAM_CASE)
 #undef CREATE_HISTOGRAM_CASE
@@ -38,15 +38,14 @@ public:
     }
 
     static auto CreateStateUpdater(TTypeId columnTypeId) {
-        return [columnTypeId](const TState& state, const TValue& val) {
-            Y_ENSURE(state);
+        return [columnTypeId](TState& state, const TValue& val) {
             switch (columnTypeId) {
-#define MAKE_PRIMITIVE_VISITOR(type, layout)                                                                \
-                case NUdf::TDataType<type>::Id: {                                                           \
-                    const auto valType = NKikimr::GetHistogramValueType<type>();                            \
-                    Y_ENSURE(valType, "Unsupported histogram data type");                                   \
-                    state->AddElement(val.Get<layout>());                                                   \
-                    break;                                                                                  \
+#define MAKE_PRIMITIVE_VISITOR(type, layout)                                        \
+                case NUdf::TDataType<type>::Id: {                                   \
+                    const auto valType = NKikimr::GetHistogramValueType<layout>();  \
+                    Y_ENSURE(valType, "Unsupported histogram data type");           \
+                    state.AddElement(val.Get<layout>());                            \
+                    break;                                                          \
                 }
                 KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_VISITOR)
 #undef MAKE_PRIMITIVE_VISITOR
@@ -57,18 +56,16 @@ public:
         };
     }
 
-    static void MergeStates(const TState& left, const TState& right) {
-        Y_ENSURE(left && right);
-        left->Aggregate(*right);
+    static void MergeStates(const TState& left, TState& right) {
+        right.Aggregate(left);
     }
 
     static TString SerializeState(const TState& state) {
-        Y_ENSURE(state);
-        return state->Serialize();
+        return state.Serialize();
     }
 
     static TState DeserializeState(const char* data, size_t size) {
-        return std::make_unique<NKikimr::TEqWidthHistogram>(data, size);
+        return NKikimr::TEqWidthHistogram(data, size);
     }
 
     static TString FinalizeState(const TState& state) {

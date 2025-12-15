@@ -30,7 +30,7 @@ public:
     }
     static void MergeStates(const TState& left, const TState& right) {
         Y_ENSURE(left && right);
-        *left += *right;
+        *right += *left;
     }
     static TString SerializeState(const TState& state) {
         Y_ENSURE(state);

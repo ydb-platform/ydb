@@ -3,6 +3,7 @@
 #include "global.h"
 
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/common/key.h>
@@ -56,6 +57,7 @@ namespace NPQ {
         ui16 InternalPartsCount;
         ui32 Size;
         TString Value;
+        std::shared_ptr<TVector<TBatch>> Batches;
         bool Cached;
         TKey Key;
         ui64 CreationUnixTime;

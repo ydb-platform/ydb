@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/common/partition_id.h>
 
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/actorid.h>
 
@@ -33,12 +34,17 @@ struct TCacheValue : TNonCopyable {
     using TPtr = std::shared_ptr<TCacheValue>;
     using TWeakPtr = std::weak_ptr<TCacheValue>;
 
-    TCacheValue(TString value, TActorId owner, TInstant accessTime)
+    TCacheValue(std::shared_ptr<TVector<TBatch>> value, TActorId owner, TInstant accessTime)
         : Value(value)
+        , DataSize(0)
         , Owner(owner)
         , AccessTime(accessTime.TimeT())
         , AccessCount(0)
-    {}
+    {
+        for (const auto& batch : *Value) {
+            DataSize += batch.GetUnpackedSize();
+        }
+    }
 
     TInstant GetAccessTime() const {
         return TInstant::Seconds(AccessTime);
@@ -53,12 +59,12 @@ struct TCacheValue : TNonCopyable {
         return AccessCount;
     }
 
-    TString GetValue() const {
+    std::shared_ptr<TVector<TBatch>> GetValue() const {
         return Value;
     }
 
-    size_t DataSize() const {
-        return Value.size();
+    size_t GetDataSize() const {
+        return DataSize;
     }
 
     const TActorId& GetOwner() const {
@@ -66,7 +72,8 @@ struct TCacheValue : TNonCopyable {
     }
 
 private:
-    const TString Value;
+    const std::shared_ptr<TVector<TBatch>> Value;
+    size_t DataSize;
     const TActorId Owner;
     std::atomic<ui64> AccessTime;
     std::atomic<ui32> AccessCount;

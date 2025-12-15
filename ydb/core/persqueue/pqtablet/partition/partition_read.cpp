@@ -1,6 +1,6 @@
 #include "partition_util.h"
-#include "partition_common.h"
 #include "partition_compactification.h"
+#include "partition_common.h"
 
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
@@ -438,9 +438,9 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         ui32 count = blobs[pos].Count;
         ui16 partNo = blobs[pos].PartNo;
         ui16 internalPartsCount = blobs[pos].InternalPartsCount;
-        const TString& blobValue = blobs[pos].Value;
+        auto& blobBatches = blobs[pos].Batches;
 
-        if (blobValue.empty()) { // this is ok. Means that someone requested too much data or retention race
+        if (!blobBatches || blobBatches->empty()) { // this is ok. Means that someone requested too much data or retention race
             PQ_LOG_D("Not full answer here!");
             ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {
@@ -462,8 +462,14 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 .ReplyTo = ReplyTo,
             };
         }
-        AFL_ENSURE(blobValue.size() <= blobs[pos].Size)("value for offset", offset)("count", count)
-            ("size must be",  blobs[pos].Size)("got", (ui32)blobValue.size());
+
+        ui32 totalSize = 0;
+        for (const auto& batch : *blobBatches) {
+            totalSize += batch.GetUnpackedSize();
+        }
+
+        AFL_ENSURE(totalSize <= blobs[pos].Size)("value for offset", offset)("count", count)
+            ("size must be",  blobs[pos].Size)("got", totalSize);
 
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
             Offset = offset;
@@ -472,11 +478,10 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         AFL_ENSURE(offset <= Offset);
         AFL_ENSURE(offset < Offset || partNo <= PartNo);
         auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount);
-        ui64 firstHeaderOffset = GetFirstHeaderOffset(key, blobValue);
-        for (TBlobIterator it(key, blobValue); it.IsValid() && !needStop; it.Next()) {
-            TBatch batch = it.GetBatch();
+        ui64 firstHeaderOffset = blobBatches->front().GetOffset();
+
+        for (auto& batch : *blobBatches) {
             auto& header = batch.Header;
-            batch.Unpack();
             ui64 trueOffset = blobs[pos].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
 
             ui32 pos = 0;

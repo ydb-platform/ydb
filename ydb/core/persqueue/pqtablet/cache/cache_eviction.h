@@ -267,6 +267,16 @@ namespace NKikimr::NPQ {
         ui64 GetSize() const { return Cache.size(); }
         const TCounters& GetCounters() const { return Counters; }
 
+        TVector<TBatch> ExtractBatches(const TRequestedBlob& reqBlob) const {
+            TVector<TBatch> batches;
+            for (TBlobIterator it(reqBlob.Key, reqBlob.Value); it.IsValid(); it.Next()) {
+                TBatch batch = it.GetBatch();
+                batch.Unpack();
+                batches.push_back(batch);
+            }
+            return batches;
+        }
+
         /// @return count of cached blobs
         ui32 RequestBlobs(const TActorContext& ctx, TKvRequest& kvReq)
         {
@@ -307,8 +317,9 @@ namespace NKikimr::NPQ {
                     reqData.RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), nullptr);
                 }
 
-                auto cached = std::make_shared<TCacheValue>(reqBlob.Value, ctx.SelfID, TAppData::TimeProvider->Now());
-                TValueL1 valL1(cached, cached->DataSize(), TValueL1::SourceHead);
+                auto batches = ExtractBatches(reqBlob);
+                auto cached = std::make_shared<TCacheValue>(std::make_shared<TVector<TBatch>>(std::move(batches)), ctx.SelfID, TAppData::TimeProvider->Now());
+                TValueL1 valL1(cached, cached->GetDataSize(), TValueL1::SourceHead);
                 Cache[blob] = valL1; // weak
                 Counters.Inc(valL1);
                 if (L1Strategy)
@@ -396,9 +407,9 @@ namespace NKikimr::NPQ {
                     }
                 }
 
-                TCacheValue::TPtr cached(new TCacheValue(reqBlob.Value, ctx.SelfID, TAppData::TimeProvider->Now()));
-                TValueL1 valL1(cached, cached->DataSize(), TValueL1::SourcePrefetch);
-                Cache[blob] = valL1; // weak
+                TCacheValue::TPtr cached(new TCacheValue(reqBlob.Batches, ctx.SelfID, TAppData::TimeProvider->Now()));
+                TValueL1 valL1(cached, cached->GetDataSize(), TValueL1::SourcePrefetch);
+                Cache[blob] = valL1;
                 Counters.Inc(valL1);
 
                 reqData->StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), cached);
@@ -420,7 +431,7 @@ namespace NKikimr::NPQ {
             auto it = Cache.find(blob);
             if (it == Cache.end()) {
                 LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Can't evict. No such blob in L1. Partition "
-                    << blob.Partition << " offset " << blob.Offset << " size " << value->DataSize()
+                    << blob.Partition << " offset " << blob.Offset << " size " << value->GetDataSize()
                     << " cause it's been evicted from L2. Actual L1 size: " << Cache.size());
                 return;
             }
@@ -428,13 +439,13 @@ namespace NKikimr::NPQ {
             auto sp = it->second.GetBlob();
             if (sp.get() != value.get()) {
                 LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE, "Evicting strange blob. Partition " << blob.Partition.InternalPartitionId
-                           << "offset " << blob.Offset << " partNo " << blob.PartNo << " size " << value->DataSize()
+                           << "offset " << blob.Offset << " partNo " << blob.PartNo << " size " << value->GetDataSize()
                            << " L1 ptr " << ((void*)sp.get()) << " vs L2 ptr " << ((void*)value.get()));
             }
             RemoveBlob(it);
 
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Erasing blob in L1. Partition "
-                << blob.Partition << " offset " << blob.Offset << " size " << value->DataSize()
+                << blob.Partition << " offset " << blob.Offset << " size " << value->GetDataSize()
                 << " cause it's been evicted from L2. Actual L1 size: " << Cache.size());
         }
 
@@ -485,15 +496,15 @@ namespace NKikimr::NPQ {
                 return nullptr;
             }
 
-            AFL_ENSURE(data->DataSize() == it->second.DataSize)
-                ("data->DataSize()", data->DataSize())
+            AFL_ENSURE(data->GetDataSize() == it->second.DataSize)
+                ("data->GetDataSize()", data->GetDataSize())
                 ("it->second.DataSize", it->second.DataSize);
 
             const TBlobId& blob = it->first;
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got data from cache. Partition "
                 << blob.Partition << " offset " << blob.Offset <<
                 " partno " << blob.PartNo << " count " << blob.Count << " parts_count " << blob.InternalPartsCount
-                << " source " << (ui32)it->second.Source << " size " << data->DataSize()
+                << " source " << (ui32)it->second.Source << " size " << data->GetDataSize()
                 << " accessed " << data->GetAccessCount() << " times before, last time " << data->GetAccessTime());
 
             return data;
@@ -511,7 +522,7 @@ namespace NKikimr::NPQ {
                 TCacheValue::TPtr cached = GetValue(ctx, blobId);
                 if (cached) {
                     ++numCached;
-                    blob.Value = cached->GetValue();
+                    blob.Batches = cached->GetValue();
                     blob.Cached = true;
                     AFL_ENSURE(blob.Value.size())("d", "Got empty blob from cache");
                 }

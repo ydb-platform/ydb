@@ -211,6 +211,7 @@ namespace NPQ {
                         AFL_ENSURE(outBlobs[pos].Value.empty());
                         outBlobs[pos].Value = r->GetValue();
                         outBlobs[pos].CreationUnixTime = r->GetCreationUnixTime();
+                        outBlobs[pos].Batches = std::make_shared<TVector<TBatch>>(Cache.ExtractBatches(outBlobs[pos]));
                     } else {
                         LOG_E("Got Error response " << r->GetStatus()
                                         << " for " << i << "'s blob from " << resp.ReadResultSize() << " blobs");
@@ -399,7 +400,7 @@ namespace NPQ {
                                     TABLED() {out << c.first.Partition;}
                                     TABLED() {out << c.first.Offset;}
                                     TABLED() {out << c.first.Count;}
-                                    TABLED() {out << data->GetValue().size();}
+                                    TABLED() {out << data->GetDataSize();}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(data->GetAccessTime());}
                                 }
                             }

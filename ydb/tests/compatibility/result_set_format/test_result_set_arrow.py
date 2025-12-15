@@ -45,13 +45,6 @@ primitive_type_to_arrow_type = {
     "Yson": pa.binary(),
 }
 
-codec_to_string = {
-    ydb.ArrowCompressionCodecType.UNSPECIFIED: "none",
-    ydb.ArrowCompressionCodecType.NONE: "none",
-    ydb.ArrowCompressionCodecType.ZSTD: "zstd",
-    ydb.ArrowCompressionCodecType.LZ4_FRAME: "lz4",
-}
-
 
 def kb_to_b(n):
     return n * 1024

@@ -852,19 +852,9 @@
                             <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
                             {% endif %}
                             {% if test.status.value == 1 or test.status.value == 2 or test.status.value == 4 %}
-                            {% if test.full_name in test_success_rates %}
-                            {% set rates = test_success_rates[test.full_name] %}
                             <button class="success-rate-button" data-test-full-name="{{ test.full_name|e }}" data-action="show-success-rate" title="View success rate and history">
-                                <span class="emoji">&#128202;</span> 
-                                {% if rates.other %}{{ branch|upper }}:{{ rates.other.rate }}%{% endif %}
-                                {% if rates.other and rates.pr_check %} | {% endif %}
-                                {% if rates.pr_check %}PR:{{ rates.pr_check.rate }}%{% endif %}
+                                <span class="emoji">&#128202;</span> <span class="success-rate-text">No history</span>
                             </button>
-                            {% else %}
-                            <button class="success-rate-button" data-test-full-name="{{ test.full_name|e }}" data-action="show-success-rate" title="View success rate and history">
-                                <span class="emoji">&#128202;</span> No history
-                            </button>
-                            {% endif %}
                             {% endif %}
                         </div>
                             
@@ -964,6 +954,23 @@
                 return dataLoadPromise;
             }
             
+            // Check if we're in a local file:// context (CORS will fail)
+            const isLocalFile = window.location.protocol === 'file:';
+            
+            // For local file:// protocol, fetch won't work due to CORS
+            // Return empty data structure immediately to avoid errors
+            if (isLocalFile) {
+                console.warn('Local file mode detected (file://). JSON data cannot be loaded via fetch due to CORS restrictions.');
+                console.warn('For local testing, use a local web server: python3 -m http.server 8000');
+                testData = {
+                    history_for_js: {},
+                    history_descriptions: {},
+                    test_descriptions: {},
+                    test_success_rates: {}
+                };
+                return Promise.resolve(testData);
+            }
+            
             dataLoadPromise = fetch(dataFileUrl)
                 .then(response => {
                     if (!response.ok) {
@@ -972,12 +979,17 @@
                     return response.json();
                 })
                 .then(data => {
+                    console.log('Test data loaded successfully. Keys:', Object.keys(data));
+                    console.log('History tests:', data.history_for_js ? Object.keys(data.history_for_js).length : 0);
+                    console.log('Test descriptions:', data.test_descriptions ? Object.keys(data.test_descriptions).length : 0);
                     testData = data;
                     return testData;
                 })
                 .catch(error => {
-                    console.error('Error loading test data:', error);
+                    console.error('Error loading test data from JSON file:', error);
+                    console.error('Data file URL:', dataFileUrl);
                     // Return empty data structure on error
+                    // Features that require history/descriptions will show "No data available"
                     testData = {
                         history_for_js: {},
                         history_descriptions: {},
@@ -1001,6 +1013,9 @@
             if (Object.keys(testHistory).length === 0) {
                 const data = await loadTestData();
                 testHistory = data.history_for_js || {};
+                if (Object.keys(testHistory).length > 0) {
+                    console.log('Test history loaded:', Object.keys(testHistory).length, 'tests');
+                }
             }
             return testHistory;
         }
@@ -1025,8 +1040,41 @@
             if (Object.keys(testSuccessRates).length === 0) {
                 const data = await loadTestData();
                 testSuccessRates = data.test_success_rates || {};
+                // Update success rate buttons after loading data
+                updateSuccessRateButtons();
             }
             return testSuccessRates;
+        }
+        
+        // Update success rate buttons with loaded data
+        function updateSuccessRateButtons() {
+            const branch = "{{ branch }}";
+            const buttons = document.querySelectorAll('.success-rate-button');
+            buttons.forEach(button => {
+                const testFullName = button.getAttribute('data-test-full-name');
+                if (!testFullName) return;
+                
+                const rates = testSuccessRates[testFullName];
+                if (!rates) return;
+                
+                const rateText = button.querySelector('.success-rate-text');
+                if (!rateText) return;
+                
+                let text = '';
+                if (rates.other) {
+                    text += branch.toUpperCase() + ':' + rates.other.rate + '%';
+                }
+                if (rates.other && rates.pr_check) {
+                    text += ' | ';
+                }
+                if (rates.pr_check) {
+                    text += 'PR:' + rates.pr_check.rate + '%';
+                }
+                
+                if (text) {
+                    rateText.textContent = text;
+                }
+            });
         }
         
         const testCounts = {{ test_counts | tojson }};
@@ -1211,6 +1259,11 @@
             // Initialize sanitizer and timeout counts (setGroupBy already calls them, but ensure they're called)
             updateSanitizerCount();
             updateTimeoutCount();
+            
+            // Load success rates and update buttons (async, non-blocking)
+            getTestSuccessRates().catch(err => {
+                console.warn('Failed to load success rates:', err);
+            });
         });
         
         function updateSanitizerCount() {
@@ -1456,6 +1509,12 @@
             });
             
             flatView.classList.add('active');
+            
+            // Update success rate buttons after rendering flat view
+            // Data might have been loaded by now, so update buttons
+            if (Object.keys(testSuccessRates).length > 0) {
+                updateSuccessRateButtons();
+            }
         }
         
         function applyFilters() {
@@ -2002,6 +2061,12 @@
                 getTestSuccessRates()
             ]);
             
+            console.log('showSuccessRateModal - testFullName:', testFullName);
+            console.log('showSuccessRateModal - history keys:', Object.keys(history).length);
+            console.log('showSuccessRateModal - has history for test:', testFullName in history);
+            console.log('showSuccessRateModal - rates keys:', Object.keys(rates).length);
+            console.log('showSuccessRateModal - has rates for test:', testFullName in rates);
+            
             if (!history || !history[testFullName] || !rates || !rates[testFullName]) {
                 modalTitle.textContent = `Success Rate: ${testFullName}`;
                 modalContent.innerHTML = '<div style="padding: 20px;"><p>No history data available for this test.</p><p>History is collected for the last 4 days for failed, error, and muted tests.</p></div>';
@@ -2016,18 +2081,18 @@
             let html = '<div style="margin-bottom: 20px;">';
             html += '<h3>Overall Success Rate (Last 4 Days)</h3>';
             html += '<div style="display: flex; gap: 30px; margin: 15px 0;">';
-            if (rates.other) {
-                html += `<div><strong>Branch Runs:</strong> ${rates.other.rate}% (${rates.other.passed}/${rates.other.total})</div>`;
+            if (testRates.other) {
+                html += `<div><strong>Branch Runs:</strong> ${testRates.other.rate}% (${testRates.other.passed}/${testRates.other.total})</div>`;
             }
-            if (rates.pr_check) {
-                html += `<div><strong>PR-Check:</strong> ${rates.pr_check.rate}% (${rates.pr_check.passed}/${rates.pr_check.total})</div>`;
+            if (testRates.pr_check) {
+                html += `<div><strong>PR-Check:</strong> ${testRates.pr_check.rate}% (${testRates.pr_check.passed}/${testRates.pr_check.total})</div>`;
             }
             html += '</div></div>';
             
             // Group history by date and calculate daily success rates
             const historyByDate = {};
-            for (const timestamp in history) {
-                const entry = history[timestamp];
+            for (const timestamp in testHistory) {
+                const entry = testHistory[timestamp];
                 if (!entry) continue; // Skip invalid entries
                 
                 // Safely get date - handle both 'date' and 'datetime' fields

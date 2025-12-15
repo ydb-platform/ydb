@@ -97,9 +97,6 @@ class TestResult:
             TestStatus.SKIP: "SKIP",
             TestStatus.MUTE: "MUTE",
         }[self.status]
-        # For ERROR add error_type suffix if present (e.g., ERROR-TIMEOUT)
-        if self.status == TestStatus.ERROR and self.error_type:
-            return f"{base}-{self.error_type}"
         return base
 
     @property
@@ -170,16 +167,17 @@ class TestResult:
         else:
             status = TestStatus.PASS
         
-        # Extract log URLs from links (updated by transform_build_results.py with URLs)
-        # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
-        log_urls = {}
-        links = result.get("links", {})
-        if links and isinstance(links, dict):
-            for key in ['log', 'logsdir', 'stdout', 'stderr']:
-                if key in links and isinstance(links[key], list) and len(links[key]) > 0:
-                    url = links[key][0]  # Take first URL from array
-                    if url:
-                        log_urls[key] = url
+        # Extract log URLs from properties with url: prefix (same as old junit format)
+        # Properties format: {"url:logsdir": "https://...", "url:log": "https://..."}
+        properties = result.get("properties", {})
+        log_urls = {
+            'Log': properties.get("url:Log") if isinstance(properties, dict) else None,
+            'log': properties.get("url:log") if isinstance(properties, dict) else None,
+            'logsdir': properties.get("url:logsdir") if isinstance(properties, dict) else None,
+            'stdout': properties.get("url:stdout") if isinstance(properties, dict) else None,
+            'stderr': properties.get("url:stderr") if isinstance(properties, dict) else None,
+        }
+        log_urls = {k: v for k, v in log_urls.items() if v}
         
         # Get duration from result (same as upload_tests_results.py)
         duration = result.get("duration", 0)

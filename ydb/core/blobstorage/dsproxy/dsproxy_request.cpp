@@ -1066,8 +1066,7 @@ namespace NKikimr {
 
             if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> &&
                     !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
-                std::visit([&](const auto& relevance) { ev.MessageRelevanceTracker = relevance; },
-                        Relevance);
+                ev.MessageRelevanceTracker = TMessageRelevance(RelevanceOwner, ExternalRelevanceWatcher);
                 ui64 cost;
                 if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVMultiPut>) {
                     bool internalQueue;
@@ -1132,17 +1131,11 @@ namespace NKikimr {
     }
 
     bool TBlobStorageGroupRequestActor::CheckForExternalCancellation() {
-        bool cancelled = false;
-        std::visit(
-            TOverloaded{
-                [&](const TMessageRelevanceOwner&) { cancelled = false; },
-                [&](const TMessageRelevanceWatcher& watcher) { cancelled = watcher.expired(); }
-            }, Relevance);
-
-        if (cancelled) {
+        if (ExternalRelevanceWatcher && ExternalRelevanceWatcher->expired()) {
             ReplyAndDie(NKikimrProto::ERROR);
+            return true;
         }
-        return cancelled;
+        return false;
     }
 
     void TBlobStorageGroupProxy::Handle(TEvGetQueuesInfo::TPtr ev) {

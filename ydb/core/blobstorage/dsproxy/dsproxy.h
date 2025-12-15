@@ -221,6 +221,8 @@ public:
         , RequestStartTime(params.Common.Now)
         , Source(params.Common.Source)
         , Cookie(params.Common.Cookie)
+        , RelevanceOwner(std::make_shared<TMessageRelevanceTracker>())
+        , ExternalRelevanceWatcher(std::move(params.Common.ExternalRelevanceWatcher))
         , LatencyQueueKind(params.Common.LatencyQueueKind)
         , RacingDomains(&Info->GetTopology())
         , ExecutionRelay(std::move(params.Common.ExecutionRelay))
@@ -240,12 +242,6 @@ public:
         }
 
         Y_ABORT_UNLESS(CostModel);
-
-        if (params.Common.ExternalRelevanceWatcher) {
-            Relevance = std::move(*params.Common.ExternalRelevanceWatcher);
-        } else {
-            Relevance = std::make_shared<TMessageRelevanceTracker>();
-        }
     }
 
     virtual ~TBlobStorageGroupRequestActor() = default;
@@ -326,7 +322,8 @@ protected:
 private:
     const TActorId Source;
     const ui64 Cookie;
-    std::variant<TMessageRelevanceOwner, TMessageRelevanceWatcher> Relevance;
+    TMessageRelevanceOwner RelevanceOwner;
+    std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
     ui32 RequestsInFlight = 0;
     std::unique_ptr<IEventBase> Response;
     const TMaybe<TGroupStat::EKind> LatencyQueueKind;

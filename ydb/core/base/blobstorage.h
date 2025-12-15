@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk_category.h"
+#include "blobstorage_relevance.h"
 #include "boot_type.h"
 #include "events.h"
 #include "tablet_types.h"
@@ -38,10 +39,6 @@ static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
 
 static constexpr TDuration VDiskCooldownTimeout = TDuration::Seconds(15);
 static constexpr TDuration VDiskCooldownTimeoutOnProxy = TDuration::Seconds(12);
-
-struct TMessageRelevanceTracker {};
-using TMessageRelevanceOwner = std::shared_ptr<TMessageRelevanceTracker>;
-using TMessageRelevanceWatcher = std::weak_ptr<TMessageRelevanceTracker>;
 
 struct TStorageStatusFlags {
     ui32 Raw = 0;

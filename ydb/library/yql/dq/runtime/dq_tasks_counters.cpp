@@ -15,6 +15,12 @@ NYql::NUdf::TCounter TDqTaskCountersProvider::GetCounter(const NUdf::TStringRef&
         if (op.StartsWith(NKikimr::NMiniKQL::Operator_Join)) {
             opType = TOperatorType::Join;
             id = op.substr(NKikimr::NMiniKQL::Operator_Join.size());
+        } else if (op.StartsWith(NKikimr::NMiniKQL::Operator_BlockHashJoin)) {
+            opType = TOperatorType::Join;
+            id = op.substr(NKikimr::NMiniKQL::Operator_BlockHashJoin.size());
+        } else if (op.StartsWith(NKikimr::NMiniKQL::Operator_ScalarHashJoin)) {
+            opType = TOperatorType::Join;
+            id = op.substr(NKikimr::NMiniKQL::Operator_ScalarHashJoin.size());
         } else if (op.StartsWith(NKikimr::NMiniKQL::Operator_Aggregation)) {
             opType = TOperatorType::Aggregation;
             id = op.substr(NKikimr::NMiniKQL::Operator_Aggregation.size());

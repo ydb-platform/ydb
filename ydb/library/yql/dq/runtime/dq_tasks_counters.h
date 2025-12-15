@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/minikql/comp_nodes/mkql_counters.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_counters.h>
 
 #include <util/generic/hash.h>
 

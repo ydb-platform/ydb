@@ -7,7 +7,7 @@ which automatically collect metrics for all operations.
 
 import inspect
 import os
-from typing import Optional, Any, Callable
+from typing import Optional, Callable
 import ydb
 from .publish_metrics import get_metrics_collector
 
@@ -42,38 +42,6 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
             self.full_name = os.path.dirname(caller_frame.filename).replace('/', '.')
         finally:
             del caller_frame
-
-    def _instrument_call(self, method: Callable, operation_name: str) -> Any:
-        """
-        Wrapper for instrumenting call with automatic metrics collection.
-
-        Args:
-            method: Method to call
-            operation_name: Operation name for metrics
-
-        Returns:
-            Method execution result
-        """
-        if not self.enable_metrics:
-            return method()
-
-        success = True
-        error_type = None
-
-        try:
-            result = method()
-            return result
-        except Exception as e:
-            success = False
-            error_type = e.__class__.__name__
-            raise
-        finally:
-            self.metrics_collector.record_query(
-                operation=operation_name,
-                success=success,
-                error_type=error_type,
-                stress_util_name=self.full_name,
-            )
 
     def execute_with_retries(self, query: str, parameters=None,
                              retry_settings=None, settings=None,
@@ -114,7 +82,10 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
         Returns:
             EXPLAIN result
         """
-        return self._instrument_call(
+        if not self.enable_metrics:
+            super(InstrumentedSessionPool, self).explain_with_retries(query, retry_settings)
+
+        return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings),
             operation_name
         )
@@ -162,38 +133,6 @@ class InstrumentedSessionPool(ydb.SessionPool):
         finally:
             del caller_frame
 
-    def _instrument_call(self, method: Callable, operation_name: str) -> Any:
-        """
-        Wrapper for instrumenting call with automatic metrics collection.
-
-        Args:
-            method: Method to call
-            operation_name: Operation name for metrics
-
-        Returns:
-            Method execution result
-        """
-        if not self.enable_metrics:
-            return method()
-
-        success = True
-        error_type = None
-
-        try:
-            result = method()
-            return result
-        except Exception as e:
-            success = False
-            error_type = e.__class__.__name__
-            raise
-        finally:
-            self.metrics_collector.record_query(
-                operation=operation_name,
-                success=success,
-                error_type=error_type,
-                stress_util_name=self.full_name,
-            )
-
     def retry_operation_sync(self, callee: Callable, *args,
                              operation_name: Optional[str] = None, **kwargs):
         """
@@ -210,7 +149,10 @@ class InstrumentedSessionPool(ydb.SessionPool):
         if operation_name is None:
             operation_name = 'session_pool_operation'
 
-        return self._instrument_call(
+        if not self.enable_metrics:
+            super(InstrumentedSessionPool, self).retry_operation_sync(callee, *args, **kwargs)
+
+        return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedSessionPool, self).retry_operation_sync(callee, *args, **kwargs),
             operation_name
         )

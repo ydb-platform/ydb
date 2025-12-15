@@ -52,38 +52,6 @@ class InstrumentedYdbClient(YdbClient):
         finally:
             del caller_frame
 
-    def _instrument_method(self, method: Callable, operation_name: str) -> Any:
-        """
-        Wrapper for instrumenting method with automatic metrics collection.
-
-        Args:
-            method: Method to instrument
-            operation_name: Operation name for metrics
-
-        Returns:
-            Method execution result
-        """
-        if not self.enable_metrics:
-            return method()
-
-        error_type = None
-        success = True
-
-        try:
-            result = method()
-            return result
-        except Exception as e:
-            success = False
-            error_type = e.__class__.__name__
-            raise
-        finally:
-            self.metrics_collector.record_query(
-                operation=operation_name,
-                success=success,
-                error_type=error_type,
-                stress_util_name=self.full_name,
-            )
-
     def query(self, statement: str, is_ddl: bool, retry_settings=None,
               operation_name: Optional[str] = None):
         """
@@ -101,8 +69,10 @@ class InstrumentedYdbClient(YdbClient):
         """
         if operation_name is None:
             operation_name = 'ddl' if is_ddl else 'dml'
+        if not self.enable_metrics:
+            super(InstrumentedYdbClient, self).query(statement, is_ddl, retry_settings)
 
-        return self._instrument_method(
+        return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).query(
                 statement, is_ddl, retry_settings
             ),
@@ -117,7 +87,9 @@ class InstrumentedYdbClient(YdbClient):
             path_to_table: Table path
             operation_name: Operation name for metrics
         """
-        return self._instrument_method(
+        if not self.enable_metrics:
+            super(InstrumentedYdbClient, self).drop_table(path_to_table)
+        return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).drop_table(path_to_table),
             operation_name
         )
@@ -133,7 +105,9 @@ class InstrumentedYdbClient(YdbClient):
             dst: Target index name
             operation_name: Operation name for metrics
         """
-        return self._instrument_method(
+        if not self.enable_metrics:
+            super(InstrumentedYdbClient, self).replace_index(table, src, dst)
+        return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).replace_index(table, src, dst),
             operation_name
         )
@@ -146,7 +120,9 @@ class InstrumentedYdbClient(YdbClient):
             path: Object path
             operation_name: Operation name for metrics
         """
-        return self._instrument_method(
+        if not self.enable_metrics:
+            super(InstrumentedYdbClient, self).describe(path)
+        return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).describe(path),
             operation_name
         )
@@ -159,7 +135,9 @@ class InstrumentedYdbClient(YdbClient):
             path: Directory path
             operation_name: Operation name for metrics
         """
-        return self._instrument_method(
+        if not self.enable_metrics:
+            super(InstrumentedYdbClient, self).remove_recursively(path)
+        return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).remove_recursively(path),
             operation_name
         )

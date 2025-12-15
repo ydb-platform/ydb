@@ -131,7 +131,7 @@ class ParallelWorkloadTestBase:
         logging.debug(f"Additional stats {additional_stats}")
 
         if stress_deployer.nemesis_started:
-            recoverability_result = self.stop_nemesis_check_recoverability(
+            recoverability_result = self.stop_nemesis_and_check_recoverability(
                 stress_executor,
                 stress_deployer,
                 workload_params,
@@ -367,11 +367,11 @@ class ParallelWorkloadTestBase:
             with pytest.warns(RuntimeWarning):
                 warnings.warn("All workloads have failed in recovery steps", RuntimeWarning)
 
-    def stop_nemesis_check_recoverability(self,
-                                          stress_executor: StressRunExecutor,
-                                          stress_deployer: StressUtilDeployer,
-                                          workload_params: dict[str, dict],
-                                          preparation_result: dict[str, StressUtilDeployResult]) -> None:
+    def stop_nemesis_and_check_recoverability(self,
+                                              stress_executor: StressRunExecutor,
+                                              stress_deployer: StressUtilDeployer,
+                                              workload_params: dict[str, dict],
+                                              preparation_result: dict[str, StressUtilDeployResult]) -> dict:
         with allure.step("Phase 2.5: Stop nemesis and check recoverability"):
             stress_deployer._manage_nemesis(False, workload_params.keys(), 'RecoverabilityCheck')
             recoverability_execution_result = stress_executor.execute_stress_runs(

@@ -16,6 +16,8 @@ class HealthCheckReporter():
         self.healthcheck_thread: threading.Thread = None
         self.ydb_path = os.path.join(os.getcwd(), 'ydb_cli_hc')
         self.hosts = hosts
+        self.hc_request_timeout_seconds = 45
+        self.hc_period_seconds = 15
         unpack_resource('ydb_cli', self.ydb_path)
 
     def start_healthchecks(self):
@@ -25,7 +27,7 @@ class HealthCheckReporter():
     def stop_healthchecks(self):
         self.stop = True
         if self.healthcheck_thread and self.healthcheck_thread.is_alive():
-            self.healthcheck_thread.join(30)
+            self.healthcheck_thread.join(self.hc_request_timeout_seconds)
             if self.healthcheck_thread.is_alive():
                 logging.warning("Healthcheck thread did not stop gracefully, it may be hanging in a blocking operation")
 
@@ -35,7 +37,7 @@ class HealthCheckReporter():
                 self.__publish_healthcheck_results(self.__execute_healthcheck())
             except Exception as e:
                 logging.error(f"Error in healthcheck thread: {e}")
-            time.sleep(15)
+            time.sleep(self.hc_period_seconds)
 
     def __execute_healthcheck(self):
         results = {}
@@ -43,7 +45,7 @@ class HealthCheckReporter():
         def run_healthcheck_for_host(host):
             try:
                 cmd = [f'{self.ydb_path}', '--endpoint', f'grpc://{host}:2135', 'monitoring', 'healthcheck', '--format', 'json']
-                result = subprocess.run(cmd, check=True, text=True, capture_output=True, timeout=45)
+                result = subprocess.run(cmd, check=True, text=True, capture_output=True, timeout=self.hc_request_timeout_seconds)
                 return host, json.loads(result.stdout)
             except Exception:
                 logging.error(f"Unexpected error during healthcheck for {host}: {traceback.format_exc()}")
@@ -57,7 +59,7 @@ class HealthCheckReporter():
 
             for future in as_completed(future_to_host):
                 try:
-                    host, result = future.result(timeout=20)
+                    host, result = future.result(timeout=self.hc_request_timeout_seconds)
                     results[host] = result
                 except Exception:
                     host = future_to_host[future]

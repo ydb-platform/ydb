@@ -15,6 +15,7 @@ import time
 import traceback
 import json
 import threading
+from typing import Any, Callable
 
 import requests
 
@@ -185,6 +186,38 @@ class MetricsCollector:
         }
         self.publisher = publisher or _global_publisher
 
+    def wrap_call(self, method: Callable, operation_name: str) -> Any:
+        """
+        Wrapper for instrumenting call with automatic metrics collection.
+
+        Args:
+            method: Method to call
+            operation_name: Operation name for metrics
+
+        Returns:
+            Method execution result
+        """
+        if self.mode is None:
+            return method()
+
+        success = True
+        error_type = None
+
+        try:
+            result = method()
+            return result
+        except Exception as e:
+            success = False
+            error_type = e.__class__.__name__
+            raise
+        finally:
+            self.record_query(
+                operation=operation_name,
+                success=success,
+                error_type=error_type,
+                stress_util_name=self.full_name,
+            )
+
     def record_query(self, operation: str, success: bool, error_type: str = None,
                      stress_util_name: str = None):
         """
@@ -266,9 +299,9 @@ def get_metrics_collector() -> MetricsCollector:
 
 class report_exception(object):
     """
-    Base decorator for tracking function success/errors.
-
+    Standalone decorator class for tracking function success/errors.
     Automatically publishes events through MetricsPublisher.
+    Can be used directly to decorate functions or methods.
     """
 
     def __init__(self, func, event_kind='general', publisher: MetricsPublisher = None):

@@ -11,12 +11,6 @@
 
 namespace NKikimr::NHttpProxy {
 
-    namespace {
-
-        const NMonitoring::TBucketBounds HISTOGRAM_BUCKETS_BOUNDS = {10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000};
-
-    } // namespace
-
     using namespace NActors;
 
     class TMetricsActor : public NActors::TActorBootstrapped<TMetricsActor> {
@@ -73,7 +67,7 @@ namespace NKikimr::NHttpProxy {
             group = group->GetSubgroup(ev->Get()->Labels[i].first, ev->Get()->Labels[i].second);
         }
         auto counter = group->GetNamedHistogram(ev->Get()->Labels.back().first, ev->Get()->Labels.back().second,
-                                                    NMonitoring::ExplicitHistogram(HISTOGRAM_BUCKETS_BOUNDS));
+                                                    NMonitoring::ExplicitHistogram({100, 200, 500, 1000, 2000, 5000, 10000, 30000}));
         counter->Collect(ev->Get()->Value, ev->Get()->Count);
     }
 

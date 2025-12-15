@@ -1100,13 +1100,14 @@ namespace NKikimr::NHttpProxy {
                 Y_UNUSED(ev);
             }
 
-            void TryUpdateDbInfo(const TDatabase& db) {
+            void TryUpdateDbInfo(const TDatabase& db, const TActorContext& ctx) {
                 if (db.Path) {
                     HttpContext.DatabasePath = db.Path;
                     HttpContext.DatabaseId = db.Id;
                     HttpContext.CloudId = db.CloudId;
                     HttpContext.FolderId = db.FolderId;
                 }
+                ReportInputCounters(ctx);
             }
 
             void HandleToken(TEvServerlessProxy::TEvToken::TPtr& ev, const TActorContext& ctx) {
@@ -1119,13 +1120,13 @@ namespace NKikimr::NHttpProxy {
                         return;
                     }
                 }
-                TryUpdateDbInfo(ev->Get()->Database);
+                TryUpdateDbInfo(ev->Get()->Database, ctx);
 
                 SendGrpcRequestNoDriver(ctx);
             }
 
             void HandleErrorWithIssue(TEvServerlessProxy::TEvErrorWithIssue::TPtr& ev, const TActorContext& ctx) {
-                TryUpdateDbInfo(ev->Get()->Database);
+                TryUpdateDbInfo(ev->Get()->Database, ctx);
                 ReplyWithYdbError(ctx, ev->Get()->Status, ev->Get()->Response, ev->Get()->IssueCode);
             }
 
@@ -1330,8 +1331,8 @@ namespace NKikimr::NHttpProxy {
                               "database '" << HttpContext.DatabasePath << "' " <<
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
-                ReportInputCounters(ctx);
                 if (HttpContext.IamToken.empty() && Signature) {
+
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
                 } else {

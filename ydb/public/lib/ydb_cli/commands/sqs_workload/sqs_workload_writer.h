@@ -27,7 +27,6 @@ namespace NYdb::NConsoleClient {
         ui32 GroupsAmount;
         ui32 MessageSize;
         bool SetSubjectToken;
-        bool DeduplicationOn;
     };
 
     class TSqsWorkloadWriter {

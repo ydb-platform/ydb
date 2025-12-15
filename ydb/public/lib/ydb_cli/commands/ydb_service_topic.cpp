@@ -646,7 +646,7 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .DefaultValue(false)
             .StoreResult(&KeepMessagesOrder_);
-        config.Opts->AddLongOption("shared-default-processing-timeout", "Default processing timeout for shared consumer")
+        config.Opts->AddLongOption("shared-default-processing-timeout", "Default processing timeout for shared consumer (ex. '1h', '1m', '1s)")
             .Optional()
             .StoreMappedResult(&DefaultProcessingTimeout_, ParseDuration);
         config.Opts->AddLongOption("shared-dlq-max-processing-attempts", "Max processing attempts for DLQ for shared consumer")

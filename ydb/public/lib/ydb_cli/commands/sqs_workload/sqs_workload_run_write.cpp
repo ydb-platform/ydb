@@ -57,7 +57,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption('m', "message-size", "AWS message size.")
             .DefaultValue(900)
             .StoreResult(&Scenario.MessageSize);
-        config.Opts->AddLongOption('g', "groups-amount", "Groups amount.")
+        config.Opts->AddLongOption('g', "message-groups-amount", "Message groups amount.")
             .DefaultValue(0)
             .StoreResult(&Scenario.GroupsAmount);
         config.Opts
@@ -76,8 +76,9 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&Scenario.Region);
         config.Opts->AddLongOption("set-subject-token", "Set subject token.")
             .DefaultValue(false)
+            .Hidden()
             .StoreTrue(&Scenario.SetSubjectToken);
-        config.Opts->AddLongOption("max-unique-messages", "Max unique messages.")
+        config.Opts->AddLongOption("max-unique-messages", "Max unique messages. If set to 0, content based deduplication is used.")
             .DefaultValue(0)
             .StoreResult(&Scenario.MaxUniqueMessages);
     }

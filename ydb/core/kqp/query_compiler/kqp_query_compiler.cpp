@@ -741,7 +741,7 @@ public:
 
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
         queryProto.SetEnableWatermarks(Config->EnableWatermarks);
-        TVector<bool> resultDiscardFlags;
+        std::vector<bool> resultDiscardFlags;
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
             if (queryBlockSettings.HasUncommittedChangesRead) {
@@ -751,7 +751,7 @@ public:
             for (const auto& kiResult : queryBlock.Results()) {
                 if (kiResult.Maybe<TKiResult>()) {
                     auto result = kiResult.Cast<TKiResult>();
-                    bool discard = result.Discard().Value() == "true";
+                    bool discard = result.Discard().Value() == "1";
                     resultDiscardFlags.push_back(discard);
                 }
             }
@@ -768,8 +768,12 @@ public:
             }
         }
 
-        THashSet<std::pair<ui32, ui32>> createChannel;
-
+        YQL_ENSURE(resultDiscardFlags.size() <= query.Results().Size(),
+            "resultDiscardFlags.size()=" << resultDiscardFlags.size() << " which exceeds query.Results().Size()=" << query.Results().Size());
+        
+        THashSet<std::pair<ui32, ui32>> shouldCreateChannel; // (txIndex, resultIndex)
+        
+        // if one transaction depends on another result, we need to create a channel
         for (ui32 txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
             const auto& tx = query.Transactions().Item(txIdx);
             for (const auto& paramBinding : tx.ParamBindings()) {
@@ -777,10 +781,19 @@ public:
                     auto resultBinding = maybeResultBinding.Cast();
                     auto refTxIndex = FromString<ui32>(resultBinding.TxIndex());
                     auto refResultIndex = FromString<ui32>(resultBinding.ResultIndex());
-                    createChannel.insert({refTxIndex, refResultIndex});
+                    shouldCreateChannel.insert({refTxIndex, refResultIndex});
                 }
             }
         }
+        struct TResultBindingInfo {
+            ui32 OriginalIndex;
+            ui32 TxIndex;
+            ui32 ResultIndex;
+            bool IsDiscard;
+        };
+        // if no parambindings use this result, we can discard it
+        std::vector<TResultBindingInfo> resultBindings;
+        resultBindings.reserve(query.Results().Size());
 
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
@@ -789,17 +802,24 @@ public:
                 auto txIndex = FromString<ui32>(binding.TxIndex().Value());
                 auto resultIndex = FromString<ui32>(binding.ResultIndex());
                 
-                bool isDiscard = (querySettings.Type == EPhysicalQueryType::GenericQuery) && 
-                                 (i < resultDiscardFlags.size() && resultDiscardFlags[i]);
-                if (!isDiscard) {
-                    createChannel.insert({txIndex, resultIndex});
+                YQL_ENSURE(i < resultDiscardFlags.size(),
+                    "Index " << i << " is out of bounds for resultDiscardFlags with size " << resultDiscardFlags.size());
+
+                bool markedDiscard = (querySettings.Type == EPhysicalQueryType::GenericQuery) && resultDiscardFlags[i];
+                
+                bool canDiscard = markedDiscard && !shouldCreateChannel.contains(std::pair{txIndex, resultIndex});
+                
+                resultBindings.push_back({i, txIndex, resultIndex, canDiscard});
+                
+                if (!canDiscard) {
+                    shouldCreateChannel.insert({txIndex, resultIndex});
                 }
             }
         }
 
         for (ui32 txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
             const auto& tx = query.Transactions().Item(txIdx);
-            CompileTransaction(tx, *queryProto.AddTransactions(), ctx, txIdx, createChannel);
+            CompileTransaction(tx, *queryProto.AddTransactions(), ctx, txIdx, shouldCreateChannel);
         }
 
         if (const auto overridePlanner = Config->OverridePlanner.Get()) {
@@ -816,13 +836,14 @@ public:
 
         ui32 resultIdx = 0;
 
-        for (ui32 i = 0; i < query.Results().Size(); ++i) {
-            const auto& result = query.Results().Item(i);
+        for (const auto& bindingInfo : resultBindings) {
+            const auto& result = query.Results().Item(bindingInfo.OriginalIndex);
 
             YQL_ENSURE(result.Maybe<TKqpTxResultBinding>());
             auto binding = result.Cast<TKqpTxResultBinding>();
-            auto txIndex = FromString<ui32>(binding.TxIndex().Value());
-            auto txResultIndex = FromString<ui32>(binding.ResultIndex());
+
+            const ui32 txIndex = bindingInfo.TxIndex;
+            const ui32 txResultIndex = bindingInfo.ResultIndex;
 
             YQL_ENSURE(txIndex < queryProto.TransactionsSize());
             YQL_ENSURE(txResultIndex < queryProto.GetTransactions(txIndex).ResultsSize());
@@ -830,8 +851,7 @@ public:
 
             YQL_ENSURE(txResult.GetIsStream());
 
-            if (querySettings.Type == EPhysicalQueryType::GenericQuery && 
-                i < resultDiscardFlags.size() && resultDiscardFlags[i]) {
+            if (bindingInfo.IsDiscard) {
                 continue;
             }
             
@@ -1122,7 +1142,7 @@ private:
     }
 
     void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx,
-                            ui32 txIdx, const THashSet<std::pair<ui32, ui32>>& createChannel) {
+                            ui32 txIdx, const THashSet<std::pair<ui32, ui32>>& shouldCreateChannel) {
         auto txSettings = TKqpPhyTxSettings::Parse(tx);
         YQL_ENSURE(txSettings.Type);
         txProto.SetType(GetPhyTxType(*txSettings.Type));
@@ -1219,7 +1239,7 @@ private:
                     columnHintsProto.Add(TString(columnHint.Value()));
                 }
             }
-            bool canSkip = (createChannel.find(std::make_pair(txIdx, resIdx)) == createChannel.end());
+            bool canSkip = (shouldCreateChannel.find(std::make_pair(txIdx, resIdx)) == shouldCreateChannel.end());
             resultProto.SetCanSkipChannel(canSkip);
         }
 

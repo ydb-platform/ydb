@@ -856,7 +856,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
                 .Value(resWrite.Data())
                 .Columns(GetResultColumns(resWrite, ctx))
                 .RowsLimit().Build(GetResultRowsLimit(resWrite))
-                .Discard().Build(GetResultDiscard(resWrite) ? "true" : "false")
+                .Discard().Build(GetResultDiscard(resWrite))
                 .Done();
 
             queryResults.push_back(kiResult.Ptr());
@@ -1333,7 +1333,7 @@ TExprNode::TPtr KiBuildResult(TExprBase node, const TString& cluster, TExprConte
                 .Value(resFill.Data())
                 .Columns(GetResultColumns(resFill, ctx))
                 .RowsLimit().Build(GetResultRowsLimit(resFill))
-                .Discard().Build(GetResultDiscard(resFill) ? "true" : "false")
+                .Discard().Build(GetResultDiscard(resFill))
                 .Build()
             .Build()
         .Effects()

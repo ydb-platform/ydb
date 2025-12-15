@@ -422,9 +422,8 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         }
     }
 
-    Y_UNIT_TEST(TestCrossInnerJoin) {
-        TestCrossInnerJoin(false);
-        TestCrossInnerJoin(true);
+    Y_UNIT_TEST_TWIN(TestCrossInnerJoin, ColumnStore) {
+        TestCrossInnerJoin(ColumnStore);
     }
 
     Y_UNIT_TEST(PredicatePushdownLeftJoin) {
@@ -849,13 +848,11 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 select count(*) from t1 group by t1.b order by t1.b;
             )",
-            /*
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
                 select count(*) from t1 group by t1.b + 1 order by t1.b + 1;
             )"
-            */
         };
 
         std::vector<std::string> results = {

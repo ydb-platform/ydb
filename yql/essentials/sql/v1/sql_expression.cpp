@@ -1,5 +1,5 @@
-#include "sql_expression.h"
 
+#include "sql_expression.h"
 #include "select_yql.h"
 #include "sql_select_yql.h"
 #include "sql_call_expr.h"
@@ -1336,21 +1336,25 @@ TNodeResult TSqlExpression::LambdaRule(const TRule_lambda& rule) {
     return Wrap(lambdaNode);
 }
 
-TNodePtr TSqlExpression::CastRule(const TRule_cast_expr& rule) {
-    Ctx_.IncrementMonCounter("sql_features", "Cast");
+TNodeResult TSqlExpression::CastRule(const TRule_cast_expr& rule) {
     const auto& alt = rule;
+
     Token(alt.GetToken1());
     TPosition pos(Ctx_.Pos());
+
     TSqlExpression expr(Ctx_, Mode_);
-    auto exprNode = Unwrap(expr.Build(rule.GetRule_expr3()));
+    expr.SetYqlSelectProduced(IsYqlSelectProduced_);
+    TNodeResult exprNode = expr.Build(rule.GetRule_expr3());
     if (!exprNode) {
-        return {};
+        return std::unexpected(exprNode.error());
     }
-    auto type = TypeNodeOrBind(rule.GetRule_type_name_or_bind5());
+
+    TNodePtr type = TypeNodeOrBind(rule.GetRule_type_name_or_bind5());
     if (!type) {
-        return {};
+        return std::unexpected(ESQLError::Basic);
     }
-    return new TCallNodeImpl(pos, "SafeCast", {exprNode, type});
+
+    return TNonNull(TNodePtr(new TCallNodeImpl(pos, "SafeCast", {*exprNode, type})));
 }
 
 TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) {
@@ -1523,7 +1527,11 @@ TSQLResult<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, c
             }
             break;
         case TRule_atom_expr::kAltAtomExpr4:
-            result.Expr = CastRule(node.GetAlt_atom_expr4().GetRule_cast_expr1());
+            if (auto expected = CastRule(node.GetAlt_atom_expr4().GetRule_cast_expr1())) {
+                result.Expr = std::move(*expected);
+            } else {
+                return std::unexpected(expected.error());
+            }
             break;
         case TRule_atom_expr::kAltAtomExpr5:
             if (auto expected = ExistsRule(node.GetAlt_atom_expr5().GetRule_exists_expr1())) {
@@ -1627,7 +1635,11 @@ TSQLResult<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& no
             }
             break;
         case TRule_in_atom_expr::kAltInAtomExpr4:
-            result.Expr = CastRule(node.GetAlt_in_atom_expr4().GetRule_cast_expr1());
+            if (auto expected = CastRule(node.GetAlt_in_atom_expr4().GetRule_cast_expr1())) {
+                result.Expr = std::move(*expected);
+            } else {
+                return std::unexpected(expected.error());
+            }
             break;
         case TRule_in_atom_expr::kAltInAtomExpr5:
             if (auto expected = CaseRule(node.GetAlt_in_atom_expr5().GetRule_case_expr1())) {
@@ -1809,13 +1821,13 @@ TNodeResult TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTraili
             Token(token);
             TPosition pos(Ctx_.Pos());
             auto tokenId = token.GetId();
-            if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, NOT)) {
+            if (IS_TOKEN(tokenId, NOT)) {
                 opName = "Not";
-            } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, PLUS)) {
+            } else if (IS_TOKEN(tokenId, PLUS)) {
                 opName = "Plus";
-            } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, MINUS)) {
+            } else if (IS_TOKEN(tokenId, MINUS)) {
                 opName = Ctx_.Scoped->PragmaCheckedOps ? "CheckedMinus" : "Minus";
-            } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, TILDA)) {
+            } else if (IS_TOKEN(tokenId, TILDA)) {
                 opName = "BitNot";
             } else {
                 Ctx_.IncrementMonCounter("sql_errors", "UnsupportedUnaryOperation");
@@ -2106,7 +2118,7 @@ TNodeResult TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTraili
             }
             case TRule_cond_expr::kAltCondExpr4: {
                 auto alt = cond.GetAlt_cond_expr4();
-                const bool symmetric = alt.HasBlock3() && IS_TOKEN(Ctx_.Settings.Antlr4Parser, alt.GetBlock3().GetToken1().GetId(), SYMMETRIC);
+                const bool symmetric = alt.HasBlock3() && IS_TOKEN(alt.GetBlock3().GetToken1().GetId(), SYMMETRIC);
                 const bool negation = alt.HasBlock1();
 
                 TNodeResult left = SubExpr(alt.GetRule_eq_subexpr4(), {});
@@ -2206,7 +2218,25 @@ TNodeResult TSqlExpression::YqlXorSubExpr(
         return std::unexpected(rhs.error());
     }
 
-    TNodePtr expr = BuildYqlInSubquery(std::move(*rhs), std::move(lhs));
+    TNodePtr expr;
+    if (IsYqlSubQuery(*rhs)) {
+        expr = BuildYqlInSubquery(std::move(*rhs), std::move(lhs));
+    } else {
+        TNodePtr hints = BuildTuple(Ctx_.Pos(), {});
+        TVector<TNodePtr> args = {
+            std::move(lhs),
+            std::move(*rhs),
+            std::move(hints),
+        };
+
+        TNodeResult result = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "In", std::move(args), /*isYqlSelect=*/true);
+        if (!result) {
+            return std::unexpected(result.error());
+        }
+
+        expr = std::move(*result);
+    }
+
     if (negation) {
         expr = expr->ApplyUnaryOp(Ctx_, *negation, "Not");
     }
@@ -2307,28 +2337,28 @@ TNodeResult TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter
         TPosition pos(Ctx_.Pos());
         TString opName;
         auto tokenId = begin->GetToken1().GetId();
-        if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, LESS)) {
+        if (IS_TOKEN(tokenId, LESS)) {
             opName = "<";
             Ctx_.IncrementMonCounter("sql_binary_operations", "Less");
-        } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, LESS_OR_EQ)) {
+        } else if (IS_TOKEN(tokenId, LESS_OR_EQ)) {
             opName = "<=";
             Ctx_.IncrementMonCounter("sql_binary_operations", "LessOrEq");
-        } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, GREATER)) {
+        } else if (IS_TOKEN(tokenId, GREATER)) {
             opName = ">";
             Ctx_.IncrementMonCounter("sql_binary_operations", "Greater");
-        } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, GREATER_OR_EQ)) {
+        } else if (IS_TOKEN(tokenId, GREATER_OR_EQ)) {
             opName = ">=";
             Ctx_.IncrementMonCounter("sql_binary_operations", "GreaterOrEq");
-        } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, PLUS)) {
+        } else if (IS_TOKEN(tokenId, PLUS)) {
             opName = Ctx_.Scoped->PragmaCheckedOps ? "CheckedAdd" : "+MayWarn";
             Ctx_.IncrementMonCounter("sql_binary_operations", "Plus");
-        } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, MINUS)) {
+        } else if (IS_TOKEN(tokenId, MINUS)) {
             opName = Ctx_.Scoped->PragmaCheckedOps ? "CheckedSub" : "-MayWarn";
             Ctx_.IncrementMonCounter("sql_binary_operations", "Minus");
-        } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, ASTERISK)) {
+        } else if (IS_TOKEN(tokenId, ASTERISK)) {
             opName = Ctx_.Scoped->PragmaCheckedOps ? "CheckedMul" : "*MayWarn";
             Ctx_.IncrementMonCounter("sql_binary_operations", "Multiply");
-        } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, SLASH)) {
+        } else if (IS_TOKEN(tokenId, SLASH)) {
             opName = "/MayWarn";
             Ctx_.IncrementMonCounter("sql_binary_operations", "Divide");
             if (!Ctx_.Scoped->PragmaClassicDivision && partialResult) {
@@ -2336,7 +2366,7 @@ TNodeResult TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter
             } else if (Ctx_.Scoped->PragmaCheckedOps) {
                 opName = "CheckedDiv";
             }
-        } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, PERCENT)) {
+        } else if (IS_TOKEN(tokenId, PERCENT)) {
             opName = Ctx_.Scoped->PragmaCheckedOps ? "CheckedMod" : "%MayWarn";
             Ctx_.IncrementMonCounter("sql_binary_operations", "Mod");
         } else {
@@ -2373,7 +2403,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode ge
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if (!IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, SHIFT_LEFT)) {
+                if (!IS_TOKEN(tokenId, SHIFT_LEFT)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return std::unexpected(ESQLError::Basic);
                 }
@@ -2389,7 +2419,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode ge
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if (!IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, ROT_LEFT)) {
+                if (!IS_TOKEN(tokenId, ROT_LEFT)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return std::unexpected(ESQLError::Basic);
                 }
@@ -2405,7 +2435,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode ge
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt5: {
                 Token(begin->GetBlock1().GetAlt5().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt5().GetToken1().GetId();
-                if (!IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, AMPERSAND)) {
+                if (!IS_TOKEN(tokenId, AMPERSAND)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return std::unexpected(ESQLError::Basic);
                 }
@@ -2416,7 +2446,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode ge
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt6: {
                 Token(begin->GetBlock1().GetAlt6().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt6().GetToken1().GetId();
-                if (!IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, PIPE)) {
+                if (!IS_TOKEN(tokenId, PIPE)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return std::unexpected(ESQLError::Basic);
                 }
@@ -2427,7 +2457,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode ge
             case TRule_neq_subexpr_TBlock2_TBlock1::kAlt7: {
                 Token(begin->GetBlock1().GetAlt7().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt7().GetToken1().GetId();
-                if (!IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, CARET)) {
+                if (!IS_TOKEN(tokenId, CARET)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return std::unexpected(ESQLError::Basic);
                 }
@@ -2469,7 +2499,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode get
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt1: {
                 Token(begin->GetBlock1().GetAlt1().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt1().GetToken1().GetId();
-                if (!IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, EQUALS)) {
+                if (!IS_TOKEN(tokenId, EQUALS)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return std::unexpected(ESQLError::Basic);
                 }
@@ -2480,7 +2510,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode get
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt2: {
                 Token(begin->GetBlock1().GetAlt2().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt2().GetToken1().GetId();
-                if (!IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, EQUALS2)) {
+                if (!IS_TOKEN(tokenId, EQUALS2)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return std::unexpected(ESQLError::Basic);
                 }
@@ -2491,7 +2521,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode get
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt3: {
                 Token(begin->GetBlock1().GetAlt3().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt3().GetToken1().GetId();
-                if (!IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, NOT_EQUALS)) {
+                if (!IS_TOKEN(tokenId, NOT_EQUALS)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return std::unexpected(ESQLError::Basic);
                 }
@@ -2502,7 +2532,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode get
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::kAlt4: {
                 Token(begin->GetBlock1().GetAlt4().GetToken1());
                 auto tokenId = begin->GetBlock1().GetAlt4().GetToken1().GetId();
-                if (!IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, NOT_EQUALS2)) {
+                if (!IS_TOKEN(tokenId, NOT_EQUALS2)) {
                     Error() << "Unsupported binary operation token: " << tokenId;
                     return std::unexpected(ESQLError::Basic);
                 }

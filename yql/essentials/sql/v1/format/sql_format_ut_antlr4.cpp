@@ -26,7 +26,6 @@ struct TSetup {
 
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &Arena;
-        settings.Antlr4Parser = true;
         settings.AnsiLexer = ansiLexer;
         Formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
     }
@@ -52,7 +51,6 @@ struct TSetup {
 
             if (mode == NSQLFormat::EFormatMode::Pretty) {
                 NSQLTranslation::TTranslationSettings settings;
-                settings.Antlr4Parser = true;
                 auto mutatedQuery = NSQLFormat::MutateQuery(lexers, c.first, settings);
                 auto res3 = Formatter->Format(mutatedQuery, formatted, issues);
                 UNIT_ASSERT_C(res3, issues.ToString());

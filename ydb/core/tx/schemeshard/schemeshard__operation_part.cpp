@@ -94,10 +94,10 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
         const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType); \
         const auto msg = LogMessage(DebugReply(ev), context, ignore); \
         if (ignore) { \
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg); \
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
             return false; \
         } \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg); \
+        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
         Y_FAIL_S(msg); \
     } \
     \

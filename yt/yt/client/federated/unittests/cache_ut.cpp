@@ -55,9 +55,9 @@ TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch1)
     auto connectionConfig = New<TConnectionConfig>();
     connectionConfig->BundleName = "my_bundle";
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
-    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"primary"};
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = "primary";
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
-    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"secondary"};
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = "secondary";
 
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
@@ -75,11 +75,11 @@ TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch2)
     auto connectionConfig = New<TConnectionConfig>();
     connectionConfig->BundleName = "my_bundle";
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
-    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"primary"};
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = "primary";
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
-    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"secondary"};
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = "secondary";
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
-    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"tertiary"};
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = "tertiary";
 
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,
@@ -97,9 +97,9 @@ TEST(TFederatedClientsCacheTest, ConfigurationMissingCluster)
     auto connectionConfig = New<TConnectionConfig>();
     connectionConfig->BundleName = "my_bundle";
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
-    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"primary"};
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = "primary";
     connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
-    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"secondary"};
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = "secondary";
 
     auto ytClientsCache = CreateFederatedClientsCache(
         connectionConfig,

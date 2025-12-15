@@ -140,14 +140,14 @@ TEST(TSolomonExporterTest, ReadSensorsFilter)
     TGauge cache_size = TProfiler("/cache/", "", {}, registry).Gauge("size");
     TGauge responses = TProfiler("/requests/", "", {}, registry).Gauge("responses");
 
-    auto isSensorInShard = [&exporter] (const TString& shardName, const TString& sensor) -> bool {
-        std::optional<TString> out = exporter->ReadJson({}, shardName);
+    auto isSensorInShard = [&exporter] (const std::string& shardName, const std::string& sensor) -> bool {
+        std::optional<std::string> out = exporter->ReadJson({}, shardName);
         if (!out) {
             return false;
         }
 
-        const TString& sensors = out.value();
-        return sensors.Contains(sensor);
+        const std::string& sensors = out.value();
+        return sensors.contains(sensor);
     };
 
     ASSERT_FALSE(isSensorInShard("/uptime/", "uptime"));
@@ -210,12 +210,12 @@ TEST(TSolomonExporterTest, ReadSensorsStripSensorsOption)
     Sleep(TDuration::Seconds(5));
 
     // WO Strip option
-    std::optional<TString> out = exporter->ReadJson({}, "/uptime/");
+    std::optional<std::string> out = exporter->ReadJson({}, "/uptime/");
     ASSERT_TRUE(out);
 
-    TString& sensors = out.value();
-    ASSERT_TRUE(sensors.Contains("uptime"));
-    ASSERT_TRUE(sensors.Contains("uptime.")); // not "/uptime/" Reason: sensor rename
+    std::string& sensors = out.value();
+    ASSERT_TRUE(sensors.contains("uptime"));
+    ASSERT_TRUE(sensors.contains("uptime.")); // not "/uptime/" Reason: sensor rename
 
     // With Strip option
     TReadOptions options;
@@ -224,8 +224,8 @@ TEST(TSolomonExporterTest, ReadSensorsStripSensorsOption)
     ASSERT_TRUE(out);
 
     sensors = out.value();
-    ASSERT_TRUE(sensors.Contains("uptime"));
-    ASSERT_FALSE(sensors.Contains("uptime."));
+    ASSERT_TRUE(sensors.contains("uptime"));
+    ASSERT_FALSE(sensors.contains("uptime."));
 
     exporter->Stop();
 }

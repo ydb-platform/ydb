@@ -1100,7 +1100,7 @@ namespace NTable {
             Y_UNREACHABLE();
         }
 
-        std::optional<TRowVersion> SkipToCommitted(NTable::ITransactionMapSimplePtr committedTransactions,
+        TSkipToCommittedResult SkipToCommitted(NTable::ITransactionMapSimplePtr committedTransactions,
                 NTable::ITransactionObserverSimplePtr transactionObserver,
                 ELockMode& lockMode, ui64& lockTxId)
         {
@@ -1120,7 +1120,7 @@ namespace NTable {
                     const auto* commitVersion = committedTransactions.Find(txId);
                     if (commitVersion) {
                         // Found a committed delta
-                        return *commitVersion;
+                        return { *commitVersion, txId };
                     }
                     // Skip an uncommitted delta
                     transactionObserver.OnSkipUncommitted(txId);

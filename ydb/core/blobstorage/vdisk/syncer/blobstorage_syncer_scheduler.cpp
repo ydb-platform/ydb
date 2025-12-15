@@ -258,7 +258,11 @@ namespace NKikimr {
         void Handle(TEvSyncerJobDone::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             TEvSyncerJobDone *msg = ev->Get();
-
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+            if (msg->Task->SstWriterId) {
+                ActiveActors.Erase(msg->Task->SstWriterId);
+            }
+#endif
             if (msg->Task->NeedCommit()) {
                 auto proxy = std::make_unique<TSyncerCommitterProxy>(ctx.SelfID, CommitterId, std::move(msg->Task));
                 const TActorId aid = ctx.Register(proxy.release());

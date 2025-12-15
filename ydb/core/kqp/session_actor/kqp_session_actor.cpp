@@ -1157,13 +1157,6 @@ public:
             return false;
         }
 
-        if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
-            && QueryState->TxCtx->HasOltpTable) {
-            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "SnapshotRW can only be used with column-oriented tables.");
-            return false;
-        }
-
         if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
                 && !QueryState->TxCtx->EnableHtapTx.value_or(false) && !QueryState->IsSplitted()) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,

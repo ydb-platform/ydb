@@ -40,7 +40,7 @@ std::vector<TNamedValue> MakeNamedValueList(
     result.reserve(row.GetCount());
 
     for (const auto& value : row) {
-        auto namedValue = TNamedValue(TString(nameTable->GetNameOrThrow(value.Id)), TNamedValue::ExtractValue(value));
+        auto namedValue = TNamedValue(std::string(nameTable->GetNameOrThrow(value.Id)), TNamedValue::ExtractValue(value));
         result.push_back(std::move(namedValue));
     }
     return result;
@@ -61,7 +61,7 @@ TUnversionedValue TNamedValue::ToUnversionedValue(const TNameTablePtr& nameTable
             return MakeUnversionedDoubleValue(value, valueId);
         } else if constexpr (std::is_same_v<T, bool>) {
             return MakeUnversionedBooleanValue(value, valueId);
-        } else if constexpr (std::is_same_v<T, TString>) {
+        } else if constexpr (std::is_same_v<T, std::string>) {
             return MakeUnversionedStringValue(value, valueId);
         } else if constexpr (std::is_same_v<T, TAny>) {
             return MakeUnversionedAnyValue(value.Value, valueId);
@@ -107,11 +107,11 @@ TNamedValue::TValue TNamedValue::ExtractValue(const TUnversionedValue& value)
 TNamedValue::TValue TNamedValue::ToValue(EValueType valueType, TStringBuf value)
 {
     if (valueType == EValueType::String) {
-        return TString(value);
+        return std::string(value);
     } else if (valueType == EValueType::Any) {
-        return TAny{TString(value)};
+        return TAny{std::string(value)};
     } else if (valueType == EValueType::Composite) {
-        return TComposite{TString(value)};
+        return TComposite{std::string(value)};
     } else {
         YT_ABORT();
     }

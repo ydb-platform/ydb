@@ -2003,10 +2003,11 @@ void ValidateColumnSchema(
                 options);
         }
 
-        {
-            TComplexTypeFieldDescriptor descriptor(name, columnSchema.LogicalType());
-            ValidateLogicalType(descriptor, MaxSchemaDepth);
-        }
+        ValidateLogicalType(
+            TComplexTypeFieldDescriptor(name, columnSchema.LogicalType()),
+            TLogicalTypeValidationOptions{
+                .DepthLimit = MaxSchemaDepth,
+            });
 
         if (!IsComparable(columnSchema.LogicalType()) &&
             columnSchema.SortOrder() &&

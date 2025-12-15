@@ -872,6 +872,7 @@ bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& node
 
 struct TWriteSettings {
     bool Discard = false;
+    TPosition DiscardPos;
     TDeferredAtom Label;
 };
 

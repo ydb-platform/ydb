@@ -1195,9 +1195,9 @@ TFuture<void> TClient::TransferAccountResources(
 }
 
 TFuture<void> TClient::TransferPoolResources(
-    const TString& srcPool,
-    const TString& dstPool,
-    const TString& poolTree,
+    const std::string& srcPool,
+    const std::string& dstPool,
+    const std::string& poolTree,
     NYTree::INodePtr resourceDelta,
     const TTransferPoolResourcesOptions& options)
 {
@@ -1209,6 +1209,26 @@ TFuture<void> TClient::TransferPoolResources(
     req->set_src_pool(srcPool);
     req->set_dst_pool(dstPool);
     req->set_pool_tree(poolTree);
+    req->set_resource_delta(ToProto(ConvertToYsonString(resourceDelta)));
+
+    ToProto(req->mutable_mutating_options(), options);
+
+    return req->Invoke().As<void>();
+}
+
+TFuture<void> TClient::TransferBundleResources(
+    const std::string& srcBundle,
+    const std::string& dstBundle,
+    NYTree::INodePtr resourceDelta,
+    const TTransferBundleResourcesOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.TransferBundleResources();
+    SetTimeoutOptions(*req, options);
+
+    req->set_src_bundle(srcBundle);
+    req->set_dst_bundle(dstBundle);
     req->set_resource_delta(ToProto(ConvertToYsonString(resourceDelta)));
 
     ToProto(req->mutable_mutating_options(), options);

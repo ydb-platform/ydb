@@ -61,9 +61,9 @@ TEST(TFederatedConnectionTest, CreateClient)
         .WillOnce(Return(mockClientVla));
 
     EXPECT_CALL(*mockConnectionSas, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("sas")));
+        .WillOnce(ReturnRefOfCopy(std::string("sas")));
     EXPECT_CALL(*mockConnectionVla, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("vla")));
+        .WillOnce(ReturnRefOfCopy(std::string("vla")));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
         NNet::SetLocalHostName(oldLocalHostName);
@@ -126,9 +126,9 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
         .WillOnce(Return(mockClientVla));
 
     EXPECT_CALL(*mockConnectionSas, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("sas")));
+        .WillOnce(ReturnRefOfCopy(std::string("sas")));
     EXPECT_CALL(*mockConnectionVla, GetLoggingTag())
-        .WillOnce(ReturnRefOfCopy(TString("vla")));
+        .WillOnce(ReturnRefOfCopy(std::string("vla")));
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
         NNet::SetLocalHostName(oldLocalHostName);

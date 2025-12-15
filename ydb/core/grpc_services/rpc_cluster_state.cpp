@@ -297,7 +297,7 @@ public:
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
         ui32 idx = ev.Get()->Cookie;
-        Counters[idx].push_back(std::make_pair(Pack(std::move(ev->Get()->Record.GetResponse())), TInstant::Now()));
+        Counters[idx].push_back(std::make_pair(std::move(ev->Get()->Record.GetResponse()), TInstant::Now()));
         NodeStateInfoReceived(idx);
     }
 

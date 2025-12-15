@@ -64,6 +64,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetTablePivotKeys);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CreateTableBackup);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RestoreTableBackup);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, TransferBundleResources);
 
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, LookupRows);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, VersionedLookupRows);

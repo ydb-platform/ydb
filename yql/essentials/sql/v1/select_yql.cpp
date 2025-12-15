@@ -171,6 +171,7 @@ public:
             !InitSource(ctx, src) ||
             (Where && !Where->GetRef().Init(ctx, src)) ||
             (GroupBy && !NSQLTranslationV1::Init(ctx, src, GroupBy->Keys)) ||
+            (Having && !Having->GetRef().Init(ctx, src)) ||
             !InitOrderBy(ctx, src) ||
             (Limit && !Limit->GetRef().Init(ctx, src)) ||
             (Offset && !Offset->GetRef().Init(ctx, src))) {
@@ -222,11 +223,15 @@ public:
                 return false;
             }
 
-            item->Add(Q(Y(Q("where"), Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), *Where)))));
+            item->Add(Q(Y(Q("where"), BuildYqlWhere(*Where))));
         }
 
         if (GroupBy) {
             item->Add(Q(Y(Q("group_by"), Q(BuildGroupBy(*GroupBy)))));
+        }
+
+        if (Having) {
+            item->Add(Q(Y(Q("having"), BuildYqlWhere(*Having))));
         }
 
         if (OrderBy) {
@@ -448,6 +453,10 @@ private:
         return Y("YqlGroup", Y("Void"), Y("lambda", Q(Y()), std::move(node)));
     }
 
+    TNodePtr BuildYqlWhere(TNodePtr expr) const {
+        return Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), std::move(expr)));
+    }
+
     TNodePtr BuildSortSpecification(const TVector<TSortSpecificationPtr>& keys) const {
         TNodePtr specification = Y();
         for (const TSortSpecificationPtr& key : keys) {
@@ -651,6 +660,11 @@ private:
     TVariant Variant_;
     TNodePtr Node_;
 };
+
+bool IsYqlSubQuery(const TNodePtr& node) {
+    return IsYqlSource(node) ||
+           dynamic_cast<TYqlSubLinkNode*>(node.Get());
+}
 
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args) {
     return new TYqlTableRefNode(std::move(position), std::move(args));

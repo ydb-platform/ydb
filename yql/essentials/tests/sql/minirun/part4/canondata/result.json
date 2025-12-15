@@ -1919,6 +1919,20 @@
             "uri": "https://{canondata_backend}/1871102/6db210a7091f95f8df3b12d3aa25ed46dcf52e4f/resource.tar.gz#test.test_select_yql-from_select-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-group_by_a_sum_distinct_b-default.txt-Debug]": [
+        {
+            "checksum": "71390777927f6a9472113700d123ce6e",
+            "size": 1065,
+            "uri": "https://{canondata_backend}/937458/7d5fe8c90d2c6ae42045aa9fc2babd60f26d3828/resource.tar.gz#test.test_select_yql-group_by_a_sum_distinct_b-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-group_by_a_sum_distinct_b-default.txt-Results]": [
+        {
+            "checksum": "1dc48deabab3b0fced48b3ed70251afc",
+            "size": 1189,
+            "uri": "https://{canondata_backend}/937458/7d5fe8c90d2c6ae42045aa9fc2babd60f26d3828/resource.tar.gz#test.test_select_yql-group_by_a_sum_distinct_b-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-projection_alias_case_sensivity-default.txt-Debug]": [
         {
             "checksum": "e81acceb7be91bf0127ad464c372873d",
@@ -1931,6 +1945,20 @@
             "checksum": "15b3d8bee40d96be9ed358ffebb80c52",
             "size": 976,
             "uri": "https://{canondata_backend}/1784117/59a1ed654cc7cf541c3d0bbf8b3a41883b0b9464/resource.tar.gz#test.test_select_yql-projection_alias_case_sensivity-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-projection_in_expr-default.txt-Debug]": [
+        {
+            "checksum": "f860e5769f0cb2cc649800d2e2e767ae",
+            "size": 484,
+            "uri": "https://{canondata_backend}/1031349/9a162bf46ddefb28cb1e4f995394146d52c6555c/resource.tar.gz#test.test_select_yql-projection_in_expr-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-projection_in_expr-default.txt-Results]": [
+        {
+            "checksum": "4183adf9082428c3ed5429ceb096726f",
+            "size": 1090,
+            "uri": "https://{canondata_backend}/1031349/9a162bf46ddefb28cb1e4f995394146d52c6555c/resource.tar.gz#test.test_select_yql-projection_in_expr-default.txt-Results_/results.txt"
         }
     ],
     "test.test[simple_pg-date_trunc-default.txt-Debug]": [

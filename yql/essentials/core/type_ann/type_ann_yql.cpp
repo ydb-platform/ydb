@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_module_helpers.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NYql::NTypeAnnImpl {
 
@@ -82,18 +83,35 @@ IGraphTransformer::TStatus YqlAggWrapper(
 
     YQL_ENSURE(input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit);
 
-    if (!EnsureTupleType(*input->Child(1), ctx.Expr)) {
+    if (!EnsureTuple(*input->Child(1), ctx.Expr)) {
         ctx.Expr.AddError(TIssue(
             input->Child(1)->Pos(ctx.Expr),
-            TStringBuilder() << "Expected aggregation options"));
+            TStringBuilder() << "Expected aggregation settings"));
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureMaxArgsCount(*input->Child(1), 0, ctx.Expr)) {
-        ctx.Expr.AddError(TIssue(
-            input->Child(1)->Pos(ctx.Expr),
-            TStringBuilder() << "Aggregation options are not implemented yet"));
-        return IGraphTransformer::TStatus::Error;
+    for (const auto& setting : input->Child(1)->Children()) {
+        if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(setting->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TStringBuf content = setting->Head().Content();
+        if (content == "distinct") {
+            if (!EnsureTupleSize(*setting, 1, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            YQL_ENSURE(GetSetting(*input->Child(1), "distinct"));
+        } else {
+            ctx.Expr.AddError(TIssue(
+                input->Pos(ctx.Expr),
+                TStringBuilder() << "Unexpected setting " << content));
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 
     if (!input->Child(2)->IsCallable("Void")) {

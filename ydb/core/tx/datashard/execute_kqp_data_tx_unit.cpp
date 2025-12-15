@@ -208,6 +208,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 case EEnsureCurrentLock::Abort:
                     // Lock cannot be created and we must abort
                     return abortLock();
+
+                case EEnsureCurrentLock::Missing:
+                    Y_ENSURE(false, "unreachable");
             }
         }
 

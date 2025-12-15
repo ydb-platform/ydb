@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package Ydb.TestShard.V1;
 
-import "ydb/public/api/protos/draft/ydb_test_shard.proto";
+import "ydb/public/api/protos/ydb_test_shard.proto";
 
 service TestShardService {
     // Creates TestShard tablet(s)

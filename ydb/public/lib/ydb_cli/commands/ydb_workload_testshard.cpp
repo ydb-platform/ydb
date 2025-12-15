@@ -1,6 +1,6 @@
 #include "ydb_workload_testshard.h"
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_test_shard.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/test_shard/test_shard.h>
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
 
 #include <util/stream/file.h>
@@ -22,8 +22,6 @@ TCommandTestShardInit::TCommandTestShardInit()
 
 void TCommandTestShardInit::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("path", "Path to TestShard object")
-        .Required().RequiredArgument("PATH").StoreResult(&Path);
     config.Opts->AddLongOption("channels", "Storage pool names for tablet channels (comma-separated, optional - uses database storage pools if not specified)")
         .Optional().RequiredArgument("POOLS").Handler([this](const TString& value) {
             Channels = StringSplitter(value).Split(',').ToList<TString>();
@@ -32,11 +30,13 @@ void TCommandTestShardInit::Config(TConfig& config) {
         .DefaultValue(1).RequiredArgument("NUM").StoreResult(&Count);
     config.Opts->AddLongOption('f', "config-file", "Path to YAML configuration file")
         .RequiredArgument("PATH").StoreResult(&ConfigFile);
-    config.SetFreeArgsNum(0);
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<path>", "Path to TestShard object");
 }
 
 void TCommandTestShardInit::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
+    Path = config.ParseResult->GetFreeArgs()[0];
 
     if (ConfigFile.empty()) {
         ythrow yexception() << "config-file must be specified";
@@ -77,13 +77,13 @@ TCommandTestShardClean::TCommandTestShardClean()
 
 void TCommandTestShardClean::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("path", "Path to TestShard object")
-        .Required().RequiredArgument("PATH").StoreResult(&Path);
-    config.SetFreeArgsNum(0);
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<path>", "Path to TestShard object");
 }
 
 void TCommandTestShardClean::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
+    Path = config.ParseResult->GetFreeArgs()[0];
 }
 
 int TCommandTestShardClean::Run(TConfig& config) {

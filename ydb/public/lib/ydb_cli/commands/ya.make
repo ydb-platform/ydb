@@ -80,6 +80,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/test_shard
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/credentials/login
     ydb/public/sdk/cpp/src/library/operation_id

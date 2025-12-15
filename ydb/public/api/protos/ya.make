@@ -22,7 +22,6 @@ SRCS(
     draft/ydb_object_storage.proto
     draft/ydb_replication.proto
     draft/ydb_tablet.proto
-    draft/ydb_test_shard.proto
     draft/ydb_view.proto
     draft/ymq.proto
     persqueue_error_codes_v1.proto
@@ -52,6 +51,7 @@ SRCS(
     ydb_scripting.proto
     ydb_status_codes.proto
     ydb_table.proto
+    ydb_test_shard.proto
     ydb_topic.proto
     ydb_value.proto
 )

@@ -46,12 +46,11 @@ struct TOutputChannelReadResult {
 class TOutputChannelReader {
 public:
     TOutputChannelReader(NTaskRunnerProxy::IOutputChannel::TPtr channel, i64 toPopSize,
-        bool wasFinished, ui64 cookie
+        bool wasFinished
     )
         : Channel(channel)
         , ToPopSize(toPopSize)
         , WasFinished(wasFinished)
-        , Cookie(cookie)
     {}
 
     TOutputChannelReadResult Read() {
@@ -392,7 +391,7 @@ private:
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto channel = taskRunner->GetOutputChannel(channelId);
-                TOutputChannelReader reader(channel, toPop, wasFinished, cookie);
+                TOutputChannelReader reader(channel, toPop, wasFinished);
                 TOutputChannelReadResult result = reader.Read();
 
                 NDqProto::TPopResponse response;
@@ -505,7 +504,6 @@ private:
         auto cookie = ev->Cookie;
         auto taskId = ev->Get()->Task.GetId();
         auto& inputs = ev->Get()->Task.GetInputs();
-        auto& outputs = ev->Get()->Task.GetOutputs();
         auto startTime = TInstant::Now();
         ExecCtx = ev->Get()->ExecCtx;
         auto* actorSystem = TActivationContext::ActorSystem();

@@ -42,7 +42,7 @@ struct TMetricCollector {
 
 struct TConsumerMetricCollector {
     TMetricCollector<EClientLabeledCounters_descriptor> ClientLabeledCounters;
-    //TMetricCollector<EMLPConsumerLabeledCounters_descriptor> MLPConsumerLabeledCounters;
+    TMetricCollector<EMLPConsumerLabeledCounters_descriptor> MLPConsumerLabeledCounters;
     //TMetricCollector MLPMessageLockAttemptsCounter;
 };
 
@@ -88,12 +88,11 @@ struct TTopicMetricCollector {
             Consumers[consumer.GetConsumer()].ClientLabeledCounters.Collect(consumer.GetValues());
         }
 
-        // TODO MLP
-        // for (const auto& consumer : counters.GetMLPConsumerCounters()) {
-        //     auto& collector = Consumers[consumer.GetConsumer()];
-        //     collector.MLPConsumerLabeledCounters.Collect(consumer.GetCountersValues());
+        for (const auto& consumer : counters.GetMLPConsumerCounters()) {
+            auto& collector = Consumers[consumer.GetConsumer()];
+            collector.MLPConsumerLabeledCounters.Collect(consumer.GetCountersValues());
         //     collector.MLPMessageLockAttemptsCounter.Collect(consumer.GetMessageLocksValues());
-        // }
+        }
     }
 
     void Finish() {
@@ -205,7 +204,7 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTablet
         counters.ClientLabeledCounters = InitializeCounters<EClientLabeledCounters_descriptor>(DynamicCounters, {{"consumer", metricsConsumerName}});
 
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-            //metrics.MLPClientLabeledCounters = InitializeCounters<EMLPConsumerLabeledCounters_descriptor>(DynamicCounters, {{"consumer", metricsConsumerName}});
+            counters.MLPClientLabeledCounters = InitializeCounters<EMLPConsumerLabeledCounters_descriptor>(DynamicCounters, {{"consumer", metricsConsumerName}});
             //metrics.MLPMessageLockAttemptsCounter = InitializeCounters<EMLPMessageLockAttemptsLabeledCounters_descriptor>(DynamicCounters,  {{"consumer", metricsConsumerName}});
         }
     }
@@ -274,6 +273,7 @@ void TTopicMetricsHandler::UpdateMetrics() {
         collector.Collect(partitionStatus);
     }
     collector.Finish();
+
     PartitionStatuses.erase(PartitionStatuses.begin(), PartitionStatuses.end());
 
     TopicMetrics = collector.TopicMetrics;
@@ -291,10 +291,10 @@ void TTopicMetricsHandler::UpdateMetrics() {
         auto& consumerMetrics = it->second;
 
         SetCounters(consumerCounters.ClientLabeledCounters, consumerMetrics.ClientLabeledCounters);
-        //if (!consumerCounters.MLPClientLabeledCounters.Counters.empty()) {
-            // SetCounters(consumerCounters.MLPClientLabeledCounters, consumerMetrics.MLPConsumerLabeledCounters);
+        if (!consumerCounters.MLPClientLabeledCounters.Counters.empty()) {
+            SetCounters(consumerCounters.MLPClientLabeledCounters, consumerMetrics.MLPConsumerLabeledCounters);
             // TODO MLPMessageLockAttemptsCounter
-        //}
+        }
     }
 }
 

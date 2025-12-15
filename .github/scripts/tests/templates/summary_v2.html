@@ -91,6 +91,11 @@
             background-color: #ff4500;
             border-color: #ff4500;
         }
+        .filter-by-btn.timeout.active {
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #856404;
+        }
         .filter-btn {
             padding: 8px 16px;
             border: 1px solid #d0d7de;
@@ -170,6 +175,17 @@
             background-color: #fff4e6;
             color: #d1242f;
             border: 1px solid #ff4500;
+            padding: 2px 8px;
+            border-radius: 3px;
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .timeout-badge {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffc107;
             padding: 2px 8px;
             border-radius: 3px;
             flex-shrink: 0;
@@ -737,9 +753,11 @@
                 
                 // Store filter state for later use
                 const sanitizerParam = urlParams.get('sanitizer');
+                const timeoutParam = urlParams.get('timeout');
                 window.__initialFilter = {
                     main: actualFilter,
-                    sanitizer: sanitizerParam
+                    sanitizer: sanitizerParam,
+                    timeout: timeoutParam
                 };
                 
                 // Add data attribute to body to hide all tests via CSS
@@ -785,6 +803,7 @@
             <div class="filter-by-section">
                 <label style="margin-right: 8px; font-weight: 500; color: #656d76;">Filter by:</label>
                 <button class="filter-by-btn sanitizer" id="sanitizer-filter-btn" onclick="toggleSanitizerFilter(this)" style="display: none;">Sanitizer (0)</button>
+                <button class="filter-by-btn timeout" id="timeout-filter-btn" onclick="toggleTimeoutFilter(this)" style="display: none;">Timeout (0)</button>
             </div>
         </div>
     </div>
@@ -811,7 +830,7 @@
             </div>
             <div id="suite-{{ loop.index }}" class="suite-content">
                 {% for test in tests %}
-                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name|e }}" data-test-owner="{{ test.owners|e }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-suite-name="{{ suite_name|e }}" data-test-display-name="{{ test.name|e }}">
+                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name|e }}" data-test-owner="{{ test.owners|e }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-is-timeout="{% if test.is_timeout_issue %}true{% else %}false{% endif %}" data-suite-name="{{ suite_name|e }}" data-test-display-name="{{ test.name|e }}">
                     <span class="searchable-full-path">{{ test.full_name }}</span>
                     <span class="test-name {% if test.status_description %}has-error{% endif %}" {% if test.status_description %}data-has-error="true" data-test-full-name="{{ test.full_name|e }}"{% endif %} title="{{ test.full_name|e }}">
                         {% if test.status_description %}<span class="test-name-toggle">▶</span>{% endif %}
@@ -821,6 +840,9 @@
                     <div class="test-meta">
                         {% if test.is_sanitizer_issue %}
                         <span class="sanitizer-badge">SANITIZER</span>
+                        {% endif %}
+                        {% if test.is_timeout_issue %}
+                        <span class="timeout-badge">TIMEOUT</span>
                         {% endif %}
                         <span class="test-status {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}">{{ test.status_display }}</span>
                         <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
@@ -940,6 +962,7 @@
         // Current filter state
         let currentMainFilter = 'all';
         let currentSanitizerFilter = false; // Additional filter for sanitizer issues
+        let currentTimeoutFilter = false; // Additional filter for timeout issues
         let currentGroupBy = 'none'; // 'none' or 'suite'
         
         function getHistoryError(testName, timestamp) {
@@ -963,6 +986,30 @@
                 suite.classList.add('hidden');
                 if (toggle) toggle.textContent = '\u25B6';
             }
+        }
+        
+        // Also expand when filter changes - now filters tests via data attributes
+        function setFilter(filter, button) {
+            // Update button states for status filters
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
+            });
+            button.classList.add('active', filter);
+            
+            // Don't deactivate sanitizer filter - it's independent
+            // Update current main filter
+            currentMainFilter = filter;
+            
+            // Apply filters first (fast)
+            applyFilters();
+            
+            // Re-render flat view if needed (after filters applied)
+            if (currentGroupBy === 'none') {
+                renderFlatView();
+            }
+            
+            // Update sanitizer count for current status
+            updateSanitizerCount();
         }
         
         // Initialize: expand all suites by default for cmd+f search
@@ -1019,6 +1066,7 @@
             });
             
             // Initialize filter from URL - apply immediately to prevent showing all tests
+            // IMPORTANT: Apply filters BEFORE setGroupBy to avoid rendering all tests
             if (window.__initialFilter) {
                 // Use pre-parsed filter from inline script
                 const filter = window.__initialFilter.main;
@@ -1033,52 +1081,44 @@
                     }
                 }
                 
+                // Handle timeout filter
+                if (window.__initialFilter && window.__initialFilter.timeout === 'true') {
+                    const timeoutBtn = document.getElementById('timeout-filter-btn');
+                    if (timeoutBtn) {
+                        currentTimeoutFilter = true;
+                        timeoutBtn.classList.add('active');
+                    }
+                }
+                
                 // Handle status filter
                 if (filter && filter !== 'sanitizer') {
-                const button = document.querySelector(`.filter-btn.${filter}`);
-                if (button) {
-                    // Apply main filter immediately
-                    setFilter(filter, button);
-                        }
-                } else {
-                    // No status filter, just apply sanitizer if needed
-                    applyFilters();
+                    const button = document.querySelector(`.filter-btn.${filter}`);
+                    if (button) {
+                        // Update button state without calling setFilter (which calls setGroupBy)
+                        document.querySelectorAll('.filter-btn').forEach(btn => {
+                            btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
+                        });
+                        button.classList.add('active', filter);
+                        currentMainFilter = filter;
+                    }
                 }
+                
+                // Apply filters immediately (before setGroupBy to avoid rendering all tests)
+                applyFilters();
             } else {
                 // Fallback to URL parsing if inline script didn't run
                 initFilterFromUrl();
+                // initFilterFromUrl already calls applyFilters and setGroupBy, so return
+                return;
             }
             
-            // Initialize group by mode
+            // Initialize group by mode AFTER filters are applied
             setGroupBy('none');
             
-            // Initialize sanitizer count (setGroupBy already calls it, but ensure it's called)
+            // Initialize sanitizer and timeout counts (setGroupBy already calls them, but ensure they're called)
             updateSanitizerCount();
+            updateTimeoutCount();
         });
-        
-        // Also expand when filter changes - now filters tests via data attributes
-        function setFilter(filter, button) {
-            // Update button states for status filters
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
-            });
-            button.classList.add('active', filter);
-            
-            // Don't deactivate sanitizer filter - it's independent
-            // Update current main filter
-            currentMainFilter = filter;
-            
-            // Re-render flat view if needed
-            if (currentGroupBy === 'none') {
-                renderFlatView();
-            }
-            
-            // Update sanitizer count for current status
-            updateSanitizerCount();
-            
-            // Apply filters
-            applyFilters();
-        }
         
         function updateSanitizerCount() {
             const sanitizerBtn = document.getElementById('sanitizer-filter-btn');
@@ -1115,6 +1155,41 @@
             }
         }
         
+        function updateTimeoutCount() {
+            const timeoutBtn = document.getElementById('timeout-filter-btn');
+            if (!timeoutBtn) return;
+            
+            // Count timeout tests for current status filter
+            // Use all test items from view-all (source of truth), not from current view
+            const allTestItems = Array.from(document.querySelectorAll('#view-all .test-item'));
+            let timeoutCount = 0;
+            
+            allTestItems.forEach(testItem => {
+                const testStatus = testItem.getAttribute('data-test-status');
+                const isTimeout = testItem.getAttribute('data-is-timeout') === 'true';
+                
+                // Check if test matches current status filter
+                let matchesStatus = false;
+                if (currentMainFilter === 'all') {
+                    matchesStatus = true;
+                } else {
+                    matchesStatus = testStatus === currentMainFilter;
+                }
+                
+                if (matchesStatus && isTimeout) {
+                    timeoutCount++;
+                }
+            });
+            
+            // Update button text
+            if (timeoutCount > 0) {
+                timeoutBtn.textContent = `Timeout (${timeoutCount})`;
+                timeoutBtn.style.display = '';
+            } else {
+                timeoutBtn.style.display = 'none';
+            }
+        }
+        
         function toggleSanitizerFilter(button) {
             const isActive = button.classList.contains('active');
             
@@ -1123,9 +1198,40 @@
                 button.classList.remove('active');
                 currentSanitizerFilter = false;
             } else {
-                // Activate sanitizer filter
+                // Activate sanitizer filter and deactivate timeout filter
                 button.classList.add('active');
                 currentSanitizerFilter = true;
+                
+                // Deactivate timeout filter if active
+                const timeoutBtn = document.getElementById('timeout-filter-btn');
+                if (timeoutBtn && currentTimeoutFilter) {
+                    timeoutBtn.classList.remove('active');
+                    currentTimeoutFilter = false;
+                }
+            }
+            
+            // Apply filters (status filter remains unchanged)
+            applyFilters();
+        }
+        
+        function toggleTimeoutFilter(button) {
+            const isActive = button.classList.contains('active');
+            
+            if (isActive) {
+                // Deactivate timeout filter
+                button.classList.remove('active');
+                currentTimeoutFilter = false;
+            } else {
+                // Activate timeout filter and deactivate sanitizer filter
+                button.classList.add('active');
+                currentTimeoutFilter = true;
+                
+                // Deactivate sanitizer filter if active
+                const sanitizerBtn = document.getElementById('sanitizer-filter-btn');
+                if (sanitizerBtn && currentSanitizerFilter) {
+                    sanitizerBtn.classList.remove('active');
+                    currentSanitizerFilter = false;
+                }
             }
             
             // Apply filters (status filter remains unchanged)
@@ -1150,8 +1256,9 @@
                 renderFlatView();
             }
             
-            // Update sanitizer count after view change
+            // Update sanitizer and timeout counts after view change
             updateSanitizerCount();
+            updateTimeoutCount();
             
             // Re-apply filters after switching view
             applyFilters();
@@ -1159,18 +1266,47 @@
         
         function renderFlatView() {
             const flatView = document.getElementById('tests-flat');
+            // Get all test items from source
             const allTestItems = Array.from(document.querySelectorAll('#view-all .test-item'));
             
-            // Sort alphabetically by full_name
-            allTestItems.sort((a, b) => {
+            // IMPORTANT: Filter tests BEFORE cloning to avoid creating DOM for hidden tests
+            // This significantly improves performance when filters are active
+            const visibleTestItems = allTestItems.filter(testItem => {
+                const testStatus = testItem.getAttribute('data-test-status');
+                const isSanitizer = testItem.getAttribute('data-is-sanitizer') === 'true';
+                const isTimeout = testItem.getAttribute('data-is-timeout') === 'true';
+                
+                // Apply main status filter
+                let shouldShow = false;
+                if (currentMainFilter === 'all') {
+                    shouldShow = true;
+                } else {
+                    shouldShow = testStatus === currentMainFilter;
+                }
+                
+                // Apply sanitizer filter if active
+                if (shouldShow && currentSanitizerFilter) {
+                    shouldShow = isSanitizer;
+                }
+                
+                // Apply timeout filter if active
+                if (shouldShow && currentTimeoutFilter) {
+                    shouldShow = isTimeout;
+                }
+                
+                return shouldShow;
+            });
+            
+            // Sort alphabetically by full_name (only visible tests)
+            visibleTestItems.sort((a, b) => {
                 const nameA = a.getAttribute('data-test-name') || '';
                 const nameB = b.getAttribute('data-test-name') || '';
                 return nameA.localeCompare(nameB);
             });
             
-            // Clone and update test items for flat view
+            // Clone and update test items for flat view (only visible ones - optimization!)
             flatView.innerHTML = '';
-            allTestItems.forEach(testItem => {
+            visibleTestItems.forEach(testItem => {
                 const clone = testItem.cloneNode(true);
                 const nameText = clone.querySelector('.test-name-text');
                 const fullName = clone.getAttribute('data-test-name');
@@ -1244,6 +1380,7 @@
             allTestItems.forEach(testItem => {
                 const testStatus = testItem.getAttribute('data-test-status');
                 const isSanitizer = testItem.getAttribute('data-is-sanitizer') === 'true';
+                const isTimeout = testItem.getAttribute('data-is-timeout') === 'true';
                 
                 // First apply main status filter
                 let shouldShow = false;
@@ -1259,12 +1396,18 @@
                     shouldShow = isSanitizer;
                 }
                 
+                // Then apply timeout filter if active (additional filter on top of status)
+                if (shouldShow && currentTimeoutFilter) {
+                    shouldShow = isTimeout;
+                }
+                
                 // Use display property directly for better performance
                 testItem.style.display = shouldShow ? '' : 'none';
             });
             
-            // Update sanitizer count after filtering
+            // Update sanitizer and timeout counts after filtering
             updateSanitizerCount();
+            updateTimeoutCount();
             
             // Show/hide suites based on visible tests, update counts (only for suite view)
             if (currentGroupBy === 'suite') {
@@ -1308,7 +1451,17 @@
             } else {
                 url.searchParams.delete('groupBy');
             }
-            window.history.pushState({filter: currentMainFilter, groupBy: currentGroupBy}, '', url);
+            if (currentSanitizerFilter) {
+                url.searchParams.set('sanitizer', 'true');
+            } else {
+                url.searchParams.delete('sanitizer');
+            }
+            if (currentTimeoutFilter) {
+                url.searchParams.set('timeout', 'true');
+            } else {
+                url.searchParams.delete('timeout');
+            }
+            window.history.pushState({filter: currentMainFilter, groupBy: currentGroupBy, sanitizer: currentSanitizerFilter, timeout: currentTimeoutFilter}, '', url);
         }
         
         // Handle URL parameters on load
@@ -1316,11 +1469,8 @@
             const urlParams = new URLSearchParams(window.location.search);
             const status = urlParams.get('status');
             const sanitizer = urlParams.get('sanitizer');
+            const timeout = urlParams.get('timeout');
             const groupBy = urlParams.get('groupBy');
-            
-            if (groupBy) {
-                setGroupBy(groupBy);
-            }
             
             // Handle sanitizer filter
             if (sanitizer === 'true') {
@@ -1331,6 +1481,16 @@
                 }
             }
             
+            // Handle timeout filter
+            if (timeout === 'true') {
+                const timeoutBtn = document.getElementById('timeout-filter-btn');
+                if (timeoutBtn) {
+                    currentTimeoutFilter = true;
+                    timeoutBtn.classList.add('active');
+                }
+            }
+            
+            // Handle status filter
             if (status) {
                 const filter = status.toLowerCase();
                 // Map common status names to filter names
@@ -1344,9 +1504,24 @@
                 const actualFilter = filterMap[filter] || filter;
                 const button = document.querySelector(`.filter-btn.${actualFilter}`);
                 if (button) {
-                    setFilter(actualFilter, button);
-                    return;
+                    // Update button state without calling setFilter (which calls setGroupBy)
+                    document.querySelectorAll('.filter-btn').forEach(btn => {
+                        btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
+                    });
+                    button.classList.add('active', actualFilter);
+                    currentMainFilter = actualFilter;
                 }
+            }
+            
+            // Apply filters BEFORE setGroupBy to avoid rendering all tests
+            applyFilters();
+            
+            // Handle groupBy AFTER filters are applied
+            if (groupBy) {
+                setGroupBy(groupBy);
+            } else {
+                // If no groupBy in URL, use default 'none' but AFTER filters
+                setGroupBy('none');
             }
         }
         

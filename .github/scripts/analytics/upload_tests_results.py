@@ -136,9 +136,9 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
         stdout_url = get_link_url("stdout")
 
         # Determine entity_type: suite, chunk, or test
-        if result.get("suite") == True:
+        if result.get("suite"):
             entity_type = "suite"
-        elif result.get("chunk") == True:
+        elif result.get("chunk"):
             entity_type = "chunk"
         else:
             entity_type = "test"

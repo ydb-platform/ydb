@@ -1547,7 +1547,7 @@ public:
                     .TableId = tableId,
                     .KeyColumnsMetadata = std::move(keyColumns),
                     .InputColumnsMetadata = std::move(inputColumns),
-                    .Priority = priority, // TODO: don't need it here, manage priority on WriteTask level.
+                    .Priority = priority, // TODO: manage priority on WriteTask level.
                     .OperationType = operationType,
                 },
                 .Serializer = nullptr,

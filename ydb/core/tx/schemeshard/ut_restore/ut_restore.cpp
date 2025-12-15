@@ -5508,6 +5508,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 source_prefix: "a"
                 destination_path: "/MyRoot/Table"
               }
+              skip_checksum_validation: true
             }
         )", Ydb::Import::ImportFromS3Settings::IndexFillingMode_Name(mode).c_str()));
 
@@ -5560,6 +5561,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 source_prefix: "a"
                 destination_path: "/MyRoot/Table"
               }
+              skip_checksum_validation: true
             }
         )", Ydb::Import::ImportFromS3Settings::IndexFillingMode_Name(mode).c_str()), expectedStatus);
 
@@ -6160,6 +6162,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     source_prefix: "a"
                     destination_path: "/MyRoot/Table"
                   }
+                  skip_checksum_validation: true
                 }
             )", port));
             t.TestEnv->TestWaitNotification(runtime, importId);

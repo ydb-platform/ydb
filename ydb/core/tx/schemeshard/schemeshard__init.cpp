@@ -4548,6 +4548,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
                     item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);
                     item.Issue = rowset.GetValueOrDefault<Schema::ImportItems::Issue>(TString());
+                    item.SrcPrefix = rowset.GetValueOrDefault<Schema::ImportItems::SrcPrefix>(TString());
 
                     item.ParentIdx = rowset.GetValueOrDefault<Schema::ImportItems::ParentIndex>(Max<ui32>());
                     if (item.ParentIdx != Max<ui32>()) {

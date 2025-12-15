@@ -1619,6 +1619,7 @@ struct Schema : NIceDb::Schema {
         struct NextIndexIdx : Column<9, NScheme::NTypeIds::Uint32> {};
         struct NextChangefeedIdx : Column<16, NScheme::NTypeIds::Uint32> {};
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct SrcPrefix : Column<17, NScheme::NTypeIds::Utf8> {};
         struct ParentIndex : Column<21, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<ImportId, Index>;
@@ -1639,6 +1640,7 @@ struct Schema : NIceDb::Schema {
             NextIndexIdx,
             NextChangefeedIdx,
             Issue,
+            SrcPrefix,
             ParentIndex
         >;
     };

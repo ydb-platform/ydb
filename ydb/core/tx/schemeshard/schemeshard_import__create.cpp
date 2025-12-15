@@ -953,7 +953,7 @@ private:
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
             const TString source = TStringBuilder()
-                << importInfo->Settings.items(msg.ItemIdx).source_prefix() << NYdb::NDump::NFiles::CreateView().FileName;
+                << importInfo->GetItemSrcPrefix(msg.ItemIdx) << NYdb::NDump::NFiles::CreateView().FileName;
 
             NYql::TIssues issues;
             if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
@@ -975,7 +975,7 @@ private:
         item.State = EState::CreateSchemeObject;
         Self->PersistImportItemState(db, importInfo, msg.ItemIdx);
 
-        const TString parentSrc = importInfo->Settings.items(msg.ItemIdx).source_prefix();
+        const TString parentSrc = importInfo->GetItemSrcPrefix(msg.ItemIdx);
         const TString parentDst = item.DstPathName;
         auto materializedIndexes = std::move(item.MaterializedIndexes);
         item.ChildItems.reserve(materializedIndexes.size());
@@ -990,6 +990,7 @@ private:
 
             importInfo->Items.at(msg.ItemIdx).ChildItems.push_back(childIdx);
 
+            childItem.SrcPrefix = std::move(src);
             childItem.State = EState::Waiting;
             childItem.ParentIdx = msg.ItemIdx;
             childItem.Scheme = std::move(scheme);

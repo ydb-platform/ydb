@@ -136,6 +136,7 @@ void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo::
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
         NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
+        NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix),
         NIceDb::TUpdate<Schema::ImportItems::ParentIndex>(item.ParentIdx)
     );
 }
@@ -153,7 +154,8 @@ void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo::TP
         NIceDb::TUpdate<Schema::Imports::State>(static_cast<ui8>(importInfo->State)),
         NIceDb::TUpdate<Schema::Imports::Issue>(importInfo->Issue),
         NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo->StartTime.Seconds()),
-        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo->EndTime.Seconds())
+        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo->EndTime.Seconds()),
+        NIceDb::TUpdate<Schema::Imports::Items>(importInfo->Items.size())
     );
 }
 

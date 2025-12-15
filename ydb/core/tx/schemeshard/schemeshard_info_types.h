@@ -2885,6 +2885,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         TString DstPathName;
         TPathId DstPathId;
+        TString SrcPrefix;
         Ydb::Table::CreateTableRequest Scheme;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
@@ -2942,6 +2943,20 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
+
+    TString GetItemSrcPrefix(size_t i) const {
+        if (i < Items.size() && Items[i].SrcPrefix) {
+            return Items[i].SrcPrefix;
+        }
+
+        // Backward compatibility.
+        // But there can be no paths in settings at all.
+        if (i < ui32(Settings.items_size())) {
+            return Settings.items(i).source_prefix();
+        }
+
+        return {};
+    }
 
     explicit TImportInfo(
             const ui64 id,

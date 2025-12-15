@@ -140,19 +140,6 @@
         .filter-btn.sanitizer:hover {
             background-color: #cc3700;
         }
-        .success-rate-button {
-            background-color: #0969da;
-            color: white;
-            border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            cursor: pointer;
-            margin-left: 4px;
-        }
-        .success-rate-button:hover {
-            background-color: #0860ca;
-        }
         .issue-button {
             background-color: #0969da;
             border: 1px solid #0969da;
@@ -576,34 +563,25 @@
             vertical-align: middle;
         }
         /* Modal styles */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.4);
-        }
+        .modal,
         #errorModal {
             display: none;
             position: fixed;
             z-index: 1000;
-            left: 0;
-            top: 0;
+            inset: 0;
             width: 100%;
             height: 100%;
             overflow: auto;
             background-color: rgba(0,0,0,0.5);
+            padding: 16px;
+            box-sizing: border-box;
         }
         .modal-content {
             background-color: #fefefe;
-            margin: 5% auto;
+            margin: 32px auto;
             padding: 20px;
             border: 1px solid #888;
-            width: 80%;
+            width: min(960px, 95vw);
             border-radius: 5px;
             max-height: 90vh;
             display: flex;
@@ -612,8 +590,8 @@
             position: relative;
         }
         #successRateModal .modal-content {
-            width: 95%;
-            max-width: 95%;
+            width: min(960px, 95vw);
+            max-width: 95vw;
         }
         #successRateModalContent {
             overflow-y: auto;
@@ -634,6 +612,12 @@
         }
         #successRateModalContent::-webkit-scrollbar-thumb:hover {
             background: #555;
+        }
+        /* Success rate modal runs layout */
+        .sr-runs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
         }
         .close-modal {
             color: #aaa;
@@ -728,6 +712,165 @@
             background-color: #ffc107;
             color: #000;
         }
+
+        /* Mobile tweaks */
+        @media (max-width: 900px) {
+            body {
+                zoom: 100%;
+                padding: 8px;
+            }
+            .filter-buttons {
+                margin: 12px 0;
+            }
+            .filter-buttons-row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 6px;
+            }
+            .filter-buttons-left,
+            .filter-buttons-right,
+            .filter-by-section {
+                flex-wrap: wrap;
+                justify-content: flex-start;
+            }
+            .filter-btn,
+            .filter-by-btn,
+            .group-by-selector select {
+                width: 100%;
+                justify-content: center;
+            }
+            .group-by-selector {
+                width: 100%;
+            }
+            .suite-header {
+                flex-wrap: wrap;
+            }
+            .suite-owner {
+                width: 100%;
+                margin-left: 0;
+                text-align: left;
+            }
+            .test-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .test-name {
+                max-width: 100%;
+            }
+            .test-meta {
+                width: 100%;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            .test-owner {
+                width: 100%;
+                text-align: left;
+                padding-right: 0;
+            }
+            .log-links {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .test-actions {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .error-content pre code {
+                font-size: 11px;
+            }
+            /* Modal tweaks */
+            .modal {
+                padding: 12px;
+            }
+            .modal-content {
+                width: min(960px, 95vw);
+                max-width: 95vw;
+                margin: 24px auto;
+                padding: 12px;
+            }
+            #successRateModal .modal-content {
+                width: min(960px, 95vw);
+                max-width: 95vw;
+            }
+            .close-modal {
+                font-size: 22px;
+                right: 12px;
+                top: 12px;
+            }
+            #successRateModalTitle,
+            #modalTitle {
+                font-size: 16px;
+                line-height: 1.3;
+                word-break: break-word;
+                overflow-wrap: anywhere;
+                margin-right: 32px; /* leave space for close button */
+            }
+            .modal-info {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .modal-info-label {
+                width: auto;
+                margin-right: 8px;
+            }
+            .modal-log-links {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .console-frame {
+                max-height: 50vh;
+                padding: 12px;
+            }
+            #modalErrorContent {
+                font-size: 12px;
+            }
+            /* Success-rate table */
+            .sr-table-wrap {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                max-width: 100%;
+                margin: 0 -4px;
+                padding: 0 4px;
+            }
+            .sr-table-wrap table {
+                min-width: 0;
+                table-layout: fixed;
+            }
+            .sr-table-wrap th,
+            .sr-table-wrap td {
+                padding: 3px 4px;
+                font-size: 11px;
+                white-space: normal;
+                word-break: break-word;
+            text-align: center;
+            }
+        .sr-table-wrap td:first-child,
+        .sr-table-wrap th:first-child {
+            text-align: left;
+        }
+            .sr-table-wrap thead th {
+                font-size: 11px;
+                white-space: normal;
+                word-break: break-word;
+            }
+            .sr-runs {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                gap: 4px;
+                padding-bottom: 4px;
+                -webkit-overflow-scrolling: touch;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(26px, 1fr));
+                justify-items: center;
+            }
+            .sr-runs::-webkit-scrollbar {
+                height: 6px;
+            }
+            .sr-runs span {
+                padding: 3px 6px !important;
+                font-size: 10px !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -766,6 +909,9 @@
             }
         })();
     </script>
+    <script type="application/json" id="test-counts-json">{{ test_counts | tojson }}</script>
+    <script type="application/json" id="owner-area-mapping-json">{{ owner_area_mapping | tojson }}</script>
+
     <div class="report-header">
         <h2>Test Results Report</h2>
         <p><strong>Build Preset:</strong> {{ build_preset }}</p>
@@ -1077,7 +1223,18 @@
             });
         }
         
-        const testCounts = {{ test_counts | tojson }};
+        function parseJsonScript(id) {
+            const el = document.getElementById(id);
+            if (!el) return {};
+            try {
+                return JSON.parse(el.textContent || '{}');
+            } catch (e) {
+                console.warn(`Failed to parse JSON from #${id}:`, e);
+                return {};
+            }
+        }
+
+        const testCounts = parseJsonScript('test-counts-json');
         
         // Current filter state
         let currentMainFilter = 'all';
@@ -1571,7 +1728,8 @@
                 ).length;
                 
                 // Update suite header count
-                const countSpan = suiteGroup.querySelector('.suite-header span:nth-of-type(2)');
+                // First span: toggle, second: suite name, third: count
+                const countSpan = suiteGroup.querySelector('.suite-header span:nth-of-type(3)');
                 if (countSpan && countSpan.textContent.includes('(')) {
                     countSpan.textContent = ` (${visibleCount} test${visibleCount !== 1 ? 's' : ''})`;
                 }
@@ -1900,8 +2058,10 @@
             return cut;
         }
         
+        const ownerAreaMapping = parseJsonScript('owner-area-mapping-json');
+
         function getOwnerAreaLabel(owner) {
-            const ownerMapping = {{ owner_area_mapping | tojson }};
+            const ownerMapping = ownerAreaMapping;
             if (!ownerMapping) return "";
             return ownerMapping[owner] || "";
         }
@@ -2149,8 +2309,7 @@
             const sortedDates = Object.keys(historyByDate).sort((a, b) => new Date(b) - new Date(a));
             
             html += '<h3>Daily History</h3>';
-            html += '<div style="overflow-x: auto; width: 100%;">';
-            html += '<table style="width: 100%; border-collapse: collapse; margin-top: 15px; min-width: 100%;">';
+            html += '<div class="sr-table-wrap"><table class="sr-table" style="width: 100%; border-collapse: collapse; margin-top: 15px;">';
             html += '<thead><tr style="background-color: #f6f8fa; border-bottom: 2px solid #d0d7de;">';
             html += '<th style="padding: 10px; text-align: left;">Date</th>';
             const branch = "{{ branch }}";
@@ -2193,7 +2352,7 @@
                 html += `<td style="padding: 10px; text-align: center;">${dayData.other.total > 0 ? `${otherRate}% (${dayData.other.passed}/${dayData.other.total})` : '-'}</td>`;
                 
                 // Column 2: Runs in Branch (main) - иконки для Branch runs
-                html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
+                html += `<td style="padding: 10px;"><div class="sr-runs">`;
                 for (const { timestamp, entry } of otherEntries) {
                     if (!entry) continue; // Skip invalid entries
                     const status = entry.status || 'unknown';
@@ -2214,7 +2373,7 @@
                 html += `<td style="padding: 10px; text-align: center;">${dayData.pr_check.total > 0 ? `${prRate}% (${dayData.pr_check.passed}/${dayData.pr_check.total})` : '-'}</td>`;
                 
                 // Column 4: Runs in PR-Check - иконки для PR-Check runs
-                html += `<td style="padding: 10px;"><div style="display: flex; flex-wrap: wrap; gap: 5px;">`;
+                html += `<td style="padding: 10px;"><div class="sr-runs">`;
                 for (const { timestamp, entry } of prCheckEntries) {
                     if (!entry) continue; // Skip invalid entries
                     const status = entry.status || 'unknown';
@@ -2232,7 +2391,7 @@
                 html += '</div></td></tr>';
             }
             html += '</tbody></table>';
-            html += '</div>';
+            html += '</div>'; // sr-table-wrap
             
             modalTitle.textContent = `Success Rate: ${testFullName}`;
             modalContent.innerHTML = html;
@@ -2279,8 +2438,6 @@
             const modalTitle = document.getElementById('modalTitle');
             const modalStatus = document.getElementById('modalStatus');
             const modalDate = document.getElementById('modalDate');
-            const modalSha = document.getElementById('modalSha');
-            const modalJob = document.getElementById('modalJob');
             const modalErrorContent = document.getElementById('modalErrorContent');
             const modalLogLinks = document.getElementById('modalLogLinks');
 

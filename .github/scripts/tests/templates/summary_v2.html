@@ -1705,8 +1705,15 @@
                             const preElement = document.createElement('pre');
                             preElement.appendChild(codeElement);
                             errorContent.appendChild(preElement);
-                            // Mark for later highlighting (will be done after showing)
-                            codeElement.setAttribute('data-needs-highlight', 'true');
+                            // Highlight as soon as the element is ready so first open is styled
+                            if (typeof Prism !== 'undefined') {
+                                requestAnimationFrame(() => {
+                                    Prism.highlightElement(codeElement);
+                                    codeElement.setAttribute('data-prism-loaded', 'true');
+                                });
+                            } else {
+                                codeElement.setAttribute('data-needs-highlight', 'true');
+                            }
                         }
                         errorContent.setAttribute('data-loaded', 'true');
                     });
@@ -1717,12 +1724,15 @@
                 testItem.classList.remove('error-hidden');
                 if (toggle) toggle.classList.add('expanded');
                 // Highlight syntax asynchronously after showing
-                if (typeof Prism !== 'undefined' && errorContent.querySelector('code') && !errorContent.querySelector('code').hasAttribute('data-prism-loaded')) {
-                    const codeElement = errorContent.querySelector('code');
-                    requestAnimationFrame(() => {
+                if (typeof Prism !== 'undefined') {
+                    const codeElement = errorContent.querySelector('code[data-needs-highlight]');
+                    if (codeElement && !codeElement.hasAttribute('data-prism-loaded')) {
+                        requestAnimationFrame(() => {
                             Prism.highlightElement(codeElement);
-                        codeElement.setAttribute('data-prism-loaded', 'true');
-                    });
+                            codeElement.setAttribute('data-prism-loaded', 'true');
+                            codeElement.removeAttribute('data-needs-highlight');
+                        });
+                    }
                 }
             } else {
                 // Hide immediately without animation
@@ -1751,8 +1761,15 @@
                             const preElement = document.createElement('pre');
                             preElement.appendChild(codeElement);
                             errorContent.appendChild(preElement);
-                            // Mark for later highlighting (will be done after showing)
-                            codeElement.setAttribute('data-needs-highlight', 'true');
+                            // Highlight as soon as the element is ready so first open is styled
+                            if (typeof Prism !== 'undefined') {
+                                requestAnimationFrame(() => {
+                                    Prism.highlightElement(codeElement);
+                                    codeElement.setAttribute('data-prism-loaded', 'true');
+                                });
+                            } else {
+                                codeElement.setAttribute('data-needs-highlight', 'true');
+                            }
                         }
                         errorContent.setAttribute('data-loaded', 'true');
                     });
@@ -1765,12 +1782,15 @@
                 const toggle = nameElement ? nameElement.querySelector('.test-name-toggle') : null;
                 if (toggle) toggle.classList.add('expanded');
                 // Highlight syntax asynchronously after showing
-                if (typeof Prism !== 'undefined' && errorContent.querySelector('code') && !errorContent.querySelector('code').hasAttribute('data-prism-loaded')) {
-                    const codeElement = errorContent.querySelector('code');
-                    requestAnimationFrame(() => {
-                        Prism.highlightElement(codeElement);
-                        codeElement.setAttribute('data-prism-loaded', 'true');
-                    });
+                if (typeof Prism !== 'undefined') {
+                    const codeElement = errorContent.querySelector('code[data-needs-highlight]');
+                    if (codeElement && !codeElement.hasAttribute('data-prism-loaded')) {
+                        requestAnimationFrame(() => {
+                            Prism.highlightElement(codeElement);
+                            codeElement.setAttribute('data-prism-loaded', 'true');
+                            codeElement.removeAttribute('data-needs-highlight');
+                        });
+                    }
                 }
             } else {
                 // Hide immediately without animation

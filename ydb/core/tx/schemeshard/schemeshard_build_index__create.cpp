@@ -2,7 +2,7 @@
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for NTableIndex::CommonCheck
+#include "schemeshard_index_utils.h"
 #include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -83,7 +83,7 @@ public:
             }
         }
 
-        TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+        auto buildInfo = std::make_shared<TIndexBuildInfo>();
         buildInfo->Id = BuildId;
         buildInfo->Uid = uid;
         buildInfo->DomainPathId = domainPath.Base()->PathId;
@@ -172,7 +172,11 @@ public:
                 return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
             }
         } else if (settings.has_column_build_operation()) {
-            buildInfo->TargetName = settings.source_path();
+            if (!Self->EnableAddColumsWithDefaults) {
+                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
+            }
+
+            buildInfo->TargetName = tablePath.PathString();
             // put some validation here for the build operation
             buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;
             buildInfo->BuildColumns.reserve(settings.column_build_operation().column_size());
@@ -200,12 +204,7 @@ public:
 
         Self->PersistCreateBuildIndex(db, *buildInfo);
 
-        if (buildInfo->IsBuildColumns()) {
-            buildInfo->State = TIndexBuildInfo::EState::AlterMainTable;
-        } else {
-            Y_ASSERT(buildInfo->IsBuildIndex());
-            buildInfo->State = TIndexBuildInfo::EState::Locking;
-        }
+        buildInfo->State = TIndexBuildInfo::EState::Locking;
 
         Self->PersistBuildIndexState(db, *buildInfo);
 
@@ -260,14 +259,22 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
-            if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
+            const auto& settings = vectorIndexKmeansTreeDescription.GetSettings();
+            if (!NKikimr::NKMeans::ValidateSettings(settings, explain)) {
                 return false;
             }
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
-            buildInfo.KMeans.K = vectorIndexKmeansTreeDescription.GetSettings().clusters();
-            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + vectorIndexKmeansTreeDescription.GetSettings().levels();
+            buildInfo.KMeans.K = settings.clusters();
+            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + settings.levels();
+            buildInfo.KMeans.IsPrefixed = buildInfo.IsBuildPrefixedVectorIndex();
             buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
-            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorIndexKmeansTreeDescription.GetSettings().settings(), buildInfo.KMeans.Rounds, explain);
+            buildInfo.KMeans.OverlapClusters = settings.overlap_clusters()
+                ? settings.overlap_clusters()
+                : NTableIndex::NKMeans::DefaultOverlapClusters;
+            buildInfo.KMeans.OverlapRatio = settings.has_overlap_ratio()
+                ? settings.overlap_ratio()
+                : NTableIndex::NKMeans::DefaultOverlapRatio;
+            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(settings.settings(), buildInfo.KMeans.Rounds, explain);
             if (!buildInfo.Clusters) {
                 return false;
             }

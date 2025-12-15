@@ -343,6 +343,7 @@ RECURSE_FOR_TESTS(
     ut_rs
     ut_sequence
     ut_snapshot
+    ut_snapshot_isolation
     ut_stats
     ut_trace
     ut_upload_rows

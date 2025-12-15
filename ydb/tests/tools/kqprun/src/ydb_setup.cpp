@@ -212,15 +212,9 @@ private:
 
     static void FlushStorageFileHolderOnSignal(int signal) {
         FlushStorageFileHolder();
-
-        const auto prevHandler = SignalHandlers_[signal];
-        if (prevHandler == SIG_DFL) {
-            std::signal(signal, SIG_DFL);
-            std::raise(signal);
-            std::exit(1);
-        } else if (prevHandler != SIG_IGN) {
-            prevHandler(signal);
-        }
+        std::signal(signal, SignalHandlers_[signal]);
+        std::raise(signal);
+        std::exit(1);
     }
 
     void SetupStorageFileHolder(const TString& storagePath) {
@@ -232,7 +226,7 @@ private:
         std::atexit(&FlushStorageFileHolder);
         TerminateHandler = std::set_terminate(&FlushStorageFileHolderOnTerminate);
 
-        for (auto sig : {SIGFPE, SIGILL, SIGSEGV, SIGTERM, SIGABRT, SIGINT}) {
+        for (auto sig : {SIGTERM, SIGABRT, SIGINT}) {
             const auto prevHandler = std::signal(sig, &FlushStorageFileHolderOnSignal);
             Y_ENSURE(prevHandler != SIG_ERR);
             SignalHandlers_.emplace(sig, prevHandler);
@@ -601,6 +595,16 @@ public:
         NYql::NLog::YqlLogger().ResetBackend(NActors::CreateNullBackend());
     }
 
+    TString GetDefaultDatabase() const {
+        if (StorageMeta_.TenantsSize() > 1) {
+            ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
+        }
+        if (StorageMeta_.TenantsSize() == 1) {
+            return GetTenantPath(StorageMeta_.GetTenants().begin()->first);
+        }
+        return Settings_.DomainName;
+    }
+
 private:
     NActors::TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
@@ -699,16 +703,6 @@ private:
         ythrow yexception() << "Unknown tenant '" << canonizedPath << "'";
     }
 
-    TString GetDefaultDatabase() const {
-        if (StorageMeta_.TenantsSize() > 1) {
-            ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
-        }
-        if (StorageMeta_.TenantsSize() == 1) {
-            return GetTenantPath(StorageMeta_.GetTenants().begin()->first);
-        }
-        return Settings_.DomainName;
-    }
-
     void UpdateStorageMeta() const {
         if (StorageMetaPath_) {
             TString storageMetaStr;
@@ -769,6 +763,12 @@ TRequestResult TYdbSetup::QueryRequest(const TRequestOptions& query, TQueryMeta&
     FillQueryMeta(meta, responseRecord);
 
     return TRequestResult(queryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
+}
+
+TRequestResult TYdbSetup::QueryRequest(const TRequestOptions& query) const {
+    TQueryMeta meta;
+    std::vector<Ydb::ResultSet> resultSets;
+    return QueryRequest(query, meta, resultSets, nullptr);
 }
 
 TRequestResult TYdbSetup::YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
@@ -847,6 +847,10 @@ void TYdbSetup::StartTraceOpt() const {
 
 void TYdbSetup::StopTraceOpt() {
     TYdbSetup::TImpl::StopTraceOpt();
+}
+
+TString TYdbSetup::GetDefaultDatabase() const {
+    return Impl_->GetDefaultDatabase();
 }
 
 }  // namespace NKqpRun

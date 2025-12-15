@@ -39,6 +39,9 @@ static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
 static constexpr TDuration VDiskCooldownTimeout = TDuration::Seconds(15);
 static constexpr TDuration VDiskCooldownTimeoutOnProxy = TDuration::Seconds(12);
 
+struct TMessageRelevanceTracker {};
+using TMessageRelevanceOwner = std::shared_ptr<TMessageRelevanceTracker>;
+using TMessageRelevanceWatcher = std::weak_ptr<TMessageRelevanceTracker>;
 
 struct TStorageStatusFlags {
     ui32 Raw = 0;
@@ -775,6 +778,10 @@ struct TEvBlobStorage {
         EvPhantomFlagStorageGetSnapshot,
         EvPhantomFlagStorageGetSnapshotResult,
         EvSyncLogUpdateNeighbourSyncedLsn,
+        EvLocalSyncFinished,
+        EvFullSyncFinished,
+        EvAddFullSyncSsts,
+        EvAddFullSyncSstsResult,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -1069,6 +1076,7 @@ struct TEvBlobStorage {
         const bool IgnoreBlock = false;
         mutable NLWTrace::TOrbit Orbit;
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
+        std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
 
         TEvPut(TCloneEventPolicy, const TEvPut& origin)
             : Id(origin.Id)
@@ -1079,11 +1087,13 @@ struct TEvBlobStorage {
             , IssueKeepFlag(origin.IssueKeepFlag)
             , IgnoreBlock(origin.IgnoreBlock)
             , ExtraBlockChecks(origin.ExtraBlockChecks)
+            , ExternalRelevanceWatcher(origin.ExternalRelevanceWatcher)
         {}
 
         TEvPut(const TLogoBlobID &id, TRope &&buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault, bool issueKeepFlag = false, bool ignoreBlock = false)
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false, bool ignoreBlock = false,
+               std::optional<TMessageRelevanceWatcher> externalRelevanceWatcher = std::nullopt)
             : Id(id)
             , Buffer(std::move(buffer))
             , Deadline(deadline)
@@ -1091,6 +1101,7 @@ struct TEvBlobStorage {
             , Tactic(tactic)
             , IssueKeepFlag(issueKeepFlag)
             , IgnoreBlock(ignoreBlock)
+            , ExternalRelevanceWatcher(externalRelevanceWatcher)
         {
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
             Y_ABORT_UNLESS(Buffer.size() < (40 * 1024 * 1024),
@@ -1108,21 +1119,27 @@ struct TEvBlobStorage {
 
         TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(id, TRope(std::move(buffer)), deadline, handleClass, tactic, issueKeepFlag)
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false,
+               std::optional<TMessageRelevanceWatcher> externalRelevanceWatcher = std::nullopt)
+            : TEvPut(id, TRope(std::move(buffer)), deadline, handleClass, tactic, issueKeepFlag,
+                    /*ignoreBlock=*/false, std::move(externalRelevanceWatcher))
         {}
 
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag)
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false,
+               std::optional<TMessageRelevanceWatcher> externalRelevanceWatcher = std::nullopt)
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag,
+                    /*ignoreBlock=*/false, std::move(externalRelevanceWatcher))
         {}
 
 
         TEvPut(const TLogoBlobID &id, const TSharedData &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
-               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag)
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false,
+               std::optional<TMessageRelevanceWatcher> externalRelevanceWatcher = std::nullopt)
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag,
+                    /*ignoreBlock=*/false, std::move(externalRelevanceWatcher))
         {}
 
         TString Print(bool isFull) const {

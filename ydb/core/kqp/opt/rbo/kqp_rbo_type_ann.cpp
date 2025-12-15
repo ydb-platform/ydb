@@ -307,6 +307,14 @@ TStatus ComputeTypes(std::shared_ptr<TOpLimit> limit, TRBOContext & ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(std::shared_ptr<TOpSort> sort, TRBOContext & ctx) {
+    Y_UNUSED(ctx);
+    auto inputType = sort->GetInput()->Type;
+    // TODO: Add sanity checks.
+    sort->Type = inputType;
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProps& props);
 
 TStatus ComputeTypes(std::shared_ptr<TOpCBOTree> cboTree, TRBOContext &ctx, TPlanProps& props) {
@@ -340,6 +348,9 @@ TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProp
     }
     else if(MatchOperator<TOpLimit>(op)) {
         return ComputeTypes(CastOperator<TOpLimit>(op), ctx);
+    }
+    else if (MatchOperator<TOpSort>(op)) {
+        return ComputeTypes(CastOperator<TOpSort>(op), ctx);
     }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);

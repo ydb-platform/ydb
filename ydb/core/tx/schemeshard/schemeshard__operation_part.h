@@ -756,5 +756,13 @@ ISubOperation::TPtr CreateAlterStreamingQuery(TOperationId id, TTxState::ETxStat
 ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, TTxState::ETxState state);
 
+inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& workingDir, NKikimrSchemeOp::EOperationType type) {
+    NKikimrSchemeOp::TModifyScheme tx;
+    tx.SetWorkingDir(workingDir);
+    tx.SetOperationType(type);
+
+    return tx;
+}
+
 }
 }

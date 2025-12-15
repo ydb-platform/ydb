@@ -1244,6 +1244,7 @@ private:
     void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
 
     void InitializeMLPConsumers();
+    void DropDataOfMLPConsumer(NKikimrClient::TKeyValueRequest& request, const TString& consumer);
     void NotifyEndOffsetChanged();
 
     struct TMLPConsumerInfo {

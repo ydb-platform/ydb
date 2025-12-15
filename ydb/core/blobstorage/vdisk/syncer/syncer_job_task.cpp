@@ -52,10 +52,12 @@ namespace NKikimr {
                          EJobType type,
                          const TVDiskID &vdisk,
                          const TActorId &service,
+                         const TActorId &sstWriterId,
                          const NSyncer::TPeerSyncState &peerState,
                          const std::shared_ptr<TSjCtx> &ctx)
             : VDiskId(vdisk)
             , ServiceId(service)
+            , SstWriterId(sstWriterId)
             , Type(type)
             , OldSyncState(peerState.SyncState)
             , Current(peerState)
@@ -160,6 +162,12 @@ namespace NKikimr {
                 Y_VERIFY_S(Phase == EWaitLocal,
                     Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
                     "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+                if (Type == EFullRecover) {
+                    auto msgFinished = std::make_unique<TEvLocalSyncFinished>();
+                    return TSjOutcome::Event(SstWriterId, std::move(msgFinished));
+                }
+#endif
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
             }
 
@@ -365,6 +373,11 @@ namespace NKikimr {
                     return TSjOutcome::Actor(std::move(actor), true);
                 } else {
                     auto msg = std::make_unique<TEvLocalSyncData>(vdisk, OldSyncState, data);
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+                    std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, SstWriterId,
+                            parentId, std::move(msg)));
+                    return TSjOutcome::Actor(std::move(actor), true);
+#endif
 #ifdef UNPACK_LOCALSYNCDATA
                     std::unique_ptr<IActor> actor(CreateLocalSyncDataExtractor(Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId,
                             parentId, std::move(msg)));
@@ -382,6 +395,10 @@ namespace NKikimr {
                                   "data.empty() && !EndOfStream"));
                     return ReplyAndDie(TSyncStatusVal::ProtocolError);
                 } else {
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+                    auto msgFinished = std::make_unique<TEvLocalSyncFinished>();
+                    return TSjOutcome::Event(SstWriterId, std::move(msgFinished));
+#endif
                     return ReplyAndDie(TSyncStatusVal::SyncDone);
                 }
             }
@@ -458,6 +475,12 @@ namespace NKikimr {
                 "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
 
             if (EndOfStream) {
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+                if (Type == EFullRecover) {
+                    auto msgFinished = std::make_unique<TEvLocalSyncFinished>();
+                    return TSjOutcome::Event(SstWriterId, std::move(msgFinished));
+                }
+#endif
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
             } else {
                 if (Phase == ETerminated) {
@@ -468,6 +491,10 @@ namespace NKikimr {
                     return NextRequest();
                 }
             }
+        }
+
+        TSjOutcome TSyncerJobTask::Handle(TEvFullSyncFinished::TPtr& /*ev*/) {
+            return ReplyAndDie(TSyncStatusVal::SyncDone);
         }
 
         TSjOutcome TSyncerJobTask::Terminate(ESyncStatus status) {

@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -231,6 +232,8 @@ struct TKqpTableWriterStatistics {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
+    ui64 LocksBrokenAsBreaker = 0;
+    ui64 LocksBrokenAsVictim = 0;
 
     THashSet<ui64> AffectedPartitions;
 
@@ -251,9 +254,28 @@ struct TKqpTableWriterStatistics {
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
             AffectedPartitions.insert(perShardStats.GetShardId());
         }
+
+        LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+        LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+    }
+
+    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim) {
+        NKqpProto::TKqpTaskExtraStats extraStats;
+        if (stats->HasExtra()) {
+            stats->GetExtra().UnpackTo(&extraStats);
+        }
+        extraStats.MutableLockStats()->SetBrokenAsBreaker(
+            extraStats.GetLockStats().GetBrokenAsBreaker() + brokenAsBreaker);
+        extraStats.MutableLockStats()->SetBrokenAsVictim(
+            extraStats.GetLockStats().GetBrokenAsVictim() + brokenAsVictim);
+        stats->MutableExtra()->PackFrom(extraStats);
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
+        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim);
+        LocksBrokenAsBreaker = 0;
+        LocksBrokenAsVictim = 0;
+
         if (ReadRows + WriteRows + EraseRows == 0) {
             // Avoid empty table_access stats
             return;
@@ -1136,11 +1158,14 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
-            evWrite->Record.SetLockMode(LockMode);
 
             if (MvccSnapshot) {
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
             }
+        }
+
+        if (LockMode != NKikimrDataEvents::OPTIMISTIC) {
+            evWrite->Record.SetLockMode(LockMode);
         }
 
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
@@ -1172,13 +1197,16 @@ public:
             Counters->WriteActorImmediateWritesRetries->Inc();
         }
 
-        if (isPrepare && MvccSnapshot) {
-            bool needMvccSnapshot = false;
-            for (const auto& operation : evWrite->Record.GetOperations()) {
-                if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
-                    // This operation may fail with an incorrect unique constraint violation otherwise
-                    needMvccSnapshot = true;
-                    break;
+        if (MvccSnapshot && (isPrepare || isImmediateCommit)) {
+            // Commit in snapshot isolation must validate writes against a snapshot
+            bool needMvccSnapshot = LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+            if (!needMvccSnapshot && isPrepare) {
+                for (const auto& operation : evWrite->Record.GetOperations()) {
+                    if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+                        // This operation may fail with an incorrect unique constraint violation otherwise
+                        needMvccSnapshot = true;
+                        break;
+                    }
                 }
             }
             if (needMvccSnapshot) {
@@ -4266,6 +4294,11 @@ public:
                 return builder;
             }());
 
+        if (ev->Get()->Record.HasTxStats()) {
+            LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
+            LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
+        }
+
         OnCommitted(ev->Get()->Record.GetOrigin(), 0);
     }
 
@@ -4453,6 +4486,7 @@ public:
         ForEachLookupActor([&](IKqpBufferTableLookup* actor, const TActorId) {
             actor->FillStats(&result);
         });
+        TKqpTableWriterStatistics::AddLockStats(&result, LocksBrokenAsBreaker, LocksBrokenAsVictim);
         return result;
     }
 
@@ -4526,6 +4560,9 @@ private:
     bool IsImmediateCommit = false;
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
+
+    ui64 LocksBrokenAsBreaker = 0;
+    ui64 LocksBrokenAsVictim = 0;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     std::shared_ptr<NMiniKQL::TTypeEnvironment> TypeEnv;

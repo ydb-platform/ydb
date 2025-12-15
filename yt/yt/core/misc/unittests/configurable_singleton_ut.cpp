@@ -181,22 +181,22 @@ YT_DEFINE_RECONFIGURABLE_SINGLETON(
 
 TEST(TConfigurableSingletonTest, Run)
 {
-    auto config1 = ConvertTo<TSingletonsConfigPtr>(NYson::TYsonString(TString(R"""({
+    auto config1 = ConvertTo<TSingletonsConfigPtr>(NYson::TYsonString(TStringBuf(R"""({
         required = {
             speed = 123;
         };
     })""")));
-    auto config2 = ConvertTo<TSingletonsConfigPtr>(NYson::TYsonString(TString(R"""({
+    auto config2 = ConvertTo<TSingletonsConfigPtr>(NYson::TYsonString(TStringBuf(R"""({
         required = {
             speed = 124;
         };
     })""")));
-    auto dynamicConfig1 = ConvertTo<TSingletonsDynamicConfigPtr>(NYson::TYsonString(TString(R"""({
+    auto dynamicConfig1 = ConvertTo<TSingletonsDynamicConfigPtr>(NYson::TYsonString(TStringBuf(R"""({
         reconfigurable = {
             cost = 888;
         };
     })""")));
-    auto dynamicConfig2 = ConvertTo<TSingletonsDynamicConfigPtr>(NYson::TYsonString(TString(R"""({
+    auto dynamicConfig2 = ConvertTo<TSingletonsDynamicConfigPtr>(NYson::TYsonString(TStringBuf(R"""({
         reconfigurable = {
             cost = 999;
         };

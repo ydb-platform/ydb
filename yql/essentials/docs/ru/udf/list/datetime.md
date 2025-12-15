@@ -324,7 +324,7 @@ SELECT
 
 #### Список функций
 
-* `DateTime::Format(String, alwaysWriteFractionalSeconds:Bool?) -> (Resource<TM64>{Flags:AutoMap}) -> String`
+* `DateTime::Format(String, [AlwaysWriteFractionalSeconds:Bool?, WriteOffsetWithColon:Bool?]) -> (Resource<TM64>{Flags:AutoMap}) -> String`
 
 Для строки форматирования реализовано множество спецификаторов:
 
@@ -334,8 +334,8 @@ SELECT
 * `%d` - день 2 цифры;
 * `%H` - час 2 цифры;
 * `%M` - минуты 2 цифры;
-* `%S` - секунды 2 цифры или `XX.XXXXXX` в случае непустых микросекунд (и только если флаг `alwaysWriteFractionalSeconds` не выставлен в `True`);
-* `%z` - +hhmm or -hhmm;
+* `%S` - секунды 2 цифры или `XX.XXXXXX` в случае непустых микросекунд (и только если флаг `AlwaysWriteFractionalSeconds` не выставлен в `True`);
+* `%z` - +hhmm или -hhmm по умолчанию; +hh:mm или -hh:mm, если флаг `WriteOffsetWithColon` выставлен в `True`;
 * `%Z` - IANA имя таймзоны;
 * `%b` - короткое трехбуквенное английское название месяца (Jan);
 * `%B` - полное английское название месяца (January).

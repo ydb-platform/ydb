@@ -1157,13 +1157,6 @@ public:
             return false;
         }
 
-        if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
-            && QueryState->TxCtx->HasOltpTable) {
-            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "SnapshotRW can only be used with column-oriented tables.");
-            return false;
-        }
-
         if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
                 && !QueryState->TxCtx->EnableHtapTx.value_or(false) && !QueryState->IsSplitted()) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
@@ -2071,6 +2064,9 @@ public:
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
 
+        QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
+        QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
+
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
         } else {
@@ -2271,6 +2267,8 @@ public:
 
         stats->DurationUs = ((TInstant::Now() - QueryState->StartTime).MicroSeconds());
         stats->WorkerCpuTimeUs = (QueryState->GetCpuTime().MicroSeconds());
+        stats->LocksBrokenAsBreaker = QueryState->QueryStats.LocksBrokenAsBreaker;
+        stats->LocksBrokenAsVictim = QueryState->QueryStats.LocksBrokenAsVictim;
         if (const auto continueTime = QueryState->ContinueTime) {
             stats->QueuedTimeUs = (continueTime - QueryState->StartTime).MicroSeconds();
         }

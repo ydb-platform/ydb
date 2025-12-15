@@ -5,6 +5,30 @@ import sys
 
 
 class Ast3ToGAst(AstToGAst):
+    if sys.version_info.minor == 12:
+
+        def visit_TypeVar(self, node):
+            new_node = gast.TypeVar(
+                self._visit(node.name),
+                self._visit(node.bound),
+                None
+            )
+            return gast.copy_location(new_node, node)
+
+        def visit_TypeVarTuple(self, node):
+            new_node = gast.TypeVarTuple(
+                self._visit(node.name),
+                None
+            )
+            return gast.copy_location(new_node, node)
+
+        def visit_ParamSpec(self, node):
+            new_node = gast.ParamSpec(
+                self._visit(node.name),
+                None
+            )
+            return gast.copy_location(new_node, node)
+
     if sys.version_info.minor < 10:
 
         def visit_alias(self, node):
@@ -250,8 +274,41 @@ class Ast3ToGAst(AstToGAst):
             )
             return gast.copy_location(new_node, node)
 
+    if sys.version_info.minor < 12:
+
+        def visit_ClassDef(self, node):
+            new_node = gast.ClassDef(
+                self._visit(node.name),
+                self._visit(node.bases),
+                self._visit(node.keywords),
+                self._visit(node.body),
+                self._visit(node.decorator_list),
+                [],  # type_params
+            )
+            return gast.copy_location(new_node, node)
+
 
 class GAstToAst3(GAstToAst):
+    if sys.version_info.minor == 12:
+        def visit_TypeVar(self, node):
+            new_node = ast.TypeVar(
+                self._visit(node.name),
+                self._visit(node.bound)
+            )
+            return ast.copy_location(new_node, node)
+
+        def visit_TypeVarTuple(self, node):
+            new_node = ast.TypeVarTuple(
+                self._visit(node.name),
+            )
+            return ast.copy_location(new_node, node)
+
+        def visit_ParamSpec(self, node):
+            new_node = ast.ParamSpec(
+                self._visit(node.name),
+            )
+            return ast.copy_location(new_node, node)
+
     if sys.version_info.minor < 10:
         def visit_alias(self, node):
             new_node = ast.alias(

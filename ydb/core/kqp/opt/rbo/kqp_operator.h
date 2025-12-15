@@ -15,7 +15,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, UnionAll, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
 
 /* Represents aggregation phases. */
 enum EAggregationPhase : ui32 {Intermediate, Final};
@@ -555,6 +555,17 @@ class TOpLimit : public IUnaryOperator {
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
 
+    TExprNode::TPtr LimitCond;
+};
+
+class TOpSort : public IUnaryOperator {
+  public:
+    TOpSort(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TSortElement> sortElements, TExprNode::TPtr limitCond = nullptr);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
+    virtual TString ToString(TExprContext& ctx) override;
+
+    TVector<TSortElement> SortElements;
     TExprNode::TPtr LimitCond;
 };
 

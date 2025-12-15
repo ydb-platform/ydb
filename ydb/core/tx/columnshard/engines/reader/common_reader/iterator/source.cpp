@@ -189,18 +189,18 @@ TBlobRange IDataSource::RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) 
     return TBlobRange();
 }
 
-IDataSource::IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
     const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
     const std::optional<ui64> shardingVersion, const bool hasDeletions)
     : Type(type)
-    , SourceId(sourceId)
     , SourceIdx(sourceIdx)
     , RecordSnapshotMin(recordSnapshotMin)
     , RecordSnapshotMax(recordSnapshotMax)
     , Context(context)
     , RecordsCountImpl(recordsCount)
     , ShardingVersionOptional(shardingVersion)
-    , HasDeletions(hasDeletions) {
+    , HasDeletions(hasDeletions)
+{
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("c"));
 }
@@ -299,14 +299,14 @@ void IDataSource::InitStageData(std::unique_ptr<TFetchedData>&& data) {
 }
 
 std::unique_ptr<TFetchedData> IDataSource::ExtractStageData() {
-    AFL_VERIFY(StageData)("source_id", SourceId);
+    AFL_VERIFY(StageData)("source_idx", SourceIdx);
     auto result = std::move(StageData);
     StageData.reset();
     return std::move(result);
 }
 
 const TFetchedData& IDataSource::GetStageData() const {
-    AFL_VERIFY(StageData)("source_id", SourceId);
+    AFL_VERIFY(StageData)("source_idx", SourceIdx);
     return *StageData;
 }
 

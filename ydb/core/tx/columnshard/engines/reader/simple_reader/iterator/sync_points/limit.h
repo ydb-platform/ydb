@@ -82,9 +82,9 @@ private:
             IsValidFlag = ShiftWithFilter();
         }
 
-        ui64 GetSourceId() const {
+        ui32 GetSourceIdx() const {
             AFL_VERIFY(Source);
-            return Source->GetSourceId();
+            return Source->GetSourceIdx();
         }
 
         bool IsFilled() const {
@@ -110,14 +110,14 @@ private:
         bool operator<(const TSourceIterator& item) const {
             const auto cmp = SortableRecord->ComparePartial(*item.SortableRecord);
             if (cmp == std::partial_ordering::equivalent) {
-                return item.Source->GetSourceId() < Source->GetSourceId();
+                return item.Source->GetSourceIdx() < Source->GetSourceIdx();
             }
             return cmp == std::partial_ordering::greater;
         }
     };
 
     std::vector<TSourceIterator> Iterators;
-    std::vector<ui64> DebugOrder;
+    std::vector<TSourceIterator> DebugOrder;
 
     virtual bool IsFinished() const override {
         return FetchedCount >= Limit || TBase::IsFinished();
@@ -126,7 +126,7 @@ private:
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
         AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
         Iterators.emplace_back(TSourceIterator(source));
-        DebugOrder.emplace_back(source->GetSourceId());
+        DebugOrder.emplace_back(TSourceIterator(source));
         std::push_heap(Iterators.begin(), Iterators.end());
         return TBase::OnAddSource(source);
     }

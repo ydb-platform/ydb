@@ -38,7 +38,7 @@ const ui64 UnconfiguredBufferSizeLimit = 32 << 20;
 const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(5);
 
 const TDuration DsMinimumDelayBetweenPutWakeups = TDuration::Seconds(1);
-const TDuration DsMaximumPutTimeout = TDuration::Seconds(60);
+const TDuration DsMaximumDelayBetweenPutWakeups = TDuration::Seconds(60);
 
 const ui64 BufferSizeThreshold = 1 << 20;
 
@@ -196,6 +196,8 @@ public:
 
         std::optional<ui32> ForceGroupGeneration; // work only with this specific group generation and nothing else
         bool DoSendDeathNote = true; // unschedules DSProxy timeout on termination, be careful with disabling
+
+        std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
     };
 
     struct TTypeSpecificParameters {
@@ -238,6 +240,12 @@ public:
         }
 
         Y_ABORT_UNLESS(CostModel);
+
+        if (params.Common.ExternalRelevanceWatcher) {
+            Relevance = std::move(*params.Common.ExternalRelevanceWatcher);
+        } else {
+            Relevance = std::make_shared<TMessageRelevanceTracker>();
+        }
     }
 
     virtual ~TBlobStorageGroupRequestActor() = default;
@@ -291,6 +299,8 @@ public:
     static double GetTotalTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
     static double GetVDiskTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
 
+    bool CheckForExternalCancellation();
+
 private:
     void CheckPostponedQueue();
 
@@ -316,7 +326,7 @@ protected:
 private:
     const TActorId Source;
     const ui64 Cookie;
-    std::shared_ptr<TMessageRelevanceTracker> MessageRelevanceTracker = std::make_shared<TMessageRelevanceTracker>();
+    std::variant<TMessageRelevanceOwner, TMessageRelevanceWatcher> Relevance;
     ui32 RequestsInFlight = 0;
     std::unique_ptr<IEventBase> Response;
     const TMaybe<TGroupStat::EKind> LatencyQueueKind;
@@ -363,6 +373,7 @@ struct TBlobStorageGroupPutParameters {
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
+    TDuration MaxTimeout = TDuration::Seconds(60);
 };
 IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters params);
 
@@ -382,6 +393,7 @@ struct TBlobStorageGroupMultiPutParameters {
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
+    TDuration MaxTimeout = TDuration::Seconds(60);
 
     static ui32 CalculateRestartCounter(TBatchedVec<TEvBlobStorage::TEvPut::TPtr>& events) {
         ui32 maxRestarts = 0;
@@ -528,6 +540,7 @@ struct TBlobStorageProxyControlWrappers {
     TMemorizableControlWrapper EnableVPatch;
 
     TMemorizableControlWrapper LongRequestThresholdMs = LongRequestThresholdDefaultControl;
+    TMemorizableControlWrapper MaxPutTimeoutSeconds = MaxPutTimeoutDefaultControl;
 
 #define DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(prefix)              \
     TMemorizableControlWrapper prefix = prefix##DefaultControl;         \

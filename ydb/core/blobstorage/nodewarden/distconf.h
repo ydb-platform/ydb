@@ -341,7 +341,6 @@ namespace NKikimr::NStorage {
         // pipe to Console
         TActorId ConsolePipeId;
         bool ConsoleConnected = false;
-        bool ConfigCommittedToConsole = false;
         ui64 ValidateRequestCookie = 0;
         ui64 ProposeRequestCookie = 0;
         ui64 CommitRequestCookie = 0;

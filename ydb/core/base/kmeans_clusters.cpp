@@ -1,5 +1,7 @@
 #include "kmeans_clusters.h"
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
@@ -84,6 +86,14 @@ namespace {
             return result;
         }
         ValidateSettingInRange(name, result, minValue, maxValue, error);
+        return result;
+    }
+
+    double ParseDouble(const TString& name, const TString& value, TString& error) {
+        double result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+        }
         return result;
     }
 }
@@ -550,6 +560,11 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     error = "";
 
+    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+        return false;
+    }
+
     if (!settings.has_settings()) {
         error = TStringBuilder() << "vector index settings should be set";
         return false;
@@ -575,6 +590,18 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
         return false;
     }
 
+    if (settings.has_overlap_clusters() &&
+        settings.overlap_clusters() > settings.clusters()) {
+        error = TStringBuilder() << "overlap_clusters should be less than or equal to clusters";
+        return false;
+    }
+
+    if (settings.has_overlap_ratio() &&
+        settings.overlap_ratio() < 0) {
+        error = TStringBuilder() << "overlap_ratio should be >= 0";
+        return false;
+    }
+
     ui64 clustersPowLevels = 1;
     for (ui64 i = 0; i < settings.levels(); ++i) {
         clustersPowLevels *= settings.clusters();
@@ -595,6 +622,11 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
 }
 
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
+    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+        return false;
+    }
+
     if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
         error = TStringBuilder() << "either distance or similarity should be set";
         return false;
@@ -650,6 +682,10 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, 
         settings.set_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
     } else if (nameLower =="levels") {
         settings.set_levels(ParseUInt32(name, value, MinLevels, MaxLevels, error));
+    } else if (nameLower == "overlap_clusters") {
+        settings.set_overlap_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+    } else if (nameLower == "overlap_ratio") {
+        settings.set_overlap_ratio(ParseDouble(name, value, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << name;
         return false;
@@ -677,6 +713,29 @@ void FilterOverlapRows(TVector<TSerializedCellVec>& rows, size_t distancePos, ui
             auto d = rows[i].GetCells().at(distancePos).AsValue<double>();
             if (d > thresh) {
                 rows.resize(i);
+                break;
+            }
+        }
+    }
+}
+
+void FilterOverlapRows(TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>& rowClusters, ui32 overlapClusters, double overlapRatio) {
+    if (rowClusters.size() <= 1) {
+        return;
+    }
+    std::sort(rowClusters.begin(), rowClusters.end(),
+        [&](const std::pair<NTableIndex::NKMeans::TClusterId, double>& a,
+            const std::pair<NTableIndex::NKMeans::TClusterId, double>& b) {
+            return a.second < b.second;
+        });
+    if (rowClusters.size() > overlapClusters) {
+        rowClusters.resize(overlapClusters);
+    }
+    if (overlapRatio > 0) {
+        double thresh = (rowClusters[0].second < 0 ? rowClusters[0].second/overlapRatio : rowClusters[0].second*overlapRatio);
+        for (size_t i = 1; i < rowClusters.size(); i++) {
+            if (rowClusters[i].second > thresh) {
+                rowClusters.resize(i);
                 break;
             }
         }

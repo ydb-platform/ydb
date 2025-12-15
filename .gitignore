@@ -99,3 +99,6 @@ path.bash.inc
 
 # Editor config
 /.editorconfig
+
+# Cursor ignore
+.cursorignore

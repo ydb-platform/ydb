@@ -2,6 +2,7 @@
 
 #include <yt/yt/library/query/base/public.h>
 
+#include <yt/yt/client/complex_types/check_type_compatibility.h>
 #include <yt/yt/client/table_client/schema.h>
 
 namespace NYT::NTableClient {
@@ -12,13 +13,20 @@ struct TSchemaUpdateEnabledFeatures
 {
     bool EnableStaticTableDropColumn = false;
     bool EnableDynamicTableDropColumn = false;
+
+    bool EnableStaticTableStructFieldRenaming = false;
+    bool EnableDynamicTableStructFieldRenaming = false;
+
+    bool EnableStaticTableStructFieldRemoval = false;
+    bool EnableDynamicTableStructFieldRemoval = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void ValidateColumnSchemaUpdate(
     const TColumnSchema& oldColumn,
-    const TColumnSchema& newColumn);
+    const TColumnSchema& newColumn,
+    const NComplexTypes::TTypeCompatibilityOptions& typeCompatibilityOptions);
 
 void ValidateTableSchemaUpdateInternal(
     const TTableSchema& oldSchema,

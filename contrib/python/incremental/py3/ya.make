@@ -2,12 +2,12 @@
 
 PY3_LIBRARY()
 
-VERSION(24.7.2)
+VERSION(24.11.0)
 
 LICENSE(MIT)
 
 PEERDIR(
-    contrib/python/setuptools
+    contrib/python/packaging
 )
 
 NO_LINT()

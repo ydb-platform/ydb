@@ -39,7 +39,8 @@ struct TExecutionOptions {
         GenericScript,
         GenericQuery,
         YqlScript,
-        AsyncQuery
+        AsyncQuery,
+        StreamingQuery
     };
 
     std::vector<TString> ScriptQueries;
@@ -62,6 +63,7 @@ struct TExecutionOptions {
     std::vector<TString> UserSIDs;
     std::vector<TDuration> Timeouts;
     std::vector<std::optional<TVector<NACLib::TSID>>> GroupSIDs;
+    std::vector<TString> StreamingQueriesNames;
     ui64 ResultsRowsLimit = 0;
 
     const TString DefaultTraceId = "kqprun";
@@ -134,6 +136,13 @@ struct TExecutionOptions {
         };
     }
 
+    TString GetStreamingQueryName(size_t index) const {
+        if (index < StreamingQueriesNames.size()) {
+            return StreamingQueriesNames[index];
+        }
+        return TStringBuilder() << "streaming_query_" << index;
+    }
+
     void Validate(const TRunnerOptions& runnerOptions) const {
         if (!SchemeQuery && ScriptQueries.empty() && !runnerOptions.YdbSettings.MonitoringEnabled && !runnerOptions.YdbSettings.GrpcEnabled && !RunAsDeamon) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
@@ -183,40 +192,42 @@ private:
             ythrow yexception() << "Same session can not be used with async quries";
         }
 
-        // Script specific
-        if (HasExecutionCase(EExecutionCase::GenericScript)) {
-            return;
-        }
-        if (ForgetExecution) {
-            ythrow yexception() << "Forget execution can not be used without generic script queries";
-        }
-        if (runnerOptions.ScriptCancelAfter) {
-            ythrow yexception() << "Cancel after can not be used without generic script queries";
-        }
-
-        // Script/Query specific
-        if (HasExecutionCase(EExecutionCase::GenericQuery)) {
-            return;
-        }
-        if (ResultsRowsLimit) {
-            ythrow yexception() << "Result rows limit can not be used without script queries";
-        }
-        if (!runnerOptions.InProgressStatisticsOutputFiles.empty()) {
-            ythrow yexception() << "Script statistics can not be used without script queries";
+        const bool hasScript = HasExecutionCase(EExecutionCase::GenericScript);
+        const bool hasStreaming = HasExecutionCase(EExecutionCase::StreamingQuery);
+        if (!hasScript && !hasStreaming) {
+            if (ForgetExecution) {
+                ythrow yexception() << "Forget execution can not be used without script queries";
+            }
+            if (runnerOptions.ScriptCancelAfter) {
+                ythrow yexception() << "Cancel after can not be used without script queries";
+            }
         }
 
-        // Common specific
-        if (HasExecutionCase(EExecutionCase::YqlScript)) {
-            return;
+        const bool hasSimpleQuery = hasScript || HasExecutionCase(EExecutionCase::GenericQuery);
+        if (!hasSimpleQuery) {
+            if (ResultsRowsLimit) {
+                ythrow yexception() << "Result rows limit can not be used without generic/script queries";
+            }
+            if (!hasStreaming && !runnerOptions.InProgressStatisticsOutputFiles.empty()) {
+                ythrow yexception() << "Script statistics can not be used without generic/script/streaming queries";
+            }
         }
-        if (!runnerOptions.ScriptQueryAstOutputs.empty()) {
-            ythrow yexception() << "Script query AST output can not be used without script/yql queries";
+
+        const bool hasYqlQuery = hasSimpleQuery || HasExecutionCase(EExecutionCase::YqlScript);
+        if (!hasYqlQuery) {
+            if (runnerOptions.YdbSettings.SameSession) {
+                ythrow yexception() << "Same session can not be used without generic/script/yql queries";
+            }
         }
-        if (!runnerOptions.ScriptQueryPlanOutputs.empty()) {
-            ythrow yexception() << "Script query plan output can not be used without script/yql queries";
-        }
-        if (runnerOptions.YdbSettings.SameSession) {
-            ythrow yexception() << "Same session can not be used without script/yql queries";
+
+        const bool hasAnyQuery = hasStreaming || hasYqlQuery;
+        if (!hasAnyQuery) {
+            if (!runnerOptions.ScriptQueryAstOutputs.empty()) {
+                ythrow yexception() << "Script query AST output can not be used without generic/script/yql/streaming queries";
+            }
+            if (!runnerOptions.ScriptQueryPlanOutputs.empty()) {
+                ythrow yexception() << "Script query plan output can not be used without generic/script/yql/streaming queries";
+            }
         }
     }
 
@@ -324,6 +335,19 @@ void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant star
             runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime));
             break;
         }
+
+        case TExecutionOptions::EExecutionCase::StreamingQuery: {
+            if (!runner.ExecuteStreaming(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime), executionOptions.GetStreamingQueryName(index), duration)) {
+                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Streaming query execution failed";
+            }
+            if (executionOptions.ForgetExecution) {
+                Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Deleting streaming query..." << colors.Default() << Endl;
+                if (!runner.ForgetStreamingQuery(executionOptions.GetUserSID(index))) {
+                    ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Delete streaming query failed";
+                }
+            }
+            break;
+        }
     }
 }
 
@@ -355,8 +379,13 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
 
         const TInstant startTime = TInstant::Now();
         const size_t loopId = queryId / numberQueries;
-        if (executionOptions.GetExecutionCase(id) != TExecutionOptions::EExecutionCase::AsyncQuery) {
-            Cout << colors.Yellow() << startTime.ToIsoStringLocal() << " Executing script";
+        if (const auto executionCase = executionOptions.GetExecutionCase(id); executionCase != TExecutionOptions::EExecutionCase::AsyncQuery) {
+            Cout << colors.Yellow() << startTime.ToIsoStringLocal() << " Executing ";
+            if (executionCase != TExecutionOptions::EExecutionCase::StreamingQuery) {
+                Cout << "query";
+            } else {
+                Cout << "streaming query '" << executionOptions.GetStreamingQueryName(id) << "'";
+            }
             if (numberQueries > 1) {
                 Cout << " " << id;
             }
@@ -711,14 +740,29 @@ protected:
             {"script", TExecutionOptions::EExecutionCase::GenericScript},
             {"query", TExecutionOptions::EExecutionCase::GenericQuery},
             {"yql-script", TExecutionOptions::EExecutionCase::YqlScript},
-            {"async", TExecutionOptions::EExecutionCase::AsyncQuery}
+            {"async", TExecutionOptions::EExecutionCase::AsyncQuery},
+            {"streaming", TExecutionOptions::EExecutionCase::StreamingQuery},
         });
-        options.AddLongOption('C', "execution-case", "Type of query for -p argument")
-            .RequiredArgument("query-type")
-            .Choices(executionCase.GetChoices())
+        options.AddLongOption('C', "execution-case", TStringBuilder()
+            << "Type of query for -p argument, allowed cases: " << JoinSeq(", ", executionCase.GetChoices())
+            << ". Use streaming@<query name> to specify streaming query name"
+        )
+            .RequiredArgument("query-type[@query-name]")
             .Handler1([this, executionCase](const NLastGetopt::TOptsParser* option) {
-                TString choice(option->CurValOrDef());
-                ExecutionOptions.ExecutionCases.emplace_back(executionCase(choice));
+                TStringBuf caseChoice;
+                TStringBuf name;
+                TStringBuf(option->CurValOrDef()).Split('@', caseChoice, name);
+
+                const auto caseValue = executionCase(TString(caseChoice));
+                if (name) {
+                    if (caseValue == TExecutionOptions::EExecutionCase::StreamingQuery) {
+                        ExecutionOptions.StreamingQueriesNames.emplace_back(name);
+                    } else {
+                        ythrow yexception() << "Query name is not allowed for not 'streaming' execution case";
+                    }
+                }
+
+                ExecutionOptions.ExecutionCases.emplace_back(caseValue);
             });
 
         options.AddLongOption("inflight-limit", "In flight limit for async queries (use 0 for unlimited)")
@@ -785,7 +829,7 @@ protected:
             .RequiredArgument("uint")
             .StoreMappedResultT<ui64>(&RunnerOptions.ScriptCancelAfter, &TDuration::MilliSeconds<ui64>);
 
-        options.AddLongOption("forget", "Forget script execution operation after fetching results")
+        options.AddLongOption("forget", "Forget script/streaming execution operation after fetching results")
             .NoArgument()
             .SetFlag(&ExecutionOptions.ForgetExecution);
 

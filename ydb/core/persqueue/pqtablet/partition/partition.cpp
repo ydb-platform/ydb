@@ -4011,6 +4011,8 @@ void TPartition::AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request)
         } else {
             AddCmdDeleteRange(request,
                               ikey, ikeyDeprecated);
+
+            DropDataOfMLPConsumer(request, user);
         }
     }
 }

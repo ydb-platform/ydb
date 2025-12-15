@@ -74,6 +74,12 @@ public:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& GetExecutionVisitorVerified() const;
 };
 
+class IPortionDataSource {
+public:
+    virtual ui64 GetPortionId() const = 0;
+    virtual ~IPortionDataSource() = default;
+};
+
 class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
 public:
     enum class EType {
@@ -87,7 +93,6 @@ public:
 private:
     TAtomic SyncSectionFlag = 1;
     YDB_READONLY(EType, Type, EType::Undefined);
-    YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
     static inline TAtomicCounter MemoryGroupCounter = 0;
     YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
@@ -102,7 +107,7 @@ private:
     virtual bool DoAddTxConflict() = 0;
 
     virtual ui64 DoGetEntityId() const override {
-        return SourceId;
+        return SourceIdx;
     }
 
     virtual ui64 DoGetEntityRecordsCount() const override;
@@ -217,7 +222,7 @@ public:
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const;
 
-    IDataSource(const EType type, const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions);
 

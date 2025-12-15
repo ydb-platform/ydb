@@ -34,4 +34,8 @@ TString MakeIndexBuildUid(const TImportInfo& importInfo, ui32 itemIdx);
 
 bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx);
 
+class TSchemeShard;
+
+bool ValidateImportDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain);
+
 } // NKikimr::NSchemeShard

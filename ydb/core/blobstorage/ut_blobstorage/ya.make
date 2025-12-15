@@ -17,6 +17,7 @@ SRCS(
     backpressure.cpp
     block_race.cpp
     bsc_cache.cpp
+    cancellation.cpp
     counting_events.cpp
     corrupted_reads.cpp
     deadlines.cpp

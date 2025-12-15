@@ -2,7 +2,14 @@
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 
-#include <ydb/public/api/protos/ydb_table.pb.h>
+namespace Ydb::Table {
+    class VectorIndexSettings;
+    class KMeansTreeSettings;
+}
+
+namespace NKikimr::NTableIndex::NKMeans {
+    using TClusterId = ui64;
+}
 
 namespace NKikimr::NKMeans {
 
@@ -56,5 +63,6 @@ bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& 
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
 bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error);
 void FilterOverlapRows(TVector<TSerializedCellVec>& rows, size_t distancePos, ui32 overlapClusters, double overlapRatio);
+void FilterOverlapRows(TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>& rowClusters, ui32 overlapClusters, double overlapRatio);
 
 }

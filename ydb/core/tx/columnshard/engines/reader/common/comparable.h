@@ -24,9 +24,11 @@ public:
     const NArrow::TSimpleRow& GetValue() const {
         return Value;
     }
-
     NArrow::TSimpleRow CopyValue() const {
         return Value;
+    }
+    NArrow::TSimpleRow&& ExtractValue() && {
+        return std::move(Value);
     }
 
     explicit TReplaceKeyAdapter(NArrow::TSimpleRow&& rk, const bool reverse)
@@ -48,16 +50,17 @@ public:
 class TCompareKeyForScanSequence {
 private:
     TReplaceKeyAdapter Key;
-    YDB_READONLY(ui32, SourceId, 0);
+    ui32 SourceIdx;
 
 public:
     const TReplaceKeyAdapter GetKey() const {
         return Key;
     }
 
-    explicit TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceId)
+    explicit TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceIdx)
         : Key(key)
-        , SourceId(sourceId) {
+        , SourceIdx(sourceIdx)
+    {
     }
 
     static TCompareKeyForScanSequence BorderStart(const TReplaceKeyAdapter& key) {
@@ -67,7 +70,7 @@ public:
     bool operator<(const TCompareKeyForScanSequence& item) const {
         const std::partial_ordering compareResult = Key.Compare(item.Key);
         if (compareResult == std::partial_ordering::equivalent) {
-            return SourceId < item.SourceId;
+            return SourceIdx < item.SourceIdx;
         } else {
             return compareResult == std::partial_ordering::less;
         }

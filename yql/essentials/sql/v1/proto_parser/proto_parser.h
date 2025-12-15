@@ -14,15 +14,22 @@ struct TTranslationSettings;
 namespace NSQLTranslationV1 {
 
 struct TParsers {
-    NSQLTranslation::TParserFactoryPtr Antlr3;
-    NSQLTranslation::TParserFactoryPtr Antlr3Ansi;
     NSQLTranslation::TParserFactoryPtr Antlr4;
     NSQLTranslation::TParserFactoryPtr Antlr4Ansi;
 };
 
 google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName,
-                                  NYql::TIssues& err, size_t maxErrors, bool ansiLexer, bool antlr4Parser, google::protobuf::Arena* arena);
+                                  NYql::TIssues& err, size_t maxErrors, bool ansiLexer, google::protobuf::Arena* arena);
+
 google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName,
-                                  NAST::IErrorCollector& err, bool ansiLexer, bool antlr4Parser, google::protobuf::Arena* arena);
+                                  NAST::IErrorCollector& err, bool ansiLexer, google::protobuf::Arena* arena);
+
+// TODO(YQL-19017): remove.
+google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName,
+                                  NYql::TIssues& err, size_t maxErrors, bool ansiLexer, bool antlr4, google::protobuf::Arena* arena);
+
+// TODO(YQL-19017): remove.
+google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName,
+                                  NAST::IErrorCollector& err, bool ansiLexer, bool antlr4, google::protobuf::Arena* arena);
 
 } // namespace NSQLTranslationV1

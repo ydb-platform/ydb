@@ -23,7 +23,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TColumnSchema ColumnFromYson(const TString& yson)
+TColumnSchema ColumnFromYson(const std::string& yson)
 {
     auto maybeDeletedColumn = ConvertTo<TMaybeDeletedColumnSchema>(TYsonStringBuf(yson));
     YT_VERIFY(!maybeDeletedColumn.Deleted());
@@ -283,63 +283,63 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
     expectBad(TColumnSchema(SystemColumnNamePrefix + "Name", EValueType::String));
 
     // Names longer than MaxColumnNameLength are not ok.
-    expectBad(TColumnSchema(TString(MaxColumnNameLength + 1, 'z'), EValueType::String));
+    expectBad(TColumnSchema(std::string(MaxColumnNameLength + 1, 'z'), EValueType::String));
 
     // Empty lock names are not ok.
     expectBad(
         TColumnSchema("Name", EValueType::String)
-            .SetLock(TString("")));
+            .SetLock(""));
 
     // Locks on key columns are not ok.
     expectBad(
         TColumnSchema("Name", EValueType::String)
             .SetSortOrder(ESortOrder::Ascending)
-            .SetLock(TString("LockName")));
+            .SetLock("LockName"));
 
     // Locks longer than MaxColumnLockLength are not ok.
     expectBad(
         TColumnSchema("Name", EValueType::String)
-            .SetLock(TString(MaxColumnLockLength + 1, 'z')));
+            .SetLock(std::string(MaxColumnLockLength + 1, 'z')));
 
     // Column type should be valid according to the ValidateSchemaValueType function.
     // Non-key columns can't be computed.
     expectBad(
         TColumnSchema("Name", EValueType::String)
-            .SetExpression(TString("SomeExpression")));
+            .SetExpression("SomeExpression"));
 
     // Key columns can't be aggregated.
     expectBad(
         TColumnSchema("Name", EValueType::String)
             .SetSortOrder(ESortOrder::Ascending)
-            .SetAggregate(TString("sum")));
+            .SetAggregate(std::string("sum")));
 
     ValidateColumnSchema(TColumnSchema("Name", EValueType::String));
     ValidateColumnSchema(TColumnSchema("Name", EValueType::Any));
     ValidateColumnSchema(
-        TColumnSchema(TString(256, 'z'), EValueType::String)
-            .SetLock(TString(256, 'z')));
+        TColumnSchema(std::string(256, 'z'), EValueType::String)
+            .SetLock(std::string(256, 'z')));
     ValidateColumnSchema(
         TColumnSchema("Name", EValueType::String)
             .SetSortOrder(ESortOrder::Ascending)
-            .SetExpression(TString("SomeExpression")));
+            .SetExpression("SomeExpression"));
     ValidateColumnSchema(
         TColumnSchema("Name", EValueType::String)
-            .SetAggregate(TString("sum")));
+            .SetAggregate(std::string("sum")));
 
     // Struct field validation
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {"", SimpleLogicalType(ESimpleLogicalValueType::Int8)}
-        })));
+            {"", "", SimpleLogicalType(ESimpleLogicalValueType::Int8)}
+        }, /*removedFieldStableNames*/ {})));
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {TString(257, 'a'), SimpleLogicalType(ESimpleLogicalValueType::Int8)}
-        })));
+            {std::string(257, 'a'), std::string(257, 'a'), SimpleLogicalType(ESimpleLogicalValueType::Int8)}
+        }, /*removedFieldStableNames*/ {})));
 
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {"\255", SimpleLogicalType(ESimpleLogicalValueType::Int8)}
-        })));
+            {"\255", "\255", SimpleLogicalType(ESimpleLogicalValueType::Int8)}
+        }, /*removedFieldStableNames*/ {})));
 
     ValidateColumnSchema(
         TColumnSchema("Column", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int8)), ESortOrder::Ascending));
@@ -373,9 +373,9 @@ TEST(TTableSchemaTest, ColumnSchemaValidation)
 
     expectBad(
         TColumnSchema("Column", StructLogicalType({
-            {"foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-            {"bar", SimpleLogicalType(ESimpleLogicalValueType::String)},
-        }), ESortOrder::Ascending));
+            {"foo", "foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
+            {"bar", "bar", SimpleLogicalType(ESimpleLogicalValueType::String)},
+        }, /*removedFieldStableNames*/ {}), ESortOrder::Ascending));
 
     // Allow some names starting from SystemColumnNamePrefix
     EXPECT_NO_THROW(

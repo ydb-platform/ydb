@@ -154,6 +154,21 @@ void TPartition::InitializeMLPConsumers() {
     }
 }
 
+void TPartition::DropDataOfMLPConsumer(NKikimrClient::TKeyValueRequest& request, const TString& consumer) {
+    auto snapshotKey = NMLP::MakeSnapshotKey(Partition.OriginalPartitionId, consumer);
+    auto snapshot = request.AddCmdDeleteRange()->MutableRange();
+    snapshot->SetFrom(snapshotKey);
+    snapshot->SetIncludeFrom(true);
+    snapshot->SetTo(std::move(snapshotKey));
+    snapshot->SetIncludeTo(true);
+
+    auto wal = request.AddCmdDeleteRange()->MutableRange();
+    wal->SetFrom(NMLP::MinWALKey(Partition.OriginalPartitionId, consumer));
+    wal->SetIncludeFrom(true);
+    wal->SetTo(NMLP::MaxWALKey(Partition.OriginalPartitionId, consumer));
+    wal->SetIncludeTo(true);
+}
+
 void TPartition::NotifyEndOffsetChanged() {
     if (LastNotifiedEndOffset == GetEndOffset()) {
         return;

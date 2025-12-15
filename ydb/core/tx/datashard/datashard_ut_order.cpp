@@ -2,6 +2,7 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
 
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -4390,6 +4391,73 @@ Y_UNIT_TEST(UncommittedReads) {
             "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
             "{ items { uint32_value: 4 } items { uint32_value: 4 } }");
     }
+}
+
+Y_UNIT_TEST(LocksBrokenStats) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableOltpSink(false);
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
+
+    Tests::TServer::TPtr server = new TServer(serverSettings);
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+    InitRoot(server, sender);
+
+    TShardedTableOptions opts;
+    auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+    const ui64 shard = shards[0];
+
+    // Insert initial data
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100);"));
+
+    // Start a KQP transaction with a read (this establishes locks via KQP)
+    TString sessionId, txId;
+    KqpSimpleBegin(runtime, sessionId, txId, Q_("SELECT * FROM `/Root/table-1` WHERE key = 1;"));
+    UNIT_ASSERT(!txId.empty());
+
+    // Set up typed observer to capture TEvProposeTransactionResult
+    // We need to copy the record data since the event pointer may become invalid
+    TMaybe<NKikimrTxDataShard::TEvProposeTransactionResult> breakerRecord;
+    TMaybe<NKikimrTxDataShard::TEvProposeTransactionResult> victimRecord;
+    auto observer = runtime.AddObserver<TEvDataShard::TEvProposeTransactionResult>([&](TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
+        auto* result = ev->Get();
+        if (result && result->GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA &&
+            result->GetOrigin() == shard) {
+            if (result->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE) {
+                breakerRecord = result->Record;
+            } else if (result->Record.GetStatus() == NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN) {
+                victimRecord = result->Record;
+            }
+        }
+    });
+
+    // Execute SQL using KqpSimpleExec - this will commit immediately and break the locks
+    // The observer will capture TEvProposeTransactionResult during execution
+    KqpSimpleExec(runtime, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 200);"));
+
+    // Verify we captured a COMPLETE result with LocksBrokenAsBreaker set
+    UNIT_ASSERT(breakerRecord.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(breakerRecord->GetStatus(), NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
+    UNIT_ASSERT(breakerRecord->HasTxStats());
+    UNIT_ASSERT_VALUES_EQUAL(breakerRecord->GetTxStats().GetLocksBrokenAsBreaker(), 1u);
+
+    // Now try to commit the victim transaction - it should fail with ABORTED (LOCKS_BROKEN at datashard level)
+    auto commitResult = KqpSimpleCommit(runtime, sessionId, txId, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 300);"));
+    UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
+
+    // Verify we captured a LOCKS_BROKEN result
+    UNIT_ASSERT(victimRecord.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(victimRecord->GetStatus(), NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+
+    auto tableState = ReadTable(server, shards, tableId);
+    UNIT_ASSERT(tableState.find("key = 1, value = 200") != TString::npos);
 }
 
 } // Y_UNIT_TEST_SUITE(DataShardOutOfOrder)

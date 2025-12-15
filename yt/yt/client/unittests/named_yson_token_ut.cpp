@@ -21,13 +21,13 @@ using namespace NTableClient;
 ////////////////////////////////////////////////////////////////////////////////
 
 const auto KeyValueStruct = StructLogicalType({
-    {"key", SimpleLogicalType(ESimpleLogicalValueType::String)},
-    {"value", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
-});
+    {"key", "key", SimpleLogicalType(ESimpleLogicalValueType::String)},
+    {"value", "value", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
+}, /*removedFieldStableNames*/ {});
 
 const auto IntStringVariant = VariantStructLogicalType({
-    {"int", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-    {"string", SimpleLogicalType(ESimpleLogicalValueType::String)},
+    {"int", "int", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
+    {"string", "string", SimpleLogicalType(ESimpleLogicalValueType::String)},
 });
 
 YT_DEFINE_THREAD_LOCAL(TYsonConverterConfig, PositionalToNamedConfigInstance);
@@ -61,7 +61,7 @@ TString CanonizeYson(TStringBuf yson)
     return result;
 }
 
-TString ConvertYson(
+std::string ConvertYson(
     bool namedToPositional,
     const TLogicalTypePtr& type,
     TStringBuf sourceYson)
@@ -110,7 +110,7 @@ void CheckYsonConversion(
     TStringBuf sourceYson,
     TStringBuf expectedConvertedYson)
 {
-    TString convertedYson;
+    std::string convertedYson;
     try {
         convertedYson = ConvertYson(namedToPositional, type, sourceYson);
     } catch (const std::exception& ex) {
@@ -135,13 +135,13 @@ void CheckYsonConversion(
 
 #define CHECK_NAMED_TO_POSITIONAL_THROWS(type, namedYson, exceptionSubstring) \
     do { \
-        TString tmp; \
+        std::string tmp; \
         EXPECT_THROW_WITH_SUBSTRING(ConvertYson(true, type, namedYson), exceptionSubstring); \
     } while (0)
 
 #define CHECK_POSITIONAL_TO_NAMED_THROWS(type, namedYson, exceptionSubstring) \
     do { \
-        TString tmp; \
+        std::string tmp; \
         EXPECT_THROW_WITH_SUBSTRING(ConvertYson(false, type, namedYson), exceptionSubstring); \
     } while (0)
 
@@ -188,11 +188,11 @@ TEST(TNamedPositionalYsonConverterTest, TestStructSkipNullValues)
     CHECK_POSITIONAL_TO_NAMED(KeyValueStruct, "[foo]", "{key=foo}");
 
     auto type2 = StructLogicalType({
-        {"opt_int", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))},
-        {"opt_opt_int", OptionalLogicalType(OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))},
-        {"list_null", ListLogicalType(NullLogicalType())},
-        {"null", NullLogicalType()},
-    });
+        {"opt_int", "opt_int", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))},
+        {"opt_opt_int", "opt_opt_int", OptionalLogicalType(OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)))},
+        {"list_null", "list_null", ListLogicalType(NullLogicalType())},
+        {"null", "null", NullLogicalType()},
+    }, /*removedFieldStableNames*/ {});
     CHECK_POSITIONAL_TO_NAMED(type2, "[42; [#]; []; #]", "{opt_int=42; opt_opt_int=[#]; list_null=[]}");
     CHECK_POSITIONAL_TO_NAMED(type2, "[#; #; [#; #;]]", "{list_null=[#; #;]}");
 }

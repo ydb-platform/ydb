@@ -414,7 +414,7 @@ TO_PYTHON_UNICODE(TStringBuf)
 TO_PYTHON_UNICODE(NUdf::TStringRef)
 
 template <typename T>
-NUdf::TUnboxedValuePod FromPyTz(PyObject* value, T limit, TStringBuf typeName, const TPyCastContext::TPtr& ctx) {
+NUdf::TUnboxedValuePod FromPyTzImpl(PyObject* value, T minValid, T maxValid, TStringBuf typeName, const TPyCastContext::TPtr& ctx) {
     PY_ENSURE(PyTuple_Check(value),
               "Expected to get Tuple, but got " << Py_TYPE(value)->tp_name);
 
@@ -426,7 +426,7 @@ NUdf::TUnboxedValuePod FromPyTz(PyObject* value, T limit, TStringBuf typeName, c
     PyObject* el0 = PyTuple_GET_ITEM(value, 0);
     PyObject* el1 = PyTuple_GET_ITEM(value, 1);
     auto num = PyCast<T>(el0);
-    if (num >= limit) {
+    if (num < minValid || num > maxValid) {
         throw yexception() << "Python object " << PyObjectRepr(el0)
                            << " is out of range for " << typeName;
     }
@@ -440,6 +440,20 @@ NUdf::TUnboxedValuePod FromPyTz(PyObject* value, T limit, TStringBuf typeName, c
 
     ret.SetTimezoneId(tzId);
     return ret;
+}
+
+template <typename T>
+NUdf::TUnboxedValuePod FromPyTz(PyObject* value, T firstInvalid, TStringBuf typeName, const TPyCastContext::TPtr& ctx) {
+    static_assert(std::is_unsigned<T>::value);
+    if (firstInvalid == 0) {
+        throw yexception() << "Invalid usage";
+    }
+    return FromPyTzImpl(value, T{0}, T{firstInvalid - 1}, typeName, ctx);
+}
+
+template <typename T>
+NUdf::TUnboxedValuePod FromPyTzExt(PyObject* value, T minValid, T maxValid, TStringBuf typeName, const TPyCastContext::TPtr& ctx) {
+    return FromPyTzImpl(value, minValid, maxValid, typeName, ctx);
 }
 
 TO_PYTHON("f", float)
@@ -533,6 +547,25 @@ TPyObjectPtr ToPyData(const TPyCastContext::TPtr& ctx,
         }
         case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
             TPyObjectPtr pyValue = PyCast<ui64>(value.Get<ui64>());
+            auto tzId = value.GetTimezoneId();
+            auto tzName = ctx->GetTimezoneName(tzId);
+            return PyTuple_Pack(2, pyValue.Get(), tzName.Get());
+        }
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            return PyCast<i32>(value.Get<i32>());
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+            return PyCast<i64>(value.Get<i64>());
+        case NUdf::TDataType<NUdf::TTzDate32>::Id: {
+            TPyObjectPtr pyValue = PyCast<i32>(value.Get<i32>());
+            auto tzId = value.GetTimezoneId();
+            auto tzName = ctx->GetTimezoneName(tzId);
+            return PyTuple_Pack(2, pyValue.Get(), tzName.Get());
+        }
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+            TPyObjectPtr pyValue = PyCast<i64>(value.Get<i64>());
             auto tzId = value.GetTimezoneId();
             auto tzName = ctx->GetTimezoneName(tzId);
             return PyTuple_Pack(2, pyValue.Get(), tzName.Get());
@@ -672,6 +705,49 @@ NUdf::TUnboxedValue FromPyData(
             return FromPyTz<ui32>(value, NUdf::MAX_DATETIME, TStringBuf("TzDatetime"), ctx);
         case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
             return FromPyTz<ui64>(value, NUdf::MAX_TIMESTAMP, TStringBuf("TzTimestamp"), ctx);
+
+        case NUdf::TDataType<NUdf::TDate32>::Id: {
+            const auto num = PyCast<i32>(value);
+            if (num > NUdf::MAX_DATE32 || num < NUdf::MIN_DATE32) {
+                throw yexception() << "Python object " << PyObjectRepr(value)
+                                   << " is out of range for Date32";
+            }
+
+            return NUdf::TUnboxedValuePod(num);
+        }
+        case NUdf::TDataType<NUdf::TDatetime64>::Id: {
+            const auto num = PyCast<i64>(value);
+            if (num > NUdf::MAX_DATETIME64 || num < NUdf::MIN_DATETIME64) {
+                throw yexception() << "Python object " << PyObjectRepr(value)
+                                   << " is out of range for Datetime64";
+            }
+
+            return NUdf::TUnboxedValuePod(num);
+        }
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id: {
+            const auto num = PyCast<i64>(value);
+            if (num > NUdf::MAX_TIMESTAMP64 || num < NUdf::MIN_TIMESTAMP64) {
+                throw yexception() << "Python object " << PyObjectRepr(value)
+                                   << " is out of range for Timestamp64";
+            }
+
+            return NUdf::TUnboxedValuePod(num);
+        }
+        case NUdf::TDataType<NUdf::TInterval64>::Id: {
+            const auto num = PyCast<i64>(value);
+            if (num > NUdf::MAX_INTERVAL64 || num < -NUdf::MAX_INTERVAL64) {
+                throw yexception() << "Python object " << PyObjectRepr(value)
+                                   << " is out of range for Interval64";
+            }
+
+            return NUdf::TUnboxedValuePod(num);
+        }
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            return FromPyTzExt<i32>(value, NUdf::MIN_DATE32, NUdf::MAX_DATE32, TStringBuf("TzDate32"), ctx);
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            return FromPyTzExt<i64>(value, NUdf::MIN_DATETIME64, NUdf::MAX_DATETIME64, TStringBuf("TzDatetime64"), ctx);
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
+            return FromPyTzExt<i64>(value, NUdf::MIN_TIMESTAMP64, NUdf::MAX_TIMESTAMP64, TStringBuf("TzTimestamp64"), ctx);
     }
 
     throw yexception()

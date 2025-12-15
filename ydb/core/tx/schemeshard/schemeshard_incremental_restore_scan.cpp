@@ -1,5 +1,4 @@
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>

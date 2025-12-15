@@ -2,7 +2,7 @@
 
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
-#include "schemeshard_xxport_common.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>

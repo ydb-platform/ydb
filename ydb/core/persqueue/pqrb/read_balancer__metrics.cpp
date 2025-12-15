@@ -40,10 +40,36 @@ struct TMetricCollector {
     TTabletLabeledCountersBase Aggregator;
 };
 
+struct THistogramMetricCollector {
+    THistogramMetricCollector(const NMonitoring::TBucketBounds& bounds)
+    {
+        Values.resize(bounds.size() + 1);
+    }
+
+    void Collect(const auto& values) {
+        Collect(values.begin(), values.end());
+    }
+
+    void Collect(auto begin, auto end) {
+        ssize_t in_size = std::distance(begin, end);
+        AFL_ENSURE(in_size >= 0)("in_size", in_size);
+
+        if (size_t(in_size) != Values.size()) {
+            return;
+        }
+
+        for (size_t i = 0; i < Values.size(); ++i) {
+            Values[i] += *begin;
+            ++begin;
+        }
+    }
+    std::vector<ui64> Values;
+};
+
 struct TConsumerMetricCollector {
     TMetricCollector<EClientLabeledCounters_descriptor> ClientLabeledCounters;
     TMetricCollector<EMLPConsumerLabeledCounters_descriptor> MLPConsumerLabeledCounters;
-    std::vector<ui64> MLPMessageLockAttemptsCounter;
+    THistogramMetricCollector MLPMessageLockAttemptsCounter{MLP_LOCKS_BOUNDS};
 };
 
 struct TTopicMetricCollector {
@@ -91,16 +117,7 @@ struct TTopicMetricCollector {
         for (const auto& consumer : counters.GetMLPConsumerCounters()) {
             auto& collector = Consumers[consumer.GetConsumer()];
             collector.MLPConsumerLabeledCounters.Collect(consumer.GetCountersValues());
-
-            if (collector.MLPMessageLockAttemptsCounter.empty()) {
-                collector.MLPMessageLockAttemptsCounter.resize(MLP_LOCKS_BOUNDS.size() + 1);
-            }
-
-            if (size_t(consumer.GetMessageLocksValues().size()) == collector.MLPMessageLockAttemptsCounter.size()) {
-                for (size_t i = 0; i <= MLP_LOCKS_BOUNDS.size(); ++i) {
-                    collector.MLPMessageLockAttemptsCounter[i] += consumer.GetMessageLocksValues()[i];
-                }
-            }
+            collector.MLPMessageLockAttemptsCounter.Collect(consumer.GetMessageLocksValues());
         }
     }
 
@@ -163,6 +180,14 @@ void SetCounters(TCounters& counters, const auto& metrics) {
 
         counters.Counters[i]->Set(value);
     }
+}
+
+void SetCounters(NMonitoring::THistogramPtr& counter, const THistogramMetricCollector& metrics, const auto& bounds) {
+    counter->Reset();
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        counter->Collect(bounds[i], metrics.Values[i]);
+    }
+    counter->Collect(Max<double>(), metrics.Values[metrics.Values.size() - 1]);
 }
 
 }
@@ -303,14 +328,7 @@ void TTopicMetricsHandler::UpdateMetrics() {
         SetCounters(consumerCounters.ClientLabeledCounters, consumerMetrics.ClientLabeledCounters);
         if (!consumerCounters.MLPClientLabeledCounters.Counters.empty()) {
             SetCounters(consumerCounters.MLPClientLabeledCounters, consumerMetrics.MLPConsumerLabeledCounters);
-
-            if (!consumerMetrics.MLPMessageLockAttemptsCounter.empty()) {
-                consumerCounters.MLPMessageLockAttemptsCounter->Reset();
-                for (size_t i = 0; i < MLP_LOCKS_BOUNDS.size(); ++i) {
-                    consumerCounters.MLPMessageLockAttemptsCounter->Collect(MLP_LOCKS_BOUNDS[i], consumerMetrics.MLPMessageLockAttemptsCounter[i]);
-                }
-                consumerCounters.MLPMessageLockAttemptsCounter->Collect(Max<double>(), consumerMetrics.MLPMessageLockAttemptsCounter[MLP_LOCKS_BOUNDS.size()]);
-            }
+            SetCounters(consumerCounters.MLPMessageLockAttemptsCounter, consumerMetrics.MLPMessageLockAttemptsCounter, MLP_LOCKS_BOUNDS);
         }
     }
 }

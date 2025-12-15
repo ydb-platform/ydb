@@ -101,7 +101,7 @@ ydb_stream_logs() {
 ydb_truncate_logs() {
     find "${YDB_WORKING_DIR}" -type f \( -name stdout -o -name stderr -o -name "logfile_*" \) 2>/dev/null | sort | while read -r log_file; do
         if [ -n "$log_file" ]; then
-            echo "" > "$log_file"
+            > "$log_file"
         fi
     done
 }

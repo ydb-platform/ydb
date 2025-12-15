@@ -165,13 +165,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     ui64 SchemeShardId;
     NKikimrPQ::TPQTabletConfig TabletConfig;
 
-    struct TConsumerInfo {
-        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
-        THolder<TTabletLabeledCountersBase> Aggr;
-    };
-
-    std::unordered_map<TString, TConsumerInfo> Consumers;
-
     ui64 TxId;
     ui32 NumActiveParts;
 

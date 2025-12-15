@@ -66,6 +66,17 @@ void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     ForwardToMLPConsumer(ev->Get()->Consumer, ev);
 }
 
+void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvMLPConsumerState " << ev->Get()->Metrics.ShortDebugString());
+    auto it = MLPConsumers.find(ev->Get()->Metrics.GetConsumer());
+    if (it == MLPConsumers.end()) {
+        return;
+    }
+
+    auto& consumerInfo = it->second;
+    consumerInfo.Metrics = std::move(ev->Get()->Metrics);
+}
+
 void TPartition::ProcessMLPPendingEvents() {
     LOG_D("Process MLP pending events. Count " << MLPPendingEvents.size());
 

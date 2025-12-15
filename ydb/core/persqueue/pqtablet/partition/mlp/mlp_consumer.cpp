@@ -3,7 +3,9 @@
 
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
+#include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -649,7 +651,7 @@ size_t TConsumerActor::RequiredToFetchMessageCount() const {
         maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
 
-    return std::min(maxMessages, Storage->MaxMessages - metrics.InflyMessageCount);
+    return std::min(maxMessages, Storage->MaxMessages - metrics.InflightMessageCount);
 }
 
 bool TConsumerActor::FetchMessagesIfNeeded() {
@@ -663,12 +665,12 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
     }
 
     auto& metrics = Storage->GetMetrics();
-    if (metrics.InflyMessageCount >= Storage->MaxMessages) {
+    if (metrics.InflightMessageCount >= Storage->MaxMessages) {
         LOG_D("Skip fetch: infly limit exceeded");
         return false;
     }
-    if (metrics.InflyMessageCount >= Storage->MinMessages && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2) {
-        LOG_D("Skip fetch: there are enough messages. InflyMessageCount=" << metrics.InflyMessageCount
+    if (metrics.InflightMessageCount >= Storage->MinMessages && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2) {
+        LOG_D("Skip fetch: there are enough messages. InflightMessageCount=" << metrics.InflightMessageCount
             << ", UnprocessedMessageCount=" << metrics.UnprocessedMessageCount
             << ", LockedMessageCount=" << metrics.LockedMessageCount);
         return false;
@@ -763,6 +765,7 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
     FetchMessagesIfNeeded();
     ProcessEventQueue();
+    UpdateMetrics();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
@@ -815,6 +818,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
     LOG_D("Handle TEvents::TEvWakeup");
+    UpdateMetrics();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
@@ -822,6 +826,32 @@ void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
     auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), TabletId, FirstPipeCacheRequest, 1);
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
     FirstPipeCacheRequest = false;
+}
+
+void TConsumerActor::UpdateMetrics() {
+    auto& metrics = Storage->GetMetrics();
+
+    NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters counters;
+    counters.SetConsumer(Config.GetName());
+
+    auto* values = counters.MutableCountersValues();
+    values->Resize(NAux::GetLabeledCounterOpts<EMLPConsumerLabeledCounters_descriptor>()->Size, 0);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_COMMITTED_COUNT, metrics.CommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_LOCKED_COUNT, metrics.LockedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_DELAYED_COUNT, metrics.DelayedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_UNLOCKED_COUNT, metrics.UnprocessedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT, metrics.TotalScheduledToDLQMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_COMMITTED_COUNT, metrics.TotalCommittedMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_MOVED_TO_DLQ_COUNT, metrics.TotalMovedToDLQMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_DELETED_BY_RETENTION_COUNT, metrics.TotalDeletedByRetentionMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_DELETED_BY_DEADLINE_POLICY_COUNT, metrics.TotalDeletedByDeadlinePolicyMessageCount);
+    values->Set(EMLPConsumerLabeledCounters::METRIC_PURGED_COUNT, metrics.TotalPurgedMessageCount);
+
+    for (size_t i = 0; i < metrics.MessageLocks.GetRangeCount(); ++i) {
+        counters.AddMessageLocksValues(metrics.MessageLocks.GetRangeValue(i));
+    }
+
+    Send(PartitionActorId, new TEvPQ::TEvMLPConsumerState(std::move(counters)));
 }
 
 NActors::IActor* CreateConsumerActor(

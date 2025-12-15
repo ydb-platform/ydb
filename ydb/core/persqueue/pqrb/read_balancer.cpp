@@ -268,18 +268,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     PartitionGraph = MakePartitionGraph(record);
 
-    auto oldConsumers = std::move(Consumers);
-    Consumers.clear();
-    for (auto& consumer : TabletConfig.GetConsumers()) {
-        auto it = oldConsumers.find(consumer.GetName());
-        if (it != oldConsumers.end()) {
-            Consumers[consumer.GetName()] = std::move(it->second);
-        } else {
-            Consumers.insert(std::make_pair(consumer.GetName(), TConsumerInfo{}));
-        }
-    }
-
-
     std::vector<std::pair<ui64, TTabletInfo>> newTablets;
     std::vector<std::pair<ui32, ui32>> newGroups;
     std::vector<std::pair<ui64, TTabletInfo>> reallocatedTablets;
@@ -585,7 +573,7 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
     // TEvStatsWakeup must processed before next TEvWakeup, which send next status request to TPersQueue
     const auto& config = AppData(ctx)->PQConfig;
     auto wakeupInterval = std::max<ui64>(config.GetBalancerWakeupIntervalSec(), 1);
-    auto stateWakeupInterval = std::max<ui64>(config.GetBalancerWakeupIntervalSec(), 1);
+    auto stateWakeupInterval = std::max<ui64>(config.GetBalancerStatsWakeupIntervalSec(), 1);
     ui64 delayMs = std::min(stateWakeupInterval * 1000, wakeupInterval * 500);
     if (0 < delayMs) {
         Schedule(TDuration::MilliSeconds(delayMs), new TEvPQ::TEvStatsWakeup(++StatsRequestTracker.Round));

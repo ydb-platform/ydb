@@ -287,10 +287,6 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                                 quoted_path = urllib.parse.quote(rel_path)
                                 url = f"{log_url_prefix}{quoted_path}"
                                 result["links"][link_type] = [url]
-                                # Also add to properties for consistency
-                                if "properties" not in result:
-                                    result["properties"] = {}
-                                result["properties"][f"url:{link_type}"] = url
                                 break
                             except ValueError:
                                 # Path is not relative to ya_out_dir, skip
@@ -323,10 +319,6 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             if "links" not in result:
                 result["links"] = {}
             result["links"][link_type] = [url]
-            # Also add to properties for consistency (same as logsdir)
-            if "properties" not in result:
-                result["properties"] = {}
-            result["properties"][f"url:{link_type}"] = url
 
         # Archive logsdir ONCE per suite (not per test) - this is the critical performance fix
         # This prevents multiple archiving of the same directory when multiple tests share the same logsdir
@@ -337,10 +329,6 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                 if "links" not in result:
                     result["links"] = {}
                 result["links"]["logsdir"] = [url]
-                # Also add to properties for consistency
-                if "properties" not in result:
-                    result["properties"] = {}
-                result["properties"]["url:logsdir"] = url
 
     # Strip rich markup from all results (not just test results) to ensure cleanup
     for result in report.get("results", []):

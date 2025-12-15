@@ -167,15 +167,21 @@ class TestResult:
         else:
             status = TestStatus.PASS
         
-        # Extract log URLs from properties with url: prefix (same as old junit format)
-        # Properties format: {"url:logsdir": "https://...", "url:log": "https://..."}
-        properties = result.get("properties", {})
+        # Extract log URLs from links (updated by transform_build_results.py with URLs)
+        # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
+        links = result.get("links", {})
+        
+        def get_link_url(link_type):
+            if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
+                return links[link_type][0]  # Take first URL from array
+            return None
+        
         log_urls = {
-            'Log': properties.get("url:Log") if isinstance(properties, dict) else None,
-            'log': properties.get("url:log") if isinstance(properties, dict) else None,
-            'logsdir': properties.get("url:logsdir") if isinstance(properties, dict) else None,
-            'stdout': properties.get("url:stdout") if isinstance(properties, dict) else None,
-            'stderr': properties.get("url:stderr") if isinstance(properties, dict) else None,
+            'Log': get_link_url("Log"),
+            'log': get_link_url("log"),
+            'logsdir': get_link_url("logsdir"),
+            'stdout': get_link_url("stdout"),
+            'stderr': get_link_url("stderr"),
         }
         log_urls = {k: v for k, v in log_urls.items() if v}
         

@@ -33,19 +33,54 @@ TInputInfo::TInputInfo(const TString& name, const NYT::TRichYPath& path, bool te
 }
 
 TExecContextBaseSimple::TExecContextBaseSimple(
+    const IYtGateway::TPtr& gateway,
     const TYtBaseServices::TPtr& services,
     const TConfigClusters::TPtr& clusters,
     TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> mkqlCompiler,
+    std::shared_ptr<TYtUrlMapper> urlMapper,
     const TString& cluster,
-    const TSessionBase::TPtr& session)
-    : FunctionRegistry_(services->FunctionRegistry)
+    const TSessionBase::TPtr& session
+)
+    : Gateway(gateway)
+    , FunctionRegistry_(services->FunctionRegistry)
     , Config_(services->Config)
     , Clusters_(clusters)
     , MkqlCompiler_(mkqlCompiler)
+    , UrlMapper_(urlMapper)
+    , FileStorage_(services->FileStorage)
     , Cluster_(cluster)
-    , BaseSession_(session),
-    NeedToTransformTmpTablePaths_(services->NeedToTransformTmpTablePaths)
+    , BaseSession_(session)
+    , NeedToTransformTmpTablePaths_(services->NeedToTransformTmpTablePaths)
 {
+    if (Clusters_) {
+        YtServer_ = Clusters_->GetServer(Cluster_);
+    }
+    LogCtx_ = NYql::NLog::CurrentLogContextPath();
+}
+
+void TExecContextBaseSimple::MakeUserFiles(const TUserDataTable& userDataBlocks) {
+    const TString& activeYtCluster = Clusters_->GetYtName(Cluster_);
+    UserFiles_ = MakeIntrusive<TUserFiles>(*UrlMapper_, activeYtCluster);
+    for (const auto& file: userDataBlocks) {
+        auto block = file.second;
+        if (!Config_->GetMrJobUdfsDir().empty() && block.Usage.Test(EUserDataBlockUsage::Udf) && block.Type == EUserDataType::PATH) {
+            TFsPath path = block.Data;
+            TString fileName = path.Basename();
+#ifdef _win_
+            TStringBuf changedName(fileName);
+            changedName.ChopSuffix(".dll");
+            fileName = TString("lib") + changedName + ".so";
+#endif
+            block.Data = TFsPath(Config_->GetMrJobUdfsDir()) / fileName;
+            TString md5;
+            if (block.FrozenFile) {
+                md5 = block.FrozenFile->GetMd5();
+            }
+            block.FrozenFile = CreateFakeFileLink(block.Data, md5);
+        }
+
+        UserFiles_->AddFile(file.first, block);
+    }
 }
 
 void TExecContextBaseSimple::FillRichPathForPullCaseInput(NYT::TRichYPath& richYPath, TYtTableBaseInfo::TPtr tableInfo) {
@@ -348,5 +383,27 @@ TString TExecContextBaseSimple::GetTransformedPath(const TString& path, const TS
     return NYql::TransformPath(tmpFolder, path, isTemp, BaseSession_->UserName_);
 }
 
+TString TExecContextBaseSimple::GetAuth(const TYtSettings::TConstPtr& config) const {
+    auto auth = config->Auth.Get();
+    if (!auth || auth->empty()) {
+         auth = Clusters_->GetAuth(Cluster_);
+    }
+
+    return auth.GetOrElse(TString());
+}
+
+TMaybe<TString> TExecContextBaseSimple::GetImpersonationUser(const TYtSettings::TConstPtr& config) const {
+    return config->_ImpersonationUser.Get();
+}
+
+NYT::IClientPtr TExecContextBaseSimple::CreateYtClient(const TYtSettings::TConstPtr& config) const {
+    TString token = GetAuth(config);
+    TMaybe<TString> impersonationUser = GetImpersonationUser(config);
+    auto createClientOptions = NYT::TCreateClientOptions().Token(token);
+    if (impersonationUser) {
+        createClientOptions = createClientOptions.ImpersonationUser(*impersonationUser);
+    }
+    return NYT::CreateClient(YtServer_, createClientOptions);
+}
 
 } // namespace NYql

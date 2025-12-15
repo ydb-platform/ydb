@@ -1195,6 +1195,10 @@ private:
         }
     }
 
+    NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) override {
+        return Inner_->DownloadTable(std::move(options));
+    }
+
 private:
     const IYtGateway::TPtr Inner_;
     const TQContext QContext_;

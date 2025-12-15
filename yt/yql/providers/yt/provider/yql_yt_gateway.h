@@ -6,6 +6,8 @@
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
 #include <yt/yql/providers/yt/lib/full_capture/yql_yt_full_capture.h>
 #include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
+#include <yt/yql/providers/yt/lib/temp_files/temp_files.h>
+
 #include <yql/providers/stat/uploader/yql_stat_uploader.h>
 
 #include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
@@ -699,6 +701,50 @@ public:
     struct TDumpResult : public NCommon::TOperationResult {
     };
 
+    struct TDownloadTableOptions : public TCommonOptions {
+        using TSelf = TDownloadTableOptions;
+
+        TDownloadTableOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        struct TSamplingConfig {
+            double SamplingPercent;
+            ui64 SamplingSeed;
+            bool IsSystemSampling;
+        };
+
+        struct TYtTableOptions {
+            bool IsTemporary;
+            bool IsAnonymous;
+            ui32 Epoch;
+        };
+
+        struct TRemoteYtTable {
+            NYT::TRichYPath RichPath;
+            TYtTableOptions TableOptions;
+            NYT::TNode Format;
+        };
+
+        using TStructColumns = THashMap<TString, ui32>;
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+        OPTION_FIELD(TVector<TRemoteYtTable>, Tables)
+        OPTION_FIELD(TStructColumns, StructColumns)
+        OPTION_FIELD(TMaybe<TSamplingConfig>, SamplingConfig)
+        OPTION_FIELD(bool, ForceLocalTableContent)
+        OPTION_FIELD(TMaybe<ui32>, PublicId)
+        OPTION_FIELD(TString, UniqueId)
+        OPTION_FIELD(TTempFiles::TPtr, TmpFiles)
+    };
+
+    struct TDownloadTableResult: public NCommon::TOperationResult {
+        TVector<NYT::TRichYPath> RemoteFiles;
+        TVector<TString> LocalFiles;
+    };
+
 public:
     virtual ~IYtGateway() = default;
 
@@ -767,6 +813,8 @@ public:
     virtual TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) = 0;
 
     virtual NThreading::TFuture<TDumpResult> Dump(TDumpOptions&& options) = 0;
+
+    virtual NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) = 0;
 };
 
 }

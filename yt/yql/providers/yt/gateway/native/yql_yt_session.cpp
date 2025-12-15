@@ -12,11 +12,10 @@ namespace NYql {
 namespace NNative {
 
 TSession::TSession(IYtGateway::TOpenSessionOptions&& options, size_t numThreads)
-    : TSessionBase(options.SessionId_, std::move(options.UserName()), std::move(options.RandomProvider()))
-    , ProgressWriter_(std::move(options.ProgressWriter()))
+    : TSessionBase(options.SessionId_, std::move(options.UserName()), std::move(options.RandomProvider()), std::move(options.TimeProvider()),
+    std::move(options.OperationOptions()), std::move(options.ProgressWriter())
+)
     , StatWriter_(std::move(options.StatWriter()))
-    , OperationOptions_(std::move(options.OperationOptions()))
-    , TimeProvider_(std::move(options.TimeProvider()))
     , DeterministicMode_(GetEnv("YQL_DETERMINISTIC_MODE"))
     , OperationSemaphore(nullptr)
     , LocalCalcSemaphore_(nullptr)
@@ -53,10 +52,6 @@ void TSession::Close() {
     }
 
     StopQueueAndTracker();
-}
-
-NYT::TNode TSession::CreateSpecWithDesc(const TVector<std::pair<TString, TString>>& code) const {
-    return YqlOpOptionsToSpec(OperationOptions_, UserName_, code);
 }
 
 NYT::TNode TSession::CreateTableAttrs() const {

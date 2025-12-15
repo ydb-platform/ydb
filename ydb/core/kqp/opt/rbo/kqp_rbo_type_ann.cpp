@@ -59,7 +59,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
 
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
-    for (auto t : structItemTypes) {
+    for (const auto* t : structItemTypes) {
         TString columnName = TString(t->GetName());
         auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
         auto columnIndex = std::distance(read->Columns.begin(), it);
@@ -82,13 +82,13 @@ TStatus ComputeTypes(std::shared_ptr<TOpEmptySource> emptySource, TRBOContext & 
     return TStatus::Ok;
 }
 
-const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<TInfoUnit> scalarContextIUs, TRBOContext & ctx, TPlanProps& props) {
+const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<TInfoUnit> scalarContextIUs, TRBOContext& ctx, TPlanProps& props) {
     TVector<const TItemExprType*> structItemTypes;
-    for (auto t : itemType->GetItems()) {
-        structItemTypes.push_back(t);
+    for (const auto *item : itemType->GetItems()) {
+        structItemTypes.push_back(item);
     }
 
-    for (auto iu : scalarContextIUs) {
+    for (const auto& iu : scalarContextIUs) {
         auto subplan = props.ScalarSubplans.PlanMap.at(iu);
         auto subplanType = subplan->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         auto scalarExprType = subplanType->GetItems()[0];
@@ -100,7 +100,7 @@ const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<T
     return ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes);
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext & ctx, TPlanProps& props) {
+TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanProps& props) {
     const TTypeAnnotationNode* inputType = filter->GetInput()->Type;
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, inputType: " << *inputType;
 
@@ -109,8 +109,8 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext & ctx, TPlan
 
     auto filterIUs = filter->GetFilterIUs(props);
     TVector<TInfoUnit> scalarContextIUs;
-    for (auto iu : filterIUs ) {
-        if (iu.ScalarContext) {
+    for (const auto& iu : filterIUs) {
+        if (iu.IsScalarContext()) {
             scalarContextIUs.push_back(iu);
         }
     }
@@ -175,8 +175,8 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
         const TTypeAnnotationNode* inputType = map->GetInput()->Type;
         auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
-        for (auto t : structType->GetItems()) {
-            resStructItemTypes.push_back(t);
+        for (const auto* item : structType->GetItems()) {
+            resStructItemTypes.push_back(item);
         }
     }
 
@@ -196,7 +196,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
             resStructItemTypes.push_back(renameType);
         }
         else {
-            auto & lambda = std::get<TExprNode::TPtr>(mapEl.second);
+            auto& lambda = std::get<TExprNode::TPtr>(mapEl.second);
             if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -288,7 +288,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
 
     TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
 
-    for (auto item : rightItemType->Cast<TStructExprType>()->GetItems()){
+    for (const auto* item : rightItemType->Cast<TStructExprType>()->GetItems()){
         structItemTypes.push_back(item);
     }
 

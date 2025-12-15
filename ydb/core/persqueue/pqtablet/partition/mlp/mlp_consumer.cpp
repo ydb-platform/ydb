@@ -5,6 +5,7 @@
 #include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -834,7 +835,7 @@ void TConsumerActor::UpdateMetrics() {
     counters.SetConsumer(Config.GetName());
 
     auto* values = counters.MutableCountersValues();
-    values->Resize(10, 0);
+    values->Resize(NAux::GetLabeledCounterOpts<EMLPConsumerLabeledCounters_descriptor>()->Size, 0);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_COMMITTED_COUNT, metrics.CommittedMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_LOCKED_COUNT, metrics.LockedMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_DELAYED_COUNT, metrics.DelayedMessageCount);

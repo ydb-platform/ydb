@@ -186,7 +186,6 @@ class YdbCliHelper:
             self.check_canonical = check_canonical
             self.workload_type = workload_type
             self.db_path = db_path
-            self.query_names = query_names
             self.timeout = timeout
             self.query_syntax = query_syntax
             self.scale = scale
@@ -196,7 +195,14 @@ class YdbCliHelper:
             self.returncode = None
             self.stderr = None
             self.stdout = None
-            self.__prefix = md5(','.join(query_names).encode()).hexdigest() if len(query_names) != 1 else query_names[0]
+            if self.workload_type == WorkloadType.EXTERNAL and not self.external_path:
+                self.__prefix = md5(','.join(query_names).encode()).hexdigest()
+                self.__external_queries = query_names
+                self.query_names = [f'Custom{i}' for i in range(len(query_names))]
+            else:
+                self.__prefix = md5(','.join(query_names).encode()).hexdigest() if len(query_names) != 1 else query_names[0]
+                self.__external_queries = []
+                self.query_names = query_names
             if user:
                 self.__prefix += f'.{user}'
             self.__plan_path = f'{self.__prefix}.plan'
@@ -219,6 +225,8 @@ class YdbCliHelper:
             cmd += ['run']
             if self.external_path:
                 cmd += ['--suite-path', self.external_path]
+            for q in self.__external_queries:
+                cmd += ['--query', q]
             cmd += [
                 '--json', self.json_path,
                 '--output', self.__query_output_path,

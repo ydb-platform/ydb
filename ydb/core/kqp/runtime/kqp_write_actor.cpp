@@ -4914,12 +4914,6 @@ private:
 
         ev->SendTime = TInstant::Now();
 
-        if (ev->Data->IsEmpty() && ev->Close && WriteToken.IsEmpty()) {
-            // Nothing was written
-            OnFlushed();
-            return;
-        }
-
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));
     }

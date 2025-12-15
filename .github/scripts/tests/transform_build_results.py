@@ -235,7 +235,7 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             if "links" not in result:
                 result["links"] = {}
             
-            original_links = result.get("links", {})
+            original_links = result.get("links", {}).copy()
             
             for link_type, paths in original_links.items():
                 if not isinstance(paths, list):
@@ -295,6 +295,15 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                 if "links" not in result:
                     result["links"] = {}
                 result["links"]["logsdir"] = [url]
+        
+        for result in results:
+            status = result.get("status", "")
+            is_fail = status in ("FAILED", "ERROR")
+            if not is_fail:
+                processed_link_types = set()
+                if "links" in result:
+                    processed_link_types.add("logsdir")
+                    result["links"] = {k: v for k, v in result["links"].items() if k in processed_link_types}
 
     for result in report.get("results", []):
         if "rich-snippet" in result and result["rich-snippet"]:

@@ -8,7 +8,6 @@ namespace NDataShard {
 
 class TCreateCdcStreamUnit : public TExecutionUnit {
     THolder<TEvChangeExchange::TEvAddSender> AddSender;
-    // Заменили одиночный Holder на вектор, так как DropNotice может содержать несколько стримов
     TVector<THolder<TEvChangeExchange::TEvRemoveSender>> RemoveSenders; 
 
 public:
@@ -32,11 +31,9 @@ public:
             return EExecutionStatus::Executed;
         }
 
-        // Логика для инкрементального бэкапа (CopyTable + CDC)
         if (schemeTx.HasCreateIncrementalBackupSrc()) {
             const auto& backup = schemeTx.GetCreateIncrementalBackupSrc();
             
-            // Определяем PathId таблицы (он должен быть одинаковым и в Drop, и в Create)
             TPathId pathId;
             ui64 schemaVersion = 0;
             bool hasWork = false;
@@ -62,10 +59,8 @@ public:
 
             TUserTable::TPtr tableInfo;
 
-            // 1. Обработка DROP (удаление старых стримов)
             if (backup.HasDropCdcStreamNotice()) {
                 const auto& notice = backup.GetDropCdcStreamNotice();
-                // Проверка на совпадение версий и ID, если вдруг пришли разные (не должно случаться)
                 Y_VERIFY_S(TPathId::FromProto(notice.GetPathId()) == pathId, "PathId mismatch in DropNotice");
                 
                 TVector<TPathId> streamsToDrop;
@@ -81,7 +76,6 @@ public:
                         scanManager.Forget(txc.DB, pathId, oldStreamPathId);
                         
                         if (const auto* info = scanManager.Get(oldStreamPathId)) {
-                            // Если скан активен, отменяем его
                             if (tableInfo) {
                                 DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
                             }
@@ -102,7 +96,6 @@ public:
                 }
             }
 
-            // 2. Обработка CREATE (добавление нового стрима)
             if (backup.HasCreateCdcStreamNotice()) {
                 const auto& notice = backup.GetCreateCdcStreamNotice();
                 Y_VERIFY_S(TPathId::FromProto(notice.GetPathId()) == pathId, "PathId mismatch in CreateNotice");
@@ -110,7 +103,6 @@ public:
                 const auto& streamDesc = notice.GetStreamDescription();
                 const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
 
-                // Этот вызов вернет актуальный tableInfo (включающий изменения от Drop, если он был)
                 tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, schemaVersion, streamDesc);
 
                 if (notice.HasSnapshotName()) {
@@ -136,7 +128,6 @@ public:
                 ));
             }
 
-            // Финализация
             Y_ENSURE(tableInfo, "Table info must be initialized by Drop or Create action");
 
             TDataShardLocksDb locksDb(DataShard, txc);
@@ -152,11 +143,10 @@ public:
             return EExecutionStatus::DelayCompleteNoMoreRestarts;
         }
 
-        // Стандартная логика для обычного CreateCdcStream (не бэкап)
         const auto& params =
             schemeTx.HasCreateCdcStreamNotice() ?
             schemeTx.GetCreateCdcStreamNotice() :
-            schemeTx.GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice(); // Fallback, хотя выше обработано
+            schemeTx.GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
             
         const auto& streamDesc = params.GetStreamDescription();
         const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
@@ -204,7 +194,6 @@ public:
     }
 
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
-        // Отправляем события удаления (может быть несколько)
         if (!RemoveSenders.empty()) {
             const auto& changeSender = DataShard.GetChangeSender();
             if (changeSender) {

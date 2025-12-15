@@ -72,8 +72,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
 
-    // TVector<std::pair<TPath, TString>> streamsToDrop;
-
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
@@ -127,18 +125,11 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             if (!oldStreamName.empty()) {
                 NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
 
-                // auto* rotateOp = desc.MutableRotateSrcCdcStream();
-                // rotateOp->SetTableName(item.GetPath());
-                // rotateOp->SetOldStreamName(oldStreamName);
-                // rotateOp->MutableNewStream()->CopyFrom(createCdcStreamOp);
-
                 desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
                 
                 auto* dropOp = desc.MutableDropSrcCdcStream();
                 dropOp->SetTableName(item.GetPath());
                 dropOp->AddStreamName(oldStreamName);
-
-                // streamsToDrop.emplace_back(sPath, oldStreamName);
             } else {
                 NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
                 desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
@@ -306,18 +297,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             }
         }
     }
-
-    // for (const auto& [tablePath, streamName] : streamsToDrop) {
-    //     if (!tablePath.IsResolved()) continue;
-        
-    //     auto streamPath = tablePath.Child(streamName);
-    //     if (!streamPath.IsResolved()) continue;
-
-    //     auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);
-    //     outTx.MutableDrop()->SetName(streamName);
-        
-    //     result.push_back(CreateDropCdcStreamImpl(NextPartId(opId, result), outTx));
-    // }
 
     return result;
 }

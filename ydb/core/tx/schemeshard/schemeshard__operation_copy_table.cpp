@@ -121,13 +121,11 @@ public:
             NKikimrTxDataShard::TFlatSchemeTransaction oldShardTx;
             context.SS->FillSeqNo(oldShardTx, seqNo);
 
-            // Check if we need to Drop or Create CDC streams (Incremental Backup logic)
             TVector<TPathId> streamsToDrop;
             TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
             for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
                 if (context.SS->PathsById.contains(id)) {
                     auto childPath = context.SS->PathsById.at(id);
-                    // Collect streams marked for drop by this operation in Propose
                     if (childPath->IsCdcStream() && 
                         childPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         childPath->DropTxId == OperationId.GetTxId()) {
@@ -257,7 +255,6 @@ public:
             context.SS->ClearDescribePathCaches(srcPath);
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
-            // Handle CDC streams updates (Drop and Create)
             if (context.SS->Tables.contains(srcPathId)) {
                 auto srcTable = context.SS->Tables.at(srcPathId);
                 srcTable->AlterVersion += 1;
@@ -266,7 +263,6 @@ public:
                 NCdcStreamState::SyncChildIndexes(srcPath, srcTable->AlterVersion, OperationId, context, db);
             }
 
-            // 1. Finish creation of new stream if any
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
                 context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
                 auto stream = context.SS->CdcStreams.at(txState->CdcPathId);
@@ -276,42 +272,31 @@ public:
                 }
             }
 
-            // ... (начало TPropose::HandleReply остается таким же) ...
-
-            // 2. Finish drop of old streams
             for (const auto& [name, id] : srcPath->GetChildren()) {
                 if (id == txState->CdcPathId) continue;
 
                 if (context.SS->CdcStreams.contains(id)) {
                     auto streamPath = context.SS->PathsById.at(id);
 
-                    // Check if this stream was marked for drop by THIS transaction
                     if (streamPath->IsCdcStream() && 
                         streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         streamPath->DropTxId == OperationId.GetTxId()) {
                         
                         context.MemChanges.GrabCdcStream(context.SS, id);
 
-                        // Actually remove the CDC stream info
                         context.SS->PersistRemoveCdcStream(db, id);
                         context.SS->CdcStreams.erase(id);
 
-                        // ИЗМЕНЕНИЕ ЗДЕСЬ: Полная финализация удаления пути (SetDropped)
                         Y_ABORT_UNLESS(!streamPath->Dropped());
                         streamPath->SetDropped(step, OperationId.GetTxId());
                         context.SS->PersistDropStep(db, id, step, OperationId);
 
-                        // Обновляем счетчики и квоты родителя (таблицы)
-                        // srcPath в этом методе - это TPathElement::TPtr таблицы
                         auto parent = srcPath; 
                         
-                        // Уменьшаем счетчики внутри домена
                         context.SS->ResolveDomainInfo(id)->DecPathsInside(context.SS);
                         
-                        // Уменьшаем счетчик живых детей у родителя
                         DecAliveChildrenDirect(OperationId, parent, context);
 
-                        // Инвалидируем кэши
                         context.SS->ClearDescribePathCaches(streamPath);
                         context.OnComplete.PublishToSchemeBoard(OperationId, id);
                     }
@@ -419,9 +404,6 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
-        // DropSrcCdcStream / RotateSrcCdcStream check removed from here 
-        // as we process DropSrcCdcStream via path state logic below.
-
         const TTabletId ssId = context.SS->SelfTabletId();
         const TString& parentPath = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateTable().GetName();
@@ -603,7 +585,6 @@ public:
 
         const bool omitFollowers = schema.GetOmitFollowers();
 
-        // Process DROP for incremental backup rotation
         if (Transaction.GetCreateTable().HasDropSrcCdcStream()) {
             const auto& dropOp = Transaction.GetCreateTable().GetDropSrcCdcStream();
             for (const auto& streamName : dropOp.GetStreamName()) {
@@ -617,14 +598,14 @@ public:
                     return result;
                 }
 
-                // Check for conflict
                 if (oldStreamPath.Base()->LastTxId != InvalidTxId && oldStreamPath.Base()->LastTxId != OperationId.GetTxId()) {
-                    result->SetError(NKikimrScheme::StatusMultipleModifications, 
-                        TStringBuilder() << "Stream " << streamName << " is busy by another operation");
-                    return result;
+                    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TCopyTable Propose: Stream " << streamName 
+                        << " was busy by txId " << oldStreamPath.Base()->LastTxId 
+                        << ", overriding with current opId " << OperationId.GetTxId()
+                        << " because CopyTable owns the parent table.");
                 }
                 
-                // Mark as Drop by this operation
                 context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
                 context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
 
@@ -636,13 +617,6 @@ public:
             }
         }
 
-        // Process CREATE for incremental backup (or regular copy with CDC)
-        // Note: New stream path logic is simplified compared to old Rotate logic.
-        // It relies on CreateBackupCollection creating the path separately via DoCreateStreamImpl
-        // OR standard CreateTable/CopyTable logic handling CreateCdcStream.
-        // The cdcPeerOp in CreateCopyTable wrapper ensures the proto has CreateCdcStream set.
-        // The standard flow below handles creating the *new* stream logic via Transaction.HasCreateCdcStream().
-        
         PrepareScheme(&schema, name, srcTableInfo, context);
         schema.SetIsBackup(isBackup);
 
@@ -931,7 +905,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             schema.MutableCreateCdcStream()->CopyFrom(*cdcPeerOp);
         }
 
-        // ПРОКИДЫВАЕМ DropSrcCdcStream ИЗ ИСХОДНОЙ ТРАНЗАКЦИИ (если есть)
         if (copying.HasDropSrcCdcStream()) {
             operation->MutableDropSrcCdcStream()->CopyFrom(copying.GetDropSrcCdcStream());
         }

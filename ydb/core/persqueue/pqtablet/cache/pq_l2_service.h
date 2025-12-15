@@ -41,6 +41,7 @@ struct TCacheValue : TNonCopyable {
         , AccessTime(accessTime.TimeT())
         , AccessCount(0)
     {
+        AFL_VERIFY(value != nullptr);
         for (const auto& batch : *Value) {
             DataSize += batch.GetUnpackedSize();
         }

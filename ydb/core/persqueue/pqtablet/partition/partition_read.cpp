@@ -438,9 +438,8 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         ui32 count = blobs[pos].Count;
         ui16 partNo = blobs[pos].PartNo;
         ui16 internalPartsCount = blobs[pos].InternalPartsCount;
-        auto& blobBatches = blobs[pos].Batches;
 
-        if (!blobBatches || blobBatches->empty()) { // this is ok. Means that someone requested too much data or retention race
+        if (blobs[pos].Empty()) { // this is ok. Means that someone requested too much data or retention race
             PQ_LOG_D("Not full answer here!");
             ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {
@@ -463,6 +462,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             };
         }
 
+        auto blobBatches = blobs[pos].Batches;
         ui32 totalSize = 0;
         for (const auto& batch : *blobBatches) {
             totalSize += batch.GetUnpackedSize();

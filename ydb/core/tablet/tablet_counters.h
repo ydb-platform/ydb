@@ -256,17 +256,6 @@ public:
         Populate(rp);
     }
 
-    bool PopulateFrom(auto begin, auto end) {
-        Y_DEBUG_ABORT_UNLESS(std::distance(begin, end) == (ssize_t)Values.size());
-        if (std::distance(begin, end) != (ssize_t)Values.size()) {
-            return false;
-        }
-        for (auto i: xrange(Values.size())) {
-            Values[i] += *(begin + i);
-        }
-        return true;
-    }
-
     void OutputHtml(IOutputStream &os, const char* name) const;
 
 private:

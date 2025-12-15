@@ -255,7 +255,23 @@ public:
             context.SS->ClearDescribePathCaches(srcPath);
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
-            if (context.SS->Tables.contains(srcPathId)) {
+            bool hasCdcChanges = (txState->CdcPathId != InvalidPathId);
+
+            if (!hasCdcChanges) {
+                for (const auto& [name, id] : srcPath->GetChildren()) {
+                    if (context.SS->CdcStreams.contains(id)) {
+                        auto streamPath = context.SS->PathsById.at(id);
+                        if (streamPath->IsCdcStream() && 
+                            streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
+                            streamPath->DropTxId == OperationId.GetTxId()) {
+                            hasCdcChanges = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
                 auto srcTable = context.SS->Tables.at(srcPathId);
                 srcTable->AlterVersion += 1;
                 context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);

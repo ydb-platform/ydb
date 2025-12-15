@@ -3404,31 +3404,39 @@ WITH (
         TestReplication(scheme, expected);
     }
 
-    Y_UNIT_TEST(ReplicationExportWithPermissions) {
-        TString scheme = R"(
-            Name: "Replication"
-            Config {
-                SrcConnectionParams {
-                    Endpoint: "localhost:2135"
-                    Database: ""
-                }
-                Specific {
-                    Targets {
-                        SrcPath: "/MyRoot/Table1"
-                        DstPath: "/MyRoot/Table1Replica"
-                    }
+    Y_UNIT_TEST(ReplicatedTableExport) {
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            ReplicationConfig {
+                Mode: REPLICATION_MODE_READ_ONLY
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+            NLs::UserAttrsEqual({{"__async_replica", "true"}}),
+        });
+
+        TString request = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "Table"
                 }
             }
-        )";
-        TString expected = R"(-- database: "/MyRoot"
--- backup root: "/MyRoot"
-CREATE ASYNC REPLICATION `Replication`
-FOR
-  `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
-WITH (
-  CONNECTION_STRING = 'grpc://localhost:2135/?database=',
-  CONSISTENCY_LEVEL = 'Row'
-);)";
-        TestReplication(scheme, expected);
+        )", S3Port());
+
+        TestExport(Runtime(), ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
+
 }

@@ -33,6 +33,7 @@ namespace {
             NScheme::ESchemeEntryType::Table,
             NScheme::ESchemeEntryType::View,
             NScheme::ESchemeEntryType::Topic,
+            NScheme::ESchemeEntryType::Replication,
         }, entry.Type);
     }
 

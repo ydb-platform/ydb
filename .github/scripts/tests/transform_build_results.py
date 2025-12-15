@@ -103,7 +103,7 @@ def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
                 log_print(f"truncate {out_fn} to {trunc_size}")
                 with open(out_fn, "wb") as out_fp:
                     while 1:
-                        buf = in_fp.read(8192)
+                        buf = in_fp.read(1024 * 1024)  # 1MB buffer for faster copying
                         if not buf:
                             break
                         out_fp.write(buf)
@@ -210,6 +210,10 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
     # Process each suite
     for suite_name, results in suites.items():
         has_fail_tests = False
+        # Collect all unique logsdir paths for the suite (to archive once per suite, not per test)
+        suite_logsdirs = set()
+        # Track which results have logsdir to assign URL only to them
+        results_with_logsdir = []
 
         for result in results:
             path_str = result.get("path", "")
@@ -256,25 +260,16 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                 
                 for i, file_path in enumerate(paths):
                     if link_type == "logsdir":
-                        # logsdir is a directory - archive it
+                        # Collect logsdir paths for later archiving (once per suite, not per test)
+                        # This prevents multiple archiving of the same directory
                         if os.path.isdir(file_path):
-                            url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, {file_path})
-                            # Replace first path with URL
-                            result["links"][link_type] = [url]
-                            break
-                        else:
-                            # Directory doesn't exist, but create URL anyway for consistency
-                            try:
-                                rel_path = os.path.relpath(file_path, ya_out_dir)
-                                quoted_path = urllib.parse.quote(rel_path)
-                                url = f"{test_stuff_prefix}{quoted_path}.zip"
-                                result["links"][link_type] = [url]
-                                break
-                            except ValueError:
-                                # Path is not relative to ya_out_dir, skip
-                                pass
+                            suite_logsdirs.add(file_path)
+                            # Track this result for later URL assignment
+                            if result not in results_with_logsdir:
+                                results_with_logsdir.append(result)
+                        # Don't process URL yet - will do it after archiving
                     else:
-                        # Other links are files
+                        # Other links are files - process immediately
                         if os.path.isfile(file_path):
                             url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
                             # Replace first path with URL
@@ -303,6 +298,20 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                     if "properties" not in result:
                         result["properties"] = {}
                     result["properties"].update(user_properties[path_str][subtest_name])
+
+        # Archive logsdir ONCE per suite (not per test) - this is the critical performance fix
+        # This prevents multiple archiving of the same directory when multiple tests share the same logsdir
+        if has_fail_tests and suite_logsdirs:
+            url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, suite_logsdirs)
+            # Assign the URL only to results that have logsdir
+            for result in results_with_logsdir:
+                if "links" not in result:
+                    result["links"] = {}
+                result["links"]["logsdir"] = [url]
+                # Also add to properties for consistency
+                if "properties" not in result:
+                    result["properties"] = {}
+                result["properties"]["url:logsdir"] = url
 
     # Strip rich markup from all results (not just test results) to ensure cleanup
     for result in report.get("results", []):

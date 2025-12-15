@@ -594,7 +594,7 @@ public:
         } else {
             bool isResolved = context.SS->ResolveSolomonChannels(op.GetStorageConfig(), dstPath.GetPathIdForDomain(), channelsBinding);
             if (!isResolved) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pools");
                 return result;
             }
         }

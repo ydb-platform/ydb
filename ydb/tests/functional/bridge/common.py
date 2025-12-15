@@ -100,7 +100,9 @@ class BridgeKiKiMRTest(object):
             try:
                 self.get_cluster_state_and_check(client, expected_states)
                 return
-            except AssertionError as e:
+            except (AssertionError, Exception) as e:
+                # Ловим как AssertionError (неправильное состояние), так и другие исключения
+                # (ошибки подключения, когда кластер еще не готов)
                 last_exception = e
                 time.sleep(0.5)
         raise AssertionError(f"Cluster state did not reach expected state in {timeout_seconds}s") from last_exception

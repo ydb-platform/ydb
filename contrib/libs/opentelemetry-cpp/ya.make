@@ -86,6 +86,7 @@ SRCS(
     sdk/src/common/random.cc
     sdk/src/logs/batch_log_record_processor.cc
     sdk/src/logs/batch_log_record_processor_factory.cc
+    sdk/src/logs/batch_log_record_processor_options.cc
     sdk/src/logs/event_logger.cc
     sdk/src/logs/event_logger_provider.cc
     sdk/src/logs/event_logger_provider_factory.cc
@@ -139,6 +140,7 @@ SRCS(
     sdk/src/resource/resource_detector.cc
     sdk/src/trace/batch_span_processor.cc
     sdk/src/trace/batch_span_processor_factory.cc
+    sdk/src/trace/batch_span_processor_options.cc
     sdk/src/trace/exporter.cc
     sdk/src/trace/provider.cc
     sdk/src/trace/random_id_generator.cc

@@ -196,8 +196,10 @@ class KikimrConfigGenerator(object):
             system_tablets=None,
             protected_mode=False,  # Authentication
             enable_pool_encryption=False,
+            default_tablet_node_ids=None,
             tiny_mode=False,
             module=None,
+            infer_pdisk_slot_count_settings=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -292,7 +294,9 @@ class KikimrConfigGenerator(object):
 
         self.__bs_cache_file_path = bs_cache_file_path
 
-        self.yaml_config = _load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
+        if default_tablet_node_ids is None:
+            default_tablet_node_ids = self.__node_ids
+        self.yaml_config = _load_default_yaml(default_tablet_node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
 
         security_config_root = self.yaml_config["domains_config"]
         if self.use_self_management:
@@ -459,6 +463,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["grpc_config"]["ca"] = self.grpc_tls_ca_path
             self.yaml_config["grpc_config"]["cert"] = self.grpc_tls_cert_path
             self.yaml_config["grpc_config"]["key"] = self.grpc_tls_key_path
+
+        if infer_pdisk_slot_count_settings is not None:
+            self.yaml_config["blob_storage_config"]["infer_pdisk_slot_count_settings"] = infer_pdisk_slot_count_settings
 
         if default_users is not None:
             # check for None for remove default users for empty dict

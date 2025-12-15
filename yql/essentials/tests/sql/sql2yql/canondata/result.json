@@ -9008,6 +9008,13 @@
             "uri": "https://{canondata_backend}/1773845/d44e77c717d417cc593a54611fecfab186795fbf/resource.tar.gz#test_sql2yql.test_simple_pg-date_trunc_/sql.yql"
         }
     ],
+    "test_sql2yql.test[simple_pg-eval_params_fail]": [
+        {
+            "checksum": "405f09f974689b4a72b96a2e08ab638c",
+            "size": 1020,
+            "uri": "https://{canondata_backend}/1031349/0f9783fc7c2bc84428b5c28e1c1a799cf2b41e51/resource.tar.gz#test_sql2yql.test_simple_pg-eval_params_fail_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[simple_pg-floor]": [
         {
             "checksum": "413e810bd6fb4f1bd0fe7d3593fe57a8",
@@ -14485,6 +14492,11 @@
     "test_sql_format.test[simple_pg-date_trunc]": [
         {
             "uri": "file://test_sql_format.test_simple_pg-date_trunc_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[simple_pg-eval_params_fail]": [
+        {
+            "uri": "file://test_sql_format.test_simple_pg-eval_params_fail_/formatted.sql"
         }
     ],
     "test_sql_format.test[simple_pg-floor]": [

@@ -447,7 +447,7 @@ SELECT $foo;
 | ----- | ------------------------ |
 | 0     | Cost-based optimizer is disabled. |
 | 1     | Cost-based optimizer is disabled, but estimates are computed and available. |
-| 2     | Cost-based optimizer is enabled only for queries that include {% if backend_name == "YDB" and oss == true %}[column-oriented tables](../../../concepts/glossary.md#column-oriented-table-column-oriented-table) {% else %} column-oriented tables. |
+| 2     | Cost-based optimizer is enabled only for queries that include {% if backend_name == "YDB" and oss == true %}[column-oriented tables](../../../concepts/glossary.md#column-oriented-table-column-oriented-table) {% else %} column-oriented tables.{% endif %} |
 | 3     | Cost-based optimizer is enabled for all queries, but `LookupJoin` is preferred for row-oriented tables. |
 | 4     | Cost-based optimizer is enabled for all queries. |
 

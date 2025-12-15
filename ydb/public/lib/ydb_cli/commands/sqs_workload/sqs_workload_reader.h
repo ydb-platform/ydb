@@ -45,8 +45,7 @@ namespace NYdb::NConsoleClient {
                           const Aws::SQS::Model::ReceiveMessageRequest& request,
                           const Aws::SQS::Model::ReceiveMessageOutcome& outcome);
 
-        static bool ShouldFail(const TSqsWorkloadReaderParams& params,
-                               const Aws::SQS::Model::Message& message, ui64 sendMessageTime);
+        static bool ShouldFail(const TSqsWorkloadReaderParams& params, ui64 sendMessageTime);
         static bool ValidateFifo(const TSqsWorkloadReaderParams& params,
                                  const Aws::SQS::Model::Message& message,
                                  ui64 sendTimestamp);

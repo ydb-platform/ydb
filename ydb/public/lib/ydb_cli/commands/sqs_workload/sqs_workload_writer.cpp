@@ -2,6 +2,7 @@
 #include "consts.h"
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/core/client/AsyncCallerContext.h>
 #include <aws/core/utils/UUID.h>
 #include <aws/sqs/SQSClient.h>
 #include <aws/sqs/model/SendMessageBatchRequest.h>
@@ -26,7 +27,7 @@ namespace NYdb::NConsoleClient {
             Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry> entries;
             for (ui32 i = 0; i < batchSize; ++i) {
                 auto messageBody =
-                    fmt::format("{}{}", now, kSQSMessageStartTimeSeparator);
+                    fmt::format("{}{}", now, SQS_MESSAGE_START_TIME_SEPARATOR);
                 while (messageBody.size() < messageSize) {
                     messageBody.push_back('a');
                 }
@@ -83,11 +84,11 @@ namespace NYdb::NConsoleClient {
                 now, params.BatchSize, params.MessageSize, params.GroupsAmount,
                 messageGroupID));
             sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
-                kAmzTargetHeader, kSQSTargetSendMessageBatch);
+                AMZ_TARGET_HEADER, SQS_TARGET_SEND_MESSAGE_BATCH);
 
             if (params.SetSubjectToken) {
                 sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
-                    kYacloudSubjectTokenHeader, params.Token.c_str());
+                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token.c_str());
             }
 
             {

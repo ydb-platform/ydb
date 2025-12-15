@@ -10,7 +10,7 @@ namespace NYdb::NConsoleClient {
         auto driver = std::make_unique<NYdb::TDriver>(TYdbCommand::CreateDriver(
             config, std::unique_ptr<TLogBackend>(
                         CreateLogBackend(
-                            kSQSWorkloadLogFileName,
+                            SQS_WORKLOAD_LOG_FILE_NAME,
                             TClientCommand::TConfig::VerbosityLevelToELogPriority(
                                 config.VerbosityLevel))
                             .Release())));

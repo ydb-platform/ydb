@@ -20,8 +20,8 @@ namespace NYdb::NConsoleClient {
 
     namespace {
 
-        constexpr auto kWaitTimeSeconds = 15;
-        constexpr auto kErrorMessagesDestinyFatal = "fatal";
+        constexpr auto WAIT_TIME_SECONDS = 15;
+        constexpr auto ERROR_MESSAGES_DESTINY_FATAL = "fatal";
 
         void DecrementStartedCountAndNotify(const TSqsWorkloadReaderParams& params) {
             std::unique_lock locker(*params.Mutex);
@@ -50,7 +50,7 @@ namespace NYdb::NConsoleClient {
         const auto& messages = outcome.GetResult().GetMessages();
         if (!messages.empty()) {
             const auto& body = messages[0].GetBody();
-            auto sepIndex = body.find(kSQSMessageStartTimeSeparator);
+            auto sepIndex = body.find(SQS_MESSAGE_START_TIME_SEPARATOR);
 
             if (sepIndex != std::string::npos) {
                 try {
@@ -82,7 +82,9 @@ namespace NYdb::NConsoleClient {
                 return;
             }
 
-            if (ShouldFail(params, message, sendMessageTime)) {
+            if (ShouldFail(params, sendMessageTime)) {
+                params.StatsCollector->AddErrorWhileProcessingMessagesEvent(TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent());
+
                 continue;
             }
 
@@ -102,11 +104,11 @@ namespace NYdb::NConsoleClient {
             deleteMessageBatchRequest.SetQueueUrl(params.QueueUrl.c_str());
             deleteMessageBatchRequest.SetEntries(deleteMessageBatchRequestEntries);
             deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(
-                kAmzTargetHeader, kSQSTargetDeleteMessageBatch);
+                AMZ_TARGET_HEADER, SQS_TARGET_DELETE_MESSAGE_BATCH);
 
             if (params.SetSubjectToken) {
                 deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(
-                    kYacloudSubjectTokenHeader, params.Token.c_str());
+                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token.c_str());
             }
 
             auto deleteMessageBatchOutcome =
@@ -131,8 +133,7 @@ namespace NYdb::NConsoleClient {
         DecrementStartedCountAndNotify(params);
     }
 
-    bool TSqsWorkloadReader::ShouldFail(const TSqsWorkloadReaderParams& params,
-                                        const Aws::SQS::Model::Message& message, ui64 sendMessageTime) {
+    bool TSqsWorkloadReader::ShouldFail(const TSqsWorkloadReaderParams& params, ui64 sendMessageTime) {
         if (!params.ErrorMessagesRate || *params.ErrorMessagesRate == 0) {
             return false;
         }
@@ -143,39 +144,24 @@ namespace NYdb::NConsoleClient {
             return false;
         }
 
-        params.Log->Write(ELogPriority::TLOG_ERR,
-                          TStringBuilder() << "Message failed to process: "
-                                           << message.GetMessageId());
-
-        return (params.ErrorMessagesDestiny == kErrorMessagesDestinyFatal) ||
+        return (params.ErrorMessagesDestiny == ERROR_MESSAGES_DESTINY_FATAL) ||
                (std::rand() % 3 == 0);
     }
 
     bool TSqsWorkloadReader::ValidateFifo(const TSqsWorkloadReaderParams& params,
                                           const Aws::SQS::Model::Message& message,
                                           ui64 sendTimestamp) {
-        std::unique_lock locker(*params.HashMapMutex);
         const auto& attributes = message.GetAttributes();
         auto messageGroupId = attributes.find(
             Aws::SQS::Model::MessageSystemAttributeName::MessageGroupId);
-        if (messageGroupId == attributes.end()) {
+
+        std::unique_lock locker(*params.HashMapMutex);
+        auto [it, newGroup] = params.LastReceivedMessageInGroup->try_emplace(messageGroupId->second, sendTimestamp);
+        if (it->second > sendTimestamp) {
             return false;
         }
 
-        auto lastReceivedMessageInGroup =
-            params.LastReceivedMessageInGroup->find(messageGroupId->second);
-        if (lastReceivedMessageInGroup ==
-            params.LastReceivedMessageInGroup->end()) {
-            (*params.LastReceivedMessageInGroup)[messageGroupId->second] =
-                sendTimestamp;
-            return true;
-        }
-
-        if (lastReceivedMessageInGroup->second > sendTimestamp) {
-            return false;
-        }
-
-        (*params.LastReceivedMessageInGroup)[messageGroupId->second] = sendTimestamp;
+        it->second = sendTimestamp;
         return true;
     }
 
@@ -186,15 +172,15 @@ namespace NYdb::NConsoleClient {
         while (Now() < endTime && !params.ErrorFlag->load()) {
             Aws::SQS::Model::ReceiveMessageRequest receiveMessageRequest;
             receiveMessageRequest.SetQueueUrl(params.QueueUrl.c_str());
-            receiveMessageRequest.SetWaitTimeSeconds(kWaitTimeSeconds);
+            receiveMessageRequest.SetWaitTimeSeconds(WAIT_TIME_SECONDS);
             receiveMessageRequest.SetVisibilityTimeout(visibilityTimeout);
             receiveMessageRequest.SetMaxNumberOfMessages(params.BatchSize);
             receiveMessageRequest.SetAdditionalCustomHeaderValue(
-                kAmzTargetHeader, kSQSTargetReceiveMessage);
+                AMZ_TARGET_HEADER, SQS_TARGET_RECEIVE_MESSAGE);
 
             if (params.SetSubjectToken) {
                 receiveMessageRequest.SetAdditionalCustomHeaderValue(
-                    kYacloudSubjectTokenHeader, params.Token.c_str());
+                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token.c_str());
             }
 
             {

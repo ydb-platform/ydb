@@ -22,15 +22,11 @@ namespace NYdb::NConsoleClient {
 
     TSqsWorkloadScenario::TSqsWorkloadScenario()
         : Log(std::make_shared<TLog>(CreateLogBackend(
-              kSQSWorkloadLogFileName, ELogPriority::TLOG_DEBUG, true)))
-        ,
-        ErrorFlag(std::make_shared<std::atomic_bool>(false))
-        , AwsOptions()
-        ,
-        Mutex(std::make_shared<std::mutex>())
-        ,
-        FinishedCond(std::make_shared<std::condition_variable>())
-        ,
+              SQS_WORKLOAD_LOG_FILE_NAME, ELogPriority::TLOG_DEBUG, true))),
+        ErrorFlag(std::make_shared<std::atomic_bool>(false)),
+        AwsOptions(),
+        Mutex(std::make_shared<std::mutex>()),
+        FinishedCond(std::make_shared<std::condition_variable>()),
         StartedCount(std::make_shared<size_t>(0))
     {
         Log->SetFormatter(GetPrefixLogFormatter(""));

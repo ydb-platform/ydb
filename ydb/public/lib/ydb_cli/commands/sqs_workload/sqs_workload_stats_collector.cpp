@@ -8,19 +8,16 @@ TSqsWorkloadStatsCollector::TSqsWorkloadStatsCollector(
     size_t writerCount, size_t readerCount, bool quiet, bool printTimestamp,
     ui32 windowDurationSec, ui32 totalDurationSec, ui32 warmupSec,
     double percentile, std::shared_ptr<std::atomic_bool> errorFlag)
-    : WriterCount(writerCount)
-    , ReaderCount(readerCount)
-    , Quiet(quiet)
-    ,
-    PrintTimestamp(printTimestamp)
-    , WindowSec(windowDurationSec)
-    ,
-    TotalSec(totalDurationSec)
-    , WarmupSec(warmupSec)
-    , Percentile(percentile)
-    ,
-    ErrorFlag(errorFlag)
-    , WindowStats(MakeHolder<TSqsWorkloadStats>())
+    : WriterCount(writerCount),
+    ReaderCount(readerCount),
+    Quiet(quiet),
+    PrintTimestamp(printTimestamp),
+    WindowSec(windowDurationSec),
+    TotalSec(totalDurationSec),
+    WarmupSec(warmupSec),
+    Percentile(percentile),
+    ErrorFlag(errorFlag),
+    WindowStats(MakeHolder<TSqsWorkloadStats>())
 {
     SendRequestDoneEventQueue = MakeHolder<
         TAutoLockFreeQueue<TSqsWorkloadStats::SendRequestDoneEvent>>();
@@ -44,6 +41,8 @@ TSqsWorkloadStatsCollector::TSqsWorkloadStatsCollector(
         TAutoLockFreeQueue<TSqsWorkloadStats::FinishProcessMessagesEvent>>();
     AddAsyncRequestTaskToQueueEventQueue = MakeHolder<TAutoLockFreeQueue<
         TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent>>();
+    ErrorWhileProcessingMessagesEventQueue = MakeHolder<TAutoLockFreeQueue<
+        TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>>();
 }
 
 void TSqsWorkloadStatsCollector::PrintHeader(bool total) const {
@@ -70,9 +69,9 @@ void TSqsWorkloadStatsCollector::PrintHeader(bool total) const {
     } else if (WriterCount == 0 && ReaderCount > 0) {
         header << fmt::format(
             "{:<6} {:>10} {:>10} {:>10} {:>8} {:>8} {:>10} "
-            "{:>10} {:>10} {:>10} {:>10} {:>10} {:>12}", "Window", "Rd speed",
+            "{:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>12}", "Window", "Rd speed",
             "Rd bytes", "E2E ms", "Recv ms", "Del ms", "Recv err", "Recv ok",
-            "Del err", "Del ok", "Del speed", "InFlight", "Async tasks");
+            "Del err", "Del ok", "Del speed", "InFlight", "Proc err", "Async tasks");
         if (PrintTimestamp) {
             header << " " << "Timestamp";
         }
@@ -80,11 +79,11 @@ void TSqsWorkloadStatsCollector::PrintHeader(bool total) const {
 
         header << fmt::format(
             "{:<6} {:>10} {:>10} {:>10} {:>8} {:>8} {:>10} "
-            "{:>10} {:>10} {:>10} {:>10} {:>10} {:>12}", "#", "msg/s", "MB/s",
+            "{:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>12}", "#", "msg/s", "MB/s",
             "p" + std::to_string((int)(Percentile)),
             "p" + std::to_string((int)(Percentile)),
             "p" + std::to_string((int)(Percentile)), "count", "count", "count",
-            "count", "msg/s", "count", "count");
+            "count", "msg/s", "count", "count", "count");
         header << "\n";
     } else {
         header << "Window\t";
@@ -96,7 +95,7 @@ void TSqsWorkloadStatsCollector::PrintHeader(bool total) const {
             header << "Rd speed\tRd bytes\tE2E ms\t";
             header
                 << "Recv ms\tDel ms\tRecv err\tRecv ok\tDel err\tDel ok\tDel "
-                   "speed\tInFlight\tAsync tasks\t";
+                   "speed\tInFlight\tProc err\tAsync tasks\t";
         }
         if (PrintTimestamp) {
             header << "Timestamp";
@@ -112,7 +111,7 @@ void TSqsWorkloadStatsCollector::PrintHeader(bool total) const {
         if (ReaderCount > 0) {
             header << "msg/s\tMB/s\tp" << (int)(Percentile) << "\t";
             header << "p" << (int)(Percentile) << "\tp" << (int)(Percentile)
-                   << "\tcount\tcount\tcount\tcount\tmsg/s\tcount\tcount\t";
+                   << "\tcount\tcount\tcount\tcount\tmsg/s\tcount\tcount\tcount\t";
         }
         header << "\n";
     }
@@ -206,10 +205,10 @@ void TSqsWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
         Cout << fmt::format(
             "{:<6} {:>10} {:>10} {:>10} {:>8} {:>8} {:>10} {:>10} {:>10} "
             "{:>10} "
-            "{:>10} {:>10} {:>12}", totalIt, readSpeed, mbStr, e2eMs, recvMs,
+            "{:>10} {:>10} {:>10} {:>12}", totalIt, readSpeed, mbStr, e2eMs, recvMs,
             delMs, stats.ReceiveRequestErrors, stats.ReceiveRequestsSuccess,
             stats.DeleteRequestErrors, stats.DeleteRequestsSuccess, delSpeed,
-            inFlight, stats.AsyncRequestTasks);
+            inFlight, stats.ErrorsWhileProcessingMessages, stats.AsyncRequestTasks);
         if (PrintTimestamp) {
             Cout << " " << Now().ToStringUpToSeconds();
         }
@@ -231,6 +230,7 @@ void TSqsWorkloadStatsCollector::CollectEvents()
     CollectEvents<TSqsWorkloadStats::DeletedMessagesEvent>();
     CollectEvents<TSqsWorkloadStats::FinishProcessMessagesEvent>();
     CollectEvents<TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent>();
+    CollectEvents<TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>();
 }
 
 template <class T>
@@ -300,6 +300,12 @@ void TSqsWorkloadStatsCollector::CollectEvents()
     } else if constexpr (
         std::is_same_v<T, TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent>) {
         while (AddAsyncRequestTaskToQueueEventQueue->Dequeue(&event)) {
+            WindowStats->AddEvent(*event);
+            TotalStats.AddEvent(*event);
+        }
+    } else if constexpr (
+        std::is_same_v<T, TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>) {
+        while (ErrorWhileProcessingMessagesEventQueue->Dequeue(&event)) {
             WindowStats->AddEvent(*event);
             TotalStats.AddEvent(*event);
         }
@@ -389,6 +395,13 @@ void TSqsWorkloadStatsCollector::AddAddAsyncRequestTaskToQueueEvent(
 {
     AddAsyncRequestTaskToQueueEventQueue->Enqueue(
         MakeHolder<TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent>(event));
+}
+
+void TSqsWorkloadStatsCollector::AddErrorWhileProcessingMessagesEvent(
+    const TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent& event)
+{
+    ErrorWhileProcessingMessagesEventQueue->Enqueue(
+        MakeHolder<TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>(event));
 }
 
 template <class T>

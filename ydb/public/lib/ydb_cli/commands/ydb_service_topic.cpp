@@ -1,6 +1,8 @@
+#include <fmt/format.h>
 #include <openssl/sha.h>
 
 #include "ydb_service_topic.h"
+#include <util/generic/serialized_enum.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
@@ -637,24 +639,24 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("availability-period", "Duration for which uncommited data in topic is retained (ex. '72h', '1440m')")
             .Optional()
             .StoreMappedResult(&AvailabilityPeriod_, ParseDuration);
-        config.Opts->AddLongOption("consumer-type", "Consumer type")
+        config.Opts->AddLongOption("consumer-type", "Consumer type: streaming, shared")
             .DefaultValue("streaming")
             .StoreResult(&ConsumerType_);
-        config.Opts->AddLongOption("keep-messages-order", "Keep messages order")
+        config.Opts->AddLongOption("shared-keep-messages-order", "Keep messages order for shared consumer")
             .Optional()
             .DefaultValue(false)
             .StoreResult(&KeepMessagesOrder_);
-        config.Opts->AddLongOption("default-processing-timeout", "Default processing timeout")
+        config.Opts->AddLongOption("shared-default-processing-timeout", "Default processing timeout for shared consumer")
             .Optional()
             .StoreMappedResult(&DefaultProcessingTimeout_, ParseDuration);
-        config.Opts->AddLongOption("dlq-max-processing-attempts", "Max processing attempts for DLQ")
+        config.Opts->AddLongOption("shared-dlq-max-processing-attempts", "Max processing attempts for DLQ for shared consumer")
             .Optional()
             .StoreResult(&DlqMaxProcessingAttempts_);
-        config.Opts->AddLongOption("dlq-enabled", "Is DLQ enabled")
+        config.Opts->AddLongOption("shared-dlq-enabled", "Is DLQ enabled")
             .Optional()
             .DefaultValue(false)
             .StoreResult(&DlqEnabled_);
-        config.Opts->AddLongOption("dlq-queue-name", "DLQ queue name")
+        config.Opts->AddLongOption("shared-dlq-queue-name", "DLQ queue name for shared consumer")
             .Optional()
             .StoreResult(&DlqQueueName_);
         config.Opts->SetFreeArgsNum(1);
@@ -691,15 +693,13 @@ namespace NYdb::NConsoleClient {
             consumerSettings.AvailabilityPeriod(*AvailabilityPeriod_);
         }
 
-        if (ConsumerType_ == "shared") {
-            consumerSettings.ConsumerType(NTopic::EConsumerType::Shared);
-        } else if (ConsumerType_ == "streaming") {
-            consumerSettings.ConsumerType(NTopic::EConsumerType::Streaming);
-        } else {
-            throw TMisuseException() << "Invalid consumer type: " << ConsumerType_ << ". Valid types: shared, streaming";
+        auto consumerType = TryFromString<NTopic::EConsumerType>(ConsumerType_);
+        if (!consumerType.Defined()) {
+            throw TMisuseException() << "Invalid consumer type: " << ConsumerType_ << ". Valid types: " << JoinSeq(", ", GetEnumAllNames<NTopic::EConsumerType>());
         }
 
-        consumerSettings.KeepMessagesOrder((KeepMessagesOrder_.Defined() && *KeepMessagesOrder_));
+        consumerSettings.ConsumerType(*consumerType);
+        consumerSettings.KeepMessagesOrder(KeepMessagesOrder_.GetOrElse(false));
         if (DefaultProcessingTimeout_.Defined()) {
             consumerSettings.DefaultProcessingTimeout(*DefaultProcessingTimeout_);
         }

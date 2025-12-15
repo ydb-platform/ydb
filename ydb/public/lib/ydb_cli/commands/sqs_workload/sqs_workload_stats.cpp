@@ -3,34 +3,31 @@
 using namespace NYdb::NConsoleClient;
 
 TSqsWorkloadStats::TSqsWorkloadStats()
-    : WriteBytes(0)
-    , WriteMessages(0)
-    ,
-    SendRequestTimeHist(HighestTrackableTime, 2)
-    , ReadMessages(0)
-    ,
-    SendRequestErrors(0)
-    , SendRequestsSuccess(0)
-    ,
-    ReceiveRequestTimeHist(HighestTrackableTime, 2)
-    , ReceiveRequestErrors(0)
-    ,
-    ReceiveRequestsSuccess(0)
-    , DeleteMessages(0)
-    ,
-    DeleteRequestTimeHist(HighestTrackableTime, 2)
-    , DeleteRequestErrors(0)
-    ,
-    DeleteRequestsSuccess(0)
-    , ReadBytes(0)
-    ,
-    EndToEndLatencyHist(HighestTrackableTime, 5)
-    , MessagesInFlight(0)
-    ,
-    MessagesInFlightHist(HighestTrackableMessageCount, 5)
-    ,
-    AsyncRequestTasks(0)
+    : WriteBytes(0),
+    WriteMessages(0),
+    SendRequestTimeHist(HighestTrackableTime, 2),
+    ReadMessages(0),
+    SendRequestErrors(0),
+    SendRequestsSuccess(0),
+    ReceiveRequestTimeHist(HighestTrackableTime, 2),
+    ReceiveRequestErrors(0),
+    ReceiveRequestsSuccess(0),
+    DeleteMessages(0),
+    DeleteRequestTimeHist(HighestTrackableTime, 2),
+    DeleteRequestErrors(0),
+    DeleteRequestsSuccess(0),
+    ReadBytes(0),
+    EndToEndLatencyHist(HighestTrackableTime, 5),
+    MessagesInFlight(0),
+    MessagesInFlightHist(HighestTrackableMessageCount, 5),
+    AsyncRequestTasks(0),
+    ErrorsWhileProcessingMessages(0)
 {
+}
+
+void TSqsWorkloadStats::AddEvent(const ErrorWhileProcessingMessagesEvent&)
+{
+    ErrorsWhileProcessingMessages++;
 }
 
 void TSqsWorkloadStats::AddEvent(const SendRequestDoneEvent& event)

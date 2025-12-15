@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-sqs
+    library/cpp/string_utils/url
 )
 
 END()

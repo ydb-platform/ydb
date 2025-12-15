@@ -4,13 +4,11 @@
 #include <aws/core/client/ClientConfiguration.h>
 #include <aws/core/utils/DateTime.h>
 
-#include <fmt/format.h>
-
 namespace NYdb::NConsoleClient {
 
     namespace {
 
-        const TString kLatencyMetric = "RequestLatency";
+        const TString LATENCY_METRIC = "RequestLatency";
 
     } // namespace
 
@@ -28,21 +26,21 @@ namespace NYdb::NConsoleClient {
 
         ui64 latency = 0;
         for (const auto& [key, value] : request->GetRequestMetrics()) {
-            if (key == kLatencyMetric) {
+            if (key == LATENCY_METRIC) {
                 latency = value;
                 break;
             }
         }
 
-        auto action = request->GetHeaderValue(kAmzTargetHeader);
         if (StatsCollector) {
-            if (action == kSQSTargetReceiveMessage) {
+            auto action = request->GetHeaderValue(AMZ_TARGET_HEADER);
+            if (action == SQS_TARGET_RECEIVE_MESSAGE) {
                 StatsCollector->AddReceiveRequestDoneEvent(
                     TSqsWorkloadStats::ReceiveRequestDoneEvent{latency});
-            } else if (action == kSQSTargetSendMessageBatch) {
+            } else if (action == SQS_TARGET_SEND_MESSAGE_BATCH) {
                 StatsCollector->AddSendRequestDoneEvent(
                     TSqsWorkloadStats::SendRequestDoneEvent{latency});
-            } else if (action == kSQSTargetDeleteMessageBatch) {
+            } else if (action == SQS_TARGET_DELETE_MESSAGE_BATCH) {
                 StatsCollector->AddDeleteRequestDoneEvent(
                     TSqsWorkloadStats::DeleteRequestDoneEvent{latency});
             }

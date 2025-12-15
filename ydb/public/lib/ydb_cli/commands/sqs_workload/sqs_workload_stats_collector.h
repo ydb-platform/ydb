@@ -41,6 +41,8 @@ namespace NYdb::NConsoleClient {
             const TSqsWorkloadStats::FinishProcessMessagesEvent& event);
         void AddAddAsyncRequestTaskToQueueEvent(
             const TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent& event);
+        void AddErrorWhileProcessingMessagesEvent(
+            const TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent& event);
 
         ui64 GetTotalReadMessages() const;
         ui64 GetTotalWriteMessages() const;
@@ -86,6 +88,8 @@ namespace NYdb::NConsoleClient {
         THolder<
             TAutoLockFreeQueue<TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent>>
             AddAsyncRequestTaskToQueueEventQueue;
+        THolder<TAutoLockFreeQueue<TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>>
+            ErrorWhileProcessingMessagesEventQueue;
 
         bool Quiet;
         bool PrintTimestamp;

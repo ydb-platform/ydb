@@ -63,7 +63,7 @@ TCommandWorkload::TCommandWorkload()
     : TClientCommandTree("workload", {}, "YDB workload service")
 {
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
-    AddCommand(std::make_unique<TCommandWorkloadSqs>());
+    AddHiddenCommand(std::make_unique<TCommandWorkloadSqs>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTPCC>());
     AddCommand(std::make_unique<TCommandVector>());

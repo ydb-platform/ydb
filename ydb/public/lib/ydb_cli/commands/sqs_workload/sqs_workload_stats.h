@@ -7,6 +7,9 @@ namespace NYdb {
     namespace NConsoleClient {
         class TSqsWorkloadStats {
         public:
+            struct RequestDoneEvent {
+                ui64 RequestTime;
+            };
             struct SendRequestErrorEvent {};
             struct SendRequestDoneEvent {
                 ui64 RequestTime;
@@ -35,6 +38,7 @@ namespace NYdb {
                 ui64 MessagesCount;
             };
             struct AddAsyncRequestTaskToQueueEvent {};
+            struct ErrorWhileProcessingMessagesEvent {};
 
             TSqsWorkloadStats();
 
@@ -49,6 +53,7 @@ namespace NYdb {
             void AddEvent(const DeletedMessagesEvent& event);
             void AddEvent(const FinishProcessMessagesEvent& event);
             void AddEvent(const AddAsyncRequestTaskToQueueEvent& event);
+            void AddEvent(const ErrorWhileProcessingMessagesEvent& event);
 
             ui64 WriteBytes;
             ui64 WriteMessages;
@@ -68,6 +73,7 @@ namespace NYdb {
             ui64 MessagesInFlight;
             NHdr::THistogram MessagesInFlightHist;
             i64 AsyncRequestTasks;
+            ui64 ErrorsWhileProcessingMessages;
 
         private:
             constexpr static ui64 HighestTrackableTime = 100000000;

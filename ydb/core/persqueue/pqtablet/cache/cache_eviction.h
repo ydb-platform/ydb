@@ -108,7 +108,7 @@ namespace NKikimr::NPQ {
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
             for (auto& blob : Blobs) {
-                if (blob.Value.empty()) {
+                if (blob.Empty()) {
                     // add reading command
                     const auto& key = blob.Key;
                     auto read = request->Record.AddCmdRead();
@@ -127,12 +127,12 @@ namespace NKikimr::NPQ {
             ui32 cropped = 0;
             for (ui32 i = 0; i < Blobs.size(); ++i) {
                 TRequestedBlob& blob = Blobs[i];
-                if (blob.Value.size())
-                    Verify(blob);
-                size += blob.Value.size();
+                if (!blob.Empty())
+                    blob.Verify();
+                size += blob.Size;
                 if (size > MAX_RESPONSE_SIZE) {
                     ++cropped;
-                    blob.Value.clear();
+                    blob.Clear();
                 }
             }
 
@@ -143,14 +143,6 @@ namespace NKikimr::NPQ {
             }
 
             return MakeHolder<TEvPQ::TEvBlobResponse>(CookiePQ, std::move(Blobs), error);
-        }
-
-        void Verify(const TRequestedBlob& blob) const {
-            AFL_ENSURE(blob.Value.size() <= blob.Size)
-                ("blob.Value.size()", blob.Value.size())
-                ("blob.Size", blob.Size)
-                ("key", blob.Key.ToString());
-            TClientBlob::CheckBlob(blob.Key, blob.Value);
         }
     };
 
@@ -267,16 +259,6 @@ namespace NKikimr::NPQ {
         ui64 GetSize() const { return Cache.size(); }
         const TCounters& GetCounters() const { return Counters; }
 
-        TVector<TBatch> ExtractBatches(const TRequestedBlob& reqBlob) const {
-            TVector<TBatch> batches;
-            for (TBlobIterator it(reqBlob.Key, reqBlob.Value); it.IsValid(); it.Next()) {
-                TBatch batch = it.GetBatch();
-                batch.Unpack();
-                batches.push_back(batch);
-            }
-            return batches;
-        }
-
         /// @return count of cached blobs
         ui32 RequestBlobs(const TActorContext& ctx, TKvRequest& kvReq)
         {
@@ -317,8 +299,8 @@ namespace NKikimr::NPQ {
                     reqData.RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), nullptr);
                 }
 
-                auto batches = ExtractBatches(reqBlob);
-                auto cached = std::make_shared<TCacheValue>(std::make_shared<TVector<TBatch>>(std::move(batches)), ctx.SelfID, TAppData::TimeProvider->Now());
+                // reqBlob.ExtractBatches();
+                auto cached = std::make_shared<TCacheValue>(reqBlob.Batches, ctx.SelfID, TAppData::TimeProvider->Now());
                 TValueL1 valL1(cached, cached->GetDataSize(), TValueL1::SourceHead);
                 Cache[blob] = valL1; // weak
                 Counters.Inc(valL1);
@@ -329,7 +311,7 @@ namespace NKikimr::NPQ {
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Caching head blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << reqBlob.Value.size() << " actorID " << ctx.SelfID);
+                    << " size " << reqBlob.Size << " actorID " << ctx.SelfID);
             }
         }
 
@@ -416,7 +398,7 @@ namespace NKikimr::NPQ {
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Prefetched blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << reqBlob.Value.size()  << " actorID " << ctx.SelfID);
+                    << " size " << reqBlob.Size  << " actorID " << ctx.SelfID);
                 haveSome = true;
             }
 
@@ -524,7 +506,7 @@ namespace NKikimr::NPQ {
                     ++numCached;
                     blob.Batches = cached->GetValue();
                     blob.Cached = true;
-                    AFL_ENSURE(blob.Value.size())("d", "Got empty blob from cache");
+                    AFL_ENSURE(blob.Size)("d", "Got empty blob from cache");
                 }
             }
             return numCached;

@@ -51,20 +51,27 @@ namespace NPQ {
     };
 
     struct TRequestedBlob {
+    private:
+        TString Value;
+
+    public:
         ui64 Offset;
         ui16 PartNo;
         ui32 Count;
         ui16 InternalPartsCount;
         ui32 Size;
-        TString Value;
-        std::shared_ptr<TVector<TBatch>> Batches;
         bool Cached;
         TKey Key;
         ui64 CreationUnixTime;
+        std::shared_ptr<TVector<TBatch>> Batches;
 
         TRequestedBlob() = delete;
-
         TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value, const TKey& key, ui64 creationUnixTime);
+        bool Empty() const;
+        void ExtractBatches();
+        void Clear();
+        void SetValue(const TString& value);
+        void Verify() const;
     };
 
     struct TDataKey {
@@ -564,7 +571,7 @@ struct TEvPQ {
         void Check() const
         {
             //error or empty response(all from cache) or not empty response at all
-            AFL_ENSURE(Error.HasError() || Blobs.empty() || !Blobs[0].Value.empty())
+            AFL_ENSURE(Error.HasError() || Blobs.empty() || (Blobs[0].Batches && !Blobs[0].Batches->empty()))
                 ("Cookie", Cookie)("Error code", NPersQueue::NErrorCode::EErrorCode_Name(Error.ErrorCode))("blobs count", Blobs.size());
         }
 

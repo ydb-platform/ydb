@@ -279,10 +279,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
 
     ui64 offset = requestedBlob.Key.GetOffset();
 
-    for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
-        TBatch batch = it.GetBatch();
-        batch.Unpack();
-
+    for (const auto& batch : *requestedBlob.Batches) {
         for (const auto& blob : batch.Blobs) {
             LOG_D("Try append part " << offset << "." << blob.GetPartNo() << "/" << blob.GetTotalParts());
 

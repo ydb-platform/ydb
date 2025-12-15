@@ -485,7 +485,7 @@ def iter_build_results_files(path):
             for result in report.get("results") or []:
                 if result.get("type") == "test":
                     # Skip suite-level entries (they are aggregates, not individual tests)
-                    if result.get("suite") == True:
+                    if result.get("suite") is True:
                         continue
                     yield fn, result
         except (json.JSONDecodeError, KeyError) as e:

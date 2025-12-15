@@ -950,13 +950,85 @@
     </div>
 
     <script>
-        // Preload history data (without status_description to reduce HTML size)
-        const testHistory = {{ history_for_js | tojson }};
-        // Separate object for error descriptions (only for failed/error/mute entries)
-        const historyDescriptions = {{ history_descriptions | tojson }};
-        // Separate object for current test error descriptions (loaded on demand)
-        const testDescriptions = {{ test_descriptions | tojson }};
-        const testSuccessRates = {{ test_success_rates | tojson }};
+        // Data will be loaded from separate JSON file to reduce HTML size
+        const dataFileUrl = "{{ data_file_url }}";
+        let testData = null;
+        let dataLoadPromise = null;
+        
+        // Lazy load test data from JSON file
+        async function loadTestData() {
+            if (testData) {
+                return testData;
+            }
+            if (dataLoadPromise) {
+                return dataLoadPromise;
+            }
+            
+            dataLoadPromise = fetch(dataFileUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Failed to load data: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    testData = data;
+                    return testData;
+                })
+                .catch(error => {
+                    console.error('Error loading test data:', error);
+                    // Return empty data structure on error
+                    testData = {
+                        history_for_js: {},
+                        history_descriptions: {},
+                        test_descriptions: {},
+                        test_success_rates: {}
+                    };
+                    return testData;
+                });
+            
+            return dataLoadPromise;
+        }
+        
+        // Initialize with empty data structures (will be populated when needed)
+        let testHistory = {};
+        let historyDescriptions = {};
+        let testDescriptions = {};
+        let testSuccessRates = {};
+        
+        // Helper functions to get data (with lazy loading)
+        async function getTestHistory() {
+            if (Object.keys(testHistory).length === 0) {
+                const data = await loadTestData();
+                testHistory = data.history_for_js || {};
+            }
+            return testHistory;
+        }
+        
+        async function getHistoryDescriptions() {
+            if (Object.keys(historyDescriptions).length === 0) {
+                const data = await loadTestData();
+                historyDescriptions = data.history_descriptions || {};
+            }
+            return historyDescriptions;
+        }
+        
+        async function getTestDescriptions() {
+            if (Object.keys(testDescriptions).length === 0) {
+                const data = await loadTestData();
+                testDescriptions = data.test_descriptions || {};
+            }
+            return testDescriptions;
+        }
+        
+        async function getTestSuccessRates() {
+            if (Object.keys(testSuccessRates).length === 0) {
+                const data = await loadTestData();
+                testSuccessRates = data.test_success_rates || {};
+            }
+            return testSuccessRates;
+        }
+        
         const testCounts = {{ test_counts | tojson }};
         
         // Current filter state
@@ -965,11 +1037,12 @@
         let currentTimeoutFilter = false; // Additional filter for timeout issues
         let currentGroupBy = 'none'; // 'none' or 'suite'
         
-        function getHistoryError(testName, timestamp) {
-            if (!historyDescriptions || !historyDescriptions[testName]) return '';
+        async function getHistoryError(testName, timestamp) {
+            const descs = await getHistoryDescriptions();
+            if (!descs || !descs[testName]) return '';
             // timestamp всегда строка в historyDescriptions (ключи преобразованы в строки)
             const timestampStr = String(timestamp);
-            return historyDescriptions[testName][timestampStr] || '';
+            return descs[testName][timestampStr] || '';
         }
 
         function toggleSuite(suiteId) {
@@ -1543,19 +1616,21 @@
             if (errorContent.classList.contains('hidden')) {
                 // Load error description on demand if not already loaded
                 if (!errorContent.hasAttribute('data-loaded')) {
-                    const errorText = testDescriptions[testName] || '';
-                    if (errorText) {
-                        const isPython = testName.includes('.py');
-                        const codeElement = document.createElement('code');
-                        codeElement.className = 'language-' + (isPython ? 'python' : 'cpp');
-                        codeElement.textContent = errorText;
-                        const preElement = document.createElement('pre');
-                        preElement.appendChild(codeElement);
-                        errorContent.appendChild(preElement);
-                        // Mark for later highlighting (will be done after showing)
-                        codeElement.setAttribute('data-needs-highlight', 'true');
-                    }
-                    errorContent.setAttribute('data-loaded', 'true');
+                    getTestDescriptions().then(descs => {
+                        const errorText = descs[testName] || '';
+                        if (errorText) {
+                            const isPython = testName.includes('.py');
+                            const codeElement = document.createElement('code');
+                            codeElement.className = 'language-' + (isPython ? 'python' : 'cpp');
+                            codeElement.textContent = errorText;
+                            const preElement = document.createElement('pre');
+                            preElement.appendChild(codeElement);
+                            errorContent.appendChild(preElement);
+                            // Mark for later highlighting (will be done after showing)
+                            codeElement.setAttribute('data-needs-highlight', 'true');
+                        }
+                        errorContent.setAttribute('data-loaded', 'true');
+                    });
                 }
                 
                 // Show immediately without blocking
@@ -1587,19 +1662,21 @@
             if (errorContent.classList.contains('hidden')) {
                 // Load error description on demand if not already loaded
                 if (!errorContent.hasAttribute('data-loaded')) {
-                    const errorText = testDescriptions[testName] || '';
-                    if (errorText) {
-                        const isPython = testName.includes('.py');
-                        const codeElement = document.createElement('code');
-                        codeElement.className = 'language-' + (isPython ? 'python' : 'cpp');
-                        codeElement.textContent = errorText;
-                        const preElement = document.createElement('pre');
-                        preElement.appendChild(codeElement);
-                        errorContent.appendChild(preElement);
-                        // Mark for later highlighting (will be done after showing)
-                        codeElement.setAttribute('data-needs-highlight', 'true');
-                    }
-                    errorContent.setAttribute('data-loaded', 'true');
+                    getTestDescriptions().then(descs => {
+                        const errorText = descs[testName] || '';
+                        if (errorText) {
+                            const isPython = testName.includes('.py');
+                            const codeElement = document.createElement('code');
+                            codeElement.className = 'language-' + (isPython ? 'python' : 'cpp');
+                            codeElement.textContent = errorText;
+                            const preElement = document.createElement('pre');
+                            preElement.appendChild(codeElement);
+                            errorContent.appendChild(preElement);
+                            // Mark for later highlighting (will be done after showing)
+                            codeElement.setAttribute('data-needs-highlight', 'true');
+                        }
+                        errorContent.setAttribute('data-loaded', 'true');
+                    });
                 }
                 
                 // Show immediately without blocking
@@ -1856,48 +1933,64 @@
             const owner = testItem.getAttribute('data-test-owner') || '';
             const ownerMatch = owner.match(/TEAM:@ydb-platform\/([^;:]+)/);
             const ownerSimple = ownerMatch ? ownerMatch[1] : owner;
-            // Get success/fail counts from test history if available
-            let success_count = 0;
-            let fail_count = 0;
-            if (testHistory && testHistory[testName]) {
-                for (const timestamp in testHistory[testName]) {
-                    const status = testHistory[testName][timestamp].status;
-                    if (status === 'passed') success_count++;
-                    else if (status === 'failure' || status === 'mute') fail_count++;
+            // Get success/fail counts from test history if available (async)
+            getTestHistory().then(history => {
+                let success_count = 0;
+                let fail_count = 0;
+                if (history && history[testName]) {
+                    for (const timestamp in history[testName]) {
+                        const status = history[testName][timestamp].status;
+                        if (status === 'passed') success_count++;
+                        else if (status === 'failure' || status === 'mute') fail_count++;
+                    }
                 }
-            }
-            const is_sanitizer = testItem.querySelector('.sanitizer-badge') !== null;
-            let errorText = '';
-            // Try to get from loaded error content first
-            const errorContent = testItem.querySelector('.error-content pre code');
-            if (errorContent) {
-                errorText = errorContent.textContent;
-            } else {
-                // If not loaded yet, get from testDescriptions
-                errorText = testDescriptions[testName] || '';
-            }
-            let logUrls = {};
-            const logLinks = testItem.querySelectorAll('.log-link');
-            logLinks.forEach(link => {
-                logUrls[link.textContent] = link.href;
+                const is_sanitizer = testItem.querySelector('.sanitizer-badge') !== null;
+                let errorText = '';
+                // Try to get from loaded error content first
+                const errorContent = testItem.querySelector('.error-content pre code');
+                if (errorContent) {
+                    errorText = errorContent.textContent;
+                    let logUrls = {};
+                    const logLinks = testItem.querySelectorAll('.log-link');
+                    logLinks.forEach(link => {
+                        logUrls[link.textContent] = link.href;
+                    });
+                    createIssue(testName, ownerSimple, success_count, fail_count, is_sanitizer, errorText, logUrls);
+                } else {
+                    // If not loaded yet, get from testDescriptions
+                    getTestDescriptions().then(descs => {
+                        errorText = descs[testName] || '';
+                        let logUrls = {};
+                        const logLinks = testItem.querySelectorAll('.log-link');
+                        logLinks.forEach(link => {
+                            logUrls[link.textContent] = link.href;
+                        });
+                        createIssue(testName, ownerSimple, success_count, fail_count, is_sanitizer, errorText, logUrls);
+                    });
+                }
             });
-            createIssue(testName, ownerSimple, success_count, fail_count, is_sanitizer, errorText, logUrls);
         }
         
-        function showSuccessRateModal(testFullName) {
+        async function showSuccessRateModal(testFullName) {
             const modal = document.getElementById('successRateModal');
             const modalTitle = document.getElementById('successRateModalTitle');
             const modalContent = document.getElementById('successRateModalContent');
             
-            if (!testHistory || !testHistory[testFullName] || !testSuccessRates || !testSuccessRates[testFullName]) {
+            // Load data asynchronously
+            const [history, rates] = await Promise.all([
+                getTestHistory(),
+                getTestSuccessRates()
+            ]);
+            
+            if (!history || !history[testFullName] || !rates || !rates[testFullName]) {
                 modalTitle.textContent = `Success Rate: ${testFullName}`;
                 modalContent.innerHTML = '<div style="padding: 20px;"><p>No history data available for this test.</p><p>History is collected for the last 4 days for failed, error, and muted tests.</p></div>';
                 modal.style.display = 'block';
                 return;
             }
             
-            const rates = testSuccessRates[testFullName];
-            const history = testHistory[testFullName];
+            const testRates = rates[testFullName];
+            const testHistory = history[testFullName];
             
             // Build modal content
             let html = '<div style="margin-bottom: 20px;">';
@@ -2041,13 +2134,14 @@
             modal.style.display = 'block';
         }
         
-        function showHistoryEntry(testName, timestamp) {
-            if (!testHistory || !testHistory[testName] || !testHistory[testName][timestamp]) return;
+        async function showHistoryEntry(testName, timestamp) {
+            const history = await getTestHistory();
+            if (!history || !history[testName] || !history[testName][timestamp]) return;
             
-            const entry = testHistory[testName][timestamp];
+            const entry = history[testName][timestamp];
             const timestampStr = String(timestamp);
             // Get error text from separate historyDescriptions object
-            const errorText = getHistoryError(testName, timestampStr);
+            const errorText = await getHistoryError(testName, timestampStr);
             
             // Find the test item to get log URLs
             const testItem = document.querySelector(`[data-test-name="${testName}"]`);

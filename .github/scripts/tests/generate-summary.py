@@ -663,6 +663,20 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     # Prepare flat sorted list of all visible tests (for default "no grouping" view)
     all_tests_sorted = sorted(visible_rows, key=attrgetter("full_name"))
     
+    # Save data to separate JSON file to reduce HTML size
+    data_file = fn.replace('.html', '_data.json')
+    data_to_save = {
+        'history_for_js': history_for_js,
+        'history_descriptions': history_descriptions,
+        'test_descriptions': test_descriptions,
+        'test_success_rates': test_success_rates
+    }
+    with open(data_file, "w", encoding="utf-8") as f:
+        json.dump(data_to_save, f, separators=(',', ':'))  # Minified JSON
+    
+    # Calculate data file URL (relative to HTML file)
+    data_file_url = os.path.basename(data_file)
+    
     content = env.get_template("summary_v2.html").render(
         suites=suites_dict,
         all_tests_sorted=all_tests_sorted,  # Flat sorted list for default view
@@ -670,10 +684,11 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
         sanitizer_suites=sanitizer_suites,
         test_counts=test_counts,
         history=history,  # Keep for template checks (test.full_name in history)
-        history_for_js=history_for_js,  # Optimized history for JS (without status_description)
-        history_descriptions=history_descriptions,  # Separate object for error descriptions (loaded on demand)
-        test_descriptions=test_descriptions,  # Separate object for current test error descriptions (loaded on demand)
-        test_success_rates=test_success_rates,  # Success rates for pr-check and other runs
+        history_for_js={},  # Empty - will be loaded from JSON
+        history_descriptions={},  # Empty - will be loaded from JSON
+        test_descriptions={},  # Empty - will be loaded from JSON
+        test_success_rates={},  # Empty - will be loaded from JSON
+        data_file_url=data_file_url,  # URL to JSON data file
         build_preset=build_preset,
         buid_preset_params=buid_preset_params,
         branch=branch,

@@ -1,5 +1,5 @@
 items:
-- name: YDB SDK
+- name: YDB SDK и фреймворки
   include:
     mode: link
     path: ydb-sdk/toc_p.yaml

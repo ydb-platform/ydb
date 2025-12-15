@@ -2049,12 +2049,7 @@ function drainNode(element, nodeId) {
 function rebalanceTablets() {
     $('#balancerProgress').html('o.O');
     var max_movements = $('#balancer_max_movements').val();
-<<<<<<< HEAD
-    $.ajax({url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements});
-=======
-    var in_flight = $('#balancer_in_flight').val();
-    $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements + '&inflight=' + in_flight});
->>>>>>> 94fcb4ae8fb (only accept post requests in hive for effectful http operations (#30038))
+    $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements});
 }
 
 function rebalanceTabletsFromScratch(element) {
@@ -2628,13 +2623,10 @@ public:
     TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TBase(hive)
         , TLoggedMonTransaction(ev, hive)
-<<<<<<< HEAD
         , Source(source)
         , NodeId(nodeId)
         , Down(down)
-=======
         , Event(ev->Release())
->>>>>>> 94fcb4ae8fb (only accept post requests in hive for effectful http operations (#30038))
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOWN; }
@@ -2850,12 +2842,8 @@ class TTxMonEvent_Rebalance : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     int MaxMovements = 1000;
-<<<<<<< HEAD
-=======
-    ui64 MaxInFlight = 1;
     TString Response = "{}";
     THolder<NMon::TEvRemoteHttpInfo> Event;
->>>>>>> 94fcb4ae8fb (only accept post requests in hive for effectful http operations (#30038))
 
     TTxMonEvent_Rebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
@@ -2992,26 +2980,17 @@ public:
         return SelfId().LocalId();
     }
 
-<<<<<<< HEAD
     void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
         ++TabletsDone;
-=======
-    void AddTablet(TLeaderTabletInfo* tablet) {
-        tablet->ActorsToNotifyOnRestart.push_back(SelfId());
-        ++TabletsTotal;
-    }
-
-    void AddContext(const TString& key, const TString& value) {
-        Response[key] = value;
-    }
-
-    void CheckCompletion() {
->>>>>>> 3dc0eba1e0e (remove legacy multiple tablets reassign http api (#29554))
         if (TabletsDone >= TabletsTotal) {
             Response["total"] = TabletsDone;
             Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Response, false)));
             PassAway();
         }
+    }
+
+    void AddContext(const TString& key, const TString& value) {
+        Response[key] = value;
     }
 
     STATEFN(StateWork) {
@@ -3078,13 +3057,9 @@ public:
     TVector<ui32> ForcedGroupIds;
     TString Error;
     bool Wait = true;
-<<<<<<< HEAD
-=======
-    bool Async = false;
     bool BypassLimit = false;
 
     static constexpr size_t REASSIGN_SOFT_LIMIT = 500;
->>>>>>> 3dc0eba1e0e (remove legacy multiple tablets reassign http api (#29554))
 
     TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive, const TCgiParameters& params)
         : TBase(hive)
@@ -3092,24 +3067,11 @@ public:
         , Source(source)
         , TabletFilter(params)
     {
-<<<<<<< HEAD
-        TabletChannels = Scan<ui32>(SplitString(Event->Cgi().Get("channel"), ","));
-        GroupId = FromStringWithDefault(Event->Cgi().Get("group"), GroupId);
-        ForcedGroupIds = Scan<ui32>(SplitString(Event->Cgi().Get("forcedGroup"), ","));
-        Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
-<<<<<<< HEAD
-=======
-        Async = FromStringWithDefault(Event->Cgi().Get("async"), Async);
-        BypassLimit = FromStringWithDefault(Event->Cgi().Get("bypassLimit"), BypassLimit);
->>>>>>> 3dc0eba1e0e (remove legacy multiple tablets reassign http api (#29554))
-=======
         TabletChannels = Scan<ui32>(SplitString(params.Get("channel"), ","));
         GroupId = FromStringWithDefault(params.Get("group"), GroupId);
         ForcedGroupIds = Scan<ui32>(SplitString(params.Get("forcedGroup"), ","));
         Wait = FromStringWithDefault(params.Get("wait"), Wait);
-        Async = FromStringWithDefault(params.Get("async"), Async);
         BypassLimit = FromStringWithDefault(params.Get("bypassLimit"), BypassLimit);
->>>>>>> 94fcb4ae8fb (only accept post requests in hive for effectful http operations (#30038))
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
@@ -3140,31 +3102,8 @@ public:
             Error = "forcedGroup size should be equal to channel size";
             return true;
         }
-<<<<<<< HEAD
-        TVector<TLeaderTabletInfo*> tablets;
-        if (TabletId != 0) {
-            TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
-            if (tablet != nullptr) {
-                tablets.push_back(tablet);
-            }
-        } else if (TabletType != TTabletTypes::TypeInvalid) {
-            for (auto& pr : Self->Tablets) {
-                if (pr.second.Type == TabletType) {
-                    tablets.push_back(&pr.second);
-                }
-            }
-        } else {
-            for (auto& pr : Self->Tablets) {
-                tablets.push_back(&pr.second);
-            }
-=======
-        if (!ForcedGroupIds.empty() && Async) {
-            Error = "cannot provide force groups in async mode";
-            return true;
-        }
         if (!TabletFilter.IsValidFilter(Error)) {
             return true;
->>>>>>> 3dc0eba1e0e (remove legacy multiple tablets reassign http api (#29554))
         }
         if (TabletFilter.AllowsEverything() && GroupId == 0) {
             Error = "cannot reassign all tablets";
@@ -3211,17 +3150,13 @@ public:
             if (Wait) {
                 tablet->ActorsToNotifyOnRestart.emplace_back(waitActorId); // volatile settings, will not persist upon restart
             }
-<<<<<<< HEAD
             operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds));
-=======
-            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds, Async));
             if (!BypassLimit && operations.size() >= REASSIGN_SOFT_LIMIT) {
                 if (Wait) {
                     waitActor->AddContext("limit_reached", "true");
                 }
                 break;
             }
->>>>>>> 3dc0eba1e0e (remove legacy multiple tablets reassign http api (#29554))
         }
         if (Wait) {
             waitActor->TabletsTotal = operations.size();
@@ -4199,86 +4134,6 @@ public:
     }
 };
 
-<<<<<<< HEAD
-=======
-
-class TTxMonEvent_SetDomain : public TTransactionBase<THive>, TLoggedMonTransaction {
-public:
-    TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
-    const TActorId Source;
-    TTabletId TabletId = 0;
-    TTabletId SchemeShard = 0;
-    TObjectId PathId = 0;
-    TTabletId OldSchemeShard = 0;
-    TObjectId OldPathId = 0;
-    bool Success = false;
-
-    TTxMonEvent_SetDomain(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
-        : TBase(hive)
-        , TLoggedMonTransaction(ev, hive)
-        , Event(ev->Release())
-        , Source(source)
-    {
-        auto cgi = GetParams(Event.Get());
-        TabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), TabletId);
-        SchemeShard = FromStringWithDefault<TTabletId>(cgi.Get("schemeshard"), SchemeShard);
-        PathId = FromStringWithDefault<TObjectId>(cgi.Get("pathid"), PathId);
-        OldSchemeShard = FromStringWithDefault<TTabletId>(cgi.Get("oldSchemeshard"), OldSchemeShard);
-        OldPathId = FromStringWithDefault<TObjectId>(cgi.Get("oldPathid"), OldPathId);
-    }
-
-    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOMAIN; }
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
-            return true;
-        }
-        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
-        TSubDomainKey newDomain(SchemeShard, PathId);
-        TSubDomainKey clientOldDomain(OldSchemeShard, OldPathId);
-        if (tablet != nullptr) {
-            NIceDb::TNiceDb db(txc.DB);
-            auto rowset = db.Table<Schema::Tablet>().Key(TabletId).Select<Schema::Tablet::ObjectDomain>();
-            if (!rowset.IsReady()) {
-                return false;
-            }
-            TSubDomainKey oldDomain(rowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
-            if (clientOldDomain && oldDomain != clientOldDomain) {
-                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Old domain does not match, have " << oldDomain <<  ", provided " << clientOldDomain << "\"}"));
-                return true;
-            }
-            if (rowset.HaveValue<Schema::Tablet::ObjectDomain>() && (bool)oldDomain) {
-                if (oldDomain == newDomain) {
-                    ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"ALREADY\"}"));
-                    return true;
-                } else if (!clientOldDomain) {
-                    ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Domain already set to " << oldDomain << "\"}"));
-                    return true;
-                }
-            }
-            tablet->AssignDomains(newDomain, tablet->NodeFilter.AllowedDomains);
-            tablet->TabletStorageInfo->TenantPathId = tablet->GetTenant();
-            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ObjectDomain>(tablet->ObjectDomain);
-            NJson::TJsonValue jsonOperation;
-            jsonOperation["Tablet"] = TabletId;
-            jsonOperation["ObjectDomain"] = TStringBuilder() << newDomain;
-            WriteOperation(db, jsonOperation);
-            Success = true;
-        } else {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Tablet not found\"}"));
-        }
-        return true;
-    }
-
-    void Complete(const TActorContext& ctx) override {
-        if (Success) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"OK\"}"));
-        }
-    }
-};
-
->>>>>>> 94fcb4ae8fb (only accept post requests in hive for effectful http operations (#30038))
 class TUpdateResourcesActor : public TActorBootstrapped<TUpdateResourcesActor> {
 public:
     TActorId Source;

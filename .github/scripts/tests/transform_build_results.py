@@ -36,7 +36,6 @@ class YTestReportTrace:
             log_print(f"Directory {test_results_dir} doesn't exist")
             return
 
-        # find the test result
         for folder in os.listdir(test_results_dir):
             fn = os.path.join(self.out_root, test_results_dir, folder, "ytest.report.trace")
 
@@ -118,10 +117,9 @@ def save_zip(suite_name, out_dir, url_prefix, logs_dir: Set[str]):
 
     arc_fn = os.path.join(out_dir, arc_name)
 
-    zf = zipfile.ZipFile(arc_fn, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=1)
+    zf = zipfile.ZipFile(arc_fn, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=9)
 
     for path in logs_dir:
-        # path is .../test-results/black/testing_out_stuff
         log_print(f"put {path} into {arc_name}")
         test_type = os.path.basename(os.path.dirname(path))
         for root, dirs, files in os.walk(path):
@@ -150,7 +148,6 @@ def load_user_properties(test_dir):
                     with open(properties_file_path, "r") as upf:
                         properties = json.load(upf)
 
-                    # Merge properties into all_properties
                     for key, value in properties.items():
                         if key not in all_properties:
                             all_properties[key] = value
@@ -170,9 +167,7 @@ def strip_rich_markup(text):
     """
     if not text:
         return text
-    # List of known markup tags from app.display
     known_tags = ['imp', 'unimp', 'bad', 'warn', 'good', 'alt1', 'alt2', 'alt3', 'path', 'rst']
-    # Replace only known tags, preserving any other square bracket content
     for tag in known_tags:
         text = text.replace(f'[[{tag}]]', '')
     return text
@@ -183,7 +178,6 @@ def mute_test_result(result):
     if result.get("status") in ("FAILED", "ERROR"):
         result["muted"] = True
         result["status"] = "SKIPPED"
-        # Preserve error information in rich-snippet if it exists
         return True
     return False
 
@@ -193,10 +187,8 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
     with open(report_file, 'r') as f:
         report = json.load(f)
 
-    # Load user properties
     user_properties = load_user_properties(test_dir)
 
-    # Group results by suite (path)
     suites = {}
     for result in report.get("results", []):
         if result.get("type") != "test":
@@ -207,18 +199,11 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             suites[suite_name] = []
         suites[suite_name].append(result)
 
-    # Process each suite
     for suite_name, results in suites.items():
         has_fail_tests = False
-        # Collect all unique logsdir paths for the suite (to archive once per suite, not per test)
         suite_logsdirs = set()
-        # Track which results have logsdir to assign URL only to them
         results_with_logsdir = []
-        # Cache for processed files to avoid duplicate truncate/copy operations
-        # Key: file_path, Value: URL
         processed_files_cache = {}
-        # Track which results need which file URLs
-        # Key: (result, link_type), Value: file_path
         results_file_links = []
 
         for result in results:
@@ -226,10 +211,9 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             name = result.get("name", "")
             subtest_name = result.get("subtest_name", "")
             
-            # Replace :: with . in name (pytest format uses ::, we use .)
             if name:
                 name = name.replace(".py::", ".py.")
-                result["name"] = name  # Update the result to normalize the format
+                result["name"] = name
             
             test_name_for_mute = ""
             if subtest_name:
@@ -240,48 +224,41 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             else:
                 test_name_for_mute = name
 
-            # Convert ERROR to FAILED for all test results (including suite results)
             if result.get("status") == "ERROR":
                 result["status"] = "FAILED"
                 log_print(f"Converted ERROR to FAILED for {suite_name}/{test_name_for_mute}")
 
-            # Check if test failed (before muting, to preserve original status for link processing)
             status = result.get("status", "")
             is_fail = status in ("FAILED", "ERROR")
             has_fail_tests |= is_fail
 
-            # Process links from build-results-report (they are arrays with file/directory paths)
-            # Format: {"stdout": ["/path"], "stderr": ["/path"], "log": ["/path"], "logsdir": ["/path"]}
-            # We update links directly, replacing local paths with URLs for all tests
-            # Process links BEFORE muting to ensure they're converted even for muted tests
             if "links" not in result:
                 result["links"] = {}
             
             original_links = result.get("links", {})
             
-            # Process all link types from links
             for link_type, paths in original_links.items():
                 if not isinstance(paths, list):
                     continue
-                
-                for i, file_path in enumerate(paths):
-                    if link_type == "logsdir":
-                        # Collect logsdir paths for later archiving (once per suite, not per test)
-                        # This prevents multiple archiving of the same directory
+                if link_type == "logsdir":
+                    for file_path in paths:
                         if os.path.isdir(file_path):
                             suite_logsdirs.add(file_path)
-                            # Track this result for later URL assignment
                             if result not in results_with_logsdir:
                                 results_with_logsdir.append(result)
-                        # Don't process URL yet - will do it after archiving
-                    else:
-                        # Other links are files - collect for batch processing (once per suite, not per test)
-                        # This prevents multiple truncate/copy operations for the same file
-                        if os.path.isfile(file_path):
-                            # Track this file for later processing
+                    break
+            
+            if is_fail:
+                for link_type, paths in original_links.items():
+                    if not isinstance(paths, list):
+                        continue
+                    if link_type == "logsdir":
+                        continue
+                    
+                    for i, file_path in enumerate(paths):
+                        if os.path.isfile(file_path) and os.stat(file_path).st_size > 0:
                             results_file_links.append((result, link_type, file_path))
                         else:
-                            # File doesn't exist, but create URL anyway for consistency
                             try:
                                 rel_path = os.path.relpath(file_path, ya_out_dir)
                                 quoted_path = urllib.parse.quote(rel_path)
@@ -289,53 +266,40 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                                 result["links"][link_type] = [url]
                                 break
                             except ValueError:
-                                # Path is not relative to ya_out_dir, skip
                                 pass
 
-            # Check if test should be muted (after processing links)
             if mute_check(suite_name, test_name_for_mute):
                 log_print("mute", suite_name, test_name_for_mute)
                 mute_test_result(result)
 
-            # Initialize properties dict only for user properties (if needed)
             if test_dir and path_str in user_properties:
                 if subtest_name and subtest_name in user_properties[path_str]:
                     if "properties" not in result:
                         result["properties"] = {}
                     result["properties"].update(user_properties[path_str][subtest_name])
 
-        # Process files ONCE per suite (not per test) - this prevents multiple truncate/copy operations
-        # for the same file when multiple tests share the same log file
         for result, link_type, file_path in results_file_links:
             if file_path not in processed_files_cache:
-                # Process file only once
                 url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
                 processed_files_cache[file_path] = url
             else:
-                # Reuse cached URL
                 url = processed_files_cache[file_path]
             
-            # Assign URL to result
             if "links" not in result:
                 result["links"] = {}
             result["links"][link_type] = [url]
 
-        # Archive logsdir ONCE per suite (not per test) - this is the critical performance fix
-        # This prevents multiple archiving of the same directory when multiple tests share the same logsdir
         if has_fail_tests and suite_logsdirs:
             url = save_zip(suite_name, test_stuff_out, test_stuff_prefix, suite_logsdirs)
-            # Assign the URL only to results that have logsdir
-            for result in results_with_logsdir:
+            for result in results:
                 if "links" not in result:
                     result["links"] = {}
                 result["links"]["logsdir"] = [url]
 
-    # Strip rich markup from all results (not just test results) to ensure cleanup
     for result in report.get("results", []):
         if "rich-snippet" in result and result["rich-snippet"]:
             result["rich-snippet"] = strip_rich_markup(result["rich-snippet"])
 
-    # Save updated report
     with open(report_file, 'w') as f:
         json.dump(report, f, indent=2)
 

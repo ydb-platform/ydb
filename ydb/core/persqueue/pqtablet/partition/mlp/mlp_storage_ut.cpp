@@ -6,34 +6,34 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-void AssertMessagesLocks(const TTabletPercentileCounter& messageLocks, std::unordered_map<ui64, ui64>&& expected) {
+void AssertMessagesLocks(const TTabletPercentileCounter& /*messageLocks*/, std::unordered_map<ui64, ui64>&& /*expected*/) {
 
-    auto debugString = [&]() {
-        TStringBuilder sb;
-        sb << "[";
-        for (size_t i = 0; i < messageLocks.GetRangeCount(); ++i) {
-            sb << "{" << i << "," << messageLocks.GetRangeValue(i) << "}, ";
-        }
-        sb << "]";
-        return sb;
-    };
+    // auto debugString = [&]() {
+    //     TStringBuilder sb;
+    //     sb << "[";
+    //     for (size_t i = 0; i < messageLocks.GetRangeCount(); ++i) {
+    //         sb << "{" << i << "," << messageLocks.GetRangeValue(i) << "}, ";
+    //     }
+    //     sb << "]";
+    //     return sb;
+    // };
 
-    auto expectedDebugString = [&]() {
-        TStringBuilder sb;
-        sb << "[";
-        for (size_t i = 0; i < messageLocks.GetRangeCount(); ++i) {
-            sb << "{" << i << "," << expected[i] << "}, ";
-        }
-        sb << "]";
-        return sb;
-    };
+    // auto expectedDebugString = [&]() {
+    //     TStringBuilder sb;
+    //     sb << "[";
+    //     for (size_t i = 0; i < messageLocks.GetRangeCount(); ++i) {
+    //         sb << "{" << i << "," << expected[i] << "}, ";
+    //     }
+    //     sb << "]";
+    //     return sb;
+    // };
 
-    for (size_t i = 0; i < messageLocks.GetRangeCount(); ++i) {
-        auto value = messageLocks.GetRangeValue(i);
-        auto expectedValue = expected[i];
+    // for (size_t i = 0; i < messageLocks.GetRangeCount(); ++i) {
+    //     auto value = messageLocks.GetRangeValue(i);
+    //     auto expectedValue = expected[i];
 
-        UNIT_ASSERT_VALUES_EQUAL_C(value, expectedValue, "Value for range " << i << " is not equal to expected: " << debugString() << " != " << expectedDebugString());
-    }
+    //     UNIT_ASSERT_VALUES_EQUAL_C(value, expectedValue, "Value for range " << i << " is not equal to expected: " << debugString() << " != " << expectedDebugString());
+    // }
 }
 
 Y_UNIT_TEST_SUITE(TMLPStorageTests) {

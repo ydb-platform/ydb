@@ -1287,6 +1287,7 @@ private:
                 db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, row).Delete();
             }
             buildInfo.KMeans.FilterBorderRows.clear();
+            buildInfo.Sample.Clear();
             return true;
         }
         // Wait for upload

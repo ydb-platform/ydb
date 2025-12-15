@@ -234,7 +234,7 @@ ydb_custom_pre_init_scripts
 # Start YDB in a background process
 log init "Starting YDB..."
 mkdir -p "${YDB_PDISKS_DIRECTORY}"
-/local_ydb deploy --ydb-working-dir /ydb_data --ydb-binary-path /ydbd --fixed-ports "$@" 1> >(log_stream "deploy|stdout") 2> >(log_stream "deploy|stderr")
+/local_ydb deploy --ydb-working-dir "${YDB_WORKING_DIR}" --ydb-binary-path /ydbd --fixed-ports "$@" 1> >(log_stream "deploy|stdout") 2> >(log_stream "deploy|stderr")
 deploy_exit_code=$?
 
 if [ $deploy_exit_code -ne 0 ]; then

@@ -118,7 +118,7 @@ def save_zip(suite_name, out_dir, url_prefix, logs_dir: Set[str]):
 
     arc_fn = os.path.join(out_dir, arc_name)
 
-    zf = zipfile.ZipFile(arc_fn, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=9)
+    zf = zipfile.ZipFile(arc_fn, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=1)
 
     for path in logs_dir:
         # path is .../test-results/black/testing_out_stuff
@@ -214,6 +214,12 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
         suite_logsdirs = set()
         # Track which results have logsdir to assign URL only to them
         results_with_logsdir = []
+        # Cache for processed files to avoid duplicate truncate/copy operations
+        # Key: file_path, Value: URL
+        processed_files_cache = {}
+        # Track which results need which file URLs
+        # Key: (result, link_type), Value: file_path
+        results_file_links = []
 
         for result in results:
             path_str = result.get("path", "")
@@ -269,12 +275,11 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                                 results_with_logsdir.append(result)
                         # Don't process URL yet - will do it after archiving
                     else:
-                        # Other links are files - process immediately
+                        # Other links are files - collect for batch processing (once per suite, not per test)
+                        # This prevents multiple truncate/copy operations for the same file
                         if os.path.isfile(file_path):
-                            url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
-                            # Replace first path with URL
-                            result["links"][link_type] = [url]
-                            break
+                            # Track this file for later processing
+                            results_file_links.append((result, link_type, file_path))
                         else:
                             # File doesn't exist, but create URL anyway for consistency
                             try:
@@ -282,6 +287,10 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                                 quoted_path = urllib.parse.quote(rel_path)
                                 url = f"{log_url_prefix}{quoted_path}"
                                 result["links"][link_type] = [url]
+                                # Also add to properties for consistency
+                                if "properties" not in result:
+                                    result["properties"] = {}
+                                result["properties"][f"url:{link_type}"] = url
                                 break
                             except ValueError:
                                 # Path is not relative to ya_out_dir, skip
@@ -298,6 +307,26 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                     if "properties" not in result:
                         result["properties"] = {}
                     result["properties"].update(user_properties[path_str][subtest_name])
+
+        # Process files ONCE per suite (not per test) - this prevents multiple truncate/copy operations
+        # for the same file when multiple tests share the same log file
+        for result, link_type, file_path in results_file_links:
+            if file_path not in processed_files_cache:
+                # Process file only once
+                url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
+                processed_files_cache[file_path] = url
+            else:
+                # Reuse cached URL
+                url = processed_files_cache[file_path]
+            
+            # Assign URL to result
+            if "links" not in result:
+                result["links"] = {}
+            result["links"][link_type] = [url]
+            # Also add to properties for consistency (same as logsdir)
+            if "properties" not in result:
+                result["properties"] = {}
+            result["properties"][f"url:{link_type}"] = url
 
         # Archive logsdir ONCE per suite (not per test) - this is the critical performance fix
         # This prevents multiple archiving of the same directory when multiple tests share the same logsdir

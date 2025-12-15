@@ -452,4 +452,13 @@ struct TPDiskConfig : public TThrRefBase {
     }
 };
 
+struct TInferPDiskSlotCountSettingsForDriveType {
+    ui64 UnitSize = 0;
+    ui32 MaxSlots = 0;
+
+    explicit operator bool() const {
+        return UnitSize && MaxSlots;
+    }
+};
+
 } // NKikimr

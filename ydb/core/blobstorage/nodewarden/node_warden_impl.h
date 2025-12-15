@@ -282,6 +282,8 @@ namespace NKikimr::NStorage {
             return LocalPDiskInitOwnerRound;
         }
 
+        TInferPDiskSlotCountSettingsForDriveType GetInferPDiskSlotCountSettingsForDriveType(NPDisk::EDeviceType type) const;
+        bool PreferInferredSettingsOverExplicit() const;
         TIntrusivePtr<TPDiskConfig> CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
         static void InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes, ui32 maxSlots);
         void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);

@@ -8,6 +8,7 @@ TEST_SRCS(
     test_self_heal.py
     test_tablet_channel_migration.py
     test_vdisks.py
+    test_static_pdisk.py
 )
 
 IF (SANITIZER_TYPE)

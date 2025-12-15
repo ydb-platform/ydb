@@ -34,6 +34,7 @@ public:
     // Table
     ui64 TxId = 0;
     std::optional<ui64> LockId;
+    std::optional<ui32> LockNodeId;
     std::optional<NKikimrDataEvents::ELockMode> LockMode;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
@@ -61,10 +62,16 @@ public:
         ScanCursor = cursor;
     }
 
-    void SetLock(std::optional<ui64> lockId, std::optional<NKikimrDataEvents::ELockMode> lockMode, const NColumnShard::TLockFeatures* lock, const bool readOnlyConflicts) {
+    void SetLock(
+        std::optional<ui64> lockId, 
+        std::optional<ui32> lockNodeId,
+        std::optional<NKikimrDataEvents::ELockMode> lockMode, 
+        const NColumnShard::TLockFeatures* lock,
+        const bool readOnlyConflicts
+    ) {
         LockId = lockId;
+        LockNodeId = lockNodeId;
         LockMode = lockMode;
-
         auto snapshotIsolation = lockId.has_value() && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
 
         readNonconflictingPortions = !readOnlyConflicts;

@@ -144,13 +144,12 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
             AFL_VERIFY(CommitSnapshot);
             // No tx writes (bulk upsert) must break decent/proper txs.
             // Decent/proper txs asked for serializable, so we have to give them serializable. 
-            Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
             Self->OperationsManager->BreakConflictingTxs(op->GetLockId());
-            Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), *CommitSnapshot);
+            Self->OperationsManager->CommitTransactionOnComplete(*Self, 0, op->GetLockId(), *CommitSnapshot);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
         } else {
             Self->GetOperationsManager().SetOperationFinished(op->GetWriteId());
-            Self->MaybeCleanupLock(op->GetLockId());
+            Self->MaybeAbortTransaction(op->GetLockId());
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
@@ -170,14 +169,13 @@ TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKiki
     , StartTime(TInstant::Now()) {
 }
 
-bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorContext& /* ctx */) {
+bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& /* txc */, const TActorContext& /* ctx */) {
     for (auto&& wResult : Pack.GetWriteResults()) {
         const auto& writeMeta = wResult.GetWriteMeta();
         writeMeta.OnStage(NEvWrite::EWriteStage::Replied);
         AFL_VERIFY(!writeMeta.HasLongTxId());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
-        Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
-        Self->OperationsManager->AbortTransactionOnExecute(*Self, op->GetLockId(), txc);
+        Self->GetOperationsManager().SetOperationFinished(op->GetWriteId());
 
         LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, op->GetCookie(), "tx_write", false, wResult.GetErrorMessage());
         auto ev = NEvents::TDataEvents::TEvWriteResult::BuildError(Self->TabletID(), op->GetLockId(),
@@ -198,7 +196,7 @@ void TTxBlobsWritingFailed::DoComplete(const TActorContext& ctx) {
         const auto& writeMeta = wResult.GetWriteMeta();
         writeMeta.OnStage(NEvWrite::EWriteStage::Aborted);
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
-        Self->OperationsManager->AbortTransactionOnComplete(*Self, op->GetLockId());
+        Self->TransactionToAbort(op->GetLockId());
     }
 }
 

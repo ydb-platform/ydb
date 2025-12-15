@@ -773,14 +773,14 @@ class WorkloadSecondaryIndex(WorkloadBase):
         table_name: str,
         pk_size: int,
     ) -> None:
-        try:
-            """Verify a single index table against the main table"""
-            # Process index table data
-            index_data = {}
-            for row in index_rows:
-                key = tuple(row[f'c{col}'] for col in range(pk_size))
-                index_data[key] = row
+        """Verify a single index table against the main table"""
+        # Process index table data
+        index_data = {}
+        for row in index_rows:
+            key = tuple(row[f'c{col}'] for col in range(pk_size))
+            index_data[key] = row
 
+        try:
             logger.info(f"Index idx{index_id} has {len(index_data)} rows")
 
             # Check data size consistency
@@ -807,8 +807,8 @@ class WorkloadSecondaryIndex(WorkloadBase):
             # Check uniqueness constraint if applicable
             if index_desc.unique:
                 self._verify_index_uniqueness(index_rows, index_desc, index_id, table_name)
-        except e:
-            logger.error(f"Expection: {e}")
+        except:
+            logger.error("Expection")
             logger.error(f"Main: {main_data}")
             logger.error(f"Index: {index_data}")
             raise

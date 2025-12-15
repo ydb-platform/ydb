@@ -25,6 +25,7 @@ class WorkloadRunner:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self._cleanup()
+        pass
 
     def _cleanup(self):
         print(f"Cleaning up {self.tables_prefix}...")

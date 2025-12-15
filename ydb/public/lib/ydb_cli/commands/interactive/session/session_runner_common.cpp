@@ -10,6 +10,7 @@ TSessionRunnerBase::TSessionRunnerBase(const TLineReaderSettings& settings, cons
 {}
 
 ILineReader::TPtr TSessionRunnerBase::Setup() {
+    LineReader.reset();
     LineReader = CreateLineReader(Settings, Log);
     return LineReader;
 }

@@ -82,6 +82,7 @@ public:
         , ContinueAfterCancel(settings.ContinueAfterCancel)
         , EnableSwitchMode(settings.EnableSwitchMode)
         , Prompt(settings.Prompt)
+        , Placeholder(settings.Placeholder)
     {
         std::vector<TString> completionCommands(settings.AdditionalCommands.begin(), settings.AdditionalCommands.end());
         if (EnableSwitchMode) {
@@ -171,8 +172,13 @@ private:
         });
 
         Rx->set_hint_delay(100);
-        Rx->set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
-            return YQLCompleter->ApplyLight(Rx->get_state().text(), prefix, contextLen);
+        Rx->set_hint_callback([this](const std::string& prefix, int& contextLen, replxx::Replxx::Color& color) {
+            const char* text = Rx->get_state().text();
+            if ((text == nullptr || text[0] == '\0') && !Placeholder.empty()) {
+                color = replxx::Replxx::Color::GRAY;
+                return std::vector<std::string>{std::string(Placeholder)};
+            }
+            return YQLCompleter->ApplyLight(text, prefix, contextLen);
         });
 
         if (enableYqlCompletion) {
@@ -269,6 +275,7 @@ private:
     const bool ContinueAfterCancel = true;
     const bool EnableSwitchMode = true;
     const TString Prompt;
+    const TString Placeholder;
     std::optional<replxx::Replxx> Rx;
     std::optional<THistory> History;
     bool SwitchRequested = false;

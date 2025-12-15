@@ -134,6 +134,7 @@ private:
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::AI) << "> ",
             .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_ai_history.txt",
             .AdditionalCommands = {"/help", "/model", "/config"},
+            .Placeholder = "Type message (Enter to send, Ctrl+J for newline, Ctrl+T for YQL mode, Ctrl+D to exit)",
             .EnableYqlCompletion = false,
         };
     }

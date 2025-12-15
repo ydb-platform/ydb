@@ -180,6 +180,7 @@ private:
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
             .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_sql_history.txt",
             .AdditionalCommands = {"/help"},
+            .Placeholder = "Type YQL query (Enter to execute, Ctrl+J for newline, Ctrl+T for AI mode, Ctrl+D to exit)",
         };
     }
 

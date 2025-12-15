@@ -58,6 +58,10 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         Cout << "Database: " << Log.EntityName(config.Database) << Endl;
     }
 
+    if (const auto& aiProfile = configurationManager->GetAiProfile(configurationManager->GetActiveAiProfileName())) {
+        Cout << "AI profile: " << Log.EntityName(aiProfile->GetName()) << Endl;
+    }
+
     TStringBuilder connectionStringBuilder;
     // config.InitialArgC and config.InitialArgV contain all arguments passed to the CLI
     for (int i = 0; i < config.InitialArgC; ++i) {
@@ -75,9 +79,9 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
     if (!activeSession) {
-        Cout << "Write YQL query text or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
+        Cout << "Type YQL query text or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
     } else {
-        Cout << "Write textual request or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
+        Cout << "Type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
     }
 
     Y_VALIDATE(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid), "Unexpected default mode: " << activeSession);

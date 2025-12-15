@@ -93,7 +93,19 @@ namespace NKikimr {
                     if (staticPDisk && (staticPDisk->PDiskConfig != disk.PDiskConfig
                             || staticPDisk->InferPDiskSlotCountFromUnitSize != disk.InferPDiskSlotCountFromUnitSize
                             || staticPDisk->InferPDiskSlotCountMax != disk.InferPDiskSlotCountMax)) {
-                        throw TExError() << "PDiskConfig mismatch for static disk" << TErrorParams::NodeId(disk.NodeId) << TErrorParams::Path(disk.Path);
+                        throw TExError() << "PDiskConfig mismatch for static disk"
+                            << " Expected# {"
+                                << " PDiskConfig# { " << FormatPDiskConfig(staticPDisk->PDiskConfig) << " }"
+                                << " InferPDiskSlotCountFromUnitSize# " << staticPDisk->InferPDiskSlotCountFromUnitSize
+                                << " InferPDiskSlotCountMax# " << staticPDisk->InferPDiskSlotCountMax
+                            << " }"
+                            << " Provided# {"
+                                << " PDiskConfig# { " << FormatPDiskConfig(disk.PDiskConfig) << " }"
+                                << " InferPDiskSlotCountFromUnitSize# " << disk.InferPDiskSlotCountFromUnitSize
+                                << " InferPDiskSlotCountMax# " << disk.InferPDiskSlotCountMax
+                            << " }"
+                            << TErrorParams::NodeId(disk.NodeId)
+                            << TErrorParams::Path(disk.Path);
                     } else {
                         pdiskInfo->PDiskConfig = disk.PDiskConfig;
                         pdiskInfo->InferPDiskSlotCountFromUnitSize = disk.InferPDiskSlotCountFromUnitSize;
@@ -185,13 +197,15 @@ namespace NKikimr {
                         disk.LastSeenSerial = serial;
                         disk.NodeId = *nodeId;
                         disk.Path = drive.Path;
-                        disk.PDiskCategory = TPDiskCategory(PDiskTypeToPDiskType(driveInfo.Type), driveInfo.Kind);
+                        NPDisk::EDeviceType pdiskType = PDiskTypeToPDiskType(driveInfo.Type);
+                        disk.PDiskCategory = TPDiskCategory(pdiskType, driveInfo.Kind);
                         disk.PDiskConfig = driveInfo.PDiskConfig.GetOrElse(TString());
                         disk.ReadCentric = driveInfo.ReadCentric;
                         disk.Serial = serial;
                         disk.SharedWithOs = driveInfo.SharedWithOs;
-                        disk.InferPDiskSlotCountFromUnitSize = driveInfo.InferPDiskSlotCountFromUnitSize;
-                        disk.InferPDiskSlotCountMax = driveInfo.InferPDiskSlotCountMax;
+                        auto inferSettings = state.Self.GetInferPDiskSlotCountSettingsForDriveType(pdiskType);
+                        disk.InferPDiskSlotCountFromUnitSize = inferSettings.UnitSize;
+                        disk.InferPDiskSlotCountMax = inferSettings.MaxSlots;
 
                         auto diskId = disk.GetId();
                         auto [_, inserted] = disks.try_emplace(diskId, std::move(disk));

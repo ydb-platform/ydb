@@ -266,25 +266,23 @@ public:
 
 class IOptimizerPlannerConstructor {
 public:
-    enum class EOptimizerStrategy {
-        Default,   //use One Layer levels to avoid portion intersections
-        Logs,   // use Zero Levels only for performance
-        LogsInStore
-    };
     class TBuildContext {
     private:
         YDB_READONLY_DEF(TInternalPathId, PathId);
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
-        YDB_READONLY_DEF(EOptimizerStrategy, DefaultStrategy);
+        YDB_READONLY_DEF(NKikimrConfig::TColumnShardConfig::ECompactionType, DefaultStrategy);
 
     public:
         TBuildContext(
-            const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+            const TInternalPathId pathId,
+            const std::shared_ptr<IStoragesManager>& storages,
+            const std::shared_ptr<arrow::Schema>& pkSchema,
+            NKikimrConfig::TColumnShardConfig::ECompactionType defaultStrategy)
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema)
-            , DefaultStrategy(EOptimizerStrategy::Default) {   //TODO configure me via DDL
+            , DefaultStrategy(defaultStrategy) {   //TODO configure me via DDL
         }
     };
 
@@ -307,8 +305,18 @@ public:
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto default_compaction = HasAppData() && AppDataVerified().ColumnShardConfig.HasDefaultCompaction()
-            ? AppDataVerified().ColumnShardConfig.GetDefaultCompaction() : "tiling";
+        auto e_default_compaction = [] {
+            if (!HasAppData()) {
+                return NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompaction();
+            }
+            return AppDataVerified().ColumnShardConfig.GetDefaultCompaction();
+        }();
+        auto default_compaction = [&] {
+            if (e_default_compaction == NKikimrConfig::TColumnShardConfig::TILING) {
+                return "tiling";
+            }
+            return "lc-buckets";
+        }();
         auto result = TFactory::MakeHolder(default_compaction);
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());

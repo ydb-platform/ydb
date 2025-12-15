@@ -32,7 +32,7 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
         }
     } else {
         switch(context.GetDefaultStrategy()) {
-            case EOptimizerStrategy::Default:
+            case NKikimrConfig::TColumnShardConfig::LC_BUCKETS_DEFAULT :
                 levels.emplace_back(std::make_shared<TOneLayerPortions>(
                     5, 1.0, 8 * (1ull << 20),
                     nullptr, portionsInfo, counters->GetLevelCounters(5),
@@ -76,7 +76,7 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
                 ));
                break;
 
-            case EOptimizerStrategy::Logs:
+            case NKikimrConfig::TColumnShardConfig::LC_BUCKETS_LOGS_2 :
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     1, nullptr, counters->GetLevelCounters(1),
                     std::make_shared<TNoOverloadChecker>(),
@@ -91,7 +91,7 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
                 ));
                 break;
 
-            case EOptimizerStrategy::LogsInStore:
+            case NKikimrConfig::TColumnShardConfig::LC_BUCKETS_LOGS_3:
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     2, nullptr, counters->GetLevelCounters(2),
                     std::make_shared<TNoOverloadChecker>(),
@@ -111,7 +111,9 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
                     selectors, defaultSelectorName, 1
                 ));
                 break;
-        }
+            case NKikimrConfig::TColumnShardConfig_ECompactionType_TILING:
+                AFL_VERIFY(false)("TColumnShardConfig_ECompactionType_TILING", "in lc-buckets");
+            }
     }
     std::reverse(levels.begin(), levels.end());
     return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), counters, portionsInfo,

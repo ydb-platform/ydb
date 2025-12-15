@@ -76,7 +76,7 @@ TString TEqWidthHistogram::Serialize() const {
         WriteUnaligned<TBucket>(out + offset, Buckets_[i]);
         offset += sizeof(TBucket);
     }
-    Y_ASSERT(offset == binarySize);
+    Y_ENSURE(offset == binarySize);
     return result;
 }
 

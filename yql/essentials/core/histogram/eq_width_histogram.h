@@ -202,14 +202,14 @@ public:
 
     // Returns a number of elements in a bucket by the given `index`.
     ui64 GetNumElementsInBucket(ui32 index) const {
-        Y_ASSERT(index < GetNumBuckets());
+        Y_ENSURE(index < GetNumBuckets());
         return Buckets_[index].Count;
     }
 
     // Returns the start boundary value of a bucket by the given `index`.
     template <typename T>
     T GetBucketStartBoundary(ui32 index) const {
-        Y_ASSERT(index < GetNumBuckets());
+        Y_ENSURE(index < GetNumBuckets());
         return LoadFrom<T>(Buckets_[index].Start);
     }
 
@@ -221,7 +221,7 @@ public:
         StoreTo<T>(range.End, rangeEnd);
         const T start = LoadFrom<T>(range.Start);
         const T end = LoadFrom<T>(range.End);
-        Y_ASSERT(CmpLess<T>(start, end));
+        Y_ENSURE(CmpLess<T>(start, end));
         const T rangeLen = end - start;
         WriteUnaligned<ui8[EqWidthHistogramBucketStorageSize]>(Buckets_[0].Start, range.Start);
         for (ui32 i = 1; i < GetNumBuckets(); ++i) {

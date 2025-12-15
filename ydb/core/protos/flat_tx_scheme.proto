@@ -162,7 +162,7 @@ message TEvLoginResult {
 }
 
 message TEvListUsers {
-
+    optional string User = 1;
 }
 
 message TEvListUsersResult {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "read_balancer.h"
+#include "read_balancer__metrics.h"
 #include "read_balancer__schema.h"
 
 #include <ydb/core/tablet/tablet_exception.h>
@@ -60,7 +61,8 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                     Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
 
                     if (SplitMergeEnabled(Self->TabletConfig)) {
-                        Self->PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Self->Topic, Self->Path, Self->DatabasePath, Self->PathId, Self->Version, Self->TabletConfig, Self->PartitionGraph);
+                        // TODO DatabasePath is not initialized yet
+                        Self->PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Self->Topic, Self->Path, Self->DatabaseInfo.DatabasePath, Self->PathId, Self->Version, Self->TabletConfig, Self->PartitionGraph);
                     }
                     Self->UpdateConfigCounters();
                 }
@@ -76,8 +78,8 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
 
                 partitionsInfo[part] = {tabletId};
-                Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(),
-                                                partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
+                Self->TopicMetricsHandler->InitializePartitions(part, partsRowset.GetValue<Schema::Partitions::DataSize>(),
+                    partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
 
                 if (!partsRowset.Next())
                     return false;

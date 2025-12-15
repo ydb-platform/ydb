@@ -36,6 +36,22 @@ bool AllowPullUpExtendOverEquiJoin(const TOptimizeContext& optCtx) {
     return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
+bool AllowPayloadRenameOverWindow(const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const char OptName[] = "PayloadRenameOverWindow";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
+}
+
+bool CheckWindowFramesFieldSubsetEnabled(const TOptimizeContext& optCtx) {
+    if (AllowPayloadRenameOverWindow(optCtx)) {
+        // payload renaming requires checking window frame subset before fusing
+        return true;
+    }
+    YQL_ENSURE(optCtx.Types);
+    static const char OptName[] = "CheckWindowFramesFieldSubset";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) || !IsOptimizerDisabled<OptName>(*optCtx.Types);
+}
+
 THashSet<TStringBuf> GetAggregationInputKeys(const TCoAggregate& node) {
     TMaybe<TStringBuf> sessionColumn;
     const auto sessionSetting = GetSetting(node.Settings().Ref(), "session");
@@ -1991,14 +2007,31 @@ TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, T
         .Build();
 }
 
-bool CheckWindowFramesFieldSubset(const TExprNodeList& calcNodes, const TStructExprType& inputItemType, const TTypeAnnotationContext& types) {
-    static const char OptName[] = "CheckWindowFramesFieldSubset";
-    if (!IsOptimizerEnabled<OptName>(types) || IsOptimizerDisabled<OptName>(types)) {
-        return true;
-    }
-
+bool CheckWindowFramesFieldSubset(const TExprNodeList& calcNodes, const TStructExprType& inputItemType) {
     for (auto calcNode : calcNodes) {
         TCoCalcOverWindowTuple calc(calcNode);
+        for (const auto& key : calc.Keys()) {
+            if (!inputItemType.FindItem(key.Value())) {
+                return false;
+            }
+        }
+
+        TExprNodeList traitsInputTypeNodes;
+        if (auto maybeSort = calc.SortSpec().Maybe<TCoSortTraits>()) {
+            traitsInputTypeNodes.push_back(maybeSort.Cast().ListType().Ptr());
+        }
+        if (auto maybeSession = calc.SessionSpec().Maybe<TCoSessionWindowTraits>()) {
+            traitsInputTypeNodes.push_back(maybeSession.Cast().ListType().Ptr());
+        }
+
+        for (auto& typeNode : traitsInputTypeNodes) {
+            YQL_ENSURE(typeNode->GetTypeAnn());
+            const auto& specItemType = *typeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            if (!IsFieldSubset(specItemType, inputItemType)) {
+                return false;
+            }
+        }
+
         for (auto frameNode : calc.Frames().Ref().Children()) {
             YQL_ENSURE(TCoWinOnBase::Match(frameNode.Get()));
             for (ui32 i = 1; i < frameNode->ChildrenSize(); ++i) {
@@ -2010,7 +2043,12 @@ bool CheckWindowFramesFieldSubset(const TExprNodeList& calcNodes, const TStructE
                 YQL_ENSURE(traits->IsCallable({"Lag", "Lead", "RowNumber", "Rank", "DenseRank", "WindowTraits", "PercentRank", "CumeDist", "NTile"}));
                 if (traits->IsCallable("WindowTraits")) {
                     bool isDistinct = kvTuple->ChildrenSize() == 3;
-                    if (!isDistinct) {
+                    if (isDistinct) {
+                        YQL_ENSURE(kvTuple->Child(2)->IsAtom());
+                        if (!inputItemType.FindItem(kvTuple->Child(2)->Content())) {
+                            return false;
+                        }
+                    } else {
                         YQL_ENSURE(traits->Head().GetTypeAnn());
                         const TStructExprType& specItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                         if (!IsFieldSubset(specItemType, inputItemType)) {
@@ -2030,6 +2068,111 @@ bool CheckWindowFramesFieldSubset(const TExprNodeList& calcNodes, const TStructE
     }
 
     return true;
+}
+
+TExprNode::TPtr PayloadRenameOverWindow(const TCoFlatMapBase& node, TExprContext& ctx) {
+    YQL_ENSURE(node.Input().Maybe<TCoCalcOverWindowBase>() || node.Input().Maybe<TCoCalcOverWindowGroup>());
+
+    THashMap<TStringBuf, TStringBuf> backRenames;
+    THashSet<TStringBuf> outputMembers;
+    bool isIdentity;
+    if (!IsRenamingOrPassthroughFlatMap(node, backRenames, outputMembers, isIdentity)) {
+        return node.Ptr();
+    }
+
+    const auto calcNode = node.Input().Cast<TCoInputBase>();
+    if (isIdentity) {
+        YQL_CLOG(DEBUG, Core) << "Eliminate identity " << node.CallableName() << " over " << calcNode.CallableName();
+        return calcNode.Ptr();
+    }
+
+    if (outputMembers.size() != backRenames.size()) {
+        return node.Ptr();
+    }
+
+    // originalName -> nameAfterFlatMap
+    THashMap<TStringBuf, TStringBuf> renames;
+    for (const auto& [dstName, srcName] : backRenames) {
+        if (!renames.insert({ srcName, dstName }).second) {
+            return node.Ptr();
+        }
+    }
+
+    TExprNodeList parentCalcs = ExtractCalcsOverWindow(calcNode.Ptr(), ctx);
+
+    THashSet<TStringBuf> payloadColumns;
+    for (auto c : parentCalcs) {
+        TCoCalcOverWindowTuple calc(c);
+        for (auto frame : calc.Frames()) {
+            YQL_ENSURE(frame.Maybe<TCoWinOnBase>());
+            auto winOn = frame.Cast<TCoWinOnBase>();
+            for (ui32 i = 1; i < winOn.Ref().ChildrenSize(); ++i) {
+                auto child = winOn.Ref().Child(i);
+                YQL_ENSURE(child->IsList() && child->ChildrenSize() > 0 && child->Child(0)->IsAtom());
+                YQL_ENSURE(payloadColumns.insert(child->Child(0)->Content()).second);
+            }
+        }
+        for (auto session : calc.SessionColumns()) {
+            YQL_ENSURE(payloadColumns.insert(session.Value()).second);
+        }
+    }
+
+    TExprNodeList extractMembers;
+    extractMembers.reserve(renames.size());
+    YQL_ENSURE(calcNode.Input().Ref().GetTypeAnn());
+    const TStructExprType& calcInputType = *calcNode.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    for (const auto& [srcName,  dstName] : renames) {
+        if (payloadColumns.contains(srcName)) {
+            if (calcInputType.FindItem(dstName)) {
+                return node.Ptr();
+            }
+        } else if (srcName != dstName) {
+            return node.Ptr();
+        }
+        extractMembers.push_back(ctx.NewAtom(node.Pos(), dstName));
+    }
+
+    for (auto& c : parentCalcs) {
+        TCoCalcOverWindowTuple calc(c);
+        TExprNodeList newFrames;
+
+        for (auto frame : calc.Frames()) {
+            TExprNodeList winOnChildren = frame.Ref().ChildrenList();
+            for (size_t i = 1; i < winOnChildren.size(); ++i) {
+                auto& child = winOnChildren[i];
+                TExprNode::TPtr column = child->ChildPtr(0);
+                if (auto it = renames.find(column->Content()); it != renames.end()) {
+                    child = ctx.ChangeChild(*child, 0, ctx.NewAtom(column->Pos(), it->second));
+                }
+            }
+            newFrames.emplace_back(ctx.ChangeChildren(frame.Ref(), std::move(winOnChildren)));
+        }
+
+        TExprNodeList newSessionColumns;
+        for (auto session : calc.SessionColumns()) {
+            if (auto it = renames.find(session.Value()); it != renames.end()) {
+                newSessionColumns.emplace_back(ctx.NewAtom(session.Pos(), it->second));
+            } else {
+                newSessionColumns.push_back(session.Ptr());
+            }
+        }
+
+        c = Build<TCoCalcOverWindowTuple>(ctx, calc.Pos())
+                .InitFrom(calc)
+                .Frames(ctx.NewList(calc.Frames().Pos(), std::move(newFrames)))
+                .SessionColumns(ctx.NewList(calc.SessionColumns().Pos(), std::move(newSessionColumns)))
+                .Done().Ptr();
+    }
+
+    YQL_CLOG(DEBUG, Core) << "Replace payload renaming " << node.CallableName() << " over " << calcNode.CallableName() << " with ExtractMembers";
+    return Build<TCoExtractMembers>(ctx, calcNode.Pos())
+        .Input<TCoCalcOverWindowGroup>()
+            .Input(calcNode.Input())
+            .Calcs(ctx.NewList(calcNode.Pos(), std::move(parentCalcs)))
+        .Build()
+        .Members(ctx.NewList(node.Pos(), std::move(extractMembers)))
+        .Done()
+        .Ptr();
 }
 
 } // namespace
@@ -2190,6 +2333,15 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 auto ret = FilterNullMembersToSkipNullMembers(self, ctx);
                 if (ret != self.Ptr()) {
                     return ret;
+                }
+            }
+
+            if (AllowPayloadRenameOverWindow(optCtx)) {
+                if (self.Input().Maybe<TCoCalcOverWindowBase>() || self.Input().Maybe<TCoCalcOverWindowGroup>()) {
+                    auto ret = PayloadRenameOverWindow(self, ctx);
+                    if (ret != self.Ptr()) {
+                        return ret;
+                    }
                 }
             }
         }
@@ -2932,9 +3084,10 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         const TStructExprType& inputItemType = *input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
         TExprNodeList parentCalcs = ExtractCalcsOverWindow(node, ctx);
-        YQL_ENSURE(optCtx.Types);
-        if (!CheckWindowFramesFieldSubset(parentCalcs, inputItemType, *optCtx.Types)) {
-            return node;
+        if (CheckWindowFramesFieldSubsetEnabled(optCtx)) {
+            if (!CheckWindowFramesFieldSubset(parentCalcs, inputItemType)) {
+                return node;
+            }
         }
 
         TExprNodeList calcs = ExtractCalcsOverWindow(node->HeadPtr(), ctx);

@@ -5,6 +5,7 @@
 #include <ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
@@ -735,13 +736,28 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
 
     auto drainNode = [runtime = kikimr.GetTestServer().GetRuntime()](size_t nodeId, bool undrain = false) {
         auto sender = runtime->AllocateEdgeActor();
-        IEventBase* ev = nullptr;
+        NActorsProto::TRemoteHttpInfo pb;
+        pb.SetMethod(HTTP_METHOD_POST);
+        pb.SetPath("/app");
+        auto* p1 = pb.AddQueryParams();
+        p1->SetKey("TabletID");
+        p1->SetValue("72057594037968897");
+        auto* p2 = pb.AddQueryParams();
+        p2->SetKey("node");
+        p2->SetValue(ToString(nodeId));
         if (undrain) {
-            ev = new TEvHive::TEvSetDown(nodeId, false);
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("page");
+            p3->SetValue("SetDown");
+            auto* p4 = pb.AddQueryParams();
+            p4->SetKey("down");
+            p4->SetValue("0");
         } else {
-            ev = new TEvHive::TEvDrainNode(nodeId);
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("page");
+            p3->SetValue("DrainNode");
         }
-        runtime->SendToPipe(72057594037968897, sender, ev, 0, GetPipeConfigWithRetries());
+        runtime->SendToPipe(72057594037968897, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
     };
 
     auto waitTablets = [&session](size_t nodeId) mutable {

@@ -27,6 +27,11 @@ DATA (
     arcadia/ydb/core/kqp/ut/join/data
 )
 
+RESOURCE(
+    ydb/library/benchmarks/gen_queries/consts.yql consts.yql
+    ydb/library/benchmarks/gen_queries/consts_decimal.yql consts_decimal.yql
+)
+
 IF (OS_WINDOWS)
 CFLAGS(
    "-D__thread=__declspec(thread)"

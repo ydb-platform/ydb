@@ -535,7 +535,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode, TinyMode);
     }
 
-    if (TinyMode && Config.HasFeatureFlags() && !Config.GetFeatureFlags().HasEnableBackgroundCompaction()) {
+    if (TinyMode && !Config.GetFeatureFlags().HasEnableBackgroundCompaction()) {
         Config.MutableFeatureFlags()->SetEnableBackgroundCompaction(false);
     }
 

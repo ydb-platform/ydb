@@ -38,6 +38,7 @@ namespace NKikimr::NPQ {
     void TRequestedBlob::Clear() {
         Batches.reset();
         UnpackedSize = 0;
+        PackedSize = 0;
     }
 
     void TRequestedBlob::SetValue(const TString& value) {

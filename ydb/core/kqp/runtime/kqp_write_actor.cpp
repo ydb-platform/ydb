@@ -1500,6 +1500,7 @@ private:
         LOOKUP_MAIN_TABLE,
         LOOKUP_UNIQUE_INDEX,
         WRITING,
+        CLOSING,
         FINISHED,
     };
 
@@ -1552,8 +1553,10 @@ public:
     void Write(IDataBatchPtr data) {
         AFL_ENSURE(!Closed);
         AFL_ENSURE(!IsError());
-        Memory += data->GetMemory();
-        BufferedBatches.push_back(std::move(data));
+        if (!data->IsEmpty()) {
+            Memory += data->GetMemory();
+            BufferedBatches.push_back(std::move(data));
+        }
     }
 
     void Close() {
@@ -1579,16 +1582,21 @@ public:
                     return ProcessLookupUniqueIndex();
                 case EState::WRITING:
                     return ProcessWriting();
+                case EState::CLOSING:
+                    return ProcessClosing();
                 case EState::FINISHED:
-                    YQL_ENSURE(false);
+                    return false;
             }
         };
 
         while (stateIteration());
 
-        if (!IsError() && IsClosed() && IsEmpty()) {
+        if (!IsError() && IsClosed() && IsEmpty()
+                && State != EState::CLOSING
+                && State != EState::FINISHED) {
             AFL_ENSURE(GetMemory() == 0);
-            CloseWrite();
+            State = EState::CLOSING;
+            while (stateIteration());
         }
     }
 
@@ -1954,6 +1962,19 @@ private:
         return true;
     }
 
+    bool ProcessClosing() {
+        AFL_ENSURE(State == EState::CLOSING);
+        AFL_ENSURE(!IsError());
+        if (!AllOf(PathWriteInfo, [](const auto& writeInfo) {
+                return writeInfo.second.WriteActor->IsReady();
+            })) {
+            return false;
+        }
+        CloseWrite();
+        State = EState::FINISHED;
+        return true;
+    }
+
     void FlushWritesToActors() {
         AFL_ENSURE(!IsError());
 
@@ -2063,7 +2084,6 @@ private:
                 actorInfo.WriteActor->Close(DeleteCookie);
             }
         }
-        State = EState::FINISHED;
     }
 
     const ui64 Cookie;
@@ -3255,9 +3275,8 @@ public:
         } else if (CurrentStateFunc() == &TThis::StateFlush) {
             bool isEmpty = true;
             ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
-                AFL_ENSURE(actor->IsReady());
                 if (NeedToFlushActor(actor)) {
-                    isEmpty &= actor->IsEmpty();
+                    isEmpty &= actor->IsReady() && actor->IsEmpty();
                 }
             });
             if (isEmpty) {
@@ -3348,8 +3367,7 @@ public:
 
             bool flushFailed = false;
             ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
-                AFL_ENSURE(actor->IsReady());
-                if (!flushFailed && NeedToFlushActor(actor)) {
+                if (!flushFailed && actor->IsReady() && NeedToFlushActor(actor)) {
                     actor->FlushBuffers();
                     if (!actor->FlushToShards()) {
                         flushFailed = true;

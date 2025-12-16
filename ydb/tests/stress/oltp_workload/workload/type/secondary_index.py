@@ -807,11 +807,10 @@ class WorkloadSecondaryIndex(WorkloadBase):
             # Check uniqueness constraint if applicable
             if index_desc.unique:
                 self._verify_index_uniqueness(index_rows, index_desc, index_id, table_name)
-        except:
+        except TableVerificationError:
             logger.error(f"Main: {main_data}")
             logger.error(f"Index: {index_data}")
             raise
-
 
     def _verify_index_uniqueness(
         self, index_rows: List[Any], index_desc: IndexInfo, index_id: int, table_name: str

@@ -2,6 +2,8 @@
 #include "select_builder.h"
 
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/library/yql/udfs/statistics_internal/all_agg_funcs.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 #include <util/generic/size_literals.h>
@@ -19,27 +21,28 @@ class TCMSEval : public IColumnStatisticEval {
     static constexpr ui64 MIN_WIDTH = 256;
     static constexpr ui64 DEFAULT_DEPTH = 8;
 
-    TCMSEval(ui64 width) : Width(width) {}
 public:
-    static std::optional<TCMSEval> MaybeCreate(
+    TCMSEval(ui64 width) : Width(width) {}
+
+    static TPtr MaybeCreate(
             const NKikimrStat::TSimpleColumnStatistics& simpleStats,
             const NScheme::TTypeInfo&) {
         if (simpleStats.GetCount() == 0 || simpleStats.GetCountDistinct() == 0) {
             // Empty table
-            return std::nullopt;
+            return TPtr{};
         }
 
         const double n = simpleStats.GetCount();
         const double ndv = simpleStats.GetCountDistinct();
 
         if (ndv >= 0.8 * n) {
-            return std::nullopt;
+            return TPtr{};
         }
 
         const double c = 10;
         const double eps = (c - 1) * (1 + std::log10(n / ndv)) / ndv;
         const ui64 cmsWidth = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
-        return TCMSEval(cmsWidth);
+        return std::make_unique<TCMSEval>(cmsWidth);
     }
 
     EStatType GetType() const final { return EStatType::COUNT_MIN_SKETCH; }
@@ -65,8 +68,152 @@ public:
     }
 };
 
+struct TBorder {
+    std::variant<ui64, i64, double> Val;
+
+    template<typename T>
+    explicit TBorder(T val) : Val(val) {}
+
+    static std::pair<TBorder, TBorder> GetBucketRange(
+            EHistogramValueType type,
+            const Ydb::Value& minVal, const Ydb::Value& maxVal, ui32* numBuckets) {
+        switch (type) {
+        default:
+            Y_ENSURE(false, "Unexpected type: " << static_cast<ui8>(type));
+        case EHistogramValueType::Uint16:
+        case EHistogramValueType::Uint32:
+        case EHistogramValueType::Uint64: {
+            const ui64 min = (type == EHistogramValueType::Uint64 ?
+                minVal.uint64_value() : minVal.uint32_value());
+            const ui64 max = (type == EHistogramValueType::Uint64 ?
+                maxVal.uint64_value() : maxVal.uint32_value());
+            if (min >= max || *numBuckets <= 1) {
+                *numBuckets = 1;
+                return {TBorder(min), TBorder(min)};
+            }
+            const ui64 dist = max - min;
+            if (*numBuckets > dist) {
+                *numBuckets = dist + 1;
+            }
+            const ui64 bucketLen = dist / (*numBuckets - 1);
+            return {TBorder(min), TBorder(min + bucketLen)};
+        }
+        case EHistogramValueType::Int16:
+        case EHistogramValueType::Int32:
+        case EHistogramValueType::Int64: {
+            const i64 min = (type == EHistogramValueType::Int64 ?
+                minVal.int64_value() : minVal.int32_value());
+            const i64 max = (type == EHistogramValueType::Int64 ?
+                maxVal.int64_value() : maxVal.int32_value());
+            if (min >= max || *numBuckets <= 1) {
+                *numBuckets = 1;
+                return {TBorder(min), TBorder(min)};
+            }
+            const ui64 dist = -((ui64)(-max) + (ui64)min);
+            if (*numBuckets > dist) {
+                *numBuckets = dist + 1;
+            }
+            const ui64 bucketLen = dist / (*numBuckets - 1);
+            return {TBorder(min), TBorder((i64)(min + bucketLen))};
+        }
+        case EHistogramValueType::Double: {
+            const double min = minVal.double_value();
+            const double max = maxVal.double_value();
+            if (min >= max || *numBuckets <= 1) {
+                *numBuckets = 1;
+                return {TBorder(min), TBorder(min)};
+            }
+            const double bucketLen = (max - min) / (*numBuckets - 1);
+            return {TBorder(min), TBorder(min + bucketLen)};
+        }
+        }
+    }
+};
+
+class TEWHEval : public IColumnStatisticEval {
+    ui64 NumBuckets;
+    TBorder RangeStart;
+    TBorder RangeEnd;
+
+    std::optional<ui32> Seq;
+
+public:
+    TEWHEval(ui64 numBuckets, TBorder rangeStart, TBorder rangeEnd)
+        : NumBuckets(numBuckets)
+        , RangeStart(std::move(rangeStart))
+        , RangeEnd(std::move(rangeEnd))
+    {}
+
+    static std::optional<EHistogramValueType> GetHistogramType(NScheme::TTypeId typeId) {
+        switch (typeId) {
+#define MAKE_PRIMITIVE_VISITOR(type, layout)                                 \
+        case NUdf::TDataType<type>::Id: {                                    \
+            return GetHistogramValueType<layout>();                          \
+        }
+        KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_VISITOR)
+#undef MAKE_PRIMITIVE_VISITOR
+        default:
+            return std::nullopt;
+        }
+    }
+
+    static TPtr MaybeCreate(
+            const NKikimrStat::TSimpleColumnStatistics& simpleStats,
+            const NScheme::TTypeInfo& type) {
+        if (simpleStats.GetCount() == 0 || simpleStats.GetCountDistinct() == 0) {
+            // Empty table
+            return TPtr{};
+        }
+
+        std::optional<EHistogramValueType> histType = GetHistogramType(type.GetTypeId());
+        if (!histType) {
+            // Unsupported column type
+            return TPtr{};
+        }
+
+        const double n = simpleStats.GetCount();
+        const double ndv = simpleStats.GetCountDistinct();
+
+        if (ndv >= 0.8 * n) {
+            // Too many distinct values
+            return TPtr{};
+        }
+
+        const double cbrtN = std::cbrt(n);
+        const double numBucketsEstimate = std::ceil(
+            std::min(std::sqrt(n), cbrtN * n / ndv));
+        ui32 numBuckets = (numBucketsEstimate <= std::numeric_limits<ui32>::max()
+            ? numBucketsEstimate
+            : std::numeric_limits<ui32>::max());
+
+        auto [rangeStart, rangeEnd] = TBorder::GetBucketRange(
+            *histType, simpleStats.GetMin(), simpleStats.GetMax(), &numBuckets);
+        return std::make_unique<TEWHEval>(numBuckets, rangeStart, rangeEnd);
+    }
+
+    EStatType GetType() const final { return EStatType::EQ_WIDTH_HISTOGRAM; }
+
+    size_t EstimateSize() const final { return NumBuckets * sizeof(TEqWidthHistogram::TBucket); }
+
+    void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
+        Seq = builder.AddUDAFAggregation(
+            columnName, "EquiWidthHistogram", NumBuckets, RangeStart, RangeEnd);
+    }
+
+    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const final {
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        Y_ENSURE(!val.IsNull()); // Makes no sense to calculate histograms for empty tables.
+        const auto& bytes = val.GetBytes();
+        return TString(bytes.data(), bytes.size());
+    }
+};
+
 TVector<EStatType> IColumnStatisticEval::SupportedTypes() {
-    return { EStatType::COUNT_MIN_SKETCH };
+    return {
+        EStatType::COUNT_MIN_SKETCH,
+        EStatType::EQ_WIDTH_HISTOGRAM,
+    };
 }
 
 IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
@@ -74,13 +221,10 @@ IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
         const NKikimrStat::TSimpleColumnStatistics& simpleStats,
         const NScheme::TTypeInfo& columnType) {
     switch (statType) {
-    case EStatType::COUNT_MIN_SKETCH: {
-        auto maybeEval = TCMSEval::MaybeCreate(simpleStats, columnType);
-        if (!maybeEval) {
-            return TPtr{};
-        }
-        return std::make_unique<TCMSEval>(std::move(*maybeEval));
-    }
+    case EStatType::COUNT_MIN_SKETCH:
+        return TCMSEval::MaybeCreate(simpleStats, columnType);
+    case EStatType::EQ_WIDTH_HISTOGRAM:
+        return TEWHEval::MaybeCreate(simpleStats, columnType);
     default:
         return TPtr{};
     }
@@ -201,10 +345,13 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     CountSeq = stage1Builder.AddBuiltinAggregation({}, "count");
 
     auto addColumn = [&](const TSysTables::TTableColumnInfo& colInfo) {
-        Columns.emplace_back(colInfo.Id, colInfo.PType, colInfo.Name);
+        auto& col = Columns.emplace_back(colInfo.Id, colInfo.PType, colInfo.PTypeMod, colInfo.Name);
         // TODO: escape column names
-        Columns.back().CountDistinctSeq = stage1Builder.AddBuiltinAggregation(
-            colInfo.Name, "HLL");
+        col.CountDistinctSeq = stage1Builder.AddBuiltinAggregation(colInfo.Name, "HLL");
+        if (TEWHEval::GetHistogramType(colInfo.PType.GetTypeId())) {
+            col.MinSeq = stage1Builder.AddBuiltinAggregation(colInfo.Name, "min");
+            col.MaxSeq = stage1Builder.AddBuiltinAggregation(colInfo.Name, "max");
+        }
     };
     if (!RequestedColumnTags.empty()) {
         for (const auto& colTag : RequestedColumnTags) {
@@ -243,6 +390,18 @@ NKikimrStat::TSimpleColumnStatistics TAnalyzeActor::TColumnDesc::ExtractSimpleSt
     NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
     ui64 countDistinct = hllVal.GetOptionalUint64().value_or(0);
     result.SetCountDistinct(countDistinct);
+
+    result.SetTypeId(Type.GetTypeId());
+    if (NScheme::NTypeIds::IsParametrizedType(Type.GetTypeId())) {
+        NScheme::ProtoFromTypeInfo(Type, PgTypeMod, *result.MutableTypeInfo());
+    }
+
+    if (MinSeq) {
+        result.MutableMin()->CopyFrom(aggColumns.at(*MinSeq).GetProto());
+    }
+    if (MaxSeq) {
+        result.MutableMax()->CopyFrom(aggColumns.at(*MaxSeq).GetProto());
+    }
 
     return result;
 }
@@ -316,3 +475,14 @@ void TAnalyzeActor::HandleStage2(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 }
 
 } // NKikimr::NStat
+
+template<>
+void Out<NKikimr::NStat::TBorder>(IOutputStream& os, const NKikimr::NStat::TBorder& x) {
+    struct TVisitor {
+        IOutputStream& Os;
+        void operator()(ui64 val) { Os << val; }
+        void operator()(i64 val) { Os << val; }
+        void operator()(double val) { Os << val; }
+    };
+    std::visit(TVisitor{os}, x.Val);
+}

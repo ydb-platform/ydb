@@ -1180,6 +1180,11 @@ private:
                 response.CountMinSketch.CountMin.reset(
                     TCountMinSketch::FromString(msg->Data->data(), msg->Data->size()));
                 break;
+            case EStatType::EQ_WIDTH_HISTOGRAM:
+                response.Success = true;
+                response.EqWidthHistogram.Data =
+                    std::make_shared<TEqWidthHistogram>(msg->Data->data(), msg->Data->size());
+                break;
             default:
                 SA_LOG_E("TEvLoadStatisticsQueryResponse, request id = " << requestId
                     << ". Unexpected stat type: " << static_cast<int>(request.StatType));
@@ -1374,6 +1379,7 @@ private:
                 str << "[SIMPLE: " << counts[EStatType::SIMPLE]
                     << ", SIMPLE_COLUMN: " << counts[EStatType::SIMPLE_COLUMN]
                     << ", COUNT_MIN_SKETCH: " << counts[EStatType::COUNT_MIN_SKETCH]
+                    << ", EQ_WIDTH_HISTOGRAM: " << counts[EStatType::EQ_WIDTH_HISTOGRAM]
                     << "]" << Endl;
             }
             str << "NextRequestId: " << NextRequestId << Endl;

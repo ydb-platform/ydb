@@ -5,6 +5,7 @@
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/histogram/eq_width_histogram.h>
 #include <ydb/library/actors/core/events.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -25,10 +26,15 @@ struct TStatCountMinSketch {
     std::shared_ptr<TCountMinSketch> CountMin;
 };
 
+struct TStatEqWidthHistogram {
+    std::shared_ptr<TEqWidthHistogram> Data;
+};
+
 enum EStatType {
     SIMPLE = 0,
     SIMPLE_COLUMN = 1,
     COUNT_MIN_SKETCH = 2,
+    EQ_WIDTH_HISTOGRAM = 3,
 };
 
 struct TRequest {
@@ -42,6 +48,7 @@ struct TResponse {
     TStatSimple Simple;
     TStatSimpleColumn SimpleColumn;
     TStatCountMinSketch CountMinSketch;
+    TStatEqWidthHistogram EqWidthHistogram;
 };
 
 // A single item of columnar statistics ready to be saved in the internal table.

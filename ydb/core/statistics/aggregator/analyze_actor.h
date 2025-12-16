@@ -44,14 +44,18 @@ class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     struct TColumnDesc {
         ui32 Tag;
         NScheme::TTypeInfo Type;
+        TString PgTypeMod;
         TString Name;
 
         std::optional<ui32> CountDistinctSeq;
+        std::optional<ui32> MinSeq;
+        std::optional<ui32> MaxSeq;
         TVector<IColumnStatisticEval::TPtr> Statistics;
 
-        explicit TColumnDesc(ui32 tag, NScheme::TTypeInfo type, TString name)
+        explicit TColumnDesc(ui32 tag, NScheme::TTypeInfo type, TString pgTypeMod, TString name)
             : Tag(tag)
             , Type(type)
+            , PgTypeMod(std::move(pgTypeMod))
             , Name(std::move(name))
         {}
         TColumnDesc(TColumnDesc&&) noexcept = default;

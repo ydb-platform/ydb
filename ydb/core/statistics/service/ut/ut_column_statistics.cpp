@@ -10,8 +10,7 @@
 
 #include <type_traits>
 
-namespace NKikimr {
-namespace NStat {
+namespace NKikimr::NStat {
 
 namespace {
 
@@ -22,6 +21,39 @@ const std::vector<TColumnDesc>& GetColumns() {
             .TypeId = NScheme::NTypeIds::String,
             .AddValue = [](ui64 key, Ydb::Value& row) {
                 row.add_items()->set_bytes_value(ToString(key % 10));
+            },
+        },
+        {
+            .Name = "LowCardinalityInt",
+            .TypeId = NScheme::NTypeIds::Int16,
+            .AddValue = [](ui64 key, Ydb::Value& row) {
+                row.add_items()->set_int32_value(key % 10);
+            },
+        },
+        {
+            .Name = "Double",
+            .TypeId = NScheme::NTypeIds::Double,
+            .AddValue = [](ui64 key, Ydb::Value& row) {
+                row.add_items()->set_double_value(key / 10);
+            },
+        },
+        {
+            .Name = "Date",
+            .TypeId = NScheme::NTypeIds::Date,
+            .AddValue = [](ui64 key, Ydb::Value& row) {
+                ui32 startDate = 10000; // 1997-05-19
+                row.add_items()->set_uint32_value(startDate + key / 10);
+            },
+        },
+        {
+            .Name = "NearNumericLimits",
+            .TypeId = NScheme::NTypeIds::Int64,
+            .AddValue = [](ui64 key, Ydb::Value& row) {
+                Y_ASSERT(key >= 0);
+                i64 val = (key % 2 == 0
+                    ? std::numeric_limits<i64>::min() + key / 10
+                    : std::numeric_limits<i64>::max() - key / 10);
+                row.add_items()->set_int64_value(val);
             },
         },
     };
@@ -120,15 +152,97 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
             // Key column
             const auto& data = *responses[0].SimpleColumn.Data;
             UNIT_ASSERT_VALUES_EQUAL(data.GetCountDistinct(), 1000);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetTypeId(), NScheme::NTypeIds::Uint64);
+            UNIT_ASSERT(!data.HasTypeInfo());
+            UNIT_ASSERT_VALUES_EQUAL(data.GetMin().uint64_value(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetMax().uint64_value(), 999);
         }
 
         {
             // LowCardinalityString column
             const auto& data = *responses[1].SimpleColumn.Data;
             UNIT_ASSERT_VALUES_EQUAL(data.GetCountDistinct(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(data.GetTypeId(), NScheme::NTypeIds::String);
+            UNIT_ASSERT(!data.HasTypeInfo());
+            UNIT_ASSERT(!data.HasMin());
+            UNIT_ASSERT(!data.HasMax());
+        }
+    }
+
+    Y_UNIT_TEST(EqWidthHistogram) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        auto responses = GetStatistics(
+            runtime, tableInfo.PathId, EStatType::EQ_WIDTH_HISTOGRAM, {
+                GetTag("Key"),
+                GetTag("LowCardinalityString"),
+                GetTag("LowCardinalityInt"),
+                GetTag("Double"),
+                GetTag("Date"),
+                GetTag("NearNumericLimits"),
+            });
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 6);
+
+        UNIT_ASSERT(!responses[0].Success);
+        UNIT_ASSERT(!responses[1].Success);
+
+        {
+            // LowCardinalityInt column
+            const auto& resp = responses[2];
+            UNIT_ASSERT(resp.Success);
+            const auto& histogram = resp.EqWidthHistogram.Data;
+            UNIT_ASSERT(histogram);
+            UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Int16);
+            auto estimator = TEqWidthHistogramEstimator(histogram);
+            UNIT_ASSERT_VALUES_EQUAL(estimator.EstimateLess<i16>(5), 500);
+        }
+
+        {
+            // Double column
+            const auto& resp = responses[3];
+            UNIT_ASSERT(resp.Success);
+            const auto& histogram = resp.EqWidthHistogram.Data;
+            UNIT_ASSERT(histogram);
+            UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Double);
+            auto estimator = TEqWidthHistogramEstimator(histogram);
+            const i64 expected = 500;
+            const i64 actual = estimator.EstimateLess<double>(50.0);
+            UNIT_ASSERT_C(
+                std::abs(expected - actual) < 50,
+                "Expected: " << expected << ", actual: " << actual);
+        }
+
+        {
+            // Date column
+            const auto& resp = responses[4];
+            UNIT_ASSERT(resp.Success);
+            const auto& histogram = resp.EqWidthHistogram.Data;
+            UNIT_ASSERT(histogram);
+            UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Uint16);
+            auto estimator = TEqWidthHistogramEstimator(histogram);
+            const i64 expected = 500;
+            const i64 actual = estimator.EstimateLess<ui16>(10000 + 50);
+            UNIT_ASSERT_C(
+                std::abs(expected - actual) < 50,
+                "Expected: " << expected << ", actual: " << actual);
+        }
+
+        {
+            // NearNumericLimits column
+            const auto& resp = responses[5];
+            UNIT_ASSERT(resp.Success);
+            const auto& histogram = resp.EqWidthHistogram.Data;
+            UNIT_ASSERT(histogram);
+            UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Int64);
+            auto estimator = TEqWidthHistogramEstimator(histogram);
+            UNIT_ASSERT_VALUES_EQUAL(estimator.EstimateLess<i64>(0), 500);
         }
     }
 }
 
-} // NSysView
-} // NKikimr
+} // NKikimr::NStat

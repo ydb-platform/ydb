@@ -20,7 +20,7 @@ def load_owner_area_mapping():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         config_dir = os.path.join(script_dir, '..', '..', 'config')
         mapping_file = os.path.join(config_dir, 'owner_area_mapping.json')
-        with open(mapping_file, 'r') as f:
+        with open(mapping_file, 'r', encoding='utf-8') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Warning: Could not load owner area mapping: {e}")

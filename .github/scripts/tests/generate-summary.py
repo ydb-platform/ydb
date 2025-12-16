@@ -346,120 +346,8 @@ def group_tests_by_suite(tests):
     return suites
 
 
-def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None):
-    TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
-
-    env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
-
-    status_test = {}
-    last_n_runs = 5
-    has_any_log = set()
-
-    for t in rows:
-        status_test.setdefault(t.status, []).append(t)
-        if any(t.log_urls.values()):
-            has_any_log.add(t.status)
-
-    for status in status_test.keys():
-        status_test[status].sort(key=attrgetter("full_name"))
-
-    status_order = [TestStatus.ERROR, TestStatus.FAIL, TestStatus.SKIP, TestStatus.MUTE, TestStatus.PASS]
-
-    # remove status group without tests
-    status_order = [s for s in status_order if s in status_test]
-
-    # get testowners
-    all_tests = [test for status in status_order for test in status_test.get(status)]
-        
-    dir = os.path.dirname(__file__)
-    git_root = f"{dir}/../../.."
-    codeowners = f"{git_root}/.github/TESTOWNERS"
-    get_codeowners_for_tests(codeowners, all_tests)
-    
-    # statuses for history
-    status_for_history = [TestStatus.FAIL, TestStatus.MUTE]
-    status_for_history = [s for s in status_for_history if s in status_test]
-    
-    tests_names_for_history = []
-    history= {}
-    tests_in_statuses = [test for status in status_for_history for test in status_test.get(status)]
-    
-    # get tests for history
-    for test in tests_in_statuses:
-        tests_names_for_history.append(test.full_name)
-
-    try:
-        history = get_test_history(tests_names_for_history, last_n_runs, build_preset, branch)
-    except Exception:
-        print(traceback.format_exc())
-   
-    #geting count of passed tests in history for sorting
-    for test in tests_in_statuses:
-        if test.full_name in history:
-            test.count_of_passed = len(
-                [
-                    history[test.full_name][x]
-                    for x in history[test.full_name]
-                    if history[test.full_name][x]["status"] == "passed"
-                ]
-            )
-    # sorted by test name
-    for current_status in status_for_history:
-        status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
-
-    buid_preset_params = '--build unknown_build_type'
-    if build_preset == 'release-asan' :
-        buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'release-msan':
-        buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'release-tsan':   
-        buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'relwithdebinfo':
-        buid_preset_params = '--build "relwithdebinfo"'
-    
-    # Get GitHub server URL and repository from environment
-    github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
-    github_repository = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
-    
-    # For commit SHA, prioritize the actual head commit over merge commit
-    # In PR context, GITHUB_HEAD_SHA contains the actual commit being tested
-    github_sha = os.environ.get("GITHUB_HEAD_SHA", "")
-    
-    # Construct PR and workflow URLs if the information is available
-    pr_url = None
-    workflow_url = None
-    
-    if pr_number:
-        pr_url = f"{github_server_url}/{github_repository}/pull/{pr_number}"
-    
-    if workflow_run_id:
-        workflow_url = f"{github_server_url}/{github_repository}/actions/runs/{workflow_run_id}"
-    
-    # Load owner to area mapping
-    owner_area_mapping = load_owner_area_mapping()
-        
-    content = env.get_template("summary.html").render(
-        status_order=status_order,
-        tests=status_test,
-        has_any_log=has_any_log,
-        history=history,
-        build_preset=build_preset,
-        buid_preset_params=buid_preset_params,
-        branch=branch,
-        pr_number=pr_number,
-        pr_url=pr_url,
-        workflow_run_id=workflow_run_id,
-        workflow_url=workflow_url,
-        owner_area_mapping=owner_area_mapping,
-        commit_sha=github_sha
-    )
-
-    with open(fn, "w", encoding="utf-8") as fp:
-        fp.write(content)
-
-
-def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None, public_dir=None):
-    """New version: Group tests by suite with filters"""
+def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None, public_dir=None):
+    """Group tests by suite with filters"""
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
@@ -680,7 +568,7 @@ def render_testlist_html_v2(rows, fn, build_preset, branch, pr_number=None, work
     #          and URL should be "ya-test_data.json" (relative to HTML location)
     data_file_url = os.path.basename(data_file)
     
-    content = env.get_template("summary_v2.html").render(
+    content = env.get_template("summary.html").render(
         suites=suites_dict,
         all_tests_sorted=all_tests_sorted,  # Flat sorted list for default view
         status_suites=status_suites,
@@ -827,8 +715,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"
 
-        # Use new version v2 for rendering
-        render_testlist_html_v2(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id, public_dir)
+        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id, public_dir)
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 

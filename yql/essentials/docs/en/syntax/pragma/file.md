@@ -28,13 +28,13 @@ When specifying the token name, its value will be used to access the target syst
 
 Treat the specified attached file as a library from which you can do [IMPORT](../export_import.md). The syntax type for the library is determined from the file extension:
 
-* `.sql`: For the YQL dialect of SQL <span style="color: green;">(recommended)</span>.
+* `.yql`: For the YQL dialect of SQL <span style="color: green;">(recommended)</span>.
 * `.yqls`: For [s-expressions](/docs/s_expressions).
 
 Example with a file attached to the query:
 
 ```yql
-PRAGMA library("a.sql");
+PRAGMA library("a.yql");
 IMPORT a SYMBOLS $x;
 SELECT $x;
 ```
@@ -42,7 +42,7 @@ SELECT $x;
 If the URL is specified, the library is downloaded from the URL rather than from the pre-attached file as in the following example:
 
 ```yql
-PRAGMA library("a.sql","http://intranet.site/5618566/text");
+PRAGMA library("a.yql","http://intranet.site/5618566/text");
 IMPORT a SYMBOLS $x;
 SELECT $x;
 ```
@@ -51,7 +51,7 @@ In this case, you can use text parameter value substitution in the URL:
 
 ```yql
 DECLARE $_ver AS STRING; -- "5618566"
-PRAGMA library("a.sql","http://intranet.site/{$_ver}/text");
+PRAGMA library("a.yql","http://intranet.site/{$_ver}/text");
 IMPORT a SYMBOLS $x;
 SELECT $x;
 ```
@@ -66,7 +66,7 @@ Attach a hierarchical set of files to the query by URL, treating them as a packa
 
 Package name is expected to be given as ``project_name.package_name``; from package's libraries you can do [IMPORT](../export_import.md) with a module name like ``pkg.project_name.package_name.maybe.nested.module.name``.
 
-Example for a package with flat hierarchy which consists of two libraries - foo.sql and bar.sql:
+Example for a package with flat hierarchy which consists of two libraries - foo.yql and bar.yql:
 
 ```yql
 PRAGMA package("project.package", "http://intranet.site/path/to/package");
@@ -99,7 +99,7 @@ Example:
 
 ```yql
 PRAGMA package("project.package", "http://intranet.site/path/to/package");
-PRAGMA override_library("project/package/maybe/nested/module/name.sql");
+PRAGMA override_library("project/package/maybe/nested/module/name.yql");
 
 IMPORT pkg.project.package.foo SYMBOLS $foo;
 SELECT $foo;

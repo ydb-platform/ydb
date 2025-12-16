@@ -1169,7 +1169,7 @@
             <button class="error-button" onclick="toggleError(this)"></button>
             <div style="display: none;" class="error-content">
                 <div class="console-frame" style="display: none;">
-                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") }}</code></pre>
+                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") | e }}</code></pre>
                 </div>
             </div>
             {% endif %}
@@ -1181,7 +1181,7 @@
                       data-test-name="{{ t.full_name }}" 
                       data-status="{{ history[t.full_name][h].status }}" 
                       data-date="{{ history[t.full_name][h].datetime }}" 
-                      data-error="{{ history[t.full_name][h].status_description }}" 
+                      data-error="{{ history[t.full_name][h].status_description | e }}" 
                       data-commit="{{ history[t.full_name][h].commit }}"
                       data-job-name="{{ history[t.full_name][h].job_name }}[{{ history[t.full_name][h].branch}}:{{ build_preset }}]"
                       data-job-id="{{ history[t.full_name][h].job_id }}">

@@ -1,0 +1,2552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="https://storage.yandexcloud.net/ydb-site-assets/favicon-202305/favicon.ico">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism-themes/1.9.0/prism-vs.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+            margin: 0;
+            padding: 10px;
+            box-sizing: border-box;
+            zoom: 80%;
+        }
+        .report-header {
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin: 8px 0;
+        }
+        .report-header h2 {
+            margin: 0 0 8px 0;
+            font-size: 20px;
+        }
+        .report-header p {
+            margin: 4px 0;
+            line-height: 1.4;
+        }
+        .filter-buttons {
+            margin: 20px 0;
+        }
+        .filter-buttons-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .filter-buttons-row:last-child {
+            margin-bottom: 0;
+        }
+        .filter-buttons-left {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .filter-buttons-right {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-left: auto;
+        }
+        .filter-by-section {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .filter-by-section label {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .filter-by-btn {
+            padding: 8px 16px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            background-color: #f6f8fa;
+            cursor: pointer;
+            font-size: 14px;
+            min-height: 36px;
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            font-size: 13px;
+            font-weight: normal;
+            color: #24292f;
+        }
+        .filter-by-btn:hover {
+            background-color: #f6f8fa;
+        }
+        .filter-by-btn.active {
+            background-color: #0969da;
+            color: white;
+            border-color: #0969da;
+        }
+        .filter-by-btn.sanitizer.active {
+            background-color: #ff4500;
+            border-color: #ff4500;
+        }
+        .filter-by-btn.timeout.active {
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #856404;
+        }
+        .filter-btn {
+            padding: 8px 16px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            background-color: #f6f8fa;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .filter-btn:hover {
+            background-color: #f3f4f6;
+        }
+        .filter-btn.active {
+            color: white;
+            border-color: #0969da;
+        }
+        .filter-btn.active.all {
+            background-color: #0969da;
+        }
+        .filter-btn.active.passed {
+            background-color: #28a745;
+        }
+        .filter-btn.active.failed {
+            background-color: #dc3545;
+        }
+        .filter-btn.active.error {
+            background-color: #ff9800;
+        }
+        .filter-btn.active.mute {
+            background-color: #007bff;
+        }
+        .filter-btn.active.skipped {
+            background-color: #6c757d;
+        }
+        .filter-btn.active.sanitizer {
+            background-color: #ff4500;
+        }
+        .filter-btn.sanitizer {
+            background-color: #ff4500;
+            color: white;
+        }
+        .filter-btn.sanitizer:hover {
+            background-color: #cc3700;
+        }
+        .issue-button {
+            background-color: #0969da;
+            border: 1px solid #0969da;
+            border-radius: 4px;
+            color: white;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .issue-button:hover {
+            background-color: #0860ca;
+            border-color: #0860ca;
+            text-decoration: none;
+        }
+        .sanitizer-badge {
+            background-color: #fff4e6;
+            color: #d1242f;
+            border: 1px solid #ff4500;
+            padding: 2px 8px;
+            border-radius: 3px;
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .timeout-badge {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffc107;
+            padding: 2px 8px;
+            border-radius: 3px;
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .suite-group {
+            margin: 20px 0;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+        }
+        .suite-header {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #0969da;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .suite-owner {
+            font-size: 12px;
+            font-weight: normal;
+            color: #656d76;
+            margin-left: auto;
+        }
+        .suite-owner a {
+            color: #656d76;
+            text-decoration: none;
+        }
+        .suite-owner a:hover {
+            text-decoration: underline;
+            color: #0969da;
+        }
+        .suite-header:hover {
+            text-decoration: underline;
+        }
+        .suite-toggle {
+            font-size: 12px;
+        }
+        .suite-content {
+            margin-top: 12px;
+        }
+        .test-item {
+            padding: 10px 12px;
+            margin: 6px 0;
+            border-left: 3px solid;
+            border-radius: 4px;
+            background-color: #fafbfc;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        .test-item.error-hidden {
+            padding: 6px 12px;
+        }
+        .test-item:hover {
+            background-color: #f6f8fa;
+        }
+        .test-item.passed {
+            border-left-color: green;
+        }
+        .test-item.failed {
+            border-left-color: red;
+        }
+        .test-item.error {
+            border-left-color: orange;
+        }
+        .test-item.skipped {
+            border-left-color: gray;
+        }
+        .test-item.mute {
+            border-left-color: blue;
+        }
+        .test-name {
+            font-weight: 500;
+            flex: 1;
+            min-width: 200px;
+            max-width: calc(100% - 400px); /* Leave space for other elements and owner */
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+        }
+        .test-name-text {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: break-word;
+            line-height: 1.4;
+            max-height: 2.8em; /* 2 lines * 1.4 line-height */
+        }
+        .test-name.has-error {
+            cursor: pointer;
+        }
+        .test-name.has-error:hover {
+            text-decoration: underline;
+        }
+        .test-name-toggle {
+            font-size: 12px;
+            color: #656d76;
+            flex-shrink: 0;
+            margin-top: 2px; /* Align with first line of text */
+        }
+        .test-name-toggle.expanded {
+            transform: rotate(90deg);
+        }
+        .group-by-selector {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .group-by-selector select {
+            padding: 8px 16px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            background-color: #f6f8fa;
+            font-size: 14px;
+            min-height: 36px;
+            box-sizing: border-box;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .group-by-selector select:hover {
+            background-color: #f3f4f6;
+        }
+        .group-by-selector label {
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .tests-flat-container {
+            display: none;
+        }
+        .tests-flat-container.active {
+            display: block;
+        }
+        .suite-group.hidden-group {
+            display: none;
+        }
+        .test-status {
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            min-width: 50px;
+            text-align: center;
+        }
+        .test-duration {
+            font-size: 12px;
+            color: #656d76;
+            white-space: nowrap;
+            flex-shrink: 0;
+            min-width: 50px;
+        }
+        .suite-duration {
+            font-size: 12px;
+            font-weight: normal;
+            color: #656d76;
+            margin-left: 8px;
+        }
+        .test-status.passed {
+            background-color: #dafbe1;
+            color: #1a7f37;
+        }
+        .test-status.failed {
+            background-color: #ffebe9;
+            color: #cf222e;
+        }
+        .test-status.error {
+            background-color: #fff8c5;
+            color: #9a6700;
+        }
+        .test-status.skipped {
+            background-color: #f6f8fa;
+            color: #656d76;
+        }
+        .test-status.mute {
+            background-color: #ddf4ff;
+            color: #0969da;
+        }
+        .test-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: nowrap;
+            flex: 1;
+            min-width: 0;
+        }
+        .test-meta > * {
+            flex-shrink: 0;
+        }
+        .test-meta > .test-owner {
+            margin-left: auto;
+        }
+        .test-badges {
+            display: inline-flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: nowrap;
+            flex-shrink: 0;
+        }
+        .test-badges:empty {
+            display: none;
+        }
+        .test-owner {
+            font-size: 12px;
+            font-weight: normal;
+            color: #656d76;
+            margin-left: auto;
+            flex-shrink: 0;
+            white-space: nowrap;
+            min-width: 120px;
+            text-align: right;
+            padding-right: 20px;
+        }
+        .test-owner a {
+            color: #656d76;
+            text-decoration: none;
+        }
+        .test-owner a:hover {
+            text-decoration: underline;
+            color: #0969da;
+        }
+        .log-links {
+            display: inline-flex;
+            gap: 6px;
+            flex-wrap: nowrap;
+            flex-shrink: 0;
+        }
+        .log-links:empty {
+            display: none;
+        }
+        .log-link {
+            font-size: 11px;
+            color: #0969da;
+            text-decoration: none;
+            padding: 4px 8px;
+            border: 1px solid #d0d7de;
+            border-radius: 3px;
+            background-color: #ffffff;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .log-link:hover {
+            background-color: #f3f4f6;
+            text-decoration: none;
+            border-color: #0969da;
+        }
+        .success-rate-button {
+            background-color: #0366d6;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .success-rate-button:hover {
+            background-color: #0256cc;
+        }
+        .status-group {
+            margin: 30px 0;
+        }
+        .status-header {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid;
+        }
+        .status-header.error {
+            color: orange;
+            border-bottom-color: orange;
+        }
+        .status-header.failed {
+            color: red;
+            border-bottom-color: red;
+        }
+        .status-header.passed {
+            color: green;
+            border-bottom-color: green;
+        }
+        .status-header.mute {
+            color: blue;
+            border-bottom-color: blue;
+        }
+        .hidden {
+            display: none;
+        }
+        /* Hide all tests initially if body has data-initial-filter attribute - will be shown by JavaScript */
+        body[data-initial-filter] .test-item,
+        body[data-initial-filter] .suite-group {
+            display: none;
+        }
+        .error-section {
+            flex-basis: 100%;
+            margin-top: 8px;
+            min-width: 0;
+            width: 100%;
+            overflow: hidden;
+        }
+        .error-button {
+            background-color: #fff4e6;
+            color: #9a6700;
+            border: 1px solid #ffd8a8;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 500;
+            padding: 3px 8px;
+            margin-left: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .error-button:hover {
+            background-color: #ffe8cc;
+            border-color: #ffc878;
+        }
+        .error-button::before {
+            content: "⚠";
+            font-size: 12px;
+        }
+        .error-content {
+            margin-top: 8px;
+            padding: 8px;
+            background-color: #f6f8fa;
+            border-radius: 4px;
+            width: 100%;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .error-content pre {
+            margin: 0;
+            overflow-x: auto;
+            overflow-y: visible;
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+        }
+        .error-content pre code {
+            font-size: 12px;
+            white-space: pre;
+            display: block;
+            min-width: 0;
+        }
+        .test-actions {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .test-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+            padding: 2px 4px;
+            display: inline-flex;
+            align-items: center;
+            color: #0969da;
+            font-size: 11px;
+        }
+        .test-action-btn:hover {
+            text-decoration: underline;
+        }
+        .emoji {
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", sans-serif;
+            font-style: normal;
+            font-variant: normal;
+            font-weight: normal;
+            line-height: 1;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        /* Modal styles */
+        .modal,
+        #errorModal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 32px auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: min(960px, 95vw);
+            border-radius: 5px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+        #successRateModal .modal-content {
+            width: min(960px, 95vw);
+            max-width: 95vw;
+        }
+        #successRateModalContent {
+            overflow-y: auto;
+            overflow-x: hidden;
+            max-height: calc(90vh - 120px); /* Leave space for header, close button and padding */
+            padding-right: 10px; /* Space for scrollbar */
+        }
+        #successRateModalContent::-webkit-scrollbar {
+            width: 8px;
+        }
+        #successRateModalContent::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        #successRateModalContent::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        #successRateModalContent::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        /* Success rate modal runs layout */
+        .sr-runs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .close-modal {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            line-height: 1;
+            padding: 0;
+            z-index: 1;
+        }
+        .close-modal:hover {
+            color: #000;
+        }
+        .modal-header {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+            flex-shrink: 0;
+        }
+        .modal-info {
+            font-size: 14px;
+            margin-bottom: 15px;
+            line-height: 1.6;
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+            flex-shrink: 0;
+        }
+        .modal-info-left {
+            flex: 1;
+        }
+        .modal-info-right {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .modal-info-item {
+            margin-bottom: 8px;
+        }
+        .modal-info-label {
+            font-weight: bold;
+            display: inline-block;
+            width: 100px;
+        }
+        .modal-log-links {
+            display: inline-flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        #modalErrorSection {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .console-frame {
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 10px;
+            max-height: 60vh;
+            overflow-y: auto;
+            overflow-x: auto;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        .console-frame pre {
+            margin: 0;
+            overflow-x: auto;
+        }
+        /* Hidden text for search - accessible to cmd+F but invisible */
+        .searchable-full-path {
+            position: absolute;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+        }
+        /* Enhanced selection highlight */
+        ::selection {
+            background-color: #ffc107;
+            color: #000;
+        }
+        ::-moz-selection {
+            background-color: #ffc107;
+            color: #000;
+        }
+
+        /* Mobile tweaks */
+        @media (max-width: 900px) {
+            body {
+                zoom: 100%;
+                padding: 8px;
+            }
+            .filter-buttons {
+                margin: 12px 0;
+            }
+            .filter-buttons-row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 6px;
+            }
+            .filter-buttons-left,
+            .filter-buttons-right,
+            .filter-by-section {
+                flex-wrap: wrap;
+                justify-content: flex-start;
+            }
+            .filter-btn,
+            .filter-by-btn,
+            .group-by-selector select {
+                width: 100%;
+                justify-content: center;
+            }
+            .group-by-selector {
+                width: 100%;
+            }
+            .suite-header {
+                flex-wrap: wrap;
+            }
+            .suite-owner {
+                width: 100%;
+                margin-left: 0;
+                text-align: left;
+            }
+            .test-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .test-name {
+                max-width: 100%;
+            }
+            .test-meta {
+                width: 100%;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            .test-owner {
+                width: 100%;
+                text-align: left;
+                padding-right: 0;
+            }
+            .log-links {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .test-actions {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .error-content pre code {
+                font-size: 11px;
+            }
+            /* Modal tweaks */
+            .modal {
+                padding: 12px;
+            }
+            .modal-content {
+                width: min(960px, 95vw);
+                max-width: 95vw;
+                margin: 24px auto;
+                padding: 12px;
+            }
+            #successRateModal .modal-content {
+                width: min(960px, 95vw);
+                max-width: 95vw;
+            }
+            .close-modal {
+                font-size: 22px;
+                right: 12px;
+                top: 12px;
+            }
+            #successRateModalTitle,
+            #modalTitle {
+                font-size: 16px;
+                line-height: 1.3;
+                word-break: break-word;
+                overflow-wrap: anywhere;
+                margin-right: 32px; /* leave space for close button */
+            }
+            .modal-info {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .modal-info-label {
+                width: auto;
+                margin-right: 8px;
+            }
+            .modal-log-links {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .console-frame {
+                max-height: 50vh;
+                padding: 12px;
+            }
+            #modalErrorContent {
+                font-size: 12px;
+            }
+            /* Success-rate table */
+            .sr-table-wrap {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                max-width: 100%;
+                margin: 0 -4px;
+                padding: 0 4px;
+            }
+            .sr-table-wrap table {
+                min-width: 0;
+                table-layout: fixed;
+            }
+            .sr-table-wrap th,
+            .sr-table-wrap td {
+                padding: 3px 4px;
+                font-size: 11px;
+                white-space: normal;
+                word-break: break-word;
+            text-align: center;
+            }
+        .sr-table-wrap td:first-child,
+        .sr-table-wrap th:first-child {
+            text-align: left;
+        }
+            .sr-table-wrap thead th {
+                font-size: 11px;
+                white-space: normal;
+                word-break: break-word;
+            }
+            .sr-runs {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                gap: 4px;
+                padding-bottom: 4px;
+                -webkit-overflow-scrolling: touch;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(26px, 1fr));
+                justify-items: center;
+            }
+            .sr-runs::-webkit-scrollbar {
+                height: 6px;
+            }
+            .sr-runs span {
+                padding: 3px 6px !important;
+                font-size: 10px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <script>
+        // Apply filter immediately on page load, before DOM is fully rendered
+        // This prevents showing "all" tests when URL has ?status=Failed
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const status = urlParams.get('status');
+            
+            if (status) {
+                // Map status to filter name
+                const filter = status.toLowerCase();
+                const filterMap = {
+                    'fail': 'failed',
+                    'pass': 'passed',
+                    'err': 'error',
+                    'mut': 'mute',
+                    'skip': 'skipped',
+                    'fla': 'flaky'
+                };
+                const actualFilter = filterMap[filter] || filter;
+                
+                // Store filter state for later use
+                const sanitizerParam = urlParams.get('sanitizer');
+                const timeoutParam = urlParams.get('timeout');
+                window.__initialFilter = {
+                    main: actualFilter,
+                    sanitizer: sanitizerParam,
+                    timeout: timeoutParam
+                };
+                
+                // Add data attribute to body to hide all tests via CSS
+                // This will be removed by applyFilters() after filtering
+                document.body.setAttribute('data-initial-filter', 'true');
+            }
+        })();
+    </script>
+    <script type="application/json" id="test-counts-json">{{ test_counts | tojson }}</script>
+    <script type="application/json" id="owner-area-mapping-json">{{ owner_area_mapping | tojson }}</script>
+
+    <div class="report-header">
+        <h2>Test Results Report</h2>
+        <p><strong>Build Preset:</strong> {{ build_preset }}</p>
+        <p><strong>Branch:</strong> {{ branch }}</p>
+        {% if pr_number %}
+        <p><strong>PR:</strong> <a href="{{ pr_url }}">#{{ pr_number }}</a></p>
+        {% endif %}
+        {% if workflow_run_id %}
+        <p><strong>Workflow:</strong> <a href="{{ workflow_url }}">Run #{{ workflow_run_id }}</a></p>
+        {% endif %}
+        {% if commit_sha %}
+        <p><strong>Commit:</strong> {{ commit_sha[:7] }}</p>
+        {% endif %}
+    </div>
+
+    <div class="filter-buttons">
+        <div class="filter-buttons-row">
+            <div class="filter-buttons-left">
+        <button class="filter-btn active all" onclick="setFilter('all', this)">All ({{ test_counts.all }})</button>
+        <button class="filter-btn passed" onclick="setFilter('passed', this)">Passed ({{ test_counts.passed }})</button>
+        <button class="filter-btn failed" onclick="setFilter('failed', this)">Failed ({{ test_counts.failed }})</button>
+        <button class="filter-btn error" onclick="setFilter('error', this)">Error ({{ test_counts.error }})</button>
+        <button class="filter-btn mute" onclick="setFilter('mute', this)">Mute ({{ test_counts.mute }})</button>
+        <button class="filter-btn skipped" onclick="setFilter('skipped', this)">Skipped ({{ test_counts.skipped }})</button>
+    </div>
+        </div>
+        <div class="filter-buttons-row">
+            <div class="group-by-selector">
+                <label for="groupBySelect" style="margin-right: 8px; font-weight: 500; color: #656d76;">Group by:</label>
+                <select id="groupBySelect" onchange="setGroupBy(this.value)">
+                    <option value="none" selected>None</option>
+                    <option value="suite">Suite</option>
+                </select>
+            </div>
+            <div class="filter-by-section">
+                <label style="margin-right: 8px; font-weight: 500; color: #656d76;">Filter by:</label>
+                <button class="filter-by-btn sanitizer" id="sanitizer-filter-btn" onclick="toggleSanitizerFilter(this)" style="display: none;">Sanitizer (0)</button>
+                <button class="filter-by-btn timeout" id="timeout-filter-btn" onclick="toggleTimeoutFilter(this)" style="display: none;">Timeout (0)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- All view: grouped by suite -->
+    <div id="view-all" class="view">
+        {% for suite_name, tests in suites.items()|sort %}
+        <div class="suite-group" data-suite-name="{{ suite_name }}">
+            <div class="suite-header" onclick="toggleSuite('suite-{{ loop.index }}')">
+                <span class="suite-toggle">&#9660;</span>
+                <span>{{ suite_name }}</span>
+                <span style="font-weight: normal; color: #656d76;">({{ tests|length }} test{{ 's' if tests|length != 1 else '' }})</span>
+                {% set suite_duration = tests|sum(attribute='elapsed') %}
+                {% set suite_minutes = (suite_duration // 60)|int %}
+                {% set suite_seconds = (suite_duration % 60)|round(3) %}
+                <span class="suite-duration">
+                    {% if suite_minutes > 0 %}{{ suite_minutes }}m {% endif %}{{ suite_seconds }}s
+                </span>
+                {% if tests and tests[0].owners %}
+                <span class="suite-owner">
+                    Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ tests[0].owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
+                </span>
+                {% endif %}
+            </div>
+            <div id="suite-{{ loop.index }}" class="suite-content">
+                {% for test in tests %}
+                <div class="test-item {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-test-name="{{ test.full_name|e }}" data-test-owner="{{ test.owners|e }}" data-test-status="{% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}" data-is-sanitizer="{% if test.is_sanitizer_issue %}true{% else %}false{% endif %}" data-is-timeout="{% if test.is_timeout_issue %}true{% else %}false{% endif %}" data-suite-name="{{ suite_name|e }}" data-test-display-name="{{ test.name|e }}">
+                    <span class="searchable-full-path">{{ test.full_name }}</span>
+                    <span class="test-name {% if test.status_description %}has-error{% endif %}" {% if test.status_description %}data-has-error="true" data-test-full-name="{{ test.full_name|e }}"{% endif %} title="{{ test.full_name|e }}">
+                        {% if test.status_description %}<span class="test-name-toggle">▶</span>{% endif %}
+                        <span class="test-name-text">{{ test.name }}</span>
+                    </span>
+                    
+                    <div class="test-meta">
+                        {% if test.is_sanitizer_issue %}
+                        <span class="sanitizer-badge">SANITIZER</span>
+                        {% endif %}
+                        {% if test.is_timeout_issue %}
+                        <span class="timeout-badge">TIMEOUT</span>
+                        {% endif %}
+                        <span class="test-status {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}">{{ test.status_display }}</span>
+                        <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
+                        
+                        <div class="test-badges">
+                            {% if test.status.value == 1 or test.status.value == 2 %}
+                            <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
+                            {% endif %}
+                            {% if test.status.value == 1 or test.status.value == 2 or test.status.value == 4 %}
+                            <button class="success-rate-button" data-test-full-name="{{ test.full_name|e }}" data-action="show-success-rate" title="View success rate and history">
+                                <span class="emoji">&#128202;</span> <span class="success-rate-text">No history</span>
+                            </button>
+                            {% endif %}
+                        </div>
+                            
+                            {% if test.log_urls %}
+                            <span class="log-links">
+                                {% for log_name, log_url in test.log_urls.items() %}
+                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
+                                {% endfor %}
+                            </span>
+                        {% else %}
+                        <span class="log-links"></span>
+                            {% endif %}
+                        
+                        <div class="test-actions">
+                            <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="copy-name" title="Copy full test name"><span class="emoji">&#128203;</span> Copy name</button>
+                            <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="copy-cmd" title="Copy run command"><span class="emoji">&#128203;</span> Copy cmd</button>
+                            <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="open-history" title="Open history"><span class="emoji">&#128202;</span> History</button>
+                        </div>
+                        </div>
+                        
+                        {% if test.status_description %}
+                        <div class="error-section">
+                            <div class="error-content hidden" data-test-name="{{ test.full_name|e }}">
+                                <!-- Error description will be loaded on demand from testDescriptions -->
+                            </div>
+                        </div>
+                        {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Flat view: no grouping, sorted alphabetically -->
+    <div id="tests-flat" class="tests-flat-container active"></div>
+
+    <!-- Removed duplicate views (view-passed, view-failed, view-error, view-mute, view-sanitizer, view-flaky) to reduce HTML size -->
+    <!-- Filtering is now done via JavaScript using data-test-status and data-is-sanitizer attributes -->
+    <!-- Modal for success rate and detailed history -->
+    <div id="successRateModal" class="modal">
+        <div class="modal-content" style="max-height: 90vh;">
+            <span class="close-modal" onclick="closeSuccessRateModal()">&times;</span>
+            <div class="modal-header">
+                <h2 id="successRateModalTitle">Test Success Rate</h2>
+            </div>
+            <div id="successRateModalContent"></div>
+        </div>
+    </div>
+
+    <!-- Modal for test details -->
+    <div id="errorModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <div class="modal-header">
+                <h2 id="modalTitle">Test details</h2>
+            </div>
+            <div class="modal-info">
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Run:</span>
+                    <a id="modalJobLink" href="#" target="_blank"></a>
+                </div>
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Status:</span>
+                    <span id="modalStatus"></span>
+                </div>
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Date:</span>
+                    <span id="modalDate"></span>
+                </div>
+                <div class="modal-info-item">
+                    <span class="modal-info-label">Commit:</span>
+                    <a id="modalShaLink" href="#" target="_blank"></a>
+                </div>
+            </div>
+            <div id="modalErrorSection" style="display: none;">
+                <div class="console-frame">
+                    <pre><code id="modalErrorContent"></code></pre>
+                </div>
+            </div>
+            <div id="modalLogLinks" class="modal-log-links"></div>
+        </div>
+    </div>
+
+    <script>
+        // Data will be loaded from separate JSON file to reduce HTML size
+        const dataFileUrl = "{{ data_file_url }}";
+        let testData = null;
+        let dataLoadPromise = null;
+        
+        // Lazy load test data from JSON file
+        async function loadTestData() {
+            if (testData) {
+                return testData;
+            }
+            if (dataLoadPromise) {
+                return dataLoadPromise;
+            }
+            
+            // Check if we're in a local file:// context (CORS will fail)
+            const isLocalFile = window.location.protocol === 'file:';
+            
+            // For local file:// protocol, fetch won't work due to CORS
+            // Return empty data structure immediately to avoid errors
+            if (isLocalFile) {
+                console.warn('Local file mode detected (file://). JSON data cannot be loaded via fetch due to CORS restrictions.');
+                console.warn('For local testing, use a local web server: python3 -m http.server 8000');
+                testData = {
+                    history_for_js: {},
+                    history_descriptions: {},
+                    test_descriptions: {},
+                    test_success_rates: {}
+                };
+                return Promise.resolve(testData);
+            }
+            
+            dataLoadPromise = fetch(dataFileUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Failed to load data: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Test data loaded successfully. Keys:', Object.keys(data));
+                    console.log('History tests:', data.history_for_js ? Object.keys(data.history_for_js).length : 0);
+                    console.log('Test descriptions:', data.test_descriptions ? Object.keys(data.test_descriptions).length : 0);
+                    testData = data;
+                    return testData;
+                })
+                .catch(error => {
+                    console.error('Error loading test data from JSON file:', error);
+                    console.error('Data file URL:', dataFileUrl);
+                    // Return empty data structure on error
+                    // Features that require history/descriptions will show "No data available"
+                    testData = {
+                        history_for_js: {},
+                        history_descriptions: {},
+                        test_descriptions: {},
+                        test_success_rates: {}
+                    };
+                    return testData;
+                });
+            
+            return dataLoadPromise;
+        }
+        
+        // Initialize with empty data structures (will be populated when needed)
+        let testHistory = {};
+        let historyDescriptions = {};
+        let testDescriptions = {};
+        let testSuccessRates = {};
+        
+        // Helper functions to get data (with lazy loading)
+        async function getTestHistory() {
+            if (Object.keys(testHistory).length === 0) {
+                const data = await loadTestData();
+                testHistory = data.history_for_js || {};
+                if (Object.keys(testHistory).length > 0) {
+                    console.log('Test history loaded:', Object.keys(testHistory).length, 'tests');
+                }
+            }
+            return testHistory;
+        }
+        
+        async function getHistoryDescriptions() {
+            if (Object.keys(historyDescriptions).length === 0) {
+                const data = await loadTestData();
+                historyDescriptions = data.history_descriptions || {};
+            }
+            return historyDescriptions;
+        }
+        
+        async function getTestDescriptions() {
+            if (Object.keys(testDescriptions).length === 0) {
+                const data = await loadTestData();
+                testDescriptions = data.test_descriptions || {};
+            }
+            return testDescriptions;
+        }
+        
+        async function getTestSuccessRates() {
+            if (Object.keys(testSuccessRates).length === 0) {
+                const data = await loadTestData();
+                testSuccessRates = data.test_success_rates || {};
+                // Update success rate buttons after loading data
+                updateSuccessRateButtons();
+            }
+            return testSuccessRates;
+        }
+        
+        // Update success rate buttons with loaded data
+        function updateSuccessRateButtons() {
+            const branch = "{{ branch }}";
+            const buttons = document.querySelectorAll('.success-rate-button');
+            buttons.forEach(button => {
+                const testFullName = button.getAttribute('data-test-full-name');
+                if (!testFullName) return;
+                
+                const rates = testSuccessRates[testFullName];
+                if (!rates) return;
+                
+                const rateText = button.querySelector('.success-rate-text');
+                if (!rateText) return;
+                
+                let text = '';
+                if (rates.other) {
+                    text += branch.toUpperCase() + ':' + rates.other.rate + '%';
+                }
+                if (rates.other && rates.pr_check) {
+                    text += ' | ';
+                }
+                if (rates.pr_check) {
+                    text += 'PR:' + rates.pr_check.rate + '%';
+                }
+                
+                if (text) {
+                    rateText.textContent = text;
+                }
+            });
+        }
+        
+        function parseJsonScript(id) {
+            const el = document.getElementById(id);
+            if (!el) return {};
+            try {
+                return JSON.parse(el.textContent || '{}');
+            } catch (e) {
+                console.warn(`Failed to parse JSON from #${id}:`, e);
+                return {};
+            }
+        }
+
+        const testCounts = parseJsonScript('test-counts-json');
+        
+        // Current filter state
+        let currentMainFilter = 'all';
+        let currentSanitizerFilter = false; // Additional filter for sanitizer issues
+        let currentTimeoutFilter = false; // Additional filter for timeout issues
+        let currentGroupBy = 'none'; // 'none' or 'suite'
+        
+        async function getHistoryError(testName, timestamp) {
+            const descs = await getHistoryDescriptions();
+            if (!descs || !descs[testName]) return '';
+            // timestamp всегда строка в historyDescriptions (ключи преобразованы в строки)
+            const timestampStr = String(timestamp);
+            return descs[testName][timestampStr] || '';
+        }
+
+        function toggleSuite(suiteId) {
+            const suite = document.getElementById(suiteId);
+            if (!suite) return;
+            
+            const header = suite.previousElementSibling;
+            const toggle = header.querySelector('.suite-toggle');
+            
+            if (suite.classList.contains('hidden')) {
+                suite.classList.remove('hidden');
+                if (toggle) toggle.textContent = '\u25BC';
+            } else {
+                suite.classList.add('hidden');
+                if (toggle) toggle.textContent = '\u25B6';
+            }
+        }
+        
+        // Also expand when filter changes - now filters tests via data attributes
+        function setFilter(filter, button) {
+            // Update button states for status filters
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
+            });
+            button.classList.add('active', filter);
+            
+            // When switching status filter, deactivate timeout and sanitizer filters
+            // They should be independent per status, not persist across status changes
+            if (currentMainFilter !== filter) {
+                // Deactivate timeout filter when switching status
+                if (currentTimeoutFilter) {
+                    const timeoutBtn = document.getElementById('timeout-filter-btn');
+                    if (timeoutBtn) {
+                        timeoutBtn.classList.remove('active');
+                    }
+                    currentTimeoutFilter = false;
+                }
+                // Deactivate sanitizer filter when switching status
+                if (currentSanitizerFilter) {
+                    const sanitizerBtn = document.getElementById('sanitizer-filter-btn');
+                    if (sanitizerBtn) {
+                        sanitizerBtn.classList.remove('active');
+                    }
+                    currentSanitizerFilter = false;
+                }
+            }
+            
+            // Update current main filter
+            currentMainFilter = filter;
+            
+            // Apply filters first (fast)
+            applyFilters();
+            
+            // Re-render flat view if needed (after filters applied)
+            if (currentGroupBy === 'none') {
+                renderFlatView();
+            }
+            
+            // Update sanitizer count for current status
+            updateSanitizerCount();
+        }
+        
+        // Initialize: expand all suites by default for cmd+f search
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.suite-content').forEach(suite => {
+                suite.classList.remove('hidden');
+            });
+            document.querySelectorAll('.suite-toggle').forEach(toggle => {
+                toggle.textContent = '\u25BC';
+            });
+            // Initialize error-hidden class for tests with hidden errors
+            document.querySelectorAll('.test-item').forEach(testItem => {
+                const errorContent = testItem.querySelector('.error-content');
+                if (errorContent && errorContent.classList.contains('hidden')) {
+                    testItem.classList.add('error-hidden');
+                }
+            });
+            
+            // Add click handlers for test names with errors
+            document.addEventListener('click', function(e) {
+                const testName = e.target.closest('.test-name.has-error');
+                if (testName && testName.hasAttribute('data-has-error')) {
+                    const fullName = testName.getAttribute('data-test-full-name');
+                    if (fullName) {
+                        toggleErrorByName(fullName, testName);
+                    }
+                }
+            });
+            
+            // Add click handlers for action buttons using event delegation
+            document.addEventListener('click', function(e) {
+                const button = e.target.closest('[data-action]');
+                if (!button) return;
+                
+                const action = button.getAttribute('data-action');
+                const testFullName = button.getAttribute('data-test-full-name');
+                
+                if (!testFullName) return;
+                
+                switch(action) {
+                    case 'show-success-rate':
+                        showSuccessRateModal(testFullName);
+                        break;
+                    case 'copy-name':
+                        copyTestName(testFullName);
+                        break;
+                    case 'copy-cmd':
+                        copyRunCommand(testFullName);
+                        break;
+                    case 'open-history':
+                        openHistory(testFullName);
+                        break;
+                }
+            });
+            
+            // Initialize filter from URL - apply immediately to prevent showing all tests
+            // IMPORTANT: Apply filters BEFORE setGroupBy to avoid rendering all tests
+            if (window.__initialFilter) {
+                // Use pre-parsed filter from inline script
+                const filter = window.__initialFilter.main;
+                const sanitizer = window.__initialFilter.sanitizer;
+                
+                // Handle sanitizer filter
+                if (sanitizer === 'true') {
+                    const sanitizerBtn = document.getElementById('sanitizer-filter-btn');
+                    if (sanitizerBtn) {
+                        currentSanitizerFilter = true;
+                        sanitizerBtn.classList.add('active');
+                    }
+                }
+                
+                // Handle timeout filter
+                if (window.__initialFilter && window.__initialFilter.timeout === 'true') {
+                    const timeoutBtn = document.getElementById('timeout-filter-btn');
+                    if (timeoutBtn) {
+                        currentTimeoutFilter = true;
+                        timeoutBtn.classList.add('active');
+                    }
+                }
+                
+                // Handle status filter
+                if (filter && filter !== 'sanitizer') {
+                    const button = document.querySelector(`.filter-btn.${filter}`);
+                    if (button) {
+                        // Update button state without calling setFilter (which calls setGroupBy)
+                        document.querySelectorAll('.filter-btn').forEach(btn => {
+                            btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
+                        });
+                        button.classList.add('active', filter);
+                        currentMainFilter = filter;
+                    }
+                }
+                
+                // Apply filters immediately (before setGroupBy to avoid rendering all tests)
+                applyFilters();
+            } else {
+                // Fallback to URL parsing if inline script didn't run
+                initFilterFromUrl();
+                // initFilterFromUrl already calls applyFilters and setGroupBy, so return
+                return;
+            }
+            
+            // Initialize group by mode AFTER filters are applied
+            setGroupBy('none');
+            
+            // Initialize sanitizer and timeout counts (setGroupBy already calls them, but ensure they're called)
+            updateSanitizerCount();
+            updateTimeoutCount();
+            
+            // Load success rates and update buttons (async, non-blocking)
+            getTestSuccessRates().catch(err => {
+                console.warn('Failed to load success rates:', err);
+            });
+        });
+        
+        function updateSanitizerCount() {
+            const sanitizerBtn = document.getElementById('sanitizer-filter-btn');
+            if (!sanitizerBtn) return;
+            
+            // Count sanitizer tests for current status filter
+            // Use all test items from view-all (source of truth), not from current view
+            const allTestItems = Array.from(document.querySelectorAll('#view-all .test-item'));
+            let sanitizerCount = 0;
+            
+            allTestItems.forEach(testItem => {
+                const testStatus = testItem.getAttribute('data-test-status');
+                const isSanitizer = testItem.getAttribute('data-is-sanitizer') === 'true';
+                
+                // Check if test matches current status filter
+                let matchesStatus = false;
+                if (currentMainFilter === 'all') {
+                    matchesStatus = true;
+                } else {
+                    matchesStatus = testStatus === currentMainFilter;
+                }
+                
+                if (matchesStatus && isSanitizer) {
+                    sanitizerCount++;
+                }
+            });
+            
+            // Update button text
+            if (sanitizerCount > 0) {
+                sanitizerBtn.textContent = `Sanitizer (${sanitizerCount})`;
+                sanitizerBtn.style.display = '';
+            } else {
+                sanitizerBtn.style.display = 'none';
+            }
+        }
+        
+        function updateTimeoutCount() {
+            const timeoutBtn = document.getElementById('timeout-filter-btn');
+            if (!timeoutBtn) return;
+            
+            // Count timeout tests for current status filter
+            // Use all test items from view-all (source of truth), not from current view
+            const allTestItems = Array.from(document.querySelectorAll('#view-all .test-item'));
+            let timeoutCount = 0;
+            
+            allTestItems.forEach(testItem => {
+                const testStatus = testItem.getAttribute('data-test-status');
+                const isTimeout = testItem.getAttribute('data-is-timeout') === 'true';
+                
+                // Check if test matches current status filter
+                let matchesStatus = false;
+                if (currentMainFilter === 'all') {
+                    matchesStatus = true;
+                } else {
+                    matchesStatus = testStatus === currentMainFilter;
+                }
+                
+                if (matchesStatus && isTimeout) {
+                    timeoutCount++;
+                }
+            });
+            
+            // Update button text
+            if (timeoutCount > 0) {
+                timeoutBtn.textContent = `Timeout (${timeoutCount})`;
+                timeoutBtn.style.display = '';
+            } else {
+                timeoutBtn.style.display = 'none';
+            }
+        }
+        
+        function toggleSanitizerFilter(button) {
+            const isActive = button.classList.contains('active');
+            
+            if (isActive) {
+                // Deactivate sanitizer filter
+                button.classList.remove('active');
+                currentSanitizerFilter = false;
+            } else {
+                // Activate sanitizer filter and deactivate timeout filter
+                button.classList.add('active');
+                currentSanitizerFilter = true;
+                
+                // Deactivate timeout filter if active
+                const timeoutBtn = document.getElementById('timeout-filter-btn');
+                if (timeoutBtn && currentTimeoutFilter) {
+                    timeoutBtn.classList.remove('active');
+                    currentTimeoutFilter = false;
+                }
+            }
+            
+            // Apply filters (status filter remains unchanged)
+            applyFilters();
+        }
+        
+        function toggleTimeoutFilter(button) {
+            const isActive = button.classList.contains('active');
+            
+            if (isActive) {
+                // Deactivate timeout filter
+                button.classList.remove('active');
+                currentTimeoutFilter = false;
+            } else {
+                // Activate timeout filter and deactivate sanitizer filter
+                button.classList.add('active');
+                currentTimeoutFilter = true;
+                
+                // Deactivate sanitizer filter if active
+                const sanitizerBtn = document.getElementById('sanitizer-filter-btn');
+                if (sanitizerBtn && currentSanitizerFilter) {
+                    sanitizerBtn.classList.remove('active');
+                    currentSanitizerFilter = false;
+                }
+            }
+            
+            // Apply filters (status filter remains unchanged)
+            applyFilters();
+        }
+        
+        
+        function setGroupBy(mode) {
+            currentGroupBy = mode;
+            const select = document.getElementById('groupBySelect');
+            if (select) select.value = mode;
+            
+            const suiteView = document.getElementById('view-all');
+            const flatView = document.getElementById('tests-flat');
+            
+            if (mode === 'suite') {
+                suiteView.style.display = 'block';
+                flatView.classList.remove('active');
+                flatView.innerHTML = '';
+            } else {
+                suiteView.style.display = 'none';
+                renderFlatView();
+            }
+            
+            // Update sanitizer and timeout counts after view change
+            updateSanitizerCount();
+            updateTimeoutCount();
+            
+            // Re-apply filters after switching view
+            applyFilters();
+        }
+        
+        function renderFlatView() {
+            const flatView = document.getElementById('tests-flat');
+            // Get all test items from source
+            const allTestItems = Array.from(document.querySelectorAll('#view-all .test-item'));
+            
+            // IMPORTANT: Filter tests BEFORE cloning to avoid creating DOM for hidden tests
+            // This significantly improves performance when filters are active
+            const visibleTestItems = allTestItems.filter(testItem => {
+                const testStatus = testItem.getAttribute('data-test-status');
+                const isSanitizer = testItem.getAttribute('data-is-sanitizer') === 'true';
+                const isTimeout = testItem.getAttribute('data-is-timeout') === 'true';
+                
+                // Apply main status filter
+                let shouldShow = false;
+                if (currentMainFilter === 'all') {
+                    shouldShow = true;
+                } else {
+                    shouldShow = testStatus === currentMainFilter;
+                }
+                
+                // Apply sanitizer filter if active
+                if (shouldShow && currentSanitizerFilter) {
+                    shouldShow = isSanitizer;
+                }
+                
+                // Apply timeout filter if active
+                if (shouldShow && currentTimeoutFilter) {
+                    shouldShow = isTimeout;
+                }
+                
+                return shouldShow;
+            });
+            
+            // Sort alphabetically by full_name (only visible tests)
+            visibleTestItems.sort((a, b) => {
+                const nameA = a.getAttribute('data-test-name') || '';
+                const nameB = b.getAttribute('data-test-name') || '';
+                return nameA.localeCompare(nameB);
+            });
+            
+            // Clone and update test items for flat view (only visible ones - optimization!)
+            flatView.innerHTML = '';
+            visibleTestItems.forEach(testItem => {
+                const clone = testItem.cloneNode(true);
+                const nameText = clone.querySelector('.test-name-text');
+                const fullName = clone.getAttribute('data-test-name');
+                if (nameText && fullName) {
+                    nameText.textContent = fullName;
+                }
+                // Ensure data attributes are set for cloned element
+                const nameElement = clone.querySelector('.test-name.has-error');
+                if (nameElement && nameElement.hasAttribute('data-has-error')) {
+                    nameElement.setAttribute('data-test-full-name', fullName);
+                }
+                
+                // Add owner information for flat view
+                const owner = clone.getAttribute('data-test-owner');
+                if (owner) {
+                    // Parse owner string (format: "TEAM:@ydb-platform/team-name;;...")
+                    const ownerParts = owner.split(';;');
+                    if (ownerParts.length > 0) {
+                        const firstOwner = ownerParts[0];
+                        // Extract team name (remove "TEAM:@ydb-platform/" prefix and ":owner" suffix)
+                        let teamName = firstOwner.replace('TEAM:@ydb-platform/', '');
+                        const colonIndex = teamName.indexOf(':');
+                        if (colonIndex !== -1) {
+                            teamName = teamName.substring(0, colonIndex);
+                        }
+                        
+                        if (teamName) {
+                            // Check if owner element already exists (remove if exists)
+                            const existingOwner = clone.querySelector('.test-owner');
+                            if (existingOwner) {
+                                existingOwner.remove();
+                            }
+                            
+                            // Create owner element
+                            const ownerSpan = document.createElement('span');
+                            ownerSpan.className = 'test-owner';
+                            const ownerLink = document.createElement('a');
+                            ownerLink.href = `https://github.com/orgs/ydb-platform/teams/${teamName}`;
+                            ownerLink.target = '_blank';
+                            ownerLink.textContent = teamName;
+                            ownerSpan.appendChild(document.createTextNode('Owner: '));
+                            ownerSpan.appendChild(ownerLink);
+                            
+                            // Add to test-meta
+                            const testMeta = clone.querySelector('.test-meta');
+                            if (testMeta) {
+                                testMeta.appendChild(ownerSpan);
+                            }
+                        }
+                    }
+                }
+                
+                flatView.appendChild(clone);
+            });
+            
+            flatView.classList.add('active');
+            
+            // Update success rate buttons after rendering flat view
+            // Data might have been loaded by now, so update buttons
+            if (Object.keys(testSuccessRates).length > 0) {
+                updateSuccessRateButtons();
+            }
+        }
+        
+        function applyFilters() {
+            // Remove data-initial-filter attribute from body (was used to hide all tests initially)
+            if (document.body && document.body.hasAttribute('data-initial-filter')) {
+                document.body.removeAttribute('data-initial-filter');
+            }
+            
+            // Filter tests using data attributes
+            const allTestItems = currentGroupBy === 'suite' 
+                ? document.querySelectorAll('#view-all .test-item')
+                : document.querySelectorAll('#tests-flat .test-item');
+            const allSuites = document.querySelectorAll('.suite-group');
+            
+            allTestItems.forEach(testItem => {
+                const testStatus = testItem.getAttribute('data-test-status');
+                const isSanitizer = testItem.getAttribute('data-is-sanitizer') === 'true';
+                const isTimeout = testItem.getAttribute('data-is-timeout') === 'true';
+                
+                // First apply main status filter
+                let shouldShow = false;
+                if (currentMainFilter === 'all') {
+                    shouldShow = true;
+                } else {
+                    // Match status (failed, error, mute, passed, skipped)
+                    shouldShow = testStatus === currentMainFilter;
+                }
+                
+                // Then apply sanitizer filter if active (additional filter on top of status)
+                if (shouldShow && currentSanitizerFilter) {
+                    shouldShow = isSanitizer;
+                }
+                
+                // Then apply timeout filter if active (additional filter on top of status)
+                if (shouldShow && currentTimeoutFilter) {
+                    shouldShow = isTimeout;
+                }
+                
+                // Use display property directly for better performance
+                testItem.style.display = shouldShow ? '' : 'none';
+            });
+            
+            // Update sanitizer and timeout counts after filtering
+            updateSanitizerCount();
+            updateTimeoutCount();
+            
+            // Show/hide suites based on visible tests, update counts (only for suite view)
+            if (currentGroupBy === 'suite') {
+            allSuites.forEach(suiteGroup => {
+                const suiteContent = suiteGroup.querySelector('.suite-content');
+                const allTestsInSuite = suiteContent.querySelectorAll('.test-item');
+                const visibleCount = Array.from(allTestsInSuite).filter(item => 
+                    item.style.display !== 'none'
+                ).length;
+                
+                // Update suite header count
+                // First span: toggle, second: suite name, third: count
+                const countSpan = suiteGroup.querySelector('.suite-header span:nth-of-type(3)');
+                if (countSpan && countSpan.textContent.includes('(')) {
+                    countSpan.textContent = ` (${visibleCount} test${visibleCount !== 1 ? 's' : ''})`;
+                }
+                
+                // Show/hide suite based on visible tests
+                if (visibleCount > 0) {
+                    suiteGroup.style.display = '';
+                    // Expand all suites when filtering
+                    suiteContent.classList.remove('hidden');
+                    const toggle = suiteGroup.querySelector('.suite-toggle');
+                    if (toggle) toggle.textContent = '\u25BC';
+                } else {
+                    suiteGroup.style.display = 'none';
+                }
+            });
+            }
+            
+            // Update URL without reload
+            const url = new URL(window.location);
+            if (currentMainFilter === 'all') {
+                url.searchParams.delete('status');
+            } else {
+                // Capitalize first letter for status in URL
+                const statusInUrl = currentMainFilter.charAt(0).toUpperCase() + currentMainFilter.slice(1);
+                url.searchParams.set('status', statusInUrl);
+            }
+            if (currentGroupBy !== 'none') {
+                url.searchParams.set('groupBy', currentGroupBy);
+            } else {
+                url.searchParams.delete('groupBy');
+            }
+            if (currentSanitizerFilter) {
+                url.searchParams.set('sanitizer', 'true');
+            } else {
+                url.searchParams.delete('sanitizer');
+            }
+            if (currentTimeoutFilter) {
+                url.searchParams.set('timeout', 'true');
+            } else {
+                url.searchParams.delete('timeout');
+            }
+            window.history.pushState({filter: currentMainFilter, groupBy: currentGroupBy, sanitizer: currentSanitizerFilter, timeout: currentTimeoutFilter}, '', url);
+        }
+        
+        // Handle URL parameters on load
+        function initFilterFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const status = urlParams.get('status');
+            const sanitizer = urlParams.get('sanitizer');
+            const timeout = urlParams.get('timeout');
+            const groupBy = urlParams.get('groupBy');
+            
+            // Handle sanitizer filter
+            if (sanitizer === 'true') {
+                const sanitizerBtn = document.getElementById('sanitizer-filter-btn');
+                if (sanitizerBtn) {
+                    currentSanitizerFilter = true;
+                    sanitizerBtn.classList.add('active');
+                }
+            }
+            
+            // Handle timeout filter
+            if (timeout === 'true') {
+                const timeoutBtn = document.getElementById('timeout-filter-btn');
+                if (timeoutBtn) {
+                    currentTimeoutFilter = true;
+                    timeoutBtn.classList.add('active');
+                }
+            }
+            
+            // Handle status filter
+            if (status) {
+                const filter = status.toLowerCase();
+                // Map common status names to filter names
+                const filterMap = {
+                    'fail': 'failed',
+                    'pass': 'passed',
+                    'err': 'error',
+                    'mut': 'mute',
+                    'skip': 'skipped'
+                };
+                const actualFilter = filterMap[filter] || filter;
+                const button = document.querySelector(`.filter-btn.${actualFilter}`);
+                if (button) {
+                    // Update button state without calling setFilter (which calls setGroupBy)
+                    document.querySelectorAll('.filter-btn').forEach(btn => {
+                        btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
+                    });
+                    button.classList.add('active', actualFilter);
+                    currentMainFilter = actualFilter;
+                }
+            }
+            
+            // Apply filters BEFORE setGroupBy to avoid rendering all tests
+            applyFilters();
+            
+            // Handle groupBy AFTER filters are applied
+            if (groupBy) {
+                setGroupBy(groupBy);
+            } else {
+                // If no groupBy in URL, use default 'none' but AFTER filters
+                setGroupBy('none');
+            }
+        }
+        
+        // Handle browser back/forward
+        window.addEventListener('popstate', function(event) {
+            initFilterFromUrl();
+        });
+
+        function toggleErrorByName(testName, nameElement) {
+            // Find test item in current view (suite or flat)
+            const testItem = nameElement.closest('.test-item');
+            if (!testItem) return;
+            
+            const errorContent = testItem.querySelector('.error-content');
+            if (!errorContent) return;
+            
+            const toggle = nameElement.querySelector('.test-name-toggle');
+            
+            if (errorContent.classList.contains('hidden')) {
+                // Load error description on demand if not already loaded
+                if (!errorContent.hasAttribute('data-loaded')) {
+                    getTestDescriptions().then(descs => {
+                        const errorText = descs[testName] || '';
+                        if (errorText) {
+                            const isPython = testName.includes('.py');
+                            const codeElement = document.createElement('code');
+                            codeElement.className = 'language-' + (isPython ? 'python' : 'cpp');
+                            codeElement.textContent = errorText;
+                            const preElement = document.createElement('pre');
+                            preElement.appendChild(codeElement);
+                            errorContent.appendChild(preElement);
+                            // Highlight as soon as the element is ready so first open is styled
+                            if (typeof Prism !== 'undefined') {
+                                requestAnimationFrame(() => {
+                                    Prism.highlightElement(codeElement);
+                                    codeElement.setAttribute('data-prism-loaded', 'true');
+                                });
+                            } else {
+                                codeElement.setAttribute('data-needs-highlight', 'true');
+                            }
+                        }
+                        errorContent.setAttribute('data-loaded', 'true');
+                    });
+                }
+                
+                // Show immediately without blocking
+                errorContent.classList.remove('hidden');
+                testItem.classList.remove('error-hidden');
+                if (toggle) toggle.classList.add('expanded');
+                // Highlight syntax asynchronously after showing
+                if (typeof Prism !== 'undefined') {
+                    const codeElement = errorContent.querySelector('code[data-needs-highlight]');
+                    if (codeElement && !codeElement.hasAttribute('data-prism-loaded')) {
+                        requestAnimationFrame(() => {
+                            Prism.highlightElement(codeElement);
+                            codeElement.setAttribute('data-prism-loaded', 'true');
+                            codeElement.removeAttribute('data-needs-highlight');
+                        });
+                    }
+                }
+            } else {
+                // Hide immediately without animation
+                errorContent.classList.add('hidden');
+                testItem.classList.add('error-hidden');
+                if (toggle) toggle.classList.remove('expanded');
+            }
+        }
+        
+        function toggleError(button) {
+            const testItem = button.closest('.test-item');
+            const errorContent = testItem.querySelector('.error-content');
+            const testName = button.getAttribute('data-test-name');
+            const nameElement = testItem.querySelector('.test-name');
+            
+            if (errorContent.classList.contains('hidden')) {
+                // Load error description on demand if not already loaded
+                if (!errorContent.hasAttribute('data-loaded')) {
+                    getTestDescriptions().then(descs => {
+                        const errorText = descs[testName] || '';
+                        if (errorText) {
+                            const isPython = testName.includes('.py');
+                            const codeElement = document.createElement('code');
+                            codeElement.className = 'language-' + (isPython ? 'python' : 'cpp');
+                            codeElement.textContent = errorText;
+                            const preElement = document.createElement('pre');
+                            preElement.appendChild(codeElement);
+                            errorContent.appendChild(preElement);
+                            // Highlight as soon as the element is ready so first open is styled
+                            if (typeof Prism !== 'undefined') {
+                                requestAnimationFrame(() => {
+                                    Prism.highlightElement(codeElement);
+                                    codeElement.setAttribute('data-prism-loaded', 'true');
+                                });
+                            } else {
+                                codeElement.setAttribute('data-needs-highlight', 'true');
+                            }
+                        }
+                        errorContent.setAttribute('data-loaded', 'true');
+                    });
+                }
+                
+                // Show immediately without blocking
+                errorContent.classList.remove('hidden');
+                testItem.classList.remove('error-hidden');
+                button.textContent = 'Hide';
+                const toggle = nameElement ? nameElement.querySelector('.test-name-toggle') : null;
+                if (toggle) toggle.classList.add('expanded');
+                // Highlight syntax asynchronously after showing
+                if (typeof Prism !== 'undefined') {
+                    const codeElement = errorContent.querySelector('code[data-needs-highlight]');
+                    if (codeElement && !codeElement.hasAttribute('data-prism-loaded')) {
+                        requestAnimationFrame(() => {
+                            Prism.highlightElement(codeElement);
+                            codeElement.setAttribute('data-prism-loaded', 'true');
+                            codeElement.removeAttribute('data-needs-highlight');
+                        });
+                    }
+                }
+            } else {
+                // Hide immediately without animation
+                errorContent.classList.add('hidden');
+                testItem.classList.add('error-hidden');
+                button.textContent = 'Error';
+                const toggle = nameElement ? nameElement.querySelector('.test-name-toggle') : null;
+                if (toggle) toggle.classList.remove('expanded');
+            }
+        }
+        
+        function parseTestName(full_name) {
+            const trimmed = full_name.trim();
+            let pieces;
+            
+            if (trimmed.includes('.py.')) {
+                pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(trimmed);
+            } else {
+                pieces = /(.+)\/([^$]+)$/.exec(trimmed);
+            }
+
+            if (!pieces) {
+                console.error("Unable to split path/test name from %o", trimmed);
+                return null;
+            }
+            
+            return [pieces[1], pieces[2]];
+        }
+
+        function formatTestCommand(path, testName) {
+            const namePieces = testName.split('.');
+
+            if (namePieces.length === 2) {
+                testName = namePieces[0] + '::' + namePieces[1];
+            } else {
+                testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
+            }
+
+            return `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
+        }
+
+        function getTestRunCommand(test) {
+            const parsed = parseTestName(test);
+            if (!parsed) return "";
+            
+            const [path, testName] = parsed;
+            return formatTestCommand(path, testName);
+        }
+        
+        function copyTestName(testFullName) {
+            if (!testFullName) return;
+
+            navigator.clipboard.writeText(testFullName).then(
+                () => {
+                    console.log("Test name copied:", testFullName);
+                },
+                () => {
+                    console.error("Unable to copy test name to clipboard:", testFullName);
+                }
+            );
+        }
+        
+        function copyRunCommand(test) {
+            const cmdArg = getTestRunCommand(test);
+            if (!cmdArg) return;
+
+            console.log(cmdArg);
+
+            navigator.clipboard.writeText(cmdArg).then(
+                () => {
+                    console.log("Copied!");
+                },
+                () => {
+                    console.error("Unable to copy %o to clipboard", cmdArg);
+                }
+            );
+        }
+        
+        function openHistory(test) {
+            const full_name = test.trim();
+            const buildPreset = "{{ build_preset }}";
+            const branch = "{{ branch }}";
+            let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
+            window.open(url, '_blank');
+        }
+        
+        // Configuration constants
+        const MAX_URL_LENGTH = 8000;
+        const GITHUB_ISSUE_BASE_URL = "https://github.com/ydb-platform/ydb/issues/new";
+        
+        function buildGitHubIssueUrl(title, body, labels) {
+            return GITHUB_ISSUE_BASE_URL + "?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+        }
+        
+        function isDecodable(s) {
+            try { decodeURIComponent(s); return true; } catch (e) { return false; }
+        }
+        
+        function safeTruncateEncoded(encoded, maxLen) {
+            if (encoded.length <= maxLen) return encoded;
+            let cut = encoded.slice(0, maxLen);
+            cut = cut.replace(/%(?:[0-9A-Fa-f]{0,2})$/, '');
+            while (cut && !isDecodable(cut)) {
+                if (/%[0-9A-Fa-f]{2}$/.test(cut)) cut = cut.slice(0, -3);
+                else cut = cut.slice(0, -1);
+            }
+            return cut;
+        }
+        
+        const ownerAreaMapping = parseJsonScript('owner-area-mapping-json');
+
+        function getOwnerAreaLabel(owner) {
+            const ownerMapping = ownerAreaMapping;
+            if (!ownerMapping) return "";
+            return ownerMapping[owner] || "";
+        }
+        
+        function buildLabels(issueType, buildPreset, ownerAreaLabel) {
+            let labels = [];
+            if (issueType === 'mute') {
+                labels.push('mute');
+            } else {
+                labels.push('bug');
+                if (issueType === 'sanitizer') {
+                    labels.push('sanitizer');
+                    if (buildPreset.includes("asan")) {
+                        labels.push("asan");
+                    } else if (buildPreset.includes("msan")) {
+                        labels.push("msan");
+                    } else if (buildPreset.includes("tsan")) {
+                        labels.push("tsan");
+                    }
+                }
+            }
+            if (ownerAreaLabel) {
+                labels.push(ownerAreaLabel);
+            }
+            return labels.join(',');
+        }
+        
+        function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText) {
+            let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
+            if (issueType === 'sanitizer') {
+            } else if (issueType === 'mute') {
+                body += "**Test mute request**%0A%0A";
+            } else {
+                body += "**Test Failure**%0A%0A";
+            }
+            body += "**Build Information:**%0A";
+            if (commitSha && commitSha !== "") {
+                body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
+            }
+            body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+            body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
+            body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
+            body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
+            if (issueType !== 'sanitizer') {
+                if (success_count + fail_count != 0) {
+                    body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+                } else {
+                    body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+                }
+            }
+            body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+            body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
+            return body;
+        }
+        
+        function buildBodyWithLengthLimit(baseBody, logUrls, errorText, title, labels, maxUrlLength) {
+            let body = baseBody;
+            if (logUrls && Object.keys(logUrls).length > 0) {
+                let logsSection = "**Logs:**%0A";
+                for (const [logName, logUrl] of Object.entries(logUrls)) {
+                    logsSection += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+                }
+                logsSection += "%0A";
+                body += logsSection;
+            }
+            if (errorText && errorText.trim() !== "") {
+                const errorPrefix = "**Error Summary:**%0A```%0A";
+                const errorSuffix = "%0A```%0A%0A";
+                const truncationMsg = "%0A<TRUNCATED>";
+                const fullErrorText = errorText.trim();
+                const encodedFullError = encodeURIComponent(fullErrorText);
+                const minimalSection = errorPrefix + errorSuffix;
+                const minimalUrl = buildGitHubIssueUrl(title, body + minimalSection, labels);
+                if (minimalUrl.length > maxUrlLength) {
+                } else {
+                    const allowedDelta = maxUrlLength - minimalUrl.length;
+                    if (encodedFullError.length <= allowedDelta) {
+                        body += errorPrefix + encodedFullError + errorSuffix;
+                    } else {
+                        const allowedForEncoded = allowedDelta - truncationMsg.length;
+                        if (allowedForEncoded > 0) {
+                            const truncatedEncoded = safeTruncateEncoded(encodedFullError, allowedForEncoded);
+                            if (truncatedEncoded) {
+                                body += errorPrefix + truncatedEncoded + truncationMsg + errorSuffix;
+                            }
+                        }
+                    }
+                }
+            }
+            return body;
+        }
+        
+        function createIssueGeneric(issueType, test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+            const parsed = parseTestName(test);
+            if (!parsed) return;
+            const [path, testName] = parsed;
+            const buildPreset = "{{ build_preset }}";
+            const branch = "{{ branch }}";
+            const commitSha = "{{ commit_sha }}";
+            const testRunCommand = getTestRunCommand(test);
+            const ownerAreaLabel = getOwnerAreaLabel(owner);
+            let actualIssueType = issueType;
+            if (is_sanitizer && issueType === 'bug') {
+                actualIssueType = 'sanitizer';
+            }
+            let title;
+            if (actualIssueType === 'sanitizer') {
+                title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            } else if (actualIssueType === 'mute') {
+                title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            } else {
+                title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            }
+            const body = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText);
+            const labels = buildLabels(actualIssueType, buildPreset, ownerAreaLabel);
+            const finalBody = buildBodyWithLengthLimit(body, logUrls, errorText, title, labels, MAX_URL_LENGTH);
+            const finalUrl = buildGitHubIssueUrl(title, finalBody, labels);
+            window.open(finalUrl, '_blank');
+        }
+        
+        function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+            createIssueGeneric('bug', test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
+        }
+        
+        function createIssueForTest(button) {
+            const testItem = button.closest('.test-item');
+            const testName = testItem.getAttribute('data-test-name');
+            const owner = testItem.getAttribute('data-test-owner') || '';
+            const ownerMatch = owner.match(/TEAM:@ydb-platform\/([^;:]+)/);
+            const ownerSimple = ownerMatch ? ownerMatch[1] : owner;
+            // Get success/fail counts from test history if available (async)
+            getTestHistory().then(history => {
+                let success_count = 0;
+                let fail_count = 0;
+                if (history && history[testName]) {
+                    for (const timestamp in history[testName]) {
+                        const status = history[testName][timestamp].status;
+                        if (status === 'passed') success_count++;
+                        else if (status === 'failure' || status === 'mute') fail_count++;
+                    }
+                }
+                const is_sanitizer = testItem.querySelector('.sanitizer-badge') !== null;
+                let errorText = '';
+                // Try to get from loaded error content first
+                const errorContent = testItem.querySelector('.error-content pre code');
+                if (errorContent) {
+                    errorText = errorContent.textContent;
+                    let logUrls = {};
+                    const logLinks = testItem.querySelectorAll('.log-link');
+                    logLinks.forEach(link => {
+                        logUrls[link.textContent] = link.href;
+                    });
+                    createIssue(testName, ownerSimple, success_count, fail_count, is_sanitizer, errorText, logUrls);
+                } else {
+                    // If not loaded yet, get from testDescriptions
+                    getTestDescriptions().then(descs => {
+                        errorText = descs[testName] || '';
+                        let logUrls = {};
+                        const logLinks = testItem.querySelectorAll('.log-link');
+                        logLinks.forEach(link => {
+                            logUrls[link.textContent] = link.href;
+                        });
+                        createIssue(testName, ownerSimple, success_count, fail_count, is_sanitizer, errorText, logUrls);
+                    });
+                }
+            });
+        }
+        
+        async function showSuccessRateModal(testFullName) {
+            const modal = document.getElementById('successRateModal');
+            const modalTitle = document.getElementById('successRateModalTitle');
+            const modalContent = document.getElementById('successRateModalContent');
+            
+            // Load data asynchronously
+            const [history, rates] = await Promise.all([
+                getTestHistory(),
+                getTestSuccessRates()
+            ]);
+            
+            console.log('showSuccessRateModal - testFullName:', testFullName);
+            console.log('showSuccessRateModal - history keys:', Object.keys(history).length);
+            console.log('showSuccessRateModal - has history for test:', testFullName in history);
+            console.log('showSuccessRateModal - rates keys:', Object.keys(rates).length);
+            console.log('showSuccessRateModal - has rates for test:', testFullName in rates);
+            
+            if (!history || !history[testFullName] || !rates || !rates[testFullName]) {
+                modalTitle.textContent = `Success Rate: ${testFullName}`;
+                modalContent.innerHTML = '<div style="padding: 20px;"><p>No history data available for this test.</p><p>History is collected for the last 4 days for failed, error, and muted tests.</p></div>';
+                modal.style.display = 'block';
+                return;
+            }
+            
+            const testRates = rates[testFullName];
+            const testHistory = history[testFullName];
+            
+            // Build modal content
+            let html = '<div style="margin-bottom: 20px;">';
+            html += '<h3>Overall Success Rate (Last 4 Days)</h3>';
+            html += '<div style="display: flex; gap: 30px; margin: 15px 0;">';
+            if (testRates.other) {
+                html += `<div><strong>Branch Runs:</strong> ${testRates.other.rate}% (${testRates.other.passed}/${testRates.other.total})</div>`;
+            }
+            if (testRates.pr_check) {
+                html += `<div><strong>PR-Check:</strong> ${testRates.pr_check.rate}% (${testRates.pr_check.passed}/${testRates.pr_check.total})</div>`;
+            }
+            html += '</div></div>';
+            
+            // Group history by date and calculate daily success rates
+            const historyByDate = {};
+            for (const timestamp in testHistory) {
+                const entry = testHistory[timestamp];
+                if (!entry) continue; // Skip invalid entries
+                
+                // Safely get date - handle both 'date' and 'datetime' fields
+                const dateStr = entry.date || entry.datetime || '';
+                if (!dateStr) continue; // Skip entries without date
+                
+                const date = dateStr.split(' ')[0]; // Get date part only
+                if (!date) continue; // Skip if date is empty after split
+                
+                if (!historyByDate[date]) {
+                    historyByDate[date] = {
+                        pr_check: { passed: 0, total: 0 },
+                        other: { passed: 0, total: 0 },
+                        entries: []
+                    };
+                }
+                const isPrCheck = entry.job_name && (
+                    entry.job_name.toLowerCase().includes('pr-check') ||
+                    entry.job_name.toLowerCase().includes('pr_check') ||
+                    entry.job_name.toLowerCase().includes('pr/check')
+                );
+                const group = isPrCheck ? 'pr_check' : 'other';
+                historyByDate[date][group].total++;
+                if (entry.status === 'passed') {
+                    historyByDate[date][group].passed++;
+                }
+                historyByDate[date].entries.push({
+                    timestamp: timestamp,
+                    entry: entry
+                });
+            }
+            
+            // Sort dates (newest first)
+            const sortedDates = Object.keys(historyByDate).sort((a, b) => new Date(b) - new Date(a));
+            
+            html += '<h3>Daily History</h3>';
+            html += '<div class="sr-table-wrap"><table class="sr-table" style="width: 100%; border-collapse: collapse; margin-top: 15px;">';
+            html += '<thead><tr style="background-color: #f6f8fa; border-bottom: 2px solid #d0d7de;">';
+            html += '<th style="padding: 10px; text-align: left;">Date</th>';
+            const branch = "{{ branch }}";
+            html += `<th style="padding: 10px; text-align: center;">Success Rate Branch (${branch})</th>`;
+            html += `<th style="padding: 10px; text-align: left;">Runs in Branch (${branch})</th>`;
+            html += '<th style="padding: 10px; text-align: center;">Success Rate PR-Check</th>';
+            html += '<th style="padding: 10px; text-align: left;">Runs in PR-Check</th>';
+            html += '</tr></thead><tbody>';
+            
+            for (const date of sortedDates) {
+                const dayData = historyByDate[date];
+                const prRate = dayData.pr_check.total > 0 
+                    ? ((dayData.pr_check.passed / dayData.pr_check.total) * 100).toFixed(1)
+                    : '-';
+                const otherRate = dayData.other.total > 0
+                    ? ((dayData.other.passed / dayData.other.total) * 100).toFixed(1)
+                    : '-';
+                
+                // Sort entries by timestamp (newest first) and separate by type
+                dayData.entries.sort((a, b) => parseInt(b.timestamp) - parseInt(a.timestamp));
+                
+                // Separate entries by type
+                const prCheckEntries = dayData.entries.filter(({ entry }) => {
+                    const jobName = entry.job_name || '';
+                    return jobName.toLowerCase().includes('pr-check') ||
+                           jobName.toLowerCase().includes('pr_check') ||
+                           jobName.toLowerCase().includes('pr/check');
+                });
+                const otherEntries = dayData.entries.filter(({ entry }) => {
+                    const jobName = entry.job_name || '';
+                    return !jobName.toLowerCase().includes('pr-check') &&
+                           !jobName.toLowerCase().includes('pr_check') &&
+                           !jobName.toLowerCase().includes('pr/check');
+                });
+                
+                html += `<tr style="border-bottom: 1px solid #d0d7de;">`;
+                html += `<td style="padding: 10px;"><strong>${date}</strong></td>`;
+                
+                // Column 1: Success Rate Branch (main) - процент и количество для Branch runs
+                html += `<td style="padding: 10px; text-align: center;">${dayData.other.total > 0 ? `${otherRate}% (${dayData.other.passed}/${dayData.other.total})` : '-'}</td>`;
+                
+                // Column 2: Runs in Branch (main) - иконки для Branch runs
+                html += `<td style="padding: 10px;"><div class="sr-runs">`;
+                for (const { timestamp, entry } of otherEntries) {
+                    if (!entry) continue; // Skip invalid entries
+                    const status = entry.status || 'unknown';
+                    const date = entry.date || entry.datetime || '';
+                    const jobName = entry.job_name || '';
+                    const statusColor = status === 'passed' ? '#28a745' : 
+                                       status === 'failure' ? '#dc3545' : '#007bff';
+                    const statusSymbol = status === 'passed' ? '✓' : 
+                                        status === 'failure' ? '✗' : '⊘';
+                    html += `<span style="cursor: pointer; padding: 4px 8px; border-radius: 3px; background-color: ${statusColor}; color: white; font-size: 11px;" `;
+                    html += `onclick="showHistoryEntry('${testFullName}', '${timestamp}')" `;
+                    html += `title="${status} - ${date} - ${jobName}">`;
+                    html += `${statusSymbol}</span>`;
+                }
+                html += '</div></td>';
+                
+                // Column 3: Success Rate PR-Check - процент и количество для PR-Check runs
+                html += `<td style="padding: 10px; text-align: center;">${dayData.pr_check.total > 0 ? `${prRate}% (${dayData.pr_check.passed}/${dayData.pr_check.total})` : '-'}</td>`;
+                
+                // Column 4: Runs in PR-Check - иконки для PR-Check runs
+                html += `<td style="padding: 10px;"><div class="sr-runs">`;
+                for (const { timestamp, entry } of prCheckEntries) {
+                    if (!entry) continue; // Skip invalid entries
+                    const status = entry.status || 'unknown';
+                    const date = entry.date || entry.datetime || '';
+                    const jobName = entry.job_name || '';
+                    const statusColor = status === 'passed' ? '#28a745' : 
+                                       status === 'failure' ? '#dc3545' : '#007bff';
+                    const statusSymbol = status === 'passed' ? '✓' : 
+                                        status === 'failure' ? '✗' : '⊘';
+                    html += `<span style="cursor: pointer; padding: 4px 8px; border-radius: 3px; background-color: ${statusColor}; color: white; font-size: 11px;" `;
+                    html += `onclick="showHistoryEntry('${testFullName}', '${timestamp}')" `;
+                    html += `title="${status} - ${date} - ${jobName}">`;
+                    html += `${statusSymbol}</span>`;
+                }
+                html += '</div></td></tr>';
+            }
+            html += '</tbody></table>';
+            html += '</div>'; // sr-table-wrap
+            
+            modalTitle.textContent = `Success Rate: ${testFullName}`;
+            modalContent.innerHTML = html;
+            modal.style.display = 'block';
+        }
+        
+        async function showHistoryEntry(testName, timestamp) {
+            const history = await getTestHistory();
+            if (!history || !history[testName] || !history[testName][timestamp]) return;
+            
+            const entry = history[testName][timestamp];
+            const timestampStr = String(timestamp);
+            // Get error text from separate historyDescriptions object
+            const errorText = await getHistoryError(testName, timestampStr);
+            
+            // Find the test item to get log URLs
+            const testItem = document.querySelector(`[data-test-name="${testName}"]`);
+            const logUrls = {};
+            if (testItem) {
+                const logLinks = testItem.querySelectorAll('.log-link');
+                logLinks.forEach(link => {
+                    logUrls[link.textContent] = link.href;
+                });
+            }
+            
+            showTestInfo({
+                testName: testName,
+                status: entry.status || '',
+                date: entry.date || entry.datetime || '',
+                errorText: errorText,
+                commit: entry.commit || '',
+                job_name: entry.job_name || '',
+                job_id: entry.job_id || '',
+                logUrls: logUrls
+            });
+        }
+        
+        function closeSuccessRateModal() {
+            document.getElementById('successRateModal').style.display = 'none';
+        }
+        
+        function showTestInfo(testInfo) {
+            const modal = document.getElementById('errorModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalStatus = document.getElementById('modalStatus');
+            const modalDate = document.getElementById('modalDate');
+            const modalErrorContent = document.getElementById('modalErrorContent');
+            const modalLogLinks = document.getElementById('modalLogLinks');
+
+            // Fill information
+            modalTitle.textContent = 'Test details: ' + testInfo.testName;
+            modalStatus.textContent = testInfo.status;
+            modalDate.textContent = testInfo.date;
+            
+            // Update job link
+            const jobLink = document.getElementById('modalJobLink');
+            if (testInfo.job_id) {
+                jobLink.href = `https://github.com/ydb-platform/ydb/actions/runs/${testInfo.job_id}`;
+                jobLink.textContent = testInfo.job_name || 'View run';
+            }
+            
+            // Update commit link
+            const shaLink = document.getElementById('modalShaLink');
+            if (testInfo.commit) {
+                shaLink.href = `https://github.com/ydb-platform/ydb/commit/${testInfo.commit}`;
+                shaLink.textContent = testInfo.commit.substring(0, 8);
+            }
+            
+            // Status class
+            modalStatus.className = '';
+            if (testInfo.status === 'passed') {
+                modalStatus.classList.add('test_pass');
+            } else if (testInfo.status === 'failure') {
+                modalStatus.classList.add('test_fail');
+            } else if (testInfo.status === 'mute') {
+                modalStatus.classList.add('test_mute');
+            }
+            
+            // Error text
+            if (testInfo.errorText && testInfo.errorText.trim() !== "") {
+                document.getElementById('modalErrorSection').style.display = 'block';
+                modalErrorContent.textContent = testInfo.errorText;
+                modalErrorContent.className = 'language-' + (testInfo.testName.includes('.py') ? 'python' : 'cpp');
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightElement(modalErrorContent);
+                }
+            } else {
+                document.getElementById('modalErrorSection').style.display = 'none';
+            }
+            
+            // Log links - reuse same style as main page
+            modalLogLinks.innerHTML = '';
+            if (testInfo.logUrls && Object.keys(testInfo.logUrls).length > 0) {
+                for (const [logName, logUrl] of Object.entries(testInfo.logUrls)) {
+                    const link = document.createElement('a');
+                    link.href = logUrl;
+                    link.target = '_blank';
+                    link.className = 'log-link';
+                    link.textContent = logName;
+                    modalLogLinks.appendChild(link);
+                }
+            }
+            
+            // Show modal
+            modal.style.display = 'block';
+        }
+        
+        // Close modal when clicking X or outside
+        document.addEventListener('DOMContentLoaded', function() {
+            const closeModals = document.querySelectorAll('.close-modal');
+            closeModals.forEach(closeBtn => {
+                closeBtn.onclick = function(event) {
+                    event.stopPropagation(); // Prevent triggering window.onclick
+                    // Try to find modal parent with class 'modal' first
+                    let modal = this.closest('.modal');
+                    if (!modal) {
+                        // If not found, try to find parent with id 'errorModal'
+                        modal = this.closest('div#errorModal');
+                        if (!modal) {
+                            // Fallback: find by id directly
+                            modal = document.getElementById('errorModal');
+                        }
+                    }
+                    if (modal) {
+                        modal.style.display = 'none';
+                    }
+                }
+            });
+            
+            window.onclick = function(event) {
+                const errorModal = document.getElementById('errorModal');
+                const successRateModal = document.getElementById('successRateModal');
+                if (event.target == errorModal) {
+                    errorModal.style.display = 'none';
+                }
+                if (event.target == successRateModal) {
+                    successRateModal.style.display = 'none';
+                }
+            }
+            
+            // Close modals on Escape key
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Escape' || event.keyCode === 27) {
+                    const errorModal = document.getElementById('errorModal');
+                    const successRateModal = document.getElementById('successRateModal');
+                    if (errorModal && errorModal.style.display === 'block') {
+                        errorModal.style.display = 'none';
+                    }
+                    if (successRateModal && successRateModal.style.display === 'block') {
+                        successRateModal.style.display = 'none';
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+

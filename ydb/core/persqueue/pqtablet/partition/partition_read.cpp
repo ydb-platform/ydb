@@ -476,6 +476,10 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         ui64 firstHeaderOffset = blobBatches->front().GetOffset();
 
         for (auto& batch : *blobBatches) {
+            if (needStop) {
+                break;
+            }
+
             auto& header = batch.Header;
             ui64 trueOffset = blobs[pos].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
 
@@ -496,10 +500,6 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                     << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
 
             for (size_t i = pos; i < batch.Blobs.size(); ++i) {
-                if (needStop) {
-                    break;
-                }
-
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 

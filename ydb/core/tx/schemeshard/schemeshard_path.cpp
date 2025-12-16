@@ -959,24 +959,18 @@ const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const
 
 namespace {
 
-TVector<NKikimrSchemeOp::EPathType> AvailableInExportPathTypes() {
-    return {
-        NKikimrSchemeOp::EPathTypeTable,
-        NKikimrSchemeOp::EPathTypeColumnTable,
-        NKikimrSchemeOp::EPathTypeView,
-        NKikimrSchemeOp::EPathTypePersQueueGroup,
-        NKikimrSchemeOp::EPathTypeReplication
-    };
-}
-
 bool CheckAvailableInExports(NKikimrSchemeOp::EPathType pathType) {
     switch (pathType) {
         case NKikimrSchemeOp::EPathTypeView:
             return AppData()->FeatureFlags.GetEnableViewExport();
         case NKikimrSchemeOp::EPathTypeColumnTable:
             return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
+        case NKikimrSchemeOp::EPathTypeTable:
+        case NKikimrSchemeOp::EPathTypePersQueueGroup:
+        case NKikimrSchemeOp::EPathTypeReplication:
+            return true;
         default:
-            return IsIn(AvailableInExportPathTypes(), pathType);
+            return false;
     };
 }
 

@@ -108,7 +108,7 @@ jobs:
           
           # Helper function: check if string looks like a SHA (commit hash)
           is_sha() {
-            [[ $1 =~ ^[0-9a-f]{7,40}$ ]]
+            [[ $1 =~ ^[0-9a-fA-F]{7,40}$ ]]
           }
           
           # Helper function: check if string looks like a branch name (not SHA, not pull/N)

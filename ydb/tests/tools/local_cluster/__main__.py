@@ -40,11 +40,9 @@ def download_binary_from_s3(version, working_dir):
     Returns:
         Path to downloaded binary
     """
-    # Store binaries in binary/<version>/ydbd
     binary_dir = os.path.join(working_dir, "binary", version)
     binary_path = os.path.join(binary_dir, "ydbd")
     
-    # Check if binary already exists
     if os.path.exists(binary_path) and os.access(binary_path, os.X_OK):
         logger.info("Binary already exists for version %s: %s", version, binary_path)
         return binary_path
@@ -57,13 +55,8 @@ def download_binary_from_s3(version, working_dir):
     logger.info("Destination: %s", binary_path)
     
     try:
-        # Create binary directory if it doesn't exist
         os.makedirs(binary_dir, exist_ok=True)
-        
-        # Download the file
         urllib.request.urlretrieve(url, binary_path)
-        
-        # Make it executable
         os.chmod(binary_path, 0o755)
         
         logger.info("Binary downloaded successfully")
@@ -106,7 +99,6 @@ class LocalCluster:
         try:
             self.cluster.start()
         except Exception as e:
-            # On any error during startup, add port information
             error_msg = "Failed to start cluster.\n\n"
             error_msg += "\nOriginal error:\n"
             error_msg += str(e)
@@ -139,7 +131,6 @@ class LocalCluster:
         try:
             while True:
                 time.sleep(1)
-                # Check that processes are still alive
                 if self.cluster and self.cluster.nodes:
                     for node_id, node in self.cluster.nodes.items():
                         if node.daemon.process.poll() is not None:
@@ -187,10 +178,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Convert working directory to absolute path
     working_dir = os.path.abspath(args.working_dir)
 
-    # Determine binary path
     binary_path = args.binary_path
     
     if binary_path is None and args.version is None:
@@ -201,11 +190,9 @@ def main():
         logger.error("Cannot specify both --binary-path and --version")
         sys.exit(1)
     
-    # If version is specified, download from S3
     if args.version is not None:
         binary_path = download_binary_from_s3(args.version, working_dir)
     else:
-        # Validate binary path if provided directly
         if not os.path.exists(binary_path):
             logger.error("Binary path does not exist: %s", binary_path)
             sys.exit(1)

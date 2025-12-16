@@ -1,8 +1,10 @@
+import warnings
 import allure
 import logging
 import time as time_module
 import pytest
 
+from ydb.tests.library.stability.healthcheck.healthcheck_reporter import HealthCheckReporter
 from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult, StressUtilTestResults
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
 from ydb.tests.library.stability.utils.collect_errors import ErrorsCollector
@@ -30,6 +32,8 @@ class ParallelWorkloadTestBase:
         get_external_param(
             "yaml-config",
             ""))  # Path to yaml configuration
+    event_process_mode: str = get_external_param('event_process_mode', None)  # one of: save, send, both
+    ignore_stderr_content: str = external_param_is_true('ignore_stderr_content')
 
     @pytest.fixture(autouse=True, scope="session")
     def binary_deployer(self) -> StressUtilDeployer:
@@ -39,18 +43,18 @@ class ParallelWorkloadTestBase:
         return StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config)
 
     @pytest.fixture(autouse=True, scope="session")
-    def stress_executor(self) -> StressRunExecutor:
-        return StressRunExecutor()
+    def health_checker_daemon(self, binary_deployer: StressUtilDeployer):
+        if self.event_process_mode is not None:
+            reporter = HealthCheckReporter(binary_deployer.hosts)
+            reporter.start_healthchecks()
+            yield reporter
+            reporter.stop_healthchecks()
+        else:
+            yield None
 
     @pytest.fixture(autouse=True, scope="session")
-    def context_setup(self, binary_deployer) -> None:
-        """
-        Common initialization for workload tests.
-        Do NOT perform _Verification here - we'll do it before each test.
-        """
-        with allure.step("Workload test setup: initialize"):
-            self._setup_start_time = time_module.time()
-            self._ignore_stderr_content = external_param_is_true('ignore_stderr_content')
+    def stress_executor(self) -> StressRunExecutor:
+        return StressRunExecutor(self.ignore_stderr_content, self.event_process_mode)
 
     def execute_parallel_workloads_test(
         self,
@@ -126,6 +130,14 @@ class ParallelWorkloadTestBase:
         logging.debug(f"Execution finished with {execution_result}")
         logging.debug(f"Additional stats {additional_stats}")
 
+        if stress_deployer.nemesis_started:
+            recoverability_result = self.stop_nemesis_and_check_recoverability(
+                stress_executor,
+                stress_deployer,
+                workload_params,
+                preparation_result)
+            execution_result['overall_result'].recoverability_result = recoverability_result['overall_result']
+
         # PHASE 3: RESULTS (collect diagnostics and finalize)
         self._finalize_workload_results(
             stress_deployer,
@@ -160,11 +172,12 @@ class ParallelWorkloadTestBase:
         """
 
         with allure.step("Phase 3: Finalize results and diagnostics"):
-            overall_result = execution_result["overall_result"]
+            overall_result: StressUtilTestResults = execution_result["overall_result"]
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
-            errors_collector.check_nemesis_status(stress_deployer.nemesis_started, run_config.nemesis_enabled, run_config.stress_util_names)
+            if overall_result.recoverability_result is None:
+                errors_collector.check_nemesis_status(stress_deployer.nemesis_started, run_config.nemesis_enabled, run_config.stress_util_names)
 
             # Final processing with diagnostics (prepares data for upload)
             overall_result.workload_start_time = execution_result["workload_start_time"]
@@ -256,10 +269,6 @@ class ParallelWorkloadTestBase:
             # 4. Generate allure report
             create_parallel_allure_report(result, node_errors, verify_errors)
 
-            # Save node_errors for use after upload
-            # result._node_errors = node_errors
-
-            # Data is ready, now we can upload results
             return node_errors, verify_errors
 
     def _handle_final_status(
@@ -351,3 +360,25 @@ class ParallelWorkloadTestBase:
             detailed_error_message = "\n".join(error_details)
             exc = pytest.fail.Exception(detailed_error_message)
             raise exc
+        if result.get_successful_runs() == 0:
+            exc = pytest.fail.Exception("All workloads have failed")
+            raise exc
+        if result.recoverability_result and result.recoverability_result.get_successful_runs() == 0:
+            with pytest.warns(RuntimeWarning):
+                warnings.warn("All workloads have failed in recovery steps", RuntimeWarning)
+
+    def stop_nemesis_and_check_recoverability(self,
+                                              stress_executor: StressRunExecutor,
+                                              stress_deployer: StressUtilDeployer,
+                                              workload_params: dict[str, dict],
+                                              preparation_result: dict[str, StressUtilDeployResult]) -> dict:
+        with allure.step("Phase 2.5: Stop nemesis and check recoverability"):
+            stress_deployer._manage_nemesis(False, workload_params.keys(), 'RecoverabilityCheck')
+            recoverability_execution_result = stress_executor.execute_stress_runs(
+                stress_deployer,
+                workload_params,
+                1200,
+                preparation_result,
+                False
+            )
+        return recoverability_execution_result

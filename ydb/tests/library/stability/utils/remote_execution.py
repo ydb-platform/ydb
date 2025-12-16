@@ -39,6 +39,24 @@ class RemoteExecutor:
     """
 
     @staticmethod
+    def get_ssh_options() -> List[str]:
+        """
+        Returns common SSH options including ControlMaster configuration.
+        """
+        # Use a fixed socket path depending on user, host and port.
+        # %r - remote user name
+        # %h - remote host name
+        # %p - remote port
+        # os.getuid() is added for uniqueness of the local user running the test.
+        return [
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "ControlMaster=auto",
+            "-o", "ControlPersist=60s",
+            "-o", f"ControlPath=/tmp/ssh-{os.getuid()}-%r@%h:%p"
+        ]
+
+    @staticmethod
     def _safe_decode(data) -> str:
         """
         Safely decodes data into a string.
@@ -69,7 +87,7 @@ class RemoteExecutor:
         if not stderr:
             return stderr
 
-        # Фильтруем строки, начинающиеся с "Warning: Permanently added"
+        # Filter lines starting with "Warning: Permanently added"
         filtered_lines = []
         for line in stderr.splitlines():
             if (
@@ -93,10 +111,10 @@ class RemoteExecutor:
         if not hostname:
             return False
 
-        # Импортируем socket здесь, чтобы избежать циклических импортов
+        # Import socket here to avoid circular imports
         import socket
 
-        # Очевидные случаи localhost
+        # Obvious localhost cases
         localhost_names = {
             'localhost',
             '127.0.0.1',
@@ -109,27 +127,27 @@ class RemoteExecutor:
             return True
 
         try:
-            # Получаем IP адрес хоста
+            # Get host IP address
             host_ip = socket.gethostbyname(hostname)
 
-            # Получаем локальные IP адреса
+            # Get local IP addresses
             local_ips = set()
 
-            # Добавляем localhost адреса
+            # Add localhost addresses
             local_ips.update(['127.0.0.1', '::1'])
 
-            # Получаем IP адреса всех сетевых интерфейсов
+            # Get IP addresses of all network interfaces
             hostname_local = socket.gethostname()
             try:
                 local_ips.add(socket.gethostbyname(hostname_local))
             except socket.gaierror:
                 pass
 
-            # Проверяем, совпадает ли IP хоста с локальными IP
+            # Check if host IP matches local IPs
             return host_ip in local_ips
 
         except (socket.gaierror, socket.herror):
-            # Если не можем разрешить имя хоста, считаем что это не localhost
+            # If we can't resolve hostname, assume it's not localhost
             return False
 
     @classmethod
@@ -138,14 +156,14 @@ class RemoteExecutor:
         timeout: Optional[float] = 10, raise_on_timeout: bool = True
     ) -> ExecutionResult:
         """
-        Выполняет команду на хосте через SSH или локально
+        Executes a command on a host via SSH or locally
 
         Args:
-            host: имя хоста для выполнения команды
-            cmd: команда для выполнения (строка или список)
-            raise_on_error: вызывать ли исключение при ошибке
-            timeout: таймаут выполнения команды в секундах
-            raise_on_timeout: вызывать ли исключение при таймауте (по умолчанию True)
+            host: hostname to execute command on
+            cmd: command to execute (string or list)
+            raise_on_error: whether to raise exception on error
+            timeout: command execution timeout in seconds
+            raise_on_timeout: whether to raise exception on timeout (default True)
 
         Returns:
             ExecutionResult: результат выполнения команды
@@ -162,7 +180,7 @@ class RemoteExecutor:
             stdout = ""
             stderr = ""
 
-            # Извлекаем информацию из execution_result
+            # Extract information from execution_result
             if hasattr(e, 'execution_result') and e.execution_result:
                 execution_obj = e.execution_result
                 if hasattr(execution_obj, 'std_out') and execution_obj.std_out:
@@ -174,7 +192,7 @@ class RemoteExecutor:
                 if hasattr(execution_obj, 'command'):
                     timeout_info += f"\nCommand: {execution_obj.command}"
 
-            # Логирование
+            # Logging
             if raise_on_timeout:
                 LOGGER.error(f"{cmd_type} command timed out after {timeout} seconds on {host}")
                 LOGGER.error(f"Full command: {full_cmd}")
@@ -210,7 +228,7 @@ class RemoteExecutor:
             stderr = ""
             exit_code = 1
 
-            # Извлекаем информацию из execution_result
+            # Extract information from execution_result
             if hasattr(e, 'execution_result') and e.execution_result:
                 execution_obj = e.execution_result
                 if hasattr(execution_obj, 'std_out') and execution_obj.std_out:
@@ -222,12 +240,12 @@ class RemoteExecutor:
                 elif hasattr(execution_obj, 'returncode'):
                     exit_code = execution_obj.returncode
 
-            # Фильтруем SSH предупреждения для удаленных команд
+            # Filter SSH warnings for remote commands
             if not is_local:
                 stderr = cls._filter_ssh_warnings(stderr)
 
             if raise_on_error:
-                # Логируем детальную информацию об ошибке
+                # Log detailed error information
                 LOGGER.error(f"{cmd_type} command failed with exit code {exit_code} on {host}")
                 LOGGER.error(f"Full command: {full_cmd}")
                 LOGGER.error(f"Original command: {cmd}")
@@ -271,7 +289,7 @@ class RemoteExecutor:
                           if hasattr(execution, 'std_err') and execution.std_err else "")
 
                 exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
-                # Если команда завершилась с ошибкой, но stderr пустой, добавляем синтетическое сообщение
+                # If command failed but stderr is empty, add synthetic message
                 if exit_code != 0 and not stderr.strip():
                     stderr = f"Command failed with exit code {exit_code}, but stderr is empty"
                     LOGGER.warning(f"Local command failed with exit code {exit_code} but produced no stderr output on {host}")
@@ -304,9 +322,9 @@ class RemoteExecutor:
             """Executes command via SSH."""
             LOGGER.info(f"Executing SSH command on {host}: {cmd}")
 
-            ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+            ssh_cmd = ['ssh'] + cls.get_ssh_options()
 
-            # Добавляем SSH пользователя и ключ
+            # Add SSH user and key
             ssh_user = os.getenv('SSH_USER')
             if ssh_user is not None:
                 ssh_cmd += ['-l', ssh_user]
@@ -335,7 +353,7 @@ class RemoteExecutor:
                 stderr = cls._filter_ssh_warnings(stderr)
 
                 exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
-                # Если команда завершилась с ошибкой, но stderr пустой, добавляем синтетическое сообщение
+                # If command failed but stderr is empty, add synthetic message
                 if exit_code != 0 and not stderr.strip():
                     stderr = f"Command failed with exit code {exit_code}, but stderr is empty"
                     LOGGER.warning(f"SSH command failed with exit code {exit_code} but produced no stderr output on {host}")
@@ -364,14 +382,14 @@ class RemoteExecutor:
                     exit_code=None
                 )
 
-        # Основная логика: выбираем локальное или SSH выполнение
+        # Main logic: choose local or SSH execution
         if cls._is_localhost(host):
             return _execute_local_command(cmd)
         else:
             return _execute_ssh_command(cmd)
 
 
-# Удобные функции для прямого использования
+# Convenience functions for direct use
 def execute_command(
     host: str, cmd: Union[str, list], raise_on_error: bool = True,
     timeout: Optional[float] = 10, raise_on_timeout: bool = True
@@ -498,18 +516,18 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
     Returns:
         str: Copy result message
     """
-    # Создаем целевую директорию
+    # Create target directory
     remote_dir = os.path.dirname(remote_path)
     if remote_dir and remote_dir != '/':
         ensure_directory_with_permissions(host, remote_dir)
 
     if is_local:
-        # Локальное копирование
+        # Local copying
         try:
             shutil.copy2(local_path, remote_path)
             return f"Local copy successful: {remote_path}"
         except PermissionError:
-            # Используем временный файл и sudo
+            # Use temporary file and sudo
             import tempfile
             with tempfile.NamedTemporaryFile(delete=False, prefix="deploy_") as tmp_file:
                 temp_path = tmp_file.name
@@ -517,13 +535,13 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
             execute_command("localhost", f"sudo mv {temp_path} {remote_path}", timeout=30)
             return f"Local copy with sudo successful: {remote_path}"
     else:
-        # Удаленное копирование через SCP + временный файл
+        # Remote copying via SCP + temporary file
         timestamp = int(time())
         filename = os.path.basename(local_path)
         tmp_path = f"/tmp/{filename}.{timestamp}.tmp"
 
-        # SCP в /tmp
-        scp_cmd = ['scp', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+        # SCP to /tmp
+        scp_cmd = ['scp'] + RemoteExecutor.get_ssh_options()
 
         ssh_user = os.getenv('SSH_USER')
         scp_host = f"{ssh_user}@{host}" if ssh_user else host
@@ -536,7 +554,7 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
 
         yatest.common.execute(scp_cmd, wait=True, check_exit_code=True)
 
-        # Перемещаем из /tmp в целевое место
+        # Move from /tmp to target location
         if execute_command(host, f"mv {tmp_path} {remote_path}", raise_on_error=False, timeout=30).exit_code != 0:
             execute_command(host, f"sudo mv {tmp_path} {remote_path}", raise_on_error=True, timeout=30)
         return f"SCP copy successful: {remote_path}"
@@ -563,15 +581,15 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
     target_path = os.path.join(target_dir, binary_name)
 
     try:
-        # Создаем директорию
+        # Create directory
         ensure_directory_with_permissions(host, target_dir, raise_on_error=True)
 
-        # Копируем файл
+        # Copy file
         copy_result = copy_file(local_path, host, target_path)
         if copy_result is None:
             raise Exception("File copy failed")
 
-        # Делаем исполняемым
+        # Make executable
         if make_executable:
             if execute_command(host, f"chmod +x {target_path}", raise_on_error=False, timeout=10).exit_code != 0:
                 execute_command(host, f"sudo chmod +x {target_path}", raise_on_error=True, timeout=10)
@@ -610,17 +628,17 @@ def deploy_binaries_to_hosts(
     """
     results = {}
 
-    for host in set(hosts):  # Автоматическое удаление дубликатов
+    for host in set(hosts):  # Automatic duplicate removal
         host_results = {}
 
-        # Создаем директорию на хосте один раз
+        # Create directory on host once
         ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
 
-        # Копируем каждый бинарный файл
+        # Copy each binary file
         for binary_file in binary_files:
             result = deploy_binary(binary_file, host, target_dir)
             host_results[os.path.basename(binary_file)] = result
-            # Логируем только критичные события
+            # Log only critical events
             if not result['success']:
                 LOGGER.error(f"Failed to deploy {result['name']} to {host}: {result.get('error', 'Unknown error')}")
 
@@ -660,7 +678,7 @@ def execute_ssh(host: str, cmd: str):
     if local:
         ssh_cmd = cmd
     else:
-        ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+        ssh_cmd = ['ssh'] + RemoteExecutor.get_ssh_options()
         ssh_user = os.getenv('SSH_USER')
         if ssh_user is not None:
             ssh_cmd += ['-l', ssh_user]

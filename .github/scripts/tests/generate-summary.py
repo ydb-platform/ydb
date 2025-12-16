@@ -20,7 +20,7 @@ def load_owner_area_mapping():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         config_dir = os.path.join(script_dir, '..', '..', 'config')
         mapping_file = os.path.join(config_dir, 'owner_area_mapping.json')
-        with open(mapping_file, 'r', encoding='utf-8') as f:
+        with open(mapping_file, 'r') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Warning: Could not load owner area mapping: {e}")
@@ -134,11 +134,11 @@ class TestResult:
         if status_str is None:
             raise ValueError(f"Missing required field 'status' in result: {result}")
         
-        # Extract optional fields
-        name_part = result.get("name", "")
-        subtest_name = result.get("subtest_name", "")
-        error_type = result.get("error_type", "")
-        status_description = result.get("rich-snippet", "")
+        # Extract fields
+        name_part = result.get("name")
+        subtest_name = result.get("subtest_name")
+        error_type = result.get("error_type")
+        status_description = result.get("rich-snippet")
         properties = result.get("properties")
         metrics = result.get("metrics")
         links = result.get("links")
@@ -160,42 +160,39 @@ class TestResult:
         # All ERROR statuses are treated as FAIL
         if is_muted:
             status = TestStatus.MUTE
-        elif status_str == "FAILED" or status_str == "ERROR":
+        elif status_str == "FAILED":
             status = TestStatus.FAIL
+        elif status_str == "ERROR":
+            status = TestStatus.ERROR
         elif status_str == "SKIPPED":
             status = TestStatus.SKIP
         else:
             status = TestStatus.PASS
         
-        # Extract log URLs from properties or links
-        # In build-results-report, links is an object with arrays: {"stdout": ["/path"], "stderr": ["/path"]}
-        # Properties are added later by transform_build_results.py with URL format
-        log_urls = {}
-        if properties and isinstance(properties, dict):
-            # Check both "url:key" (primary format) and "key" (fallback for backward compatibility)
-            log_keys = ['log', 'logsdir', 'stdout', 'stderr']
-            for key in log_keys:
-                # Try "url:key" format first (primary format from transform_build_results.py)
-                url = properties.get(f"url:{key}")
-                if not url:
-                    # Fallback to just "key" (for backward compatibility)
-                    url = properties.get(key)
-                if url:
-                    if key not in log_urls:  # Don't overwrite if already found
-                        log_urls[key] = url
-        
-        # Note: Links are processed later in gen_summary() to handle both URLs and file paths
-        # (file paths need public_dir_url for conversion, which is only available in gen_summary)
-        
-        # Extract elapsed time from metrics
-        elapsed = 0.0
-        if metrics and isinstance(metrics, dict):
-            elapsed_time = metrics.get("elapsed_time")
-            if elapsed_time is not None:
-                try:
-                    elapsed = float(elapsed_time)
-                except (TypeError, ValueError):
-                    elapsed = 0.0
+        # Extract log URLs from links (updated by transform_build_results.py with URLs)
+        # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
+        links = result.get("links", {})
+
+        def get_link_url(link_type):
+            if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
+                return links[link_type][0]  # Take first URL from array
+            return None
+
+        log_urls = {
+            'Log': get_link_url("Log"),
+            'log': get_link_url("log"),
+            'logsdir': get_link_url("logsdir"),
+            'stdout': get_link_url("stdout"),
+            'stderr': get_link_url("stderr"),
+        }
+        log_urls = {k: v for k, v in log_urls.items() if v}
+
+        # Get duration from result (same as upload_tests_results.py)
+        duration = result.get("duration", 0)
+        try:
+            elapsed = float(duration)
+        except (TypeError, ValueError):
+            elapsed = 0.0
         return cls(
             classname=classname,
             name=name,
@@ -207,7 +204,7 @@ class TestResult:
             status_description=status_description or '',
             error_type=error_type or '',
             is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
-            is_timeout_issue=(error_type or '').upper() == 'TIMEOUT'
+            is_timeout_issue=(error_type or '').lower() == 'timeout'
         )
 
 

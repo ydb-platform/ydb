@@ -1287,6 +1287,30 @@ void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPt
             record.GetConfig().GetBlobStorageConfig().HasInferPDiskSlotCountSettings()) {
         auto inferSettings = record.GetConfig().GetBlobStorageConfig().GetInferPDiskSlotCountSettings();
         InferPDiskSlotCountSettings.CopyFrom(inferSettings);
+
+        for (auto& [key, localPDisk] : LocalPDisks) {
+            const TServiceSetPDisk& serviceSetPDisk = localPDisk.Record;
+            ui64 oldExpectedSlotCount = serviceSetPDisk.GetPDiskConfig().GetExpectedSlotCount();
+            ui32 oldSlotSizeInUnits = serviceSetPDisk.GetPDiskConfig().GetSlotSizeInUnits();
+            TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(serviceSetPDisk);
+            ui64 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+            ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
+
+            if (newExpectedSlotCount != oldExpectedSlotCount ||
+                    newSlotSizeInUnits != oldSlotSizeInUnits) {
+                STLOG(PRI_DEBUG, BS_NODE, NW112, "SendChangeExpectedSlotCount from config notification",
+                    (PDiskId, key.PDiskId),
+                    (ExpectedSlotCount, newExpectedSlotCount),
+                    (SlotSizeInUnits, newSlotSizeInUnits));
+
+                const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+                Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(newExpectedSlotCount, newSlotSizeInUnits));
+
+                NKikimrBlobStorage::TPDiskConfig* pdiskConfig = localPDisk.Record.MutablePDiskConfig();
+                pdiskConfig->SetExpectedSlotCount(newExpectedSlotCount);
+                pdiskConfig->SetSlotSizeInUnits(newSlotSizeInUnits);
+            }
+        }
     }
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }

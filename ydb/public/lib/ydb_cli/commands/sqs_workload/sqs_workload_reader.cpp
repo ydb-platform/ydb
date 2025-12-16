@@ -193,8 +193,8 @@ namespace NYdb::NConsoleClient {
                 ++(*params.StartedCount);
             }
 
-            params.StatsCollector->AddAddAsyncRequestTaskToQueueEvent(
-                TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent());
+            params.StatsCollector->AddPushAsyncRequestTaskToQueueEvent(
+                TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent());
             params.SqsClient->ReceiveMessageAsync(
                 receiveMessageRequest,
                 [&params](

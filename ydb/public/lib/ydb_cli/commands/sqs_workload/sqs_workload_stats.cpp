@@ -106,7 +106,7 @@ void TSqsWorkloadStats::AddEvent(const FinishProcessMessagesEvent& event)
     AsyncRequestTasks--;
 }
 
-void TSqsWorkloadStats::AddEvent(const AddAsyncRequestTaskToQueueEvent&)
+void TSqsWorkloadStats::AddEvent(const PushAsyncRequestTaskToQueueEvent&)
 {
     AsyncRequestTasks++;
 }

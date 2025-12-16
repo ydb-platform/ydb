@@ -28,7 +28,7 @@ inline bool ThrowOnErrorAndCheckEOS(NYdb::Dev::TStreamPartStatus status) {
 inline TDuration ParseDuration(TStringBuf str) {
     StripInPlace(str);
     if (!str.empty() && !IsAsciiAlpha(str.back())) {
-        throw TMisuseException() << "Duration must ends with a unit name (ex. 'h' for hours, 's' for seconds)";
+        throw TMisuseException() << "Duration must end with a unit name (ex. 'h' for hours, 's' for seconds)";
     }
     return TDuration::Parse(str);
 }

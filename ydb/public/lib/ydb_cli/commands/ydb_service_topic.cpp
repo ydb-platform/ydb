@@ -639,24 +639,20 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("availability-period", "Duration for which uncommited data in topic is retained (ex. '72h', '1440m')")
             .Optional()
             .StoreMappedResult(&AvailabilityPeriod_, ParseDuration);
-        config.Opts->AddLongOption("consumer-type", "Consumer type: streaming, shared")
+        config.Opts->AddLongOption("consumer-type", "Consumer type. Available options: streaming, shared")
             .DefaultValue("streaming")
             .StoreResult(&ConsumerType_);
-        config.Opts->AddLongOption("shared-keep-messages-order", "Keep messages order for shared consumer")
+        config.Opts->AddLongOption("keep-messages-order", "Keep messages order for shared consumer")
             .Optional()
             .DefaultValue(false)
             .StoreResult(&KeepMessagesOrder_);
-        config.Opts->AddLongOption("shared-default-processing-timeout", "Default processing timeout for shared consumer (ex. '1h', '1m', '1s)")
+        config.Opts->AddLongOption("default-processing-timeout", "Default processing timeout for shared consumer (ex. '1h', '1m', '1s)")
             .Optional()
             .StoreMappedResult(&DefaultProcessingTimeout_, ParseDuration);
-        config.Opts->AddLongOption("shared-dlq-max-processing-attempts", "Max processing attempts for DLQ for shared consumer")
+        config.Opts->AddLongOption("max-processing-attempts", "Max processing attempts for DLQ for shared consumer")
             .Optional()
-            .StoreResult(&DlqMaxProcessingAttempts_);
-        config.Opts->AddLongOption("shared-dlq-enabled", "Is DLQ enabled")
-            .Optional()
-            .DefaultValue(false)
-            .StoreResult(&DlqEnabled_);
-        config.Opts->AddLongOption("shared-dlq-queue-name", "DLQ queue name for shared consumer")
+            .StoreResult(&MaxProcessingAttempts_);
+        config.Opts->AddLongOption("dlq-queue-name", "DLQ queue name for shared consumer")
             .Optional()
             .StoreResult(&DlqQueueName_);
         config.Opts->SetFreeArgsNum(1);
@@ -704,13 +700,13 @@ namespace NYdb::NConsoleClient {
             consumerSettings.DefaultProcessingTimeout(*DefaultProcessingTimeout_);
         }
 
-        if (DlqMaxProcessingAttempts_.Defined() || DlqEnabled_.Defined() || DlqQueueName_.Defined()) {
+        if (MaxProcessingAttempts_.Defined() || DlqQueueName_.Defined()) {
             NYdb::NTopic::TDeadLetterPolicySettings dlqSettings;
-            dlqSettings.Enabled(DlqEnabled_.Defined() && *DlqEnabled_);
+            dlqSettings.Enabled(true);
             
             NYdb::NTopic::TDeadLetterPolicyConditionSettings conditionSettings;
-            if (DlqMaxProcessingAttempts_.Defined()) {
-                conditionSettings.MaxProcessingAttempts(*DlqMaxProcessingAttempts_);
+            if (MaxProcessingAttempts_.Defined()) {
+                conditionSettings.MaxProcessingAttempts(*MaxProcessingAttempts_);
             }
         
             dlqSettings.Condition(conditionSettings);

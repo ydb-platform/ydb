@@ -22,7 +22,7 @@ namespace NYdb::NConsoleClient {
         }
 
         Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry>
-        CreateSendMessageBatchRequestEntries(ui64 now, ui32& messageGroupID, ui64& messageDeduplicationID, const TSqsWorkloadWriterParams& params) {
+        CreateSendMessageBatchRequestEntries(ui64 now, const TSqsWorkloadWriterParams& params) {
             Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry> entries;
             for (ui32 i = 0; i < params.BatchSize; ++i) {
                 auto messageBody =
@@ -34,13 +34,13 @@ namespace NYdb::NConsoleClient {
                 Aws::SQS::Model::SendMessageBatchRequestEntry entry;
                 entry.WithMessageBody(messageBody).WithId(fmt::format("{}", i));
                 if (params.GroupsAmount > 0) {
+                    auto messageGroupID = std::rand() % params.GroupsAmount;
                     entry.WithMessageGroupId(fmt::format("{}", messageGroupID));
-                    messageGroupID = (messageGroupID + 1) % params.GroupsAmount;
                 }
 
                 if (params.MaxUniqueMessages > 0) {
+                    auto messageDeduplicationID = std::rand() % params.MaxUniqueMessages;
                     entry.WithMessageDeduplicationId(std::format("{}", messageDeduplicationID));
-                    messageDeduplicationID = (messageDeduplicationID + 1) % params.MaxUniqueMessages;
                 }
 
                 entries.push_back(std::move(entry));
@@ -75,16 +75,13 @@ namespace NYdb::NConsoleClient {
 
     void TSqsWorkloadWriter::RunLoop(const TSqsWorkloadWriterParams& params,
                                      TInstant endTime) {
-        ui32 messageGroupID = 0;
-        ui64 messageDeduplicationID = 0;
-
         while (Now() < endTime && !params.ErrorFlag->load()) {
             auto now = Now().MilliSeconds();
 
             Aws::SQS::Model::SendMessageBatchRequest sendMessageBatchRequest;
             sendMessageBatchRequest.SetQueueUrl(params.QueueUrl.c_str());
             sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(
-                now, messageGroupID, messageDeduplicationID, params));
+                now, params));
             sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_SEND_MESSAGE_BATCH);
 
@@ -103,8 +100,8 @@ namespace NYdb::NConsoleClient {
                 ++(*params.StartedCount);
             }
 
-            params.StatsCollector->AddAddAsyncRequestTaskToQueueEvent(
-                TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent());
+            params.StatsCollector->AddPushAsyncRequestTaskToQueueEvent(
+                TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent());
             params.SqsClient->SendMessageBatchAsync(
                 sendMessageBatchRequest,
                 [&params](

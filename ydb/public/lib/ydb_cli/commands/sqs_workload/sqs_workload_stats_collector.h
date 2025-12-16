@@ -39,8 +39,8 @@ namespace NYdb::NConsoleClient {
         AddSentMessagesEvent(const TSqsWorkloadStats::SentMessagesEvent& event);
         void AddFinishProcessMessagesEvent(
             const TSqsWorkloadStats::FinishProcessMessagesEvent& event);
-        void AddAddAsyncRequestTaskToQueueEvent(
-            const TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent& event);
+        void AddPushAsyncRequestTaskToQueueEvent(
+            const TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent& event);
         void AddErrorWhileProcessingMessagesEvent(
             const TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent& event);
 
@@ -86,8 +86,8 @@ namespace NYdb::NConsoleClient {
         THolder<TAutoLockFreeQueue<TSqsWorkloadStats::FinishProcessMessagesEvent>>
             FinishProcessMessagesEventQueue;
         THolder<
-            TAutoLockFreeQueue<TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent>>
-            AddAsyncRequestTaskToQueueEventQueue;
+            TAutoLockFreeQueue<TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent>>
+            PushAsyncRequestTaskToQueueEventQueue;
         THolder<TAutoLockFreeQueue<TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>>
             ErrorWhileProcessingMessagesEventQueue;
 

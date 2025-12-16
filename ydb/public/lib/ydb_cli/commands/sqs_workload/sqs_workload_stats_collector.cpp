@@ -39,8 +39,8 @@ TSqsWorkloadStatsCollector::TSqsWorkloadStatsCollector(
         TAutoLockFreeQueue<TSqsWorkloadStats::DeletedMessagesEvent>>();
     FinishProcessMessagesEventQueue = MakeHolder<
         TAutoLockFreeQueue<TSqsWorkloadStats::FinishProcessMessagesEvent>>();
-    AddAsyncRequestTaskToQueueEventQueue = MakeHolder<TAutoLockFreeQueue<
-        TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent>>();
+    PushAsyncRequestTaskToQueueEventQueue = MakeHolder<TAutoLockFreeQueue<
+        TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent>>();
     ErrorWhileProcessingMessagesEventQueue = MakeHolder<TAutoLockFreeQueue<
         TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>>();
 }
@@ -229,7 +229,7 @@ void TSqsWorkloadStatsCollector::CollectEvents()
     CollectEvents<TSqsWorkloadStats::SentMessagesEvent>();
     CollectEvents<TSqsWorkloadStats::DeletedMessagesEvent>();
     CollectEvents<TSqsWorkloadStats::FinishProcessMessagesEvent>();
-    CollectEvents<TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent>();
+    CollectEvents<TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent>();
     CollectEvents<TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent>();
 }
 
@@ -298,8 +298,8 @@ void TSqsWorkloadStatsCollector::CollectEvents()
             TotalStats.AddEvent(*event);
         }
     } else if constexpr (
-        std::is_same_v<T, TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent>) {
-        while (AddAsyncRequestTaskToQueueEventQueue->Dequeue(&event)) {
+        std::is_same_v<T, TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent>) {
+        while (PushAsyncRequestTaskToQueueEventQueue->Dequeue(&event)) {
             WindowStats->AddEvent(*event);
             TotalStats.AddEvent(*event);
         }
@@ -390,11 +390,11 @@ void TSqsWorkloadStatsCollector::AddFinishProcessMessagesEvent(
         MakeHolder<TSqsWorkloadStats::FinishProcessMessagesEvent>(event));
 }
 
-void TSqsWorkloadStatsCollector::AddAddAsyncRequestTaskToQueueEvent(
-    const TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent& event)
+void TSqsWorkloadStatsCollector::AddPushAsyncRequestTaskToQueueEvent(
+    const TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent& event)
 {
-    AddAsyncRequestTaskToQueueEventQueue->Enqueue(
-        MakeHolder<TSqsWorkloadStats::AddAsyncRequestTaskToQueueEvent>(event));
+    PushAsyncRequestTaskToQueueEventQueue->Enqueue(
+        MakeHolder<TSqsWorkloadStats::PushAsyncRequestTaskToQueueEvent>(event));
 }
 
 void TSqsWorkloadStatsCollector::AddErrorWhileProcessingMessagesEvent(

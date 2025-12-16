@@ -152,8 +152,7 @@ namespace NYdb::NConsoleClient {
         TString ConsumerType_;
         TMaybe<bool> KeepMessagesOrder_;
         TMaybe<TDuration> DefaultProcessingTimeout_;
-        TMaybe<ui32> DlqMaxProcessingAttempts_;
-        TMaybe<bool> DlqEnabled_;
+        TMaybe<ui32> MaxProcessingAttempts_;
         TMaybe<TString> DlqQueueName_;
     };
 

@@ -37,7 +37,7 @@ namespace NYdb {
             struct FinishProcessMessagesEvent {
                 ui64 MessagesCount;
             };
-            struct AddAsyncRequestTaskToQueueEvent {};
+            struct PushAsyncRequestTaskToQueueEvent {};
             struct ErrorWhileProcessingMessagesEvent {};
 
             TSqsWorkloadStats();
@@ -52,7 +52,7 @@ namespace NYdb {
             void AddEvent(const DeleteRequestErrorEvent& event);
             void AddEvent(const DeletedMessagesEvent& event);
             void AddEvent(const FinishProcessMessagesEvent& event);
-            void AddEvent(const AddAsyncRequestTaskToQueueEvent& event);
+            void AddEvent(const PushAsyncRequestTaskToQueueEvent& event);
             void AddEvent(const ErrorWhileProcessingMessagesEvent& event);
 
             ui64 WriteBytes;

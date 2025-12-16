@@ -111,7 +111,7 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
                     selectors, defaultSelectorName, 1
                 ));
                 break;
-                }
+        }
     }
     std::reverse(levels.begin(), levels.end());
     return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), counters, portionsInfo,

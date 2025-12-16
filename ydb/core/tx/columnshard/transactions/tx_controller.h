@@ -110,7 +110,9 @@ public:
         }
 
         bool IsFail() const {
-            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED && Status != NKikimrTxColumnShard::EResultStatus::SUCCESS;
+            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED
+                && Status != NKikimrTxColumnShard::EResultStatus::SUCCESS
+                && Status != NKikimrTxColumnShard::EResultStatus::ALREADY_PREPARED;
         }
 
         TString DebugString() const {

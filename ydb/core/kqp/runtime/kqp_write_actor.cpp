@@ -1590,14 +1590,6 @@ public:
         };
 
         while (stateIteration());
-
-        if (!IsError() && IsClosed() && IsEmpty()
-                && State != EState::CLOSING
-                && State != EState::FINISHED) {
-            AFL_ENSURE(GetMemory() == 0);
-            State = EState::CLOSING;
-            while (stateIteration());
-        }
     }
 
     i64 GetMemory() const {
@@ -1651,8 +1643,19 @@ private:
         AFL_ENSURE(ProcessBatches.empty());
         AFL_ENSURE(ProcessCells.empty());
         AFL_ENSURE(Writes.empty());
-        if (BufferedBatches.empty() || !(forceFlush || IsClosed())) {
-            return false;
+
+        if (IsClosed()) {
+            if (BufferedBatches.empty()) {
+                AFL_ENSURE(IsEmpty());
+                AFL_ENSURE(!IsError());
+                AFL_ENSURE(GetMemory() == 0);
+                State = EState::CLOSING;
+                return true;
+            }
+        } else {
+            if (!forceFlush || BufferedBatches.empty()) {
+                return false;
+            }
         }
 
         if (auto lookupInfoIt = PathLookupInfo.find(PathId); lookupInfoIt != PathLookupInfo.end()) {

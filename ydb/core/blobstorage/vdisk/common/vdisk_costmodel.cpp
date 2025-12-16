@@ -294,7 +294,7 @@ namespace NKikimr {
         WriteSpeedBps = std::min(WriteSpeedBps, other.WriteSpeedBps);
         ReadBlockSize = std::min(ReadBlockSize, other.ReadBlockSize);
         WriteBlockSize = std::min(WriteBlockSize, other.WriteBlockSize);
-        MinREALHugeBlobInBytes = std::max(MinREALHugeBlobInBytes, other.MinREALHugeBlobInBytes);
+        MinREALHugeBlobInBytes = std::min(MinREALHugeBlobInBytes, other.MinREALHugeBlobInBytes);
     }
 
     // PDisk messages cost

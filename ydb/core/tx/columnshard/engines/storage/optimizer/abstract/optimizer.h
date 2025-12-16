@@ -266,23 +266,25 @@ public:
 
 class IOptimizerPlannerConstructor {
 public:
+    enum class EOptimizerStrategy {
+        Default,   //use One Layer levels to avoid portion intersections
+        Logs,   // use Zero Levels only for performance
+        LogsInStore
+    };
     class TBuildContext {
     private:
         YDB_READONLY_DEF(TInternalPathId, PathId);
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
-        YDB_READONLY_DEF(NKikimrConfig::TColumnShardConfig::ECompactionType, DefaultStrategy);
+        YDB_READONLY_DEF(EOptimizerStrategy, DefaultStrategy);
 
     public:
         TBuildContext(
-            const TInternalPathId pathId,
-            const std::shared_ptr<IStoragesManager>& storages,
-            const std::shared_ptr<arrow::Schema>& pkSchema,
-            NKikimrConfig::TColumnShardConfig::ECompactionType defaultStrategy)
+            const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema)
-            , DefaultStrategy(defaultStrategy) {   //TODO configure me via DDL
+            , DefaultStrategy(EOptimizerStrategy::Default) {   //TODO configure me via DDL
         }
     };
 
@@ -305,19 +307,23 @@ public:
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto enumDefaultCompaction = [] {
-            if (!HasAppData()) {
-                return NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompaction();
-            }
-            return AppDataVerified().ColumnShardConfig.GetDefaultCompaction();
-        }();
-        auto strDefaultCompaction = [&] {
-            if (enumDefaultCompaction == NKikimrConfig::TColumnShardConfig::TILING) {
-                return "tiling";
-            }
-            return "lc-buckets";
-        }();
-        auto result = TFactory::MakeHolder(strDefaultCompaction);
+        return BuildDefault(NKikimrConfig::TColumnShardConfig::default_instance().GetName());
+    }
+
+    static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {
+        // auto enumDefaultCompaction = [] {
+        //     if (!HasAppData()) {
+        //         return NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompaction();
+        //     }
+        //     return AppDataVerified().ColumnShardConfig.GetDefaultCompaction();
+        // }();
+        // auto strDefaultCompaction = [&] {
+        //     if (enumDefaultCompaction == NKikimrConfig::TColumnShardConfig::TILING) {
+        //         return "tiling";
+        //     }
+        //     return "lc-buckets";
+        // }();
+        auto result = TFactory::MakeHolder(defaultCompactionName);
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }

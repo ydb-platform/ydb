@@ -2458,14 +2458,10 @@ message TColumnShardConfig {
     optional TStatistics Statistics = 57;
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
 
-    enum ECompactionType {
-        LC_BUCKETS_DEFAULT = 0;
-        TILING = 1;
-        LC_BUCKETS_LOGS_2 = 2;
-        LC_BUCKETS_LOGS_3 = 3;
-    };
-
-    optional ECompactionType DefaultCompaction = 59 [default = TILING];
+    oneof DefaultCompaction {
+        string Name = 59 [default = "tiling"];
+        NKikimrSchemeOp.TCompactionPlannerConstructorContainer Constructor = 60;
+    }
 }
 
 message TSchemeShardConfig {

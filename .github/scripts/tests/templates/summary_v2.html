@@ -906,21 +906,29 @@
                 const filter = status.toLowerCase();
                 const filterMap = {
                     'fail': 'failed',
+                    'failed': 'failed',
                     'pass': 'passed',
+                    'passed': 'passed',
                     'err': 'error',
+                    'error': 'error',
                     'mut': 'mute',
+                    'mute': 'mute',
                     'skip': 'skipped',
-                    'fla': 'flaky'
+                    'skipped': 'skipped',
+                    'fla': 'flaky',
+                    'flaky': 'flaky'
                 };
                 const actualFilter = filterMap[filter] || filter;
                 
                 // Store filter state for later use
                 const sanitizerParam = urlParams.get('sanitizer');
                 const timeoutParam = urlParams.get('timeout');
+                const groupByParam = urlParams.get('groupBy');
                 window.__initialFilter = {
                     main: actualFilter,
                     sanitizer: sanitizerParam,
-                    timeout: timeoutParam
+                    timeout: timeoutParam,
+                    groupBy: groupByParam
                 };
                 
                 // Add data attribute to body to hide all tests via CSS
@@ -1419,6 +1427,27 @@
                 const filter = window.__initialFilter.main;
                 const sanitizer = window.__initialFilter.sanitizer;
                 
+                // IMPORTANT: Set currentGroupBy and currentMainFilter from __initialFilter BEFORE showing view
+                // Use groupBy from __initialFilter (already parsed from URL in inline script)
+                if (window.__initialFilter.groupBy) {
+                    currentGroupBy = window.__initialFilter.groupBy;
+                } else {
+                    currentGroupBy = 'none';
+                }
+                
+                // Handle status filter FIRST (before renderFlatView so it uses correct filter)
+                if (filter && filter !== 'sanitizer') {
+                    const button = document.querySelector(`.filter-btn.${filter}`);
+                    if (button) {
+                        // Update button state without calling setFilter (which calls setGroupBy)
+                        document.querySelectorAll('.filter-btn').forEach(btn => {
+                            btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
+                        });
+                        button.classList.add('active', filter);
+                        currentMainFilter = filter;
+                    }
+                }
+                
                 // Handle sanitizer filter
                 if (sanitizer === 'true') {
                     const sanitizerBtn = document.getElementById('sanitizer-filter-btn');
@@ -1437,20 +1466,28 @@
                     }
                 }
                 
-                // Handle status filter
-                if (filter && filter !== 'sanitizer') {
-                    const button = document.querySelector(`.filter-btn.${filter}`);
-                    if (button) {
-                        // Update button state without calling setFilter (which calls setGroupBy)
-                        document.querySelectorAll('.filter-btn').forEach(btn => {
-                            btn.classList.remove('active', 'all', 'passed', 'failed', 'error', 'mute', 'skipped', 'sanitizer');
-                        });
-                        button.classList.add('active', filter);
-                        currentMainFilter = filter;
+                // Show correct view based on groupBy BEFORE applyFilters() so tests are visible
+                const suiteView = document.getElementById('view-all');
+                const flatView = document.getElementById('tests-flat');
+                if (currentGroupBy === 'suite') {
+                    suiteView.style.display = 'block';
+                    flatView.classList.remove('active');
+                } else {
+                    suiteView.style.display = 'none';
+                    flatView.classList.add('active');
+                    // IMPORTANT: Render flat view if it's empty (needed for filtering to work)
+                    // currentMainFilter is already set above, so renderFlatView will filter correctly
+                    if (flatView.children.length === 0) {
+                        renderFlatView();
                     }
                 }
                 
-                // Apply filters immediately (before setGroupBy to avoid rendering all tests)
+                // Update select element
+                const select = document.getElementById('groupBySelect');
+                if (select) select.value = currentGroupBy;
+                
+                // Apply filters immediately (view is already shown, so tests will be visible)
+                // currentGroupBy is already set from URL, so it will be preserved
                 applyFilters();
             } else {
                 // Fallback to URL parsing if inline script didn't run
@@ -1467,7 +1504,25 @@
             }
             
             // Initialize group by mode AFTER filters and data are applied
-            setGroupBy('none');
+            // Use groupBy from __initialFilter if available, otherwise check URL
+            let groupByToUse = null;
+            if (window.__initialFilter && window.__initialFilter.groupBy) {
+                groupByToUse = window.__initialFilter.groupBy;
+            } else {
+                const urlParams = new URLSearchParams(window.location.search);
+                groupByToUse = urlParams.get('groupBy');
+            }
+            
+            // Only call setGroupBy if it's different from current value
+            // This avoids unnecessary applyFilters() call and URL update
+            const targetGroupBy = groupByToUse || 'none';
+            if (currentGroupBy !== targetGroupBy) {
+                setGroupBy(targetGroupBy);
+            } else {
+                // Just update the select element if value is already correct
+                const select = document.getElementById('groupBySelect');
+                if (select) select.value = targetGroupBy;
+            }
             
             // Initialize sanitizer and timeout counts (setGroupBy already calls them, but ensure they're called)
             updateSanitizerCount();
@@ -1860,10 +1915,15 @@
                 // Map common status names to filter names
                 const filterMap = {
                     'fail': 'failed',
+                    'failed': 'failed',
                     'pass': 'passed',
+                    'passed': 'passed',
                     'err': 'error',
+                    'error': 'error',
                     'mut': 'mute',
-                    'skip': 'skipped'
+                    'mute': 'mute',
+                    'skip': 'skipped',
+                    'skipped': 'skipped'
                 };
                 const actualFilter = filterMap[filter] || filter;
                 const button = document.querySelector(`.filter-btn.${actualFilter}`);
@@ -1877,14 +1937,42 @@
                 }
             }
             
-            // Apply filters BEFORE setGroupBy to avoid rendering all tests
+            // IMPORTANT: Set currentGroupBy from URL and show correct view BEFORE applyFilters()
+            if (groupBy) {
+                currentGroupBy = groupBy;
+            } else {
+                currentGroupBy = 'none';
+            }
+            
+            // Show correct view based on groupBy BEFORE applyFilters() so tests are visible
+            const suiteView = document.getElementById('view-all');
+            const flatView = document.getElementById('tests-flat');
+            if (currentGroupBy === 'suite') {
+                suiteView.style.display = 'block';
+                flatView.classList.remove('active');
+            } else {
+                suiteView.style.display = 'none';
+                flatView.classList.add('active');
+                // IMPORTANT: Render flat view if it's empty (needed for filtering to work)
+                if (flatView.children.length === 0) {
+                    renderFlatView();
+                }
+            }
+            
+            // Update select element
+            const select = document.getElementById('groupBySelect');
+            if (select) select.value = currentGroupBy;
+            
+            // Apply filters (this will update URL with currentGroupBy already set)
+            // Note: applyFilters() is called here, and setGroupBy() will call it again,
+            // but that's fine - both times currentGroupBy will be correct
             applyFilters();
             
-            // Handle groupBy AFTER filters are applied
+            // Now apply the groupBy view mode
+            // setGroupBy() will call applyFilters() again, but URL will remain correct
             if (groupBy) {
                 setGroupBy(groupBy);
             } else {
-                // If no groupBy in URL, use default 'none' but AFTER filters
                 setGroupBy('none');
             }
         }

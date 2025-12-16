@@ -1,3 +1,4 @@
+#include "datashard_cdc_stream_common.h"
 #include "datashard_impl.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
@@ -6,13 +7,12 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TCreateCdcStreamUnit : public TExecutionUnit {
+class TCreateCdcStreamUnit : public TCdcStreamUnitBase {
     THolder<TEvChangeExchange::TEvAddSender> AddSender;
-    TVector<THolder<TEvChangeExchange::TEvRemoveSender>> RemoveSenders; 
 
 public:
     TCreateCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::CreateCdcStream, false, self, pipeline)
+        : TCdcStreamUnitBase(EExecutionUnitKind::CreateCdcStream, false, self, pipeline)
     {
     }
 
@@ -72,18 +72,7 @@ public:
                     tableInfo = DataShard.AlterTableDropCdcStreams(ctx, txc, pathId, schemaVersion, streamsToDrop);
 
                     for (const auto& oldStreamPathId : streamsToDrop) {
-                        auto& scanManager = DataShard.GetCdcStreamScanManager();
-                        scanManager.Forget(txc.DB, pathId, oldStreamPathId);
-                        
-                        if (const auto* info = scanManager.Get(oldStreamPathId)) {
-                            if (tableInfo) {
-                                DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
-                            }
-                            scanManager.Complete(oldStreamPathId);
-                        }
-
-                        DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, oldStreamPathId);
-                        RemoveSenders.emplace_back(new TEvChangeExchange::TEvRemoveSender(oldStreamPathId));
+                        StopCdcStream(txc, pathId, oldStreamPathId, tableInfo);
                     }
                 }
 
@@ -193,16 +182,8 @@ public:
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
-        if (!RemoveSenders.empty()) {
-            const auto& changeSender = DataShard.GetChangeSender();
-            if (changeSender) {
-                for (auto& holder : RemoveSenders) {
-                    ctx.Send(changeSender, holder.Release());
-                }
-            }
-            RemoveSenders.clear();
-        }
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
+        TCdcStreamUnitBase::Complete(op, ctx);
 
         if (AddSender) {
             ctx.Send(DataShard.GetChangeSender(), AddSender.Release());

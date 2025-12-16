@@ -1,3 +1,4 @@
+#include "datashard_cdc_stream_common.h"
 #include "datashard_impl.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
@@ -6,12 +7,10 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDropCdcStreamUnit : public TExecutionUnit {
-    TVector<THolder<TEvChangeExchange::TEvRemoveSender>> RemoveSenders;
-
+class TDropCdcStreamUnit : public TCdcStreamUnitBase {
 public:
     TDropCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::DropCdcStream, false, self, pipeline)
+        : TCdcStreamUnitBase(EExecutionUnitKind::DropCdcStream, false, self, pipeline)
     {
     }
 
@@ -35,7 +34,6 @@ public:
         const auto pathId = TPathId::FromProto(params.GetPathId());
         Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
 
-        // Collect stream IDs to drop - works for both single and multiple
         TVector<TPathId> streamPathIds;
         for (const auto& streamId : params.GetStreamPathId()) {
             streamPathIds.push_back(TPathId::FromProto(streamId));
@@ -48,16 +46,7 @@ public:
         tableInfo = DataShard.AlterTableDropCdcStreams(ctx, txc, pathId, version, streamPathIds);
 
         for (const auto& streamPathId : streamPathIds) {
-            auto& scanManager = DataShard.GetCdcStreamScanManager();
-            scanManager.Forget(txc.DB, pathId, streamPathId);
-            if (const auto* info = scanManager.Get(streamPathId)) {
-                DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
-                scanManager.Complete(streamPathId);
-            }
-
-            DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, pathId, streamPathId);
-
-            RemoveSenders.emplace_back(new TEvChangeExchange::TEvRemoveSender(streamPathId));
+            StopCdcStream(txc, pathId, streamPathId, tableInfo);
         }
 
         // Update table info once after processing all streams
@@ -81,17 +70,6 @@ public:
 
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
-
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
-        if (const auto& changeSender = DataShard.GetChangeSender()) {
-            for (auto& removeSender : RemoveSenders) {
-                if (auto* event = removeSender.Release()) {
-                    ctx.Send(changeSender, event);
-                }
-            }
-        }
-    }
-
 };
 
 THolder<TExecutionUnit> CreateDropCdcStreamUnit(TDataShard& self, TPipeline& pipeline) {

@@ -129,13 +129,18 @@ ydb/tests/functional/backup_collection basic_user_scenarios.py.TestIncrementalCh
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration.test_state_storage
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage
 ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
+ydb/tests/functional/hive py3test
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
+ydb/tests/functional/serverless py3test
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
+ydb/tests/functional/sqs/cloud py3test
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v1-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v0-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
 ydb/tests/functional/sqs/common test_queues_managing.py.TestQueuesManagingWithTenant.test_delete_queue[tables_format_v1-std]
 ydb/tests/functional/statistics test_restarts.py.test_basic
+ydb/tests/functional/tenants py3test
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--false]
@@ -153,6 +158,7 @@ ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap/s3_import py3test.sole chunk
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_unavailable_during_import
 ydb/tests/olap/s3_import test_tpch_import.py.TestS3TpchImport.test_import_and_export
+ydb/tests/olap/scenario py3test
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
@@ -239,6 +245,10 @@ ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[row]
 ydb/tests/stress/olap_workload/tests py3test.sole chunk
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
+ydb/tests/stress/show_create/table/tests import_test
+ydb/tests/stress/show_create/table/tests ydb-tests-stress-show_create-table-tests.import_test
+ydb/tests/stress/show_create/view/tests import_test
+ydb/tests/stress/show_create/view/tests ydb-tests-stress-show_create-view-tests.import_test
 ydb/tests/stress/streaming/tests py3test.sole chunk
 ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test

@@ -321,6 +321,9 @@ public:
             ResponseEv->LockHandle = std::move(LockHandle);
         }
         if (!TxManager && !Locks.empty()) {
+            if (LockHandle) {
+                ResponseEv->LockHandle = std::move(LockHandle);
+            }
             BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
         }
 

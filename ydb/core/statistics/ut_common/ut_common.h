@@ -71,6 +71,15 @@ TString CreateDatabase(TTestEnv& env, const TString& databaseName,
 
 TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName, size_t nodeCount = 0);
 
+struct TColumnDesc {
+    TString Name;
+    NScheme::TTypeId TypeId;
+    std::function<void(ui64, Ydb::Value&)> AddValue; // void AddValue(key, row)
+};
+
+// One value column with low-cardinality String.
+const std::vector<TColumnDesc>& SimpleColumnList();
+
 struct TTableInfo {
     std::vector<ui64> ShardIds;
     ui64 SaTabletId;
@@ -80,16 +89,13 @@ struct TTableInfo {
 };
 
 // Create empty column table with the requested number of shards.
-TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
-
-struct TInsertedRow {
-    ui64 Key;
-    TString Value;
-};
+TTableInfo CreateColumnTable(
+    TTestEnv& env, const TString& databaseName, const TString& tableName,
+    int shardCount, const std::vector<TColumnDesc>& valueColumns = SimpleColumnList());
 
 void InsertDataIntoTable(
     TTestEnv& env, const TString& databaseName, const TString& tableName,
-    std::vector<TInsertedRow> rows);
+    size_t rowCount, const std::vector<TColumnDesc>& valueColumns = SimpleColumnList());
 
 // Create a column table and insert ColumnTableRowsNumber rows.
 TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
@@ -97,8 +103,6 @@ TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const 
 // Create a column table, enable count-min-sketch column indexes,
 // and insert ColumnTableRowsNumber rows with some overlap to trigger compaction.
 TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
-
-std::vector<TInsertedRow> RowsWithFewDistinctValues(size_t count);
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
 

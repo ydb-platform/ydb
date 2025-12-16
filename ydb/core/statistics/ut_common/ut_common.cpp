@@ -223,6 +223,12 @@ TVector<ui64> GetColumnTableShards(TTestActorRuntime& runtime, TActorId sender, 
     return shards;
 }
 
+static TString GetIssuesString(const Ydb::Operations::Operation& operation) {
+    NYql::TIssues issues;
+    NYql::IssuesFromMessage(operation.issues(), issues);
+    return issues.ToString();
+}
+
 Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script, bool mustSucceed) {
     auto& runtime = *env.GetServer().GetRuntime();
 
@@ -239,10 +245,27 @@ Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script
 
     UNIT_ASSERT(response.operation().ready());
     if (mustSucceed) {
-        UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.operation().status(), Ydb::StatusIds::SUCCESS,
+            GetIssuesString(response.operation()));
     }
     return response.operation().status();
 }
+
+const std::vector<TColumnDesc>& SimpleColumnList() {
+    static const std::vector<TColumnDesc> ret {
+        {
+            .Name = "Value",
+            .TypeId = NScheme::NTypeIds::String,
+            .AddValue = [](ui64 key, Ydb::Value& row) {
+                row.add_items()->set_bytes_value(ToString(key % 10));
+            },
+        },
+    };
+
+    return ret;
+}
+
 
 void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
     ExecuteYqlScript(env, Sprintf(R"(
@@ -273,23 +296,21 @@ void PrepareUniformTable(TTestEnv& env, const TString& databaseName, const TStri
 }
 
 TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
-    int shardCount)
+    int shardCount, const std::vector<TColumnDesc>& valueColumns)
 {
     auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
     auto& runtime = *env.GetServer().GetRuntime();
 
-    ExecuteYqlScript(env, Sprintf(R"(
-        CREATE TABLE `%s` (
-            Key Uint64 NOT NULL,
-            Value String,
-            PRIMARY KEY (Key)
-        )
-        PARTITION BY HASH(Key)
-        WITH (
-            STORE = COLUMN,
-            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %d
-        );
-    )", fullTableName.c_str(), shardCount));
+    TStringBuilder createTable;
+    createTable << "CREATE TABLE `" << fullTableName <<"` (Key Uint64 NOT NULL";
+    for (const auto& col : valueColumns) {
+        createTable << ", " << col.Name << " " << NScheme::TypeName(col.TypeId);
+    }
+    createTable << ", PRIMARY KEY (Key)) "
+        << "PARTITION BY HASH(Key) "
+        << "WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << shardCount << ");";
+
+    ExecuteYqlScript(env, createTable);
     runtime.SimulateSleep(TDuration::Seconds(1));
 
     TTableInfo tableInfo;
@@ -301,7 +322,7 @@ TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const T
 
 void InsertDataIntoTable(
         TTestEnv& env, const TString& databaseName, const TString& tableName,
-        std::vector<TInsertedRow> insertedRows) {
+        size_t rowCount, const std::vector<TColumnDesc>& valueColumns) {
     auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
     auto& runtime = *env.GetServer().GetRuntime();
 
@@ -316,15 +337,20 @@ void InsertDataIntoTable(
     auto* reqKeyType = reqRowType->add_members();
     reqKeyType->set_name("Key");
     reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT64);
-    auto* reqValueType = reqRowType->add_members();
-    reqValueType->set_name("Value");
-    reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+    for (const auto& col : valueColumns) {
+        auto* reqColType = reqRowType->add_members();
+        reqColType->set_name(col.Name);
+        reqColType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(
+            static_cast<Ydb::Type_PrimitiveTypeId>(col.TypeId));
+    }
 
     auto* reqRows = rows->mutable_value();
-    for (const auto& inserted : insertedRows) {
+    for (ui64 key = 0; key < rowCount; ++key) {
         auto* row = reqRows->add_items();
-        row->add_items()->set_uint64_value(inserted.Key);
-        row->add_items()->set_bytes_value(inserted.Value);
+        row->add_items()->set_uint64_value(key);
+        for (const auto& col : valueColumns) {
+            col.AddValue(key, *row);
+        }
     }
 
     auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
@@ -332,7 +358,9 @@ void InsertDataIntoTable(
     auto response = runtime.WaitFuture(std::move(future));
 
     UNIT_ASSERT(response.operation().ready());
-    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        response.operation().status(), Ydb::StatusIds::SUCCESS,
+        GetIssuesString(response.operation()));
     env.GetController()->WaitActualization(TDuration::Seconds(1));
 }
 
@@ -340,12 +368,7 @@ TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const 
     int shardCount)
 {
     auto info = CreateColumnTable(env, databaseName, tableName, shardCount);
-
-    std::vector<TInsertedRow> rows;
-    for (size_t i = 0; i < ColumnTableRowsNumber; ++i) {
-        rows.push_back(TInsertedRow{.Key = i, .Value = ToString(i)});
-    }
-    InsertDataIntoTable(env, databaseName, tableName, rows);
+    InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber);
     return info;
 }
 
@@ -412,14 +435,6 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
     env.GetController()->WaitActualization(TDuration::Seconds(1));
 
     return info;
-}
-
-std::vector<TInsertedRow> RowsWithFewDistinctValues(size_t count) {
-    std::vector<TInsertedRow> rows;
-    for (size_t i = 0; i < count; ++i) {
-        rows.push_back(TInsertedRow{.Key = i, .Value = ToString(i % 10)});
-    }
-    return rows;
 }
 
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {

@@ -17,7 +17,7 @@ namespace {
 
 TTableInfo PrepareTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
     auto tableInfo = CreateColumnTable(env, databaseName, tableName, 1);
-    InsertDataIntoTable(env, databaseName, tableName, RowsWithFewDistinctValues(1000));
+    InsertDataIntoTable(env, databaseName, tableName, 1000);
     return tableInfo;
 }
 

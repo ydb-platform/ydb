@@ -340,6 +340,18 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
             indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
         }
         op = NTableIndex::CalcVectorKmeansTreeBuildOverlapTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix);
+        // This also means that we can directly copy split boundaries from the main table!
+        const auto& tableInfo = ss->Tables.at(buildInfo.TablePathId);
+        size_t parts = tableInfo->GetPartitions().size();
+        for (const auto& x: tableInfo->GetPartitions()) {
+            if (--parts > 0) {
+                op.AddSplitBoundary()->SetSerializedKeyPrefix(x.EndOfRange);
+            }
+        }
+        auto& policy = *resetPartitionsSettings();
+        // Prevent merging partitions
+        policy.SetMinPartitionsCount(32768);
+        policy.SetMaxPartitionsCount(0);
         LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
             "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
         return propose;

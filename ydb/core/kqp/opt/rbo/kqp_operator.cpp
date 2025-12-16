@@ -425,7 +425,17 @@ TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node->Pos(
     Alias = alias;
     StorageType = opSource.SourceType().StringValue() == "Row" ? NYql::EStorageType::RowStorage : NYql::EStorageType::ColumnStorage;
     TableCallable = opSource.Table().Ptr();
-    Pos = node->Pos();
+}
+
+TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType, const TExprNode::TPtr& tableCallable,
+                 const TExprNode::TPtr& olapFilterLambda, TPositionHandle pos)
+    : IOperator(EOperator::Source, pos)
+    , Alias(alias)
+    , Columns(columns)
+    , OutputIUs(outputIUs)
+    , StorageType(storageType)
+    , TableCallable(tableCallable)
+    , OlapFilterLambda(olapFilterLambda) {
 }
 
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
@@ -452,7 +462,7 @@ void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 }
 
-NYql::EStorageType TOpRead::GetTableStorageType() {
+NYql::EStorageType TOpRead::GetTableStorageType() const {
     return StorageType;
 }
 
@@ -461,15 +471,17 @@ TString TOpRead::ToString(TExprContext& ctx) {
     auto res = TStringBuilder();
     res << "Read (" << TKqpTable(TableCallable).Path().StringValue() << "," << Alias << ", [";
 
-    for (size_t i=0; i<Columns.size(); i++) {
+    for (size_t i = 0; i < Columns.size(); i++) {
         res << Columns[i] << ":" << OutputIUs[i].GetFullName();
-        if (i != Columns.size()-1) {
+        if (i != Columns.size() - 1) {
             res << ", ";
         }
     }
     res << "])";
     const TString storageType = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
     res << " (StorageType: " << storageType << ")";
+    if (OlapFilterLambda)
+        res << " OlapFilter: (" << PrintRBOExpression(OlapFilterLambda, ctx) << ")";
     return res;
 }
 

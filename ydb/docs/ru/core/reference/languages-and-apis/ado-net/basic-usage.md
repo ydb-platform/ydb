@@ -1,6 +1,6 @@
 # Основное использование ADO.NET
 
-В этой статье рассматриваются основные сценарии использования ADO.NET c YDB, включая подключение к базе данных, выполнение запросов и обработку результатов. Дополнительные сведения см. в основной [документации](index.md).
+В этой статье рассматриваются основные сценарии использования ADO.NET с YDB, включая подключение к базе данных, выполнение запросов и обработку результатов. Дополнительные сведения см. в основной [документации](index.md).
 
 ## Data Source {#data_source}
 
@@ -51,7 +51,7 @@ await using var ydbDataSource = new YdbDataSource(ydbConnectionBuilder);
 
 ### YdbDataSource.OpenConnectionAsync
 
-Открывает подключение к YDB с параметрами, указанными при создании `YdbDataSource` (cм. [раздел Ydb Data Source](#data_source)).
+Открывает подключение к YDB с параметрами, указанными при создании `YdbDataSource` (см. [раздел Ydb Data Source](#data_source)).
 
 ```c#
 await using var ydbConnection = await ydbDataSource.OpenConnectionAsync();
@@ -61,14 +61,14 @@ await using var ydbConnection = await ydbDataSource.OpenConnectionAsync();
 
 ### YdbDataSource.OpenRetryableConnectionAsync
 
-Открывает подключение с автоматическими повторами операций (retry), учитывающее YDB Retry Policy (см. [раздел повторные попытки](#retry_policy)).
+Открывает подключение с автоматическими повторами операций (retry), учитывающее YDB Retry Policy (см. [раздел Повторные попытки](#retry_policy)).
 
 ```c#
 await using var ydbConnection = ydbDataSource.OpenRetryableConnectionAsync();
 ```
 
 Особенности режима:
-- Транзакции не поддерживаются. Попытка использовать транзакцию приведет к исключению (см. [раздел транзакции](#transactions)).
+- Транзакции не поддерживаются. Попытка использовать транзакцию приведет к исключению (см. [раздел Транзакции](#transactions)).
 - Команды (`YdbCommand`), созданные из такого подключения, автоматически повторяют одиночные операции при временных ошибках.
 
 {% note warning %}
@@ -128,7 +128,7 @@ await ydbConnection.OpenAsync();
 
 {% note info %}
 
-Как это устроено внутри: для прикладного кода «подключение» — логическое. Под капотом операции — это RPC‑вызовы поверх небольшого пула gRPC/HTTP/2‑каналов. Провайдер также управляет пулом сессий таблиц. Эти детали прозрачны для пользователя и настраиваются параметрами пула (см. [Pooling параметры](connection-parameters.md#pooling)).
+Как это устроено внутри: для прикладного кода «подключение» — логическое. Под капотом операции — это RPC‑вызовы поверх небольшого пула gRPC/HTTP/2‑каналов. Провайдер также управляет пулом сессий таблиц. Эти детали прозрачны для пользователя и настраиваются параметрами пула (см. [параметры Pooling](connection-parameters.md#pooling)).
 
 {% endnote %}
 
@@ -260,7 +260,7 @@ await ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
 new YdbRetryPolicyConfig { MaxAttempts = 5 });
 ```
 
-Повторные попытки выполняются в соответствии с политиками YDB (см. [раздел повторные попытки](#retry_policy)).
+Повторные попытки выполняются в соответствии с политиками YDB (см. [раздел Повторные попытки](#retry_policy)).
 
 ### Транзакции YdbConnection
 
@@ -275,7 +275,7 @@ await transaction.CommitAsync();
 
 {% note warning %}
 
-В таком случае обработка ошибок ([Transaction Lock Invalidated](https://ydb.tech/docs/ru/troubleshooting/performance/queries/transaction-lock-invalidation)) становится заботой пользователя. YDB может откратить транзакцию в случае инвалидации MVC локов.
+В таком случае обработка ошибок ([Transaction Lock Invalidated](https://ydb.tech/docs/ru/troubleshooting/performance/queries/transaction-lock-invalidation)) становится заботой пользователя. YDB может откатить транзакцию в случае инвалидации MVC локов.
 
 {% endnote %}
 
@@ -288,7 +288,7 @@ await transaction.CommitAsync();
 Есть две сигнатуры этого метода с единственным параметром уровня изоляции:
 
 - `BeginTransaction(TransactionMode transactionMode)`<br>
-  Параметр `Ydb.Sdk.Ado.TransactionMode` - это {{ ydb-short-name }} специфичный уровень изоляции, ознакомиться поподробнее можно [здесь](../../../concepts/transactions.md).
+  Параметр `Ydb.Sdk.Ado.TransactionMode` — это {{ ydb-short-name }}-специфичный уровень изоляции, подробнее ознакомиться можно [здесь](../../../concepts/transactions.md).
 
 - `BeginTransaction(IsolationLevel isolationLevel)`<br>
   Параметр `System.Data.IsolationLevel` из стандарта ADO.NET. Поддерживаются следующие уровни изоляции: `Serializable` и `Unspecified`. Оба эквивалентны параметру `TxMode.SerializableRW`.
@@ -310,7 +310,7 @@ await transaction.CommitAsync();
 
 ### Передача настроек политики
 
-В методы OpenRetryableConnectionAsync, ExecuteInTransactionAsync, ExecuteAsync. Можно передать `YdbConfigRetryConfig`:
+В методы `OpenRetryableConnectionAsync`, `ExecuteInTransactionAsync`, `ExecuteAsync` можно передать `YdbRetryPolicyConfig`:
 
 - Подключение с повторами:
 
@@ -350,7 +350,7 @@ await transaction.CommitAsync();
 
 {% note warning %}
 
-Используя данный подход, вы точно должны быть уверены в том, что хотите, так как вы отказываетесь от настроек предпочитаемых.
+Используя данный подход, вы точно должны быть уверены в том, что хотите, так как вы отказываетесь от рекомендуемых настроек.
 
 {% endnote %}
 
@@ -358,7 +358,7 @@ await transaction.CommitAsync();
 
 {% note info %}
 
-Этот раздел актуален, если вы не используете встроенные повторы провайдера (см. [раздел повторные попытки](#retry_policy)).
+Этот раздел актуален, если вы не используете встроенные повторы провайдера (см. [раздел Повторные попытки](#retry_policy)).
 
 {% endnote %}
 

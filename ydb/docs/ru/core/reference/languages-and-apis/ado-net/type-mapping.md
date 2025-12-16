@@ -7,7 +7,7 @@
 Ниже показаны сопоставления, используемые при чтении значений.
 
 - Возвращаемый тип при использовании `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()` и подобных методов.
-- Вы можете читать значения и как другие .NET‑типы, вызывая `YdbDataReader.GetFieldValue<T>()`. Для некоторых временных типов можно получить их «сырое» (непреобразованное) значение, как оно хранится в базе — через `GetInt32()` или `GetInt64()`.
+- Вы можете читать значения также как другие .NET‑типы, вызывая `YdbDataReader.GetFieldValue<T>()`. Для некоторых временных типов можно получить их «сырое» (непреобразованное) значение, как оно хранится в базе — через `GetInt32()` или `GetInt64()`.
 
 | **{{ ydb-short-name }} тип**       | **.NET тип**                                       | **Non-default .NET типы**                                 |
 |------------------------------------|----------------------------------------------------|-----------------------------------------------------------|
@@ -22,7 +22,7 @@
 | `Uint64`                          | `ulong`                                            |                                                           |
 | `Float`                           | `float`                                            |                                                           |
 | `Double`                          | `double`                                           |                                                           |
-| `Decimal (precision, scale)`      | ``decimal`` ([cм. раздел Decimal](#decimal))        |                                                           |
+| `Decimal (precision, scale)`      | `decimal` ([см. раздел Decimal](#decimal))        |                                                           |
 | `Bytes` (синоним ``String``)      | `byte[]`                                           |                                                           |
 | `Text` (синоним ``Utf8``)         | `string`                                           |                                                           |
 | `Json`                            | `string`                                           |                                                           |
@@ -32,7 +32,7 @@
 | `Date`                            | `DateTime`                                         | `DateOnly`                                                |
 | `Date32`                          | `DateTime`                                         | `DateOnly`, `int` (`GetInt32()` — «сырой» value)        |
 | `Datetime`                        | `DateTime`                                         | `DateOnly`                                                |
-| `Datetime64`                      | `DateTime`                                         | `DateOnly`, `long` (`GetInt64()` — («сырой» value)       |
+| `Datetime64`                      | `DateTime`                                         | `DateOnly`, `long` (`GetInt64()` — «сырой» value)       |
 | `Timestamp`                       | `DateTime`                                         | `DateOnly`                                                |
 | `Timestamp64`                     | `DateTime`                                         | `DateOnly`, `long` (`GetInt64()` — «сырой» value)       |
 | `Interval`                        | `TimeSpan`                                         | `long`(`GetInt64()` — «сырой» value)                   |

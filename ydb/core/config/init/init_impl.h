@@ -1181,6 +1181,13 @@ public:
 
         LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
 
+        // disable as early as possible to properly propagate it everywhere
+        if (CommonAppOptions.TinyMode) {
+            if (!AppConfig.GetFeatureFlags().HasEnableBackgroundCompaction()) {
+                AppConfig.MutableFeatureFlags()->SetEnableBackgroundCompaction(false);
+            }
+        }
+
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
 
         Option("domains-file", TCfg::TDomainsConfigFieldTag{});

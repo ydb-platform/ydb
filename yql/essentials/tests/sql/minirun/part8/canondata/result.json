@@ -1732,5 +1732,19 @@
             "size": 1399,
             "uri": "https://{canondata_backend}/1031349/1ca7b08e33ca64b3d3c8f3d5204265a8028fd7ca/resource.tar.gz#test.test_udf-sqlproject_grounds-default.txt-Results_/results.txt"
         }
+    ],
+    "test.test[window-fuse_with_rename_session_start_first-default.txt-Debug]": [
+        {
+            "checksum": "afafabe59b0752c2bcd66b5df94cb07e",
+            "size": 3711,
+            "uri": "https://{canondata_backend}/1937027/768c048f063cb934e42138f86a1cf134863bee57/resource.tar.gz#test.test_window-fuse_with_rename_session_start_first-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-fuse_with_rename_session_start_first-default.txt-Results]": [
+        {
+            "checksum": "a2c3cf95b3def30fddd45e82e3c630e3",
+            "size": 14988,
+            "uri": "https://{canondata_backend}/1937027/768c048f063cb934e42138f86a1cf134863bee57/resource.tar.gz#test.test_window-fuse_with_rename_session_start_first-default.txt-Results_/results.txt"
+        }
     ]
 }

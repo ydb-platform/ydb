@@ -32,25 +32,39 @@ enum EPrintPlanOptions: ui32 {
  * Currently we only record the name and alias of the column, but we will extend it in the future
  */
 struct TInfoUnit {
-    TInfoUnit(TString alias, TString column, bool scalarContext=false) : 
-        Alias(alias), 
-        ColumnName(column), 
-        ScalarContext(scalarContext) {}
+    TInfoUnit(TString alias, TString column, bool scalarContext = false)
+        : Alias(alias)
+        , ColumnName(column)
+        , ScalarContext(scalarContext) {
+    }
 
-    TInfoUnit(TString name, bool scalarContext=false);
-    TInfoUnit() {}
+    TInfoUnit(TString name, bool scalarContext = false);
+    TInfoUnit() = default;
+    ~TInfoUnit() = default;
 
-    TString GetFullName() const { return ((Alias != "") ? ("_alias_" + Alias + ".") : "") + ColumnName; }
+    TString GetFullName() const {
+        return (Alias != "" ? Alias + "." : "") + ColumnName;
+    }
 
-    TString Alias;
-    TString ColumnName;
-    bool ScalarContext = false;
+    TString GetAlias() const { return Alias; }
+    TString GetColumnName() const { return ColumnName; }
+    bool IsScalarContext() const { return ScalarContext; }
+    void SetScalarContext(bool scalarContext) { ScalarContext = scalarContext; }
 
-    bool operator==(const TInfoUnit &other) const { return Alias == other.Alias && ColumnName == other.ColumnName; }
+    bool operator==(const TInfoUnit& other) const {
+        return Alias == other.Alias && ColumnName == other.ColumnName;
+    }
 
     struct THashFunction {
-        size_t operator()(const TInfoUnit &c) const { return THash<TString>{}(c.Alias) ^ THash<TString>{}(c.ColumnName); }
+        size_t operator()(const TInfoUnit& c) const {
+            return THash<TString>{}(c.Alias) ^ THash<TString>{}(c.ColumnName);
+        }
     };
+
+private:
+    TString Alias;
+    TString ColumnName;
+    bool ScalarContext{false};
 };
 
 /**

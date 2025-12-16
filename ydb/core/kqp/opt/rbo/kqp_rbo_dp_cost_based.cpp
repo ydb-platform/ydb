@@ -78,8 +78,8 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
             auto mappedLeftKey = cboTree->TreeRoot->Props.Metadata->MapColumn(leftKey);
             auto mappedRightKey = cboTree->TreeRoot->Props.Metadata->MapColumn(rightKey);
 
-            leftKeys.push_back(TJoinColumn(mappedLeftKey.Alias, mappedLeftKey.ColumnName));
-            rightKeys.push_back(TJoinColumn(mappedRightKey.Alias, mappedRightKey.ColumnName));
+            leftKeys.push_back(TJoinColumn(mappedLeftKey.GetAlias(), mappedLeftKey.GetColumnName()));
+            rightKeys.push_back(TJoinColumn(mappedRightKey.GetAlias(), mappedRightKey.GetColumnName()));
         }
 
         result = std::make_shared<TJoinOptimizerNode>(leftNode, 

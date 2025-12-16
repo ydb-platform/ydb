@@ -9008,6 +9008,13 @@
             "uri": "https://{canondata_backend}/1773845/d44e77c717d417cc593a54611fecfab186795fbf/resource.tar.gz#test_sql2yql.test_simple_pg-date_trunc_/sql.yql"
         }
     ],
+    "test_sql2yql.test[simple_pg-eval_params_fail]": [
+        {
+            "checksum": "405f09f974689b4a72b96a2e08ab638c",
+            "size": 1020,
+            "uri": "https://{canondata_backend}/1031349/0f9783fc7c2bc84428b5c28e1c1a799cf2b41e51/resource.tar.gz#test_sql2yql.test_simple_pg-eval_params_fail_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[simple_pg-floor]": [
         {
             "checksum": "413e810bd6fb4f1bd0fe7d3593fe57a8",
@@ -9342,6 +9349,41 @@
             "checksum": "cebb1bc06b5b3d0fca280b36e7ad5a0e",
             "size": 1428,
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_weak_field-weak_member_string_copy_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-fuse_with_rename]": [
+        {
+            "checksum": "64c7cb0d72c7f356a51db9f38bc43419",
+            "size": 5375,
+            "uri": "https://{canondata_backend}/1916746/c0f81b5b84630b9ef87c9aaaaa238360d32ae49d/resource.tar.gz#test_sql2yql.test_window-fuse_with_rename_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-fuse_with_rename_session_no_start]": [
+        {
+            "checksum": "5c42694d3744e2e3a19dc90b735b4dbb",
+            "size": 8211,
+            "uri": "https://{canondata_backend}/1916746/c0f81b5b84630b9ef87c9aaaaa238360d32ae49d/resource.tar.gz#test_sql2yql.test_window-fuse_with_rename_session_no_start_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-fuse_with_rename_session_start_first]": [
+        {
+            "checksum": "bbe390c7c4ea0959ba3f65a60027c043",
+            "size": 8559,
+            "uri": "https://{canondata_backend}/1916746/c0f81b5b84630b9ef87c9aaaaa238360d32ae49d/resource.tar.gz#test_sql2yql.test_window-fuse_with_rename_session_start_first_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-fuse_with_rename_session_start_last]": [
+        {
+            "checksum": "1d0c5c3c1a7cf7fce8d16e792ba7dd5b",
+            "size": 8559,
+            "uri": "https://{canondata_backend}/1916746/c0f81b5b84630b9ef87c9aaaaa238360d32ae49d/resource.tar.gz#test_sql2yql.test_window-fuse_with_rename_session_start_last_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[window-no_fuse_with_rename]": [
+        {
+            "checksum": "7b9122ccf817aaf407b3115da7d8b95c",
+            "size": 5152,
+            "uri": "https://{canondata_backend}/1775319/8d76f0768e7300e00adc259d4a66ff256b76f33c/resource.tar.gz#test_sql2yql.test_window-no_fuse_with_rename_/sql.yql"
         }
     ],
     "test_sql2yql.test[window-null_type]": [
@@ -14487,6 +14529,11 @@
             "uri": "file://test_sql_format.test_simple_pg-date_trunc_/formatted.sql"
         }
     ],
+    "test_sql_format.test[simple_pg-eval_params_fail]": [
+        {
+            "uri": "file://test_sql_format.test_simple_pg-eval_params_fail_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[simple_pg-floor]": [
         {
             "uri": "file://test_sql_format.test_simple_pg-floor_/formatted.sql"
@@ -14725,6 +14772,31 @@
     "test_sql_format.test[weak_field-weak_member_string_copy]": [
         {
             "uri": "file://test_sql_format.test_weak_field-weak_member_string_copy_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-fuse_with_rename]": [
+        {
+            "uri": "file://test_sql_format.test_window-fuse_with_rename_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-fuse_with_rename_session_no_start]": [
+        {
+            "uri": "file://test_sql_format.test_window-fuse_with_rename_session_no_start_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-fuse_with_rename_session_start_first]": [
+        {
+            "uri": "file://test_sql_format.test_window-fuse_with_rename_session_start_first_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-fuse_with_rename_session_start_last]": [
+        {
+            "uri": "file://test_sql_format.test_window-fuse_with_rename_session_start_last_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-no_fuse_with_rename]": [
+        {
+            "uri": "file://test_sql_format.test_window-no_fuse_with_rename_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-null_type]": [

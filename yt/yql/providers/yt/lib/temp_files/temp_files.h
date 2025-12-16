@@ -8,7 +8,11 @@
 
 namespace NYql {
 
-struct TTempFiles {
+struct TTempFiles : public TThrRefBase {
+    virtual ~TTempFiles() = default;
+
+    using TPtr = TIntrusivePtr<TTempFiles>;
+
     TTempFiles(const TString& tmpDir);
 
     TString AddFile(const TString& fileName);

@@ -43,6 +43,7 @@
 #include "viewer_sse_counter.h"
 #include "viewer_storage_stats.h"
 #include "viewer_peers.h"
+#include "viewer_database_stats.h"
 
 namespace NKikimr::NViewer {
 
@@ -379,6 +380,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerGroupsJsonHandler(jsonHandlers);
     jsonHandlers.AddHandler("/viewer/storage_stats", new TJsonHandler<TJsonStorageStats>(TJsonStorageStats::GetSwagger()));
     jsonHandlers.AddHandler("/viewer/peers", new TJsonHandler<TJsonPeers>(TJsonPeers::GetSwagger()));
+    jsonHandlers.AddHandler("/viewer/database_stats", new THttpHandler<TJsonDatabaseStats>());
 }
 
 }

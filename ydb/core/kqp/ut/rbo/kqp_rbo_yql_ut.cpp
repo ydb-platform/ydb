@@ -12,6 +12,8 @@
 #include <util/system/env.h>
 
 #include <ctime>
+#include <regex>
+#include <fstream>
 
 namespace {
 
@@ -495,8 +497,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestAggregation(ColumnStore);
     }
 
-    /*
-    Y_UNIT_TEST(CrossInnerJoin) {
+    Y_UNIT_TEST(BasicJoins) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
@@ -524,7 +525,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         NYdb::TValueBuilder rowsTableFoo;
         rowsTableFoo.BeginList();
-        for (size_t i = 0; i < 1; ++i) {
+        for (size_t i = 0; i < 4; ++i) {
             rowsTableFoo.AddListItem()
                 .BeginStruct()
                 .AddMember("id").Int64(i)
@@ -538,7 +539,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         NYdb::TValueBuilder rowsTableBar;
         rowsTableBar.BeginList();
-        for (size_t i = 0; i < 4; ++i) {
+        for (size_t i = 0; i < 3; ++i) {
             rowsTableBar.AddListItem()
                 .BeginStruct()
                 .AddMember("id").Int64(i)
@@ -555,63 +556,128 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                --!syntax_pg
-                SELECT foo.id FROM /Root/foo as foo inner join /Root/bar as bar on foo.id = bar.id;
+                PRAGMA YqlSelect = 'force';
+                SELECT foo.id, bar.id FROM `/Root/foo` as foo inner join `/Root/bar` as bar on foo.id = bar.id order by foo.id;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
-                SELECT foo.id FROM `/Root/foo` inner join `/Root/bar` on foo.id = bar.id WHERE name = '1_name';
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                SELECT f.id as id2 FROM `/Root/foo` AS f, `/Root/bar` WHERE f.id = bar.id and name = '0_name';
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                SELECT foo.id FROM `/Root/foo`, `/Root/bar`;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                SELECT foo.id, bar.id FROM `/Root/foo`, `/Root/bar`;
+                SELECT foo.id, bar.id FROM `/Root/foo` as foo left join `/Root/bar` as bar on foo.id = bar.id order by foo.id;
             )",
         };
 
-        // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
-            R"([[0]])",
-            R"([])",
-            R"([[0]])",
-            R"([[0];[0];[0];[0]])",
-            R"([[0;0];[0;1];[0;2];[0;3]])",
+            R"([[0;0];[1;1];[2;2]])",
+            R"([[0;[0]];[1;[1]];[2;[2]];[3;#]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            UNIT_ASSERT_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
 
+    void Replace(std::string& s, const std::string& from, const std::string& to) {
+        size_t pos = 0;
+        while ((pos = s.find(from, pos)) != std::string::npos) {
+            s.replace(pos, from.size(), to);
+            pos += to.size();
+        }
+    }
+
+    TString GetFullPath(const TString& filePath) {
+        TString fullPath = SRC_("../join/data/" + filePath);
+
+        std::ifstream file(fullPath);
+
+        if (!file.is_open()) {
+            throw std::runtime_error("can't open + " + fullPath + " " + std::filesystem::current_path());
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+
+        return buffer.str();
+    }
+
+    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& schemaPath, bool useColumnStore) {
+        std::string query = GetFullPath(schemaPath);
+
+        if (useColumnStore) {
+            std::regex pattern(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
+            query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
+        }
+
+        auto res = session.ExecuteSchemeQuery(TString(query)).GetValueSync();
+        res.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT(res.IsSuccess());
+    }
+
+    void RunTPCHBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+ 
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, "schema/tpch.sql", columnStore);
+
+        if (!queries.size()) {
+            for (ui32 i = 1; i <= 22; ++i) {
+                queries.push_back(i);
+            }
+        }
+
+        std::string consts = NResource::Find(TStringBuilder() << "consts.yql");
+        std::string tablePrefix = "/Root/";
+        for (const auto qId : queries) {
+            Cout << "Q " << qId << Endl;
+            std::string q = NResource::Find(TStringBuilder() << "resfs/file/tpch/queries/yql/q" << qId << ".sql");
+            Replace(q, "{path}", tablePrefix);
+            Replace(q, "{% include 'header.sql.jinja' %}", R"(PRAGMA YqlSelect = 'force';)");
+            std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
+            q = std::regex_replace(q, pattern, "`" + tablePrefix + "$1`");
+            q = consts + "\n" + q;
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExplainDataQuery(q).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TPCH) {
+       RunTPCHBenchmark(/*columnstore*/ true, {1, 6, 14, 19}, /*new rbo*/ true);
+       RunTPCHBenchmark(/*columnstore*/ true, {1, 6, 14, 19}, /*new rbo*/ false);
+    }
+
+    /*
     Y_UNIT_TEST(ScalarSubquery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/foo` (
-                id	Int64	NOT NULL,	
-	            name	String,
-                primary key(id)	
-            );
+                id	Int64	NOT NULL,
+                name	String,
+                primary key(id)
+            ) with (Store = Column);
 
             CREATE TABLE `/Root/bar` (
-                id	Int64	NOT NULL,	
-	            lastname	String,
-                primary key(id)	
-            );
+                id	Int64	NOT NULL,
+                lastname	String,
+                primary key(id)
+            ) with (Store = Column);
         )").GetValueSync();
 
         NYdb::TValueBuilder rowsTableFoo;
@@ -647,7 +713,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                SELECT bar.id FROM `/Root/bar` where bar.id = (SELECT id FROM `/Root/foo`);
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` where bar.id = (SELECT min(foo.id) FROM `/Root/foo` as foo);
             )"
         };
 
@@ -664,7 +731,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-
     Y_UNIT_TEST(PredicatePushdownLeftJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -675,14 +741,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/t1` (
                 a Int64 NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
 
             CREATE TABLE `/Root/t2` (
                 a Int64	NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
@@ -776,28 +842,28 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/t1` (
                 a Int64 NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
 
             CREATE TABLE `/Root/t2` (
                 a Int64	NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
 
             CREATE TABLE `/Root/t3` (
                 a Int64 NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
 
             CREATE TABLE `/Root/t4` (
                 a Int64 NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
@@ -869,14 +935,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/t1` (
                 a Int64 NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
 
             CREATE TABLE `/Root/t2` (
                 a Int64	NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
@@ -934,28 +1000,28 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/t1` (
                 a Int64 NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
 
             CREATE TABLE `/Root/t2` (
                 a Int64	NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
 
             CREATE TABLE `/Root/t3` (
                 a Int64 NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
 
             CREATE TABLE `/Root/t4` (
                 a Int64 NOT NULL,
-	            b String,
+                b String,
                 c Int64,
                 primary key(a)
             );
@@ -983,7 +1049,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
-                SELECT t1.a FROM t1 left join t2 on t1.a = t2.a left join t3 on t2.a = t3.a left join t4 on t3.a = t4.a and t4.c = t2.c and t1.c = t4.c where t4.b = '0_b';
+                SELECT t1.a FROM t1 left join t2 on t1.a = t2.a left join t3 on t2.a = t3.a left join t4 on t3.a = t4.a and t4.c = t2.c and t1.c = t4.c where
+t4.b = '0_b';
             )",
         };
 
@@ -1027,21 +1094,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/foo_0` (
                 id Int64 NOT NULL,
-	            join_id Int64 NOT NULL,
+                join_id Int64 NOT NULL,
                 c Int64,
                 primary key(id)
             );
 
             CREATE TABLE `/Root/foo_1` (
                 id Int64	NOT NULL,
-	            join_id Int64 NOT NULL,
+                join_id Int64 NOT NULL,
                 c Int64,
                 primary key(id)
             );
 
             CREATE TABLE `/Root/foo_2` (
                 id Int64 NOT NULL,
-	            join_id Int64 NOT NULL,
+                join_id Int64 NOT NULL,
                 c Int64,
                 primary key(id)
             );
@@ -1058,7 +1125,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto result = session2.ExecuteDataQuery(R"(
             --!syntax_pg
             SET TablePathPrefix = "/Root/";
-            
+
             WITH cte as (
                 SELECT a1.id2, join_id FROM (SELECT id as "id2", join_id FROM foo_0) as a1)
 
@@ -1067,7 +1134,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                (SELECT id2
                FROM foo_1, cte
                WHERE foo_1.join_id = cte.join_id) as X1,
-               
+
                (SELECT id2
                FROM foo_2, cte
                WHERE foo_2.join_id = cte.join_id) as X2;
@@ -1092,7 +1159,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 SELECT 1 as "a", 2 as "b";
             )", 10);
 
-        Cout << "Time per query: " << time;     
+        Cout << "Time per query: " << time;
 
         //UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
@@ -1106,9 +1173,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/foo` (
-                id	Int64	NOT NULL,	
-	            name	String,
-                primary key(id)	
+                id	Int64	NOT NULL,
+                name	String,
+                primary key(id)
             );
         )").GetValueSync();
 
@@ -1118,7 +1185,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             SELECT id as "id2" FROM foo WHERE name = 'some_name';
         )",10);
 
-        Cout << "Time per query: " << time;     
+        Cout << "Time per query: " << time;
     }
 
     Y_UNIT_TEST(Bench_CrossFilter) {
@@ -1130,15 +1197,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/foo` (
-                id	Int64	NOT NULL,	
-	            name	String,
-                primary key(id)	
+                id	Int64	NOT NULL,
+                name	String,
+                primary key(id)
             );
 
             CREATE TABLE `/Root/bar` (
-                id	Int64	NOT NULL,	
-	            lastname	String,
-                primary key(id)	
+                id	Int64	NOT NULL,
+                lastname	String,
+                primary key(id)
             );
         )").GetValueSync();
 
@@ -1148,7 +1215,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             SELECT f.id as "id2" FROM foo AS f, bar WHERE name = 'some_name';
         )", 10);
 
-        Cout << "Time per query: " << time;     
+        Cout << "Time per query: " << time;
     }
 
     Y_UNIT_TEST(Bench_JoinFilter) {
@@ -1160,15 +1227,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/foo` (
-                id	Int64	NOT NULL,	
-	            name	String,
-                primary key(id)	
+                id	Int64	NOT NULL,
+                name	String,
+                primary key(id)
             );
 
             CREATE TABLE `/Root/bar` (
-                id	Int64	NOT NULL,	
-	            lastname	String,
-                primary key(id)	
+                id	Int64	NOT NULL,
+                lastname	String,
+                primary key(id)
             );
         )").GetValueSync();
 
@@ -1178,7 +1245,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             SELECT f.id as "id2" FROM foo AS f, bar WHERE f.id = bar.id and name = 'some_name';
         )", 10);
 
-        Cout << "Time per query: " << time;     
+        Cout << "Time per query: " << time;
     }
 
     Y_UNIT_TEST(Bench_10Joins) {
@@ -1194,63 +1261,63 @@ CREATE TABLE `/Root/foo_0` (
     join_id Int64,
     primary key(id)
     );
-    
+
 
     CREATE TABLE `/Root/foo_1` (
     id Int64 NOT NULL,
     join_id Int64,
     primary key(id)
     );
-    
+
 
     CREATE TABLE `/Root/foo_2` (
     id Int64 NOT NULL,
     join_id Int64,
     primary key(id)
     );
-    
+
 
     CREATE TABLE `/Root/foo_3` (
     id Int64 NOT NULL,
     join_id Int64,
     primary key(id)
     );
-    
+
 
     CREATE TABLE `/Root/foo_4` (
     id Int64 NOT NULL,
     join_id Int64,
     primary key(id)
     );
-    
+
 
     CREATE TABLE `/Root/foo_5` (
     id Int64 NOT NULL,
     join_id Int64,
     primary key(id)
     );
-    
+
 
     CREATE TABLE `/Root/foo_6` (
     id Int64 NOT NULL,
     join_id Int64,
     primary key(id)
     );
-    
+
 
     CREATE TABLE `/Root/foo_7` (
     id Int64 NOT NULL,
     join_id Int64,
     primary key(id)
     );
-    
+
 
     CREATE TABLE `/Root/foo_8` (
     id Int64 NOT NULL,
     join_id Int64,
     primary key(id)
     );
-    
+
 
     CREATE TABLE `/Root/foo_9` (
     id Int64 NOT NULL,
@@ -1265,13 +1332,14 @@ CREATE TABLE `/Root/foo_0` (
 
      SELECT foo_0.id as "id2"
      FROM foo_0, foo_1, foo_2, foo_3, foo_4, foo_5, foo_6, foo_7, foo_8, foo_9
-     WHERE foo_0.join_id = foo_1.id AND foo_0.join_id = foo_2.id AND foo_0.join_id = foo_3.id AND foo_0.join_id = foo_4.id AND foo_0.join_id = foo_5.id AND foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.id AND foo_0.join_id = foo_9.id;
-     
+     WHERE foo_0.join_id = foo_1.id AND foo_0.join_id = foo_2.id AND foo_0.join_id = foo_3.id AND foo_0.join_id = foo_4.id AND foo_0.join_id = foo_5.id AND
+foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.id AND foo_0.join_id = foo_9.id;
+
     )";
 
         auto time = TimeQuery(schema, query, 10);
 
-        Cout << "Time per query: " << time;     
+        Cout << "Time per query: " << time;
     }
 
     */

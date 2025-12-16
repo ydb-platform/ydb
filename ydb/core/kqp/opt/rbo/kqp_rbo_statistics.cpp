@@ -20,7 +20,7 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool wit
 TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, TVector<TInfoUnit> keyColumns) {
     TVector<TString> keyColumnNames;
     for (auto iu: (keyColumns.empty() ? props.Metadata->KeyColumns : keyColumns)) {
-        keyColumnNames.push_back(iu.ColumnName);
+        keyColumnNames.push_back(iu.GetColumnName());
     }
 
     double cost = props.Cost.has_value() ? *props.Cost : 0.0;
@@ -72,9 +72,9 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
 
         builder << ", ColumnsCount: " << ColumnsCount << ", Storage: " << storageType << ", KeyCols: [";
 
-        for (size_t i=0; i<KeyColumns.size(); i++) {
-            builder << KeyColumns[i].Alias << "." << KeyColumns[i].ColumnName;
-            if (i!=KeyColumns.size()-1) {
+        for (size_t i = 0; i < KeyColumns.size(); i++) {
+            builder << KeyColumns[i].GetAlias() << "." << KeyColumns[i].GetColumnName();
+            if (i != KeyColumns.size() - 1) {
                 builder << ", ";
             }
         }

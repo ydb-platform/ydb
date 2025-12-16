@@ -381,7 +381,7 @@ Y_UNIT_TEST(RetentionStorage) {
             .RetentionStorageMb(8)
             .BeginAddSharedConsumer("mlp-consumer")
                 .KeepMessagesOrder(false)
-            .EndAddConsumer());
+            .EndAddConsumer()).GetValueSync();
 
     Sleep(TDuration::Seconds(1));
 
@@ -415,7 +415,7 @@ Y_UNIT_TEST(RetentionStorageAfterReload) {
             .RetentionStorageMb(8)
             .BeginAddSharedConsumer("mlp-consumer")
                 .KeepMessagesOrder(false)
-            .EndAddConsumer());
+            .EndAddConsumer()).GetValueSync();
 
     Sleep(TDuration::Seconds(1));
 

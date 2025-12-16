@@ -110,9 +110,6 @@ private:
             } else {
                 op->TxBroken = BrokenFlag;
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
-                if (BrokenFlag) {
-                    Self->GetProgressTxController().ExecuteOnCancel(TxId, txc);
-                }
             }
             return true;
         }
@@ -126,9 +123,6 @@ private:
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
             } else {
                 op->SendBrokenFlagAck(*Self);
-                if (BrokenFlag) {
-                    Self->GetProgressTxController().CompleteOnCancel(TxId, ctx);
-                }
                 Self->EnqueueProgressTx(ctx, TxId);
             }
         }

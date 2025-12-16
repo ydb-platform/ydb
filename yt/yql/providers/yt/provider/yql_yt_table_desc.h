@@ -22,7 +22,7 @@ class TQContext;
 
 enum class TYtTableIntent: ui32 {
     Read        = 1 << 0,
-    View        = 1 << 1, // Read via view
+    View        = 1 << 1,
     Override    = 1 << 2,
     Append      = 1 << 3,
     Create      = 1 << 4,

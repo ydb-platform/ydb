@@ -639,7 +639,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("availability-period", "Duration for which uncommited data in topic is retained (ex. '72h', '1440m')")
             .Optional()
             .StoreMappedResult(&AvailabilityPeriod_, ParseDuration);
-        config.Opts->AddLongOption("consumer-type", "Consumer type. Available options: streaming, shared")
+        config.Opts->AddLongOption("type", "Consumer type. Available options: streaming, shared")
             .DefaultValue("streaming")
             .StoreResult(&ConsumerType_);
         config.Opts->AddLongOption("keep-messages-order", "Keep messages order for shared consumer")

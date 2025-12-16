@@ -135,9 +135,11 @@ jobs:
             # Temporarily use SLO-specific .dockerignore
             cp ydb/public/sdk/cpp/tests/slo_workloads/.dockerignore .dockerignore
 
+            CURRENT_REF="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
             docker build -t ydb-app-current \
               --build-arg SRC_PATH=key_value \
               --build-arg BINARY_NAME=key_value \
+              --build-arg REF="${CURRENT_REF}" \
               -f ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile .
 
             # Clean up temporary .dockerignore
@@ -160,6 +162,7 @@ jobs:
             docker build -t ydb-app-baseline \
               --build-arg SRC_PATH=key_value \
               --build-arg BINARY_NAME=key_value \
+              --build-arg REF="${{ steps.baseline.outputs.ref }}" \
               -f ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile .
 
             # Clean up temporary .dockerignore

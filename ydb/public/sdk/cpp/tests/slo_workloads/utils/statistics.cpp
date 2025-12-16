@@ -3,7 +3,6 @@
 #include "metrics.h"
 #include "utils.h"
 
-#include <fstream>
 #include <chrono>
 #include <unistd.h>
 

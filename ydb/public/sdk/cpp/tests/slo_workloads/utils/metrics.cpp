@@ -6,15 +6,22 @@
 
 #include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>
 #include <opentelemetry/sdk/metrics/meter_provider_factory.h>
+#include <opentelemetry/sdk/metrics/meter_context.h>
+#include <opentelemetry/sdk/resource/resource.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
-#include <fstream>
 #include <chrono>
 #include <unistd.h>
 #include <sys/types.h>
 
 using namespace std::chrono_literals;
+
+#ifdef REF
+static constexpr const std::string_view REF_LABEL = REF;
+#else
+static constexpr const std::string_view REF_LABEL = "unknown";
+#endif
 
 class TOtelMetricsPusher : public IMetricsPusher {
 public:
@@ -32,18 +39,33 @@ public:
         auto exporter = opentelemetry::exporter::otlp::OtlpHttpMetricExporterFactory::Create(exporterOptions);
 
         opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions readerOptions;
-        readerOptions.export_interval_millis = 1000ms;
-        readerOptions.export_timeout_millis  = 500ms;
+        readerOptions.export_interval_millis = 250ms;
+        readerOptions.export_timeout_millis  = 200ms;
 
         auto metricReader = opentelemetry::sdk::metrics::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), readerOptions);
 
-        MeterProvider_ = opentelemetry::sdk::metrics::MeterProviderFactory::Create();
+        // Create resource with unique instance identifier (hostname)
+        opentelemetry::sdk::resource::ResourceAttributes attributes = {
+            {"ref", REF_LABEL},
+            {"sdk", "cpp"},
+            {"sdk_version", NYdb::GetSdkSemver()}
+        };
+
+        auto resource = opentelemetry::sdk::resource::Resource::Create(attributes);
+
+        // Create MeterContext with resource
+        auto context = std::make_unique<opentelemetry::sdk::metrics::MeterContext>(
+            std::unique_ptr<opentelemetry::sdk::metrics::ViewRegistry>(new opentelemetry::sdk::metrics::ViewRegistry()),
+            resource
+        );
+
+        MeterProvider_ = opentelemetry::sdk::metrics::MeterProviderFactory::Create(std::move(context));
         MeterProvider_->AddMetricReader(std::move(metricReader));
 
         Meter_ = MeterProvider_->GetMeter("slo_workloads", NYdb::GetSdkSemver());
 
         // #region agent log
-        std::cerr << "[DEBUG_LOG] {\"location\":\"metrics.cpp:after_meter\",\"message\":\"Meter created\",\"data\":{\"meterName\":\"slo_workloads\",\"meterVersion\":\"" << NYdb::GetSdkSemver() << "\"},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"D\"}" << std::endl;
+        std::cerr << "[DEBUG_LOG] {\"location\":\"metrics.cpp:after_meter\",\"message\":\"Meter created with resource\",\"data\":{\"meterName\":\"slo_workloads\",\"meterVersion\":\"" << NYdb::GetSdkSemver() << "\",\"serviceInstanceId\":\"" << hostname << "\"},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"D\"}" << std::endl;
         // #endregion
 
         InitMetrics();

@@ -2,6 +2,7 @@ FROM ubuntu:22.04 AS build
 
 ARG SRC_PATH
 ARG BINARY_NAME
+ARG REF="unknown"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 \
@@ -22,7 +23,7 @@ COPY ydb/public/sdk/cpp/ /ydb/public/sdk/cpp/
 
 COPY ./ya /
 
-RUN ./ya make ydb/public/sdk/cpp/tests/slo_workloads/${SRC_PATH} -r && cp ydb/public/sdk/cpp/tests/slo_workloads/${SRC_PATH}/${BINARY_NAME} /slo-workload-bin
+RUN ./ya make -r -D REF=\"${REF}\" ydb/public/sdk/cpp/tests/slo_workloads/${SRC_PATH} && cp ydb/public/sdk/cpp/tests/slo_workloads/${SRC_PATH}/${BINARY_NAME} /slo-workload-bin
 
 FROM ubuntu:22.04
 

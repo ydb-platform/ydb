@@ -188,10 +188,6 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
         RunCommonChecks();
 
-        if (!Self->ConfigCommittedToConsole && Self->SelfManagementEnabled) {
-            throw TExRace() << "Previous config has not been committed to Console yet";
-        }
-
         // extract YAML files provided by the user
         NewYaml = request.HasYAML() ? std::make_optional(request.GetYAML()) : std::nullopt;
         NewStorageYaml = request.HasStorageYAML() ? std::make_optional(request.GetStorageYAML()) : std::nullopt;
@@ -367,8 +363,7 @@ namespace NKikimr::NStorage {
         }
 
         if (request.GetSkipConsoleValidation() || !NewYaml) {
-            StartProposition(&ProposedStorageConfig, /*acceptLocalQuorum=*/ false, /*requireScepter=*/ true,
-                /*mindPrev=*/ true, /*propositionBase=*/ nullptr, enablingDistconf);
+            StartProposition(&ProposedStorageConfig, /*mindPrev=*/ true, /*propositionBase=*/ nullptr, enablingDistconf);
         } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
             throw TExRace() << "Console pipe is not available";
         } else {
@@ -569,8 +564,7 @@ namespace NKikimr::NStorage {
                 if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, *NewYaml, record.GetYAML())) {
                     throw TExError() << "Failed to update config yaml: " << *error;
                 }
-                return StartProposition(&ProposedStorageConfig, /*acceptLocalQuorum=*/ false, /*requireScepter=*/ true,
-                    /*mindPrev=*/ true, /*propositionBase=*/ nullptr, EnablingDistconf);
+                return StartProposition(&ProposedStorageConfig, /*mindPrev=*/ true, /*propositionBase=*/ nullptr, EnablingDistconf);
         }
     }
 
@@ -609,8 +603,7 @@ namespace NKikimr::NStorage {
                 if (auto err = LocalYamlValidate(mainYaml, /*allowUnknown=*/ true)) {
                     throw TExError() << "YAML validation failed: " << *err;
                 }
-                StartProposition(&r.ConfigToPropose.value(), /*acceptLocalQuorum=*/ false, /*requireScepter=*/ true,
-                    /*mindPrev=*/ true, /*propositionBase=*/ nullptr, /*fromBootstrap=*/ true);
+                StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true, /*propositionBase=*/ nullptr, /*fromBootstrap=*/ true);
             } else { // no new proposition has been made
                 Finish(TResult::OK, std::nullopt);
             }

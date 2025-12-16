@@ -101,14 +101,8 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
-    TString result(original);
-
-    if (!QuerySettings.empty()) {
-        result = JoinSeq("\n", QuerySettings) + "\n" + result;
-    }
-
     std::vector<TStringBuf> lines;
-    for (auto& line : StringSplitter(result).Split('\n').SkipEmpty()) {
+    for (auto& line : StringSplitter(original).Split('\n').SkipEmpty()) {
         if (line.StartsWith("--") && !line.StartsWith("--!")) {
             continue;
         }
@@ -116,7 +110,15 @@ TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const 
         lines.push_back(line);
     }
 
-    return JoinSeq('\n', lines);
+    if (lines.empty()) {
+        return "";
+    }
+
+    TString result = JoinSeq('\n', lines);
+    if (!QuerySettings.empty()) {
+        result = JoinSeq("\n", QuerySettings) + "\n" + result;
+    }
+    return result;
 }
 
 bool TWorkloadCommandBenchmark::NeedRun(const TString& queryName) const {

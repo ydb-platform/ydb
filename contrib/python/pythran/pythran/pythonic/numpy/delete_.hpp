@@ -11,11 +11,11 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class T, class pS>
-  types::ndarray<T, types::pshape<long>>
-  delete_(types::ndarray<T, pS> const &a, long index, types::none_type axis)
+  types::ndarray<T, types::pshape<long>> delete_(types::ndarray<T, pS> const &a, long index,
+                                                 types::none_type axis)
   {
-    types::ndarray<T, types::pshape<long>> out(
-        types::pshape<long>(long(a.flat_size()) - 1), builtins::None);
+    types::ndarray<T, types::pshape<long>> out(types::pshape<long>(long(a.flat_size()) - 1),
+                                               builtins::None);
     long n = a.flat_size();
     index = std::min(n, index);
     std::copy(a.buffer + index + 1, a.buffer + n,
@@ -24,14 +24,11 @@ namespace numpy
   }
 
   template <class T, class pS, class I>
-  typename std::enable_if<!std::is_scalar<I>::value,
-                          types::ndarray<T, types::pshape<long>>>::type
-  delete_(types::ndarray<T, pS> const &in, I const &indices,
-          types::none_type axis)
+  std::enable_if_t<!std::is_scalar<I>::value, types::ndarray<T, types::pshape<long>>>
+  delete_(types::ndarray<T, pS> const &in, I const &indices, types::none_type axis)
   {
     types::ndarray<T, types::pshape<long>> out(
-        types::pshape<long>(long(in.flat_size()) - indices.flat_size()),
-        builtins::None);
+        types::pshape<long>(long(in.flat_size()) - indices.flat_size()), builtins::None);
     auto out_iter = out.buffer;
     auto in_iter = in.buffer;
     for (long index : indices) {

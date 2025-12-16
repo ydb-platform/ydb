@@ -58,6 +58,8 @@ public:
         THashMap<std::tuple<TString, TString, TString>, std::vector<NYT::TRichYPath>> RangeCache;
         THashMap<TString, std::pair<std::vector<TString>, std::vector<std::exception_ptr>>> PartialRangeCache;
 
+        THashMap<TString, NYT::TNode> SchemasBySchemaId;
+
         using TFolderCache = THashMap<TString, std::vector<std::tuple<TString, TString, NYT::TNode>>>;
         TFolderCache FolderCache;
 

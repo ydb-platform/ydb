@@ -33,10 +33,6 @@ NYdb::NRetry::TRetryOperationSettings GetRetrySettings(TDuration timeout, bool i
         .MaxTimeout(timeout);
 }
 
-TCreateSessionSettings::TCreateSessionSettings() {
-    ClientTimeout_ = TDuration::Seconds(5);
-};
-
 static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto)
 {
     switch (txSettings.GetMode()) {
@@ -190,6 +186,7 @@ public:
 
     TAsyncCommitTransactionResult CommitTransaction(const std::string& txId, const NYdb::NQuery::TCommitTxSettings& settings, const TSession& session) {
         using namespace Ydb::Query;
+        auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey());
         auto request = MakeRequest<Ydb::Query::CommitTransactionRequest>();
         request.set_session_id(TStringType{session.GetId()});
         request.set_tx_id(TStringType{txId});
@@ -220,7 +217,7 @@ public:
             responseCb,
             &V1::QueryService::Stub::AsyncCommitTransaction,
             DbDriverState_,
-            TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey()));
+            rpcSettings);
 
         return promise.GetFuture();
     }
@@ -229,6 +226,7 @@ public:
         const TBeginTxSettings& settings, const TSession& session)
     {
         using namespace Ydb::Query;
+        auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey());
         auto request = MakeRequest<Ydb::Query::BeginTransactionRequest>();
         request.set_session_id(TStringType{session.GetId()});
         SetTxSettings(txSettings, request.mutable_tx_settings());
@@ -261,7 +259,7 @@ public:
             responseCb,
             &V1::QueryService::Stub::AsyncBeginTransaction,
             DbDriverState_,
-            TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey()));
+            rpcSettings);
 
         return promise.GetFuture();
     }
@@ -456,13 +454,27 @@ public:
                 });
             }
 
+            void ScheduleOnDeadlineWaiterCleanup() override {
+                Client->Connections_->ScheduleDelayedTask(
+                    [client = Client]() {
+                        client->SessionPool_.ClearOldWaiters();
+                    },
+                    GetDeadline()
+                );
+            }
+
+            TDeadline GetDeadline() const override {
+                return std::min(RpcSettings.Deadline, TDeadline::AfterDuration(NSessionPool::MAX_WAIT_SESSION_TIMEOUT));
+            }
+
         private:
             void ScheduleReply(TCreateSessionResult val) {
                 Promise.SetValue(std::move(val));
             }
+
             NThreading::TPromise<TCreateSessionResult> Promise;
             std::shared_ptr<TQueryClient::TImpl> Client;
-            TRpcRequestSettings RpcSettings;
+            const TRpcRequestSettings RpcSettings;
         };
 
         auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), rpcSettings);

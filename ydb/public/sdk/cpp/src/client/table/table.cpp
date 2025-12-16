@@ -1430,18 +1430,20 @@ TSessionInspectorFn TSession::TImpl::GetSessionInspector(
     NThreading::TPromise<TCreateSessionResult>& promise,
     std::shared_ptr<TTableClient::TImpl> client,
     const TCreateSessionSettings& settings,
+    const TRpcRequestSettings& rpcSettings,
     ui32 counter, bool needUpdateActiveSessionCounter)
 {
-    return [promise, client, settings, counter, needUpdateActiveSessionCounter](TAsyncCreateSessionResult future) mutable {
+    return [promise, client, settings, rpcSettings, counter, needUpdateActiveSessionCounter](TAsyncCreateSessionResult future) mutable {
         Y_ASSERT(future.HasValue());
         auto session = future.ExtractValue();
         if (IsSessionStatusRetriable(session) && counter < client->GetSessionRetryLimit()) {
             counter++;
-            client->CreateSession(settings, false)
+            client->CreateSession(settings, rpcSettings, false)
                 .Subscribe(GetSessionInspector(
                     promise,
                     client,
                     settings,
+                    rpcSettings,
                     counter,
                     needUpdateActiveSessionCounter)
                 );
@@ -1461,7 +1463,9 @@ TTableClient::TTableClient(const TDriver& driver, const TClientSettings& setting
 
 TAsyncCreateSessionResult TTableClient::CreateSession(const TCreateSessionSettings& settings) {
     // Returns standalone session
-    return Impl_->CreateSession(settings, true);
+    auto rpcSettings = TRpcRequestSettings::Make(settings);
+    rpcSettings.Header.push_back({NYdb::YDB_CLIENT_CAPABILITIES, NYdb::YDB_CLIENT_CAPABILITY_SESSION_BALANCER});
+    return Impl_->CreateSession(settings, rpcSettings, true);
 }
 
 TAsyncCreateSessionResult TTableClient::GetSession(const TCreateSessionSettings& settings) {
@@ -2557,6 +2561,8 @@ TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeS
         .Settings = TVectorIndexSettings::FromProto(proto.settings()),
         .Clusters = proto.clusters(),
         .Levels = proto.levels(),
+        .OverlapClusters = proto.overlap_clusters(),
+        .OverlapRatio = proto.overlap_ratio(),
     };
 }
 
@@ -2564,6 +2570,8 @@ void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) 
     Settings.SerializeTo(*settings.mutable_settings());
     settings.set_clusters(Clusters);
     settings.set_levels(Levels);
+    settings.set_overlap_clusters(OverlapClusters);
+    settings.set_overlap_ratio(OverlapRatio);
 }
 
 void TKMeansTreeSettings::Out(IOutputStream& o) const {
@@ -2706,6 +2714,8 @@ TFulltextIndexSettings TFulltextIndexSettings::FromProto(const Ydb::Table::Fullt
         switch (proto.layout()) {
         case Ydb::Table::FulltextIndexSettings::FLAT:
             return ELayout::Flat;
+        case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+            return ELayout::FlatRelevance;
         default:
             return ELayout::Unspecified;
         }
@@ -2725,6 +2735,8 @@ void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& sett
         switch (*Layout) {
         case ELayout::Flat:
             return Ydb::Table::FulltextIndexSettings::FLAT;
+        case ELayout::FlatRelevance:
+            return Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
         case ELayout::Unspecified:
             return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
         }

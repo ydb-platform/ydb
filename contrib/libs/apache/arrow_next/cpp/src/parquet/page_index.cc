@@ -15,19 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/page_index.h"
-#include "parquet/encoding.h"
-#include "parquet/encryption/encryption_internal.h"
-#include "parquet/encryption/internal_file_decryptor.h"
-#include "parquet/encryption/internal_file_encryptor.h"
-#include "parquet/exception.h"
-#include "parquet/metadata.h"
-#include "parquet/schema.h"
-#include "parquet/statistics.h"
-#include "parquet/thrift_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/page_index.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encoding.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/internal_file_decryptor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/internal_file_encryptor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/thrift_internal.h"
 
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/unreachable.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/unreachable.h"
 
 #include <limits>
 #include <numeric>

@@ -228,12 +228,12 @@ CreateAsyncDoubleMetricSystemCpuUtilization(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  Disk bytes transferred.
   <p>
   counter
  */
 static constexpr const char *kMetricSystemDiskIo     = "system.disk.io";
-static constexpr const char *descrMetricSystemDiskIo = "TODO.";
+static constexpr const char *descrMetricSystemDiskIo = "Disk bytes transferred.";
 static constexpr const char *unitMetricSystemDiskIo  = "By";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricSystemDiskIo(
@@ -348,13 +348,14 @@ CreateAsyncDoubleMetricSystemDiskLimit(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  The number of disk reads/writes merged into single physical disk access operations.
   <p>
   counter
  */
-static constexpr const char *kMetricSystemDiskMerged     = "system.disk.merged";
-static constexpr const char *descrMetricSystemDiskMerged = "TODO.";
-static constexpr const char *unitMetricSystemDiskMerged  = "{operation}";
+static constexpr const char *kMetricSystemDiskMerged = "system.disk.merged";
+static constexpr const char *descrMetricSystemDiskMerged =
+    "The number of disk reads/writes merged into single physical disk access operations.";
+static constexpr const char *unitMetricSystemDiskMerged = "{operation}";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricSystemDiskMerged(
     metrics::Meter *meter)
@@ -434,12 +435,12 @@ CreateAsyncDoubleMetricSystemDiskOperationTime(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  Disk operations count.
   <p>
   counter
  */
 static constexpr const char *kMetricSystemDiskOperations     = "system.disk.operations";
-static constexpr const char *descrMetricSystemDiskOperations = "TODO.";
+static constexpr const char *descrMetricSystemDiskOperations = "Disk operations count.";
 static constexpr const char *unitMetricSystemDiskOperations  = "{operation}";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
@@ -557,13 +558,14 @@ CreateAsyncDoubleMetricSystemFilesystemUsage(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  Fraction of filesystem bytes used.
   <p>
   gauge
  */
 static constexpr const char *kMetricSystemFilesystemUtilization = "system.filesystem.utilization";
-static constexpr const char *descrMetricSystemFilesystemUtilization = "TODO.";
-static constexpr const char *unitMetricSystemFilesystemUtilization  = "1";
+static constexpr const char *descrMetricSystemFilesystemUtilization =
+    "Fraction of filesystem bytes used.";
+static constexpr const char *unitMetricSystemFilesystemUtilization = "1";
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
 
@@ -812,13 +814,14 @@ CreateAsyncDoubleMetricSystemMemoryUsage(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  Percentage of memory bytes in use.
   <p>
   gauge
  */
-static constexpr const char *kMetricSystemMemoryUtilization     = "system.memory.utilization";
-static constexpr const char *descrMetricSystemMemoryUtilization = "TODO.";
-static constexpr const char *unitMetricSystemMemoryUtilization  = "1";
+static constexpr const char *kMetricSystemMemoryUtilization = "system.memory.utilization";
+static constexpr const char *descrMetricSystemMemoryUtilization =
+    "Percentage of memory bytes in use.";
+static constexpr const char *unitMetricSystemMemoryUtilization = "1";
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
 
@@ -855,13 +858,13 @@ CreateAsyncDoubleMetricSystemMemoryUtilization(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  The number of connections.
   <p>
   updowncounter
  */
 static constexpr const char *kMetricSystemNetworkConnectionCount =
     "system.network.connection.count";
-static constexpr const char *descrMetricSystemNetworkConnectionCount = "TODO.";
+static constexpr const char *descrMetricSystemNetworkConnectionCount = "The number of connections.";
 static constexpr const char *unitMetricSystemNetworkConnectionCount  = "{connection}";
 
 static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
@@ -943,6 +946,57 @@ CreateAsyncDoubleMetricSystemNetworkConnections(metrics::Meter *meter)
 }
 
 /**
+  Count of packets that are dropped or discarded even though there was no error.
+
+  @deprecated
+  {"note": "Replaced by @code system.network.packet.dropped @endcode.", "reason": "renamed",
+  "renamed_to": "system.network.packet.dropped"} <p> Measured as: <ul> <li>Linux: the @code drop
+  @endcode column in @code /proc/dev/net @endcode (<a
+  href="https://web.archive.org/web/20180321091318/http://www.onlamp.com/pub/a/linux/2000/11/16/LinuxAdmin.html">source</a>)</li>
+    <li>Windows: <a
+  href="https://docs.microsoft.com/windows/win32/api/netioapi/ns-netioapi-mib_if_row2">@code
+  InDiscards @endcode/@code OutDiscards @endcode</a> from <a
+  href="https://docs.microsoft.com/windows/win32/api/netioapi/nf-netioapi-getifentry2">@code
+  GetIfEntry2 @endcode</a></li>
+  </ul>
+  <p>
+  counter
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricSystemNetworkDropped =
+    "system.network.dropped";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricSystemNetworkDropped =
+    "Count of packets that are dropped or discarded even though there was no error.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemNetworkDropped = "{packet}";
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+CreateSyncInt64MetricSystemNetworkDropped(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricSystemNetworkDropped, descrMetricSystemNetworkDropped,
+                                    unitMetricSystemNetworkDropped);
+}
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
+CreateSyncDoubleMetricSystemNetworkDropped(metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricSystemNetworkDropped, descrMetricSystemNetworkDropped,
+                                    unitMetricSystemNetworkDropped);
+}
+
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemNetworkDropped(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(
+      kMetricSystemNetworkDropped, descrMetricSystemNetworkDropped, unitMetricSystemNetworkDropped);
+}
+
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemNetworkDropped(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(
+      kMetricSystemNetworkDropped, descrMetricSystemNetworkDropped, unitMetricSystemNetworkDropped);
+}
+
+/**
   Count of network errors detected.
   <p>
   Measured as:
@@ -991,13 +1045,14 @@ CreateAsyncDoubleMetricSystemNetworkErrors(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  The number of bytes transmitted and received.
   <p>
   counter
  */
-static constexpr const char *kMetricSystemNetworkIo     = "system.network.io";
-static constexpr const char *descrMetricSystemNetworkIo = "TODO.";
-static constexpr const char *unitMetricSystemNetworkIo  = "By";
+static constexpr const char *kMetricSystemNetworkIo = "system.network.io";
+static constexpr const char *descrMetricSystemNetworkIo =
+    "The number of bytes transmitted and received.";
+static constexpr const char *unitMetricSystemNetworkIo = "By";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricSystemNetworkIo(
     metrics::Meter *meter)
@@ -1028,13 +1083,14 @@ CreateAsyncDoubleMetricSystemNetworkIo(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  The number of packets transferred.
   <p>
   counter
  */
-static constexpr const char *kMetricSystemNetworkPacketCount     = "system.network.packet.count";
-static constexpr const char *descrMetricSystemNetworkPacketCount = "TODO.";
-static constexpr const char *unitMetricSystemNetworkPacketCount  = "{packet}";
+static constexpr const char *kMetricSystemNetworkPacketCount = "system.network.packet.count";
+static constexpr const char *descrMetricSystemNetworkPacketCount =
+    "The number of packets transferred.";
+static constexpr const char *unitMetricSystemNetworkPacketCount = "{packet}";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricSystemNetworkPacketCount(metrics::Meter *meter)
@@ -1122,12 +1178,53 @@ CreateAsyncDoubleMetricSystemNetworkPacketDropped(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  The number of packets transferred.
+
+  @deprecated
+  {"note": "Replaced by @code system.network.packet.count @endcode.", "reason": "renamed",
+  "renamed_to": "system.network.packet.count"} <p> counter
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricSystemNetworkPackets =
+    "system.network.packets";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricSystemNetworkPackets =
+    "The number of packets transferred.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemNetworkPackets = "{packet}";
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+CreateSyncInt64MetricSystemNetworkPackets(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricSystemNetworkPackets, descrMetricSystemNetworkPackets,
+                                    unitMetricSystemNetworkPackets);
+}
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
+CreateSyncDoubleMetricSystemNetworkPackets(metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricSystemNetworkPackets, descrMetricSystemNetworkPackets,
+                                    unitMetricSystemNetworkPackets);
+}
+
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemNetworkPackets(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(
+      kMetricSystemNetworkPackets, descrMetricSystemNetworkPackets, unitMetricSystemNetworkPackets);
+}
+
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemNetworkPackets(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(
+      kMetricSystemNetworkPackets, descrMetricSystemNetworkPackets, unitMetricSystemNetworkPackets);
+}
+
+/**
+  The number of page faults.
   <p>
   counter
  */
 static constexpr const char *kMetricSystemPagingFaults     = "system.paging.faults";
-static constexpr const char *descrMetricSystemPagingFaults = "TODO.";
+static constexpr const char *descrMetricSystemPagingFaults = "The number of page faults.";
 static constexpr const char *unitMetricSystemPagingFaults  = "{fault}";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricSystemPagingFaults(
@@ -1159,12 +1256,12 @@ CreateAsyncDoubleMetricSystemPagingFaults(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  The number of paging operations.
   <p>
   counter
  */
 static constexpr const char *kMetricSystemPagingOperations     = "system.paging.operations";
-static constexpr const char *descrMetricSystemPagingOperations = "TODO.";
+static constexpr const char *descrMetricSystemPagingOperations = "The number of paging operations.";
 static constexpr const char *unitMetricSystemPagingOperations  = "{operation}";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
@@ -1237,13 +1334,14 @@ CreateAsyncDoubleMetricSystemPagingUsage(metrics::Meter *meter)
 }
 
 /**
-  TODO.
+  Swap (unix) or pagefile (windows) utilization.
   <p>
   gauge
  */
-static constexpr const char *kMetricSystemPagingUtilization     = "system.paging.utilization";
-static constexpr const char *descrMetricSystemPagingUtilization = "TODO.";
-static constexpr const char *unitMetricSystemPagingUtilization  = "1";
+static constexpr const char *kMetricSystemPagingUtilization = "system.paging.utilization";
+static constexpr const char *descrMetricSystemPagingUtilization =
+    "Swap (unix) or pagefile (windows) utilization.";
+static constexpr const char *unitMetricSystemPagingUtilization = "1";
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
 

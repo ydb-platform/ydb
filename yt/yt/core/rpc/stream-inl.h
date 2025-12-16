@@ -58,7 +58,7 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
     TCallback<void(TIntrusivePtr<TResponse>&&)> rspHandler)
 {
     auto invokeResult = request->Invoke()
-        .ApplyUnique(std::move(rspHandler));
+        .AsUnique().Apply(std::move(rspHandler));
     auto metaHandlerResult = request->GetResponseAttachmentsStream()->Read()
         .Apply(std::move(metaHandler));
     return metaHandlerResult.Apply(BIND ([req = std::move(request), res = std::move(invokeResult)] () mutable {
@@ -74,7 +74,7 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
     TCallback<void(TIntrusivePtr<TResponse>&&)> rspHandler)
 {
     auto invokeResult = request->Invoke()
-        .ApplyUnique(std::move(rspHandler));
+        .AsUnique().Apply(std::move(rspHandler));
 
     return NDetail::CreateRpcClientOutputStreamFromInvokedRequest(
         std::move(request),

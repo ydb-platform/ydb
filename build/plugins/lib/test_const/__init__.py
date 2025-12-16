@@ -467,7 +467,7 @@ class CppLinterName(Enum):
 
 class CustomExplicitLinterName(Enum):
     ClangFormatJson = "clang_format_json"
-    YamlfmtFormatYaml = "yamlfmt_format_yaml"
+    Yamlfmt = "yamlfmt"
     Yqlfmt = "yqlfmt"
 
 
@@ -490,7 +490,7 @@ LINTER_TO_GLOBAL_RESOURCES = {
     PythonLinterName.Py2Flake8: (('build/external_resources/flake8_py2', FLAKE8_PY2_RESOURCE),),
     CppLinterName.ClangFormat: (('build/platform/clang/clang-format', CLANG_FORMAT_RESOURCE),),
     CustomExplicitLinterName.ClangFormatJson: (('build/platform/clang/clang-format', CLANG_FORMAT_RESOURCE),),
-    CustomExplicitLinterName.YamlfmtFormatYaml: (('build/external_resources/yamlfmt', YAMLFMT_FORMAT_RESOURCE),),
+    CustomExplicitLinterName.Yamlfmt: (('build/external_resources/yamlfmt', YAMLFMT_FORMAT_RESOURCE),),
     CustomExplicitLinterName.Yqlfmt: (('build/external_resources/yql-lint', YQLLINT_RESOURCE),),
 }
 
@@ -500,7 +500,7 @@ LINTER_TO_DEFAULT_CONFIGS = {
     PythonLinterName.Black: DefaultLinterConfig.Python,
     PythonLinterName.Ruff: DefaultLinterConfig.Python,
     CustomExplicitLinterName.ClangFormatJson: DefaultLinterConfig.Json,
-    CustomExplicitLinterName.YamlfmtFormatYaml: DefaultLinterConfig.Yaml,
+    CustomExplicitLinterName.Yamlfmt: DefaultLinterConfig.Yaml,
 }
 
 # Fill up like
@@ -520,7 +520,7 @@ LINTER_CONFIG_TYPES = {
     PythonLinterName.Black: ("pyproject.toml",),
     PythonLinterName.Ruff: ("pyproject.toml", "ruff.toml"),
     CustomExplicitLinterName.ClangFormatJson: (".clang-format",),
-    CustomExplicitLinterName.YamlfmtFormatYaml: (".yamlfmt.yml",),
+    CustomExplicitLinterName.Yamlfmt: (".yamlfmt.yml",),
 }
 
 AUTOINCLUDE_PATHS = (

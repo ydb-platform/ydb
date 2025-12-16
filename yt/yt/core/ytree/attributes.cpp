@@ -9,7 +9,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYsonString IAttributeDictionary::GetYson(TKeyView key) const
+auto IAttributeDictionary::GetYson(TKeyView key) const -> TValue
 {
     auto result = FindYson(key);
     if (!result) {
@@ -18,7 +18,16 @@ TYsonString IAttributeDictionary::GetYson(TKeyView key) const
     return result;
 }
 
-TYsonString IAttributeDictionary::GetYsonAndRemove(TKeyView key)
+auto IAttributeDictionary::FindYsonAndRemove(TKeyView key) -> TValue
+{
+    auto result = FindYson(key);
+    if (result) {
+        Remove(key);
+    }
+    return result;
+}
+
+auto IAttributeDictionary::GetYsonAndRemove(TKeyView key) -> TValue
 {
     auto result = GetYson(key);
     Remove(key);

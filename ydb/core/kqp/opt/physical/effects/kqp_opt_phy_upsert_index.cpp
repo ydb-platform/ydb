@@ -585,8 +585,10 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
 } // namespace
 
 TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, const TExprBase& inputRows,
-    const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults, const TKikimrTableDescription& table,
-    const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, TPositionHandle pos, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+    const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults,
+    const TExprBase& tableExpr, const TKikimrTableDescription& table,
+    const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, TPositionHandle pos,
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
     switch (mode) {
         case TKqpPhyUpsertIndexMode::Upsert:
@@ -611,6 +613,29 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
     auto filter = (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
     const auto indexes = BuildAffectedIndexTables(table, pos, ctx, filter);
+
+    const bool isSink = NeedSinks(table, kqpCtx);
+    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+    const bool needPrecompute = !useStreamIndex
+        || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
+            return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
+                || index.second->Type == TIndexDescription::EType::GlobalFulltext;
+        });
+
+    if (!needPrecompute) {
+        TVector<TExprBase> effects;
+        effects.emplace_back(Build<TKqlUpsertRows>(ctx, pos)
+            .Table(tableExpr.Ptr())
+            .Input(inputRows.Ptr())
+            .Columns(inputColumns)
+            .ReturningColumns(returningColumns.Ptr())
+            .IsBatch(ctx.NewAtom(pos, "false"))
+            .Settings(settings)
+            .Done());
+        return Build<TExprList>(ctx, pos)
+            .Add(effects)
+            .Done();
+    }
 
     auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, pos, ctx);
 
@@ -664,19 +689,22 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         : rowsPrecompute.Cast();
 
     auto mainTableNode = BuildTableMeta(table, pos, ctx);
-    auto tableUpsert = Build<TKqlUpsertRows>(ctx, pos)
+    TVector<TExprBase> effects;
+    effects.emplace_back(Build<TKqlUpsertRows>(ctx, pos)
         .Table(mainTableNode)
         .Input(tableUpsertRows)
         .Columns(inputColumns)
         .ReturningColumns(returningColumns)
         .IsBatch(ctx.NewAtom(pos, "false"))
         .Settings(settings)
-        .Done();
-
-    TVector<TExprBase> effects;
-    effects.emplace_back(tableUpsert);
+        .Done());
 
     for (const auto& [tableNode, indexDesc] : indexes) {
+        if (useStreamIndex
+                && (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+            continue;
+        }
         bool indexKeyColumnsUpdated = false;
         THashSet<TStringBuf> indexTableColumnsSet;
         TVector<TStringBuf> indexTableColumns;
@@ -991,7 +1019,8 @@ TExprBase KqpBuildUpsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, upsert.Table().Path());
 
     auto effects = KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode::Upsert, upsert.Input(), upsert.Columns(),
-        upsert.ReturningColumns(), upsert.GenerateColumnsIfInsert(), table, upsert.Settings(), upsert.Pos(), ctx, kqpCtx);
+        upsert.ReturningColumns(), upsert.GenerateColumnsIfInsert(), upsert.Table(), table,
+        upsert.Settings(), upsert.Pos(), ctx, kqpCtx);
 
     if (!effects) {
         return node;

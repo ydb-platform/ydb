@@ -177,6 +177,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
                 op->SetAbortedFlag();
                 BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+                op->Result()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
                 return EExecutionStatus::Executed;
             };
 
@@ -207,6 +208,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 case EEnsureCurrentLock::Abort:
                     // Lock cannot be created and we must abort
                     return abortLock();
+
+                case EEnsureCurrentLock::Missing:
+                    Y_ENSURE(false, "unreachable");
             }
         }
 
@@ -231,6 +235,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 txId,
                 NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN
             );
+            tx->Result()->Record.MutableTxStats()->SetLocksBrokenAsVictim(brokenLocks.size());
 
             for (auto& brokenLock : brokenLocks) {
                 tx->Result()->Record.MutableTxLocks()->Add()->Swap(&brokenLock);
@@ -238,6 +243,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
             KqpEraseLocks(tabletId, kqpLocks, sysLocks);
             auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
+            tx->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
             NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
             DataShard.SubscribeNewLocks(ctx);
 
@@ -299,6 +305,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             // it's just that actually breaking this (potentially persistent)
             // lock and rolling back changes will be unnecessarily complicated.
             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+            op->Result()->Record.MutableTxStats()->SetLocksBrokenAsVictim(guardLocks.AffectedTables.Size());
 
             // Add a list of "broken" table locks to the result. It may be the
             // case that the lock is not even set yet (write + read with conflicts),
@@ -507,6 +514,10 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
     auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
     NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), op->GetTxId(), locksBrokenByTx);
+
+    // Set the count of locks broken by this transaction
+    op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
+
     LOG_T("add locks to result: " << locks.size());
     for (const auto& lock : locks) {
         if (lock.IsError()) {

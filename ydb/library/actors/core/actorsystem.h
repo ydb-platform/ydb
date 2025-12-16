@@ -93,6 +93,9 @@ namespace NActors {
         TRdmaAllocatorWithFallback(std::shared_ptr<NInterconnect::NRdma::IMemPool>  memPool) noexcept;
         TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept override;
         TRcBuf AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept override;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> GetRdmaMemPool() noexcept {
+            return RdmaMemPool;
+        }
     private:
         template<bool pageAligned>
         std::optional<TRcBuf> TryAllocRdmaRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept;
@@ -319,6 +322,10 @@ namespace NActors {
                 return {};
             }
             return SystemSetup->GetThreadsOptional(poolId);
+        }
+
+        auto GetPoolMaxThreadsCount(ui32 poolId) const {
+            return CpuManager->GetExecutorPool(poolId)->GetMaxThreadCount();
         }
 
         void DeferPreStop(std::function<void()> fn) {

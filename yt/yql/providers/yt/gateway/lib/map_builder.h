@@ -16,8 +16,6 @@ public:
 
     virtual ~TMapJobBuilder() = default;
 
-    TMapJobBuilder(const TString& jobPrefix = "Yt");
-
     template<class ExecCtxPtr>
     void SetMapJobParams(
         TYqlUserJobBase* mapJob,
@@ -99,7 +97,7 @@ public:
                 execCtx->FunctionRegistry_->SupportsSizedAllocators());
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
-            mapLambda = builder.BuildLambdaWithIO(Prefix_, *execCtx->MkqlCompiler_, map.Mapper(), ctx);
+            mapLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, map.Mapper(), ctx);
         }
         mapJob->SetLambdaCode(mapLambda);
         return mapLambda;
@@ -110,9 +108,6 @@ public:
     void SetBlockOutput(TYqlUserJobBase* mapJob, NNodes::TYtMap map);
 
     void SetInputType(TYqlUserJobBase* mapJob, NNodes::TYtMap map);
-
-private:
-    const TString Prefix_;
 };
 
 } // namespace NYql

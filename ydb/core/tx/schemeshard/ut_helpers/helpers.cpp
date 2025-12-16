@@ -1944,6 +1944,8 @@ namespace NSchemeShardUT_Private {
                 }
             }
         } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+        } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
         }

@@ -95,9 +95,15 @@ message TTableStats {
     uint64 DataWeight = 3;
 }
 
+message TSortedChunkStats {
+    bool IsSorted = 1;
+    string FirstRowKeys = 2;
+}
+
 message TChunkStats {
     uint64 Rows = 1;
     uint64 DataWeight = 2;
+    TSortedChunkStats SortedChunkStats = 3;
 }
 
 message TTableChunkStats {

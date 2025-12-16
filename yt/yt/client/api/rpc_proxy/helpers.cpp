@@ -1,6 +1,7 @@
 #include "helpers.h"
 
 #include <yt/yt/client/api/distributed_table_session.h>
+#include <yt/yt/client/api/operation_client.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
 
@@ -457,6 +458,54 @@ void FromProto(
     if (proto.has_incarnation_switch_info()) {
         result->IncarnationSwitchInfo = TYsonString(proto.incarnation_switch_info());
     }
+}
+
+void ToProto(
+    NProto::TJobTrace* proto,
+    const NApi::TJobTraceMeta& result)
+{
+    ToProto(proto->mutable_trace_id(), result.TraceId);
+    proto->set_progress(ConvertJobTraceProgressToProto(result.Progress));
+    proto->set_health(ConvertJobTraceHealthToProto(result.Health));
+
+    if (!result.ProcessTraceMetas.empty()) {
+        auto* pids = proto->mutable_process_trace_metas();
+        for (const auto& [processId, info] : result.ProcessTraceMetas) {
+            (*pids->mutable_pids())[processId].set_state(ConvertJobTraceStateToProto(info.State));
+        }
+    }
+}
+
+void FromProto(
+    NApi::TJobTraceMeta* result,
+    const NProto::TJobTrace& proto)
+{
+    result->TraceId = FromProto<NJobTrackerClient::TJobTraceId>(proto.trace_id());
+    result->Progress = ConvertJobTraceProgressFromProto(proto.progress());
+    result->Health = ConvertJobTraceHealthFromProto(proto.health());
+
+    result->ProcessTraceMetas.clear();
+    if (proto.has_process_trace_metas()) {
+        for (const auto& [processId, processTrace] : proto.process_trace_metas().pids()) {
+            result->ProcessTraceMetas[processId] = NApi::TProcessTraceMeta{
+                ConvertJobTraceStateFromProto(processTrace.state()),
+            };
+        }
+    }
+}
+
+void ToProto(
+    NProto::TCheckOperationPermissionResult* proto,
+    const NApi::TCheckOperationPermissionResult& result)
+{
+    proto->set_action(static_cast<NProto::ESecurityAction>(result.Action));
+}
+
+void FromProto(
+    NApi::TCheckOperationPermissionResult* result,
+    const NProto::TCheckOperationPermissionResult& proto)
+{
+    result->Action = static_cast<NSecurityClient::ESecurityAction>(proto.action());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -992,9 +1041,9 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_TO_PROTO(protoJob, pool_tree, job.PoolTree);
     YT_OPTIONAL_TO_PROTO(protoJob, pool, job.Pool);
     YT_OPTIONAL_SET_PROTO(protoJob, job_cookie, job.JobCookie);
-    YT_OPTIONAL_SET_PROTO(protoJob, job_cookie_group_index, job.JobCookieGroupIndex);
-    if (job.MainJobId) {
-        ToProto(protoJob->mutable_main_job_id(), job.MainJobId);
+    YT_OPTIONAL_SET_PROTO(protoJob, distributed_group_job_index, job.DistributedGroupJobIndex);
+    if (job.DistributedGroupMainJobId) {
+        ToProto(protoJob->mutable_distributed_group_main_job_id(), job.DistributedGroupMainJobId);
     }
     if (job.ArchiveFeatures) {
         protoJob->set_archive_features(ToProto(job.ArchiveFeatures));
@@ -1065,10 +1114,10 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->CoreInfos = TYsonString();
     }
-    if (protoJob.has_main_job_id()) {
-        FromProto(&job->MainJobId, protoJob.main_job_id());
+    if (protoJob.has_distributed_group_main_job_id()) {
+        FromProto(&job->DistributedGroupMainJobId, protoJob.distributed_group_main_job_id());
     } else {
-        job->MainJobId = {};
+        job->DistributedGroupMainJobId = {};
     }
     if (protoJob.has_job_competition_id()) {
         FromProto(&job->JobCompetitionId, protoJob.job_competition_id());
@@ -1099,7 +1148,7 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     job->PoolTree = YT_OPTIONAL_FROM_PROTO(protoJob, pool_tree);
     job->Pool = YT_OPTIONAL_FROM_PROTO(protoJob, pool);
     job->JobCookie = YT_OPTIONAL_FROM_PROTO(protoJob, job_cookie);
-    job->JobCookieGroupIndex = YT_OPTIONAL_FROM_PROTO(protoJob, job_cookie_group_index);
+    job->DistributedGroupJobIndex = YT_OPTIONAL_FROM_PROTO(protoJob, distributed_group_job_index);
     if (protoJob.has_archive_features()) {
         job->ArchiveFeatures = TYsonString(protoJob.archive_features());
     } else {
@@ -1842,6 +1891,8 @@ NProto::EQueryEngine ConvertQueryEngineToProto(
             return NProto::EQueryEngine::QE_MOCK;
         case NQueryTrackerClient::EQueryEngine::Spyt:
             return NProto::EQueryEngine::QE_SPYT;
+        case NQueryTrackerClient::EQueryEngine::SpytConnect:
+            return NProto::EQueryEngine::QE_SPYT;
     }
     YT_ABORT();
 }
@@ -1939,6 +1990,80 @@ NProto::EJobStderrType ConvertJobStderrTypeToProto(
             return NProto::EJobStderrType::JST_USER_JOB_STDERR;
         case NApi::EJobStderrType::GpuCheckStderr:
             return NProto::EJobStderrType::JST_GPU_CHECK_STDERR;
+    }
+}
+
+NProto::EJobTraceProgress ConvertJobTraceProgressToProto(
+    NApi::EJobTraceProgress progress)
+{
+    switch (progress) {
+        case NApi::EJobTraceProgress::InProgress:
+            return NProto::EJobTraceProgress::JTP_IN_PROGRESS;
+        case NApi::EJobTraceProgress::Finished:
+            return NProto::EJobTraceProgress::JTP_FINISHED;
+    }
+}
+
+NApi::EJobTraceProgress ConvertJobTraceProgressFromProto(
+    NProto::EJobTraceProgress proto)
+{
+    switch (proto) {
+        case NProto::EJobTraceProgress::JTP_IN_PROGRESS:
+            return NApi::EJobTraceProgress::InProgress;
+        case NProto::EJobTraceProgress::JTP_FINISHED:
+            return NApi::EJobTraceProgress::Finished;
+    }
+}
+
+NProto::EJobTraceHealth ConvertJobTraceHealthToProto(
+    NApi::EJobTraceHealth health)
+{
+    switch (health) {
+        case NApi::EJobTraceHealth::Healthy:
+            return NProto::EJobTraceHealth::JTH_HEALTHY;
+        case NApi::EJobTraceHealth::Unhealthy:
+            return NProto::EJobTraceHealth::JTH_UNHEALTHY;
+    }
+}
+
+NApi::EJobTraceHealth ConvertJobTraceHealthFromProto(
+    NProto::EJobTraceHealth proto)
+{
+    switch (proto) {
+        case NProto::EJobTraceHealth::JTH_HEALTHY:
+            return NApi::EJobTraceHealth::Healthy;
+        case NProto::EJobTraceHealth::JTH_UNHEALTHY:
+            return NApi::EJobTraceHealth::Unhealthy;
+    }
+}
+
+NProto::EJobTraceState ConvertJobTraceStateToProto(
+    NJobTrackerClient::EJobTraceState state)
+{
+    switch (state) {
+        case NJobTrackerClient::EJobTraceState::Started:
+            return NProto::EJobTraceState::JTS_STARTED;
+        case NJobTrackerClient::EJobTraceState::Finished:
+            return NProto::EJobTraceState::JTS_FINISHED;
+        case NJobTrackerClient::EJobTraceState::Dropped:
+            return NProto::EJobTraceState::JTS_DROPPED;
+        case NJobTrackerClient::EJobTraceState::Orphaned:
+            return NProto::EJobTraceState::JTS_ORPHANED;
+    }
+}
+
+NJobTrackerClient::EJobTraceState ConvertJobTraceStateFromProto(
+    NProto::EJobTraceState proto)
+{
+    switch (proto) {
+        case NProto::EJobTraceState::JTS_STARTED:
+            return NJobTrackerClient::EJobTraceState::Started;
+        case NProto::EJobTraceState::JTS_FINISHED:
+            return NJobTrackerClient::EJobTraceState::Finished;
+        case NProto::EJobTraceState::JTS_DROPPED:
+            return NJobTrackerClient::EJobTraceState::Dropped;
+        case NProto::EJobTraceState::JTS_ORPHANED:
+            return NJobTrackerClient::EJobTraceState::Orphaned;
     }
 }
 
@@ -2182,6 +2307,7 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
+        error.FindMatching(NTabletClient::EErrorCode::HunkTabletStoreToggleConflict) ||
         IsChaosRetriableError(error);
 }
 

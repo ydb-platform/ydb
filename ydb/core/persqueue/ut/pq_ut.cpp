@@ -5,6 +5,8 @@
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/security/ticket_parser.h>
 
+#include <ydb/core/protos/grpc_pq_old.pb.h>
+
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
@@ -1530,10 +1532,22 @@ Y_UNIT_TEST(TestTimeRetention) {
     });
 }
 
-Y_UNIT_TEST(TestCompactifiedWithRetention) {
-    // TODO(abcdef): temporarily deleted
-    return;
+TString GetSerializedData(ui64 seqNo, const TString& payload, const TString& key) {
+    NKikimrPQClient::TDataChunk proto;
+    proto.SetSeqNo(seqNo);
+    proto.SetData(payload);
+    if (!key.empty()) {
+        auto *msgMeta = proto.AddMessageMeta();
+        msgMeta->set_key("__key");
+        msgMeta->set_value(key);
+    }
+    TString dataChunkStr;
+    bool res = proto.SerializeToString(&dataChunkStr);
+    Y_ABORT_UNLESS(res);
+    return dataChunkStr;
+}
 
+Y_UNIT_TEST(TestCompactifiedWithRetention) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1545,24 +1559,29 @@ Y_UNIT_TEST(TestCompactifiedWithRetention) {
 
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
-        TVector<std::pair<ui64, TString>> data;
-        activeZone = PlainOrSoSlow(true, false);
-
+        ui64 key = 1;
         TString s{32, 'c'};
         ui32 pp = 8 + 4 + 2 + 9;
-        for (ui32 i = 0; i < 10; ++i) {
-            data.push_back({i + 1, s.substr(pp)});
-        }
+        auto getData = [&] () {
+            TVector<std::pair<ui64, TString>> data;
+            for (ui32 i = 0; i < 10; ++i) {
+                data.push_back({i + 1, GetSerializedData(i + 1, s.substr(pp), ToString(key++))});
+            }
+            return data;
+        };
+        activeZone = PlainOrSoSlow(true, false);
+
+
         PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = true}, {}, tc);
-        CmdWrite(0, "sourceid0", data, tc, false, {}, true);
-        CmdWrite(0, "sourceid1", data, tc, false);
-        CmdWrite(0, "sourceid2", data, tc, false);
+        CmdWrite(0, "sourceid0", getData(), tc, false, {}, true);
+        CmdWrite(0, "sourceid1", getData(), tc, false);
+        CmdWrite(0, "sourceid2", getData(), tc, false);
         PQGetPartInfo(0, 30, tc);
 
         PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = false}, {}, tc);
-        CmdWrite(0, "sourceid3", data, tc, false);
-        CmdWrite(0, "sourceid4", data, tc, false);
-        CmdWrite(0, "sourceid5", data, tc, false);
+        CmdWrite(0, "sourceid3", getData(), tc, false);
+        CmdWrite(0, "sourceid4", getData(), tc, false);
+        CmdWrite(0, "sourceid5", getData(), tc, false);
         Cerr << "Get part info with compactification disabled\n";
         PQGetPartInfo(50, 60, tc);
     });
@@ -2527,6 +2546,7 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
 
     auto observe = [&](TAutoPtr<IEventHandle>& ev) {
         if (auto* event = ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            Cerr << ">>> got event: " << event->Record.ShortDebugString() << Endl;
             foundCmdDeleteFirstMessage = false;
             const auto& record = event->Record;
             for (size_t i = 0; i < record.CmdDeleteRangeSize(); ++i) {
@@ -2580,7 +2600,7 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
     data[0].second = TString(1_KB, 'x');
     CmdWrite(0, "sourceid1", data, tc, false, {}, true, "", -1, 2);
 
-    Cerr << ">>> write #1" << Endl;
+    Cerr << ">>> write #4" << Endl;
 
     keys = GetTabletKeys(tc);
     UNIT_ASSERT_C(!keys.contains(firstMessageKey),
@@ -2707,6 +2727,8 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     // Making sure that the blobs have not been deleted yet
     auto keys = GetTabletKeys(tc);
 
+    Cerr << "keys: " << JoinRange(", ", keys.begin(), keys.end()) << Endl;
+
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
@@ -2751,11 +2773,13 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
 
     keys = GetTabletKeys(tc);
 
+    Cerr << "keys: " << JoinRange(", ", keys.begin(), keys.end()) << Endl;
+
     // We make sure that the blobs with messages on offsets 2 and 3 have not been deleted
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
-    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
 
     tc.Runtime->Send(blobResponseEvent);
 
@@ -2767,9 +2791,12 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
 
     keys = GetTabletKeys(tc);
 
+    Cerr << "keys: " << JoinRange(", ", keys.begin(), keys.end()) << Endl;
+
     // Making sure that the blobs for messages with offsets 2 and 3 are removed
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
 }
 
 Y_UNIT_TEST(IncompleteProxyResponse) {
@@ -2813,7 +2840,7 @@ Y_UNIT_TEST(IncompleteProxyResponse) {
                         }
                         newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetData("");
                         newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetUncompressedSize(0);
-                    } if (res.GetOffset() == 5) { // All parts null
+                    } else if (res.GetOffset() == 5) { // All parts null
                         newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetData("");
                         newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetUncompressedSize(0);
                     }
@@ -2867,6 +2894,64 @@ Y_UNIT_TEST(SmallMsgCompactificationWithRebootsTest) {
         }
         UNIT_ASSERT(consumerOffset >= expectedOffset);
         PQGetPartInfo([](ui64 offset) { return offset >= 25; }, currentOffset, tc);
+    });
+}
+
+Y_UNIT_TEST(The_Keys_Are_Loaded_In_Several_Iterations) {
+    auto observer = [](TAutoPtr<IEventHandle>& ev) {
+        if (auto* e = ev->CastAsLocal<TEvKeyValue::TEvResponse>(); e) {
+            if (!e->Record.ReadRangeResultSize()) {
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
+            auto* range = e->Record.MutableReadRangeResult(0);
+            if (range->GetStatus() != NKikimrProto::OK) {
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
+            if (range->PairSize() <= 1) {
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
+            if (!range->GetPair(0).GetKey().StartsWith("d0000000000_")) {
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
+
+            range->SetStatus(NKikimrProto::OVERRUN);
+            auto* pairs = range->MutablePair();
+            pairs->Truncate(1);
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        tc.Runtime->SetScheduledLimit(3000);
+        //tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(100'000);
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {}, tc);
+
+        size_t totalSize = 15_MB;
+        for (ui64 offset = 0, seqno = 1; totalSize > 0; ++offset, ++seqno) {
+            const auto size = Min<size_t>(50'000, totalSize);
+            TVector<std::pair<ui64, TString>> data;
+            data.emplace_back(seqno, TString(size, '@'));
+
+            CmdWrite(0, "sourceid", std::move(data), tc, false, {}, false, "", -1, offset);
+
+            totalSize -= size;
+        }
+
+        PQGetPartInfo(0, 315, tc);
+
+        auto prevObserver = tc.Runtime->SetObserverFunc(observer);
+        PQTabletRestart(tc);
+        tc.Runtime->SetObserverFunc(prevObserver);
+
+        PQGetPartInfo(0, 315, tc);
     });
 }
 

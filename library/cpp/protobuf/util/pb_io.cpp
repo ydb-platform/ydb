@@ -133,7 +133,7 @@ int operator&(NProtoBuf::Message& m, IBinSaver& f) {
 void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out) {
     NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
 
-    if (!NProtoBuf::TextFormat::Print(m, &adaptor)) {
+    if (!NProtoBuf::TextFormat::Print(m, &adaptor) || !adaptor.Flush()) {
         ythrow yexception() << "SerializeToTextFormat failed on Print";
     }
 }
@@ -150,7 +150,7 @@ void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream&
     printer.SetDefaultFieldValuePrinter(new NProtoBuf::TEnumIdValuePrinter());
     NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
 
-    if (!printer.Print(m, &adaptor)) {
+    if (!printer.Print(m, &adaptor) || !adaptor.Flush()) {
          ythrow yexception() << "SerializeToTextFormatWithEnumId failed on Print";
     }
 }
@@ -162,7 +162,7 @@ void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out
 
     NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
 
-    if (!printer.Print(m, &adaptor)) {
+    if (!printer.Print(m, &adaptor) || !adaptor.Flush()) {
          ythrow yexception() << "SerializeToTextFormatPretty failed on Print";
     }
 }

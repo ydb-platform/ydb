@@ -173,6 +173,7 @@ using TFeatureIdFormatter = const std::function<std::optional<TStringBuf>(int fe
 
 extern const std::string RequestIdAnnotation;
 extern const std::string EndpointAnnotation;
+extern const std::string EndpointAddressAnnotation;
 extern const std::string RequestInfoAnnotation;
 extern const std::string RequestUser;
 extern const std::string ResponseInfoAnnotation;

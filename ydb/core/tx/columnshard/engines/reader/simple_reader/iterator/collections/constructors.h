@@ -12,27 +12,17 @@ class TPortionInfo;
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-class TSourceConstructor: public ICursorEntity, public TMoveOnly {
+class TSourceConstructor: public NCommon::TDataSourceConstructor {
 private:
-    TCompareKeyForScanSequence Start;
-    YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
 
-    virtual ui64 DoGetEntityId() const override {
-        return SourceId;
-    }
     virtual ui64 DoGetEntityRecordsCount() const override {
         return RecordsCount;
     }
-    std::optional<ui32> SourceIdx;
 
 public:
-    void SetIndex(const ui32 index) {
-        SourceIdx = index;
-    }
-
     void SetIsStartedByCursor() {
         IsStartedByCursorFlag = true;
     }
@@ -40,43 +30,27 @@ public:
         return IsStartedByCursorFlag;
     }
 
-    const TCompareKeyForScanSequence& GetStart() const {
-        return Start;
-    }
-
-    TSourceConstructor(
-        const std::shared_ptr<TPortionInfo>&& portion, 
-        const NReader::ERequestSorting sorting
-    ) : Start(TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
-                    sorting == NReader::ERequestSorting::DESC),
-              portion->GetPortionId())
-        , SourceId(portion->GetPortionId())
+    TSourceConstructor(const std::shared_ptr<TPortionInfo>&& portion, const NReader::ERequestSorting sorting)
+        : NCommon::TDataSourceConstructor(
+              TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
+                  sorting == NReader::ERequestSorting::DESC),
+              TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyStart() : portion->IndexKeyEnd(),
+                  sorting == NReader::ERequestSorting::DESC))
         , Portion(std::move(portion))
-        , RecordsCount(portion->GetRecordsCount()) {
+        , RecordsCount(portion->GetRecordsCount())
+    {
     }
-
-    class TComparator {
-    private:
-        const ERequestSorting Sorting;
-
-    public:
-        TComparator(const ERequestSorting sorting)
-            : Sorting(sorting) {
-            AFL_VERIFY(Sorting != ERequestSorting::NONE);
-        }
-
-        bool operator()(const TSourceConstructor& l, const TSourceConstructor& r) const {
-            return r.Start < l.Start;
-        }
-    };
 
     std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const;
+
+    virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const override {
+        return Portion->GetPortionId() < VerifyDynamicCast<const TSourceConstructor*>(&rhs)->GetPortion()->GetPortionId();
+    }
 };
 
 class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSourceConstructor> {
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
-    ui32 CurrentSourceIdx = 0;
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;
@@ -103,8 +77,6 @@ private:
 
     virtual std::shared_ptr<NCommon::IDataSource> DoExtractNextImpl(const std::shared_ptr<NCommon::TSpecialReadContext>& context) override {
         auto constructor = TBase::PopObjectWithAccessor();
-        constructor.MutableObject().SetIndex(CurrentSourceIdx);
-        ++CurrentSourceIdx;
         return constructor.MutableObject().Construct(context, constructor.DetachAccessor());
     }
 

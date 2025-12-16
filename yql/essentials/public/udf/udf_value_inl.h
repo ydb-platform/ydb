@@ -305,7 +305,7 @@ Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(const TUnboxedValuePod& value) noexc
 Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(TUnboxedValuePod&& value) noexcept
     : TUnboxedValuePod(std::move(value))
 {
-    value.Raw = TRaw();
+    value.Raw = TRaw(); // NOLINT(bugprone-use-after-move)
     Ref();
 }
 
@@ -318,7 +318,7 @@ Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(const TUnboxedValue& value) noexcept
 Y_FORCE_INLINE TUnboxedValue::TUnboxedValue(TUnboxedValue&& value) noexcept
     : TUnboxedValuePod(static_cast<TUnboxedValuePod&&>(value))
 {
-    value.Raw = TRaw();
+    value.Raw = TRaw(); // NOLINT(bugprone-use-after-move)
 }
 
 Y_FORCE_INLINE TUnboxedValue& TUnboxedValue::operator=(const TUnboxedValue& value) noexcept {
@@ -551,8 +551,8 @@ inline TUnboxedValue TUnboxedValuePod::GetVariantItem() const {
 }
 
 inline bool TUnboxedValuePod::TryMakeVariant(ui32 index) {
-    static const ui32 limit = (1U << 6U) - 1U;
-    if (index >= limit || Raw.GetIndex()) {
+    static const ui32 Limit = (1U << 6U) - 1U;
+    if (index >= Limit || Raw.GetIndex()) {
         return false;
     }
 

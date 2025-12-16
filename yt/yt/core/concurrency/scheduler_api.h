@@ -66,11 +66,6 @@ template <class T>
     TFuture<T> future,
     IInvokerPtr invoker = GetCurrentInvoker());
 
-//! From the authors of #WaitForUnique and #WaitForFast.
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUniqueFast(
-    TFuture<T> future);
-
 //! A possibly blocking version of #WaitFor.
 template <CFuture TFuture>
 TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(

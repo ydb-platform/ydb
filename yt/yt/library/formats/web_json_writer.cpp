@@ -14,6 +14,7 @@
 #include <yt/yt/client/table_client/row_batch.h>
 
 #include <yt/yt/core/concurrency/async_stream.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/yson/format.h>
 
@@ -515,7 +516,7 @@ public:
     i64 GetWrittenSize() const override;
     TFuture<void> Close() override;
     TFuture<void> Flush() override;
-    std::optional<TMD5Hash> GetDigest() const override;
+    std::optional<TRowsDigest> GetDigest() const override;
 
 private:
     const TWebJsonFormatConfigPtr Config_;
@@ -760,7 +761,7 @@ void TWriterForWebJson<TValueWriter>::DoClose()
 }
 
 template <typename TValueWriter>
-std::optional<TMD5Hash> TWriterForWebJson<TValueWriter>::GetDigest() const
+std::optional<TRowsDigest> TWriterForWebJson<TValueWriter>::GetDigest() const
 {
     return std::nullopt;
 }

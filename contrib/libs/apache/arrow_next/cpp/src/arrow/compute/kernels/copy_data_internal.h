@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
 
 namespace arrow20 {
 namespace compute {

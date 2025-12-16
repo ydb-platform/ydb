@@ -17,6 +17,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseAccessDenyCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseSchemeErrorCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseUnavailableCounter_;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmptyDatabaseNameCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr DatabaseRateLimitedCounter_;
     ::NMonitoring::TDynamicCounters::TCounterPtr ConsumedRUCounter_;
     NMonitoring::THistogramPtr ThrottleDelayHistogram_;
@@ -38,6 +39,8 @@ public:
         DatabaseSchemeErrorCounter_ = group->GetCounter("databaseSchemeError", true);
         DatabaseUnavailableCounter_ = group->GetCounter("databaseUnavailable", true);
 
+        EmptyDatabaseNameCounter_ = group->GetCounter("emptyDatabaseName", true);
+
         DatabaseRateLimitedCounter_ = group->GetCounter("api.grpc.request.throughput_quota_exceeded_count", true);
 
         ConsumedRUCounter_ = group->GetCounter("api.grpc.response.consumed_request_units", true);
@@ -57,6 +60,10 @@ public:
 
     void IncDatabaseUnavailableCounter() override {
         DatabaseUnavailableCounter_->Inc();
+    }
+
+    void IncEmptyDatabaseNameCounter() override {
+        EmptyDatabaseNameCounter_->Inc();
     }
 
     void IncDatabaseRateLimitedCounter() override {
@@ -272,6 +279,10 @@ public:
     void IncDatabaseUnavailableCounter() override {
         Common->IncDatabaseUnavailableCounter();
         Db->IncDatabaseUnavailableCounter();
+    }
+
+    void IncEmptyDatabaseNameCounter() override {
+        Common->IncEmptyDatabaseNameCounter();
     }
 
     void IncDatabaseRateLimitedCounter() override {

@@ -23,8 +23,7 @@ namespace numpy
     types::ndarray<double, pS> logseries(double p, pS const &shape)
     {
       types::ndarray<double, pS> result{shape, types::none_type()};
-      std::generate(result.fbegin(), result.fend(),
-                    [&]() { return logseries(p); });
+      std::generate(result.fbegin(), result.fend(), [&]() { return logseries(p); });
       return result;
     }
 

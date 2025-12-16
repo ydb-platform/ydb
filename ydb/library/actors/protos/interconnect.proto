@@ -51,6 +51,10 @@ message TRdmaCred {
     required fixed32 Rkey = 3;
 }
 
+message TRdmaCreds {
+    repeated TRdmaCred Creds = 1;
+}
+
 message TRdmaHandshake {
     required uint32 QpNum = 1; // Queie pair num
     required fixed64 SubnetPrefix = 3;

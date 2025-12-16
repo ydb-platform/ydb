@@ -174,6 +174,7 @@ public:
     bool IsHeadRead;
     ui64 LockId = 0;
     ui32 LockNodeId = 0;
+    NKikimrDataEvents::ELockMode LockMode = NKikimrDataEvents::OPTIMISTIC;
     TLockInfo::TPtr Lock;
     bool LockInconsistent = false;
 
@@ -211,7 +212,7 @@ public:
     // note that we send SeqNo's starting from 1
     ui64 SeqNo = 0;
     ui64 LastAckSeqNo = 0;
-    ui32 FirstUnprocessedQuery = 0;
+    ui64 FirstUnprocessedQuery = 0; // must be unsigned
     TString LastProcessedKey;
     bool LastProcessedKeyErased = false;
 

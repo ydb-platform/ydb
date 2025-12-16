@@ -122,11 +122,6 @@ private:
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
-    void SetSelectInfo(std::unique_ptr<ISourcesConstructor>&& value) {
-        AFL_VERIFY(!SourcesConstructor);
-        SourcesConstructor = std::move(value);
-    }
-
     std::unique_ptr<ISourcesConstructor> ExtractSelectInfo() const {
         AFL_VERIFY(!!SourcesConstructor);
         return std::move(SourcesConstructor);

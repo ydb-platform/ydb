@@ -74,9 +74,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     }
 
     static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent,
-                                     const std::vector<TString>& level,
-                                     NKikimrTxDataShard::EKMeansState upload,
-                                     VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric)
+        const std::vector<TString>& level, NKikimrTxDataShard::EKMeansState upload,
+        VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric, ui32 overlapClusters = 0)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -119,6 +118,12 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 rec.AddDataColumns("data");
 
                 rec.SetDatabaseName(kDatabaseName);
+
+                rec.SetOverlapClusters(overlapClusters);
+                rec.SetOverlapRatio(2);
+                rec.SetOverlapOutForeign(upload == NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD ||
+                    upload == NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD);
+
                 rec.SetOutputName(kPostingTable);
             };
             fill(ev1);
@@ -145,42 +150,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     static void DropTable(Tests::TServer::TPtr server, TActorId sender, const char* name)
     {
         ui64 txId = AsyncDropTable(server, sender, "/Root", name);
-        WaitTxNotification(server, sender, txId);
-    }
-
-    static void CreateMainTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options)
-    {
-        options.AllowSystemColumnNames(false);
-        options.Columns({
-            {"key", "Uint32", true, true},
-            {"embedding", "String", false, false},
-            {"data", "String", false, false},
-        });
-        CreateShardedTable(server, sender, "/Root", "table-main", options);
-    }
-
-    static void CreatePostingTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options)
-    {
-        options.AllowSystemColumnNames(true);
-        options.Columns({
-            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
-            {"key", "Uint32", true, true},
-            {"data", "String", false, false},
-        });
-        CreateShardedTable(server, sender, "/Root", "table-posting", options);
-    }
-
-    static void CreateBuildTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options,
-                                 const char* name)
-    {
-        options.AllowSystemColumnNames(true);
-        options.Columns({
-            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
-            {"key", "Uint32", true, true},
-            {"embedding", "String", false, false},
-            {"data", "String", false, false},
-        });
-        CreateShardedTable(server, sender, "/Root", name, options);
+        WaitTxNotification(server, txId);
     }
 
     Y_UNIT_TEST(BadRequest) {
@@ -342,6 +312,60 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }
     }
 
+    Y_UNIT_TEST(MainToPostingWithOverlap) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // Upsert some initial values
+        ExecSQL(server, sender, MainTableForOverlap);
+
+        auto create = [&] { CreatePostingTable(server, sender, options); };
+        create();
+
+        auto similarity = VectorIndexSettings::DISTANCE_COSINE;
+        {
+            std::vector<TString> level = {
+                "\x10\x80\x02",
+                "\x80\x10\x02",
+                "\x0E\x0E\x02",
+            };
+            auto posting = DoReshuffleKMeans(server, sender, 0, level,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+                VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, 2);
+            UNIT_ASSERT_VALUES_EQUAL(posting,
+                "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
+                "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
+                "__ydb_parent = 9223372036854775809, key = 5, data = five\n"
+                "__ydb_parent = 9223372036854775809, key = 11, data = ffff\n"
+                "__ydb_parent = 9223372036854775810, key = 2, data = two\n"
+                "__ydb_parent = 9223372036854775810, key = 6, data = aaa\n"
+                "__ydb_parent = 9223372036854775810, key = 7, data = bbbb\n"
+                "__ydb_parent = 9223372036854775810, key = 10, data = eee\n"
+                "__ydb_parent = 9223372036854775811, key = 3, data = three\n"
+                "__ydb_parent = 9223372036854775811, key = 8, data = ccccc\n"
+                "__ydb_parent = 9223372036854775811, key = 9, data = dddd\n"
+                "__ydb_parent = 9223372036854775811, key = 10, data = eee\n"
+                "__ydb_parent = 9223372036854775811, key = 11, data = ffff\n"
+                "__ydb_parent = 9223372036854775811, key = 12, data = ggggg\n"
+                "__ydb_parent = 9223372036854775811, key = 13, data = hhhh\n");
+        }
+    }
+
     Y_UNIT_TEST(MainToBuild) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -425,6 +449,60 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                                               "__ydb_parent = 1, key = 4, embedding = \x65\x65\2, data = four\n"
                                               "__ydb_parent = 1, key = 5, embedding = \x75\x75\2, data = five\n");
             recreate();
+        }
+    }
+
+    Y_UNIT_TEST(MainToBuildWithOverlap) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // Upsert some initial values
+        ExecSQL(server, sender, MainTableForOverlap);
+
+        auto create = [&] { CreateBuildTableWithForeignOut(server, sender, options, "table-posting"); };
+        create();
+
+        auto similarity = VectorIndexSettings::DISTANCE_COSINE;
+        {
+            std::vector<TString> level = {
+                "\x10\x80\x02",
+                "\x80\x10\x02",
+                "\x0E\x0E\x02",
+            };
+            auto posting = DoReshuffleKMeans(server, sender, 0, level,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD,
+                VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, 2);
+            UNIT_ASSERT_VALUES_EQUAL(posting,
+                "key = 1, __ydb_parent = 1, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x80\x02, data = one\n"
+                "key = 2, __ydb_parent = 2, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x80\x10\x02, data = two\n"
+                "key = 3, __ydb_parent = 3, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x10\x02, data = three\n"
+                "key = 4, __ydb_parent = 1, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x11\x81\x02, data = four\n"
+                "key = 5, __ydb_parent = 1, __ydb_foreign = 0, __ydb_distance = 2.952767713e-05, embedding = \x11\x80\x02, data = five\n"
+                "key = 6, __ydb_parent = 2, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x81\x11\x02, data = aaa\n"
+                "key = 7, __ydb_parent = 2, __ydb_foreign = 0, __ydb_distance = 4.552470524e-07, embedding = \x81\x10\x02, data = bbbb\n"
+                "key = 8, __ydb_parent = 3, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x11\x10\x02, data = ccccc\n"
+                "key = 9, __ydb_parent = 3, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x10\x11\x02, data = dddd\n"
+                "key = 10, __ydb_parent = 2, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x11\x09\x02, data = eee\n"
+                "key = 10, __ydb_parent = 3, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x11\x09\x02, data = eee\n"
+                "key = 11, __ydb_parent = 1, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 11, __ydb_parent = 3, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 12, __ydb_parent = 3, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x09\x09\x02, data = ggggg\n"
+                "key = 13, __ydb_parent = 3, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x11\x11\x02, data = hhhh\n");
         }
     }
 
@@ -602,6 +680,45 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                                               "__ydb_parent = 41, key = 5, embedding = \x75\x75\2, data = five\n");
             recreate();
         }
+    }
+
+    Y_UNIT_TEST (BuildToBuildWithOverlap) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
+        options.Shards(1);
+
+        CreateBuildTableWithForeignIn(server, sender, options, "table-main");
+        // Upsert some initial values
+        ExecSQL(server, sender, BuildTableWithOverlapIn);
+
+        auto create = [&] {
+            CreateLevelTable(server, sender, options);
+            CreateBuildTableWithForeignOut(server, sender, options, "table-posting");
+        };
+        create();
+
+        auto similarity = VectorIndexSettings::DISTANCE_COSINE;
+        std::vector<TString> level = {
+            "\x0e\x35\x02",
+            "\x64\x0e\x02",
+        };
+        auto posting = DoReshuffleKMeans(server, sender, 40, level,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, 2);
+        UNIT_ASSERT_VALUES_EQUAL(posting, BuildToBuildWithOverlapOut);
     }
 }
 

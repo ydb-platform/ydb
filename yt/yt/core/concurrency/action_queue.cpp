@@ -639,6 +639,7 @@ public:
         YT_VERIFY(!Suspended_.exchange(true));
         {
             auto guard = Guard(SpinLock_);
+            YT_VERIFY(!FreeEvent_);
             FreeEvent_ = NewPromise<void>();
             if (ActiveInvocationCount_ == 0) {
                 FreeEvent_.Set();
@@ -650,9 +651,13 @@ public:
     void Resume() override
     {
         YT_VERIFY(Suspended_.exchange(false));
+        TPromise<void> freeEvent;
         {
             auto guard = Guard(SpinLock_);
-            FreeEvent_.Reset();
+            freeEvent = std::move(FreeEvent_);
+        }
+        if (freeEvent && !freeEvent.IsSet()) {
+            freeEvent.TrySet(TError(NYT::EErrorCode::Canceled, "Invoker resumed before suspension completed"));
         }
         ScheduleMore();
     }
@@ -720,7 +725,7 @@ private:
             if (FreeEvent_ && !FreeEvent_.IsSet()) {
                 auto freeEvent = FreeEvent_;
                 guard.Release();
-                freeEvent.Set();
+                freeEvent.TrySet();
             }
         }
     }

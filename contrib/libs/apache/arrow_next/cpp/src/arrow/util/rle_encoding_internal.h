@@ -26,11 +26,11 @@
 #include <limits>
 #include <vector>
 
-#include "arrow/util/bit_block_counter.h"
-#include "arrow/util/bit_run_reader.h"
-#include "arrow/util/bit_stream_utils_internal.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_block_counter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_stream_utils_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
 
 namespace arrow20 {
 namespace util {

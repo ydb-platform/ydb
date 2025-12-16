@@ -1,4 +1,8 @@
-FROM ghcr.io/ydb-platform/fq-connector-go_greenplum:6.25.3@sha256:0627a657b179ff73949fec05201f3e164b92639281eff248cd07669ce7247eec
+ARG BASE_IMAGE=ghcr.io/ydb-platform/fq-connector-go_greenplum:6.25.3-6432@sha256:9e862b05719b289b447562fbce6c003916a764a549f924a4175eecd7e7891a0b
+FROM $BASE_IMAGE
 
-# For the sake of simplicity of tests, we force Greenplum to use the same port that it uses within MDB
-RUN find /data -type f -exec sed -i 's/5432/6432/' "{}" +;
+COPY ./init_db.sh /init_db.sh
+
+HEALTHCHECK --interval=50s --timeout=10s --retries=5 --start-period=20s \
+  CMD /usr/local/gpdb/bin/pg_isready -q -h localhost -p 6432 -U gpadmin || exit 1
+

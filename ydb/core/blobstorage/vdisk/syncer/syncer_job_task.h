@@ -114,11 +114,16 @@ namespace NKikimr {
             // When Type=EFullRecover we store state here
             ////////////////////////////////////////////////////////////////////////
             struct TFullRecoverInfo {
+                TFullRecoverInfo(NKikimrBlobStorage::EFullSyncProtocol protocol)
+                    : Protocol(protocol)
+                {}
+
                 NKikimrBlobStorage::ESyncFullStage Stage = NKikimrBlobStorage::LogoBlobs;
                 TKeyLogoBlob LogoBlobFrom = TKeyLogoBlob::First();
                 TKeyBlock BlockTabletFrom = TKeyBlock::First();
                 TKeyBarrier BarrierFrom = TKeyBarrier::First();
                 ui64 VSyncFullMsgsReceived = 0;
+                NKikimrBlobStorage::EFullSyncProtocol Protocol;
             };
 
         public:
@@ -132,6 +137,7 @@ namespace NKikimr {
                     EJobType type,
                     const TVDiskID &vdisk,
                     const TActorId &service,
+                    const TActorId &sstWriterId,
                     const NSyncer::TPeerSyncState &peerState,
                     const std::shared_ptr<TSjCtx> &ctx);
             void Output(IOutputStream &str) const;
@@ -140,6 +146,7 @@ namespace NKikimr {
             TSjOutcome Handle(TEvBlobStorage::TEvVSyncResult::TPtr &ev, const TActorId &parentId);
             TSjOutcome Handle(TEvBlobStorage::TEvVSyncFullResult::TPtr &ev, const TActorId &parentId);
             TSjOutcome Handle(TEvLocalSyncDataResult::TPtr &ev);
+            TSjOutcome Handle(TEvFullSyncFinished::TPtr &ev);
             TSjOutcome Terminate(ESyncStatus status);
 
             bool NeedCommit() const {
@@ -181,6 +188,9 @@ namespace NKikimr {
         public:
             const TVDiskID VDiskId;
             const TActorId ServiceId;
+            // full sync sst writer for a new scheme
+            const TActorId SstWriterId;
+
         private:
             // job type
             EJobType Type = EJustSync;

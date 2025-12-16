@@ -1,6 +1,7 @@
 #include "sparse_coredump.h"
 
 #include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/size_literals.h>

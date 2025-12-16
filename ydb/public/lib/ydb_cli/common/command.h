@@ -122,6 +122,7 @@ public:
         void InitClientCert();
 
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
+        bool UseAllNodes = false;
         bool EnableSsl = false;
         bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
@@ -164,8 +165,6 @@ public:
         bool AllowEmptyAddress = false;
         bool OnlyExplicitProfile = false;
         bool AssumeYes = false;
-        // Whether a command is local (need no connection to YDB) or not
-        bool LocalCommand = false;
         std::optional<std::string> StorageUrl = std::nullopt;
 
         TCredentialsGetter CredentialsGetter;
@@ -275,22 +274,26 @@ public:
                 .SetDatabase(Database)
                 .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
                 .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
-        
+
+            if (UseAllNodes) {
+                driverConfig.SetBalancingPolicy(TBalancingPolicy::UseAllNodes());
+            }
+
             if (EnableSsl) {
                 driverConfig.UseSecureConnection(CaCerts);
             }
-        
+
             if (IsNetworkIntensive) {
                 size_t networkThreadNum = GetNetworkThreadNum();
                 driverConfig.SetNetworkThreadsNum(networkThreadNum);
             }
-        
+
             if (SkipDiscovery) {
                 driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
             }
-        
+
             driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
-        
+
             return driverConfig;
         }
 
@@ -303,12 +306,17 @@ public:
                 } else if (cpuCount >= 32 && cpuCount < 64) {
                     // leave the half of CPUs to the client's logic
                     return cpuCount / 2;
-                } else if (cpuCount >= 16 && cpuCount < 32) {
+                } else if (cpuCount > 16 && cpuCount < 32) {
                     // Originally here we had a constant value 16.
                     // To not break things this heuristic tries to use this constant as well.
                     return 16;
-                } else {
-                    return std::min(size_t(2), cpuCount / 2);
+                } else if (cpuCount == 16) {
+                    // Again originally here we had a constant value 16.
+                    // But it seems a bad idea to create 16 network threads if we have just 16 cores.
+                    // To not break things here we return slightly more than 16 / 2, but not 16.
+                    return 12;
+                } else if (cpuCount >= 4 && cpuCount < 16) {
+                    return cpuCount / 2;
                 }
             }
             return 1; // TODO: check default
@@ -420,7 +428,6 @@ public:
 
     void Hide();
     void MarkDangerous();
-    void MarkLocal();
     void UseOnlyExplicitProfile();
 
 protected:
@@ -450,7 +457,6 @@ public:
     void AddCommand(std::unique_ptr<TClientCommand> command);
     void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
     void AddDangerousCommand(std::unique_ptr<TClientCommand> command);
-    void AddLocalCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
     void RenderCommandDescription(
         TStringStream& stream,

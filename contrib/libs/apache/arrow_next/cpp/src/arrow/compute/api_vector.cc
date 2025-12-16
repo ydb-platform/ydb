@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
 
 #include <algorithm>
 #include <memory>
@@ -23,19 +23,19 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array/array_nested.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/compute/exec.h"
-#include "arrow/compute/function.h"
-#include "arrow/compute/function_internal.h"
-#include "arrow/compute/kernels/vector_sort_internal.h"
-#include "arrow/compute/registry.h"
-#include "arrow/datum.h"
-#include "arrow/record_batch.h"
-#include "arrow/result.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/reflection_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_nested.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/vector_sort_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/datum.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/reflection_internal.h"
 
 namespace arrow20 {
 

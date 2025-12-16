@@ -36,8 +36,6 @@ struct TNativeYtLambdaBuilder: public TGatewayLambdaBuilder {
 
     TNativeYtLambdaBuilder(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session,
         TLangVersion langver);
-
-    TString BuildLambdaWithIO(const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda, TExprContext& exprCtx);
 };
 
 NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(NYql::NCommon::TCodecContext* codecCtx,

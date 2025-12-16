@@ -1028,7 +1028,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", writtenRows# " << WrittenRows);
 
         TAutoPtr<IDestructable> prod = new TImportJobProduct(success, error, WrittenBytes, WrittenRows);
-        Send(DataShard, new TDataShard::TEvPrivate::TEvAsyncJobComplete(prod), 0, TxId);
+        Send(DataShard, new TEvDataShard::TEvAsyncJobComplete(prod), 0, TxId);
 
         Y_ENSURE(TaskId);
         Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(TaskId));

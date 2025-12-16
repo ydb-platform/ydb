@@ -26,8 +26,10 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStorePermissions Execute");
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::Param>().Key(1).Update(NIceDb::TUpdate<Schema::Param::NextPermissionID>(NextPermissionId),
-                                                NIceDb::TUpdate<Schema::Param::NextRequestID>(NextRequestId));
+        db.Table<Schema::Param>().Key(Schema::Param::Key).Update(
+            NIceDb::TUpdate<Schema::Param::NextPermissionID>(NextPermissionId),
+            NIceDb::TUpdate<Schema::Param::NextRequestID>(NextRequestId)
+        );
 
         const auto &rec = Response->Get<TEvCms::TEvPermissionResponse>()->Record;
 

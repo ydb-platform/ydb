@@ -8,6 +8,7 @@ RECURSE(
     mdb_mock
     nemesis
     pq_read
+    s3_bench
     s3_recipe
     token_accessor_mock
     ydb_serializable

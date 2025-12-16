@@ -20,6 +20,7 @@ void RegisterKikimrFatalActions();
 void AddAfterFatalCallback(const std::function<void(int)>& after);
 void AddBeforeFatalCallback(const std::function<void(int)>& before);
 void EnableKikimrSymbolize();
+void DisableBacktraceUnwinding();
 
 void KikimrBackTrace();
 void KikimrBackTraceFormatImpl(IOutputStream*);

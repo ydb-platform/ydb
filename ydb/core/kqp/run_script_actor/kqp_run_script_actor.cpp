@@ -127,6 +127,7 @@ public:
         , DisableDefaultTimeout(settings.DisableDefaultTimeout)
         , CheckpointId(settings.CheckpointId)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
+        , StreamingQueryPath(settings.StreamingQueryPath)
         , Counters(settings.Counters)
     {}
 
@@ -144,6 +145,7 @@ public:
         );
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
         UserRequestContext->CheckpointId = CheckpointId;
+        UserRequestContext->StreamingQueryPath = StreamingQueryPath;
 
         LOG_I("Bootstrap");
 
@@ -246,7 +248,7 @@ private:
         ev->SetDisableDefaultTimeout(DisableDefaultTimeout);
         ev->SetUserRequestContext(UserRequestContext);
         if (PhysicalGraph) {
-            ev->SetQueryPhysicalGraph(std::move(*PhysicalGraph));
+            ev->SetQueryPhysicalGraph(*PhysicalGraph);
         }
         if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
             ev->SetProgressStatsPeriod(ProgressStatsPeriod ? ProgressStatsPeriod : TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
@@ -323,7 +325,7 @@ private:
     void TerminateActorExecution(Ydb::StatusIds::StatusCode replyStatus, const NYql::TIssues& replyIssues) {
         LOG_I("Script execution finalized, cancel response status: " << replyStatus << ", issues: " << replyIssues.ToOneLineString());
         for (auto& req : CancelRequests) {
-            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues));
+            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues), 0, req->Cookie);
         }
         PassAway();
     }
@@ -572,7 +574,13 @@ private:
     }
 
     void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        LOG_T("Got script progress from " << ev->Sender);
+        const bool isExecuting = IsExecuting();
+        LOG_T("Got script progress from " << ev->Sender << ", isExecuting: " << isExecuting);
+
+        if (!isExecuting) {
+            return;
+        }
+
         const auto& record = ev->Get()->Record;
         QueryPlan = record.GetQueryPlan();
         QueryAst = record.GetQueryAst();
@@ -679,7 +687,11 @@ private:
         NYql::IssuesFromMessage(issueMessage, issues);
         Issues.AddIssues(TruncateIssues(issues));
 
-        LOG_I("Script query finished from " << ev->Sender << " " << record.GetYdbStatus() << ", Issues: " << Issues.ToOneLineString());
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            LOG_I("Script query successfully finished from " << ev->Sender << ", Issues: " << Issues.ToOneLineString());
+        } else {
+            LOG_W("Script query failed from " << ev->Sender << " " << record.GetYdbStatus() << ", Issues: " << Issues.ToOneLineString());
+        }
 
         if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
             const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);
@@ -720,13 +732,13 @@ private:
             CancelRequests.emplace_front(std::move(ev));
             break;
         case ERunState::Cancelled:
-            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already cancelled"));
+            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already cancelled"), 0, ev->Cookie);
             break;
         case ERunState::Finishing:
             CancelRequests.emplace_front(std::move(ev));
             break;
         case ERunState::Finished:
-            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"));
+            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"), 0, ev->Cookie);
             break;
         }
     }
@@ -969,6 +981,7 @@ private:
     const bool DisableDefaultTimeout = false;
     const TString CheckpointId;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
+    const TString StreamingQueryPath;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;

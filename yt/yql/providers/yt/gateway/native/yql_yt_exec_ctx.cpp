@@ -43,46 +43,15 @@ TExecContextBase::TExecContextBase(
     const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
     const TSession::TPtr& session,
     const TString& cluster,
-    const TYtUrlMapper& urlMapper,
+    std::shared_ptr<TYtUrlMapper> urlMapper,
     IMetricsRegistryPtr metrics)
-    : TExecContextBaseSimple(services, clusters, mkqlCompiler, cluster, session)
-    , Gateway(gateway)
-    , FileStorage_(services->FileStorage)
+    : TExecContextBaseSimple(gateway, services, clusters, mkqlCompiler, urlMapper, cluster, session)
     , SecretMasker(services->SecretMasker)
     , Session_(session)
-    , UrlMapper_(urlMapper)
     , DisableAnonymousClusterAccess_(services->DisableAnonymousClusterAccess)
     , Hidden(session->SessionId_.EndsWith("_hidden"))
     , Metrics(std::move(metrics))
 {
-    YtServer_ = Clusters_->GetServer(Cluster_);
-    LogCtx_ = NYql::NLog::CurrentLogContextPath();
-}
-
-
-void TExecContextBase::MakeUserFiles(const TUserDataTable& userDataBlocks) {
-    const TString& activeYtCluster = Clusters_->GetYtName(Cluster_);
-    UserFiles_ = MakeIntrusive<TUserFiles>(UrlMapper_, activeYtCluster);
-    for (const auto& file: userDataBlocks) {
-        auto block = file.second;
-        if (!Config_->GetMrJobUdfsDir().empty() && block.Usage.Test(EUserDataBlockUsage::Udf) && block.Type == EUserDataType::PATH) {
-            TFsPath path = block.Data;
-            TString fileName = path.Basename();
-#ifdef _win_
-            TStringBuf changedName(fileName);
-            changedName.ChopSuffix(".dll");
-            fileName = TString("lib") + changedName + ".so";
-#endif
-            block.Data = TFsPath(Config_->GetMrJobUdfsDir()) / fileName;
-            TString md5;
-            if (block.FrozenFile) {
-                md5 = block.FrozenFile->GetMd5();
-            }
-            block.FrozenFile = CreateFakeFileLink(block.Data, md5);
-        }
-
-        UserFiles_->AddFile(file.first, block);
-    }
 }
 
 void TExecContextBase::SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
@@ -196,19 +165,6 @@ void TExecContextBase::DumpFilesFromJob(const NYT::TNode& opSpec, const TYtSetti
     Session_->FullCapture_->AddOperationFuture(Gateway->Dump(std::move(dumpOptions)).Apply([] (const NThreading::TFuture<IYtGateway::TDumpResult>& f) {
         return NCommon::TOperationResult(f.GetValue());
     }));
-}
-
-TString TExecContextBase::GetAuth(const TYtSettings::TConstPtr& config) const {
-    auto auth = config->Auth.Get();
-    if (!auth || auth->empty()) {
-         auth = Clusters_->GetAuth(Cluster_);
-    }
-
-    return auth.GetOrElse(TString());
-}
-
-TMaybe<TString> TExecContextBase::GetImpersonationUser(const TYtSettings::TConstPtr& config) const {
-    return config->_ImpersonationUser.Get();
 }
 
 ui64 TExecContextBase::EstimateLLVMMem(size_t nodes, const TString& llvmOpt, const TYtSettings::TConstPtr& config) const {

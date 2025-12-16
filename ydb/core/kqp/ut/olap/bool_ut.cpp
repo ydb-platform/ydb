@@ -872,7 +872,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        auto settings = CreateKikimrSettingsWithBoolSupport();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        TTestHelper helper(settings);
 
         const TString ds = "/Root/RowSrc";
         const TString cs = "/Root/ColSrc";

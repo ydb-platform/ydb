@@ -59,6 +59,7 @@ struct TEvRowDispatcher {
         EvPurecalcCompileRequest,
         EvPurecalcCompileResponse,
         EvPurecalcCompileAbort,
+        EvCoordinatorDistributionReset,
         EvEnd,
     };
 
@@ -89,6 +90,11 @@ struct TEvRowDispatcher {
     struct TEvCoordinatorResult : public NActors::TEventPB<TEvCoordinatorResult,
         NFq::NRowDispatcherProto::TEvGetAddressResponse, EEv::EvCoordinatorResult> {
         TEvCoordinatorResult() = default;
+    };
+
+    struct TEvCoordinatorDistributionReset : public NActors::TEventPB<TEvCoordinatorDistributionReset,
+        NFq::NRowDispatcherProto::TEvCoordinatorDistributionReset, EEv::EvCoordinatorDistributionReset> {
+        TEvCoordinatorDistributionReset() = default;
     };
 
 // Session events (with seqNo checks)

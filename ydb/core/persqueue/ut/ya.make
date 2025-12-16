@@ -16,6 +16,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    contrib/libs/fmt
     library/cpp/getopt
     library/cpp/json
     library/cpp/regex/pcre

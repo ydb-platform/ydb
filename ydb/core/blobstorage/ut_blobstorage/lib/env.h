@@ -65,6 +65,9 @@ struct TEnvironmentSetup {
         const ui32 NumPiles = 0;
         const bool AutomaticBootstrap = false;
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
+        const bool EnablePhantomFlagStorage = false;
+        const bool TinySyncLog = false;
+        const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
     };
 
     const TSettings Settings;
@@ -494,6 +497,7 @@ config:
                     config->ReplMaxDonorNotReadyCount = Settings.ReplMaxDonorNotReadyCount;
                 }
                 config->UseActorSystemTimeInBSQueue = Settings.UseActorSystemTimeInBSQueue;
+                config->TinySyncLog = Settings.TinySyncLog;
                 if (Settings.ConfigPreprocessor) {
                     Settings.ConfigPreprocessor(nodeId, *config);
                 }
@@ -517,12 +521,12 @@ config:
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
 
                 auto& icb = *appData->Icb;
-#define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {   \
-                    auto& icbControl = icb.ICB_CONTROL_PATH;                            \
-                    TControlWrapper control(defaultVal, minVal, maxVal);                \
-                    TControlBoard::RegisterSharedControl(control, icbControl);          \
-                    control = currentValue;                                             \
-                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});    \
+#define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {       \
+                    auto& icbControl = icb.ICB_CONTROL_PATH;                                \
+                    TControlWrapper control(defaultVal, minVal, maxVal);                    \
+                    TControlBoard::RegisterSharedControl(control, icbControl);              \
+                    control = currentValue;                                                 \
+                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});  \
                 }
 
                 if (Settings.BurstThresholdNs) {
@@ -544,6 +548,7 @@ config:
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisks, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(DSProxyControls.MaxPutTimeoutSeconds, 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
 
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
@@ -551,6 +556,7 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
                 ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
                 ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
+                ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, false, false, true, Settings.EnablePhantomFlagStorage);
                 
 #undef ADD_ICB_CONTROL
 

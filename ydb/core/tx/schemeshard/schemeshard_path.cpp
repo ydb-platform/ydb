@@ -967,6 +967,7 @@ const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) con
     // which does not support the YQL export process. Otherwise, they will be considered as tables,
     // and we might cause the process to be aborted.
     if (Path.Base()->IsTable()
+        || (Path.Base()->IsColumnTable() && AppData()->FeatureFlags.GetEnableColumnTablesBackup())
         || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
         || Path.Base()->IsPQGroup()
     )  {
@@ -1201,6 +1202,28 @@ const TPath::TChecker& TPath::TChecker::IsStreamingQuery(EStatus status) const {
 
     return Fail(status, TStringBuilder() << "path is not a streaming query"
         << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerMethodPtr rightFunc, EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+    
+    TChecker left(*this);
+    (left.*leftFunc)(status);
+    
+    if (!left.Failed) {
+        return *this;
+    }
+    
+    TChecker right(*this);
+    (right.*rightFunc)(status);
+    
+    if (right.Failed) {
+        return Fail(left.Status, TStringBuilder() << left.Error << " and " << right.Error);
+    }
+
+    return *this;
 }
 
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
@@ -1679,6 +1702,12 @@ bool TPath::IsCommonSensePath() const {
     }
 
     return true;
+}
+
+bool TPath::ShouldSkipCommonPathCheckForIndexImplTable() const {
+    const bool featureFlagEnabled = AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
+    const bool isInsideIndexPath = IsInsideTableIndexPath(false);
+    return featureFlagEnabled && isInsideIndexPath;
 }
 
 bool TPath::AtLocalSchemeShardPath() const {

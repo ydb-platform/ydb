@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
     }
 
     Y_UNIT_TEST_F(CompilationValidation, TFilterFixture) {
-        CompileError = {EStatusId::INTERNAL_ERROR, "Error: mismatched input '.'"};
+        CompileError = {EStatusId::INTERNAL_ERROR, "Error: extraneous input '(' expecting {<EOF>, ';'}"};
         auto consumer = MakeConsumer(
             {{"a1", "[DataType; String]"}},
             "",
@@ -767,7 +767,7 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
     }
 
     Y_UNIT_TEST_F(CompilationValidation, TFilterSetFixture) {
-        CompileError = {EStatusId::INTERNAL_ERROR, "Error: mismatched input '.'"};
+        CompileError = {EStatusId::INTERNAL_ERROR, "Error: extraneous input '(' expecting {<EOF>, ';'}"};
 
         auto consumer = MakeConsumer(
             {{"a1", "[DataType; String]"}},

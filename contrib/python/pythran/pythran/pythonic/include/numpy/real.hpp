@@ -11,11 +11,9 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E>
-  auto real(E &&expr) -> decltype(builtins::getattr(types::attr::REAL{},
-                                                    std::forward<E>(expr)));
+  auto real(E &&expr) -> decltype(builtins::getattr(types::attr::REAL{}, std::forward<E>(expr)));
   template <class T>
-  auto real(types::list<T> const &expr)
-      -> decltype(real(numpy::functor::asarray{}(expr)));
+  auto real(types::list<T> const &expr) -> decltype(real(numpy::functor::asarray{}(expr)));
 
   DEFINE_FUNCTOR(pythonic::numpy, real);
 } // namespace numpy

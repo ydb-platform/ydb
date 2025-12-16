@@ -16,6 +16,7 @@ namespace configuration
 
 class DocumentNodeConstIterator;
 class PropertiesNodeConstIterator;
+class DocumentNodeLocation;
 
 class DocumentNode
 {
@@ -29,6 +30,8 @@ public:
   DocumentNode &operator=(DocumentNode &&)           = default;
   DocumentNode &operator=(const DocumentNode &other) = default;
   virtual ~DocumentNode()                            = default;
+
+  virtual DocumentNodeLocation Location() const = 0;
 
   virtual std::string Key() const = 0;
 
@@ -170,6 +173,17 @@ public:
 
 private:
   std::unique_ptr<PropertiesNodeConstIteratorImpl> impl_;
+};
+
+class DocumentNodeLocation
+{
+public:
+  size_t offset;
+  size_t line;
+  size_t col;
+  std::string filename;
+
+  std::string ToString() const;
 };
 
 }  // namespace configuration

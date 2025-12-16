@@ -159,9 +159,9 @@ TCandidate ToCandidate(TGenericName generic, TLocalSyntaxContext& local) {
 
         TCandidate candidate;
         if constexpr (IsContextSensitive) {
-            candidate = ToCandidate(std::move(name), local);
+            candidate = ToCandidate(std::forward<decltype(name)>(name), local);
         } else {
-            candidate = ToCandidate(std::move(name));
+            candidate = ToCandidate(std::forward<decltype(name)>(name));
         }
 
         candidate.Documentation = std::move(documentation);

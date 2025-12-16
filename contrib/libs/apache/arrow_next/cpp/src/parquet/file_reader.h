@@ -23,11 +23,11 @@
 #include <string>
 #include <vector>
 
-#include "arrow/io/caching.h"
-#include "arrow/util/type_fwd.h"
-#include "parquet/metadata.h"  // IWYU pragma: keep
-#include "parquet/platform.h"
-#include "parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/caching.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
 
 namespace parquet20 {
 

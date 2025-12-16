@@ -129,7 +129,7 @@ struct TTestMetricConsumer
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TSolomonRegistry, Registration)
+TEST(TSolomonRegistryTest, Registration)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -181,7 +181,7 @@ TTestMetricConsumer ReadSensors(TSolomonRegistryPtr impl)
     return testConsumer;
 }
 
-TEST(TSolomonRegistry, CounterProjections)
+TEST(TSolomonRegistryTest, CounterProjections)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -215,7 +215,7 @@ TEST(TSolomonRegistry, CounterProjections)
     CollectSensors(impl, 3);
 }
 
-TEST(TSolomonRegistry, GaugeProjections)
+TEST(TSolomonRegistryTest, GaugeProjections)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -248,7 +248,7 @@ TEST(TSolomonRegistry, GaugeProjections)
     CollectSensors(impl, 3);
 }
 
-TEST(TSolomonRegistry, ExponentialHistogramProjections)
+TEST(TSolomonRegistryTest, ExponentialHistogramProjections)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -287,7 +287,7 @@ TEST(TSolomonRegistry, ExponentialHistogramProjections)
     CollectSensors(impl, 3);
 }
 
-TEST(TSolomonRegistry, DifferentBuckets)
+TEST(TSolomonRegistryTest, DifferentBuckets)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -311,7 +311,7 @@ TEST(TSolomonRegistry, DifferentBuckets)
     ASSERT_EQ(result["yt.d.histogram{user=u0}"]->Count(), 4u);
 }
 
-TEST(TSolomonRegistry, CustomHistogramProjections)
+TEST(TSolomonRegistryTest, CustomHistogramProjections)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -353,7 +353,7 @@ TEST(TSolomonRegistry, CustomHistogramProjections)
     CollectSensors(impl, 3);
 }
 
-TEST(TSolomonRegistry, SparseHistogram)
+TEST(TSolomonRegistryTest, SparseHistogram)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -375,7 +375,7 @@ TEST(TSolomonRegistry, SparseHistogram)
     CollectSensors(impl, 3);
 }
 
-TEST(TSolomonRegistry, HistogramWithBigCounterValues)
+TEST(TSolomonRegistryTest, HistogramWithBigCounterValues)
 {
     auto impl = New<TSolomonRegistry>();
     TProfiler profiler(impl, "/d");
@@ -391,7 +391,7 @@ TEST(TSolomonRegistry, HistogramWithBigCounterValues)
     ASSERT_EQ(result.front(), 4e9);
 }
 
-TEST(TSolomonRegistry, SparseCounters)
+TEST(TSolomonRegistryTest, SparseCounters)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -417,7 +417,7 @@ TEST(TSolomonRegistry, SparseCounters)
     ASSERT_EQ(result["yt.d.sparse_counter{}"], 2u);
 }
 
-TEST(TSolomonRegistry, GaugesNoDefault)
+TEST(TSolomonRegistryTest, GaugesNoDefault)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -433,7 +433,7 @@ TEST(TSolomonRegistry, GaugesNoDefault)
     ASSERT_EQ(result["yt.d.gauge{}"], 1.0);
 }
 
-TEST(TSolomonRegistry, SparseCountersWithHack)
+TEST(TSolomonRegistryTest, SparseCountersWithHack)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -458,7 +458,7 @@ TEST(TSolomonRegistry, SparseCountersWithHack)
     ASSERT_TRUE(result.empty());
 }
 
-TEST(TSolomonRegistry, SparseGauge)
+TEST(TSolomonRegistryTest, SparseGauge)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -481,7 +481,7 @@ TEST(TSolomonRegistry, SparseGauge)
     CollectSensors(impl, 3);
 }
 
-TEST(TSolomonRegistry, SparseGaugeSummary)
+TEST(TSolomonRegistryTest, SparseGaugeSummary)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -501,7 +501,7 @@ TEST(TSolomonRegistry, SparseGaugeSummary)
     ASSERT_TRUE(result.empty());
 }
 
-TEST(TSolomonRegistry, InvalidSensors)
+TEST(TSolomonRegistryTest, InvalidSensors)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -535,7 +535,7 @@ struct TDebugProducer
     }
 };
 
-TEST(TSolomonRegistry, GaugeProducer)
+TEST(TSolomonRegistryTest, GaugeProducer)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -582,7 +582,7 @@ TEST(TSolomonRegistry, GaugeProducer)
     CollectSensors(impl, 3);
 }
 
-TEST(TSolomonRegistry, CustomProjections)
+TEST(TSolomonRegistryTest, CustomProjections)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -627,7 +627,7 @@ TEST(TSolomonRegistry, CustomProjections)
     CollectSensors(impl, 3);
 }
 
-TEST(TSolomonRegistry, DisableProjections)
+TEST(TSolomonRegistryTest, DisableProjections)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -662,7 +662,7 @@ TEST(TSolomonRegistry, DisableProjections)
     ASSERT_EQ(1, result.Counters["yt.d.bigb{mode=percentile;p=99}"]);
 }
 
-TEST(TSolomonRegistry, DisableRenaming)
+TEST(TSolomonRegistryTest, DisableRenaming)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -697,7 +697,7 @@ struct TCounterProducer
 
 DEFINE_REFCOUNTED_TYPE(TCounterProducer)
 
-TEST(TSolomonRegistry, CounterProducer)
+TEST(TSolomonRegistryTest, CounterProducer)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -729,7 +729,7 @@ struct TBadProducer
 
 DEFINE_REFCOUNTED_TYPE(TBadProducer)
 
-TEST(TSolomonRegistry, Exceptions)
+TEST(TSolomonRegistryTest, Exceptions)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -748,7 +748,7 @@ TEST(TSolomonRegistry, Exceptions)
     impl->Collect();
 }
 
-TEST(TSolomonRegistry, CounterTagsBug)
+TEST(TSolomonRegistryTest, CounterTagsBug)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -765,7 +765,7 @@ TEST(TSolomonRegistry, CounterTagsBug)
     impl->ProcessRegistrations();
 }
 
-TEST(TSolomonRegistry, TestRemoteTransfer)
+TEST(TSolomonRegistryTest, TestRemoteTransfer)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -812,7 +812,7 @@ TEST(TSolomonRegistry, TestRemoteTransfer)
     ASSERT_TRUE(sensors.Counters.empty());
 }
 
-TEST(TSolomonRegistry, TestRemoteTransferWithDistinctTags)
+TEST(TSolomonRegistryTest, TestRemoteTransferWithDistinctTags)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -872,7 +872,7 @@ TEST(TSolomonRegistry, TestRemoteTransferWithDistinctTags)
     ASSERT_EQ(7, tagRegistry.GetSize());
 }
 
-TEST(TSolomonRegistry, ExtensionTag)
+TEST(TSolomonRegistryTest, ExtensionTag)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -895,7 +895,7 @@ TEST(TSolomonRegistry, ExtensionTag)
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;medium=ssd_blobs;location_id=store0;device=sdb;model=M5100}"));
 }
 
-TEST(TSolomonRegistry, RenameTag)
+TEST(TSolomonRegistryTest, RenameTag)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -953,7 +953,7 @@ struct TBlinkingProducer
 
 DEFINE_REFCOUNTED_TYPE(TBlinkingProducer)
 
-TEST(TSolomonRegistry, ProducerRemoveSupport)
+TEST(TSolomonRegistryTest, ProducerRemoveSupport)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -1101,7 +1101,7 @@ void CheckTags(const TSolomonRegistryPtr& registry, const TTagInfoMapping& tagIn
     }
 }
 
-TEST(TSolomonRegistry, IncorrectSolomonLabelsWeakPolicy)
+TEST(TSolomonRegistryTest, IncorrectSolomonLabelsWeakPolicy)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
@@ -1139,7 +1139,7 @@ std::string a(98, 'a');
         });
 }
 
-TEST(TSolomonRegistry, IncorrectSolomonLabelsStrongPolicy)
+TEST(TSolomonRegistryTest, IncorrectSolomonLabelsStrongPolicy)
 {
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);

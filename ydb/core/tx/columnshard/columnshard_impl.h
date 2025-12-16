@@ -20,7 +20,6 @@
 #include "data_sharing/modification/events/change_owning.h"
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
-#include "export/events/events.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
@@ -64,6 +63,9 @@ class TMovePortionsChange;
 namespace NReader {
 class TTxScan;
 class TTxInternalScan;
+namespace NCommon {
+class TReadMetadata;
+}
 namespace NPlain {
 class TIndexScannerConstructor;
 }
@@ -111,6 +113,7 @@ class TTxBlobsWritingFinished;
 class TTxBlobsWritingFailed;
 class TWriteTasksQueue;
 class TWriteTask;
+class TCommitOperation;
 
 namespace NLoading {
 class TTxControllerInitializer;
@@ -212,6 +215,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
     friend class NOlap::NReader::NSimple::TIndexScannerConstructor;
+    friend class NOlap::NReader::NCommon::TReadMetadata;
     friend class NOlap::TRemovePortionsChange;
     friend class NOlap::TMovePortionsChange;
 
@@ -279,7 +283,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
-    void Handle(NStat::TEvStatistics::TEvAnalyzeTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(NStat::TEvStatistics::TEvAnalyzeShard::TPtr& ev, const TActorContext& ctx);
     void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
@@ -304,8 +308,11 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
-    void SubscribeLock(const ui64 lockId, const ui32 lockNodeId);
-    void MaybeCleanupLock(const ui64 lockId);
+    void SubscribeLockIfNotAlready(const ui64 lockId, const ui32 lockNodeId) const;
+    void ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie);
+    void TransactionToAbort(const ui64 lockId);
+    void MaybeAbortTransaction(const ui64 lockId);
+    void CancelTransaction(const ui64 txId);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 
@@ -356,6 +363,7 @@ public:
     }
 
     using EOverloadStatus = EOverloadStatus;
+    using TOverloadStatus = TOverloadStatus;
 
     // For syslocks
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
@@ -385,8 +393,8 @@ public:
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
-    EOverloadStatus ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const;
-    EOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
+    TOverloadStatus ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const;
+    TOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
     EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
 
 protected:
@@ -446,7 +454,7 @@ protected:
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
             HFunc(TEvPrivate::TEvTieringModified, Handle);
 
-            HFunc(NStat::TEvStatistics::TEvAnalyzeTable, Handle);
+            HFunc(NStat::TEvStatistics::TEvAnalyzeShard, Handle);
             HFunc(NStat::TEvStatistics::TEvStatisticsRequest, Handle);
 
             HFunc(NActors::TEvents::TEvUndelivered, Handle);

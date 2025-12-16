@@ -15,6 +15,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/library/plan2svg/plan2svg.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
@@ -581,6 +582,82 @@ protected:
         static_cast<TDerived*>(this)->CheckExecutionComplete();
     }
 
+    void HandleHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
+
+        TStringStream str;
+
+        const TCgiParameters &cgi = ev->Get()->Request.GetParams();
+        auto view = cgi.Get("view");
+        if (view == "plan") {
+            NYql::NDqProto::TDqExecutionStats execStats;
+            Stats->ExportExecStats(execStats);
+
+            for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                const auto& tx = Request.Transactions[txId].Body;
+                auto plans = AddExecStatsToTxPlan(tx->GetPlan(), execStats);
+                TPlanVisualizer viz;
+
+                NJson::TJsonReaderConfig jsonConfig;
+                NJson::TJsonValue jsonNode;
+                if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
+                    viz.LoadPlans(jsonNode);
+                }
+
+                auto svg = viz.PrintSvgSafe();
+                str << svg << Endl;
+            }
+
+            this->Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+            return;
+        }
+
+        HTML(str) {
+            PRE() {
+                str << "KQP Executer, SelfId=" << SelfId() << ' ';
+                HREF(TStringBuilder() << "/node/" << SelfId().NodeId() << "/actors/kqp_node?ex=" << SelfId() << "&view=plan")  {
+                    str << "Plan";
+                }
+                str << Endl;
+
+                TABLE_SORTABLE_CLASS("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "TxId";}
+                            TABLEH() {str << "StageId";}
+                            TABLEH() {str << "TaskId";}
+                            TABLEH() {str << "NodeId";}
+                            TABLEH() {str << "ActorId";}
+                            TABLEH() {str << "Completed";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (const auto& task : TasksGraph.GetTasks()) {
+                            TABLER() {
+                                TABLED() {str << task.StageId.TxId;}
+                                TABLED() {str << task.StageId.StageId;}
+                                TABLED() {str << task.Id;}
+                                TABLED() {str << task.Meta.NodeId;}
+                                TABLED() {
+                                    if (task.ComputeActorId) {
+                                        HREF(TStringBuilder() << "/node/" << task.ComputeActorId.NodeId() << "/actors/kqp_node?ca=" << task.ComputeActorId)  {
+                                            str << task.ComputeActorId;
+                                        }
+                                    } else {
+                                        str << "N/A";
+                                    }
+                                    str << Endl;
+                                }
+                                TABLED() {str << task.Meta.Completed;}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        this->Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+    }
+
     STATEFN(ReadyState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpExecuter::TEvTxRequest, HandleReady);
@@ -757,8 +834,11 @@ protected:
             }
 
             for (auto& task : TasksGraph.GetTasks()) {
-                if (task.Meta.NodeId == nodeId && Planner->GetPendingComputeTasks().contains(task.Id)) {
-                    return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
+                if (Planner->GetPendingComputeTasks().contains(task.Id)) {
+                    auto actualNodeId = Planner->GetActualNodeIdForTask(task.Id);
+                    if (actualNodeId && *actualNodeId == nodeId) {
+                        return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
+                    }
                 }
             }
         }
@@ -800,11 +880,24 @@ protected:
                     break;
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
-                    for (auto& task : record.GetNotStartedTasks()) {
-                        if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN
-                              and ev->Sender.NodeId() != SelfId().NodeId()) {
-                            Planner->SendStartKqpTasksRequest(task.GetRequestId(), MakeKqpNodeServiceID(SelfId().NodeId()));
-                        }
+                    if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
+                        LOG_D("Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled");
+                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                                "Compute node is unavailable"));
+                        break;
+                    }
+
+                    LOG_D("Received NODE_SHUTTING_DOWN, attempting run tasks locally");
+
+                    ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
+                    auto localNode = MakeKqpNodeServiceID(SelfId().NodeId());
+
+                    // changes requests nodeId when redirect tasks on local node: used to check on disconnected
+                    if (!Planner->SendStartKqpTasksRequest(requestId, localNode, true)) {
+                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                            MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE,
+                                "Compute node is unavailable"));
                     }
                     break;
                 }
@@ -925,7 +1018,8 @@ protected:
             .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
             .Query = Query,
-            .CheckpointCoordinator = CheckpointCoordinatorId
+            .CheckpointCoordinator = CheckpointCoordinatorId,
+            .EnableWatermarks = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks(),
         });
 
         auto err = Planner->PlanExecution();
@@ -1175,10 +1269,7 @@ protected:
             if (!BatchOperationSettings.Empty() && !Stats->TableStats.empty()) {
                 auto [_, tableStats] = *Stats->TableStats.begin();
                 Counters->Counters->BatchOperationUpdateRows->Add(tableStats->GetWriteRows());
-                Counters->Counters->BatchOperationUpdateBytes->Add(tableStats->GetWriteBytes());
-
                 Counters->Counters->BatchOperationDeleteRows->Add(tableStats->GetEraseRows());
-                Counters->Counters->BatchOperationDeleteBytes->Add(tableStats->GetEraseBytes());
             }
 
             auto finishSize = Stats->EstimateFinishMem();
@@ -1190,6 +1281,9 @@ protected:
         StatCollectInflightBytes = 0;
         Counters->Counters->QueryStatMemFinishInflightBytes->Sub(StatFinishInflightBytes);
         StatFinishInflightBytes = 0;
+
+        ResponseEv->LocksBrokenAsBreaker = Stats->LocksBrokenAsBreaker;
+        ResponseEv->LocksBrokenAsVictim = Stats->LocksBrokenAsVictim;
 
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());

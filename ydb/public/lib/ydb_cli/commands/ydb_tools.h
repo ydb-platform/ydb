@@ -87,8 +87,9 @@ private:
     struct TItemFields {
         TString Source;
         TString Destination;
+        bool OmitIndexes = false;
     };
-    DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination);
+    DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination, OmitIndexes);
 
     TVector<TItem> Items;
     TString DatabaseName;

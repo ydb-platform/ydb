@@ -37,6 +37,91 @@ using namespace NYql::NNodes;
 
 namespace {
 
+// Helper function to set VectorTopK metric from string
+void SetVectorTopKMetric(Ydb::Table::VectorIndexSettings* indexSettings, const TString& metric) {
+    if (metric == "CosineDistance") {
+        indexSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+    } else if (metric == "CosineSimilarity") {
+        indexSettings->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE);
+    } else if (metric == "InnerProductSimilarity") {
+        indexSettings->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+    } else if (metric == "ManhattanDistance") {
+        indexSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN);
+    } else if (metric == "EuclideanDistance") {
+        indexSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
+    } else {
+        YQL_ENSURE(false, "Unrecognized VectorTopK metric: " << metric);
+    }
+}
+
+// Helper function to set VectorTopK target vector expression
+void SetVectorTopKTarget(NKqpProto::TKqpPhyValue* targetProto, const TExprNode::TPtr& targetExpr) {
+    TExprBase expr(targetExpr);
+    if (expr.Maybe<TCoString>()) {
+        auto* literal = targetProto->MutableLiteralValue();
+        literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+        literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
+        literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+    } else if (expr.Maybe<TCoParameter>()) {
+        targetProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+    } else {
+        YQL_ENSURE(false, "Unexpected VectorTopKTarget callable '" << expr.Ref().Content()
+            << "'. Expected TCoString or TCoParameter.");
+    }
+}
+
+// Helper function to set VectorTopK limit expression
+void SetVectorTopKLimit(NKqpProto::TKqpPhyValue* limitProto, const TExprNode::TPtr& limitExpr) {
+    TExprBase expr(limitExpr);
+    if (expr.Maybe<TCoUint64>()) {
+        auto* literal = limitProto->MutableLiteralValue();
+        literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+        literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+        literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+    } else if (expr.Maybe<TCoParameter>()) {
+        limitProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+    } else {
+        YQL_ENSURE(false, "Unexpected VectorTopKLimit callable '" << expr.Ref().Content()
+            << "'. Expected TCoUint64 or TCoParameter.");
+    }
+}
+
+// Helper function to fill VectorTopK settings
+template <typename TColumnsRange>
+void FillVectorTopKSettings(
+    NKqpProto::TKqpPhyVectorTopK& vectorTopK,
+    const TKqpReadTableSettings& settings,
+    const TColumnsRange& columns)
+{
+    // Find column index
+    ui32 columnIdx = 0;
+    bool columnFound = false;
+    for (const auto& col : columns) {
+        if (col.Value() == settings.VectorTopKColumn) {
+            columnFound = true;
+            break;
+        }
+        columnIdx++;
+    }
+    YQL_ENSURE(columnFound, "VectorTopK column " << settings.VectorTopKColumn << " not found in read columns");
+    vectorTopK.SetColumn(columnIdx);
+
+    // Set the metric settings
+    auto* indexSettings = vectorTopK.MutableSettings();
+    SetVectorTopKMetric(indexSettings, settings.VectorTopKMetric);
+
+    // Default vector settings: when vector_dimension is 0, actual type and dimension
+    // will be auto-detected from the target vector's format at runtime.
+    indexSettings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+    indexSettings->set_vector_dimension(0);
+
+    // Set target vector
+    SetVectorTopKTarget(vectorTopK.MutableTargetVector(), settings.VectorTopKTarget);
+
+    // Set limit
+    SetVectorTopKLimit(vectorTopK.MutableLimit(), settings.VectorTopKLimit);
+}
+
 NKqpProto::TKqpPhyTx::EType GetPhyTxType(const EPhysicalTxType& type) {
     switch (type) {
         case EPhysicalTxType::Compute: return NKqpProto::TKqpPhyTx::TYPE_COMPUTE;
@@ -393,7 +478,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
 }
 
 template <typename TReader, typename TProto>
-void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& readProto) {
+void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta*/, TProto& readProto) {
     auto ranges = read.Ranges().template Maybe<TCoParameter>();
 
     if (ranges.IsValid()) {
@@ -428,6 +513,13 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& re
         readProto.SetSorted(settings.IsSorted());
         if (settings.TabletId) {
             readProto.SetTabletId(*settings.TabletId);
+        }
+    }
+
+    // Handle VectorTopK settings for brute force vector search
+    if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadRanges>) {
+        if (settings.VectorTopKColumn) {
+            FillVectorTopKSettings(*readProto.MutableVectorTopK(), settings, read.Columns());
         }
     }
 
@@ -647,6 +739,8 @@ public:
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
 
+        queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
+        queryProto.SetEnableWatermarks(Config->EnableWatermarks);
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
             if (queryBlockSettings.HasUncommittedChangesRead) {
@@ -1165,6 +1259,11 @@ private:
                     YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
                 }
             }
+
+            // Handle VectorTopK settings for brute force vector search
+            if (readSettings.VectorTopKColumn) {
+                FillVectorTopKSettings(*readProto.MutableVectorTopK(), readSettings, settings.Columns().Cast());
+            }
         } else {
             YQL_ENSURE(false, "Unsupported source type");
         }
@@ -1351,24 +1450,100 @@ private:
                 AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
                 settingsProto.SetInconsistentTx(inconsistentWrite);
 
-                if (Config->EnableIndexStreamWrite && settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                if (Config->EnableIndexStreamWrite) {
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
-                    for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
-                        const auto& indexDescription = tableMeta->Indexes[index];
 
+                    std::vector<size_t> affectedIndexes;
+                    THashSet<size_t> affectedKeysIndexes;
+                    TVector<TStringBuf> lookupColumns;
+                    {
+                        THashSet<TStringBuf> columnsSet;
+                        for (const auto& columnName : columns) {
+                            columnsSet.insert(columnName);
+                        }
+                        THashSet<TStringBuf> mainKeyColumnsSet;
+                        for (const auto& columnName : tableMeta->KeyColumnNames) {
+                            mainKeyColumnsSet.insert(columnName);
+                            AFL_ENSURE(columnsSet.contains(columnName));
+                        }
+
+                        for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                            const auto& indexDescription = tableMeta->Indexes[index];
+
+                            if (indexDescription.Type == TIndexDescription::EType::GlobalSync
+                                || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
+                                const auto& implTable = tableMeta->ImplTables[index];
+
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                                    if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
+                                            return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
+                                        })) {
+                                            affectedIndexes.push_back(index);
+                                    }
+
+                                    if (std::any_of(implTable->KeyColumnNames.begin(), implTable->KeyColumnNames.end(), [&](const auto& column) {
+                                            return columnsSet.contains(column) && !mainKeyColumnsSet.contains(column);
+                                        })) {
+                                            affectedKeysIndexes.insert(index);
+                                    }
+                                } else {
+                                    affectedIndexes.push_back(index);
+                                    affectedKeysIndexes.insert(index);
+                                }
+                            }
+                        }
+
+                        const bool needLookup = std::any_of(affectedIndexes.begin(), affectedIndexes.end(), [&](size_t index) {
+                            const auto& indexDescription = tableMeta->Indexes[index];
+
+                            if (indexDescription.Type != TIndexDescription::EType::GlobalSync
+                                && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
+                                return false;
+                            }
+                            const auto& implTable = tableMeta->ImplTables[index];
+
+                            AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+
+                            for (const auto& columnName : implTable->KeyColumnNames) {
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                                    AFL_ENSURE(columnsSet.contains(columnName));
+                                } else if (!mainKeyColumnsSet.contains(columnName)) {
+                                    return true;
+                                }
+                            }
+
+                            return false;
+                        });
+
+                        if (needLookup) {
+                            for (const auto& [columnName, columnMeta] : tableMeta->Columns) {
+                                if (!mainKeyColumnsSet.contains(columnName)) {
+                                    lookupColumns.push_back(columnName);
+                                    auto columnProto = settingsProto.AddLookupColumns();
+                                    fillColumnProto(columnName, &columnMeta, columnProto);
+                                }
+                            }
+                        }
+                    }
+
+                    // Fill indexes write settings
+                    for (size_t index : affectedIndexes) {
+                        const auto& indexDescription = tableMeta->Indexes[index];
                         if (indexDescription.Type != TIndexDescription::EType::GlobalSync
                                && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
                             continue;
                         }
                         const auto& implTable = tableMeta->ImplTables[index];
 
-                        AFL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync);
                         AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
                         auto indexSettings = settingsProto.AddIndexes();
                         FillTableId(*implTable, *indexSettings->MutableTable());
 
-                        indexSettings->SetIsUniq(indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique);
+                        indexSettings->SetIsUniq(
+                            indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique
+                            && settingsProto.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+                            && affectedKeysIndexes.contains(index));
 
                         for (const auto& columnName : implTable->KeyColumnNames) {
                             const auto columnMeta = implTable->Columns.FindPtr(columnName);
@@ -1378,16 +1553,21 @@ private:
                             fillColumnProto(columnName, columnMeta, keyColumnProto);
                         }
 
+                        indexSettings->SetKeyPrefixSize(indexDescription.KeyColumns.size());
+
                         TVector<TStringBuf> indexColumns;
+                        THashSet<TStringBuf> indexColumnsSet;
                         indexColumns.reserve(implTable->Columns.size());
 
-                        for (const auto& columnName : columns) {
-                            const auto columnMeta = implTable->Columns.FindPtr(columnName);
-                            if (columnMeta) {
-                                indexColumns.emplace_back(columnName);
+                        for (const auto& columnsList : {columns, lookupColumns}) {
+                            for (const auto& columnName : columnsList) {
+                                const auto columnMeta = implTable->Columns.FindPtr(columnName);
+                                if (columnMeta && indexColumnsSet.insert(columnName).second) {
+                                    indexColumns.emplace_back(columnName);
 
-                                auto columnProto = indexSettings->AddColumns();
-                                fillColumnProto(columnName, columnMeta, columnProto);
+                                    auto columnProto = indexSettings->AddColumns();
+                                    fillColumnProto(columnName, columnMeta, columnProto);
+                                }
                             }
                         }
 
@@ -1466,6 +1646,70 @@ private:
                 externalSink.SetSinkName(secureParams->first);
                 externalSink.SetAuthInfo(secureParams->second);
             }
+        }
+    }
+
+    void FillStreamLookupVectorTop(NKqpProto::TKqpPhyCnStreamLookup& streamLookupProto,
+        const TKqpCnStreamLookup& streamLookup, const TKqpStreamLookupSettings& settings) {
+        NKqpProto::TKqpPhyVectorTopK& vectorTopK = *streamLookupProto.MutableVectorTopK();
+        const auto implTablePath = streamLookup.Table().Path();
+        const auto mainTableFromImpl = TablesData->GetMainTableIfTableIsImplTableOfIndex(Cluster, implTablePath);
+        const auto mainTable = mainTableFromImpl ? mainTableFromImpl : &TablesData->ExistingTable(Cluster, implTablePath);
+
+        const TIndexDescription *indexDesc = nullptr;
+        for (const auto& index: mainTable->Metadata->Indexes) {
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree &&
+                index.Name == settings.VectorTopIndex) {
+                indexDesc = &index;
+            }
+        }
+        YQL_ENSURE(indexDesc);
+
+        // Index settings
+        auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
+        *vectorTopK.MutableSettings() = kmeansDesc.GetSettings().Getsettings();
+
+        // Column index
+        THashMap<TStringBuf, ui32> readColumnIndexes;
+        ui32 columnIdx = 0;
+        for (const auto& column: streamLookupProto.GetColumns()) {
+            readColumnIndexes[column] = columnIdx++;
+        }
+        YQL_ENSURE(readColumnIndexes.contains(settings.VectorTopColumn));
+        vectorTopK.SetColumn(readColumnIndexes.at(settings.VectorTopColumn));
+
+        // Unique columns - required when we read from the index posting table and overlap is enabled
+        if (settings.VectorTopDistinct) {
+            for (const auto& keyColumn: mainTable->Metadata->KeyColumnNames) {
+                YQL_ENSURE(readColumnIndexes.contains(keyColumn));
+                vectorTopK.AddDistinctColumns(readColumnIndexes.at(keyColumn));
+            }
+        }
+
+        // Limit - may be a parameter which will be linked later
+        TExprBase expr(settings.VectorTopLimit);
+        if (expr.Maybe<TCoUint64>()) {
+            auto* literal = vectorTopK.MutableLimit()->MutableLiteralValue();
+            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+        } else if (expr.Maybe<TCoParameter>()) {
+            vectorTopK.MutableLimit()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+        } else {
+            YQL_ENSURE(false, "Unexpected Limit callable " << expr.Ref().Content());
+        }
+
+        // Target vector - may be a parameter which will be linked later
+        expr = TExprBase(settings.VectorTopTarget);
+        if (expr.Maybe<TCoString>()) {
+            auto* literal = vectorTopK.MutableTargetVector()->MutableLiteralValue();
+            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
+            literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+        } else if (expr.Maybe<TCoParameter>()) {
+            vectorTopK.MutableTargetVector()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+        } else {
+            YQL_ENSURE(false, "Unexpected TargetVector callable " << expr.Ref().Content());
         }
     }
 
@@ -1728,6 +1972,9 @@ private:
                     YQL_ENSURE(false, "Unexpected lookup strategy for stream lookup: " << settings.Strategy);
             }
 
+            if (settings.VectorTopColumn) {
+                FillStreamLookupVectorTop(streamLookupProto, streamLookup, settings);
+            }
 
             return;
         }
@@ -1751,6 +1998,8 @@ private:
             // Index settings
             auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
             *vectorResolveProto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
+            vectorResolveProto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
+            vectorResolveProto.SetOverlapRatio(kmeansDesc.GetSettings().overlap_ratio());
 
             // Main table
             FillTablesMap(vectorResolve.Table(), tablesMap);

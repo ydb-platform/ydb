@@ -9,6 +9,7 @@
               "test_results_backup": "test_results/test_runs",
               "testowners": "test_results/analytics/testowners",
               "tests_monitor": "test_results/analytics/tests_monitor",
+              "test_muted_monitor_mart": "test_results/analytics/test_muted_monitor_mart",
               "test_history_fast": "test_results/analytics/test_history_fast",
               "github_issue_mapping": "test_results/analytics/github_issue_mapping",
               "flaky_tests_window": "test_results/analytics/flaky_tests_window_1_days",

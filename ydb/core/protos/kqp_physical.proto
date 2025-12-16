@@ -224,6 +224,8 @@ message TKqpPhyOpReadRanges {
     TKqpPhyValue ItemsLimit = 2;
     // Reverse sign, i.e. if user ask ORDER BY ... DESC we need to read table in reverse direction
     bool Reverse = 3;
+    // Vector top-K pushdown settings for brute force vector search
+    TKqpPhyVectorTopK VectorTopK = 4;
 }
 
 message TKqpPhyTableOperation {
@@ -301,6 +303,16 @@ enum EStreamLookupStrategy {
     SEMI_JOIN = 3;
 };
 
+message TKqpPhyVectorTopK {
+    // Top-K pushdown by vector distance between Column and TargetVector
+    // Where TargetVector and Limit may be runtime expressions
+    uint32 Column = 1;
+    Ydb.Table.VectorIndexSettings Settings = 2;
+    TKqpPhyValue TargetVector = 3;
+    TKqpPhyValue Limit = 4;
+    repeated uint32 DistinctColumns = 5;
+}
+
 message TKqpPhyCnStreamLookup {
     TKqpPhyTableId Table = 1;
     repeated string KeyColumns = 2;
@@ -312,6 +324,7 @@ message TKqpPhyCnStreamLookup {
     bool AllowNullKeys = 8;
     uint32 AllowNullKeysPrefixSize = 9;
     bool IsTableImmutable = 10;
+    TKqpPhyVectorTopK VectorTopK = 11;
 }
 
 message TKqpPhyCnVectorResolve {
@@ -325,6 +338,8 @@ message TKqpPhyCnVectorResolve {
     bytes OutputType = 8;
     uint32 ClusterColumnOutPos = 9;
     optional uint32 RootClusterColumnIndex = 10;
+    optional uint32 OverlapClusters = 11;
+    optional double OverlapRatio = 12;
 }
 
 message TKqpPhyCnSequencer {
@@ -401,6 +416,8 @@ message TKqpReadRangesSource {
     repeated string SkipNullKeys = 8;
     uint64 SequentialInFlightShards = 9;
     bool IsTableImmutable = 10;
+    // Vector top-K pushdown for brute force vector search
+    TKqpPhyVectorTopK VectorTopK = 11;
 }
 
 message TKqpExternalSource {
@@ -642,4 +659,6 @@ message TKqpPhyQuery {
     optional bool EnableHtapTx = 14;
     optional bool ForceImmediateEffectsExecution = 15;
     uint32 LangVer = 16;
+    optional bool DisableCheckpoints = 17;
+    optional bool EnableWatermarks = 18;
 }

@@ -10,13 +10,6 @@ namespace NYT::NQueryClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void Parenthesize(TStringBuilderBase* builder, const std::string& str)
-{
-    builder->AppendChar('(');
-    builder->AppendString(str);
-    builder->AppendChar(')');
-}
-
 void TQueryBuilder::SetSource(std::string source, int syntax, bool subquerySource)
 {
     Source_ = std::move(source);
@@ -212,8 +205,8 @@ std::string TQueryBuilder::Build()
 
 
     if (!WhereConjuncts_.empty()) {
-        wrapper->AppendFormat("WHERE");
-        JoinToString(&wrapper, WhereConjuncts_.begin(), WhereConjuncts_.end(), &Parenthesize, " AND ");
+        wrapper->AppendString("WHERE");
+        AppendBalancedConjunction(&wrapper, WhereConjuncts_.begin(), WhereConjuncts_.end());
     }
 
     if (!GroupByEntries_.empty()) {
@@ -230,7 +223,7 @@ std::string TQueryBuilder::Build()
             THROW_ERROR_EXCEPTION("Having without group by is not valid");
         }
         wrapper->AppendString("HAVING");
-        JoinToString(&wrapper, HavingConjuncts_.begin(), HavingConjuncts_.end(), &Parenthesize, " AND ");
+        AppendBalancedConjunction(&wrapper, HavingConjuncts_.begin(), HavingConjuncts_.end());
     }
 
     if (WithTotalsMode_ == EWithTotalsMode::AfterHaving) {
@@ -281,6 +274,33 @@ void TQueryBuilder::FormatOrderByEntry(TStringBuilderBase* builder, const TQuery
         builder->AppendString(directionString);
     }
 }
+
+void TQueryBuilder::AppendBalancedConjunction(
+    TStringBuilderBase* builder,
+    std::vector<std::string>::const_iterator begin,
+    std::vector<std::string>::const_iterator end)
+{
+    if (begin == end) {
+        return;
+    }
+
+    if (begin + 1 == end) {
+        builder->AppendString(*begin);
+
+        return;
+    }
+
+    auto midpoint = begin + (end - begin) / 2;
+
+    builder->AppendChar('(');
+    AppendBalancedConjunction(builder, begin, midpoint);
+
+    builder->AppendString(") AND (");
+
+    AppendBalancedConjunction(builder, midpoint, end);
+    builder->AppendChar(')');
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NQueryClient

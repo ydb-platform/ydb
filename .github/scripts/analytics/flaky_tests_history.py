@@ -12,18 +12,26 @@ def main():
 
     parser.add_argument('--build_type', default='relwithdebinfo', type=str, help='build types')
     parser.add_argument('--branch', default='main', type=str, help='branch')
+    parser.add_argument('--start-date', dest='start_date', type=str, help='Start date (YYYY-MM-DD), inclusive')
+    parser.add_argument('--end-date', dest='end_date', type=str, help='End date (YYYY-MM-DD), inclusive')
 
     args, unknown = parser.parse_known_args()
     build_type = args.build_type
     branch = args.branch
+    start_date_override = datetime.date.fromisoformat(args.start_date) if args.start_date else None
+    end_date_override = datetime.date.fromisoformat(args.end_date) if args.end_date else None
     
-    # Always use 1 day window
-    history_for_n_day = 1
+    if start_date_override and end_date_override and start_date_override > end_date_override:
+        raise ValueError("start-date must be earlier or equal to end-date")
     
     print(f'🚀 Starting flaky_tests_history.py')
-    print(f'   📅 Days window: {history_for_n_day}')
+    print(f'   📅 Days window: 1')
     print(f'   🔧 Build type: {build_type}')
     print(f'   🌿 Branch: {branch}')
+    if start_date_override:
+        print(f'   📍 Start date override: {start_date_override}')
+    if end_date_override:
+        print(f'   📍 End date override: {end_date_override}')
     
     with YDBWrapper() as ydb_wrapper:
         # Get table paths from config
@@ -46,20 +54,28 @@ def main():
             
             # YDB may return date_window as int (days since 1970-01-01) or datetime.date
             max_date_window = results[0].get('max_date_window') if results[0] else None
-            if max_date_window is not None:
-                # Convert int to date if needed
-                if isinstance(max_date_window, int):
-                    max_date_window = base_date + datetime.timedelta(days=max_date_window)
-                # Now max_date_window is datetime.date, can compare
-                if max_date_window > default_start_date:
-                    last_datetime = max_date_window
+            if start_date_override:
+                last_datetime = max(start_date_override, default_start_date)
+            else:
+                if max_date_window is not None:
+                    # Convert int to date if needed
+                    if isinstance(max_date_window, int):
+                        max_date_window = base_date + datetime.timedelta(days=max_date_window)
+                    # Now max_date_window is datetime.date, can compare
+                    if max_date_window > default_start_date:
+                        last_datetime = max_date_window
+                    else:
+                        last_datetime = default_start_date
                 else:
                     last_datetime = default_start_date
-            else:
-                last_datetime = default_start_date
-                
+            
+            today = end_date_override if end_date_override else datetime.date.today()
+            if last_datetime > today:
+                raise ValueError("Start date is after end date/today; nothing to process")
+            
             last_date = last_datetime.strftime('%Y-%m-%d')
-            print(f'📅 Last history date: {last_date}')
+            print(f'📅 Start history date: {last_date}')
+            print(f'📅 End history date: {today.strftime("%Y-%m-%d")}')
             
             # Create table if it doesn't exist
             create_table_sql = f"""
@@ -89,8 +105,7 @@ def main():
             ydb_wrapper.create_table(table_path, create_table_sql)
             
             # Process each date
-            today = datetime.date.today()
-            date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
+            date_list = [last_datetime + datetime.timedelta(days=x) for x in range((today - last_datetime).days + 1)]
             
             print(f'📊 Processing {len(date_list)} dates from {last_date} to {today}')
             
@@ -148,8 +163,8 @@ def main():
                                 status
                             from  `{test_runs_table}`
                             where
-                                run_timestamp <= Date('{date}') + Interval("P1D")
-                                and run_timestamp >= Date('{date}') - 2*Interval("P1D") 
+                                run_timestamp >= Date('{date}')
+                                and run_timestamp < Date('{date}') + Interval("P1D")
 
                                 and job_name in (
                                     'Nightly-run',
@@ -184,7 +199,7 @@ def main():
                         'test_name': row['test_name'],
                         'full_name': row['full_name'],
                         'date_window': row['date_base'],
-                        'days_ago_window': history_for_n_day,
+                        'days_ago_window': 1,
                         'build_type': row['build_type'],
                         'branch': row['branch'],
                         'first_run': row['first_run'],

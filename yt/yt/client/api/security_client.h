@@ -36,7 +36,7 @@ struct TCheckPermissionResult
     TError ToError(
         const std::string& user,
         NYTree::EPermission permission,
-        const std::optional<std::string>& columns = {}) const;
+        const std::optional<std::string>& column = {}) const;
 
     NSecurityClient::ESecurityAction Action;
     NObjectClient::TObjectId ObjectId;

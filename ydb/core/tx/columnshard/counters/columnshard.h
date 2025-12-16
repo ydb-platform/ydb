@@ -22,6 +22,11 @@ enum class EOverloadStatus {
     RejectProbability,
 };
 
+struct TOverloadStatus {
+    EOverloadStatus Status;
+    TString Reason;
+};
+
 enum class EWriteFailReason {
     Disabled /* "disabled" */ = 0,
     PutBlob /* "put_blob" */,

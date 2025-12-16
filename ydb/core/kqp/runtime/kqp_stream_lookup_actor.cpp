@@ -40,6 +40,7 @@ public:
         , AllowInconsistentReads(settings.GetAllowInconsistentReads())
         , UseFollowers(settings.GetAllowUseFollowers())
         , IsTableImmutable(settings.GetIsTableImmutable())
+        , HasVectorTopK(settings.HasVectorTopK())
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
@@ -49,6 +50,8 @@ public:
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TaskId, args.TypeEnv, args.HolderFactory, args.InputDesc))
         , IsolationLevel(settings.GetIsolationLevel())
         , Database(settings.GetDatabase())
+        , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
+        , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -92,10 +95,10 @@ public:
             ui64 rowsReadEstimate = ReadRowsCount;
             ui64 bytesReadEstimate = ReadBytesCount;
 
-            if (mstats) {
+            if (mstats && !HasVectorTopK) {
                 switch(LookupStrategy) {
                     case NKqpProto::EStreamLookupStrategy::LOOKUP: {
-                        // in lookup case we return as result actual data, that we read from the datashard.
+                        // in lookup case without top-K pushdown we return as result actual data, that we read from the datashard.
                         rowsReadEstimate = mstats->Inputs[InputIndex]->RowsConsumed;
                         bytesReadEstimate = mstats->Inputs[InputIndex]->BytesConsumed;
                         break;
@@ -118,6 +121,17 @@ public:
             }
 
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
+
+            // Add lock stats for broken locks from stream lookup operations
+            if (!BrokenLocks.empty()) {
+                NKqpProto::TKqpTaskExtraStats extraStats;
+                if (stats->HasExtra()) {
+                    stats->GetExtra().UnpackTo(&extraStats);
+                }
+                extraStats.MutableLockStats()->SetBrokenAsVictim(
+                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                stats->MutableExtra()->PackFrom(extraStats);
+            }
         }
     }
 
@@ -307,7 +321,7 @@ private:
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
-        auto overloaded = StreamLookupWorker->IsOverloaded();
+        auto overloaded = StreamLookupWorker->IsOverloaded(MaxRowsProcessing);
         if (!overloaded.has_value()) {
             FetchInputRows();
         } else {
@@ -450,6 +464,9 @@ private:
             }
         }
 
+        TotalBytesQuota -= MaxBytesDefaultQuota;
+        Counters->StreamLookupIteratorTotalQuotaBytesInFlight->Sub(MaxBytesDefaultQuota);
+
         if (!Snapshot.IsValid()) {
             Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
         }
@@ -507,6 +524,7 @@ private:
             }
         }
 
+
         YQL_ENSURE(read.LastSeqNo < record.GetSeqNo());
         read.LastSeqNo = record.GetSeqNo();
 
@@ -519,8 +537,14 @@ private:
             request->Record.SetSeqNo(record.GetSeqNo());
 
             auto defaultSettings = GetDefaultReadAckSettings()->Record;
-            request->Record.SetMaxRows(defaultSettings.GetMaxRows());
-            request->Record.SetMaxBytes(defaultSettings.GetMaxBytes());
+            request->Record.SetMaxRows(MaxRowsDefaultQuota);
+            request->Record.SetMaxBytes(MaxBytesDefaultQuota);
+
+            TotalBytesQuota += MaxBytesDefaultQuota;
+            Counters->StreamLookupIteratorTotalQuotaBytesInFlight->Add(MaxBytesDefaultQuota);
+            if (TotalBytesQuota > MaxTotalBytesQuota) {
+                Counters->StreamLookupIteratorTotalQuotaBytesExceeded->Inc();
+            }
 
             const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
 
@@ -662,9 +686,21 @@ private:
         }
 
         auto defaultSettings = GetDefaultReadSettings()->Record;
-        record.SetMaxRows(defaultSettings.GetMaxRows());
-        record.SetMaxBytes(defaultSettings.GetMaxBytes());
+        if (!MaxRowsDefaultQuota || !MaxBytesDefaultQuota) {
+            MaxRowsDefaultQuota = defaultSettings.GetMaxRows();
+            MaxBytesDefaultQuota = defaultSettings.GetMaxBytes();
+        }
+
+        record.SetMaxRows(MaxRowsDefaultQuota);
+        record.SetMaxBytes(MaxBytesDefaultQuota);
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+
+        TotalBytesQuota += MaxBytesDefaultQuota;
+        Counters->StreamLookupIteratorTotalQuotaBytesInFlight->Add(MaxBytesDefaultQuota);
+
+        if (TotalBytesQuota > MaxTotalBytesQuota) {
+            Counters->StreamLookupIteratorTotalQuotaBytesExceeded->Inc();
+        }
 
         CA_LOG_D(TStringBuilder() << "Send EvRead (stream lookup) to shardId=" << shardId
             << ", readId = " << record.GetReadId()
@@ -812,6 +848,7 @@ private:
     const bool AllowInconsistentReads;
     const bool UseFollowers;
     const bool IsTableImmutable;
+    const bool HasVectorTopK;
     const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;
@@ -835,6 +872,12 @@ private:
     // stats
     ui64 ReadRowsCount = 0;
     ui64 ReadBytesCount = 0;
+
+    size_t TotalBytesQuota = 0;
+    ui64 MaxTotalBytesQuota = 0;
+    size_t MaxRowsProcessing = 0;
+    size_t MaxBytesDefaultQuota = 0;
+    size_t MaxRowsDefaultQuota = 0;
 
     TIntrusivePtr<TKqpCounters> Counters;
     NWilson::TSpan LookupActorSpan;

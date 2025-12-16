@@ -114,11 +114,11 @@ public:
 };
 
 static void OutOfSpace(TEvDataShard::TEvUploadRowsResponse& response) {
-    response.Record.SetStatus(NKikimrTxDataShard::TError::OUT_OF_SPACE);
+    response.Record.SetStatus(NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE);
 }
 
 static void DiskSpaceExhausted(TEvDataShard::TEvUploadRowsResponse& response) {
-    response.Record.SetStatus(NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED);
+    response.Record.SetStatus(NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED);
 }
 
 static void WrongShardState(TEvDataShard::TEvUploadRowsResponse& response) {
@@ -143,11 +143,11 @@ static bool TryDelayS3UploadRows(TDataShard*, TEvDataShard::TEvUploadRowsRequest
 }
 
 static void OutOfSpace(TEvDataShard::TEvS3UploadRowsResponse& response) {
-    response.Record.SetStatus(NKikimrTxDataShard::TError::OUT_OF_SPACE);
+    response.Record.SetStatus(NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE);
 }
 
 static void DiskSpaceExhausted(TEvDataShard::TEvS3UploadRowsResponse& response) {
-    response.Record.SetStatus(NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED);
+    response.Record.SetStatus(NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED);
 }
 
 static void WrongShardState(TEvDataShard::TEvS3UploadRowsResponse& response) {
@@ -223,14 +223,14 @@ template <typename TEvResponse, bool IsWrite, typename TEvRequest>
 static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, TDataShard::ELogThrottlerType logThrottlerType) {
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
-    
+
     if (self->IsReplicated()) {
         rejectReasons = ERejectReasons::WrongState;
         rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at replicated table";
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Replicated, ctx, logThrottlerType);
         return true;
     }
-    
+
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
     if (self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReasons, rejectDescription)) {
         self->IncCounter(OverloadedCounter(ev));
@@ -255,13 +255,13 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
 
     if constexpr (IsWrite) {
         if (self->IsAnyChannelYellowStop()) {
-            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+            self->IncCounter(COUNTER_PREPARE_DISK_GROUP_OUT_OF_SPACE);
             rejectReasons = ERejectReasons::YellowChannels;
             rejectDescription = TStringBuilder() << "Cannot perform writes: out of disk space at tablet " << self->TabletID();
             Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &OutOfSpace, ctx, logThrottlerType);
             return true;
         } else if (self->IsSubDomainOutOfSpace()) {
-            self->IncCounter(COUNTER_PREPARE_DISK_SPACE_EXHAUSTED);
+            self->IncCounter(COUNTER_PREPARE_DATABASE_DISK_SPACE_QUOTA_EXCEEDED);
             rejectReasons = ERejectReasons::DiskSpace;
             rejectDescription = "Cannot perform writes: database is out of disk space";
             Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &DiskSpaceExhausted, ctx, logThrottlerType);
@@ -276,7 +276,7 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
     if (ShouldDelayOperation(ev)) {
         return;
     }
-    
+
     if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse, true>(this, ev, ctx, "bulk upsert", TDataShard::ELogThrottlerType::UploadRows_Reject)) {
         Executor()->Execute(new TTxUploadRows(this, ev), ctx);
     }
@@ -296,7 +296,7 @@ void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActo
     if (ShouldDelayOperation(ev)) {
         return;
     }
-    
+
     if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse, false>(this, ev, ctx, "erase", TDataShard::ELogThrottlerType::EraseRows_Reject)) {
         Executor()->Execute(new TTxEraseRows(this, ev), ctx);
     }

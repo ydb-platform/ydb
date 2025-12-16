@@ -148,7 +148,7 @@ namespace NKikimr {
         friend class TActorBootstrapped<TLocalSyncDataExtractorActor>;
 
         TIntrusivePtr<TVDiskContext> VCtx;
-        TActorId SkeletonId;
+        TActorId TargetId;
         TActorId ParentId;
         std::unique_ptr<TEvLocalSyncData> Ev;
 
@@ -161,7 +161,7 @@ namespace NKikimr {
                     << " dataSize# " << Ev->Data.size()
                     << " duration# %s" << (finishTime - startTime));
 
-            ctx.Send(new IEventHandle(SkeletonId, ParentId, Ev.release()));
+            ctx.Send(new IEventHandle(TargetId, ParentId, Ev.release()));
             PassAway();
         }
 
@@ -172,11 +172,11 @@ namespace NKikimr {
 
         TLocalSyncDataExtractorActor(
                 const TIntrusivePtr<TVDiskContext> &vctx,
-                const TActorId &skeletonId,
+                const TActorId &targetId,
                 const TActorId &parentId,
                 std::unique_ptr<TEvLocalSyncData> ev)
             : VCtx(vctx)
-            , SkeletonId(skeletonId)
+            , TargetId(targetId)
             , ParentId(parentId)
             , Ev(std::move(ev))
         {}

@@ -36,7 +36,7 @@ and **SQLAlchemy Core**.
 
 Supported features include:
 - Basic query execution via SQLAlchemy Core
-- `SELECT` queries with `JOIN`s
+- `SELECT` queries with `JOIN`s, `ARRAY JOIN`, and `FINAL` modifier
 - Lightweight `DELETE` statements
 
 The implementation does not include ORM support and is not intended as a full SQLAlchemy dialect. While it can support

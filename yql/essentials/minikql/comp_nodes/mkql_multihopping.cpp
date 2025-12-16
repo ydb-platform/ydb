@@ -16,12 +16,14 @@ namespace NMiniKQL {
 namespace {
 
 const TStatKey Hop_NewHopsCount("MultiHop_NewHopsCount", true);
-const TStatKey Hop_EarlyThrownEventsCount("MultiHop_EarlyThrownEventsCount", true);
+const TStatKey Hop_FutureEventsCount("MultiHop_FarFutureEventsCount", true);
+const TStatKey Hop_InvalidEventsCount("MultiHop_InvalidEventsCount", true);
 const TStatKey Hop_LateThrownEventsCount("MultiHop_LateThrownEventsCount", true);
 const TStatKey Hop_EmptyTimeCount("MultiHop_EmptyTimeCount", true);
 const TStatKey Hop_KeysCount("MultiHop_KeysCount", true);
 
 constexpr ui32 StateVersion = 1;
+constexpr ui32 StateVersionWithFutureEvents = 2;
 
 using TEqualsFunc = std::function<bool(NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod)>;
 using THashFunc = std::function<NYql::NUdf::THashType(NUdf::TUnboxedValuePod)>;
@@ -60,7 +62,7 @@ public:
             , StatesMap(0, hash, equal)
             , Ctx(ctx)
         {
-            if (!WatermarkMode && dataWatermarks) {
+            if (!watermarkMode && dataWatermarks) {
                 DataWatermarkTracker.emplace(TWatermarkTracker(delayHopCount * hopTime, hopTime));
             }
         }
@@ -77,17 +79,24 @@ public:
 
         struct TKeyState {
             std::vector<TBucket, TMKQLAllocator<TBucket>> Buckets; // circular buffer
-            ui64 HopIndex;                                         // Start index of current window
+            // Requires: Buckets.empty() || Buckets.size() >= IntervalHopCount size
+            ui64 HopIndex;     // Start index of current window
+            ui64 NextHopIndex; // Index after last defined event in the circular buffer (indexes *before* or equal to HopIndex are also valid and designates empty buffer)
+            // Requires: NextHopIndex <= HopIndex + Buckets.size() [using infinite-precision]
+            TMKQLMap<ui64, NUdf::TUnboxedValue> FutureEvents; // Aggregators for events >= HopIndex + Buckets.size()
 
             TKeyState(ui64 bucketsCount, ui64 hopIndex)
                 : Buckets(bucketsCount)
                 , HopIndex(hopIndex)
+                , NextHopIndex(hopIndex)
             {
             }
 
             TKeyState(TKeyState&& state)
                 : Buckets(std::move(state.Buckets))
                 , HopIndex(state.HopIndex)
+                , NextHopIndex(state.NextHopIndex)
+                , FutureEvents(std::move(state.FutureEvents))
             {
             }
         };
@@ -101,9 +110,27 @@ public:
             return Stream;
         }
 
+        inline void SerializeState(TOutputSerializer& out, const NUdf::TUnboxedValue& value) const {
+            Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(value));
+            if (Self->StateType) {
+                out.WriteUnboxedValue(Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType),
+                                      Self->OutSave->GetValue(Ctx));
+            }
+        }
+
         NUdf::TUnboxedValue Save() const override {
             MKQL_ENSURE(Ready.empty(), "Inconsistent state to save, not all elements are fetched");
-            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
+            bool hasFutureEvents = false;
+            for (const auto& [key, state] : StatesMap) {
+                if (!state.FutureEvents.empty()) {
+                    hasFutureEvents = true;
+                    break;
+                }
+            }
+            // when no FutureEvents present, saves backward-compatible version 1 state;
+            // when FutureEvents present, saves incompatible version 2 state;
+            // acceptable since FutureEvents are only present in not-yet-released watermark code
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, (hasFutureEvents ? StateVersionWithFutureEvents : StateVersion), Ctx);
 
             out.Write<ui32>(StatesMap.size());
             for (const auto& [key, state] : StatesMap) {
@@ -113,12 +140,16 @@ public:
                 for (const auto& bucket : state.Buckets) {
                     out(bucket.HasValue);
                     if (bucket.HasValue) {
-                        Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
-                        if (Self->StateType) {
-                            out.WriteUnboxedValue(Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType),
-                                                  Self->OutSave->GetValue(Ctx));
-                        }
+                        SerializeState(out, bucket.Value);
                     }
+                }
+                if (!hasFutureEvents) {
+                    continue;
+                }
+                out.Write<ui32>(state.FutureEvents.size());
+                for (const auto& [time, value] : state.FutureEvents) {
+                    out.Write<ui64>(time);
+                    SerializeState(out, value);
                 }
             }
 
@@ -137,9 +168,19 @@ public:
             return true;
         }
 
+        inline NUdf::TUnboxedValue DeserializeState(TInputSerializer& in) {
+            if (Self->StateType) {
+                Self->InLoad->SetValue(Ctx, in.ReadUnboxedValue(Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType), Ctx));
+            }
+            return Self->OutLoad->GetValue(Ctx);
+        }
+
         void LoadStateImpl(TInputSerializer& in) {
             const auto loadStateVersion = in.GetStateVersion();
-            if (loadStateVersion != StateVersion) {
+            bool hasFutureEvents = false;
+            if (loadStateVersion == StateVersionWithFutureEvents) {
+                hasFutureEvents = true;
+            } else if (loadStateVersion != StateVersion) {
                 THROW yexception() << "Invalid state version " << loadStateVersion;
             }
 
@@ -151,17 +192,43 @@ public:
                 const auto hopIndex = in.Read<ui64>();
                 const auto bucketsSize = in.Read<ui32>();
 
+                const auto hopBucketIndex = hopIndex % bucketsSize;
+
                 TKeyState keyState(bucketsSize, hopIndex);
-                for (auto& bucket : keyState.Buckets) {
+                for (ui64 i = 0; i < bucketsSize; ++i) {
+                    auto& bucket = keyState.Buckets[i];
                     in(bucket.HasValue);
                     if (bucket.HasValue) {
-                        if (Self->StateType) {
-                            Self->InLoad->SetValue(Ctx, in.ReadUnboxedValue(Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType), Ctx));
+                        const ui64 time = hopIndex + i + (i < hopBucketIndex ? bucketsSize : 0) - hopBucketIndex;
+                        if (Y_UNLIKELY(time < hopIndex)) {
+                            THROW yexception() << "Invalid state: time underflow " << time << " < " << hopIndex;
                         }
-                        bucket.Value = Self->OutLoad->GetValue(Ctx);
+                        if (Y_UNLIKELY(time == Max<ui64>())) {
+                            THROW yexception() << "Invalid state: invalid time " << time;
+                        }
+                        keyState.NextHopIndex = Max(keyState.NextHopIndex, time + 1);
+                        bucket.Value = DeserializeState(in);
+                    }
+                }
+                if (hasFutureEvents) {
+                    const auto futureEventsSize = in.Read<ui32>();
+                    for (ui32 i = 0; i < futureEventsSize; ++i) {
+                        const auto time = in.Read<ui64>();
+                        if (Y_UNLIKELY(Max(time, keyState.HopIndex) - keyState.HopIndex < keyState.Buckets.size())) {
+                            THROW yexception() << "Invalid state: time underflow " << time << " < " << keyState.HopIndex << " + " << keyState.Buckets.size();
+                        }
+                        if (Y_UNLIKELY(time == Max<ui64>())) {
+                            THROW yexception() << "Invalid state: invalid time " << time;
+                        }
+                        auto [_, inserted] = keyState.FutureEvents.emplace(time, DeserializeState(in));
+                        Y_DEBUG_ABORT_UNLESS(inserted);
+                        if (Y_UNLIKELY(!inserted)) {
+                            THROW yexception() << "Invalid state: duplicated time " << time;
+                        }
                     }
                 }
                 StatesMap.emplace(key, std::move(keyState));
+
                 key.Ref();
             }
 
@@ -173,35 +240,25 @@ public:
         }
 
         TMaybe<TInstant> GetWatermark() {
-            if (!WatermarkMode) {
-                return Nothing();
-            }
             return Watermark.WatermarkIn;
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (!Ready.empty()) {
+            if (!Ready.empty()) { // Fastpath
                 result = std::move(Ready.front());
                 Ready.pop_front();
                 return NUdf::EFetchStatus::Ok;
             }
-            if (PendingYield) {
-                PendingYield = false;
-                return NUdf::EFetchStatus::Yield;
-            }
-
-            if (Finished) {
-                return NUdf::EFetchStatus::Finish;
-            }
-
-            i64 EarlyEventsThrown = 0;
-            i64 LateEventsThrown = 0;
+            i64 farFutureEventsCount = 0;
+            i64 invalidEventsThrown = 0;
+            i64 lateEventsThrown = 0;
             i64 newHopsStat = 0;
             i64 emptyTimeCtStat = 0;
 
             Y_DEFER {
-                MKQL_ADD_STAT(Ctx.Stats, Hop_EarlyThrownEventsCount, EarlyEventsThrown);
-                MKQL_ADD_STAT(Ctx.Stats, Hop_LateThrownEventsCount, LateEventsThrown);
+                MKQL_ADD_STAT(Ctx.Stats, Hop_FutureEventsCount, farFutureEventsCount);
+                MKQL_ADD_STAT(Ctx.Stats, Hop_InvalidEventsCount, invalidEventsThrown);
+                MKQL_ADD_STAT(Ctx.Stats, Hop_LateThrownEventsCount, lateEventsThrown);
                 MKQL_ADD_STAT(Ctx.Stats, Hop_NewHopsCount, newHopsStat);
                 MKQL_ADD_STAT(Ctx.Stats, Hop_EmptyTimeCount, emptyTimeCtStat);
             };
@@ -213,30 +270,29 @@ public:
                     return NUdf::EFetchStatus::Ok;
                 }
 
+                if (PendingYield) {
+                    PendingYield = false;
+                    return NUdf::EFetchStatus::Yield;
+                }
+
+                if (Finished) {
+                    return NUdf::EFetchStatus::Finish;
+                }
+
                 const auto status = Stream.Fetch(item);
                 if (status != NUdf::EFetchStatus::Ok) {
                     if (status == NUdf::EFetchStatus::Finish) {
                         CloseOldBuckets(Max<ui64>(), newHopsStat);
                         Finished = true;
-                        if (!Ready.empty()) {
-                            result = std::move(Ready.front());
-                            Ready.pop_front();
-                            return NUdf::EFetchStatus::Ok;
-                        }
+                        continue;
                     } else if (status == NUdf::EFetchStatus::Yield) {
-                        if (!WatermarkMode) {
-                            return status;
+                        if (WatermarkMode) {
+                            if (auto watermark = GetWatermark()) {
+                                CloseOldBuckets(watermark->MicroSeconds(), newHopsStat);
+                                PendingYield = true;
+                                continue;
+                            }
                         }
-                        PendingYield = true;
-                        if (auto watermark = GetWatermark()) {
-                            CloseOldBuckets(watermark->MicroSeconds(), newHopsStat);
-                        }
-                        if (!Ready.empty()) {
-                            result = std::move(Ready.front());
-                            Ready.pop_front();
-                            return NUdf::EFetchStatus::Ok;
-                        }
-                        PendingYield = false;
                         return NUdf::EFetchStatus::Yield;
                     }
                     return status;
@@ -253,20 +309,32 @@ public:
                 const auto ts = time.Get<ui64>();
                 const auto hopIndex = ts / HopTime;
 
-                const auto watermark = GetWatermark();
-                auto& keyState = GetOrCreateKeyState(key, watermark ? watermark->MicroSeconds() / HopTime : hopIndex);
+                const auto initialBufferPosition = WatermarkMode ? GetWatermark().GetOrElse(TInstant::Zero()).MicroSeconds() / HopTime : hopIndex;
+                auto& keyState = GetOrCreateKeyState(key, initialBufferPosition);
                 if (hopIndex < keyState.HopIndex) {
-                    ++LateEventsThrown;
+                    ++lateEventsThrown;
+                    continue;
+                }
+                if (Y_UNLIKELY(hopIndex == Max<ui64>())) { // reject invalid timestamp
+                    ++invalidEventsThrown;
+                    continue;
+                }
+                if (WatermarkMode && (hopIndex - keyState.HopIndex >= keyState.Buckets.size())) {
+                    ++farFutureEventsCount;
+                    auto [it, inserted] = keyState.FutureEvents.try_emplace(hopIndex);
+                    auto& [_, value] = *it;
+                    if (inserted) {
+                        value = Self->OutInit->GetValue(Ctx);
+                    } else {
+                        Self->Key->SetValue(Ctx, std::move(key));
+                        Self->State->SetValue(Ctx, std::move(value));
+                        value = Self->OutUpdate->GetValue(Ctx);
+                    }
                     continue;
                 }
 
-                if constexpr (false) { // TODO: if (WatermarkMode) {
-                    if (hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount) {
-                        ++EarlyEventsThrown;
-                        continue;
-                    }
-                } else {
-                    // Overflow is not possible, because hopIndex is a product of a division
+                // Overflow is not possible, because hopIndex is a product of a division
+                if (!WatermarkMode) {
                     auto closeBeforeIndex = Max<i64>(hopIndex + 1 - DelayHopCount - IntervalHopCount, 0);
                     CloseOldBucketsForKey(key, keyState, closeBeforeIndex, newHopsStat);
                 }
@@ -276,10 +344,11 @@ public:
                     bucket.Value = Self->OutInit->GetValue(Ctx);
                     bucket.HasValue = true;
                 } else {
-                    Self->Key->SetValue(Ctx, NUdf::TUnboxedValue(key));
-                    Self->State->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
+                    Self->Key->SetValue(Ctx, std::move(key));
+                    Self->State->SetValue(Ctx, std::move(bucket.Value));
                     bucket.Value = Self->OutUpdate->GetValue(Ctx);
                 }
+                keyState.NextHopIndex = Max(keyState.NextHopIndex, hopIndex + 1);
 
                 if (DataWatermarkTracker) {
                     if (const auto newWatermark = DataWatermarkTracker->HandleNextEventTime(ts)) {
@@ -304,6 +373,30 @@ public:
             return iter.first->second;
         }
 
+        inline void UpdateAggregation(const NUdf::TUnboxedValue& value, TMaybe<NUdf::TUnboxedValue>& aggregated) {
+            if (!aggregated) { // todo: clone
+                Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(value));
+                Self->InLoad->SetValue(Ctx, Self->OutSave->GetValue(Ctx));
+                aggregated = Self->OutLoad->GetValue(Ctx);
+            } else {
+                Self->State->SetValue(Ctx, NUdf::TUnboxedValue(value));
+                Self->State2->SetValue(Ctx, std::move(*aggregated));
+                aggregated = Self->OutMerge->GetValue(Ctx);
+            }
+        }
+
+        inline ui64 FinishAggregation(const NUdf::TUnboxedValue& key, ui64 curHopIndex, TMaybe<NUdf::TUnboxedValue>& aggregated) {
+            if (!aggregated) {
+                return 0;
+            }
+            Self->Key->SetValue(Ctx, NUdf::TUnboxedValue(key));
+            Self->State->SetValue(Ctx, std::move(*aggregated));
+            // Outer code requires window end time (not start as could be expected)
+            Self->Time->SetValue(Ctx, NUdf::TUnboxedValuePod((curHopIndex + IntervalHopCount) * HopTime));
+            Ready.emplace_back(Self->OutFinish->GetValue(Ctx));
+            return 1;
+        }
+
         // Will return true if key state became empty
         bool CloseOldBucketsForKey(
             const NUdf::TUnboxedValue& key,
@@ -312,71 +405,107 @@ public:
             i64& newHopsStat)
         {
             auto& bucketsForKey = keyState.Buckets;
+            auto curHopIndex = keyState.HopIndex;
+            auto curHopIndexModBuckets = curHopIndex % bucketsForKey.size();
 
-            bool becameEmpty = false;
-            for (auto i = 0U; i < bucketsForKey.size(); ++i) {
-                const auto curHopIndex = keyState.HopIndex;
-                if (curHopIndex >= closeBeforeIndex) {
-                    break;
-                }
+            if (curHopIndex > closeBeforeIndex) {
+                return keyState.NextHopIndex <= keyState.HopIndex && keyState.FutureEvents.empty();
+            }
 
-                i64 lastIndexWithValue = -1;
+            auto futureIt = keyState.FutureEvents.begin();
+
+            Y_DEBUG_ABORT_UNLESS(keyState.FutureEvents.empty() || futureIt->first >= keyState.NextHopIndex);
+
+            // be careful with overflows: HopIndex + Buckets.size() *may* overflow;
+            // and NextHopIndex - HopIndex may underflow
+            // (the only illegal value for time is Max<ui64>(), hence NextHopIndex never overflows to 0)
+            const auto circularBufferLimit = Min(closeBeforeIndex, keyState.NextHopIndex);
+
+            while (curHopIndex < circularBufferLimit) {
                 TMaybe<NUdf::TUnboxedValue> aggregated;
-                for (ui64 j = 0; j < IntervalHopCount; j++) {
-                    const auto curBucketIndex = (curHopIndex + j) % bucketsForKey.size();
-                    const auto& bucket = bucketsForKey[curBucketIndex];
+                Y_DEBUG_ABORT_UNLESS(curHopIndexModBuckets == curHopIndex % bucketsForKey.size());
+                // no overflow
+                const ui64 intervalHopLimit = Min(IntervalHopCount, keyState.NextHopIndex - curHopIndex);
+                auto jBucketIndex = curHopIndexModBuckets;
+                for (ui64 j = 0; j < intervalHopLimit; ++j, ++jBucketIndex) {
+                    if (jBucketIndex == bucketsForKey.size()) { // (from previous iteration)
+                        jBucketIndex = 0;
+                    }
+                    Y_DEBUG_ABORT_UNLESS(jBucketIndex == (j + curHopIndex) % bucketsForKey.size());
+                    const auto& bucket = bucketsForKey[jBucketIndex];
                     if (!bucket.HasValue) {
                         continue;
                     }
-
-                    if (!aggregated) { // todo: clone
-                        Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
-                        Self->InLoad->SetValue(Ctx, Self->OutSave->GetValue(Ctx));
-                        aggregated = Self->OutLoad->GetValue(Ctx);
-                    } else {
-                        Self->State->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
-                        Self->State2->SetValue(Ctx, NUdf::TUnboxedValue(*aggregated));
-                        aggregated = Self->OutMerge->GetValue(Ctx);
-                    }
-
-                    lastIndexWithValue = Max<i64>(lastIndexWithValue, j);
+                    UpdateAggregation(bucket.Value, aggregated);
                 }
 
-                if (aggregated) {
-                    Self->Key->SetValue(Ctx, NUdf::TUnboxedValue(key));
-                    Self->State->SetValue(Ctx, NUdf::TUnboxedValue(*aggregated));
-                    // Outer code requires window end time (not start as could be expected)
-                    Self->Time->SetValue(Ctx, NUdf::TUnboxedValuePod((curHopIndex + IntervalHopCount) * HopTime));
-                    Ready.emplace_back(Self->OutFinish->GetValue(Ctx));
-
-                    newHopsStat++;
+                for (auto j = futureIt; j != keyState.FutureEvents.end() && j->first - IntervalHopCount < curHopIndex; ++j) {
+                    // note: FutureEvents never overlaps with circular buffer
+                    Y_DEBUG_ABORT_UNLESS(j->first >= curHopIndex + intervalHopLimit);
+                    UpdateAggregation(j->second, aggregated);
                 }
 
-                auto& clearBucket = bucketsForKey[curHopIndex % bucketsForKey.size()];
+                newHopsStat += FinishAggregation(key, curHopIndex, aggregated);
+
+                // advance circular buffer; curHopIndex % Buckets.size() becomes curHopIndex + Buckets.size()
+                auto& clearBucket = bucketsForKey[curHopIndexModBuckets];
                 clearBucket.Value = NUdf::TUnboxedValue();
                 clearBucket.HasValue = false;
 
-                keyState.HopIndex++;
+                ++curHopIndex;
+                if (++curHopIndexModBuckets == bucketsForKey.size()) {
+                    curHopIndexModBuckets = 0;
+                }
+            }
 
-                if (lastIndexWithValue == 0) {
-                    // Check if there is extra data in delayed buckets
-                    for (ui64 j = IntervalHopCount; j < bucketsForKey.size(); j++) {
-                        const auto curBucketIndex = (curHopIndex + j) % bucketsForKey.size();
-                        const auto& bucket = bucketsForKey[curBucketIndex];
-                        if (bucket.HasValue) {
-                            lastIndexWithValue = Max<i64>(lastIndexWithValue, j);
-                        }
+            if (keyState.FutureEvents.empty()) {
+                curHopIndex = closeBeforeIndex;
+            }
+
+            Y_DEBUG_ABORT_UNLESS(futureIt == keyState.FutureEvents.end() || futureIt->first >= keyState.Buckets.size());
+            // handle events from FutureEvents between end of circular buffer and closeBeforeIndex
+            // (note that this loop won't be entered unless circular buffer is completely empty)
+            for (; curHopIndex < closeBeforeIndex; ++curHopIndex) {
+                Y_DEBUG_ABORT_UNLESS(curHopIndex >= keyState.NextHopIndex);
+                // Skip completely empty windows: move curHopIndex
+                // so that [curHopIndex:curHopIndex + IntervalHopCount] contains at least one key
+                // Note: overflow impossible: futureIt->first >= Buckets.size() > IntervalHopHount - 1
+                if (curHopIndex < futureIt->first - (IntervalHopCount - 1)) {
+                    curHopIndex = futureIt->first - (IntervalHopCount - 1);
+                    if (curHopIndex >= closeBeforeIndex) {
+                        break;
                     }
+                }
 
-                    if (lastIndexWithValue == 0) {
-                        becameEmpty = true;
+                TMaybe<NUdf::TUnboxedValue> aggregated;
+                // Note: overflow impossible:
+                // j->first >= futureIt->first since FutureEvents is ordered map
+                // futureIt->first >= Buckets.size() >= IntervalHopCount
+                for (auto j = futureIt; j != keyState.FutureEvents.end() && j->first - IntervalHopCount < curHopIndex; ++j) {
+                    UpdateAggregation(j->second, aggregated);
+                }
+
+                newHopsStat += FinishAggregation(key, curHopIndex, aggregated);
+                if (futureIt->first == curHopIndex) {
+                    futureIt = keyState.FutureEvents.erase(futureIt);
+                    if (futureIt == keyState.FutureEvents.end()) {
                         break;
                     }
                 }
             }
 
-            keyState.HopIndex = Max<ui64>(keyState.HopIndex, closeBeforeIndex);
-            return becameEmpty;
+            // move buckets from FutureEvents to circular buffer
+            Y_DEBUG_ABORT_UNLESS(futureIt == keyState.FutureEvents.end() || futureIt->first >= keyState.Buckets.size());
+            // overflow impossible (but closeBeforeIndex + keyState.Buckets.size()) *may* overflow)
+            for (; futureIt != keyState.FutureEvents.end() && futureIt->first - keyState.Buckets.size() < closeBeforeIndex; futureIt = keyState.FutureEvents.erase(futureIt)) {
+                auto& bucket = keyState.Buckets[futureIt->first % keyState.Buckets.size()];
+                keyState.NextHopIndex = futureIt->first + 1;
+                bucket.Value = std::move(futureIt->second);
+                bucket.HasValue = true;
+            }
+
+            keyState.HopIndex = closeBeforeIndex;
+            return keyState.NextHopIndex <= keyState.HopIndex && keyState.FutureEvents.empty();
         }
 
         void CloseOldBuckets(ui64 watermarkTs, i64& newHops) {

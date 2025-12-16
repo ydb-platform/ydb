@@ -61,6 +61,10 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
         MvccSnapshot.emplace(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId());
     }
 
+    if (record.HasLockMode()) {
+        LockMode = TDataShardUserDb::ELockMode(record.GetLockMode());
+    }
+
     OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;

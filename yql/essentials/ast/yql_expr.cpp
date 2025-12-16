@@ -935,7 +935,7 @@ TExprNode::TListType Compile(const TAstNode& node, TContext& ctx);
 
 TExprNode::TPtr CompileQuote(const TAstNode& node, TContext& ctx) {
     if (node.IsAtom()) {
-        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), TString(node.GetContent()), node.GetFlags()));
+        return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), node.GetContent(), node.GetFlags()));
     } else {
         TExprNode::TListType children;
         children.reserve(node.GetChildrenCount());
@@ -977,7 +977,7 @@ TExprNode::TListType CompileLambda(const TAstNode& node, TContext& ctx) {
     TExprNode::TListType argNodes;
     for (ui32 index = 0; index < params->GetChildrenCount(); ++index) {
         auto arg = params->GetChild(index);
-        auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), TString(arg->GetContent())));
+        auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), arg->GetContent()));
         argNodes.push_back(lambdaArg);
         auto& binding = ctx.Frames.back().Bindings[arg->GetContent()];
         if (!binding.empty()) {
@@ -1681,7 +1681,7 @@ TExprNode::TListType Compile(const TAstNode& node, TContext& ctx) {
         std::move(r.begin(), r.end(), std::back_inserter(children));
     }
 
-    return {ctx.ProcessNode(node, ctx.Expr.NewCallable(node.GetPosition(), TString(function), std::move(children)))};
+    return {ctx.ProcessNode(node, ctx.Expr.NewCallable(node.GetPosition(), function, std::move(children)))};
 }
 
 template <typename T>
@@ -1747,8 +1747,8 @@ struct TVisitNodeContext {
             }
         }
 
-        static const TString stub;
-        return stub;
+        static const TString Stub;
+        return Stub;
     }
 
     size_t FindCommonAncestor(size_t one, size_t two) const {
@@ -3354,6 +3354,30 @@ ui64 MakePgExtensionMask(ui32 extensionIndex) {
     return 1ull << (extensionIndex - 1);
 }
 
+TExprCycleDetector::TExprCycleDetector(ui64 maxQueueSize)
+    : MaxQueueSize_(maxQueueSize)
+{
+}
+
+void TExprCycleDetector::Reset() {
+    Queue_.clear();
+    Set_.clear();
+}
+
+void TExprCycleDetector::AddNode(const TExprNode& node) {
+    auto hash = MakeCacheKey(node);
+    if (!Set_.insert(hash).second) {
+        throw yexception() << "Graph cycle detected";
+    }
+
+    Queue_.push(hash);
+    if (Queue_.size() > MaxQueueSize_) {
+        auto prevHash = Queue_.front();
+        Set_.erase(prevHash);
+        Queue_.pop();
+    }
+}
+
 TExprContext::TExprContext(ui64 nextUniqueId)
     : StringPool(4096)
     , NextUniqueId(nextUniqueId)
@@ -3387,7 +3411,7 @@ TPositionHandle TExprContext::AppendPosition(const TPosition& pos) {
     return *inserted.first;
 }
 
-TPosition TExprContext::GetPosition(TPositionHandle handle) const {
+const TPosition& TExprContext::GetPosition(TPositionHandle handle) const {
     YQL_ENSURE(handle.Handle_ < Positions_.size(), "Unknown PositionHandle");
     return Positions_[handle.Handle_];
 }
@@ -3420,6 +3444,7 @@ void TExprContext::Reset() {
     IssueManager.Reset();
     Step.Reset();
     RepeatTransformCounter = 0;
+    ResetCycleDetector();
 }
 
 bool TExprContext::IsEqual(TPositionHandle a, TPositionHandle b) const {

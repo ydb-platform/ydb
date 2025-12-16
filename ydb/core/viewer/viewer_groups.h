@@ -105,6 +105,11 @@ enum class EGroupFields : ui8 {
     PDisk, // PDisk information
     Latency,
     PileName,
+    MaxPDiskUsage,
+    MaxVDiskSlotUsage,
+    MaxVDiskRawUsage,
+    MaxNormalizedOccupancy,
+    CapacityAlert,
     COUNT
 };
 
@@ -194,6 +199,7 @@ public:
         ui64 Category = 0;
         TString DecommitStatus;
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
+        float PDiskUsage = 0;
 
         void SetCategory(ui64 category) {
             Category = category;
@@ -246,6 +252,10 @@ public:
         bool Donor = false;
         std::vector<TVSlotId> Donors;
         bool Present = false;
+        float VDiskSlotUsage = 0;
+        float VDiskRawUsage = 0;
+        float NormalizedOccupancy = 0;
+        NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlert = {};
 
         TString GetVDiskId() const {
             return TStringBuilder() << VDiskId.GroupID.GetRawId() << '-'
@@ -286,7 +296,11 @@ public:
         NKikimrViewer::EFlag DiskSpace = NKikimrViewer::EFlag::Grey;
         float DiskSpaceUsage = 0; // the highest
         TString PileName;
-
+        float MaxPDiskUsage = 0;
+        float MaxVDiskSlotUsage = 0;
+        float MaxVDiskRawUsage = 0;
+        float MaxNormalizedOccupancy = 0;
+        NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlert = {};
         std::vector<TVDisk> VDisks;
         std::vector<TNodeId> VDiskNodeIds; // filter nodes to request disk info from the whiteboard. could be duplicated.
 
@@ -463,11 +477,13 @@ public:
             ui64 limit = 0;
             DiskSpace = NKikimrViewer::EFlag::Grey;
             DiskSpaceUsage = 0;
+            MaxPDiskUsage = 0;
             for (TVDisk& vdisk : VDisks) {
                 auto itPDisk = pDisks.find(vdisk.VSlotId);
                 if (itPDisk != pDisks.end()) {
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
+                    MaxPDiskUsage = std::max(MaxPDiskUsage, itPDisk->second.PDiskUsage);
                     ui64 slotSize = itPDisk->second.GetSlotTotalSize();
                     ui64 slotAvailable = slotSize > vdisk.AllocatedSize ? slotSize - vdisk.AllocatedSize : 0;
                     if (slotAvailable < vdisk.AvailableSize || vdisk.AvailableSize == 0) {
@@ -490,6 +506,20 @@ public:
                 DiskSpace = std::max(DiskSpace, NKikimrViewer::EFlag::Yellow);
             } else {
                 DiskSpace = std::max(DiskSpace, NKikimrViewer::EFlag::Green);
+            }
+        }
+
+        void CalcCapacityMetrics() {
+            MaxVDiskSlotUsage = 0;
+            MaxNormalizedOccupancy = 0;
+            MaxVDiskRawUsage = 0;
+            CapacityAlert = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+
+            for (TVDisk& vdisk : VDisks) {
+                MaxVDiskSlotUsage = std::max<float>(MaxVDiskSlotUsage, vdisk.VDiskSlotUsage);
+                MaxNormalizedOccupancy = std::max<float>(MaxNormalizedOccupancy, vdisk.NormalizedOccupancy);
+                MaxVDiskRawUsage = std::max<float>(MaxVDiskRawUsage, vdisk.VDiskRawUsage);
+                CapacityAlert = std::max(CapacityAlert, vdisk.CapacityAlert);
             }
         }
 
@@ -547,6 +577,9 @@ public:
                 case EGroupFields::PileName:
                     groupName = PileName;
                     break;
+                case EGroupFields::CapacityAlert:
+                    groupName = NKikimrBlobStorage::TPDiskSpaceColor::E_Name(CapacityAlert);
+                    break;
                 default:
                     break;
             }
@@ -577,6 +610,15 @@ public:
                     return MissingDisks;
                 case EGroupFields::Latency:
                     return PutTabletLogLatency;
+                case EGroupFields::MaxPDiskUsage:
+                    return (float)MaxPDiskUsage;
+                case EGroupFields::MaxVDiskSlotUsage:
+                case EGroupFields::CapacityAlert:
+                    return (float)MaxVDiskSlotUsage;
+                case EGroupFields::MaxNormalizedOccupancy:
+                    return (float)MaxNormalizedOccupancy;
+                case EGroupFields::MaxVDiskRawUsage:
+                    return (float)MaxVDiskRawUsage;
                 default:
                     return TString();
             }
@@ -657,7 +699,12 @@ public:
     const TFieldsType FieldsGroupAvailableAndDiskSpace = TFieldsType().set(+EGroupFields::Available)
                                                                       .set(+EGroupFields::Limit)
                                                                       .set(+EGroupFields::Usage)
-                                                                      .set(+EGroupFields::DiskSpaceUsage);
+                                                                      .set(+EGroupFields::DiskSpaceUsage)
+                                                                      .set(+EGroupFields::MaxPDiskUsage)
+                                                                      .set(+EGroupFields::MaxVDiskSlotUsage)
+                                                                      .set(+EGroupFields::MaxNormalizedOccupancy)
+                                                                      .set(+EGroupFields::MaxVDiskRawUsage)
+                                                                      .set(+EGroupFields::CapacityAlert);
     const TFieldsType FieldsHive = TFieldsType().set(+EGroupFields::AllocationUnits);
     const TFieldsType FieldsWbGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
@@ -668,7 +715,12 @@ public:
                                                    .set(+EGroupFields::VDisk)
                                                    .set(+EGroupFields::PDisk)
                                                    .set(+EGroupFields::Read)
-                                                   .set(+EGroupFields::Write);
+                                                   .set(+EGroupFields::Write)
+                                                   .set(+EGroupFields::MaxPDiskUsage)
+                                                   .set(+EGroupFields::MaxVDiskSlotUsage)
+                                                   .set(+EGroupFields::MaxNormalizedOccupancy)
+                                                   .set(+EGroupFields::MaxVDiskRawUsage)
+                                                   .set(+EGroupFields::CapacityAlert);
 
     const std::unordered_map<EGroupFields, TFieldsType> DependentFields = {
         { EGroupFields::DiskSpaceUsage, TFieldsType().set(+EGroupFields::PDisk)
@@ -685,6 +737,11 @@ public:
         { EGroupFields::MissingDisks, TFieldsType().set(+EGroupFields::VDisk) },
         { EGroupFields::State, TFieldsType().set(+EGroupFields::VDisk) },
         { EGroupFields::Encryption, TFieldsType().set(+EGroupFields::VDisk) },
+        { EGroupFields::MaxPDiskUsage, TFieldsType().set(+EGroupFields::NodeId) },
+        { EGroupFields::MaxVDiskSlotUsage, TFieldsType().set(+EGroupFields::NodeId) },
+        { EGroupFields::MaxNormalizedOccupancy, TFieldsType().set(+EGroupFields::NodeId) },
+        { EGroupFields::MaxVDiskRawUsage, TFieldsType().set(+EGroupFields::NodeId) },
+        { EGroupFields::CapacityAlert, TFieldsType().set(+EGroupFields::NodeId) },
     };
 
     bool FieldsNeeded(TFieldsType fields) const {
@@ -754,6 +811,16 @@ public:
             result = EGroupFields::Available;
         } else if (field == "PileName") {
             result = EGroupFields::PileName;
+        } else if (field == "CapacityAlert") {
+            result = EGroupFields::CapacityAlert;
+        } else if (field == "MaxPDiskUsage") {
+            result = EGroupFields::MaxPDiskUsage;
+        } else if (field == "MaxVDiskSlotUsage") {
+            result = EGroupFields::MaxVDiskSlotUsage;
+        } else if (field == "MaxNormalizedOccupancy") {
+            result = EGroupFields::MaxNormalizedOccupancy;
+        } else if (field == "MaxVDiskRawUsage") {
+            result = EGroupFields::MaxVDiskRawUsage;
         }
         return result;
     }
@@ -1139,6 +1206,7 @@ public:
                 case EGroupFields::DiskSpaceUsage:
                 case EGroupFields::MissingDisks:
                 case EGroupFields::Latency:
+                case EGroupFields::CapacityAlert:
                     GroupCollection();
                     SortCollection(GroupGroups, [](const TGroupGroup& groupGroup) { return groupGroup.SortKey; }, true);
                     NeedGroup = false;
@@ -1154,6 +1222,10 @@ public:
                 case EGroupFields::Available:
                 case EGroupFields::AllocationUnits:
                 case EGroupFields::PDiskId:
+                case EGroupFields::MaxPDiskUsage:
+                case EGroupFields::MaxVDiskSlotUsage:
+                case EGroupFields::MaxNormalizedOccupancy:
+                case EGroupFields::MaxVDiskRawUsage:
                     break;
             }
         }
@@ -1215,6 +1287,19 @@ public:
                     break;
                 case EGroupFields::PileName:
                     SortCollection(GroupView, [](const TGroup* group) { return group->GetGroupName(EGroupFields::PileName); }, ReverseSort);
+                    break;
+                case EGroupFields::MaxPDiskUsage:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->MaxPDiskUsage; }, ReverseSort);
+                    break;
+                case EGroupFields::MaxVDiskSlotUsage:
+                case EGroupFields::CapacityAlert:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->MaxVDiskSlotUsage; }, ReverseSort);
+                    break;
+                case EGroupFields::MaxNormalizedOccupancy:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->MaxNormalizedOccupancy; }, ReverseSort);
+                    break;
+                case EGroupFields::MaxVDiskRawUsage:
+                    SortCollection(GroupView, [](const TGroup* group) { return group->MaxVDiskRawUsage; }, ReverseSort);
                     break;
                 case EGroupFields::PDiskId:
                 case EGroupFields::NodeId:
@@ -1493,6 +1578,7 @@ public:
             if (FieldsAvailable.test(+EGroupFields::PDisk)) {
                 for (TGroup* group : GroupView) {
                     group->CalcAvailableAndDiskSpace(PDisks);
+                    group->CalcCapacityMetrics();
                 }
                 FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
                 ApplyEverything();
@@ -1784,6 +1870,10 @@ public:
             vDisk.Donors.emplace_back(donor);
         }
         vDisk.Present = true;
+        vDisk.VDiskSlotUsage = info.GetVDiskSlotUsage();
+        vDisk.NormalizedOccupancy = info.GetNormalizedOccupancy();
+        vDisk.VDiskRawUsage = info.GetVDiskRawUsage();
+        vDisk.CapacityAlert = info.GetCapacityAlert();
     }
 
     void ProcessWhiteboardDisks() {
@@ -1830,6 +1920,7 @@ public:
                     pDisk.Guid = info.GetGuid();
                     pDisk.AvailableSize = info.GetAvailableSize();
                     pDisk.TotalSize = info.GetTotalSize();
+                    pDisk.PDiskUsage = info.GetPDiskUsage();
                     //pDisk.Status = info.GetStatus();
                     if (pDisk.EnforcedDynamicSlotSize < info.GetEnforcedDynamicSlotSize()) {
                         pDisk.EnforcedDynamicSlotSize = info.GetEnforcedDynamicSlotSize();
@@ -1867,6 +1958,7 @@ public:
         ApplyEverything();
         for (TGroup* group : GroupView) {
             group->CalcAvailableAndDiskSpace(PDisks);
+            group->CalcCapacityMetrics();
         }
         FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
         ApplyEverything();
@@ -1910,11 +2002,20 @@ public:
             return;
         }
         if (VDiskStateResponse.count(nodeId) == 0) {
-            VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvVDiskStateRequest()));
+            auto vdiskRequest = new TEvWhiteboard::TEvVDiskStateRequest();
+            vdiskRequest->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TVDiskStateInfo>());
+            vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kVDiskSlotUsageFieldNumber);
+            vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kNormalizedOccupancyFieldNumber);
+            vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kVDiskRawUsageFieldNumber);
+            vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kCapacityAlertFieldNumber);
+            VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, vdiskRequest));
             ++VDiskStateRequestsInFlight;
         }
         if (PDiskStateResponse.count(nodeId) == 0) {
-            PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvPDiskStateRequest()));
+            auto pdiskRequest = new TEvWhiteboard::TEvPDiskStateRequest();
+            pdiskRequest->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
+            pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskUsageFieldNumber);
+            PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, pdiskRequest));
             ++PDiskStateRequestsInFlight;
         }
     }
@@ -2140,9 +2241,6 @@ public:
             for (const TGroup* group : GroupView) {
                 NKikimrViewer::TStorageGroupInfo& jsonGroup = *json.AddStorageGroups();
                 jsonGroup.SetGroupId(::ToString(group->GroupId));
-                if (group->GroupGeneration) {
-                    jsonGroup.SetGroupGeneration(group->GroupGeneration);
-                }
                 if (FieldsAvailable.test(+EGroupFields::PoolName) && FieldsRequested.test(+EGroupFields::PoolName)) {
                     jsonGroup.SetPoolName(group->PoolName);
                 }
@@ -2162,9 +2260,6 @@ public:
                 if (FieldsAvailable.test(+EGroupFields::Encryption) && FieldsRequested.test(+EGroupFields::Encryption)) {
                     jsonGroup.SetEncryption(group->EncryptionMode);
                 }
-                if (group->Overall != NKikimrViewer::Grey) {
-                    jsonGroup.SetOverall(group->Overall);
-                }
                 if (group->DiskSpace != NKikimrViewer::Grey && FieldsRequested.test(+EGroupFields::Usage)) {
                     jsonGroup.SetDiskSpace(group->DiskSpace);
                 }
@@ -2182,6 +2277,12 @@ public:
                 }
                 if (FieldsAvailable.test(+EGroupFields::State) && FieldsRequested.test(+EGroupFields::State)) {
                     jsonGroup.SetState(group->State);
+                    if (group->GroupGeneration) {
+                        jsonGroup.SetGroupGeneration(group->GroupGeneration);
+                    }    
+                    if (group->Overall != NKikimrViewer::Grey) {
+                        jsonGroup.SetOverall(group->Overall);
+                    }    
                 }
                 if (FieldsAvailable.test(+EGroupFields::MissingDisks) && FieldsRequested.test(+EGroupFields::MissingDisks)) {
                     jsonGroup.SetMissingDisks(group->MissingDisks);
@@ -2215,9 +2316,24 @@ public:
                 if (FieldsAvailable.test(+EGroupFields::PileName) && FieldsRequested.test(+EGroupFields::PileName)) {
                     jsonGroup.SetPileName(group->PileName);
                 }
+                if (FieldsAvailable.test(+EGroupFields::MaxPDiskUsage) && FieldsRequested.test(+EGroupFields::MaxPDiskUsage)) {
+                    jsonGroup.SetMaxPDiskUsage(group->MaxPDiskUsage);
+                }
+                if (FieldsAvailable.test(+EGroupFields::MaxVDiskSlotUsage) && FieldsRequested.test(+EGroupFields::MaxVDiskSlotUsage)) {
+                    jsonGroup.SetMaxVDiskSlotUsage(group->MaxVDiskSlotUsage);
+                }
+                if (FieldsAvailable.test(+EGroupFields::MaxNormalizedOccupancy) && FieldsRequested.test(+EGroupFields::MaxNormalizedOccupancy)) {
+                    jsonGroup.SetMaxNormalizedOccupancy(group->MaxNormalizedOccupancy);
+                }
+                if (FieldsAvailable.test(+EGroupFields::MaxVDiskRawUsage) && FieldsRequested.test(+EGroupFields::MaxVDiskRawUsage)) {
+                    jsonGroup.SetMaxVDiskRawUsage(group->MaxVDiskRawUsage);
+                }
+                if (FieldsAvailable.test(+EGroupFields::CapacityAlert) && FieldsRequested.test(+EGroupFields::CapacityAlert)) {
+                    jsonGroup.SetCapacityAlert(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(group->CapacityAlert));
+                }
             }
         } else {
-            for (TGroupGroup& groupGroup : GroupGroups) {
+            for (TGroupGroup& groupGroup : GroupGroups) {                
                 NKikimrViewer::TStorageGroupGroup& jsonGroupGroup = *json.AddStorageGroupGroups();
                 jsonGroupGroup.SetGroupName(groupGroup.Name);
                 jsonGroupGroup.SetGroupCount(groupGroup.Groups.size());
@@ -2319,6 +2435,10 @@ public:
                           * `Read`
                           * `Write`
                           * `Latency`
+                          * `MaxPDiskUsage`
+                          * `MaxVDiskSlotUsage `
+                          * `MaxNormalizedOccupancy`
+                          * `MaxVDiskRawUsage`
                     required: false
                     type: string
                   - name: group
@@ -2337,6 +2457,7 @@ public:
                           * `MissingDisks`
                           * `State`
                           * `Latency`
+                          * `CapacityAlert`
                     required: false
                     type: string
                   - name: filter_group_by
@@ -2355,6 +2476,7 @@ public:
                           * `MissingDisks`
                           * `State`
                           * `Latency`
+                          * `CapacityAlert`
                     required: false
                     type: string
                   - name: filter_group
@@ -2386,6 +2508,11 @@ public:
                           * `PDisk`
                           * `VDisk`
                           * `Latency`
+                          * `MaxPDiskUsage`
+                          * `MaxVDiskSlotUsage`
+                          * `MaxNormalizedOccupancy`
+                          * `MaxVDiskRawUsage`
+                          * `CapacityAlert`
                     required: false
                     type: string
                   - name: offset
@@ -2447,6 +2574,10 @@ public:
         storageGroupProperties["Available"]["description"] = "number of bytes available on storage for this group";
         storageGroupProperties["Usage"]["description"] = "logical usage (in percent) of group space";
         storageGroupProperties["DiskSpaceUsage"]["description"] = "physical usage (in percent) of physical disk space (worst disk)";
+        storageGroupProperties["MaxPDiskUsage"]["description"] = "max PDisk.PDiskUsage across PDisks hosting VDisks of this group";
+        storageGroupProperties["MaxVDiskSlotUsage"]["description"] = "max VDisk.VDiskSlotUsage across VDisks in this group";
+        storageGroupProperties["MaxNormalizedOccupancy"]["description"] = "max VDisk.NormalizedOccupancy across VDisks in this group";
+        storageGroupProperties["MaxVDiskRawUsage"]["description"] = "max VDisk.RawUsage across VDisks in this group";
         return node;
     }
 };

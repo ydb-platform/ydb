@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/yql_parser/yql_parser.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/async.h>
 
@@ -29,7 +30,7 @@ namespace {
 
 void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config, const TString& clarification) {
     TStringStream descr;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     descr << "Query parameter[s].";
     if (clarification) {
         descr << ' ' << clarification;
@@ -113,7 +114,7 @@ void TCommandWithParameters::AddLegacyStdinFormats(TClientCommand::TConfig& conf
 
 void TCommandWithParameters::AddBatchParametersOptions(TClientCommand::TConfig& config, const TString& requestString) {
     TStringStream descr;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     descr << "Batching mode for input parameters processing. Available options:\n  "
         << colors.BoldColor() << "iterative" << colors.OldColor()
         << "\n    Executes " << requestString << " for each parameter set (exactly one execution "

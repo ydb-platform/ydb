@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/utf8.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/utf8.h"
 
 #include <cstdint>
 #include <iterator>
@@ -23,10 +23,10 @@
 #include <stdexcept>
 #include <utility>
 
-#include "arrow/result.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/utf8_internal.h"
-#include "arrow/vendored/utfcpp/checked.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/utf8_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/utfcpp/checked.h"
 
 // Can be defined by utfcpp
 #ifdef NOEXCEPT

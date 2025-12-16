@@ -24,6 +24,7 @@ struct TConfigItemInfo {
         ReplaceConfigWithConsoleYaml,
         ReplaceConfigWithConsoleProto,
         ReplaceConfigWithBase,
+        ReplaceConfigWithSeedNodes,
         LoadYamlConfigFromFile,
         SetExplicitly,
         UpdateExplicitly,
@@ -182,6 +183,7 @@ public:
     virtual ~IStorageConfigResult() {}
     virtual const TString& GetMainYamlConfig() const = 0;
     virtual const TString& GetStorageYamlConfig() const = 0;
+    virtual const TString& GetSourceAddress() const = 0;
 };
 
 class IConfigClient {
@@ -252,6 +254,7 @@ struct TDebugInfo {
 struct TConfigsDispatcherInitInfo {
     NKikimrConfig::TAppConfig InitialConfig;
     TString StartupConfigYaml;
+    TString StartupStorageYaml;
     TMap<TString, TString> Labels;
     std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     std::optional<TDebugInfo> DebugInfo;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "consumer_offset_tracker.h"
+#include "message_id_deduplicator.h"
 #include "partition_blob_encoder.h"
 #include "partition_compactification.h"
 #include "partition_init.h"
@@ -111,6 +112,7 @@ struct TTransaction {
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
     bool SendReply;
     TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> ProposeConfig;
+    TEvPQ::TMessageGroupsPtr ExplicitMessageGroups;
     TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> ProposeTransaction;
 
     //Data Tx
@@ -139,6 +141,8 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitMetaStep;
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
+    friend TDeleteKeysStep;
+    friend TInitMessageDeduplicatorStep;
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
     friend TInitFieldsStep;
@@ -207,7 +211,6 @@ private:
                                const TString& errorStr,
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
-    void ClearOldHead(const ui64 offset, const ui16 partNo);
     void CreateMirrorerActor();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
@@ -627,6 +630,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -701,6 +705,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -798,9 +803,6 @@ private:
 
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
-
-    std::shared_ptr<std::deque<TString>> DeletedKeys;
-    std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
     TPartitionBlobEncoder CompactionBlobEncoder; // Compaction zone
     TPartitionBlobEncoder BlobEncoder;           // FastWrite zone
@@ -1235,15 +1237,19 @@ private:
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPConsumerState::TPtr&);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>
     void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
 
     void InitializeMLPConsumers();
+    void DropDataOfMLPConsumer(NKikimrClient::TKeyValueRequest& request, const TString& consumer);
+    void NotifyEndOffsetChanged();
 
     struct TMLPConsumerInfo {
         TActorId ActorId;
+        NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
     };
     std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
 
@@ -1255,6 +1261,11 @@ private:
         TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
     >;
     std::deque<TMLPPendingEvent> MLPPendingEvents;
+    ui64 LastNotifiedEndOffset = 0;
+
+    TMessageIdDeduplicator MessageIdDeduplicator;
+    bool AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
+    std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

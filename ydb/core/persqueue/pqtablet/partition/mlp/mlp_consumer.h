@@ -3,12 +3,12 @@
 #include "mlp.h"
 #include "mlp_common.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
-// TODO MLP DLQ
 namespace NKikimr::NPQ::NMLP {
 
 class TBatch;
@@ -21,9 +21,9 @@ class TConsumerActor : public TBaseTabletActor<TConsumerActor>
     static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
 
 public:
-    TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
+    TConsumerActor(const TString& database, ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
         const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config,
-        std::optional<TDuration> retentionPeriod);
+        std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset);
 
     void Bootstrap();
     void PassAway() override;
@@ -43,17 +43,25 @@ private:
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
     void Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr&);
+    void HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr&);
+    void Handle(TEvPQ::TEvEndOffsetChanged::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
 
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
     void Handle(TEvKeyValue::TEvResponse::TPtr&);
 
-    void HandleOnInit(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvError::TPtr&);
 
+    void HandleOnInit(TEvPersQueue::TEvResponse::TPtr&);
+    void Handle(TEvPersQueue::TEvResponse::TPtr&);
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
+
     void HandleOnWork(TEvents::TEvWakeup::TPtr&);
     void Handle(TEvents::TEvWakeup::TPtr&);
+
+    void Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr&);
 
     STFUNC(StateInit);
     STFUNC(StateWork);
@@ -65,19 +73,29 @@ private:
     bool FetchMessagesIfNeeded();
     void ReadSnapshot();
     void Persist();
+    void MoveToDLQIfPossible();
 
     void CommitIfNeeded();
     void UpdateStorageConfig();
-    
+
+    size_t RequiredToFetchMessageCount() const;
+    void SendToPQTablet(std::unique_ptr<IEventBase> ev);
+
+    void UpdateMetrics();
+
 private:
+    const TString Database;
     const ui32 PartitionId;
     const TActorId PartitionActorId;
     NKikimrPQ::TPQTabletConfig::TConsumer Config;
     std::optional<TDuration> RetentionPeriod;
+    ui64 PartitionEndOffset;
 
     bool FetchInProgress = false;
     ui64 FetchCookie = 0;
     ui64 LastCommittedOffset = 0;
+
+    TActorId DLQMoverActorId;
 
     std::unique_ptr<TStorage> Storage;
 
@@ -93,6 +111,8 @@ private:
 
     ui64 LastWALIndex = 0;
     bool HasSnapshot = false;
+
+    bool FirstPipeCacheRequest = true;
 };
 
 }

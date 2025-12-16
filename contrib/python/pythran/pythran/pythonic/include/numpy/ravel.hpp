@@ -9,8 +9,7 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class T, class pS>
-  types::ndarray<T, types::pshape<long>>
-  ravel(types::ndarray<T, pS> const &expr);
+  types::ndarray<T, types::pshape<long>> ravel(types::ndarray<T, pS> const &expr);
 
   NUMPY_EXPR_TO_NDARRAY0_DECL(ravel);
   DEFINE_FUNCTOR(pythonic::numpy, ravel);

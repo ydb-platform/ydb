@@ -22,8 +22,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Parse");
-        return name;
+        static auto Name = TStringRef::Of("Parse");
+        return Name;
     }
 
     static bool DeclareSignature(

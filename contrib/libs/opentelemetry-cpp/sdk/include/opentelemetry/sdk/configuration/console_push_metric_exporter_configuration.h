@@ -3,9 +3,11 @@
 
 #pragma once
 
+#include "opentelemetry/sdk/configuration/default_histogram_aggregation.h"
 #include "opentelemetry/sdk/configuration/headers_configuration.h"
 #include "opentelemetry/sdk/configuration/push_metric_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/push_metric_exporter_configuration_visitor.h"
+#include "opentelemetry/sdk/configuration/temporality_preference.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -14,8 +16,8 @@ namespace sdk
 namespace configuration
 {
 
-// YAML-SCHEMA: schema/common.json
-// YAML-NODE: Console
+// YAML-SCHEMA: schema/meter_provider.json
+// YAML-NODE: ConsoleMetricExporter
 class ConsolePushMetricExporterConfiguration : public PushMetricExporterConfiguration
 {
 public:
@@ -23,6 +25,10 @@ public:
   {
     visitor->VisitConsole(this);
   }
+
+  TemporalityPreference temporality_preference{TemporalityPreference::cumulative};
+  DefaultHistogramAggregation default_histogram_aggregation{
+      DefaultHistogramAggregation::explicit_bucket_histogram};
 };
 
 }  // namespace configuration

@@ -841,6 +841,50 @@ TNode SerializeParamsForAlterTable(
     return result;
 }
 
+void SetBasicDistributedStartParams(
+    TNode& result,
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount)
+{
+    SetTransactionIdParam(&result, transactionId);
+
+    result["path"] = PathToNode(richPath);
+    result["cookie_count"] = cookieCount;
+}
+
+TNode SerializeParamsForStartDistributedFileSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    TNode result;
+    SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
+
+    if (options.Timeout_) {
+        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    }
+
+    return result;
+}
+
+TNode SerializeParamsForStartDistributedTableSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    TNode result;
+    SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
+
+    if (options.Timeout_) {
+        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    }
+
+    return result;
+}
+
 TNode SerializeParamsForGetTableColumnarStatistics(
     const TTransactionId& transactionId,
     const TVector<TRichYPath>& paths,

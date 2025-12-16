@@ -296,12 +296,12 @@ TArrowSchemaType SerializeStructColumnType(
     std::vector<flatbuffers::Offset<flatbuf::Field>> fieldOffsets;
     fieldOffsets.reserve(fields.size());
 
-    for (const auto& [fieldName, fieldType] : fields) {
+    for (const auto& field : fields) {
         auto fieldOffset = CreateRegularField(
             flatbufBuilder,
-            /*schemaType*/ SerializeColumnType(flatbufBuilder, fieldType, arrowConfig),
-            /*name*/ SerializeString(flatbufBuilder, fieldName),
-            fieldType->IsNullable());
+            /*schemaType*/ SerializeColumnType(flatbufBuilder, field.Type, arrowConfig),
+            /*name*/ SerializeString(flatbufBuilder, field.Name),
+            field.Type->IsNullable());
 
         fieldOffsets.push_back(fieldOffset);
     }
@@ -1459,8 +1459,8 @@ void CreateBuffersForComplexType(
         }
 
         case ELogicalMetatype::Struct:
-            for (const auto& [fieldName, fieldType] : type->GetFields()) {
-                CreateBuffersForComplexType(fieldType, config, buffers);
+            for (const auto& field : type->GetFields()) {
+                CreateBuffersForComplexType(field.Type, config, buffers);
             }
             break;
 
@@ -1538,8 +1538,8 @@ int CalculateBufferIndexIncrement(
 
         case ELogicalMetatype::Struct: {
             int total = 0;
-            for (const auto& [fieldName, fieldType] : type->GetFields()) {
-                total += CalculateBufferIndexIncrement(fieldType, config);
+            for (const auto& field : type->GetFields()) {
+                total += CalculateBufferIndexIncrement(field.Type, config);
             }
             return total;
         }
@@ -2198,9 +2198,9 @@ void WriteBuffersForComplexType(
         }
 
         case ELogicalMetatype::Struct:
-            for (const auto& [fieldName, fieldType] : type->GetFields()) {
+            for (const auto& field : type->GetFields()) {
                 WriteBuffersForComplexType(
-                    fieldType,
+                    field.Type,
                     context,
                     config,
                     buffers,

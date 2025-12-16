@@ -164,7 +164,7 @@ public:
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const;
 
-    EReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
+    TPrechargeResult Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
                      IPages* env, ui64 flg,
                      ui64 itemsLimit, ui64 bytesLimit,
                      EDirection direction, TRowVersion snapshot, TSelectStats& stats) const;

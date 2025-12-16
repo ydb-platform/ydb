@@ -18,6 +18,7 @@ class TInterconnectLoad : public TClientCommand {
     TDuration Duration;
     bool UseProtobufWithPayload = false;
     TString ServicePool;
+    ui32 RdmaMode = 0;
 
 public:
     TInterconnectLoad()
@@ -83,6 +84,10 @@ public:
         config.Opts->AddLongOption("service-pool", "service pool name")
             .RequiredArgument()
             .StoreResult(&ServicePool);
+
+        config.Opts->AddLongOption("rdma-mode", "rdma mode for data transfer (0 - disabled; 1 - use rdma)")
+            .RequiredArgument()
+            .StoreResult(&RdmaMode);
     }
 
     int Run(TConfig& config) override {
@@ -108,6 +113,10 @@ public:
         request.SetDuration(Duration.GetValue());
         if (ServicePool) {
             request.SetServicePool(ServicePool);
+        }
+
+        if (RdmaMode) {
+            request.SetRdmaMode(RdmaMode);
         }
 
         auto callback = [](const NMsgBusProxy::TBusResponse& response) {

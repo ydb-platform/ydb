@@ -16,6 +16,7 @@
 #include <util/generic/bitmap.h>
 #include <util/random/random.h>
 #include <util/string/split.h>
+#include <util/generic/overloaded.h>
 
 #include "console_configuration_info_collector.h"
 

@@ -15,19 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/csv/parser.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/parser.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <limits>
 #include <utility>
 
-#include "arrow/csv/lexing_internal.h"
-#include "arrow/memory_pool.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/simd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/lexing_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/simd.h"
 
 namespace arrow20 {
 namespace csv {

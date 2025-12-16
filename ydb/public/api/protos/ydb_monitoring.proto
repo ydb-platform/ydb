@@ -5,6 +5,7 @@ package Ydb.Monitoring;
 option java_package = "com.yandex.ydb.monitoring";
 option java_outer_classname = "MonitoringProtos";
 
+import "google/protobuf/timestamp.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 
 message StatusFlag {
@@ -239,6 +240,8 @@ message ClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1; // basic operation params, including timeout
     uint32 duration_seconds = 2;
     uint32 period_seconds = 3;
+    bool no_sanitize = 4;
+    bool counters_only = 5;
 }
 
 message ClusterStateResponse {
@@ -246,6 +249,13 @@ message ClusterStateResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message ClusterStateResultBlock {
+    string name = 1;
+    bytes content = 2;
+    google.protobuf.Timestamp timestamp = 3;
+}
+
 message ClusterStateResult {
-    string result = 1;
+    reserved 1; // deprecated
+    repeated ClusterStateResultBlock blocks = 2;
 }

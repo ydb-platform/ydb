@@ -1,15 +1,17 @@
 #include "read_balancer.h"
 #include "read_balancer__balancing.h"
+#include "read_balancer__metrics.h"
 #include "read_balancer__mlp_balancing.h"
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
 #include "read_balancer_log.h"
 #include "mirror_describer_factory.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/counters_pq.pb.h>
-#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tablet/tablet_exception.h>
+
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -47,6 +49,7 @@ TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletSt
         , StartPartitionIdForWrite(0)
         , TotalGroups(0)
         , ResourceMetrics(nullptr)
+        , TopicMetricsHandler(std::make_unique<TTopicMetricsHandler>())
         , StatsReportRound(0)
     {
         Balancer = std::make_unique<TBalancer>(*this);
@@ -63,11 +66,10 @@ struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Self->TTxWritePartitionStatsScheduled = false;
 
-        NIceDb::TNiceDb db(txc.DB);
-        for (auto& s : Self->AggregatedStats.Stats) {
-            auto partition = s.first;
-            auto& stats = s.second;
+        auto& metrics = Self->TopicMetricsHandler->GetPartitionMetrics();
 
+        NIceDb::TNiceDb db(txc.DB);
+        for (auto& [partition, stats] : metrics) {
             auto it = Self->PartitionsInfo.find(partition);
             if (it == Self->PartitionsInfo.end()) {
                 continue;
@@ -266,25 +268,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 
     PartitionGraph = MakePartitionGraph(record);
 
-    auto oldConsumers = std::move(Consumers);
-    Consumers.clear();
-    for (auto& consumer : TabletConfig.GetConsumers()) {
-        auto it = oldConsumers.find(consumer.GetName());
-        if (it != oldConsumers.end()) {
-            Consumers[consumer.GetName()] = std::move(it->second);
-        } else {
-            Consumers.insert(std::make_pair(consumer.GetName(), TConsumerInfo{}));
-        }
-    }
-
-
     std::vector<std::pair<ui64, TTabletInfo>> newTablets;
     std::vector<std::pair<ui32, ui32>> newGroups;
     std::vector<std::pair<ui64, TTabletInfo>> reallocatedTablets;
 
     if (SplitMergeEnabled(TabletConfig)) {
         if (!PartitionsScaleManager) {
-            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, Path, DatabasePath, PathId, Version, TabletConfig, PartitionGraph);
+            PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Topic, Path, DatabaseInfo.DatabasePath, PathId, Version, TabletConfig, PartitionGraph);
         } else {
             PartitionsScaleManager->UpdateBalancerConfig(PathId, Version, TabletConfig);
         }
@@ -324,7 +314,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     for (auto& p : record.GetPartitions()) {
         auto it = PartitionsInfo.find(p.GetPartition());
         if (it == PartitionsInfo.end()) {
-            PQ_ENSURE(p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId || NextPartitionId == 0);
+            PQ_ENSURE((p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId) || NextPartitionId == 0);
 
             partitionsInfo[p.GetPartition()] = {p.GetTabletId()};
 
@@ -438,16 +428,18 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
 {
     TActorId pipeClient = GetPipeClient(tabletId, ctx);
 
-    NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
+    if (SchemeShardId != tabletId) {
+        NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
+    }
 
-    auto it = AggregatedStats.Cookies.find(tabletId);
-    if (!pipeReconnected || it != AggregatedStats.Cookies.end()) {
+    auto it = StatsRequestTracker.Cookies.find(tabletId);
+    if (!pipeReconnected || it != StatsRequestTracker.Cookies.end()) {
         ui64 cookie;
         if (pipeReconnected) {
             cookie = it->second;
         } else {
-            cookie = ++AggregatedStats.NextCookie;
-            AggregatedStats.Cookies[tabletId] = cookie;
+            cookie = ++StatsRequestTracker.NextCookie;
+            StatsRequestTracker.Cookies[tabletId] = cookie;
         }
 
         PQ_LOG_D("Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
@@ -457,17 +449,17 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
 
 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
+    auto& record = ev->Get()->Record;
     ui64 tabletId = record.GetTabletId();
     ui64 cookie = ev->Cookie;
 
-    if ((0 != cookie && cookie != AggregatedStats.Cookies[tabletId]) || (0 == cookie && !AggregatedStats.Cookies.contains(tabletId))) {
+    if ((0 != cookie && cookie != StatsRequestTracker.Cookies[tabletId]) || (0 == cookie && !StatsRequestTracker.Cookies.contains(tabletId))) {
         return;
     }
 
-    AggregatedStats.Cookies.erase(tabletId);
+    StatsRequestTracker.Cookies.erase(tabletId);
 
-    for (const auto& partRes : record.GetPartResult()) {
+    for (auto& partRes : *record.MutablePartResult()) {
         ui32 partitionId = partRes.GetPartition();
         if (!PartitionsInfo.contains(partitionId)) {
             continue;
@@ -483,28 +475,24 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
             );
         }
 
-        AggregatedStats.AggrStats(partitionId, partRes.GetPartitionSize(), partRes.GetUsedReserveSize());
-        AggregatedStats.AggrStats(partRes.GetAvgWriteSpeedPerSec(), partRes.GetAvgWriteSpeedPerMin(),
-            partRes.GetAvgWriteSpeedPerHour(), partRes.GetAvgWriteSpeedPerDay());
-        AggregatedStats.Stats[partitionId].Counters = partRes.GetAggregatedCounters();
-        AggregatedStats.Stats[partitionId].HasCounters = true;
+        TopicMetricsHandler->Handle(std::move(partRes));
     }
 
     Balancer->Handle(ev, ctx);
 
-    if (AggregatedStats.Cookies.empty()) {
+    if (StatsRequestTracker.Cookies.empty()) {
         CheckStat(ctx);
         Balancer->ProcessPendingStats(ctx);
     }
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvStatsWakeup::TPtr& ev, const TActorContext& ctx) {
-    if (AggregatedStats.Round != ev->Get()->Round) {
+    if (StatsRequestTracker.Round != ev->Get()->Round) {
         // old message
         return;
     }
 
-    if (AggregatedStats.Cookies.empty()) {
+    if (StatsRequestTracker.Cookies.empty()) {
         return;
     }
 
@@ -515,37 +503,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TAc
     Send(ev.Get()->Sender, GetStatsEvent());
 }
 
-void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui32 partition, ui64 dataSize, ui64 usedReserveSize) {
-    AFL_ENSURE(dataSize >= usedReserveSize);
-
-    auto& oldValue = Stats[partition];
-
-    TPartitionStats newValue;
-    newValue.DataSize = dataSize;
-    newValue.UsedReserveSize = usedReserveSize;
-
-    TotalDataSize += (newValue.DataSize - oldValue.DataSize);
-    TotalUsedReserveSize += (newValue.UsedReserveSize - oldValue.UsedReserveSize);
-
-    AFL_ENSURE(TotalDataSize >= TotalUsedReserveSize);
-
-    oldValue = newValue;
-}
-
-void TPersQueueReadBalancer::TAggregatedStats::AggrStats(ui64 avgWriteSpeedPerSec, ui64 avgWriteSpeedPerMin, ui64 avgWriteSpeedPerHour, ui64 avgWriteSpeedPerDay) {
-        NewMetrics.TotalAvgWriteSpeedPerSec += avgWriteSpeedPerSec;
-        NewMetrics.MaxAvgWriteSpeedPerSec = Max<ui64>(NewMetrics.MaxAvgWriteSpeedPerSec, avgWriteSpeedPerSec);
-        NewMetrics.TotalAvgWriteSpeedPerMin += avgWriteSpeedPerMin;
-        NewMetrics.MaxAvgWriteSpeedPerMin = Max<ui64>(NewMetrics.MaxAvgWriteSpeedPerMin, avgWriteSpeedPerMin);
-        NewMetrics.TotalAvgWriteSpeedPerHour += avgWriteSpeedPerHour;
-        NewMetrics.MaxAvgWriteSpeedPerHour = Max<ui64>(NewMetrics.MaxAvgWriteSpeedPerHour, avgWriteSpeedPerHour);
-        NewMetrics.TotalAvgWriteSpeedPerDay += avgWriteSpeedPerDay;
-        NewMetrics.MaxAvgWriteSpeedPerDay = Max<ui64>(NewMetrics.MaxAvgWriteSpeedPerDay, avgWriteSpeedPerDay);
-}
-
 void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     Y_UNUSED(ctx);
-    //TODO: Deside about changing number of partitions and send request to SchemeShard
+    //TODO: Decide about changing number of partitions and send request to SchemeShard
     //TODO: make AlterTopic request via TX_PROXY
 
     if (!TTxWritePartitionStatsScheduled) {
@@ -553,235 +513,60 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
         Execute(new TTxWritePartitionStats(this));
     }
 
-    AggregatedStats.Metrics = AggregatedStats.NewMetrics;
+    UpdateCounters(ctx);
 
     TEvPersQueue::TEvPeriodicTopicStats* ev = GetStatsEvent();
     PQ_LOG_D("Send TEvPeriodicTopicStats PathId: " << PathId
             << " Generation: " << Generation
             << " StatsReportRound: " << StatsReportRound
-            << " DataSize: " << AggregatedStats.TotalDataSize
-            << " UsedReserveSize: " << AggregatedStats.TotalUsedReserveSize);
+            << " DataSize: " << TopicMetricsHandler->GetTopicMetrics().TotalDataSize
+            << " UsedReserveSize: " << TopicMetricsHandler->GetTopicMetrics().TotalUsedReserveSize);
 
     NTabletPipe::SendData(ctx, GetPipeClient(SchemeShardId, ctx), ev);
 
-    UpdateCounters(ctx);
 }
 
 void TPersQueueReadBalancer::InitCounters(const TActorContext& ctx) {
-    if (!DatabasePath) {
+    if (DatabaseInfo.DatabasePath.empty()) {
         return;
     }
 
-    if (DynamicCounters) {
-        return;
-    }
-
-    TStringBuf name = TStringBuf(Path);
-    name.SkipPrefix(DatabasePath);
-    name.SkipPrefix("/");
-
-    bool isServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
-    DynamicCounters = AppData(ctx)->Counters->GetSubgroup("counters", isServerless ? "topics_serverless" : "topics")
-                ->GetSubgroup("host", "")
-                ->GetSubgroup("database", DatabasePath)
-                ->GetSubgroup("cloud_id", CloudId)
-                ->GetSubgroup("folder_id", FolderId)
-                ->GetSubgroup("database_id", DatabaseId)
-                ->GetSubgroup("topic", TString(name));
-
-    ActivePartitionCountCounter = DynamicCounters->GetExpiringNamedCounter("name", "topic.partition.active_count", false);
-    InactivePartitionCountCounter = DynamicCounters->GetExpiringNamedCounter("name", "topic.partition.inactive_count", false);
+    TopicMetricsHandler->Initialize(TabletConfig, DatabaseInfo, Path, ctx);
 }
 
 void TPersQueueReadBalancer::UpdateConfigCounters() {
-    if (!DynamicCounters) {
-        return;
-    }
-
-    size_t inactiveCount = std::count_if(TabletConfig.GetAllPartitions().begin(), TabletConfig.GetAllPartitions().end(), [](auto& p) {
-        return p.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Inactive;
-    });
-
-    ActivePartitionCountCounter->Set(PartitionsInfo.size() - inactiveCount);
-    InactivePartitionCountCounter->Set(inactiveCount);
+    TopicMetricsHandler->UpdateConfig(TabletConfig, DatabaseInfo, Path, ActorContext());
 }
 
-void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
-    if (!AggregatedStats.Stats.size())
-        return;
-
-    if (!DynamicCounters)
-        return;
-
-    using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
-    THolder<TPartitionLabeledCounters> labeledCounters;
-    using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
-    THolder<TConsumerLabeledCounters> labeledConsumerCounters;
-    using TPartitionKeyCompactionCounters = TProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>;
-    THolder<TPartitionKeyCompactionCounters> compactionCounters;
-    using TPartitionExtendedLabeledCounters = TProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>;
-    THolder<TPartitionExtendedLabeledCounters> extendedLabeledCounters;
-    labeledCounters.Reset(new TPartitionLabeledCounters("topic", 0, DatabasePath));
-    labeledConsumerCounters.Reset(new TConsumerLabeledCounters("topic|x|consumer", 0, DatabasePath));
-    compactionCounters.Reset(new TPartitionKeyCompactionCounters("topic", 0, DatabasePath));
-    extendedLabeledCounters.Reset(new TPartitionExtendedLabeledCounters("topic", 0, DatabasePath));
-
-    if (AggregatedCounters.empty()) {
-        for (ui32 i = 0; i < labeledCounters->GetCounters().Size(); ++i) {
-            TString name = labeledCounters->GetNames()[i];
-            TStringBuf nameBuf = name;
-            nameBuf.SkipPrefix("PQ/");
-            name = nameBuf;
-            AggregatedCounters.push_back(name.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", name, false));
-        }
-    }
-    if (AggregatedExtendedCounters.empty()) {
-        for (ui32 i = 0; i < extendedLabeledCounters->GetCounters().Size(); ++i) {
-            TString name = extendedLabeledCounters->GetNames()[i];
-            AggregatedExtendedCounters.push_back(name.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", name, false));
-        }
-    }
-
-    if (TabletConfig.GetEnableCompactification()) {
-        if (AggregatedCompactionCounters.empty()) {
-            for (ui32 i = 0; i < compactionCounters->GetCounters().Size(); ++i) {
-                TStringBuf nameBuf = compactionCounters->GetNames()[i];
-                nameBuf.SkipPrefix("PQ/");
-                AggregatedCompactionCounters.push_back(nameBuf.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", TString(nameBuf), false));
-            }
-        }
-    } else {
-        AggregatedCompactionCounters.clear();
-    }
-    for (auto& [consumer, info]: Consumers) {
-        info.Aggr.Reset(new TTabletLabeledCountersBase{});
-        if (info.AggregatedCounters.empty()) {
-            auto clientCounters = DynamicCounters->GetSubgroup("consumer", NPersQueue::ConvertOldConsumerName(consumer, ctx));
-            for (ui32 i = 0; i < labeledConsumerCounters->GetCounters().Size(); ++i) {
-                TString name = labeledConsumerCounters->GetNames()[i];
-                TStringBuf nameBuf = name;
-                nameBuf.SkipPrefix("PQ/");
-                name = nameBuf;
-                info.AggregatedCounters.push_back(name.empty() ? nullptr : clientCounters->GetExpiringNamedCounter("name", name, false));
-            }
-        }
-    }
-
-    /*** apply counters ****/
-
-    ui64 milliSeconds = TAppData::TimeProvider->Now().MilliSeconds();
-
-    THolder<TTabletLabeledCountersBase> aggr(new TTabletLabeledCountersBase);
-    THolder<TTabletLabeledCountersBase> aggrExtended(new TTabletLabeledCountersBase);
-    THolder<TTabletLabeledCountersBase> compactionAggr(new TTabletLabeledCountersBase);
-
-    for (auto it = AggregatedStats.Stats.begin(); it != AggregatedStats.Stats.end(); ++it) {
-        if (!it->second.HasCounters)
-            continue;
-        for (ui32 i = 0; i < it->second.Counters.ValuesSize() && i < labeledCounters->GetCounters().Size(); ++i) {
-            labeledCounters->GetCounters()[i] = it->second.Counters.GetValues(i);
-        }
-        aggr->AggregateWith(*labeledCounters);
-
-        for (ui32 i = 0; i < it->second.Counters.GetExtendedCounters().ValuesSize()
-                         && i < extendedLabeledCounters->GetCounters().Size(); ++i
-        ) {
-            extendedLabeledCounters->GetCounters()[i] = it->second.Counters.GetExtendedCounters().GetValues(i);
-        }
-        aggrExtended->AggregateWith(*extendedLabeledCounters);
-
-        if (TabletConfig.GetEnableCompactification()) {
-            for (ui32 i = 0; i < it->second.Counters.GetCompactionCounters().ValuesSize() && i < compactionCounters->GetCounters().Size(); ++i) {
-                compactionCounters->GetCounters()[i] = it->second.Counters.GetCompactionCounters().GetValues(i);
-            }
-            compactionAggr->AggregateWith(*compactionCounters);
-        }
-
-        for (const auto& consumerStats : it->second.Counters.GetConsumerAggregatedCounters()) {
-            auto jt = Consumers.find(consumerStats.GetConsumer());
-            if (jt == Consumers.end())
-                continue;
-            for (ui32 i = 0; i < consumerStats.ValuesSize() && i < labeledCounters->GetCounters().Size(); ++i) {
-                labeledConsumerCounters->GetCounters()[i] = consumerStats.GetValues(i);
-            }
-            jt->second.Aggr->AggregateWith(*labeledConsumerCounters);
-        }
-
-    }
-
-    /*** show counters ***/
-    for (ui32 i = 0; aggr->HasCounters() && i < aggr->GetCounters().Size(); ++i) {
-        if (!AggregatedCounters[i])
-            continue;
-        const auto& type = aggr->GetCounterType(i);
-        auto val = aggr->GetCounters()[i].Get();
-        if (type == TLabeledCounterOptions::CT_TIMELAG) {
-            val = val <= milliSeconds ? milliSeconds - val : 0;
-        }
-        AggregatedCounters[i]->Set(val);
-    }
-    for (ui32 i = 0; aggrExtended->HasCounters() && i < aggrExtended->GetCounters().Size(); ++i) {
-        if (!AggregatedExtendedCounters[i])
-            continue;
-        const auto& type = aggrExtended->GetCounterType(i);
-        auto val = aggrExtended->GetCounters()[i].Get();
-        if (type == TLabeledCounterOptions::CT_TIMELAG) {
-            val = val <= milliSeconds ? milliSeconds - val : 0;
-        }
-        AggregatedExtendedCounters[i]->Set(val);
-    }
-
-
-    for (ui32 i = 0; i < compactionAggr->GetCounters().Size() && i < AggregatedCompactionCounters.size(); ++i) {
-        if (!AggregatedCompactionCounters[i]) {
-            continue;
-        }
-        auto val = compactionAggr->GetCounters()[i].Get();
-        AggregatedCompactionCounters[i]->Set(val);
-    }
-
-    for (auto& [consumer, info] : Consumers) {
-        for (ui32 i = 0; info.Aggr->HasCounters() && i < info.Aggr->GetCounters().Size(); ++i) {
-            if (!info.AggregatedCounters[i])
-                continue;
-            const auto& type = info.Aggr->GetCounterType(i);
-            auto val = info.Aggr->GetCounters()[i].Get();
-            if (type == TLabeledCounterOptions::CT_TIMELAG) {
-                val = val <= milliSeconds ? milliSeconds - val : 0;
-            }
-            info.AggregatedCounters[i]->Set(val);
-        }
-    }
+void TPersQueueReadBalancer::UpdateCounters(const TActorContext&) {
+    TopicMetricsHandler->UpdateMetrics();
 }
 
 TEvPersQueue::TEvPeriodicTopicStats* TPersQueueReadBalancer::GetStatsEvent() {
+    auto& metrics = TopicMetricsHandler->GetTopicMetrics();
+
     TEvPersQueue::TEvPeriodicTopicStats* ev = new TEvPersQueue::TEvPeriodicTopicStats();
     auto& rec = ev->Record;
     rec.SetPathId(PathId);
     rec.SetGeneration(Generation);
 
     rec.SetRound(++StatsReportRound);
-    rec.SetDataSize(AggregatedStats.TotalDataSize);
-    rec.SetUsedReserveSize(AggregatedStats.TotalUsedReserveSize);
+    rec.SetDataSize(metrics.TotalDataSize);
+    rec.SetUsedReserveSize(metrics.TotalUsedReserveSize);
     rec.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
 
     return ev;
 }
 
 void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
-    if (!AggregatedStats.Cookies.empty()) {
-        AggregatedStats.Cookies.clear();
+    if (!StatsRequestTracker.Cookies.empty()) {
+        StatsRequestTracker.Cookies.clear();
         CheckStat(ctx);
     }
 
-    TPartitionMetrics newMetrics;
-    AggregatedStats.NewMetrics = newMetrics;
-
     for (auto& p : PartitionsInfo) {
-        AggregatedStats.Stats[p.first].HasCounters = false;
-
         const ui64& tabletId = p.second.TabletId;
-        if (AggregatedStats.Cookies.contains(tabletId)) { //already asked stat
+        if (StatsRequestTracker.Cookies.contains(tabletId)) { //already asked stat
             continue;
         }
         RequestTabletIfNeeded(tabletId, ctx);
@@ -790,10 +575,10 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
     // TEvStatsWakeup must processed before next TEvWakeup, which send next status request to TPersQueue
     const auto& config = AppData(ctx)->PQConfig;
     auto wakeupInterval = std::max<ui64>(config.GetBalancerWakeupIntervalSec(), 1);
-    auto stateWakeupInterval = std::max<ui64>(config.GetBalancerWakeupIntervalSec(), 1);
+    auto stateWakeupInterval = std::max<ui64>(config.GetBalancerStatsWakeupIntervalSec(), 1);
     ui64 delayMs = std::min(stateWakeupInterval * 1000, wakeupInterval * 500);
     if (0 < delayMs) {
-        Schedule(TDuration::MilliSeconds(delayMs), new TEvPQ::TEvStatsWakeup(++AggregatedStats.Round));
+        Schedule(TDuration::MilliSeconds(delayMs), new TEvPQ::TEvStatsWakeup(++StatsRequestTracker.Round));
     }
 }
 
@@ -911,7 +696,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPa
     }
 
     if (SchemeShardId == msg->SchemeShardId &&
-       !SubDomainPathId || SubDomainPathId->OwnerId != msg->SchemeShardId)
+       (!SubDomainPathId || SubDomainPathId->OwnerId != msg->SchemeShardId))
     {
         PQ_LOG_D("Discovered subdomain " << msg->LocalPathId << " at RB " << TabletID());
 
@@ -945,12 +730,12 @@ void TPersQueueReadBalancer::StartWatchingSubDomainPathId() {
 
 void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    if (DatabasePath.empty()) {
-        DatabasePath = msg->Result->GetPath();
+    if (DatabaseInfo.DatabasePath.empty()) {
+        DatabaseInfo.DatabasePath = msg->Result->GetPath();
         for (const auto& attr : msg->Result->GetPathDescription().GetUserAttributes()) {
-            if (attr.GetKey() == "folder_id") FolderId = attr.GetValue();
-            if (attr.GetKey() == "cloud_id") CloudId = attr.GetValue();
-            if (attr.GetKey() == "database_id") DatabaseId = attr.GetValue();
+            if (attr.GetKey() == "folder_id") DatabaseInfo.FolderId = attr.GetValue();
+            if (attr.GetKey() == "cloud_id") DatabaseInfo.CloudId = attr.GetValue();
+            if (attr.GetKey() == "database_id") DatabaseInfo.DatabaseId = attr.GetValue();
         }
 
         InitCounters(ctx);
@@ -958,7 +743,7 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
     }
 
     if (PartitionsScaleManager) {
-        PartitionsScaleManager->UpdateDatabasePath(DatabasePath);
+        PartitionsScaleManager->UpdateDatabasePath(DatabaseInfo.DatabasePath);
     }
 
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {

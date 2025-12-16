@@ -17,10 +17,10 @@ namespace builtins
   {
 
     template <class Iterable, class V>
-    types::dict<typename std::remove_reference<Iterable>::type::value_type, V>
-    fromkeys(Iterable &&iter, V const &v)
+    types::dict<typename std::remove_reference_t<Iterable>::value_type, V> fromkeys(Iterable &&iter,
+                                                                                    V const &v)
     {
-      types::dict<typename std::remove_reference<Iterable>::type::value_type,
+      types::dict<typename std::remove_reference_t<Iterable>::value_type,
                   V>
           D = types::empty_dict(); // Allocate default capacity to dict
       for (auto const &i : iter)

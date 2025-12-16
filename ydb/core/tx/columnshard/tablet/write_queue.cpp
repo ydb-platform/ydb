@@ -14,14 +14,14 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
     owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
 
     if (const auto lock = owner->OperationsManager->GetLockOptional(LockId); lock) {
-        if (lock->IsDeleted()) {
-            Abort(owner, "lock is deleted", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        if (lock->NeedsAborting()) {
+            Abort(owner, "transaction is aborted", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
             return true;
         }
     }
 
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
-    owner->SubscribeLock(LockId, LockNodeId);
+    owner->SubscribeLockIfNotAlready(LockId, LockNodeId);
     auto writeOperation = owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
@@ -32,7 +32,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
     writeOperation->SetBehaviour(Behaviour);
     const auto& applyToMvccSnapshot = MvccSnapshot.Valid() ? MvccSnapshot : NOlap::TSnapshot::Max();
     NOlap::TWritingContext wContext(owner->TabletID(), owner->SelfId(), Schema, owner->StoragesManager,
-        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot, LockId,
+        owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, applyToMvccSnapshot, LockId, LockMode,
         writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationPortionsWriteActorId, IsBulk);
     // We don't need to split here portions by the last level
     // ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());

@@ -11,9 +11,8 @@ namespace builtins
 
   namespace
   {
-    struct xrange_iterator
-        : std::iterator<std::random_access_iterator_tag, long, ptrdiff_t,
-                        long *, long /*no ref here*/> {
+    struct xrange_iterator : std::iterator<std::random_access_iterator_tag, long, ptrdiff_t, long *,
+                                           long /*no ref here*/> {
       long value_;
       long step_;
 

@@ -116,7 +116,8 @@ EValueRepresentation TUnboxedImmutableComputationNode::GetRepresentation() const
 }
 
 Y_NO_INLINE TStatefulComputationNodeBase::TStatefulComputationNodeBase(ui32 valueIndex, EValueRepresentation kind)
-    : ValueIndex_(valueIndex)
+    : UpvaluesCollected_(false)
+    , ValueIndex_(valueIndex)
     , RepresentationKind_(kind)
 {
 }
@@ -155,8 +156,17 @@ Y_NO_INLINE void TStatefulComputationNodeBase::CollectDependentIndexesImpl(
 }
 
 Y_NO_INLINE void TStatefulComputationNodeBase::CollectUpvaluesImpl(TComputationExternalNodePtrSet& upvalues) const {
+    // XXX: If upvalues for the node are already collected, just
+    // enrich the set, given by the caller;..
+    if (this->UpvaluesCollected_) {
+        upvalues.insert(this->Upvalues_.cbegin(), this->Upvalues_.cend());
+        return;
+    }
+    // ... otherwise, recursively collect the upvalue candidates...
     std::for_each(Dependencies_.cbegin(), Dependencies_.cend(), std::bind(&IComputationNode::CollectUpvalues, std::placeholders::_1, std::ref(upvalues)));
+    // ... and filter out the owned nodes.
     std::erase_if(upvalues, [this](IComputationExternalNode* uv) { return Owned_.find(uv) != Owned_.cend(); });
+    this->UpvaluesCollected_ = true;
 }
 
 Y_NO_INLINE TStatefulSourceComputationNodeBase::TStatefulSourceComputationNodeBase()
@@ -377,6 +387,7 @@ Y_NO_INLINE void TPairStateWideFlowComputationNodeBase::CollectDependentIndexesI
 Y_NO_INLINE TDecoratorComputationNodeBase::TDecoratorComputationNodeBase(IComputationNode* node, EValueRepresentation kind)
     : Node_(node)
     , Kind_(kind)
+    , UpvaluesCollected_(false)
 {
 }
 
@@ -393,6 +404,7 @@ Y_NO_INLINE TBinaryComputationNodeBase::TBinaryComputationNodeBase(
     : Left_(left)
     , Right_(right)
     , Kind_(kind)
+    , UpvaluesCollected_(false)
 {
 }
 

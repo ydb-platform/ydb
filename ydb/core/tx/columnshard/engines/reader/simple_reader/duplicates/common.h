@@ -196,28 +196,28 @@ class TDuplicateMapInfo {
 private:
     TSnapshot MaxVersion;
     TIntervalBordersView Interval;
-    YDB_READONLY_DEF(ui64, SourceId);
+    YDB_READONLY_DEF(ui64, PortionId);
 
 public:
-    TDuplicateMapInfo(const TSnapshot& maxVersion, const TIntervalBordersView& interval, const ui64 sourceId)
+    TDuplicateMapInfo(const TSnapshot& maxVersion, const TIntervalBordersView& interval, const ui64 portionId)
         : MaxVersion(maxVersion)
         , Interval(interval)
-        , SourceId(sourceId)
+        , PortionId(portionId)
     {
     }
 
     operator size_t() const {
         size_t h = (size_t)MaxVersion;
         h = CombineHashes(h, (size_t)Interval);
-        h = CombineHashes(h, SourceId);
+        h = CombineHashes(h, PortionId);
         return h;
     }
     bool operator==(const TDuplicateMapInfo& other) const {
-        return std::tie(MaxVersion, Interval, SourceId) == std::tie(other.MaxVersion, other.Interval, other.SourceId);
+        return std::tie(MaxVersion, Interval, PortionId) == std::tie(other.MaxVersion, other.Interval, other.PortionId);
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "MaxVersion=" << MaxVersion.DebugString() << ";SourceId=" << SourceId;
+        return TStringBuilder() << "MaxVersion=" << MaxVersion.DebugString() << ";PortionId=" << PortionId;
     }
 
     const TIntervalBordersView& GetInterval() const {
@@ -269,12 +269,14 @@ private:
     TIntervalBorder Begin;
     TIntervalBorder End;
     YDB_READONLY_DEF(ui64, IntersectingPortionsCount);
+    ui64 ExclusivePortionId;
 
 public:
-    TIntervalInfo(const TIntervalBorder& begin, const TIntervalBorder& end, const ui64 intersectingPortionsCount)
+    TIntervalInfo(const TIntervalBorder& begin, const TIntervalBorder& end, const THashSet<ui64>& portionIds)
         : Begin(begin)
         , End(end)
-        , IntersectingPortionsCount(intersectingPortionsCount)
+        , IntersectingPortionsCount(portionIds.size())
+        , ExclusivePortionId(portionIds.size() == 1 ? *portionIds.begin() : 0)
     {
     }
 
@@ -284,6 +286,21 @@ public:
 
     const TIntervalBorder& GetEnd() const {
         return End;
+    }
+
+    ui64 GetExclusivePortionId() const {
+        AFL_VERIFY(IsExclusive());
+        return ExclusivePortionId;
+    }
+    bool IsExclusive() const {
+        return IntersectingPortionsCount == 1;
+    }
+    bool IsEmpty() const {
+        return IntersectingPortionsCount == 0;
+    }
+
+    TIntervalBordersView MakeView() const {
+        return TIntervalBordersView(Begin.MakeView(), End.MakeView());
     }
 };
 

@@ -11,7 +11,6 @@ from enum import Enum
 from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
-from junit_utils import get_property_value, iter_xml_files
 from get_test_history import get_test_history
 
 
@@ -85,17 +84,20 @@ class TestResult:
     count_of_passed: int
     owners: str
     status_description: str
+    error_type: str = ""
     is_sanitizer_issue: bool = False
+    is_timeout_issue: bool = False
 
     @property
     def status_display(self):
-        return {
+        base = {
             TestStatus.PASS: "PASS",
             TestStatus.FAIL: "FAIL",
             TestStatus.ERROR: "ERROR",
             TestStatus.SKIP: "SKIP",
             TestStatus.MUTE: "MUTE",
         }[self.status]
+        return base
 
     @property
     def elapsed_display(self):
@@ -111,49 +113,98 @@ class TestResult:
 
     @property
     def full_name(self):
-        return f"{self.classname}/{self.name}"
+        if self.classname:
+            return f"{self.classname}/{self.name}"
+        return self.name
 
     @classmethod
-    def from_junit(cls, testcase):
-        classname, name = testcase.get("classname"), testcase.get("name")
-        status_description = None
-        if testcase.find("failure") is not None:
-            status = TestStatus.FAIL
-            if testcase.find("failure").text is not None:
-                status_description = testcase.find("failure").text
-        elif testcase.find("error") is not None:
-            status = TestStatus.ERROR
-            if testcase.find("error").text is not None:
-                status_description = testcase.find("error").text
-        elif get_property_value(testcase, "mute") is not None:
+    def from_build_results_report(cls, result):
+        """
+        Create TestResult from build-results-report JSON result.
+        
+        Required fields: path, status
+        Optional fields: name, subtest_name, error_type, rich-snippet, properties, links, metrics
+        """
+        # Validate required fields
+        path_str = result.get("path")
+        if path_str is None:
+            raise ValueError(f"Missing required field 'path' in result: {result}")
+        
+        status_str = result.get("status")
+        if status_str is None:
+            raise ValueError(f"Missing required field 'status' in result: {result}")
+        
+        # Extract fields
+        name_part = result.get("name")
+        subtest_name = result.get("subtest_name")
+        error_type = result.get("error_type")
+        status_description = result.get("rich-snippet")
+        properties = result.get("properties")
+        metrics = result.get("metrics")
+        is_muted = bool(result.get("muted"))
+        
+        classname = path_str
+        if subtest_name and subtest_name.strip():
+            if name_part:
+                name = f"{name_part}.{subtest_name}"
+            else:
+                name = subtest_name
+        else:
+            name = name_part or ""
+        
+        if status_str == "OK":
+            status_str = "PASSED"
+        
+        # Map status to TestStatus enum
+        if is_muted:
             status = TestStatus.MUTE
-            if testcase.find("skipped").text is not None:
-                status_description = testcase.find("skipped").text
-        elif testcase.find("skipped") is not None:
+        elif status_str == "FAILED":
+            status = TestStatus.FAIL
+        elif status_str == "ERROR":
+            status = TestStatus.ERROR
+        elif status_str == "SKIPPED":
             status = TestStatus.SKIP
-            if testcase.find("skipped").text is not None:
-                status_description = testcase.find("skipped").text
         else:
             status = TestStatus.PASS
-
+        
+        # Extract log URLs from links (updated by transform_build_results.py with URLs)
+        # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
+        links = result.get("links", {})
+        
+        def get_link_url(link_type):
+            if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
+                return links[link_type][0]  # Take first URL from array
+            return None
+        
         log_urls = {
-            'Log': get_property_value(testcase, "url:Log"),
-            'log': get_property_value(testcase, "url:log"),
-            'logsdir': get_property_value(testcase, "url:logsdir"),
-            'stdout': get_property_value(testcase, "url:stdout"),
-            'stderr': get_property_value(testcase, "url:stderr"),
+            'Log': get_link_url("Log"),
+            'log': get_link_url("log"),
+            'logsdir': get_link_url("logsdir"),
+            'stdout': get_link_url("stdout"),
+            'stderr': get_link_url("stderr"),
         }
         log_urls = {k: v for k, v in log_urls.items() if v}
-
-        elapsed = testcase.get("time")
-
+        
+        # Get duration from result (same as upload_tests_results.py)
+        duration = result.get("duration", 0)
         try:
-            elapsed = float(elapsed)
+            elapsed = float(duration)
         except (TypeError, ValueError):
-            elapsed = 0
-            print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
-
-        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, is_sanitizer_issue(status_description))
+            elapsed = 0.0
+        
+        return cls(
+            classname=classname,
+            name=name,
+            status=status,
+            log_urls=log_urls,
+            elapsed=elapsed,
+            count_of_passed=0,
+            owners='',
+            status_description=status_description or '',
+            error_type=error_type or '',
+            is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
+            is_timeout_issue=(error_type or '').lower() == 'timeout'
+        )
 
 
 class TestSummaryLine:
@@ -420,14 +471,42 @@ def get_codeowners_for_tests(codeowners_file_path, tests_data):
             tests_data_with_owners.append(test)
 
 
+def iter_build_results_files(path):
+    """Iterate over build-results-report JSON files"""
+    import glob
+    
+    if os.path.isfile(path):
+        files = [path]
+    else:
+        # If it's a directory, look for report.json files
+        files = glob.glob(os.path.join(path, "**/report.json"), recursive=True)
+        if not files:
+            files = glob.glob(os.path.join(path, "report.json"))
+    
+    for fn in files:
+        try:
+            with open(fn, 'r') as f:
+                report = json.load(f)
+            
+            for result in report.get("results") or []:
+                if result.get("type") == "test":
+                    # Skip suite-level entries (they are aggregates, not individual tests)
+                    if result.get("suite") is True:
+                        continue
+                    yield fn, result
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)
+            continue
+
+
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None):
     summary = TestSummary(is_retry=is_retry)
 
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
 
-        for fn, suite, case in iter_xml_files(path):
-            test_result = TestResult.from_junit(case)
+        for fn, result in iter_build_results_files(path):
+            test_result = TestResult.from_build_results_report(result)
             summary_line.add(test_result)
         
         if os.path.isabs(html_fn):
@@ -502,7 +581,7 @@ def main():
     parser.add_argument('--comment_text_file', required=True)
     parser.add_argument('--pr_number', required=False, type=int, help="Pull request number")
     parser.add_argument('--workflow_run_id', required=False, help="GitHub workflow run ID")
-    parser.add_argument("args", nargs="+", metavar="TITLE html_out path")
+    parser.add_argument("args", nargs="+", metavar="TITLE html_out build-results-report-path")
     args = parser.parse_args()
 
     if len(args.args) % 3 != 0:

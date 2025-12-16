@@ -112,6 +112,9 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         if (config.GetEnableCompactification()) {
             (*settings->mutable_attributes())["_cleanup_policy"] = "compact";
         }
+        if (config.HasMetricsLevel()) {
+            settings->set_metrics_level(config.GetMetricsLevel());
+        }
         bool local = config.GetLocalDC();
         settings->set_client_write_disabled(!local);
         const auto &partConfig = config.GetPartitionConfig();
@@ -151,6 +154,11 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                 rr->add_supported_codecs((Ydb::PersQueue::V1::Codec) (codec + 1));
             }
             rr->set_important(consumer.GetImportant());
+            if (consumer.HasAvailabilityPeriodMs()) {
+                TDuration availabilityPeriod = TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
+                rr->mutable_availability_period()->set_seconds(availabilityPeriod.Seconds());
+                rr->mutable_availability_period()->set_nanos(availabilityPeriod.NanoSecondsOfSecond());
+            }
 
             if (consumer.HasServiceType()) {
                 rr->set_service_type(consumer.GetServiceType());
@@ -1374,6 +1382,11 @@ bool TPartitionsLocationActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
+    if (!record.GetStatus()) {
+        this->RaiseError("Partition locations are not available", Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED,
+            Ydb::StatusIds::UNAVAILABLE, ActorContext());
+        return false;
+    }
     for (auto i = 0u; i < record.LocationsSize(); i++) {
         const auto& part = record.GetLocations(i);
         TEvPQProxy::TPartitionLocationInfo partLocation;
@@ -1390,9 +1403,13 @@ bool TPartitionsLocationActor::ApplyResponse(
 
 void TPartitionsLocationActor::Finalize() {
     if (Settings.Partitions) {
-        Y_ABORT_UNLESS(Response->Partitions.size() == Settings.Partitions.size());
+        AFL_ENSURE(Response->Partitions.size() == Settings.Partitions.size())
+            ("l", Response->Partitions.size())
+            ("r", Settings.Partitions.size());
     } else {
-        Y_ABORT_UNLESS(Response->Partitions.size() == PQGroupInfo->Description.PartitionsSize());
+        AFL_ENSURE(Response->Partitions.size() >= PQGroupInfo->Description.PartitionsSize())
+            ("l", Response->Partitions.size())
+            ("r", PQGroupInfo->Description.PartitionsSize());
     }
     TBase::RespondWithCode(Ydb::StatusIds::SUCCESS);
 }
@@ -1400,6 +1417,16 @@ void TPartitionsLocationActor::Finalize() {
 void TPartitionsLocationActor::RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) {
     this->AddIssue(FillIssue(error, errorCode));
     this->RespondWithCode(status);
+}
+
+bool TPartitionsLocationActor::OnUnhandledException(const std::exception& exc) {
+    ALOG_ERROR(NKikimrServices::PQ_READ_PROXY, "unhandled exception "
+        << TypeName(exc) << ": " << exc.what() << Endl
+        << TBackTrace::FromCurrentException().PrintToString());
+
+    this->RaiseError("Unhandled exception", Ydb::PersQueue::ErrorCode::ERROR, Ydb::StatusIds::UNAVAILABLE, ActorContext());
+
+    return true;
 }
 
 TAlterTopicActorInternal::TAlterTopicActorInternal(

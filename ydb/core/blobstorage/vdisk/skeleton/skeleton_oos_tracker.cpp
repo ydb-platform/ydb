@@ -90,7 +90,7 @@ namespace NKikimr {
             FreeChunks = msg->FreeChunks;
             VCtx->OutOfSpaceState.UpdateLocalChunk(msg->StatusFlags);
             VCtx->OutOfSpaceState.UpdateLocalLog(msg->LogStatusFlags);
-            VCtx->OutOfSpaceState.UpdateLocalFreeSpaceShare(ui64(1 << 24) * (1.0 - msg->Occupancy));
+            VCtx->OutOfSpaceState.UpdateLocalFreeSpaceShare(ui64(1 << 24) * (1.0 - msg->NormalizedOccupancy));
             VCtx->OutOfSpaceState.UpdateLocalUsedChunks(msg->UsedChunks);
             VCtx->OutOfSpaceState.UpdateLocalTotalChunks(msg->TotalChunks);
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;

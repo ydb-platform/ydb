@@ -6,6 +6,7 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     tokenizer_ut.cpp
+    trie_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

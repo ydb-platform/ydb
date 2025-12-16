@@ -57,7 +57,15 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
     TVector<TExprBase> effects;
     effects.emplace_back(tableDelete);
 
+    const bool isSink = NeedSinks(table, kqpCtx);
+    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+
     for (const auto& [tableNode, indexDesc] : indexes) {
+        if (useStreamIndex
+                && (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+            continue;
+        }
         THashSet<TStringBuf> indexTableColumnsSet;
         TVector<TStringBuf> indexTableColumns;
 
@@ -75,8 +83,9 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         auto deleteIndexKeys = project(indexTableColumns);
 
         switch (indexDesc->Type) {
-            case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalAsync:
+                AFL_ENSURE(false);
+            case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalSyncUnique: {
                 // deleteIndexKeys are already correct
                 break;

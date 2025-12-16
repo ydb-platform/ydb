@@ -9,6 +9,11 @@
             "uri": "file://test.test_EndOf_/results.txt"
         }
     ],
+    "test.test[FormatWriteOffsetWithColon]": [
+        {
+            "uri": "file://test.test_FormatWriteOffsetWithColon_/results.txt"
+        }
+    ],
     "test.test[From]": [
         {
             "uri": "file://test.test_From_/results.txt"

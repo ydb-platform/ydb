@@ -96,6 +96,7 @@ def setup_kwargs(strategy, mode, buffer_size, store_comp_size,
 
 
 # Test single threaded usage with all valid variations of input
+@pytest.mark.thread_unsafe
 def test_1(data, strategy, mode, buffer_size, store_comp_size,
            c_return_bytearray, d_return_bytearray, dictionary):
     if buffer_size >= (1 << (8 * store_comp_size['store_comp_size'])):
@@ -111,6 +112,6 @@ def test_1(data, strategy, mode, buffer_size, store_comp_size,
 
 # Test multi threaded:
 #   Not relevant in the lz4.stream case (the process is highly sequential,
-#   and re-use/share the same context from one input chunk to the next one).
+#   and reuse/share the same context from one input chunk to the next one).
 def test_2(data, strategy, mode, buffer_size, store_comp_size, dictionary): # noqa
     pass

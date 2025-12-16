@@ -1,13 +1,14 @@
 from sqlalchemy.exc import CompileError
 from sqlalchemy.sql.compiler import SQLCompiler
 
+from clickhouse_connect.cc_sqlalchemy import ArrayJoin
 from clickhouse_connect.cc_sqlalchemy.sql import format_table
 
 
 # pylint: disable=arguments-differ
 class ChStatementCompiler(SQLCompiler):
 
-    # pylint: disable=attribute-defined-outside-init
+    # pylint: disable=attribute-defined-outside-init,unused-argument
     def visit_delete(self, delete_stmt, visiting_cte=None, **kw):
         table = delete_stmt.table
         text = f"DELETE FROM {format_table(table)}"
@@ -23,10 +24,20 @@ class ChStatementCompiler(SQLCompiler):
 
         return text
 
-    def visit_select(self, select_stmt, **kw):
-        return super().visit_select(select_stmt, **kw)
+    def visit_array_join(self, array_join_clause, asfrom=False, from_linter=None, **kw):
+        left = self.process(array_join_clause.left, asfrom=True, from_linter=from_linter, **kw)
+        array_col = self.process(array_join_clause.array_column, **kw)
+        join_type = "LEFT ARRAY JOIN" if array_join_clause.is_left else "ARRAY JOIN"
+        text = f"{left} {join_type} {array_col}"
+        if array_join_clause.alias:
+            text += f" AS {self.preparer.quote(array_join_clause.alias)}"
+
+        return text
 
     def visit_join(self, join, **kw):
+        if isinstance(join, ArrayJoin):
+            return self.visit_array_join(join, **kw)
+
         left = self.process(join.left, **kw)
         right = self.process(join.right, **kw)
         onclause = join.onclause
@@ -72,3 +83,8 @@ class ChStatementCompiler(SQLCompiler):
 
     def visit_sequence(self, sequence, **kw):
         raise NotImplementedError("ClickHouse doesn't support sequences")
+
+    def get_from_hint_text(self, table, text):
+        if text == "FINAL":
+            return "FINAL"
+        return super().get_from_hint_text(table, text)

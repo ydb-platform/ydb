@@ -368,8 +368,7 @@ namespace NPQ {
                 Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix), blob.Value);
 
             if (resp->Overload) {
-                LOG_N("Have to remove new data from cache. Topic " << TopicName << ", tablet id" << TabletId
-                                                                 << ", cookie " << resp->Cookie);
+                LOG_D("Have to remove new data from cache. Topic " << TopicName << ", cookie " << resp->Cookie);
             }
 
             UpdateCounters(ctx);

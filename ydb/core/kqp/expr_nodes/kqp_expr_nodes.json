@@ -665,8 +665,8 @@
                 {"Index": 0, "Name": "Operator", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "First", "Type": "TExprBase"},
                 {"Index": 2, "Name": "Second", "Type": "TExprBase"},
-                {"Index": 3, "Name": "Third", "Type": "TExprBase"}
-
+                {"Index": 3, "Name": "Third", "Type": "TExprBase"},
+                {"Index": 4, "Name": "OpType", "Type": "TExprBase"}
             ]
         },
         {
@@ -776,7 +776,8 @@
             "Children": [
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Alias", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "SourceType", "Type": "TCoAtom"}
             ]
         },
         {
@@ -900,7 +901,8 @@
             "Match" : {"Type": "Callable", "Name": "KqpOpRoot"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"}
+                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "PgSyntax", "Type": "TCoAtom"}
             ]
         },
         {
@@ -909,9 +911,7 @@
             "Match": {"Type": "Tuple"},
             "Children": [
                 {"Index": 0, "Name": "OriginalColName", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "AggregationFunctionResultType", "Type": "TExprBase"}
+                {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"}
             ]
         },
         {
@@ -930,9 +930,9 @@
             ]
         },
         {
-            "Name": "TKqpPgExprSublink",
+            "Name": "TKqpExprSublink",
             "Base": "TExprBase",
-            "Match" : {"Type": "Callable", "Name": "KqpPgExprSublink"},
+            "Match" : {"Type": "Callable", "Name": "KqpExprSublink"},
             "Children": [
                 {"Index": 0, "Name": "Expr", "Type": "TExprBase"}
             ]

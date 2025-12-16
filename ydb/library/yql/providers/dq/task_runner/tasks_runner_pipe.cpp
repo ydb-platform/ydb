@@ -714,9 +714,15 @@ public:
         }
     }
 
+    void Push(TInstant watermark) override {
+        Y_UNUSED(watermark);
+        ythrow yexception() << "unimplemented";
+    }
+
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override {
         Y_UNUSED(batch);
+        Y_UNUSED(watermark);
         ythrow yexception() << "unimplemented";
     }
 
@@ -726,6 +732,11 @@ public:
         } catch (...) {
             TaskRunner->RaiseException();
         }
+    }
+
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
     }
 
     bool IsFinished() const override {
@@ -881,8 +892,13 @@ public:
         Push(std::move(serialized), space);
     }
 
+    void Push(TInstant watermark) override {
+        Y_UNUSED(watermark);
+        ythrow yexception() << "unimplemented";
+    }
+
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& /* watermark */) override {
         Y_UNUSED(batch);
         ythrow yexception() << "unimplemented";
     }
@@ -1174,8 +1190,9 @@ public:
         }
     }
 
-    void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
-        Y_UNUSED(settings);
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
     }
 
     template<typename T>

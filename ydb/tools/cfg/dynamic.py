@@ -21,6 +21,7 @@ class DynamicConfigGenerator(object):
         grpc_endpoint=None,
         local_binary_path=None,
         host_info_provider=None,
+        enable_modules=False,
         **kwargs
     ):
         self._template = template
@@ -28,11 +29,12 @@ class DynamicConfigGenerator(object):
         self._local_binary_path = local_binary_path or binary_path
         self._output_dir = output_dir
         self._host_info_provider = host_info_provider
-        self._cluster_details = base.ClusterDetailsProvider(template, host_info_provider=self._host_info_provider)
+        self._enable_modules = template.get("enable_modules", enable_modules)
+        self._cluster_details = base.ClusterDetailsProvider(template, host_info_provider=self._host_info_provider, enable_modules=self._enable_modules)
         self._grpc_endpoint = grpc_endpoint
         self.__configure_request = None
         self.__static_config = static.StaticConfigGenerator(
-            template, binary_path, output_dir, host_info_provider=host_info_provider, local_binary_path=local_binary_path, **kwargs
+            template, binary_path, output_dir, host_info_provider=host_info_provider, local_binary_path=local_binary_path, enable_modules=self._enable_modules, **kwargs
         )
 
     @property
@@ -190,6 +192,12 @@ class DynamicConfigGenerator(object):
             if drive.expected_slot_count is not None:
                 pc = pdisk_config.TPDiskConfig(ExpectedSlotCount=drive.expected_slot_count)
                 kwargs.update(PDiskConfig=pc)
+
+            if self._cluster_details.infer_pdisk_slot_count is not None:
+                infer_settings = self._cluster_details.infer_pdisk_slot_count.get(str(drive.type).lower())
+                if infer_settings is not None:
+                    kwargs.update(InferPDiskSlotCountFromUnitSize=infer_settings['unit_size'])
+                    kwargs.update(InferPDiskSlotCountMax=infer_settings['max_slots'])
             array.add(**kwargs)
 
         for host_config in self._cluster_details.host_configs:

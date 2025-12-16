@@ -48,8 +48,8 @@ TUploadStatus::TUploadStatus(const NKikimrTxDataShard::TError::EKind status, con
         case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
             Code = Ydb::StatusIds::OVERLOADED;
             break;
-        case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED:
-        case NKikimrTxDataShard::TError::OUT_OF_SPACE:
+        case NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED:
+        case NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE:
             Code = Ydb::StatusIds::UNAVAILABLE;
             break;
         case NKikimrTxDataShard::TError::SCHEME_ERROR:

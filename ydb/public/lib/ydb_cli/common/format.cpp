@@ -4,6 +4,7 @@
 #include <library/cpp/json/json_prettifier.h>
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/library/arrow_parquet/result_set_parquet_printer.h>
 
 #include <iomanip>
@@ -106,7 +107,7 @@ void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config,
                                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Input format. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default input format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     auto& inputFormatDescriptions = GetInputFormatDescriptions();
@@ -131,7 +132,7 @@ void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config,
 void TCommandWithInput::AddInputFramingFormats(TClientCommand::TConfig &config,
         const TVector<EFramingFormat>& allowedFormats, EFramingFormat defaultFormat) {
     TStringStream description;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default framing format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     description << "Input framing format. Defines how parameter sets are delimited on the input. Available options: ";
@@ -157,7 +158,7 @@ void TCommandWithInput::AddInputBinaryStringEncodingFormats(TClientCommand::TCon
         const TVector<EBinaryStringEncodingFormat>& allowedFormats, EBinaryStringEncodingFormat defaultFormat) {
     TStringStream description;
     description << "Input binary strings encoding format. Sets how binary strings in the input should be interterpreted. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default binary string format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     for (const auto& format : allowedFormats) {
@@ -233,7 +234,7 @@ void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
                                     const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
     description << "Output format. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default output format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
     bool printComma = false;
@@ -337,7 +338,7 @@ void TCommandWithOutput::ParseOutputFormats() {
 void TCommandWithMessagingFormat::AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats) {
     TStringStream description;
     description << "Client-side format. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     for (const auto& format : allowedFormats) {
         auto findResult = MessagingFormatDescriptions.find(format);
         Y_ABORT_UNLESS(findResult != MessagingFormatDescriptions.end(),
@@ -479,7 +480,7 @@ void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<T
     }
 
     if (AnalyzeMode && node.contains("Stats")) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Output);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Output);
         for (const auto& [key, value] : node.at("Stats").GetMapSafe()) {
             Output << headerPrefix << colors.Yellow() << key << ": " << colors.Cyan()
                  << JsonToString(value) << colors.Default() << Endl;
@@ -570,7 +571,7 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
 
     auto& newRow = table.AddRow();
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Output);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Output);
 
     bool hasChildren = node.contains("Plans") && !node.at("Plans").GetArraySafe().empty();
 

@@ -58,8 +58,8 @@ private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder* valueBuilder, const NUdf::TUnboxedValuePod* args) const final {
             NUdf::TUnboxedValuePod newArg;
             const auto arg = args[0];
-            const auto& narrow = *reinterpret_cast<const NYql::DateTime::TTMStorage*>(arg.GetRawPtr());
-            auto& extended = *reinterpret_cast<NYql::DateTime::TTM64Storage*>(newArg.GetRawPtr());
+            const auto& narrow = *reinterpret_cast<const NYql::NDateTime::TTMStorage*>(arg.GetRawPtr());
+            auto& extended = *reinterpret_cast<NYql::NDateTime::TTM64Storage*>(newArg.GetRawPtr());
             extended.From(narrow);
             return Closure_.Run(valueBuilder, &newArg);
         }

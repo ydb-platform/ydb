@@ -55,8 +55,8 @@ bool ShouldFailOnInvalidRegexp(const std::string_view regexp, NYql::TLangVersion
         return true;
     }
     THashType hash = GetStringHash(regexp) % 100;
-    static ui64 failProbability = GetFailProbability();
-    return hash < failProbability;
+    static ui64 FailProbability = GetFailProbability();
+    return hash < FailProbability;
 }
 
 RE2::Options CreateDefaultOptions() {
@@ -157,26 +157,26 @@ public:
     };
 
     static const TStringRef& Name(EMode mode) {
-        static auto match = TStringRef::Of("Match");
-        static auto grep = TStringRef::Of("Grep");
-        static auto capture = TStringRef::Of("Capture");
-        static auto replace = TStringRef::Of("Replace");
-        static auto count = TStringRef::Of("Count");
-        static auto findAndconsume = TStringRef::Of("FindAndConsume");
+        static auto Match = TStringRef::Of("Match");
+        static auto Grep = TStringRef::Of("Grep");
+        static auto Capture = TStringRef::Of("Capture");
+        static auto Replace = TStringRef::Of("Replace");
+        static auto Count = TStringRef::Of("Count");
+        static auto FindAndconsume = TStringRef::Of("FindAndConsume");
 
         switch (mode) {
             case EMode::MATCH:
-                return match;
+                return Match;
             case EMode::GREP:
-                return grep;
+                return Grep;
             case EMode::CAPTURE:
-                return capture;
+                return Capture;
             case EMode::REPLACE:
-                return replace;
+                return Replace;
             case EMode::COUNT:
-                return count;
+                return Count;
             case EMode::FIND_AND_CONSUME:
-                return findAndconsume;
+                return FindAndconsume;
         }
         Y_ABORT("Unexpected mode");
     }
@@ -359,8 +359,8 @@ public:
     }
 
     static const ::NKikimr::NUdf::TStringRef& Name() {
-        static auto name = ::NKikimr::NUdf::TStringRef::Of("Options");
-        return name;
+        static auto Name = ::NKikimr::NUdf::TStringRef::Of("Options");
+        return Name;
     }
 
     static bool DeclareSignature(
@@ -411,8 +411,8 @@ public:
     }
 
     static const ::NKikimr::NUdf::TStringRef& Name() {
-        static auto name = ::NKikimr::NUdf::TStringRef::Of("IsValidRegexp");
-        return name;
+        static auto Name = ::NKikimr::NUdf::TStringRef::Of("IsValidRegexp");
+        return Name;
     }
 
     static bool DeclareSignature(

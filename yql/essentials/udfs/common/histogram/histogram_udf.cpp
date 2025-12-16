@@ -47,13 +47,34 @@ HISTOGRAM_ALGORITHMS_MAP(DECLARE_HISTOGRAM_RESOURCE_NAME)
 DECLARE_HISTOGRAM_RESOURCE_NAME(Linear)
 DECLARE_HISTOGRAM_RESOURCE_NAME(Logarithmic)
 
-class TLinearHistogram: public TAdaptiveWardHistogram {
+class TRangeHistogram: public TAdaptiveWardHistogram {
 public:
-    TLinearHistogram(double step, double begin, double end)
+    TRangeHistogram(double step, double begin, double end)
         : TAdaptiveWardHistogram(1ULL << 24)
         , Step_(step)
         , Begin_(begin)
         , End_(end)
+    {
+    }
+
+    void Add(double value, double weight) override {
+        TAdaptiveWardHistogram::Add(value, weight);
+    }
+
+    void Add(const THistoRec&) final {
+        Y_ABORT("Not implemented");
+    }
+
+protected:
+    double Step_ = 0;
+    double Begin_ = 0;
+    double End_ = 0;
+};
+
+class TLinearHistogram final: public TRangeHistogram {
+public:
+    TLinearHistogram(double step, double begin, double end)
+        : TRangeHistogram(step, begin, end)
     {
     }
 
@@ -65,23 +86,14 @@ public:
         } else {
             value = std::floor(value / Step_ + 0.5) * Step_;
         }
-        TAdaptiveWardHistogram::Add(value, weight);
+        TRangeHistogram::Add(value, weight);
     }
-
-    void Add(const THistoRec&) override {
-        Y_ABORT("Not implemented");
-    }
-
-protected:
-    double Step_;
-    double Begin_;
-    double End_;
 };
 
-class TLogarithmicHistogram: public TLinearHistogram {
+class TLogarithmicHistogram final: public TRangeHistogram {
 public:
     TLogarithmicHistogram(double step, double begin, double end)
-        : TLinearHistogram(step, begin, end)
+        : TRangeHistogram(step, begin, end)
     {
     }
 
@@ -102,12 +114,8 @@ public:
         }
 
         if (!std::isnan(value)) {
-            TAdaptiveWardHistogram::Add(value, weight);
+            TRangeHistogram::Add(value, weight);
         }
-    }
-
-    void Add(const THistoRec&) override {
-        Y_ABORT("Not implemented");
     }
 };
 
@@ -122,9 +130,9 @@ public:
     typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_Create";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_Create";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -174,9 +182,9 @@ public:
     typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_AddValue";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_AddValue";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -226,9 +234,9 @@ public:
     typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_Serialize";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_Serialize";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -279,9 +287,9 @@ public:
     typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_Deserialize";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_Deserialize";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -291,7 +299,7 @@ private:
         try {
             Y_UNUSED(valueBuilder);
             THistogram proto;
-            Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(TString(args[0].AsStringRef()));
+            Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(args[0].AsStringRef());
             THolder<THistogramResource> histogram(new THistogramResource(args[1].Get<ui32>()));
             histogram->Get()->FromProto(proto);
             return TUnboxedValuePod(histogram.Release());
@@ -333,9 +341,9 @@ public:
     typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_Merge";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_Merge";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -409,9 +417,9 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TString(ResourceName).substr(10) + "Histogram_GetResult";
-        static auto nameRef = TStringRef(name);
-        return nameRef;
+        static auto Name = TString(ResourceName).substr(10) + "Histogram_GetResult";
+        static auto NameRef = TStringRef(Name);
+        return NameRef;
     }
 
 private:
@@ -518,7 +526,7 @@ TUnboxedValue THistogram_Deserialize<TLinearHistogram, LinearHistogramResourceNa
     try {
         Y_UNUSED(valueBuilder);
         THistogram proto;
-        Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(TString(args[0].AsStringRef()));
+        Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(args[0].AsStringRef());
         THolder<THistogramResource> histogram(
             new THistogramResource(args[1].Get<double>(), args[2].Get<double>(), args[3].Get<double>()));
         histogram->Get()->FromProto(proto);
@@ -588,7 +596,7 @@ TUnboxedValue THistogram_Deserialize<TLogarithmicHistogram, LogarithmicHistogram
     try {
         Y_UNUSED(valueBuilder);
         THistogram proto;
-        Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(TString(args[0].AsStringRef()));
+        Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromString(args[0].AsStringRef());
         THolder<THistogramResource> histogram(
             new THistogramResource(args[1].Get<double>(), args[2].Get<double>(), args[3].Get<double>()));
         histogram->Get()->FromProto(proto);
@@ -624,8 +632,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Print");
-        return name;
+        static auto Name = TStringRef::Of("Print");
+        return Name;
     }
 
     TUnboxedValue Run(
@@ -721,8 +729,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("ToCumulativeDistributionFunction");
-        return name;
+        static auto Name = TStringRef::Of("ToCumulativeDistributionFunction");
+        return Name;
     }
 
     TUnboxedValue Run(
@@ -793,8 +801,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static auto name = TStringRef::Of("Normalize");
-        return name;
+        static auto Name = TStringRef::Of("Normalize");
+        return Name;
     }
 
     TUnboxedValue Run(

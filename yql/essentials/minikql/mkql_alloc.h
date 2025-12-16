@@ -624,14 +624,12 @@ struct TMKQLHugeAllocator {
     template <typename U>
     TMKQLHugeAllocator(const TMKQLHugeAllocator<U>&) noexcept {
     }
-    template <typename U>
-    struct Rebind {
-        typedef TMKQLHugeAllocator<U> other;
-    };
+
     template <typename U>
     bool operator==(const TMKQLHugeAllocator<U>&) const {
         return true;
     }
+
     template <typename U>
     bool operator!=(const TMKQLHugeAllocator<U>&) const {
         return false;

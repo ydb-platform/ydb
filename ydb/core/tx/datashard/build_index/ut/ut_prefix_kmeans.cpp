@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     static std::tuple<TString, TString, TString> DoPrefixKMeans(
         Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent, ui64 seed, ui64 k,
         NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
-        VectorIndexSettings::Metric metric, ui32 maxBatchRows)
+        VectorIndexSettings::Metric metric, ui32 maxBatchRows, ui32 overlapClusters = 0)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -127,6 +127,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 rec.AddSourcePrimaryKeyColumns("key");
 
                 rec.SetDatabaseName(kDatabaseName);
+
+                rec.SetOverlapClusters(overlapClusters);
+                rec.SetOverlapRatio(2);
+                rec.SetOverlapOutForeign(upload == NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD);
+
                 rec.SetPrefixName(kPrefixTable);
                 rec.SetLevelName(kLevelTable);
                 rec.SetOutputName(kPostingTable);
@@ -163,62 +168,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     static void DropTable(Tests::TServer::TPtr server, TActorId sender, const TString& name)
     {
         ui64 txId = AsyncDropTable(server, sender, "/Root", name);
-        WaitTxNotification(server, sender, txId);
-    }
-
-    static void CreatePrefixTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options)
-    {
-        options.AllowSystemColumnNames(true);
-        options.Columns({
-            {"user", "String", true, true},
-            {IdColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
-        });
-        CreateShardedTable(server, sender, "/Root", "table-prefix", options);
-    }
-
-    static void CreateLevelTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options)
-    {
-        options.AllowSystemColumnNames(true);
-        options.Columns({
-            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
-            {IdColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
-            {CentroidColumn, "String", false, true},
-        });
-        CreateShardedTable(server, sender, "/Root", "table-level", options);
-    }
-
-    static void CreatePostingTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options)
-    {
-        options.AllowSystemColumnNames(true);
-        options.Columns({
-            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
-            {"key", "Uint32", true, true},
-            {"data", "String", false, false},
-        });
-        CreateShardedTable(server, sender, "/Root", "table-posting", options);
-    }
-
-    static void CreateBuildTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options, const TString& name)
-    {
-        options.AllowSystemColumnNames(true);
-        options.Columns({
-            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
-            {"key", "Uint32", true, true},
-            {"embedding", "String", false, false},
-            {"data", "String", false, false},
-        });
-        CreateShardedTable(server, sender, "/Root", name, options);
-    }
-
-    static void CreateBuildPrefixTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options, const TString& name)
-    {
-        options.Columns({
-            {"user", "String", true, true},
-            {"key", "Uint32", true, true},
-            {"embedding", "String", false, false},
-            {"data", "String", false, false},
-        });
-        CreateShardedTable(server, sender, "/Root", name, options);
+        WaitTxNotification(server, txId);
     }
 
     Y_UNIT_TEST (BadRequest) {
@@ -458,6 +408,100 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         }}
     }
 
+    Y_UNIT_TEST (BuildToPostingWithOverlap) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
+        options.Shards(1);
+
+        CreateBuildPrefixTable(server, sender, options, "table-main");
+        // Upsert some initial values
+        ExecSQL(server, sender, MainTableForOverlapWithPrefix);
+
+        auto create = [&] {
+            CreatePrefixTable(server, sender, options);
+            CreateLevelTable(server, sender, options);
+            CreatePostingTable(server, sender, options);
+        };
+        create();
+        auto recreate = [&] {
+            DropTable(server, sender, "table-prefix");
+            DropTable(server, sender, "table-level");
+            DropTable(server, sender, "table-posting");
+            create();
+        };
+
+        ui64 seed = 100;
+        ui64 k = 3;
+        auto similarity = VectorIndexSettings::DISTANCE_COSINE;
+
+        for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
+            auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
+                VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, maxBatchRows, 2);
+            UNIT_ASSERT_VALUES_EQUAL(prefix,
+                "user = user-1, __ydb_id = 40\n"
+
+                "user = user-2, __ydb_id = 44\n"
+            );
+            UNIT_ASSERT_VALUES_EQUAL(level,
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = \x10\x80\x02\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = \x80\x10\x02\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775851, __ydb_centroid = \x0E\x0E\x02\n"
+
+                "__ydb_parent = 44, __ydb_id = 9223372036854775853, __ydb_centroid = \x10\x80\x02\n"
+                "__ydb_parent = 44, __ydb_id = 9223372036854775854, __ydb_centroid = \x0E\x0E\x02\n"
+                "__ydb_parent = 44, __ydb_id = 9223372036854775855, __ydb_centroid = \x80\x10\x02\n"
+            );
+            UNIT_ASSERT_VALUES_EQUAL(posting,
+                "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
+                "__ydb_parent = 9223372036854775849, key = 4, data = four\n"
+                "__ydb_parent = 9223372036854775849, key = 5, data = five\n"
+                "__ydb_parent = 9223372036854775849, key = 11, data = ffff\n"
+                "__ydb_parent = 9223372036854775850, key = 2, data = two\n"
+                "__ydb_parent = 9223372036854775850, key = 6, data = aaa\n"
+                "__ydb_parent = 9223372036854775850, key = 7, data = bbbb\n"
+                "__ydb_parent = 9223372036854775850, key = 10, data = eee\n"
+                "__ydb_parent = 9223372036854775851, key = 3, data = three\n"
+                "__ydb_parent = 9223372036854775851, key = 8, data = ccccc\n"
+                "__ydb_parent = 9223372036854775851, key = 9, data = dddd\n"
+                "__ydb_parent = 9223372036854775851, key = 10, data = eee\n"
+                "__ydb_parent = 9223372036854775851, key = 11, data = ffff\n"
+                "__ydb_parent = 9223372036854775851, key = 12, data = ggggg\n"
+                "__ydb_parent = 9223372036854775851, key = 13, data = hhhh\n"
+
+                "__ydb_parent = 9223372036854775853, key = 21, data = one\n"
+                "__ydb_parent = 9223372036854775853, key = 24, data = four\n"
+                "__ydb_parent = 9223372036854775853, key = 25, data = five\n"
+                "__ydb_parent = 9223372036854775853, key = 31, data = ffff\n"
+                "__ydb_parent = 9223372036854775854, key = 23, data = three\n"
+                "__ydb_parent = 9223372036854775854, key = 28, data = ccccc\n"
+                "__ydb_parent = 9223372036854775854, key = 29, data = dddd\n"
+                "__ydb_parent = 9223372036854775854, key = 30, data = eee\n"
+                "__ydb_parent = 9223372036854775854, key = 31, data = ffff\n"
+                "__ydb_parent = 9223372036854775854, key = 32, data = ggggg\n"
+                "__ydb_parent = 9223372036854775854, key = 33, data = hhhh\n"
+                "__ydb_parent = 9223372036854775855, key = 22, data = two\n"
+                "__ydb_parent = 9223372036854775855, key = 26, data = aaa\n"
+                "__ydb_parent = 9223372036854775855, key = 27, data = bbbb\n"
+                "__ydb_parent = 9223372036854775855, key = 30, data = eee\n"
+            );
+            recreate();
+        }
+    }
+
     Y_UNIT_TEST (BuildToBuild) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -609,6 +653,100 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             );
             recreate();
         }}
+    }
+
+    Y_UNIT_TEST (BuildToBuildWithOverlap) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
+        options.Shards(1);
+
+        CreateBuildPrefixTable(server, sender, options, "table-main");
+        // Upsert some initial values
+        ExecSQL(server, sender, MainTableForOverlapWithPrefix);
+
+        auto create = [&] {
+            CreatePrefixTable(server, sender, options);
+            CreateLevelTable(server, sender, options);
+            CreateBuildTableWithForeignOut(server, sender, options, "table-posting");
+        };
+        create();
+        auto recreate = [&] {
+            DropTable(server, sender, "table-prefix");
+            DropTable(server, sender, "table-level");
+            DropTable(server, sender, "table-posting");
+            create();
+        };
+
+        ui64 seed = 100;
+        ui64 k = 3;
+        auto similarity = VectorIndexSettings::DISTANCE_COSINE;
+
+        for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
+            auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
+                VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, maxBatchRows, 2);
+            UNIT_ASSERT_VALUES_EQUAL(prefix,
+                "user = user-1, __ydb_id = 40\n"
+
+                "user = user-2, __ydb_id = 44\n"
+            );
+            UNIT_ASSERT_VALUES_EQUAL(level,
+                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = \x10\x80\x02\n"
+                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = \x80\x10\x02\n"
+                "__ydb_parent = 40, __ydb_id = 43, __ydb_centroid = \x0E\x0E\x02\n"
+
+                "__ydb_parent = 44, __ydb_id = 45, __ydb_centroid = \x10\x80\x02\n"
+                "__ydb_parent = 44, __ydb_id = 46, __ydb_centroid = \x0E\x0E\x02\n"
+                "__ydb_parent = 44, __ydb_id = 47, __ydb_centroid = \x80\x10\x02\n"
+            );
+            UNIT_ASSERT_VALUES_EQUAL(posting,
+                "key = 1, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x80\x02, data = one\n"
+                "key = 2, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x80\x10\x02, data = two\n"
+                "key = 3, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x10\x02, data = three\n"
+                "key = 4, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x11\x81\x02, data = four\n"
+                "key = 5, __ydb_parent = 41, __ydb_foreign = 0, __ydb_distance = 2.952767713e-05, embedding = \x11\x80\x02, data = five\n"
+                "key = 6, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x81\x11\x02, data = aaa\n"
+                "key = 7, __ydb_parent = 42, __ydb_foreign = 0, __ydb_distance = 4.552470524e-07, embedding = \x81\x10\x02, data = bbbb\n"
+                "key = 8, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x11\x10\x02, data = ccccc\n"
+                "key = 9, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x10\x11\x02, data = dddd\n"
+                "key = 10, __ydb_parent = 42, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x11\x09\x02, data = eee\n"
+                "key = 10, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x11\x09\x02, data = eee\n"
+                "key = 11, __ydb_parent = 41, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 11, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 12, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x09\x09\x02, data = ggggg\n"
+                "key = 13, __ydb_parent = 43, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x11\x11\x02, data = hhhh\n"
+
+                "key = 21, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x80\x02, data = one\n"
+                "key = 22, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x80\x10\x02, data = two\n"
+                "key = 23, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x10\x10\x02, data = three\n"
+                "key = 24, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x11\x81\x02, data = four\n"
+                "key = 25, __ydb_parent = 45, __ydb_foreign = 0, __ydb_distance = 2.952767713e-05, embedding = \x11\x80\x02, data = five\n"
+                "key = 26, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 2.226386727e-05, embedding = \x81\x11\x02, data = aaa\n"
+                "key = 27, __ydb_parent = 47, __ydb_foreign = 0, __ydb_distance = 4.552470524e-07, embedding = \x81\x10\x02, data = bbbb\n"
+                "key = 28, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x11\x10\x02, data = ccccc\n"
+                "key = 29, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.0004588208546, embedding = \x10\x11\x02, data = dddd\n"
+                "key = 30, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x11\x09\x02, data = eee\n"
+                "key = 30, __ydb_parent = 47, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x11\x09\x02, data = eee\n"
+                "key = 31, __ydb_parent = 45, __ydb_foreign = 1, __ydb_distance = 0.06500247368, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 31, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0.04422099128, embedding = \x09\x11\x02, data = ffff\n"
+                "key = 32, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x09\x09\x02, data = ggggg\n"
+                "key = 33, __ydb_parent = 46, __ydb_foreign = 0, __ydb_distance = 0, embedding = \x11\x11\x02, data = hhhh\n"
+            );
+            recreate();
+        }
     }
 }
 

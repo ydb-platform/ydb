@@ -1,20 +1,23 @@
+# nbs sector read
 AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 4 ReadProportion: 1.0 }
-AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 8 ReadProportion: 1.0 }
 AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 16 ReadProportion: 1.0 }
-AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 32 ReadProportion: 1.0 }
 
 AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 4 ReadProportion: 0.0 }
-AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 8 ReadProportion: 0.0 }
 AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 16 ReadProportion: 0.0 }
-AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 32 ReadProportion: 0.0 }
 
 AioTestList: { DurationSeconds: 60 RequestSize: 4096 QueueDepth: 16 ReadProportion: 0.8 }
 
+# nbs block-4-2 compacted blob part-size
 AioTestList: { DurationSeconds: 60 RequestSize: 524288 QueueDepth: 4 ReadProportion: 1.0 }
 AioTestList: { DurationSeconds: 60 RequestSize: 524288 QueueDepth: 4 ReadProportion: 0.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 1048576 QueueDepth: 4 ReadProportion: 1.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 1048576 QueueDepth: 4 ReadProportion: 0.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 2097152 QueueDepth: 4 ReadProportion: 1.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 2097152 QueueDepth: 4 ReadProportion: 0.0 }
 
-TrimTestList: { DurationSeconds: 60 RequestSize: 2097152 }
-TrimTestList: { DurationSeconds: 60 RequestSize: 134217728 }
+# ydb mirror-3dc datashard compacted blob part-size
+AioTestList: { DurationSeconds: 60 RequestSize: 8388608 QueueDepth: 4 ReadProportion: 1.0 }
+AioTestList: { DurationSeconds: 60 RequestSize: 8388608 QueueDepth: 4 ReadProportion: 0.0 }
 
 PDiskTestList: {
     PDiskTestList: {

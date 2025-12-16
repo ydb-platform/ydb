@@ -91,7 +91,7 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
-### Перекрытие кластеров
+### Перекрытие кластеров {#overlap-clusters}
 
 Векторный индекс в YDB может добавлять каждый вектор в несколько кластеров с целью
 улучшения полноты и скорости поиска:

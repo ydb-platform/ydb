@@ -29,21 +29,26 @@ def check_for_fail(paths: List[str], output_path: str):
                 name = result.get("name", "")
                 subtest_name = result.get("subtest_name", "")
                 
-                # Format: path/name/subtest_name
-                test_name = path_str
-                if name:
-                    test_name = f"{path_str}/{name}"
+                # Format: name.subtest_name, then full_name as {path}/{test_name} (same as generate-summary.py and upload_tests_results.py)
                 if subtest_name:
-                    test_name = f"{path_str}/{name}/{subtest_name}" if name else f"{path_str}/{subtest_name}"
+                    if name:
+                        test_name = f"{name}.{subtest_name}"
+                    else:
+                        test_name = subtest_name
+                else:
+                    test_name = name or ""
+                
+                # Construct full_name as {path}/{test_name}, matching other scripts
+                if path_str:
+                    full_name = f"{path_str}/{test_name}" if test_name else path_str
+                else:
+                    full_name = test_name
                 
                 # Check for failures and errors
                 if status == "FAILED":
-                    if error_type == "REGULAR":
-                        failed_list.append((test_name, fn))
-                    else:
-                        error_list.append((test_name, fn))
+                    failed_list.append((full_name, fn))
                 elif status == "ERROR":
-                    error_list.append((test_name, fn))
+                    error_list.append((full_name, fn))
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Warning: Unable to parse {fn}: {e}", file=__import__('sys').stderr)
             continue

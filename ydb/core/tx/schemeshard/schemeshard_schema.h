@@ -1722,6 +1722,41 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct ForcedCompactions : Table<130> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Uid : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct TablePathOwnerId : Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct TablePathLocalId : Column<4, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct DomainPathOwnerId : Column<5, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct DomainPathLocalId : Column<6, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct UserSID : Column<7, NScheme::NTypeIds::Utf8> {};
+        struct TotalShards : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct CompactedShards : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct State : Column<10, NScheme::NTypeIds::Byte> {};
+        struct Issue : Column<11, NScheme::NTypeIds::Utf8> {};
+        struct StartTime : Column<12, NScheme::NTypeIds::Uint64> {};
+        struct EndTime : Column<13, NScheme::NTypeIds::Uint64> {};
+        struct PeerName : Column<14, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<
+            Id,
+            Uid,
+            TablePathOwnerId,
+            TablePathLocalId,
+            DomainPathOwnerId,
+            DomainPathLocalId,
+            UserSID,
+            TotalShards,
+            CompactedShards,
+            State,
+            Issue,
+            StartTime,
+            EndTime,
+            PeerName
+        >;
+    };
+
     struct OlapStores : Table<88> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -2358,6 +2393,7 @@ struct Schema : NIceDb::Schema {
         MigratedKesusAlters,
         Imports,
         ImportItems,
+        ForcedCompactions,
         TxShardStatus,
         OlapStores,
         OlapStoresAlters,

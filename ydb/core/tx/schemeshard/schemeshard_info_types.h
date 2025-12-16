@@ -3269,6 +3269,63 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 }; // TImportInfo
 // } // NImport
 
+struct TForcedCompactionInfo: public TSimpleRefCount<TForcedCompactionInfo> {
+    using TPtr = TIntrusivePtr<TForcedCompactionInfo>;
+
+    enum class EState: ui8 {
+        Invalid = 0,
+        Waiting = 1,
+        Compacting = 2,
+        Done = 240,
+    };
+
+    ui64 Id;  // TxId from the original TEvCreateForcedCompactionRequest
+    TString Uid;
+    TPathId TablePathId;  // PathId of the table being compacted
+    TPathId DomainPathId;
+    TMaybe<TString> UserSID;
+    TString PeerName;
+
+    ui64 TotalShards = 0;
+    ui64 CompactedShards = 0;
+    THashSet<TShardIdx> QueuedShards;
+    THashSet<TShardIdx> RunningShards;
+
+    EState State = EState::Invalid;
+    TString Issue;
+
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
+
+    explicit TForcedCompactionInfo(
+            const ui64 id,
+            const TString& uid,
+            const TPathId& tablePathId,
+            const TPathId& domainPathId,
+            const TString& peerName)
+        : Id(id)
+        , Uid(uid)
+        , TablePathId(tablePathId)
+        , DomainPathId(domainPathId)
+        , PeerName(peerName)
+    {
+    }
+
+    bool IsValid() const {
+        return State != EState::Invalid;
+    }
+
+    bool IsInProgress() const {
+        return State == EState::Waiting || State == EState::Compacting;
+    }
+
+    bool IsDone() const {
+        return State == EState::Done;
+    }
+
+    TString ToString() const;
+}; // TForcedCompactionInfo
+
 // TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;

@@ -37,13 +37,44 @@ namespace {
         }, entry.Type);
     }
 
-    TVector<std::pair<TString, TString>> ExpandItem(NScheme::TSchemeClient& client, TStringBuf srcPath, TStringBuf dstPath, const TFilterOp& filter) {
+    void FilterAsyncReplicaTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
+        auto isAsyncReplicaTable = [&](const NScheme::TSchemeEntry& entry) {
+            if (entry.Type != NScheme::ESchemeEntryType::Table) {
+                return false;
+            }
+            auto describeResult = session.DescribeTable(entry.Name).ExtractValueSync();
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
+
+            const auto& attributes = describeResult.GetTableDescription().GetAttributes();
+            auto it = attributes.find("__async_replica");
+            return it != attributes.end() && it->second == "true";
+        };
+
+        entries.erase(std::remove_if(entries.begin(), entries.end(), isAsyncReplicaTable), entries.end());
+    }
+
+    TVector<std::pair<TString, TString>> ExpandItem(
+        NScheme::TSchemeClient& schemeClient,
+        NTable::TTableClient tableClient,
+        TStringBuf srcPath,
+        TStringBuf dstPath,
+        const TFilterOp& filter,
+        bool ignoreAsyncReplicaTables
+    ) {
         // cut trailing slash
         srcPath.ChopSuffix(slash);
         dstPath.ChopSuffix(slash);
 
-        const auto ret = RecursiveList(client, TString{srcPath}, TRecursiveListSettings().Filter(filter));
+        auto ret = RecursiveList(schemeClient, TString{srcPath}, TRecursiveListSettings().Filter(filter));
         NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
+
+        // Additionaly remove all async replica tables
+        if (ignoreAsyncReplicaTables) {
+            auto sessionResult = tableClient.GetSession().GetValueSync();
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+            auto session = sessionResult.GetSession();
+            FilterAsyncReplicaTables(session, ret.Entries);
+        }
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
             return {{TString{srcPath}, TString{dstPath}}};
@@ -62,10 +93,18 @@ namespace {
     }
 
     template <typename TSettings>
-    void ExpandItems(NScheme::TSchemeClient& client, TSettings& settings, const TVector<TRegExMatch>& exclusionPatterns, const TFilterOp& filter = FilterTables) {
+    void ExpandItems(
+        NScheme::TSchemeClient& schemeClient,
+        NTable::TTableClient tableClient,
+        TSettings& settings,
+        const TVector<TRegExMatch>& exclusionPatterns,
+        const TFilterOp& filter = FilterTables
+    ) {
         auto items(std::move(settings.Item_));
+        // Ignore async replica tables just for S3 export
+        bool ignoreAsyncReplicaTables = std::is_same_v<TSettings, NExport::TExportToS3Settings>;
         for (const auto& item : items) {
-            for (const auto& [src, dst] : ExpandItem(client, item.Src, item.Dst, filter)) {
+            for (const auto& [src, dst] : ExpandItem(schemeClient, tableClient, item.Src, item.Dst, filter, ignoreAsyncReplicaTables)) {
                 settings.AppendItem({src, dst});
             }
         }
@@ -170,6 +209,7 @@ void TCommandExportToYt::ExtractParams(TConfig& config) {
 int TCommandExportToYt::Run(TConfig& config) {
     using namespace NExport;
     using namespace NScheme;
+    using namespace NTable;
 
     TExportToYtSettings settings = FillSettings(TExportToYtSettings());
 
@@ -191,7 +231,8 @@ int TCommandExportToYt::Run(TConfig& config) {
     const TDriver driver = CreateDriver(config);
 
     TSchemeClient schemeClient(driver);
-    ExpandItems(schemeClient, settings, ExclusionPatterns);
+    TTableClient tableClient(driver);
+    ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns);
 
     TExportClient client(driver);
     TExportToYtResponse response = client.ExportToYt(std::move(settings)).GetValueSync();
@@ -412,6 +453,7 @@ int TCommandExportToS3::Run(TConfig& config) {
 
     using namespace NExport;
     using namespace NScheme;
+    using namespace NTable;
 
     TExportToS3Settings settings = FillSettings(TExportToS3Settings());
 
@@ -461,17 +503,18 @@ int TCommandExportToS3::Run(TConfig& config) {
 
     TSchemeClient schemeClient(driver);
     TExportClient client(driver);
+    TTableClient tableClient(driver);
 
     auto originalItems = settings.Item_;
     if (expandItems) {
-        ExpandItems(schemeClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
+        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterAllSupportedSchemeObjects);
     }
     TExportToS3Response response = client.ExportToS3(settings).ExtractValueSync();
     if (expandItems && response.Status().GetStatus() == EStatus::BAD_REQUEST) {
         // Retry the export operation limiting the scope to tables only.
         // This approach ensures compatibility with servers running an older version of YDB.
         settings.Item_ = std::move(originalItems);
-        ExpandItems(schemeClient, settings, ExclusionPatterns, FilterTables);
+        ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns, FilterTables);
         response = client.ExportToS3(settings).ExtractValueSync();
     }
     ThrowOnError(response);

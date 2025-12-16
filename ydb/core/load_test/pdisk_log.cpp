@@ -354,7 +354,6 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPDiskLogWriterLoadTestActor::StateFunc);
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
-        ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
 
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Bootstrap, Workers.size# " << Workers.size());
@@ -434,6 +433,7 @@ public:
 
         // All workers is initialized
         if (!OwnerInitInProgress) {
+            ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
             TestStartTime = TAppData::TimeProvider->Now();
             if (IsDying) {
                 LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " last TEvReadLogResult, "

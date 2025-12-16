@@ -107,6 +107,7 @@ class TPDiskWriterLoadTestActor : public TActorBootstrapped<TPDiskWriterLoadTest
     bool Reuse;
     bool IsWardenlessTest;
     bool Harakiri = false;
+    bool TestStarted = false;
 
     TInstant TestStartTime;
     TInstant MeasurementStartTime;
@@ -208,7 +209,6 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPDiskWriterLoadTestActor::StateFunc);
-        ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
         AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
@@ -242,8 +242,6 @@ public:
         for (TChunkInfo& chunk : Chunks) {
             chunk.SlotSizeBlocks = PDiskParams->ChunkSize / PDiskParams->AppendBlockSize / chunk.NumSlots;
         }
-        TestStartTime = TAppData::TimeProvider->Now();
-        MeasurementStartTime = TestStartTime + DelayBeforeMeasurements;
         CheckForReserve(ctx);
     }
 
@@ -371,6 +369,13 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void SendWriteRequests(const TActorContext& ctx) {
+        if (!TestStarted) {
+            TestStarted = true;
+            TestStartTime = TAppData::TimeProvider->Now();
+            MeasurementStartTime = TestStartTime + DelayBeforeMeasurements;
+            ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
+        }
+
         while (InFlight < MaxInFlight) {
             // Randomize interval (if required)
             if (!IntervalMs && IntervalMsMax && IntervalMsMin) {

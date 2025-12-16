@@ -199,7 +199,6 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPDiskReaderLoadTestActor::StateFunc);
-        ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill());
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
         AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskReadLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
@@ -290,6 +289,7 @@ public:
         if (ChunkWrite_OK == Chunks.size()) {
             TestStartTime = TAppData::TimeProvider->Now();
             MeasurementStartTime = TestStartTime + DelayBeforeMeasurements;
+            ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill());
 
             SendReadRequests(ctx);
         }

@@ -471,13 +471,13 @@ class TestWorkloadManagerOltp100(WorkloadManagerOltp):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool(f'test_pool_{cls.tpcc_pool_perc}', [f'testuser{cls.tpcc_pool_perc}'], total_cpu_limit_percent_per_node=cls.tpcc_pool_perc, resource_weight=4),
+           ResourcePool(f'test_pool_{cls.tpcc_pool_perc}', [f'testuser{cls.tpcc_pool_perc}'], total_cpu_limit_percent_per_node=cls.tpcc_pool_perc, resource_weight=4),
         ]
 
     @classmethod
     def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         super().before_workload(result)
-        cls.run_tpcc(cls.timeout, user=f'testuser{cls.tpcc_pool_perc}')
+        cls.run_tpcc(cls.timeout, user='')
 
     @classmethod
     def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
@@ -498,7 +498,7 @@ class WorkloadManagerOltpTpch20Base(WorkloadManagerTpchBase, WorkloadManagerOltp
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=20, resource_weight=4),
+            # ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=20, resource_weight=4),
         ]
 
     @classmethod
@@ -526,7 +526,7 @@ class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=10, resource_weight=4),
+            # ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=10, resource_weight=4),
         ]
 
     @classmethod

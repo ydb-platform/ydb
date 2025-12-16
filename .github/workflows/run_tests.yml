@@ -87,6 +87,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       branch_array: ${{ steps.set-branches.outputs.branch_array }}
+      base_branch: ${{ steps.set-branches.outputs.base_branch }}
     steps:
       - name: Checkout ${{ matrix.branch }}
         uses: actions/checkout@v4
@@ -103,73 +104,161 @@ jobs:
           PULL_REQUEST_NUMBER: '${{ inputs.pull_number }}'
           GITHUB_TOKEN: '${{ github.token }}'
         run: |
-          # Check if branches parameter was passed from calling workflow
-          if [[ -n "$CALLED_BRANCHES" ]]; then
-            echo "Branches parameter provided from calling workflow: $CALLED_BRANCHES"
+          set -e
+          
+          # Helper function: check if string looks like a SHA (commit hash)
+          is_sha() {
+            [[ $1 =~ ^[0-9a-f]{7,40}$ ]]
+          }
+          
+          # Helper function: check if string looks like a branch name (not SHA, not pull/N)
+          is_branch_name() {
+            [[ -n "$1" ]] && ! is_sha "$1" && [[ $1 != pull/* ]]
+          }
+          
+          # Helper function: get PR info from GitHub API
+          get_pr_info() {
+            local pr_num=$1
+            curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/ydb-platform/ydb/pulls/$pr_num"
+          }
+          
+          # Helper function: process a single branch entry
+          # Returns: branch_to_test (SHA or branch name) and base_branch (if found)
+          process_branch_entry() {
+            local entry=$1
+            local merge_sha=""
+            local base_ref=""
             
-            # Check if input is already a JSON array
-            if [[ $CALLED_BRANCHES == \[* ]]; then
-              # This is a JSON array - parse it
-              branches=($(echo "$CALLED_BRANCHES" | jq -r '.[]'))
-            else
-              # If it's a single branch, create array with one element
-              branches=("$CALLED_BRANCHES")
-            fi
-
-            processed_branches=()
-            for branch in "${branches[@]}"; do
-              # Check if branch starts with pull/ and contains numbers
-              if [[ $branch =~ ^pull/([0-9]+)$ ]]; then
-                PULL_REQUEST_NUMBER=${BASH_REMATCH[1]}
-                echo "Processing pull request: $PULL_REQUEST_NUMBER"
-                
-                # Get merge_commit_sha from GitHub API
-                MERGE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER" | \
-                  jq -r '.merge_commit_sha')
-                
-                if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
-                  echo "Replaced pull/$PULL_REQUEST_NUMBER with merge commit: $MERGE_SHA"
-                  processed_branches+=("\"$MERGE_SHA\"")
-                  # Save merge commit SHA and PR number for comment step
-                  if [ -z "$COMMIT_SHA" ]; then
-                    echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
-                    echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
-                  fi
-                else
-                  echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER, discarding"
-                fi
-              else
-                # Just add the branch as-is
-                processed_branches+=("\"$branch\"")
+            # Case 1: Entry is "pull/N" format - convert to merge commit SHA
+            if [[ $entry =~ ^pull/([0-9]+)$ ]]; then
+              local pr_num=${BASH_REMATCH[1]}
+              echo "Processing PR: $pr_num" >&2
+              
+              local pr_info=$(get_pr_info "$pr_num")
+              merge_sha=$(echo "$pr_info" | jq -r '.merge_commit_sha')
+              base_ref=$(echo "$pr_info" | jq -r '.base.ref')
+              
+              if [[ -z "$merge_sha" || "$merge_sha" == "null" ]]; then
+                echo "Warning: Failed to get merge commit for PR $pr_num, skipping" >&2
+                return 1
               fi
-            done
-
-            # Reassemble into JSON array
-            branch_array=$(IFS=, ; echo "[${processed_branches[*]}]")
-            echo "branch_array=$branch_array" >> $GITHUB_OUTPUT
-          elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
-            echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
-          elif [[ -n "$PULL_REQUEST_NUMBER" ]] && [[ $PULL_REQUEST_NUMBER =~ ^[0-9]+$ ]]; then
-            MERGE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER" | \
-                  jq -r '.merge_commit_sha')
-            if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
-              echo "branch_array=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
-              # Save merge commit SHA and PR number for comment step
-              echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
-              echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
-            else
-              echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
+              
+              # Save PR info for comment step (only first PR)
+              if [[ -z "$COMMIT_SHA" ]]; then
+                echo "COMMIT_SHA=$merge_sha" >> $GITHUB_ENV
+                echo "PR_NUMBER=$pr_num" >> $GITHUB_ENV
+              fi
+              
+              echo "$merge_sha|$base_ref"
+              return 0
+            fi
+            
+            # Case 2: Entry is already a branch name or SHA - use as-is
+            echo "$entry|"
+            return 0
+          }
+          
+          # Initialize variables
+          BASE_BRANCH=""
+          BRANCH_ARRAY_JSON=""
+          
+          # ============================================================================
+          # SCENARIO 1: Direct PR number provided (workflow_dispatch with pull_number)
+          # ============================================================================
+          if [[ -n "$PULL_REQUEST_NUMBER" ]]; then
+            echo "Scenario: Direct PR number provided: $PULL_REQUEST_NUMBER"
+            
+            pr_info=$(get_pr_info "$PULL_REQUEST_NUMBER")
+            merge_sha=$(echo "$pr_info" | jq -r '.merge_commit_sha')
+            base_ref=$(echo "$pr_info" | jq -r '.base.ref')
+            
+            if [[ -z "$merge_sha" || "$merge_sha" == "null" ]]; then
+              echo "Error: Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
               exit 1
             fi
+            
+            BRANCH_ARRAY_JSON="[\"$merge_sha\"]"
+            BASE_BRANCH="$base_ref"
+            echo "COMMIT_SHA=$merge_sha" >> $GITHUB_ENV
+            echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
+            
+          # ============================================================================
+          # SCENARIO 2: Branches parameter provided (workflow_call with branches)
+          # ============================================================================
+          elif [[ -n "$CALLED_BRANCHES" ]]; then
+            echo "Scenario: Branches parameter provided: $CALLED_BRANCHES"
+            
+            # Parse branches input (can be JSON array or single branch)
+            if [[ $CALLED_BRANCHES == \[* ]]; then
+              readarray -t branches < <(echo "$CALLED_BRANCHES" | jq -r '.[]')
+            else
+              branches=("$CALLED_BRANCHES")
+            fi
+            
+            processed_branches=()
+            for branch_entry in "${branches[@]}"; do
+              result=$(process_branch_entry "$branch_entry") || continue
+              
+              branch_to_test=$(echo "$result" | cut -d'|' -f1)
+              base_ref_from_pr=$(echo "$result" | cut -d'|' -f2)
+              
+              processed_branches+=("\"$branch_to_test\"")
+              
+              # Set BASE_BRANCH from PR's base.ref if available
+              if [[ -z "$BASE_BRANCH" && -n "$base_ref_from_pr" && "$base_ref_from_pr" != "null" ]]; then
+                BASE_BRANCH="$base_ref_from_pr"
+              fi
+              
+              # Or use first branch name (not SHA) as base_branch
+              if [[ -z "$BASE_BRANCH" ]] && is_branch_name "$branch_entry"; then
+                BASE_BRANCH="$branch_entry"
+              fi
+            done
+            
+            BRANCH_ARRAY_JSON=$(IFS=, ; echo "[${processed_branches[*]}]")
+            
+          # ============================================================================
+          # SCENARIO 3: Branches config file provided (workflow_call with branches_config_path)
+          # ============================================================================
+          elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
+            echo "Scenario: Branches config file provided: $BRANCHES_CONFIG_PATH"
+            
+            BRANCH_ARRAY_JSON=$(jq -c "." "$BRANCHES_CONFIG_PATH")
+            
+            # Try to extract first branch name from config (for base_branch)
+            first_branch=$(jq -r '.[0] // empty' "$BRANCHES_CONFIG_PATH" 2>/dev/null || echo "")
+            if [[ -n "$first_branch" ]] && is_branch_name "$first_branch"; then
+              BASE_BRANCH="$first_branch"
+            fi
+            
+          # ============================================================================
+          # SCENARIO 4: No branches specified (direct workflow_dispatch)
+          # ============================================================================
           else
-            # If no branches specified, this is a direct workflow_dispatch run
-            echo "No branches specified, using current branch: ${{ github.ref_name }}"
-            echo "branch_array=[\"${{ github.ref_name }}\"]" >> $GITHUB_OUTPUT
+            echo "Scenario: No branches specified, using current branch"
+            
+            current_ref="${{ github.ref_name }}"
+            BRANCH_ARRAY_JSON="[\"$current_ref\"]"
+            
+            if is_branch_name "$current_ref"; then
+              BASE_BRANCH="$current_ref"
+            fi
           fi
           
-          echo "Final branches to use: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
+          # ============================================================================
+          # Output results
+          # ============================================================================
+          echo "branch_array=$BRANCH_ARRAY_JSON" >> $GITHUB_OUTPUT
+          
+          if [[ -n "$BASE_BRANCH" ]]; then
+            echo "base_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
+            echo "Using base_branch: $BASE_BRANCH"
+          else
+            echo "No base_branch determined (will use matrix.branch as fallback)"
+          fi
+          
+          echo "Final branch_array: $BRANCH_ARRAY_JSON"
 
       - name: Install dependencies
         if: always()
@@ -272,7 +361,7 @@ jobs:
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
           test_threads: ${{ fromJson(env.threads_count) }}
-          custom_branch_name: ${{ matrix.branch }}
+          custom_branch_name: ${{ needs.prepare.outputs.base_branch || matrix.branch }}
           put_build_results_to_cache: true
           collect_coredumps: ${{ inputs.collect_coredumps }}
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ inputs.additional_ya_make_args }}

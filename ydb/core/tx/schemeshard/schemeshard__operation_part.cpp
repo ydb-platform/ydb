@@ -83,17 +83,29 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
         << ", ev# " << ev;
 }
 
-template <typename TEvPtr>
-static bool IsIgnorableDuplicateReply(const TEvPtr&) {
+static bool IsColumnShardAlreadyPrepared(NActors::IEventHandle& handle) {
+    if (const auto* msg = handle.Get<TEvColumnShard::TEvProposeTransactionResult>()) {
+        const auto status = msg->Record.GetStatus();
+        return status == NKikimrTxColumnShard::EResultStatus::ALREADY_PREPARED;
+    }
+
     return false;
 }
 
-template <>
-bool IsIgnorableDuplicateReply(const TEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
-    const auto& record = ev->Get()->Record;
-    // ColumnShard may resend PREPARED reply after restart; treat such duplicate as ignorable
-    return record.GetStatus() == NKikimrTxColumnShard::EResultStatus::PREPARED
-        && record.GetStatusMessage().Contains("before restart");
+bool TSubOperationState::ShouldIgnore(ui32 eventType, NActors::IEventHandle& handle) const {
+    for (auto&& rule : MsgToIgnore) {
+        if (rule.EventType == eventType) {
+            if (!rule.Predicate || rule.Predicate(handle)) {
+                return true;
+            }
+        }
+    }
+
+    if (eventType == TEvColumnShard::TEvProposeTransactionResult::EventType && IsColumnShardAlreadyPrepared(handle)) {
+        return true;
+    }
+
+    return false;
 }
 
 #define DefaultHandleReply(NS, TEvType, ...) \
@@ -104,7 +116,7 @@ bool IsIgnorableDuplicateReply(const TEvColumnShard::TEvProposeTransactionResult
     } \
     \
     bool TSubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
-        const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType) || IsIgnorableDuplicateReply(ev); \
+        const bool ignore = ShouldIgnore(NS::TEvType::EventType, *ev.Get()); \
         const auto msg = LogMessage(DebugReply(ev), context, ignore); \
         if (ignore) { \
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
@@ -123,7 +135,10 @@ bool IsIgnorableDuplicateReply(const TEvColumnShard::TEvProposeTransactionResult
 
 void TSubOperationState::IgnoreMessages(TString debugHint, TSet<ui32> mgsIds) {
     LogHint = debugHint;
-    MsgToIgnore.swap(mgsIds);
+    MsgToIgnore.clear();
+    for (auto&& eventType : mgsIds) {
+        MsgToIgnore.push_back({eventType, {}});
+    }
 }
 
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table) {

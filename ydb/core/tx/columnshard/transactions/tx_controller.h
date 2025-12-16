@@ -340,7 +340,7 @@ public:
             }
             if (onLoad) {
                 ProposeStartInfo =
-                    TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::PREPARED, "success on iteration before restart");
+                    TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::ALREADY_PREPARED, TString());
                 Status = {};
             }
             return result;

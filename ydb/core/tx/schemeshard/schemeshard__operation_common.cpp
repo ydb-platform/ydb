@@ -597,7 +597,8 @@ bool CollectProposeTransactionResults(
         NKikimr::NSchemeShard::TOperationContext& context)
 {
     auto prepared = [](NKikimrTxColumnShard::EResultStatus status) -> bool {
-        return status == NKikimrTxColumnShard::EResultStatus::PREPARED;
+        return status == NKikimrTxColumnShard::EResultStatus::PREPARED
+            || status == NKikimrTxColumnShard::EResultStatus::ALREADY_PREPARED;
     };
 
     auto toString = [](NKikimrTxColumnShard::EResultStatus status) -> TString {

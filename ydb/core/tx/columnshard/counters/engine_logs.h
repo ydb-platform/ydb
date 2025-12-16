@@ -227,7 +227,6 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr BadPortionsCount;
-    NMonitoring::TDynamicCounters::TCounterPtr BadPortionsLimit;
 
     NMonitoring::TDynamicCounters::TCounterPtr CleanupPortionsSkippedByLock;
     NMonitoring::TDynamicCounters::TCounterPtr CleanupPortionsLimitExceeded;

@@ -602,7 +602,7 @@ namespace NTabletFlatExecutor {
                 .Buffer = TRope(std::exchange(glob.Data, TString{ })),
                 .Deadline = TInstant::Max(),
                 .HandleClass = flag,
-                .Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput, 
+                .Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput,
                 .ExternalRelevanceWatcher = RelevanceTracker,
             });
             auto ctx = ActorContext();

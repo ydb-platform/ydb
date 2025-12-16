@@ -90,7 +90,7 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
-### Overlapping clusters
+### Overlapping clusters {#overlap-clusters}
 
 Vector index in YDB can add each vector to multiple clusters to increase quality of the vector search:
 

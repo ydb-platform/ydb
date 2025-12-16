@@ -103,3 +103,6 @@ path.bash.inc
 
 # Cursor ignore
 .cursorignore
+
+# Harness local cluster working directory
+.ydbd_working_dir/

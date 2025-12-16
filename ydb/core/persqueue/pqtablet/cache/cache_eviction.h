@@ -127,7 +127,7 @@ namespace NKikimr::NPQ {
             ui32 cropped = 0;
             for (ui32 i = 0; i < Blobs.size(); ++i) {
                 auto& blob = Blobs[i];
-                size += blob.PackedSize;
+                size += blob.RawValue.size();
                 if (size > MAX_RESPONSE_SIZE) {
                     ++cropped;
                     blob.Clear();
@@ -297,7 +297,7 @@ namespace NKikimr::NPQ {
                     reqData.RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), nullptr);
                 }
 
-                auto cached = std::make_shared<TCacheValue>(reqBlob.Batches, reqBlob.PackedSize, ctx.SelfID, TAppData::TimeProvider->Now());
+                auto cached = std::make_shared<TCacheValue>(reqBlob.Key, reqBlob.RawValue, ctx.SelfID, TAppData::TimeProvider->Now());
                 TValueL1 valL1(cached, cached->GetDataSize(), TValueL1::SourceHead);
                 Cache[blob] = valL1; // weak
                 Counters.Inc(valL1);
@@ -308,7 +308,7 @@ namespace NKikimr::NPQ {
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Caching head blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << reqBlob.PackedSize << " actorID " << ctx.SelfID);
+                    << " size " << reqBlob.RawValue.size() << " actorID " << ctx.SelfID);
             }
         }
 
@@ -386,7 +386,7 @@ namespace NKikimr::NPQ {
                     }
                 }
 
-                TCacheValue::TPtr cached(new TCacheValue(reqBlob.Batches, reqBlob.PackedSize, ctx.SelfID, TAppData::TimeProvider->Now()));
+                TCacheValue::TPtr cached(new TCacheValue(reqBlob.Key, reqBlob.RawValue, ctx.SelfID, TAppData::TimeProvider->Now()));
                 TValueL1 valL1(cached, cached->GetDataSize(), TValueL1::SourcePrefetch);
                 Cache[blob] = valL1;
                 Counters.Inc(valL1);
@@ -395,7 +395,7 @@ namespace NKikimr::NPQ {
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Prefetched blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << reqBlob.PackedSize  << " actorID " << ctx.SelfID);
+                    << " size " << reqBlob.RawValue.size()  << " actorID " << ctx.SelfID);
                 haveSome = true;
             }
 
@@ -502,10 +502,8 @@ namespace NKikimr::NPQ {
                 if (cached) {
                     ++numCached;
                     blob.Batches = cached->GetValue();
-                    blob.UnpackedSize = cached->GetDataSize();
-                    blob.PackedSize = cached->GetPackedSize();
                     blob.Cached = true;
-                    AFL_ENSURE(blob.UnpackedSize)("d", "Got empty blob from cache");
+                    AFL_ENSURE(cached->GetDataSize())("d", "Got empty blob from cache");
                 }
             }
             return numCached;

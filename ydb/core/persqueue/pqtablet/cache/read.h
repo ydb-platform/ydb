@@ -209,7 +209,7 @@ namespace NPQ {
                         kvBlobs[pos] = true;
 
                         AFL_ENSURE(outBlobs[pos].Empty());
-                        outBlobs[pos].SetValue(r->GetValue());
+                        outBlobs[pos].RawValue = r->GetValue();
                         outBlobs[pos].CreationUnixTime = r->GetCreationUnixTime();
                     } else {
                         LOG_E("Got Error response " << r->GetStatus()

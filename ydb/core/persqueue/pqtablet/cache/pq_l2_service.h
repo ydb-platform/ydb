@@ -34,18 +34,15 @@ struct TCacheValue : TNonCopyable {
     using TPtr = std::shared_ptr<TCacheValue>;
     using TWeakPtr = std::weak_ptr<TCacheValue>;
 
-    TCacheValue(std::shared_ptr<TVector<TBatch>> value, size_t packedSize, TActorId owner, TInstant accessTime)
-        : Value(value)
-        , DataSize(0)
-        , PackedSize(packedSize)
+    TCacheValue(const TKey& key, const TString& rawValue, TActorId owner, TInstant accessTime)
+        : Key(key)
+        , RawValue(rawValue)
+        , Value(nullptr)
         , Owner(owner)
         , AccessTime(accessTime.TimeT())
         , AccessCount(0)
+        , DataSize(rawValue.size())
     {
-        AFL_VERIFY(value != nullptr);
-        DataSize = std::accumulate(value->begin(), value->end(), 0, [](ui32 sum, const TBatch& batch) {
-            return sum + (batch.Packed ? batch.GetPackedSize() : batch.GetUnpackedSize());
-        });
     }
 
     TInstant GetAccessTime() const {
@@ -61,16 +58,17 @@ struct TCacheValue : TNonCopyable {
         return AccessCount;
     }
 
-    std::shared_ptr<TVector<TBatch>> GetValue() const {
+    std::shared_ptr<TVector<TBatch>> GetValue() {
+        if (Value) {
+            return Value;
+        }
+        
+        Value = std::make_shared<TVector<TBatch>>(GetUnpackedBatches(Key, RawValue));
         return Value;
     }
 
     size_t GetDataSize() const {
-        return PackedSize;
-    }
-
-    size_t GetPackedSize() const {
-        return PackedSize;
+        return DataSize;
     }
 
     const TActorId& GetOwner() const {
@@ -78,13 +76,13 @@ struct TCacheValue : TNonCopyable {
     }
 
 private:
-    const TString RawValue;
-    const std::shared_ptr<TVector<TBatch>> Value;
-    size_t DataSize;
-    size_t PackedSize;
+    TKey Key;
+    TString RawValue;
+    std::shared_ptr<TVector<TBatch>> Value;
     const TActorId Owner;
     std::atomic<ui64> AccessTime;
     std::atomic<ui32> AccessCount;
+    size_t DataSize;
 };
 
 struct TCacheBlobL2 {

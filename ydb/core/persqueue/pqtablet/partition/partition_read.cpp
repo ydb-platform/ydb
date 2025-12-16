@@ -462,9 +462,9 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             };
         }
 
-        auto blobBatches = blobs[pos].Batches;
-        AFL_ENSURE(blobs[pos].PackedSize <= blobs[pos].Size)("value for offset", offset)("count", count)
-            ("size must be",  blobs[pos].Size)("got", blobs[pos].PackedSize);
+        auto blobBatches = blobs[pos].GetBatches();
+        AFL_ENSURE(blobs[pos].RawValue.size() <= blobs[pos].Size)("value for offset", offset)("count", count)
+            ("size must be",  blobs[pos].Size)("got", blobs[pos].RawValue.size());
 
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
             Offset = offset;

@@ -191,7 +191,7 @@ message TIndexDescriptionProto {
     }
 };
 
-message TColumnCompression {
+message TCompression {
     optional string Algorithm = 1;
     optional int64 Level = 2;
 }
@@ -218,7 +218,7 @@ message TKqpColumnMetadataProto {
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
     optional TKqpPathIdProto DefaultFromSequencePathId = 12;
-    optional TColumnCompression Compression = 13;
+    optional TCompression Compression = 13;
 };
 
 message TKqpTableMetadataProto {

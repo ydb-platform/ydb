@@ -145,6 +145,8 @@ namespace NYdb::NConsoleClient {
         int Run(TConfig& config) override;
 
     private:
+        void ValidateConsumerOptions(const TMaybe<NTopic::EConsumerType>& consumerType);
+
         TString ConsumerName_;
         bool IsImportant_;
         TMaybe<TDuration> AvailabilityPeriod_;

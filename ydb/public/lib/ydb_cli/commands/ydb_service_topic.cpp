@@ -666,6 +666,26 @@ namespace NYdb::NConsoleClient {
         ParseTopicName(config, 0);
     }
 
+    void TCommandTopicConsumerAdd::ValidateConsumerOptions(const TMaybe<NTopic::EConsumerType>& consumerType) {
+        if (consumerType.Defined() && *consumerType != NTopic::EConsumerType::Shared) {
+            if (MaxProcessingAttempts_.Defined()) {
+                throw TMisuseException() << "Invalid option: max-processing-attempts. This option is available only for shared consumer";
+            }
+
+            if (DlqQueueName_.Defined()) {
+                throw TMisuseException() << "Invalid option: dlq-queue-name. This option is available only for shared consumer";
+            }
+
+            if (DefaultProcessingTimeout_.Defined()) {
+                throw TMisuseException() << "Invalid option: default-processing-timeout. This option is available only for shared consumer";
+            }
+
+            if (KeepMessagesOrder_.Defined()) {
+                throw TMisuseException() << "Invalid option: keep-messages-order. This option is available only for shared consumer";
+            }
+        }
+    }
+
     int TCommandTopicConsumerAdd::Run(TConfig& config) {
         TDriver driver = CreateDriver(config);
         NTopic::TTopicClient topicClient(driver);
@@ -693,6 +713,8 @@ namespace NYdb::NConsoleClient {
         if (!consumerType.Defined()) {
             throw TMisuseException() << "Invalid consumer type: " << to_title(ConsumerType_) << ". Valid types: " << GetEnumAllNames<NTopic::EConsumerType>();
         }
+
+        ValidateConsumerOptions(consumerType);
 
         consumerSettings.ConsumerType(*consumerType);
         consumerSettings.KeepMessagesOrder(KeepMessagesOrder_.GetOrElse(false));

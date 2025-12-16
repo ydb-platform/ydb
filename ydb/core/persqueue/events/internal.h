@@ -51,14 +51,14 @@ namespace NPQ {
     };
 
     struct TRequestedBlob {
-        TString RawValue;
+        mutable TKey Key;
+        mutable TString RawValue;
         ui64 Offset;
         ui16 PartNo;
         ui32 Count;
         ui16 InternalPartsCount;
         ui32 Size;
         bool Cached;
-        TKey Key;
         ui64 CreationUnixTime;
         mutable std::shared_ptr<TVector<TBatch>> Batches;
 

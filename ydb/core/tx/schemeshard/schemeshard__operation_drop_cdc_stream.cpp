@@ -365,15 +365,8 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .NotUnderDeleting();
-
-            if (checks) {
-                if (tablePath.IsUnderOperation()) {
-                    checks.IsUnderTheSameOperation(OperationId.GetTxId());
-                } else {
-                    checks.NotUnderOperation();
-                }
-            }
+                .NotUnderDeleting()
+                .NotUnderOperation();
 
             if (checks && !tablePath.IsInsideTableIndexPath()) {
                 checks.IsCommonSensePath();
@@ -397,15 +390,8 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsCdcStream()
-                .NotUnderDeleting();
-
-            if (checks) {
-                if (streamPath.IsUnderOperation()) {
-                    checks.IsUnderTheSameOperation(OperationId.GetTxId());
-                } else {
-                    checks.NotUnderOperation();
-                }
-            }
+                .NotUnderDeleting()
+                .NotUnderOperation();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -446,28 +432,11 @@ public:
 
         // Validate and mark all streams for drop in single transaction
         for (const auto& streamPath : streamPaths) {
-            if (!context.SS->CdcStreams.contains(streamPath.Base()->PathId)) {
-                 result->SetError(NKikimrScheme::StatusPathDoesNotExist, 
-                    TStringBuilder() << "CdcStream info not found for " << streamPath.Base()->Name);
-                 return result;
-            }
+            Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
             auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);
 
-            if (stream->AlterData) {
-                bool isOurTx = (streamPath.Base()->LastTxId == OperationId.GetTxId());
-
-                if (isOurTx) {
-                    LOG_I("TDropCdcStreamAtTable: Stream " << streamPath.Base()->Name 
-                        << " has AlterData from OUR transaction. Overriding with DROP.");
-                } else {
-                    LOG_N("TDropCdcStreamAtTable: Stream " << streamPath.Base()->Name 
-                        << " is busy by txId " << streamPath.Base()->LastTxId);
-
-                    result->SetError(NKikimrScheme::StatusMultipleModifications, 
-                        TStringBuilder() << "Stream " << streamPath.Base()->Name << " is busy by another operation");
-                    return result;
-                }
-            }
+            Y_ABORT_UNLESS(stream->AlterVersion != 0);
+            Y_ABORT_UNLESS(!stream->AlterData);
 
             streamPath.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
             streamPath.Base()->DropTxId = OperationId.GetTxId();

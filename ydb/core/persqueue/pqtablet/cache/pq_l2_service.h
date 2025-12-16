@@ -78,6 +78,7 @@ struct TCacheValue : TNonCopyable {
     }
 
 private:
+    const TString RawValue;
     const std::shared_ptr<TVector<TBatch>> Value;
     size_t DataSize;
     size_t PackedSize;

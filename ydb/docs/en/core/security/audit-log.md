@@ -1,6 +1,6 @@
 # Audit log
 
-_An audit log is a stream of records that document security-relevant operations performed within the {{ ydb-short-name }} cluster. Unlike technical logs, which help detect failures and troubleshoot issues, the audit log provides data relevant to security. It serves as a source of information that answers the questions: who did what, when, and from where.
+_An audit_ log is a stream of records that document security-relevant operations performed within the {{ ydb-short-name }} cluster. Unlike technical logs, which help detect failures and troubleshoot issues, the audit log provides data relevant to security. It serves as a source of information that answers the questions: who did what, when, and from where.
 
 A single audit log record may look like this:
 
@@ -37,8 +37,8 @@ Audit events are grouped into *log classes* that represent broad categories of o
 || `DatabaseAdmin`    | Database administration requests. ||
 || `Login`            | Login requests. ||
 || `NodeRegistration` | Node registration. ||
-|| `Ddl`              | DDL requests. ||
-|| `Dml`              | DML requests. ||
+|| `Ddl`              | [DDL requests](https://en.wikipedia.org/wiki/Data_definition_language). ||
+|| `Dml`              | [DML requests](https://en.wikipedia.org/wiki/Data_manipulation_language). ||
 || `Operations`       | Asynchronous remote procedure call (RPC) operations that require polling to track the result. ||
 || `ExportImport`     | Export and import data operations. ||
 || `Acl`              | Access Control List (ACL) operations. ||
@@ -65,8 +65,8 @@ Some audit event sources divide the request processing into stages. *Logging pha
 You can currently configure the following destinations for the audit log:
 
 * A file on each {{ ydb-short-name }} cluster node.
-* An agent for delivering [Unified Agent](https://yandex.cloud/docs/monitoring/concepts/data-collection/unified-agent/) metrics.
 * The standard error stream, `stderr`.
+* An agent for delivering [Unified Agent](https://yandex.cloud/en/docs/monitoring/concepts/data-collection/unified-agent/) metrics.
 
 You can use any of the listed destinations or their combinations. See the [audit log configuration](#audit-log-configuration) for details.
 
@@ -78,6 +78,7 @@ For test installations, forward the audit log to the standard error stream (`std
 
 The table below summarizes the built-in audit event sources. Use it to identify which source emits the events you need and how to enable those events.
 
+#|
 || **Source / UID**                                     | **What it records** | **Configuration requirements** ||
 || [Schemeshard](#schemeshard) </br>`schemeshard`       | Schema operations, ACL modifications, and user management actions. | Included in the [basic audit configuration](#enabling-audit-log). ||
 || [gRPC services](#grpc-proxy) </br>`grpc-proxy`       | Non-internal requests handled by {{ ydb-short-name }} gRPC endpoints. | Enable the relevant [log classes](#log-class-config) and optional [log phases](#log-phases). ||
@@ -104,20 +105,20 @@ In this section, you will find a reference guide to the attributes in audit even
 The table below lists the common attributes.
 
 #|
-|| **Attribute**          | **Description** ||
-|| `subject`              | Event source [SID](../concepts/glossary.md#access-sid) if mandatory authentication is enabled, or `{none}` otherwise. ||
-|| `sanitized_token`      | A partially masked authentication token that was used to execute the request. Can be used to link related events while keeping the original credentials hidden. If authentication was not performed, the value will be `{none}`. ||
-|| `operation`            | Operation name (for example, `ALTER DATABASE`, `CREATE TABLE`). ||
-|| `component`            | Unique identifier (UID) of the *audit event source*. ||
-|| `status`               | Operation completion status.<br/>Acceptable values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul> ||
-|| `reason`               | Error message. ||
-|| `request_id`           | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context. ||
-|| `remote_address`       | IP of the client that delivered the request. ||
-|| `detailed_status`      | The status delivered by a {{ ydb-short-name }} *audit event source*. ||
-|| `database`             | Database path (for example, `/my_dir/db`). ||
-|| `cloud_id`             | Cloud identifier of the {{ ydb-short-name }} database. ||
-|| `folder_id`            | Folder identifier of the {{ ydb-short-name }} cluster or database. ||
-|| `resource_id`          | Resource identifier of the {{ ydb-short-name }} database.<br/>*Optional.* ||
+|| **Attribute**          | **Description**                                                                                                                                                | **Optional/Required** ||
+|| `subject`              | Event source [SID](../concepts/glossary.md#access-sid) if mandatory authentication is enabled, or `{none}` otherwise.                                         | Required ||
+|| `sanitized_token`      | A partially masked authentication token that was used to execute the request. Can be used to link related events while keeping the original credentials hidden. If authentication was not performed, the value will be `{none}`. | Optional ||
+|| `operation`            | Operation name (for example, `ALTER DATABASE`, `CREATE TABLE`).                                                                                              | Required ||
+|| `component`            | Unique identifier (UID) of the *audit event source*.                                                                                                          | Optional ||
+|| `status`               | Operation completion status.<br/>Possible values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul> | Required ||
+|| `reason`               | Error message.                                                                                                                                                | Optional ||
+|| `request_id`           | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context. | Optional ||
+|| `remote_address`       | IP address (IPv4 or IPv6) of the client that delivered the request.                                                                                           | Optional ||
+|| `detailed_status`      | The status delivered by a {{ ydb-short-name }} *audit event source*.                                                                                         | Optional ||
+|| `database`             | Database path (for example, `/Root/db`).                                                                                                                     | Required ||
+|| `cloud_id`             | Cloud identifier of the {{ ydb-short-name }} [cloud_id](https://yandex.cloud/ru/docs/api-design-guide/concepts/standard-fields) field in Yandex.Cloud database.                                                                                                       | Optional ||
+|| `folder_id`            | Folder identifier of the {{ ydb-short-name }} cluster or database in [folder_id](https://yandex.cloud/ru/docs/api-design-guide/concepts/standard-fields) field in Yandex.Cloud.                                                                                           | Optional ||
+|| `resource_id`          | Resource identifier of the {{ ydb-short-name }} database [id](https://yandex.cloud/ru/docs/api-design-guide/concepts/standard-fields) field in in Yandex.Cloud.        | Optional ||
 |#
 
 ### Schemeshard {#schemeshard}
@@ -129,40 +130,40 @@ The table below lists the common attributes.
 The table below lists additional attributes specific to the `Schemeshard` source.
 
 #|
-|| **Attribute**                            | **Description** ||
-|| **Common schemeshard attributes**        | **>** ||
-|| `tx_id`                                  | Unique transaction ID. This ID can be used to differentiate events related to different operations.</br>*Required.* ||
-|| `paths`                                  | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).</br>*Optional.* ||
-|| **Ownership and permission attributes**  | **>** ||
-|| `new_owner`                              | SID of the new owner of the object when ownership is transferred. ||
-|| `acl_add`                                | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`). ||
-|| `acl_remove`                             | List of revoked permissions in [short notation](./short-access-control-notation.md) (for example, `[-R:someuser]`). ||
-|| **Custom attributes**                    | **>** ||
-|| `user_attrs_add`                         | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`). ||
-|| `user_attrs_remove`                      | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`). ||
-|| **Login/Auth specific**                  | **>** ||
-|| `login_user`                             | User name recorded by login operations. ||
-|| `login_group`                            | Group name recorded by login operations. ||
-|| `login_member`                           | Membership changes. ||
-|| `login_user_change`                      | Changes applied to user settings. ||
-|| `login_user_level`                       | Privilege level of the user recorded by audit events. This attribute only uses the `admin` value. ||
-|| **Import/Export operation attributes**   | **>** ||
-|| `id`                                     | Unique identifier for export or import operations. ||
-|| `uid`                                    | User-defined label for operations. ||
-|| `start_time`                             | Operation start time in ISO 8601 format. ||
-|| `end_time`                               | Operation end time in ISO 8601 format. ||
-|| `last_login`                             | User's last successful login time in ISO 8601 format. ||
-|| **Export-specific**                      | **>** ||
-|| `export_type`                            | Export destination. Possible values: `yt`, `s3`. ||
-|| `export_item_count`                      | Number of exported items. ||
-|| `export_yt_prefix`                       | YT destination path prefix. ||
-|| `export_s3_bucket`                       | S3 bucket used for exports. ||
-|| `export_s3_prefix`                       | S3 destination prefix. ||
-|| **Import-specific**                      | **>** ||
-|| `import_type`                            | Import source type. It's always `s3`. ||
-|| `import_item_count`                      | Number of imported items. ||
-|| `import_s3_bucket`                       | S3 bucket used for imports. ||
-|| `import_s3_prefix`                       | S3 source prefix. ||
+|| **Attribute**                            | **Description**                                                                                                                                                     | **Optional/Required** ||
+|| **Common schemeshard attributes**        | **>**                                                                                                                                                              |  ||
+|| `tx_id`                                  | Unique transaction ID. This ID can be used to differentiate events related to different operations.                                                                 | Required ||
+|| `paths`                                  | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).                                         | Optional ||
+|| **Ownership and permission attributes**  | **>**                                                                                                                                                              |  ||
+|| `new_owner`                              | SID of the new owner of the object when ownership is transferred.                                                                                                   | None ||
+|| `acl_add`                                | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).                                                  | None ||
+|| `acl_remove`                             | List of revoked permissions in [short notation](./short-access-control-notation.md) (for example, `[-R:someuser]`).                                                | None ||
+|| **Custom attributes**                    | **>**                                                                                                                                                              |  ||
+|| `user_attrs_add`                         | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).                                      | None ||
+|| `user_attrs_remove`                      | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).                                          | None ||
+|| **Login/Auth specific**                  | **>**                                                                                                                                                              |  ||
+|| `login_user`                             | User name recorded by login operations.                                                                                                                            | None ||
+|| `login_group`                            | Group name recorded by login operations.                                                                                                                           | None ||
+|| `login_member`                           | Membership changes.                                                                                                                                                | None ||
+|| `login_user_change`                      | Changes applied to user settings.                                                                                                                                  | None ||
+|| `login_user_level`                       | Privilege level of the user recorded by audit events. This attribute only uses the `admin` value.                                                                  | None ||
+|| **Import/Export operation attributes**   | **>**                                                                                                                                                              |  ||
+|| `id`                                     | Unique identifier for export or import operations.                                                                                                                 | None ||
+|| `uid`                                    | User-defined label for operations.                                                                                                                                 | None ||
+|| `start_time`                             | Operation start time in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format.                                                                                | None ||
+|| `end_time`                               | Operation end time in ISO 8601 format.                                                                                                                             | None ||
+|| `last_login`                             | User's last successful login time in ISO 8601 format.                                                                                                              | None ||
+|| **Export-specific**                      | **>**                                                                                                                                                              |  ||
+|| `export_type`                            | Export destination. Possible values: `yt`, `s3`.                                                                                                                   | None ||
+|| `export_item_count`                      | Number of exported items.                                                                                                                                          | None ||
+|| `export_yt_prefix`                       | [YTsaurus](https://ytsaurus.tech/) destination path prefix.                                                                                                        | None ||
+|| `export_s3_bucket`                       | S3 bucket used for exports.                                                                                                                                        | None ||
+|| `export_s3_prefix`                       | S3 destination prefix.                                                                                                                                             | None ||
+|| **Import-specific**                      | **>**                                                                                                                                                              |  ||
+|| `import_type`                            | Import source type. It's always `s3`.                                                                                                                              | None ||
+|| `import_item_count`                      | Number of imported items.                                                                                                                                          | None ||
+|| `import_s3_bucket`                       | S3 bucket used for imports.                                                                                                                                        | None ||
+|| `import_s3_prefix`                       | S3 source prefix.                                                                                                                                                  | None ||
 |#
 
 ### gRPC services {#grpc-proxy}
@@ -176,24 +177,24 @@ The table below lists additional attributes specific to the `Schemeshard` source
 Тhe table below lists additional attributes specific to the `gRPC services` source.
 
 #|
-|| **Attribute**              | **Description** ||
-|| **Common gRPC attributes** | **>** ||
-|| `grpc_method`              | RPC method name.</br>*Optional.* ||
-|| `request`                  | Sanitized representation of the incoming request.</br>*Optional.* ||
-|| `start_time`               | Operation start time in ISO 8601 format.</br>*Required.* ||
-|| `end_time`                 | Operation end time in ISO 8601 format.</br>*Optional.* ||
-|| **Transaction attributes** | **>** ||
-|| `tx_id`                    | Transaction identifier. ||
-|| `begin_tx`                 | Flag set to `1` when the request starts a new transaction. ||
-|| `commit_tx`                | Shows whether the request commits the transaction. Possible values: `true`, `false`. ||
-|| **Request fields**         | **>** ||
-|| `query_text`               | Sanitized [YQL](../yql/reference/index.md) query text. ||
-|| `prepared_query_id`        | Identifier of a prepared query. ||
-|| `program_text`             | [MiniKQL program](../concepts/glossary.md#minikql) sent with the request. ||
-|| `schema_changes`           | Description of schema modifications requested in the operation. ||
-|| `table`                    | Full table path. ||
-|| `row_count`                | Number of rows processed by a [bulk upsert](../recipes/ydb-sdk/bulk-upsert.md) request. ||
-|| `tablet_id`                | Tablet identifier. ||
+|| **Attribute**              | **Description**                                                                                         | **Optional/Required** ||
+|| **Common gRPC attributes** | **>**                                                                                                  |  ||
+|| `grpc_method`              | RPC method name.                                                                                       | Optional ||
+|| `request`                  | Sanitized representation of the incoming request.                                                      | Optional ||
+|| `start_time`               | Operation start time in ISO 8601 format.                                                               | Required ||
+|| `end_time`                 | Operation end time in ISO 8601 format.                                                                 | Optional ||
+|| **Transaction attributes** | **>**                                                                                                  |  ||
+|| `tx_id`                    | Transaction identifier.                                                                                | None ||
+|| `begin_tx`                 | Flag set to `1` when the request starts a new transaction.                                             | None ||
+|| `commit_tx`                | Shows whether the request commits the transaction. Possible values: `true`, `false`.                   | None ||
+|| **Request fields**         | **>**                                                                                                  |  ||
+|| `query_text`               | Sanitized [YQL](../yql/reference/index.md) query text.                                                 | None ||
+|| `prepared_query_id`        | Identifier of a prepared query.                                                                        | None ||
+|| `program_text`             | [MiniKQL program](../concepts/glossary.md#minikql) sent with the request.                              | None ||
+|| `schema_changes`           | Description of schema modifications requested in the operation.                                        | None ||
+|| `table`                    | Full table path.                                                                                       | None ||
+|| `row_count`                | Number of rows processed by a [bulk upsert](../recipes/ydb-sdk/bulk-upsert.md) request.                | None ||
+|| `tablet_id`                | Tablet identifier.                                                                                     | None ||
 |#
 
 ### gRPC connection {#grpc-connection}
@@ -215,9 +216,9 @@ The table below lists additional attributes specific to the `Schemeshard` source
 The table below lists additional attributes specific to the `gRPC authentication` source.
 
 #|
-|| **Attribute**      | **Description** ||
-|| `login_user`       | User name. *Required.* ||
-|| `login_user_level` | Privilege level of the user recorded by audit events. This attribute only uses the `admin` value. *Optional.* ||
+|| **Attribute**      | **Description**                                                                      | **Required/Optional** ||
+|| `login_user`       | User name.                                                                          | Required ||
+|| `login_user_level` | Privilege level of the user recorded by audit events. This attribute only uses the `admin` value. | Optional ||
 |#
 
 ### Monitoring service {#monitoring}
@@ -231,11 +232,11 @@ The table below lists additional attributes specific to the `gRPC authentication
 The table below lists additional attributes specific to the `Monitoring service` source.
 
 #|
-|| **Attribute**  | **Description** ||
-|| `method`       | HTTP request method. For example `POST`, `GET`.</br>*Required.* ||
-|| `url`          | Request path without query parameters.</br>*Required.* ||
-|| `params`       | Raw query parameters.</br>*Optional.* ||
-|| `body`         | Request body (truncated to 2 MB with the `TRUNCATED_BY_YDB` suffix).</br>*Optional.* ||
+|| **Attribute**  | **Description**                                                      | **Required/Optional** ||
+|| `method`       | HTTP request method. For example `POST`, `GET`.                      | Required             ||
+|| `url`          | Request path without query parameters.                               | Required             ||
+|| `params`       | Raw query parameters.                                                | Optional             ||
+|| `body`         | Request body (truncated to 2 MB with the `TRUNCATED_BY_YDB` suffix). | Optional             ||
 |#
 
 ### Heartbeat {#heartbeat}
@@ -249,8 +250,8 @@ The table below lists additional attributes specific to the `Monitoring service`
 The table below lists additional attributes specific to the `Heartbeat` source.
 
 #|
-|| **Attribute**  | **Description** ||
-|| `node_id`      | Node identifier where the event occurred. *Required.* ||
+|| **Attribute**  | **Description**                                 | **Required/Optional** ||
+|| `node_id`      | Node identifier of the node that sent the heartbeat.       | Required             ||
 |#
 
 ### BlobStorage Controller {#bsc}
@@ -262,23 +263,23 @@ The table below lists additional attributes specific to the `Heartbeat` source.
 The table below lists additional attributes specific to the `BlobStorage Controller` source.
 
 #|
-|| **Attribute**    | **Description** ||
-|| `old_config`     | Snapshot of the previous BlobStorage Controller configuration in YAML form. </br>*Optional.* ||
-|| `new_config`     | Snapshot of the configuration that replaced the previous one. </br>*Optional.* ||
+|| **Attribute**    | **Description**                                                                             | **Required/Optional** ||
+|| `old_config`     | Snapshot of the previous [BlobStorage Controller configuration](../reference/configuration/blob_storage_config.md) in YAML format. | Optional ||
+|| `new_config`     | Snapshot of the configuration that replaced the previous one. | Optional ||
 |#
 
 ### Distconf {#distconf}
 
 **UID:** `distconf`.
-**Logged operations:** Distributed configuration changes.
+**Logged operations:** [Distributed configuration](../concepts/glossary.md#distributed-configuration) changes.
 **How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
 
 The table below lists additional attributes specific to the `Distconf` source.
 
 #|
-|| **Attribute**    | **Description** ||
-|| `old_config`     | Snapshot of the configuration that was active before the distributed update was accepted. Distconf serializes it in YAML. *Required.* ||
-|| `new_config`     | Snapshot of the configuration that Distconf committed after the change. *Required.* ||
+|| **Attribute**    | **Description**                                                                                                                         | **Required/Optional** ||
+|| `old_config`     | Snapshot of the configuration that was active before the distributed update was accepted. Distconf serializes it in YAML.                | Required             ||
+|| `new_config`     | Snapshot of the configuration that Distconf committed after the change.                                                                 | Required             ||
 |#
 
 ### Web login {#web-login}
@@ -298,9 +299,9 @@ The table below lists additional attributes specific to the `Distconf` source.
 The table below lists additional attributes specific to the `Console` source.
 
 #|
-|| **Attribute**    | **Description** ||
-|| `old_config`     | Snapshot of the configuration that was in effect before the console request was applied. *Optional.* ||
-|| `new_config`     | Snapshot of the configuration that the console applied. *Optional.* ||
+|| **Attribute**    | **Description**                                                                              | **Required/Optional** ||
+|| `old_config`     | Snapshot of the configuration that was in effect before the console request was applied.     | Optional             ||
+|| `new_config`     | Snapshot of the configuration that the console applied.                                      | Optional             ||
 |#
 
 ## Audit log configuration {#audit-log-configuration}

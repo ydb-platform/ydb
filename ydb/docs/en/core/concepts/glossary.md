@@ -601,6 +601,12 @@ Due to its nature, the state storage service operates in a best-effort manner. F
 
 A **gRPC Proxy** is the client proxy system for external user requests. Client requests enter the system via the [gRPC](https://grpc.io) protocol, then the proxy component translates them into internal calls for executing these requests, passed around via [Interconnect](#actor-system-interconnect). This proxy provides an interface for both request-response and bidirectional streaming.
 
+### Distributed configuration {#distributed-configuration}
+
+**Distributed configuration** or **DistConf** is an internal [configuration](../devops/configuration-management/configuration-v2/config-overview.md) mechanism of the cluster that ensures the startup and configuration of [static nodes](#static-node), automatic management of [static storage groups](#static-group), and [State Storage](#state-storage). Distributed configuration starts before any [tablets](#tablet), [storage groups](#storage-group), and [State Storage](#state-storage).
+
+For more details on how distributed configuration works, see [{#T}](../contributor/configuration-v2.md).
+
 ### Distributed storage implementation {#distributed-storage-implementation}
 
 **Distributed storage** is a distributed fault-tolerant data storage layer that persists binary records called [LogoBlob](#logoblob), addressed by a particular type of identifier called [LogoBlobID](#logoblobid). Thus, distributed storage is a key-value store that maps LogoBlobID to a string up to 10MB in size. Distributed storage consists of many [storage groups](#storage-group), each being an independent data repository.

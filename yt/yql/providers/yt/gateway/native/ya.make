@@ -57,6 +57,7 @@ PEERDIR(
     yt/yql/providers/yt/lib/skiff
     yt/yql/providers/yt/lib/url_mapper
     yt/yql/providers/yt/lib/yson_helpers
+    yt/yql/providers/yt/lib/yt_file_download
     yt/yql/providers/yt/lib/init_yt_api
     yt/yql/providers/yt/lib/config_clusters
     yt/yql/providers/yt/provider

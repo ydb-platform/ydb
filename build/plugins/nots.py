@@ -51,6 +51,7 @@ class TsTestType(StrEnum):
     ESLINT = auto()
     HERMIONE = auto()
     JEST = auto()
+    VITEST = auto()
     PLAYWRIGHT = auto()
     PLAYWRIGHT_LARGE = auto()
     TSC_TYPECHECK = auto()
@@ -187,6 +188,17 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestForPath.value,
     ),
     TsTestType.JEST: (
+        df.Size.from_unit,
+        df.Tag.from_unit,
+        df.Requirements.from_unit,
+        df.ConfigPath.value,
+        df.TsTestDataDirs.value,
+        df.TsTestDataDirsRename.value,
+        df.TsResources.value,
+        df.TsTestForPath.value,
+        df.DockerImage.value,
+    ),
+    TsTestType.VITEST: (
         df.Size.from_unit,
         df.Tag.from_unit,
         df.Requirements.from_unit,
@@ -983,7 +995,7 @@ def on_ts_test_for_configure(
     user_recipes = unit.get_subst("TEST_RECIPES_VALUE").strip()
     unit.set(["TEST_RECIPES_VALUE", ""])
 
-    if test_runner in [TsTestType.JEST]:
+    if test_runner in [TsTestType.JEST, TsTestType.VITEST]:
         unit.on_setup_install_node_modules_recipe([for_mod_path])
     else:
         unit.on_setup_extract_node_modules_recipe([for_mod_path])

@@ -1,119 +1,60 @@
 #pragma once
 
-#include "yql_yt_exec_ctx.h"
-
-#include <yt/yql/providers/yt/gateway/lib/temp_files.h>
+#include <yt/yql/providers/yt/gateway/lib/transform.h>
 #include <yt/yql/providers/yt/gateway/lib/transaction_cache.h>
-#include <yt/yql/providers/yt/gateway/lib/user_files.h>
-
-#include <yt/yql/providers/yt/common/yql_yt_settings.h>
-#include <yt/yql/providers/yt/job/yql_job_base.h>
-
-#include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/core/yql_udf_resolver.h>
-#include <yql/essentials/minikql/mkql_node.h>
-#include <yql/essentials/minikql/mkql_node_visitor.h>
-#include <yql/essentials/minikql/mkql_program_builder.h>
-
-#include <yt/cpp/mapreduce/interface/operation.h>
-
-#include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
-#include <util/generic/ptr.h>
-#include <util/generic/strbuf.h>
-#include <util/generic/string.h>
 
 namespace NYql {
 
-namespace NNative {
-
-class TGatewayTransformer {
+template<typename TExecContextPtr>
+class TNativeGatewayTransformer: public TGatewayTransformer<TExecContextPtr> {
 public:
-    TGatewayTransformer(TExecContextBase& execCtx, TYtSettings::TConstPtr settings, const TString& optLLVM,
-        TUdfModulesTable udfModules, IUdfResolver::TPtr udfResolver, TTransactionCache::TEntry::TPtr entry,
-        NKikimr::NMiniKQL::TProgramBuilder& builder, TTempFiles& tmpFiles, TMaybe<ui32> publicId);
-
-    template <class TExecContextPtr>
-    TGatewayTransformer(const TExecContextPtr& execCtx, TTransactionCache::TEntry::TPtr entry,
-        NKikimr::NMiniKQL::TProgramBuilder& builder, TTempFiles& tmpFiles)
-        : TGatewayTransformer(*execCtx, execCtx->Options_.Config(), execCtx->Options_.OptLLVM(),
-            execCtx->Options_.UdfModules(), execCtx->Options_.UdfResolver(), std::move(entry),
-            builder, tmpFiles, execCtx->Options_.PublicId())
+    TNativeGatewayTransformer(TExecContextPtr execCtx, ITableDownloaderFunc downloader,
+        NKikimr::NMiniKQL::TProgramBuilder& builder, TTransactionCache::TEntry::TPtr entry)
+        : TGatewayTransformer<TExecContextPtr>(execCtx, downloader, builder)
+        , Entry_(entry)
+        , HasFilesToDump_(std::make_shared<bool>(false))
     {
     }
 
-    enum class EPhase {
-        Content,
-        Other,
-        All
-    };
-
-    struct TLocalFileInfo {
-        TString Hash;
-        bool BypassArtifactCache;
-    };
-
-    NKikimr::NMiniKQL::TCallableVisitFunc operator()(NKikimr::NMiniKQL::TInternName name);
-
-    void SetTwoPhaseTransform() {
-        Phase_ = EPhase::Other;
-    }
-
-    bool HasSecondPhase();
-
-    inline bool CanExecuteInternally() const {
-        return !*RemoteExecutionFlag_ && !*UntrustedUdfFlag_;
-    }
-
-    inline bool CanExecuteLocally() const {
-        return !*RemoteExecutionFlag_;
-    }
-
-    inline ui64 GetUsedMemory() const {
-        return *UsedMem_;
-    }
+    void ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRun);
 
     bool HasFilesToDump() const {
         return *HasFilesToDump_;
     }
 
-    void ApplyJobProps(TYqlJobBase& job);
-    void ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRun);
-
 private:
     NYT::ITransactionPtr GetTx();
     TTransactionCache::TEntry::TPtr GetEntry();
-    void AddFile(TString alias, TUserFiles::TFileInfo fileInfo, const TString& udfPrefix = {});
-    TString FindUdfPath(const TStringBuf moduleName) const;
-    TString FindUdfPrefix(const TStringBuf moduleName) const;
+
+    void CalculateRemoteMemoryUsage(double remoteMemoryFactor, const NYT::TRichYPath& remoteFilePath) override;
+
+    void HandleQContextCapture(TUserFiles::TFileInfo& fileInfo, const TString& alias) override;
+    void ProcessLocalFileForDump(const TString& alias, const TString& localPath) override;
+    void ProcessRemoteFileForDump(const TString& alias, const NYT::TRichYPath& remoteFile) override;
 
 private:
-    TExecContextBase& ExecCtx_;
-    TYtSettings::TConstPtr Settings_;
-    TUdfModulesTable UdfModules_;
-    IUdfResolver::TPtr UdfResolver_;
-
     TTransactionCache::TEntry::TPtr Entry_;
-    NKikimr::NMiniKQL::TProgramBuilder& PgmBuilder_;
-    TTempFiles& TmpFiles_;
-    TMaybe<ui32> PublicId_;
-    EPhase Phase_ = EPhase::All;
-    bool ForceLocalTableContent_;
-
-    // Wrap to shared ptr because TGatewayTransformer is passed by value
-    std::shared_ptr<bool> TableContentFlag_;
-    std::shared_ptr<bool> RemoteExecutionFlag_;
-    std::shared_ptr<bool> UntrustedUdfFlag_;
-    std::shared_ptr<ui64> UsedMem_;
-    std::shared_ptr<THashMap<TString, TString>> JobFileAliases_;
-    std::shared_ptr<THashMap<TString, TString>> JobUdfs_;
-    std::shared_ptr<THashMap<TString, TString>> UniqFiles_;
-    std::shared_ptr<TVector<NYT::TRichYPath>> RemoteFiles_;
-    std::shared_ptr<TVector<std::pair<TString, TLocalFileInfo>>> LocalFiles_;
-    std::shared_ptr<TVector<std::pair<TString, TLocalFileInfo>>> DeferredUdfFiles_;
     std::shared_ptr<bool> HasFilesToDump_;
+
 };
 
-} // NNative
+template<typename TExecContextPtr>
+TNativeGatewayTransformer<TExecContextPtr> MakeNativeGatewayTransformer(
+    TExecContextPtr execCtx,
+    TTransactionCache::TEntry::TPtr entry,
+    TProgramBuilder& pgmBuilder,
+    TTempFiles::TPtr tmpFiles
+) {
+    NYT::IClientPtr client;
+    if (entry) {
+        client = entry->Client;
+    } else {
+        client = execCtx->CreateYtClient(execCtx->Options_.Config());
+    }
+    auto tableToFileDownloader = MakeYtNativeFileDownloader(execCtx->Gateway, execCtx->GetSessionId(), execCtx->Cluster_, execCtx->Options_.Config(), client, tmpFiles);
+    return TNativeGatewayTransformer(execCtx, tableToFileDownloader, pgmBuilder, entry);
+}
 
-} // NYql
+} // namespace NYql
+
+#include "yql_yt_transform-inl.h"

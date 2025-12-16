@@ -175,6 +175,7 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
 
     if (auto modules = dynamic_cast<TModuleResolver*>(moduleResolver.get())) {
         modules->AttachUserData(typeContext->UserDataStorage);
+        modules->SetUseCanonicalLibrarySuffix(true);
     }
 
     return typeContext;

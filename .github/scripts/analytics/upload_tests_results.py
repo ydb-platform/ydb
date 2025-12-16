@@ -112,10 +112,7 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
         if result.get("muted", False):
             status = "mute"
         elif status_str == "FAILED":
-            if error_type == "REGULAR":
-                status = "failure"
-            else:
-                status = "error"
+            status = "failure"
         elif status_str == "ERROR":
             status = "error"
         elif status_str == "SKIPPED":
@@ -124,15 +121,27 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
             # OK, PASSED, or any other status -> "passed"
             status = "passed"
         
-        # Extract log URLs from properties
-        # Properties are added by transform_build_results.py with URL format (converted from links)
-        properties = result.get("properties") or {}
+        # Extract log URLs from links (updated by transform_build_results.py with URLs)
+        # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
+        links = result.get("links", {})
         
-        # Get log URLs from properties (added by transform_build_results.py with URLs)
-        log_url = properties.get("url:log") or properties.get("log") or ""
-        logsdir_url = properties.get("url:logsdir") or properties.get("logsdir") or ""
-        stderr_url = properties.get("url:stderr") or properties.get("stderr") or ""
-        stdout_url = properties.get("url:stdout") or properties.get("stdout") or ""
+        def get_link_url(link_type):
+            if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
+                return links[link_type][0]  # Take first URL from array
+            return ""
+        
+        log_url = get_link_url("log")
+        logsdir_url = get_link_url("logsdir")
+        stderr_url = get_link_url("stderr")
+        stdout_url = get_link_url("stdout")
+
+        # Determine entity_type: suite, chunk, or test
+        if result.get("suite"):
+            entity_type = "suite"
+        elif result.get("chunk"):
+            entity_type = "chunk"
+        else:
+            entity_type = "test"
 
         # Build metadata JSON from available fields
         metadata = {
@@ -144,6 +153,7 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
             "name": result.get("name"),
             "id": result.get("id"),
             "hid": result.get("hid"),
+            "entity_type": entity_type,
         }
         # Remove None values from metadata
         metadata = {k: v for k, v in metadata.items() if v is not None}

@@ -9,6 +9,7 @@
 #include <ydb/library/signals/owner.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -190,7 +191,8 @@ private:
 
     void SendWriteRequest();
     static TDuration OverloadTimeout() {
-        return TDuration::MilliSeconds(OverloadedDelayMs);
+        ui32 overloadedDelayMs = min(AppData() ? AppData()->ColumnShardConfig.GetProxyOverloadedDelayMs() : OverloadedDelayMs, std::numeric_limits<ui32>::max() / 2);
+        return TDuration::MilliSeconds(overloadedDelayMs + RandomNumber<ui32>(overloadedDelayMs));
     }
     void SendToTablet(THolder<IEventBase> event) {
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,

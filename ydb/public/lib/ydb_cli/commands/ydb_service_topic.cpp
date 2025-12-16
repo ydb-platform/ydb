@@ -644,7 +644,6 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&ConsumerType_);
         config.Opts->AddLongOption("keep-messages-order", "Keep messages order for shared consumer")
             .Optional()
-            .DefaultValue(false)
             .StoreResult(&KeepMessagesOrder_);
         config.Opts->AddLongOption("default-processing-timeout", "Default processing timeout for shared consumer (ex. '1h', '1m', '1s)")
             .Optional()

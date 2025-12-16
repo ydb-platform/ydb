@@ -15,7 +15,12 @@
             margin: 0;
             padding: 10px;
             box-sizing: border-box;
-            zoom: 80%;
+        }
+        /* Only apply zoom on very large screens, not on desktop */
+        @media (min-width: 1400px) {
+            body {
+                zoom: 90%;
+            }
         }
         .report-header {
             background-color: #f6f8fa;
@@ -581,7 +586,7 @@
             margin: 32px auto;
             padding: 20px;
             border: 1px solid #888;
-            width: min(960px, 95vw);
+            width: min(1400px, 95vw);
             border-radius: 5px;
             max-height: 90vh;
             display: flex;
@@ -590,7 +595,7 @@
             position: relative;
         }
         #successRateModal .modal-content {
-            width: min(960px, 95vw);
+            width: min(1400px, 95vw);
             max-width: 95vw;
         }
         #successRateModalContent {
@@ -783,13 +788,13 @@
                 padding: 12px;
             }
             .modal-content {
-                width: min(960px, 95vw);
+                width: min(1400px, 95vw);
                 max-width: 95vw;
                 margin: 24px auto;
                 padding: 12px;
             }
             #successRateModal .modal-content {
-                width: min(960px, 95vw);
+                width: min(1400px, 95vw);
                 max-width: 95vw;
             }
             .close-modal {
@@ -847,6 +852,21 @@
         .sr-table-wrap td:first-child,
         .sr-table-wrap th:first-child {
             text-align: left;
+        }
+        /* Desktop: allow table to use more width */
+        @media (min-width: 1200px) {
+            .sr-table-wrap table {
+                table-layout: auto;
+                width: 100%;
+            }
+            .sr-table-wrap th,
+            .sr-table-wrap td {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+            .sr-table-wrap thead th {
+                font-size: 13px;
+            }
         }
             .sr-table-wrap thead th {
                 font-size: 11px;
@@ -955,7 +975,7 @@
     </div>
 
     <!-- All view: grouped by suite -->
-    <div id="view-all" class="view">
+    <div id="view-all" class="view" style="display: none;">
         {% for suite_name, tests in suites.items()|sort %}
         <div class="suite-group" data-suite-name="{{ suite_name }}">
             <div class="suite-header" onclick="toggleSuite('suite-{{ loop.index }}')">
@@ -1128,6 +1148,11 @@
                     console.log('Test data loaded successfully. Keys:', Object.keys(data));
                     console.log('History tests:', data.history_for_js ? Object.keys(data.history_for_js).length : 0);
                     console.log('Test descriptions:', data.test_descriptions ? Object.keys(data.test_descriptions).length : 0);
+                    console.log('Test success rates:', data.test_success_rates ? Object.keys(data.test_success_rates).length : 0);
+                    if (data.test_success_rates && Object.keys(data.test_success_rates).length > 0) {
+                        const sampleTest = Object.keys(data.test_success_rates)[0];
+                        console.log('Sample success rate:', sampleTest, '->', data.test_success_rates[sampleTest]);
+                    }
                     testData = data;
                     return testData;
                 })
@@ -1186,6 +1211,11 @@
             if (Object.keys(testSuccessRates).length === 0) {
                 const data = await loadTestData();
                 testSuccessRates = data.test_success_rates || {};
+                console.log('Loaded test success rates:', Object.keys(testSuccessRates).length, 'tests');
+                if (Object.keys(testSuccessRates).length > 0) {
+                    const sampleTest = Object.keys(testSuccessRates)[0];
+                    console.log('Sample success rate:', sampleTest, '->', testSuccessRates[sampleTest]);
+                }
                 // Update success rate buttons after loading data
                 updateSuccessRateButtons();
             }
@@ -1193,18 +1223,33 @@
         }
         
         // Update success rate buttons with loaded data
-        function updateSuccessRateButtons() {
+        async function updateSuccessRateButtons() {
             const branch = "{{ branch }}";
             const buttons = document.querySelectorAll('.success-rate-button');
+            // If no data yet, load it once and then proceed
+            if (Object.keys(testSuccessRates).length === 0) {
+                await getTestSuccessRates().catch(() => {});
+            }
+            
+            let updatedCount = 0;
             buttons.forEach(button => {
                 const testFullName = button.getAttribute('data-test-full-name');
-                if (!testFullName) return;
+                if (!testFullName) {
+                    console.warn('Button missing data-test-full-name attribute');
+                    return;
+                }
                 
                 const rates = testSuccessRates[testFullName];
-                if (!rates) return;
+                if (!rates) {
+                    // Don't log every missing test to avoid spam
+                    return;
+                }
                 
                 const rateText = button.querySelector('.success-rate-text');
-                if (!rateText) return;
+                if (!rateText) {
+                    console.warn('Button missing .success-rate-text element for test:', testFullName);
+                    return;
+                }
                 
                 let text = '';
                 if (rates.other) {
@@ -1219,8 +1264,12 @@
                 
                 if (text) {
                     rateText.textContent = text;
+                    updatedCount++;
+                } else {
+                    console.warn('Empty text for test:', testFullName, 'rates:', rates);
                 }
             });
+            console.log('Updated', updatedCount, 'success rate buttons');
         }
         
         function parseJsonScript(id) {
@@ -1311,7 +1360,7 @@
         }
         
         // Initialize: expand all suites by default for cmd+f search
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             document.querySelectorAll('.suite-content').forEach(suite => {
                 suite.classList.remove('hidden');
             });
@@ -1410,17 +1459,22 @@
                 return;
             }
             
-            // Initialize group by mode AFTER filters are applied
+            try {
+                // Load success rates BEFORE first render to avoid "No history" flash
+                await getTestSuccessRates();
+            } catch (err) {
+                console.warn('Failed to load success rates:', err);
+            }
+            
+            // Initialize group by mode AFTER filters and data are applied
             setGroupBy('none');
             
             // Initialize sanitizer and timeout counts (setGroupBy already calls them, but ensure they're called)
             updateSanitizerCount();
             updateTimeoutCount();
             
-            // Load success rates and update buttons (async, non-blocking)
-            getTestSuccessRates().catch(err => {
-                console.warn('Failed to load success rates:', err);
-            });
+            // Ensure current view buttons are updated with loaded data
+            updateSuccessRateButtons();
         });
         
         function updateSanitizerCount() {
@@ -1668,10 +1722,7 @@
             flatView.classList.add('active');
             
             // Update success rate buttons after rendering flat view
-            // Data might have been loaded by now, so update buttons
-            if (Object.keys(testSuccessRates).length > 0) {
-                updateSuccessRateButtons();
-            }
+            updateSuccessRateButtons();
         }
         
         function applyFilters() {
@@ -1746,6 +1797,9 @@
                 }
             });
             }
+
+            // After filtering, refresh success rate buttons
+            updateSuccessRateButtons();
             
             // Update URL without reload
             const url = new URL(window.location);
@@ -2240,6 +2294,9 @@
                 getTestHistory(),
                 getTestSuccessRates()
             ]);
+
+            // After data is loaded, also refresh buttons so the clicked one updates
+            updateSuccessRateButtons();
             
             console.log('showSuccessRateModal - testFullName:', testFullName);
             console.log('showSuccessRateModal - history keys:', Object.keys(history).length);

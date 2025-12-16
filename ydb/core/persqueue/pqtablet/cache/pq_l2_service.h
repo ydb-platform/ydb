@@ -34,9 +34,10 @@ struct TCacheValue : TNonCopyable {
     using TPtr = std::shared_ptr<TCacheValue>;
     using TWeakPtr = std::weak_ptr<TCacheValue>;
 
-    TCacheValue(std::shared_ptr<TVector<TBatch>> value, TActorId owner, TInstant accessTime)
+    TCacheValue(std::shared_ptr<TVector<TBatch>> value, size_t packedSize, TActorId owner, TInstant accessTime)
         : Value(value)
         , DataSize(0)
+        , PackedSize(packedSize)
         , Owner(owner)
         , AccessTime(accessTime.TimeT())
         , AccessCount(0)
@@ -68,6 +69,10 @@ struct TCacheValue : TNonCopyable {
         return DataSize;
     }
 
+    size_t GetPackedSize() const {
+        return PackedSize;
+    }
+
     const TActorId& GetOwner() const {
         return Owner;
     }
@@ -75,6 +80,7 @@ struct TCacheValue : TNonCopyable {
 private:
     const std::shared_ptr<TVector<TBatch>> Value;
     size_t DataSize;
+    size_t PackedSize;
     const TActorId Owner;
     std::atomic<ui64> AccessTime;
     std::atomic<ui32> AccessCount;

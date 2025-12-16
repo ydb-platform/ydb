@@ -297,7 +297,7 @@ namespace NKikimr::NPQ {
                     reqData.RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), nullptr);
                 }
 
-                auto cached = std::make_shared<TCacheValue>(reqBlob.Batches, ctx.SelfID, TAppData::TimeProvider->Now());
+                auto cached = std::make_shared<TCacheValue>(reqBlob.Batches, reqBlob.PackedSize, ctx.SelfID, TAppData::TimeProvider->Now());
                 TValueL1 valL1(cached, cached->GetDataSize(), TValueL1::SourceHead);
                 Cache[blob] = valL1; // weak
                 Counters.Inc(valL1);
@@ -386,7 +386,7 @@ namespace NKikimr::NPQ {
                     }
                 }
 
-                TCacheValue::TPtr cached(new TCacheValue(reqBlob.Batches, ctx.SelfID, TAppData::TimeProvider->Now()));
+                TCacheValue::TPtr cached(new TCacheValue(reqBlob.Batches, reqBlob.PackedSize, ctx.SelfID, TAppData::TimeProvider->Now()));
                 TValueL1 valL1(cached, cached->GetDataSize(), TValueL1::SourcePrefetch);
                 Cache[blob] = valL1;
                 Counters.Inc(valL1);
@@ -502,8 +502,10 @@ namespace NKikimr::NPQ {
                 if (cached) {
                     ++numCached;
                     blob.Batches = cached->GetValue();
+                    blob.UnpackedSize = cached->GetDataSize();
+                    blob.PackedSize = cached->GetPackedSize();
                     blob.Cached = true;
-                    AFL_ENSURE(blob.Size)("d", "Got empty blob from cache");
+                    AFL_ENSURE(blob.UnpackedSize)("d", "Got empty blob from cache");
                 }
             }
             return numCached;

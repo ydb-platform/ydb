@@ -32,30 +32,6 @@ namespace NKikimr::NStorage {
         pdiskConfig->SlotSizeInUnits = slotSizeInUnits;
     }
 
-    TInferPDiskSlotCountSettingsForDriveType TNodeWarden::GetInferPDiskSlotCountSettingsForDriveType(NPDisk::EDeviceType type) const {
-        const auto& inferSettings = Cfg->BlobStorageConfig.GetInferPDiskSlotCountSettings();
-        if (type == NPDisk::DEVICE_TYPE_ROT) {
-            const auto& rotSettings = inferSettings.GetRot();
-            return {
-                .UnitSize = rotSettings.GetUnitSize(),
-                .MaxSlots = rotSettings.GetMaxSlots(),
-            };
-        } else if (type == NPDisk::DEVICE_TYPE_SSD || type == NPDisk::DEVICE_TYPE_NVME) {
-            const auto& ssdSettings = inferSettings.GetSsd();
-            return {
-                .UnitSize = ssdSettings.GetUnitSize(),
-                .MaxSlots = ssdSettings.GetMaxSlots(),
-            };
-        } else {
-            return {};
-        }
-    }
-
-    bool TNodeWarden::PreferInferredSettingsOverExplicit() const {
-        const auto& inferSettings = Cfg->BlobStorageConfig.GetInferPDiskSlotCountSettings();
-        return inferSettings.GetPreferInferredSettingsOverExplicit();
-    }
-
     TIntrusivePtr<TPDiskConfig> TNodeWarden::CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk)  {
         const TString& path = pdisk.GetPath();
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
@@ -163,12 +139,13 @@ namespace NKikimr::NStorage {
             pdiskConfig->EnableSectorEncryption = !pdiskConfig->SectorMap;
         }
 
-        TInferPDiskSlotCountSettingsForDriveType inferSettings = GetInferPDiskSlotCountSettingsForDriveType(deviceType);
+        auto inferSettings = TInferPDiskSlotCountSettingsForDriveType(InferPDiskSlotCountSettings, deviceType);
+        bool preferInferredSettings = InferPDiskSlotCountSettings.GetPreferInferredSettingsOverExplicit();
         if (!inferSettings) {
             STLOG(PRI_DEBUG, BS_NODE, NW102, "Inferring PDisk slot count not configured", (Path, path),
                 (SlotCount, pdiskConfig->ExpectedSlotCount),
                 (SlotSizeInUnits, pdiskConfig->SlotSizeInUnits));
-        } else if (pdiskConfig->ExpectedSlotCount != 0 && !PreferInferredSettingsOverExplicit()) {
+        } else if (pdiskConfig->ExpectedSlotCount != 0 && !preferInferredSettings) {
             STLOG(PRI_DEBUG, BS_NODE, NW102, "Skipped inferring PDisk slot count, using explicit settings", (Path, path),
                 (SlotCount, pdiskConfig->ExpectedSlotCount),
                 (SlotSizeInUnits, pdiskConfig->SlotSizeInUnits));

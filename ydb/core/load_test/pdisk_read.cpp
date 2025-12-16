@@ -74,6 +74,7 @@ class TPDiskReaderLoadTestActor : public TActorBootstrapped<TPDiskReaderLoadTest
     const TActorId Parent;
     ui64 Tag;
     ui32 DurationSeconds;
+    TDuration DelayBeforeMeasurements;
     ui32 IntervalMsMin = 0;
     ui32 IntervalMsMax = 0;
     TControlWrapper MaxInFlight;
@@ -136,6 +137,7 @@ public:
 
         VERIFY_PARAM(DurationSeconds);
         DurationSeconds = cmd.GetDurationSeconds();
+        DelayBeforeMeasurements = TDuration::Seconds(cmd.GetDelayBeforeMeasurementsSeconds());
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
         Report->Duration = TDuration::Seconds(DurationSeconds);
 

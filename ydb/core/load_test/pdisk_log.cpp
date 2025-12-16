@@ -283,6 +283,7 @@ class TPDiskLogWriterLoadTestActor : public TActorBootstrapped<TPDiskLogWriterLo
     const TActorId Parent;
     ui64 Tag;
     ui32 DurationSeconds;
+    TDuration DelayBeforeMeasurements;
     i32 OwnerInitInProgress = 0;
     ui32 HarakiriInFlight = 0;
 
@@ -336,6 +337,7 @@ public:
 
         VERIFY_PARAM(DurationSeconds);
         DurationSeconds = cmd.GetDurationSeconds();
+        DelayBeforeMeasurements = TDuration::Seconds(cmd.GetDelayBeforeMeasurementsSeconds());
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
         // Report->Duration = TDuration::Seconds(DurationSeconds);
 

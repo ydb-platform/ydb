@@ -66,7 +66,7 @@ struct TCacheValue : TNonCopyable {
     }
 
     size_t GetDataSize() const {
-        return DataSize;
+        return PackedSize;
     }
 
     size_t GetPackedSize() const {

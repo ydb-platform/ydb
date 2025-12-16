@@ -127,7 +127,7 @@ namespace NKikimr::NPQ {
             ui32 cropped = 0;
             for (ui32 i = 0; i < Blobs.size(); ++i) {
                 auto& blob = Blobs[i];
-                size += blob.Size;
+                size += blob.PackedSize;
                 if (size > MAX_RESPONSE_SIZE) {
                     ++cropped;
                     blob.Clear();
@@ -308,7 +308,7 @@ namespace NKikimr::NPQ {
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Caching head blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << reqBlob.Size << " actorID " << ctx.SelfID);
+                    << " size " << reqBlob.PackedSize << " actorID " << ctx.SelfID);
             }
         }
 
@@ -395,7 +395,7 @@ namespace NKikimr::NPQ {
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Prefetched blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << reqBlob.Size  << " actorID " << ctx.SelfID);
+                    << " size " << reqBlob.PackedSize  << " actorID " << ctx.SelfID);
                 haveSome = true;
             }
 

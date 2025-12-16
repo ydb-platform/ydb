@@ -124,8 +124,8 @@ jobs:
           df -h
 
           echo "Copying SLO-specific files to baseline (temporary, will be removed after build)..."
-          cp -f current/ydb/public/sdk/cpp/tests/slo_workloads/.dockerignore baseline/ydb/public/sdk/cpp/tests/slo_workloads
-          cp -f current/ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile baseline/ydb/public/sdk/cpp/tests/slo_workloads
+          rm -rf baseline/ydb/public/sdk/cpp/tests/slo_workloads/
+          cp -r current/ydb/public/sdk/cpp/tests/slo_workloads/ baseline/ydb/public/sdk/cpp/tests
 
           # Build current version
           if [ -f "$GITHUB_WORKSPACE/current/ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile" ]; then

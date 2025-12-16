@@ -1337,19 +1337,21 @@ private:
             return result;
         }
 
-        bool hasDiscardWarning = false;
-        for (const auto& issue : ctx.IssueManager.GetIssues()) {
-            if (issue.GetCode() == TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE) {
-                hasDiscardWarning = true;
-                break;
+        if (SessionCtx->Config().FeatureFlags.GetEnableDiscardSelect()) {
+            bool hasDiscardWarning = false;
+            for (const auto& issue : ctx.IssueManager.GetIssues()) {
+                if (issue.GetCode() == TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE) {
+                    hasDiscardWarning = true;
+                    break;
+                }
             }
-        }
 
-        // only query will throw error to save the backward compatibility
-        if (SessionCtx->Query().Type == EKikimrQueryType::Query && hasDiscardWarning) {
-            ctx.AddError(YqlIssue(TPosition(), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
-                << "DISCARD can only be used at the top level, not inside subqueries"));
-            return result;
+            // only query will throw error to save the backward compatibility
+            if (SessionCtx->Query().Type == EKikimrQueryType::Query && hasDiscardWarning) {
+                ctx.AddError(YqlIssue(TPosition(), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
+                    << "DISCARD can only be used at the top level, not inside subqueries"));
+                return result;
+            }
         }
 
         YQL_ENSURE(queryAst->Root);

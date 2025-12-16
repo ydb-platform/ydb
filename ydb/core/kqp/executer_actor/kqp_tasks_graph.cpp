@@ -321,7 +321,7 @@ void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TCon
         auto& originTask = GetTask(originTaskId);
         auto& taskOutput = originTask.Outputs[outputIdx];
 
-        if (result.GetCanSkipChannel()) {
+        if (AppData()->FeatureFlags.GetEnableDiscardSelect() && result.GetCanSkipChannel()) {
             taskOutput.Type = TTaskOutputType::Effects;
             continue;
         }

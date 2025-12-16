@@ -178,7 +178,7 @@ public:
 
         for (auto& output : task.Outputs) {
             auto* protoOutput = protoTask.AddOutputs();
-            if (output.Type == TTaskOutputType::Effects) {
+            if (AppData()->FeatureFlags.GetEnableDiscardSelect() && output.Type == TTaskOutputType::Effects) {
                 protoOutput->MutableEffects();
                 continue;
             }
@@ -216,7 +216,7 @@ public:
 
         with_lock (*alloc) { // allocator is used only by outputChannel->PopAll()
             for (auto& taskOutput : task.Outputs) {
-                if (taskOutput.Type == TTaskOutputType::Effects) {
+                if (AppData()->FeatureFlags.GetEnableDiscardSelect() && taskOutput.Type == TTaskOutputType::Effects) {
                     continue;
                 }
                 for (ui64 outputChannelId : taskOutput.Channels) {

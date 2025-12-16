@@ -3401,11 +3401,24 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 }
 Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
+    TKikimrRunner CreateKikimrWithDiscardSelect(bool useRealThreads = true) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDiscardSelect(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags)
+                                                            .SetUseRealThreads(useRealThreads);
+        return TKikimrRunner(settings);
+    }
+
+    TKikimrRunner CreateKikimrWithDiscardSelect(TKikimrSettings settings) {
+        settings.FeatureFlags.SetEnableDiscardSelect(true);
+        return TKikimrRunner(settings);
+    }
+
     Y_UNIT_TEST(DiscardSelectSupport) {
-        TKikimrRunner kikimr;
+        auto kikimr = CreateKikimrWithDiscardSelect();
         auto db = kikimr.GetQueryClient();
         auto tableClient = kikimr.GetTableClient();
-        
+
         TVector<TString> queries = {
             "DISCARD SELECT 1",
             "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
@@ -3486,7 +3499,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
     }
 
     Y_UNIT_TEST(DiscardSelectEnsureExecuted) {
-        TKikimrRunner kikimr;
+        auto kikimr = CreateKikimrWithDiscardSelect();
         auto db = kikimr.GetQueryClient();
 
         auto failingEnsureQuery = std::vector{R"(
@@ -3519,7 +3532,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
     }
 
     Y_UNIT_TEST(NoChannelDataEventsWhenDiscard) {
-        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+        auto kikimr = CreateKikimrWithDiscardSelect(false);
         auto db = kikimr.GetQueryClient();
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
@@ -3584,7 +3597,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
     }
 
     Y_UNIT_TEST(DiscardSelectMultiLine) {
-        TKikimrRunner kikimr;
+        auto kikimr = CreateKikimrWithDiscardSelect();
         auto db = kikimr.GetQueryClient();
         
         auto verifyResultValue = [](auto& result, ui32 resultSetIndex, i32 expectedValue) {

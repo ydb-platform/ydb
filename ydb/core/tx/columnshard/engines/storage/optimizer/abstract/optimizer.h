@@ -311,18 +311,6 @@ public:
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {
-        // auto enumDefaultCompaction = [] {
-        //     if (!HasAppData()) {
-        //         return NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompaction();
-        //     }
-        //     return AppDataVerified().ColumnShardConfig.GetDefaultCompaction();
-        // }();
-        // auto strDefaultCompaction = [&] {
-        //     if (enumDefaultCompaction == NKikimrConfig::TColumnShardConfig::TILING) {
-        //         return "tiling";
-        //     }
-        //     return "lc-buckets";
-        // }();
         auto result = TFactory::MakeHolder(defaultCompactionName);
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());

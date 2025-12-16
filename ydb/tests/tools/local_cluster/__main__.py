@@ -167,38 +167,29 @@ def main():
         '--binary-path',
         type=str,
         default=None,
-        help='Path to ydbd binary (if not specified, --version must be provided)'
+        help='Path to ydbd binary (overrides --version if specified)'
     )
     parser.add_argument(
         '--version',
         type=str,
         default="main",
-        help='Git ref/version to download from S3 (e.g., 25.3.1.21). Binary will be downloaded to working-dir'
+        help='Git ref/version to download from S3 (e.g., 25.3.1.21). Binary will be downloaded to working-dir. Ignored if --binary-path is specified'
     )
 
     args = parser.parse_args()
 
     working_dir = os.path.abspath(args.working_dir)
 
-    binary_path = args.binary_path
-    
-    if binary_path is None and args.version is None:
-        logger.error("Either --binary-path or --version must be specified")
-        sys.exit(1)
-    
-    if binary_path is not None and args.version is not None:
-        logger.error("Cannot specify both --binary-path and --version")
-        sys.exit(1)
-    
-    if args.version is not None:
-        binary_path = download_binary_from_s3(args.version, working_dir)
-    else:
+    if args.binary_path is not None:
+        binary_path = args.binary_path
         if not os.path.exists(binary_path):
             logger.error("Binary path does not exist: %s", binary_path)
             sys.exit(1)
         if not os.access(binary_path, os.X_OK):
             logger.error("Binary path is not executable: %s", binary_path)
             sys.exit(1)
+    else:
+        binary_path = download_binary_from_s3(args.version, working_dir)
 
     cluster_manager = LocalCluster(working_dir=working_dir, binary_path=binary_path)
 

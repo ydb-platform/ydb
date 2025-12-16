@@ -117,10 +117,13 @@ jobs:
           }
           
           # Helper function: get PR info from GitHub API
+          # Returns: JSON response and sets global variable HTTP_STATUS with status code
           get_pr_info() {
             local pr_num=$1
-            curl -s -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/ydb-platform/ydb/pulls/$pr_num"
+            local response=$(curl -s -w "\n%{http_code}" -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/ydb-platform/ydb/pulls/$pr_num")
+            HTTP_STATUS=$(echo "$response" | tail -n1)
+            echo "$response" | sed '$d'
           }
           
           # Helper function: process a single branch entry
@@ -140,7 +143,16 @@ jobs:
               base_ref=$(echo "$pr_info" | jq -r '.base.ref')
               
               if [[ -z "$merge_sha" || "$merge_sha" == "null" ]]; then
-                echo "Warning: Failed to get merge commit for PR $pr_num, skipping" >&2
+                local pr_state=$(echo "$pr_info" | jq -r '.state // "unknown"')
+                local mergeable=$(echo "$pr_info" | jq -r '.mergeable // "unknown"')
+                echo "Warning: Failed to get merge commit for PR $pr_num (HTTP $HTTP_STATUS)" >&2
+                echo "  PR state: $pr_state, mergeable: $mergeable" >&2
+                if [[ "$HTTP_STATUS" != "200" ]]; then
+                  echo "  API request failed with status $HTTP_STATUS" >&2
+                elif [[ "$mergeable" == "false" ]]; then
+                  echo "  PR may not be mergeable" >&2
+                fi
+                echo "  Skipping this PR" >&2
                 return 1
               fi
               
@@ -174,7 +186,15 @@ jobs:
             base_ref=$(echo "$pr_info" | jq -r '.base.ref')
             
             if [[ -z "$merge_sha" || "$merge_sha" == "null" ]]; then
-              echo "Error: Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
+              local pr_state=$(echo "$pr_info" | jq -r '.state // "unknown"')
+              local mergeable=$(echo "$pr_info" | jq -r '.mergeable // "unknown"')
+              echo "Error: Failed to get merge commit for PR $PULL_REQUEST_NUMBER (HTTP $HTTP_STATUS)"
+              echo "  PR state: $pr_state, mergeable: $mergeable"
+              if [[ "$HTTP_STATUS" != "200" ]]; then
+                echo "  API request failed with status $HTTP_STATUS"
+              elif [[ "$mergeable" == "false" ]]; then
+                echo "  PR may not be mergeable"
+              fi
               exit 1
             fi
             

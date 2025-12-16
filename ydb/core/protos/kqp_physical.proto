@@ -401,6 +401,20 @@ message TKqpPhyConnection {
     };
 }
 
+message TKqpFullTextSource {
+    message TKqpQuerySettings {
+        repeated TKqpPhyColumnId Columns = 4;
+        optional string Query = 1;
+    }
+
+    optional TKqpPhyTableId Table = 1;
+    optional string Index = 2;
+
+    repeated TKqpPhyColumnId Columns = 3;
+
+    optional TKqpQuerySettings QuerySettings = 4;
+}
+
 message TKqpReadRangesSource {
     TKqpPhyTableId Table = 1;
     repeated TKqpPhyColumnId Columns = 2;
@@ -439,6 +453,7 @@ message TKqpSource {
     oneof Type {
         TKqpReadRangesSource ReadRangesSource = 3;
         TKqpExternalSource ExternalSource = 4;
+        TKqpFullTextSource FullTextSource = 5;
     }
 }
 

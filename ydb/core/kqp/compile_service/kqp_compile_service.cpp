@@ -361,6 +361,8 @@ private:
 
         bool enableFilterPushdownOverJoinOptionalSide = TableServiceConfig.GetFilterPushdownOverJoinOptionalSide();
 
+        bool enableParallelUnionConnectionsForExtend = TableServiceConfig.GetEnableParallelUnionAllConnectionsForExtend();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -407,7 +409,8 @@ private:
             TableServiceConfig.GetEnableOrderOptimizaionFSM() != enableOrderOptimizaionFSM ||
             TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex ||
             TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex() != enablePointPredicateSortAutoSelectIndex ||
-            TableServiceConfig.GetFilterPushdownOverJoinOptionalSide() != enableFilterPushdownOverJoinOptionalSide)
+            TableServiceConfig.GetFilterPushdownOverJoinOptionalSide() != enableFilterPushdownOverJoinOptionalSide ||
+            TableServiceConfig.GetEnableParallelUnionAllConnectionsForExtend() != enableParallelUnionConnectionsForExtend)
         {
 
             QueryCache->Clear();

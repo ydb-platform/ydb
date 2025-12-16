@@ -254,6 +254,7 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(SanitizeGroup, SANITIZE_GROUP)
                             MAP_TIMING(CancelVirtualGroup, CANCEL_VIRTUAL_GROUP)
                             MAP_TIMING(ChangeGroupSizeInUnits, CHANGE_GROUP_SIZE_IN_UNITS)
+                            MAP_TIMING(ReconfigureVirtualGroup, RECONFIGURE_VIRTUAL_GROUP)
 
                             default:
                                 break;
@@ -370,6 +371,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(GetInterfaceVersion)
                     HANDLE_COMMAND(MovePDisk)
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
+                    HANDLE_COMMAND(ReconfigureVirtualGroup)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

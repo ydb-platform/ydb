@@ -12,6 +12,45 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
+    class TSnapshotRWNotSupportedInColumnTables : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[300u];["None"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/Test` (Group, Name, Comment)
+                    VALUES (1U, "Paul", "Changed");
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetIssues().ToString().contains("SnapshotRW is not supported"));
+            }
+
+            {
+                auto result = session1.ExecuteQuery(Q_(R"(
+                    SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([[[300u];["None"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TSnapshotRWNotSupportedInColumnTables) {
+        TSnapshotRWNotSupportedInColumnTables tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
     class TSimple : public TTableDataModificationTester {
     protected:
         void DoExecute() override {

@@ -121,7 +121,7 @@ public:
 
             auto settings = soReadObject.Object().Settings();
             auto& settingsRef = settings.Ref();
-            TInstant from = TInstant::Zero();
+            TInstant from = TInstant::ParseIso8601("2010-01-01T00:00:00Z");
             TInstant to = TInstant::Now();
             TString program;
             TString selectors;

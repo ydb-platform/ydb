@@ -215,6 +215,10 @@ TWriteOperation::TPtr TOperationsManager::CreateWriteOperation(const TUnifiedPat
 }
 
 TConclusion<EOperationBehaviour> TOperationsManager::GetBehaviour(const NEvents::TDataEvents::TEvWrite& evWrite) {
+    if (evWrite.Record.HasLockMode() && evWrite.Record.GetLockMode() == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("proto", evWrite.Record.DebugString())("event", "not supported lock mode");
+        return TConclusionStatus::Fail("transaction isolation mode SnapshotRW is not supported");
+    }
     if (evWrite.Record.HasLocks() && evWrite.Record.GetLocks().GetOp() == NKikimrDataEvents::TKqpLocks::Rollback) {
         //FIXME #23784
         // AFL_VERIFY_DEBUG(!evWrite.Record.HasTxId())("TxId", evWrite.Record.GetTxId());

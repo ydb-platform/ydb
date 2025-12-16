@@ -644,6 +644,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
     kqpConfig.EnableHtapTx = serviceConfig.GetEnableHtapTx();
     kqpConfig.EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
+    kqpConfig.EnableBatchUpdates = serviceConfig.GetEnableBatchUpdates();
     kqpConfig.BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
     kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();

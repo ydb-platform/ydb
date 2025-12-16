@@ -210,6 +210,13 @@ void TDataShardUserDb::UpdateRow(
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
     if (!RowExists(tableId, key)) {
+        if (LockTxId) {
+            // We don't perform an update, but this key may be modified later
+            // by a different transaction. Make sure we set the read lock to
+            // guard against that.
+            TSmallVec<TCell> keyCells = ConvertTableKeys(key);
+            Self.SysLocksTable().SetLock(tableId, keyCells);
+        }
         // Compatibility with old stats.
         // We count read only if row exists.
         return;

@@ -640,24 +640,24 @@ private:
         return result;
     }
 
-    std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
+    std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
         // Check compactions, top to bottom
         for (size_t level = 0; level < Max(Accumulator.size(), Levels.size()); ++level) {
             if (level < Accumulator.size()) {
                 if (auto result = GetCompactAccumulatorTask(granule, locksManager, level)) {
-                    return result;
+                    return { result };
                 }
             }
             if (level < Levels.size()) {
                 if (auto result = GetCompactLevelTask(granule, locksManager, level)) {
-                    return result;
+                    return { result };
                 }
             }
         }
 
         // Nothing to compact
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: nothing to compact");
-        return nullptr;
+        return {};
     }
 
     void DoActualize(const TInstant currentInstant) override {

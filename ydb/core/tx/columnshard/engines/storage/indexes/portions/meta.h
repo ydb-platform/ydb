@@ -23,10 +23,10 @@ protected:
         return DataExtractor;
     }
 
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoBuildIndexImpl(
+    virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const = 0;
 
-    virtual TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> DoBuildIndexOptional(
+    virtual TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> DoBuildIndexOptional(
         const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
         const TIndexInfo& indexInfo) const override final;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
@@ -48,8 +48,8 @@ public:
         return ColumnIds;
     }
     TIndexByColumns() = default;
-    TIndexByColumns(const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId,
-        const TReadDataExtractorContainer& extractor);
+    TIndexByColumns(const ui32 indexId, const TString& indexName, const ui32 columnId,
+        const TString& storageId, const bool inheritPortionStorage, const TReadDataExtractorContainer& extractor);
 };
 
 }   // namespace NKikimr::NOlap::NIndexes

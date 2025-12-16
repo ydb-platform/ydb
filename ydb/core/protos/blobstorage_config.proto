@@ -591,6 +591,11 @@ message TUpdateBridgeGroupInfo {
     NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3; // new value for bridge group info
 }
 
+message TReconfigureVirtualGroup {
+    string Name = 1;
+    optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -641,6 +646,7 @@ message TConfigRequest {
             TChangeGroupSizeInUnits ChangeGroupSizeInUnits = 52;
             TMovePDisk MovePDisk = 53;
             TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 54;
+            TReconfigureVirtualGroup ReconfigureVirtualGroup = 55;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

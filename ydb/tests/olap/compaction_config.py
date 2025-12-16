@@ -3,9 +3,6 @@ import os
 import yatest.common
 import pytest
 import ydb
-# import random
-# import string
-# import datetime
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -30,7 +27,6 @@ class TestCompactionConfig(object):
         self.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         self.ydb_client.wait_connection()
 
-
     def check(self, name):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/name"
@@ -44,7 +40,7 @@ class TestCompactionConfig(object):
                 STORE = COLUMN
             )
             """
-        self.ydb_client.session_pool.execute_with_retries(statement, retry_settings = ydb.RetrySettings(max_retries=0))
+        self.ydb_client.session_pool.execute_with_retries(statement, retry_settings=ydb.RetrySettings(max_retries=0))
         return self.ydb_client.driver.table_client.session().create().describe_table(table_path)
 
     def test_lc_buckets(self):
@@ -158,7 +154,6 @@ class TestCompactionConfig(object):
         with pytest.raises(Exception, match="Socket closed"):
             self.init(config)
             self.check("test_mix_constructor")
-
 
     def test_constructor_overrides_preset(self):
         config = KikimrConfigGenerator(

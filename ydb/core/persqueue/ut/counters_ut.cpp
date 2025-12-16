@@ -141,9 +141,9 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
         // To simplify testing we set such values to 0.
         auto names = TVector<std::string>{
             "WriteTimeLagMsByLastWrite",
-            "WriteTimeLagMsByCommitted",
-            "TimeSinceLastReadMs",
-            "WriteTimeLagMsByLastRead",
+            "WriteTimeLagMsByCommittedPerPartition",
+            "TimeSinceLastReadMsPerPartition",
+            "WriteTimeLagMsByLastReadPerPartition",
             "milliseconds",  // For FirstClassCitizen
         };
         for (const auto& name : names) {

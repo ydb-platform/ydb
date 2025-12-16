@@ -4537,8 +4537,8 @@ void TPartition::SetupDetailedMetrics() {
     SourceIdCountPerPartition = getCounter("topic.partition.producers_count", "SourceIdCount", false);
     TimeSinceLastWriteMsPerPartition = getCounter("topic.partition.write.idle_milliseconds", "TimeSinceLastWriteMs", false);
 
-    BytesWrittenPerPartition = getCounter("topic.partition.write.bytes", "BytesWritten", true);
-    MessagesWrittenPerPartition = getCounter("topic.partition.write.messages", "MessagesWritten", true);
+    BytesWrittenPerPartition = getCounter("topic.partition.write.bytes", "BytesWrittenPerPartition", true);
+    MessagesWrittenPerPartition = getCounter("topic.partition.write.messages", "MessagesWrittenPerPartition", true);
 }
 
 void TPartition::ResetDetailedMetrics() {

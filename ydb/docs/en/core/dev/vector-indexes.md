@@ -6,7 +6,7 @@ Data in a {{ ydb-short-name }} table is stored and sorted by the primary key, en
 
 ## Characteristics of Vector Indexes {#characteristics}
 
-Vector indexes in {{ ydb-short-name }} address the nearest neighbor search problem using [similarity or distance functions](../yql/reference/udf/list/knn.md#distance-and-similarity-functions-functions-distance). Distance/similarity function parameters for vector indices:
+Vector indexes in {{ ydb-short-name }} address the nearest neighbor search problem using [similarity or distance functions](../yql/reference/udf/list/knn.md#functions-distance). Distance/similarity function parameters for vector indices:
 
 * `distance` is a distance function ( `cosine` , `euclidean` , `manhattan` ), mutually exclusive with `similarity`.
 * `similarity` - similarity function ( `inner_product` , `cosine` ), mutually exclusive with `distance`.

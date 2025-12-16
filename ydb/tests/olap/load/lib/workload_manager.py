@@ -496,9 +496,13 @@ class TestWorkloadManagerOltp50(TestWorkloadManagerOltp100):
 
 class WorkloadManagerOltpTpch20Base(WorkloadManagerTpchBase, WorkloadManagerOltp):
     @classmethod
+    def get_users(cls) -> list[str]:
+        return ['']
+
+    @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            # ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=20, resource_weight=4),
+            ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=20, resource_weight=4),
         ]
 
     @classmethod
@@ -524,9 +528,13 @@ class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):
         return [f'SELECT MAX(O_ENTRY_D) FROM `{path}/oorder`']
 
     @classmethod
+    def get_users(cls) -> list[str]:
+        return ['']
+
+    @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            # ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=10, resource_weight=4),
+            ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=10, resource_weight=4),
         ]
 
     @classmethod

@@ -42,7 +42,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 }
                 Callback->OnReceiveData(OwnerActorId, {}, {}, std::move(errorAddresses));
             }
-       }
+        }
     };
 
     class TObjectsProcessor: public NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy> {

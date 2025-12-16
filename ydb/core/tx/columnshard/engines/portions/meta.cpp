@@ -173,11 +173,11 @@ ui32 TPortionMetaBase::GetBlobIdsCount() const {
 }
 
 TPortionMetaBase::TPortionMetaBase(std::vector<TUnifiedBlobId>&& blobIds)
-    : BlobIds(std::move(blobIds)) {        
+    : BlobIds(std::move(blobIds)) {
 }
 
 TPortionMetaBase::TPortionMetaBase(const std::vector<TUnifiedBlobId>& blobIds)
-    : BlobIds(blobIds) {        
+    : BlobIds(blobIds) {
 }
 
 std::vector<TUnifiedBlobId> TPortionMetaBase::ExtractBlobIds() {
@@ -209,9 +209,9 @@ TPortionMeta::TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& m
     : PKSchema(pk.GetSchema()), FirstPKRow(pk.GetFirst().GetContent()),
       LastPKRow(pk.GetLast().GetContent()), RecordSnapshotMin(min),
       RecordSnapshotMax(max) {
-    AFL_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd())(
-      "start", IndexKeyStart().DebugString())("end",
-                                              IndexKeyEnd().DebugString());
+    AFL_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd())
+        ("start", IndexKeyStart().DebugString())
+        ("end", IndexKeyEnd().DebugString());
 }
 
 void TPortionMeta::FullValidation() const {

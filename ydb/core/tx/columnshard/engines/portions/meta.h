@@ -97,7 +97,7 @@ public:
     SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds,
                      const NPortion::EProduced produced) const;
 
-  TString DebugString() const;
+    TString DebugString() const;
 };
 
 class TPortionAddress {

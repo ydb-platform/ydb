@@ -45,7 +45,7 @@ public:
 
     class TSizeCalcer {
     public:
-      size_t operator()(const TObject& data);
+        size_t operator()(const TObject& data);
     };
 
     static TString GetCacheName();

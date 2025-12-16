@@ -27,10 +27,15 @@ class TOtelMetricsPusher : public IMetricsPusher {
 public:
     TOtelMetricsPusher(const std::string& metricsPushUrl, const std::string& operationType)
         : OperationType_(operationType)
+        , CommonAttributes_{
+            {"ref", std::string(REF_LABEL)},
+            {"sdk", "cpp"},
+            {"sdk_version", NYdb::GetSdkSemver()}
+        }
     {
         // #region agent log
         char hostname[256]; gethostname(hostname, sizeof(hostname));
-        std::cerr << "[DEBUG_LOG] {\"location\":\"metrics.cpp:constructor\",\"message\":\"TOtelMetricsPusher constructor called\",\"data\":{\"metricsPushUrl\":\"" << metricsPushUrl << "\",\"operationType\":\"" << operationType << "\",\"pid\":" << getpid() << ",\"hostname\":\"" << hostname << "\"},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"A,D,E\"}" << std::endl;
+        std::cerr << "[DEBUG_LOG] {\"location\":\"metrics.cpp:constructor\",\"message\":\"TOtelMetricsPusher constructor called\",\"data\":{\"metricsPushUrl\":\"" << metricsPushUrl << "\",\"operationType\":\"" << operationType << "\",\"pid\":" << getpid() << ",\"hostname\":\"" << hostname << "\",\"ref\":\"" << REF_LABEL << "\"},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"A,D,E\"}" << std::endl;
         // #endregion
 
         auto exporterOptions = opentelemetry::exporter::otlp::OtlpHttpMetricExporterOptions();
@@ -81,14 +86,14 @@ public:
         // #endregion
 
         if (requestData.Status == NYdb::EStatus::SUCCESS) {
-            OperationsSuccessTotal_->Add(1, {{"operation_type", OperationType_}});
+            OperationsSuccessTotal_->Add(1, MergeAttributes({{"operation_type", OperationType_}}));
         } else {
-            ErrorsTotal_->Add(1, {{"status", YdbStatusToString(requestData.Status)}});
-            OperationsFailureTotal_->Add(1, {{"operation_type", OperationType_}});
+            ErrorsTotal_->Add(1, MergeAttributes({{"status", YdbStatusToString(requestData.Status)}}));
+            OperationsFailureTotal_->Add(1, MergeAttributes({{"operation_type", OperationType_}}));
         }
-        OperationsTotal_->Add(1, {{"operation_type", OperationType_}});
-        OperationLatencySeconds_->Record(requestData.Delay.SecondsFloat(), {{"operation_type", OperationType_}, {"status", YdbStatusToString(requestData.Status)}});
-        RetryAttempts_->Record(requestData.RetryAttempts, {{"operation_type", OperationType_}});
+        OperationsTotal_->Add(1, MergeAttributes({{"operation_type", OperationType_}}));
+        OperationLatencySeconds_->Record(requestData.Delay.SecondsFloat(), MergeAttributes({{"operation_type", OperationType_}, {"status", YdbStatusToString(requestData.Status)}}));
+        RetryAttempts_->Record(requestData.RetryAttempts, MergeAttributes({{"operation_type", OperationType_}}));
     }
 
 private:
@@ -167,7 +172,15 @@ private:
         return Meter_->CreateDoubleHistogram(name, description, unit);
     }
 
+    // Helper to merge common attributes with metric-specific ones
+    std::map<std::string, std::string> MergeAttributes(const std::map<std::string, std::string>& metricAttrs) const {
+        std::map<std::string, std::string> result = CommonAttributes_;
+        result.insert(metricAttrs.begin(), metricAttrs.end());
+        return result;
+    }
+
     std::string OperationType_;
+    std::map<std::string, std::string> CommonAttributes_;  // ref, sdk, sdk_version
 
     std::unique_ptr<opentelemetry::sdk::metrics::MeterProvider> MeterProvider_;
     std::shared_ptr<opentelemetry::metrics::Meter> Meter_;

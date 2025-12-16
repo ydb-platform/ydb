@@ -150,6 +150,7 @@ jobs:
           fi
 
           docker system prune -f --volumes
+          docker builder prune -af
 
           # Build baseline version
           if [ -f "$GITHUB_WORKSPACE/baseline/ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile" ]; then
@@ -173,6 +174,7 @@ jobs:
           fi
 
           docker system prune -f --volumes
+          docker builder prune -af
 
           echo "Final disk space after builds:"
           df -h
@@ -194,7 +196,7 @@ jobs:
             --add-host "ydb:172.28.0.12" \
             --add-host "ydb:172.28.0.13" \
             --add-host "ydb:172.28.0.99" \
-            ydb-app-current --connection-string grpc://ydb:2136/?database=/Root/testdb create
+            ydb-app-current --connection-string grpc://ydb:2136/?database=/Root/testdb create --dont-push
 
       - name: Run SLO Tests (parallel)
         timeout-minutes: 15

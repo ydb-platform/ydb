@@ -604,7 +604,7 @@ public:
 
     ~TCheckpointStorage() = default;
 
-    TFuture<TIssues> Init() override;
+    TFuture<TIssues> Init(const NACLib::TDiffACL& acl) override;
 
     TFuture<TIssues> RegisterGraphCoordinator(const TCoordinatorId& coordinator) override;
 
@@ -672,14 +672,14 @@ TCheckpointStorage::TCheckpointStorage(
 {
 }
 
-TFuture<TIssues> TCheckpointStorage::Init()
+TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
 {
     auto graphDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("generation", EPrimitiveType::Uint64)
         .SetPrimaryKeyColumn("graph_id")
         .Build();
-    auto f1 = CreateTable(YdbConnection, CoordinatorsSyncTable, std::move(graphDesc));
+    auto f1 = CreateTable(YdbConnection, CoordinatorsSyncTable, std::move(graphDesc), acl);
     
     // TODO: graph_id could be just secondary index, but API forbids it,
     // so we set it primary key column to have index
@@ -694,7 +694,7 @@ TFuture<TIssues> TCheckpointStorage::Init()
         .AddNullableColumn("graph_description_id", EPrimitiveType::String)
         .SetPrimaryKeyColumns({"graph_id", "coordinator_generation", "seq_no"})
         .Build();
-    auto f2 = CreateTable(YdbConnection, CheckpointsMetadataTable, std::move(checkpointDesc));
+    auto f2 = CreateTable(YdbConnection, CheckpointsMetadataTable, std::move(checkpointDesc), acl);
 
     auto checkpointGraphsDescDesc = TTableBuilder()
         .AddNullableColumn("id", EPrimitiveType::String)
@@ -702,7 +702,7 @@ TFuture<TIssues> TCheckpointStorage::Init()
         .AddNullableColumn("graph_description", EPrimitiveType::String)
         .SetPrimaryKeyColumn("id")
         .Build();
-    auto f3 = CreateTable(YdbConnection, CheckpointsGraphsDescriptionTable, std::move(checkpointGraphsDescDesc));
+    auto f3 = CreateTable(YdbConnection, CheckpointsGraphsDescriptionTable, std::move(checkpointGraphsDescDesc), acl);
 
     std::vector<NThreading::TFuture<NYdb::TStatus>> futures{f1, f2, f3};
 

@@ -43,6 +43,8 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT("S3 is not supported on Windows");
     }
 
+    void TBlobDepot::OnDataLoaded() {}
+
     void TBlobDepot::InitS3Manager() {
         S3Manager->Init(Config.HasS3BackendSettings() ? &Config.GetS3BackendSettings() : nullptr);
     }

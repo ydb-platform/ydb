@@ -809,11 +809,16 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             UNIT_ASSERT_VALUES_EQUAL(channel.media(), "ssd");
         }
 
-        AlterVolume(channel, tablePath, 3, describeVolumeResult.storage_config());
+        ui32 currentChannelCount = describeVolumeResult.storage_config().channel_size();
+        Ydb::KeyValue::StorageConfig storageConfig = describeVolumeResult.storage_config();
+        auto newChannel = storageConfig.add_channel();
+        newChannel->set_media("ssd");
+
+        AlterVolume(channel, tablePath, 2, storageConfig);
         describeVolumeResult = DescribeVolume(channel, tablePath);
-        UNIT_ASSERT_VALUES_EQUAL(3, describeVolumeResult.partition_count());
+        UNIT_ASSERT_VALUES_EQUAL(2, describeVolumeResult.partition_count());
         UNIT_ASSERT(describeVolumeResult.has_storage_config());
-        UNIT_ASSERT_VALUES_EQUAL(describeVolumeResult.storage_config().channel_size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(describeVolumeResult.storage_config().channel_size(), currentChannelCount + 1);
         for (const auto& channel : describeVolumeResult.storage_config().channel()) {
             UNIT_ASSERT_VALUES_EQUAL(channel.media(), "ssd");
         }

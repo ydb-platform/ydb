@@ -1885,6 +1885,7 @@ private:
         TString sessionId = CreateGuidAsString();
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
+        state->AllowTransparentSystemColumns = false;
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;

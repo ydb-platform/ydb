@@ -130,6 +130,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
+    REGISTER_SETTING(*this, DisableCheckpoints);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);

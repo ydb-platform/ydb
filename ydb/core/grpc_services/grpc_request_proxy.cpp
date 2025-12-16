@@ -201,15 +201,18 @@ private:
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
-                if (!AllowYdbRequestsWithoutDatabase && DynamicNode && !std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
-                    requestBaseCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
-                    requestBaseCtx->FinishSpan();
-                    return;
-                } else {
-                    databaseName = RootDatabase;
-                    skipResourceCheck = true;
-                    skipCheckConnectRights = true;
+                if (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
+                    Counters->IncEmptyDatabaseNameCounter();
+                    if (DynamicNode && !AllowYdbRequestsWithoutDatabase) {
+                        requestBaseCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
+                        requestBaseCtx->FinishSpan();
+                        return;
+                    }
                 }
+
+                databaseName = RootDatabase;
+                skipResourceCheck = true;
+                skipCheckConnectRights = true;
             }
             if (databaseName.empty()) {
                 Counters->IncDatabaseUnavailableCounter();

@@ -2162,8 +2162,13 @@ public:
             } else if (!topK.HasTargetVector()) {
                 error = "Target vector is not specified";
             } else {
-                topState->KMeans = NKMeans::CreateClusters(topK.GetSettings(), 0, error);
-                if (!topState->KMeans && error == "") {
+                // Use auto-detect if vector_dimension is 0 (brute force search without index)
+                if (topK.GetSettings().vector_dimension() == 0) {
+                    topState->KMeans = NKMeans::CreateClustersAutoDetect(topK.GetSettings(), topK.GetTargetVector(), 0, error);
+                } else {
+                    topState->KMeans = NKMeans::CreateClusters(topK.GetSettings(), 0, error);
+                }
+                if (!topState->KMeans && error.empty()) {
                     error = "CreateClusters failed";
                 }
                 if (topState->KMeans && !topState->KMeans->IsExpectedSize(topK.GetTargetVector())) {

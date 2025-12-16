@@ -71,7 +71,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.SetLock(
             request.HasLockTxId() ? std::make_optional(request.GetLockTxId()) : std::nullopt,
             request.HasLockMode() ? std::make_optional(request.GetLockMode()) : std::nullopt,
-            Self->GetOperationsManager().GetLockOptional(request.GetLockTxId())
+            request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr,
+            false
         );
 
         {
@@ -107,7 +108,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 return request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
             }();
             auto constructor =
-                NReader::IScannerConstructor::TFactory::MakeHolder(read.TableMetadataAccessor->GetOverridenScanType(scanType), context);
+                NReader::IScannerConstructor::TFactory::MakeHolder(scanType, context);
             if (!constructor) {
                 return std::unique_ptr<IScannerConstructor>();
             }

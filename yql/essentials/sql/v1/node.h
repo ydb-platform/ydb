@@ -694,11 +694,10 @@ namespace NSQLTranslationV1 {
             , Name(name) {}
     };
 
-    struct TColumnConstraints {
+    struct TColumnOptions {
         TNodePtr DefaultExpr;
         bool Nullable = true;
-
-        TColumnConstraints(TNodePtr defaultExpr, bool nullable);
+        TVector<TIdentifier> Families;
     };
 
     struct TColumnSchema {
@@ -1371,6 +1370,7 @@ namespace NSQLTranslationV1 {
         NYql::TResetableSetting<TNodePtr, void> AutoPartitioningUpUtilizationPercent;
         NYql::TResetableSetting<TNodePtr, void> AutoPartitioningDownUtilizationPercent;
         NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStrategy;
+        NYql::TResetableSetting<TNodePtr, void> MetricsLevel;
 
         bool IsSet() const {
             return MinPartitions ||
@@ -1384,7 +1384,8 @@ namespace NSQLTranslationV1 {
                    AutoPartitioningStabilizationWindow ||
                    AutoPartitioningUpUtilizationPercent ||
                    AutoPartitioningDownUtilizationPercent ||
-                   AutoPartitioningStrategy
+                   AutoPartitioningStrategy ||
+                   MetricsLevel
             ;
         }
     };

@@ -236,4 +236,7 @@ message TFeatureFlags {
     optional bool EnableColumnshardBool = 211 [default = false];
     optional bool EnableOlapRejectProbability = 213 [default = false];
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = false];
+    optional bool EnableReplication = 217 [default = true];
+    optional bool EnableStreamingQueriesCounters = 219 [default = false];
+    optional bool UseYdsTopicStorageMetering = 220 [default = false];
 }

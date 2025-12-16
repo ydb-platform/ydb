@@ -921,7 +921,8 @@ protected:
             .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
             .Query = Query,
-            .CheckpointCoordinator = CheckpointCoordinatorId
+            .CheckpointCoordinator = CheckpointCoordinatorId,
+            .EnableWatermarks = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks(),
         });
 
         auto err = Planner->PlanExecution();

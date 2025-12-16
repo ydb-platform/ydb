@@ -1,6 +1,7 @@
 #include "default.h"
 
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
 
 #include <util/digest/fnv.h>
 
@@ -24,7 +25,10 @@ void TDefaultDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor::
     for (ui32 idx = 0; idx < subColumns->GetColumnsData().GetRecords()->GetColumnsCount(); ++idx) {
         const std::string_view svColName = subColumns->GetColumnsData().GetStats().GetColumnName(idx);
         const ui64 hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(svColName);
-        VisitSimple(subColumns->GetColumnsData().GetRecords()->GetColumnVerified(idx), hashBase, chunkVisitor);
+        auto iterator = subColumns->GetColumnsData().BuildIterator(idx);
+        for (; iterator.IsValid(); iterator.Next()) {
+            recordVisitor(iterator.GetValue(), hashBase);
+        }
     }
     std::vector<ui64> hashByColumnIdx;
     for (ui32 idx = 0; idx < subColumns->GetOthersData().GetStats().GetColumnsCount(); ++idx) {

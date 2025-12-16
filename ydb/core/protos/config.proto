@@ -41,6 +41,7 @@ import "ydb/core/protos/nbs/blockstore.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "yql/essentials/core/file_storage/proto/file_storage.proto";
 import "yql/essentials/providers/common/proto/gateways_config.proto";
+import "ydb/core/protos/s3_settings.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
@@ -355,6 +356,8 @@ message TBlobStorageConfig {
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
 
     optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
+
+    optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
  }
 
 message TSelfManagementConfig {
@@ -2146,6 +2149,7 @@ message TColumnShardConfig {
     }
 
     optional TStatistics Statistics = 57;
+    optional NKikimrSchemeOp.TS3Settings S3Client = 58;
 }
 
 message TSchemeShardConfig {
@@ -2470,6 +2474,7 @@ message TKafkaProxyConfig {
     optional bool AutoCreateTopicsEnable = 13 [default = false];
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
     optional bool AutoCreateConsumersEnable = 15 [default = true];
+    optional string PublicHost = 16;
 }
 
 message TAwsCompatibilityConfig {

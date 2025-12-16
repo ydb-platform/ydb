@@ -24,6 +24,7 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 |`DyNumber` | A binary representation of a real number with an accuracy of up to 38 digits.<br/>Acceptable values: positive numbers from 1×10<sup>-130</sup> up to 1×10<sup>126</sup>–1, negative numbers from -1×10<sup>126</sup>–1 to -1×10<sup>-130</sup>, and 0.<br/>Compatible with the `Number` type in AWS DynamoDB. It's not recommended for {{ backend_name_lower }}-native applications. | — |
 {% endif %}
 
+{% include [x](../_includes/type_literals_examples.md) %}
 
 ## String types {#string}
 

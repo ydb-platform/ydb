@@ -10,6 +10,7 @@ SPLIT_FACTOR(10)
 TEST_SRCS(
     test_example.py
     test_followers.py
+    test_in_memory.py
     test_compatibility.py
     test_stress.py
     test_statistics.py
@@ -26,6 +27,7 @@ TEST_SRCS(
     test_node_broker_delta_protocol.py
     test_table_schema_compatibility.py
     test_workload_manager.py
+    test_infer_pdisk_expected_slot_count.py
     udf/test_datetime2.py
     udf/test_digest.py
     udf/test_digest_regression.py
@@ -52,4 +54,5 @@ END()
 RECURSE(
     s3_backups
     olap
+    streaming
 )

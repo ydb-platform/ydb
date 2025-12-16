@@ -37,13 +37,6 @@ TTopicRef::TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNode
 {
 }
 
-TColumnConstraints::TColumnConstraints(TNodePtr defaultExpr, bool nullable)
-    : DefaultExpr(defaultExpr)
-    , Nullable(nullable)
-{
-}
-
-
 TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
         TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange)
     : Pos(pos)

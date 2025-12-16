@@ -185,7 +185,12 @@ namespace NKikimr::NBsController {
                 }
 
                 const auto& hostRecords = EnforceHostRecords ? *EnforceHostRecords : Self->HostRecords;
-                State.emplace(*Self, hostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
+                std::optional<NKikimrBlobStorage::TStorageConfig> storageConfig;
+                if (Cmd.HasStorageConfig() && Self->SelfManagementEnabled) {
+                    Cmd.GetStorageConfig().UnpackTo(&storageConfig.emplace());
+                }
+                State.emplace(*Self, hostRecords, TActivationContext::Now(), TActivationContext::Monotonic(),
+                    storageConfig ? &storageConfig.value() : nullptr);
                 State->CheckConsistency();
 
                 TString m;
@@ -249,6 +254,7 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(SanitizeGroup, SANITIZE_GROUP)
                             MAP_TIMING(CancelVirtualGroup, CANCEL_VIRTUAL_GROUP)
                             MAP_TIMING(ChangeGroupSizeInUnits, CHANGE_GROUP_SIZE_IN_UNITS)
+                            MAP_TIMING(ReconfigureVirtualGroup, RECONFIGURE_VIRTUAL_GROUP)
 
                             default:
                                 break;
@@ -365,6 +371,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(GetInterfaceVersion)
                     HANDLE_COMMAND(MovePDisk)
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
+                    HANDLE_COMMAND(ReconfigureVirtualGroup)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

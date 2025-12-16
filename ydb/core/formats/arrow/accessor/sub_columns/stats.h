@@ -18,7 +18,7 @@ class TSplittedColumns;
 class TDictStats {
 private:
     std::shared_ptr<arrow::RecordBatch> Original;
-    std::shared_ptr<arrow::StringArray> DataNames;
+    std::shared_ptr<arrow::BinaryArray> DataNames;
     std::shared_ptr<arrow::UInt32Array> DataRecordsCount;
     std::shared_ptr<arrow::UInt32Array> DataSize;
     std::shared_ptr<arrow::UInt8Array> AccessorType;
@@ -125,7 +125,7 @@ public:
     class TBuilder: TNonCopyable {
     private:
         std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-        arrow::StringBuilder* Names;
+        arrow::BinaryBuilder* Names;
         arrow::UInt32Builder* Records;
         arrow::UInt32Builder* DataSize;
         arrow::UInt8Builder* AccessorType;
@@ -148,7 +148,7 @@ public:
         arrow::FieldVector fields;
         for (ui32 i = 0; i < DataNames->length(); ++i) {
             const auto view = DataNames->GetView(i);
-            fields.emplace_back(std::make_shared<arrow::Field>(std::string(view.data(), view.size()), arrow::utf8()));
+            fields.emplace_back(std::make_shared<arrow::Field>(std::string(view.data(), view.size()), arrow::binary()));
         }
         return std::make_shared<arrow::Schema>(fields);
     }
@@ -156,7 +156,7 @@ public:
     std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
         AFL_VERIFY(index < DataNames->length());
         auto name = DataNames->GetView(index);
-        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), arrow::utf8());
+        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), arrow::binary());
     }
 
     TRTStats GetRTStats(const ui32 index) const {
@@ -180,7 +180,7 @@ public:
     ui32 GetColumnSize(const ui32 index) const;
 
     static std::shared_ptr<arrow::Schema> GetStatsSchema() {
-        static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::utf8()),
+        static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::binary()),
             std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()),
             std::make_shared<arrow::Field>("accessor_type", arrow::uint8()) };
         static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(fields);

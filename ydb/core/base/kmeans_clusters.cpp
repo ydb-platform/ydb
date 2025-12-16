@@ -3,6 +3,7 @@
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/yql/udfs/common/knn/knn-defines.h>
 
 #include <span>
 
@@ -46,7 +47,7 @@ namespace {
             return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
-    
+
     Ydb::Table::VectorIndexSettings_Metric ParseSimilarity(const TString& similarity_, TString& error) {
         const TString similarity = to_lower(similarity_);
         if (similarity == "cosine")
@@ -58,7 +59,7 @@ namespace {
             return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
-    
+
     Ydb::Table::VectorIndexSettings_VectorType ParseVectorType(const TString& vectorType_, TString& error) {
         const TString vectorType = to_lower(vectorType_);
         if (vectorType == "float")
@@ -454,8 +455,69 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
     }
 }
 
+std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSettings settings, const TStringBuf& targetVector, ui32 maxRounds, TString& error) {
+    if (targetVector.empty()) {
+        error = "Target vector is empty";
+        return nullptr;
+    }
+
+    const auto setLinearType = [&](Ydb::Table::VectorIndexSettings::VectorType type, size_t elementSize, TStringBuf typeName) -> bool {
+        if (targetVector.size() < HeaderLen + elementSize) {
+            error = TStringBuilder() << "Target vector too short for " << typeName << " type";
+            return false;
+        }
+        settings.set_vector_type(type);
+        settings.set_vector_dimension((targetVector.size() - HeaderLen) / elementSize);
+        return true;
+    };
+
+    const ui8 formatByte = static_cast<ui8>(targetVector.back());
+    switch (formatByte) {
+        case EFormat::FloatVector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, sizeof(float), "float")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Uint8Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8, sizeof(ui8), "uint8")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Int8Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8, sizeof(i8), "int8")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::BitVector: {
+            if (targetVector.size() < HeaderLen + 2) {
+                error = "Target vector too short for bit type";
+                return nullptr;
+            }
+            const ui8 paddingBits = static_cast<ui8>(targetVector[targetVector.size() - 2]);
+            const size_t payloadBits = (targetVector.size() - HeaderLen - 1) * 8;
+            if (payloadBits < paddingBits) {
+                error = "Invalid bit vector padding";
+                return nullptr;
+            }
+            settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT);
+            settings.set_vector_dimension(payloadBits - paddingBits);
+            break;
+        }
+        default:
+            error = TStringBuilder() << "Unknown vector format byte: " << static_cast<int>(formatByte);
+            return nullptr;
+    }
+
+    return CreateClusters(settings, maxRounds, error);
+}
+
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     error = "";
+
+    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+        return false;
+    }
 
     if (!settings.has_settings()) {
         error = TStringBuilder() << "vector index settings should be set";
@@ -466,16 +528,16 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
         return false;
     }
 
-    if (!ValidateSettingInRange("levels", 
-        settings.has_levels() ? std::optional<ui64>(settings.levels()) : std::nullopt, 
+    if (!ValidateSettingInRange("levels",
+        settings.has_levels() ? std::optional<ui64>(settings.levels()) : std::nullopt,
         MinLevels, MaxLevels,
         error))
     {
         return false;
     }
 
-    if (!ValidateSettingInRange("clusters", 
-        settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt, 
+    if (!ValidateSettingInRange("clusters",
+        settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt,
         MinClusters, MaxClusters,
         error))
     {
@@ -492,7 +554,7 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
     }
 
     if (settings.settings().vector_dimension() * settings.clusters() > MaxVectorDimensionMultiplyClusters) {
-        error = TStringBuilder() << "Invalid vector_dimension*clusters: " << settings.settings().vector_dimension() << "*" << settings.clusters() 
+        error = TStringBuilder() << "Invalid vector_dimension*clusters: " << settings.settings().vector_dimension() << "*" << settings.clusters()
             << " should be less than " << MaxVectorDimensionMultiplyClusters;
         return false;
     }
@@ -501,7 +563,10 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
 }
 
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
-    error = "";
+    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+        return false;
+    }
 
     if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
         error = TStringBuilder() << "either distance or similarity should be set";
@@ -521,8 +586,8 @@ bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& 
         return false;
     }
 
-    if (!ValidateSettingInRange("vector_dimension", 
-        settings.has_vector_dimension() ? std::optional<ui64>(settings.vector_dimension()) : std::nullopt, 
+    if (!ValidateSettingInRange("vector_dimension",
+        settings.has_vector_dimension() ? std::optional<ui64>(settings.vector_dimension()) : std::nullopt,
         MinVectorDimension, MaxVectorDimension,
         error))
     {

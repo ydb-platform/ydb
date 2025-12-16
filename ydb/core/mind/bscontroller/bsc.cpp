@@ -599,6 +599,8 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
         request->SetRollback(true);
     }
 
+    request->MutableStorageConfig()->PackFrom(storageConfig);
+
     if (request->CommandSize()) {
         return ev;
     }
@@ -761,21 +763,24 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
                 break;
             }
 
-            const TString& effectiveConfig = storageYaml ? *storageYaml : *mainYaml;
             NKikimrBlobStorage::TStorageConfig storageConfig;
-
-            try {
-                NKikimrConfig::TAppConfig appConfig = NYaml::Parse(effectiveConfig);
-                TString errorReason;
-                if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &errorReason)) {
+            if (record.HasStorageConfig()) {
+                record.GetStorageConfig().UnpackTo(&storageConfig);
+            } else {
+                const TString& effectiveConfig = storageYaml ? *storageYaml : *mainYaml;
+                try {
+                    NKikimrConfig::TAppConfig appConfig = NYaml::Parse(effectiveConfig);
+                    TString errorReason;
+                    if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &errorReason)) {
+                        rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                        rr.SetErrorReason("failed to derive storage config: " + errorReason);
+                        break;
+                    }
+                } catch (const std::exception& ex) {
                     rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
-                    rr.SetErrorReason("failed to derive storage config: " + errorReason);
+                    rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
                     break;
                 }
-            } catch (const std::exception& ex) {
-                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
-                rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
-                break;
             }
 
             const ui64 cookie = NextValidationCookie++;
@@ -856,16 +861,6 @@ void TBlobStorageController::IssueInitialGroupContent() {
         ev->Created.push_back(kv.first);
     }
     Send(StatProcessorActorId, ev.Release());
-}
-
-void TBlobStorageController::NotifyNodesAwaitingKeysForGroups(ui32 groupId) {
-    if (const auto it = NodesAwaitingKeysForGroup.find(groupId); it != NodesAwaitingKeysForGroup.end()) {
-        TSet<ui32> nodes = std::move(it->second);
-        NodesAwaitingKeysForGroup.erase(it);
-        for (const TNodeId nodeId : nodes) {
-            Send(SelfId(), new TEvBlobStorage::TEvControllerGetGroup(nodeId, groupId));
-        }
-    }
 }
 
 void TBlobStorageController::ValidateInternalState() {
@@ -1154,6 +1149,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateBridgeGroupInfo:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kReconfigureVirtualGroup:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:
@@ -1210,7 +1206,7 @@ void TBlobStorageController::TStaticGroupInfo::UpdateStatus(TMonotonic mono, TBl
 
 void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageController *controller) {
     LayoutCorrect = true;
-    if (!Info || Info->IsBridged()) {
+    if (!Info || Info->IsBridged() || !controller->SelfManagementEnabled) {
         return;
     }
 

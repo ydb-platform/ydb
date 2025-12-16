@@ -249,6 +249,8 @@ struct TStageExecutionStats {
     std::map<TString, TOperatorStats> Filters;
     std::map<TString, TOperatorStats> Aggregations;
 
+    std::unordered_map<TString, std::vector<ui64>> Mkql;
+
     TTimeSeriesStats MaxMemoryUsage;
 
     ui32 HistorySampleCount = 0;

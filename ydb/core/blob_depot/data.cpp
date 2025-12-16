@@ -88,6 +88,10 @@ namespace NKikimr::NBlobDepot {
             return false; // no such key existed and will not be created as it hits the barrier
         }
 
+        Y_DEFER {
+            Self->JsonHandler.Invalidate();
+        };
+
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::forward<TArgs>(args)...);
         {
             auto& [key, value] = *it;
@@ -211,6 +215,7 @@ namespace NKikimr::NBlobDepot {
                 RefCountS3.erase(it);
                 TotalS3DataSize -= locator.Len;
 
+                BDEV(BDEV27, "delete_S3", (BDT, Self->TabletID()), (Key, key), (Locator, locator));
                 AddToS3Trash(locator, txc, cookie);
                 return false; // keep this blob in deletion queue
             };
@@ -249,6 +254,17 @@ namespace NKikimr::NBlobDepot {
                     return true;
 
                 case EUpdateOutcome::CHANGE:
+                    {
+                        auto makeLocators = [&] {
+                            std::vector<TS3Locator> locators;
+                            EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded{
+                                [&](TLogoBlobID, ui32, ui32) {},
+                                [&](TS3Locator locator) { locators.push_back(locator); }
+                            });
+                            return locators;
+                        };
+                        BDEV(BDEV28, "change_key", (BDT, Self->TabletID()), (Key, key), (Locators, makeLocators()));
+                    }
                     row.template Update<Schema::Data::Value>(value.SerializeToString());
                     if (inserted || uncertainWriteBefore != value.UncertainWrite) {
                         if (value.UncertainWrite) {
@@ -804,6 +820,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     bool TData::IsUseful(const TS3Locator& locator) const {
+        Y_DEBUG_ABORT_UNLESS(IsLoaded());
         return RefCountS3.contains(locator);
     }
 

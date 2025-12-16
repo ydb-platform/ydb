@@ -21,13 +21,13 @@ class TestYdsBase(object):
             create_stream(self.output_topic, partitions_count=partitions_count)
             create_read_rule(self.output_topic, self.consumer_name)
 
-    def write_stream(self, data, topic_path=None, partition_key=None):
+    def write_stream(self, data, topic_path=None, partition_key=None, database=None, endpoint=None):
         topic = topic_path if topic_path else self.input_topic
-        write_stream(topic, data, partition_key=partition_key)
+        write_stream(topic, data, partition_key=partition_key, database=database, endpoint=endpoint)
 
-    def read_stream(self, messages_count, commit_after_processing=True, topic_path=None):
+    def read_stream(self, messages_count, commit_after_processing=True, topic_path=None, database=None, endpoint=None):
         topic = topic_path if topic_path else self.output_topic
-        return read_stream(topic, messages_count, commit_after_processing, self.consumer_name)
+        return read_stream(topic, messages_count, commit_after_processing, self.consumer_name, database=database, endpoint=endpoint)
 
     def wait_until(self, predicate, wait_time=plain_or_under_sanitizer(10, 50)):
         deadline = time.time() + wait_time

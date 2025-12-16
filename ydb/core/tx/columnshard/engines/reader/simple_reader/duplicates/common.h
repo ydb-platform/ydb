@@ -269,12 +269,14 @@ private:
     TIntervalBorder Begin;
     TIntervalBorder End;
     YDB_READONLY_DEF(ui64, IntersectingPortionsCount);
+    ui64 ExclusivePortionId;
 
 public:
-    TIntervalInfo(const TIntervalBorder& begin, const TIntervalBorder& end, const ui64 intersectingPortionsCount)
+    TIntervalInfo(const TIntervalBorder& begin, const TIntervalBorder& end, const THashSet<ui64>& portionIds)
         : Begin(begin)
         , End(end)
-        , IntersectingPortionsCount(intersectingPortionsCount)
+        , IntersectingPortionsCount(portionIds.size())
+        , ExclusivePortionId(portionIds.size() == 1 ? *portionIds.begin() : 0)
     {
     }
 
@@ -284,6 +286,21 @@ public:
 
     const TIntervalBorder& GetEnd() const {
         return End;
+    }
+
+    ui64 GetExclusivePortionId() const {
+        AFL_VERIFY(IsExclusive());
+        return ExclusivePortionId;
+    }
+    bool IsExclusive() const {
+        return IntersectingPortionsCount == 1;
+    }
+    bool IsEmpty() const {
+        return IntersectingPortionsCount == 0;
+    }
+
+    TIntervalBordersView MakeView() const {
+        return TIntervalBordersView(Begin.MakeView(), End.MakeView());
     }
 };
 

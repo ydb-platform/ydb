@@ -574,7 +574,7 @@ private:
         request->SetQuery(query.Query);
         request->SetType(type);
         request->SetAction(query.Action);
-        request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+        request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
         request->SetDatabase(database);
         request->SetPoolId(query.PoolId);
         request->MutableYdbParameters()->insert(query.Params.begin(), query.Params.end());

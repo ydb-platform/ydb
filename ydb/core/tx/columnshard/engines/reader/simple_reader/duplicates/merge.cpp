@@ -48,10 +48,10 @@ public:
 
 void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("task", "build_duplicate_filters")("info", DebugString());
-    auto columnData = ColumnData.ExtractDataByPortion(Context.GetColumns());
+    auto columnData = ColumnData.ExtractDataByPortion(Context.GetGlobalContext().GetColumns());
 
     NArrow::NMerger::TMergePartialStream merger(
-        Context.GetPKSchema(), nullptr, false, GetVersionColumnNames(), ScanSnapshotBatch, MinUncommittedSnapshotBatch);
+        Context.GetGlobalContext().GetPKSchema(), nullptr, false, GetVersionColumnNames(), ScanSnapshotBatch, MinUncommittedSnapshotBatch);
     for (const auto& [portionId, data] : columnData) {
         merger.AddSource(data, nullptr, NArrow::NMerger::TIterationOrder::Forward(0), portionId);
     }
@@ -59,26 +59,26 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
     THashMap<TDuplicateMapInfo, NArrow::TColumnFilter> filters;
     for (const auto& interval : Context.GetIntervals()) {
         for (auto&& [portionId, filter] : BuildFiltersOnInterval(interval, merger, columnData)) {
-            AFL_VERIFY(filters.emplace(TDuplicateMapInfo(Context.GetContext()->GetRequest()->Get()->GetMaxVersion(), TIntervalBordersView(interval.GetBegin().MakeView(), interval.GetEnd().MakeView()), portionId), std::move(filter)).second);
+            AFL_VERIFY(filters.emplace(TDuplicateMapInfo(Context.GetGlobalContext().GetMaxVersion(), TIntervalBordersView(interval.GetBegin().MakeView(), interval.GetEnd().MakeView()), portionId), std::move(filter)).second);
         }
     }
 
-    AFL_VERIFY(filters.size() == Context.GetRequiredPortions().size() * Context.GetIntervals().size())("filters", filters.size())(
-                                                                        "portions", Context.GetRequiredPortions().size())(
-                                                                        "intervals", Context.GetIntervals().size());
-    TActivationContext::AsActorContext().Send(Context.GetOwner(), new NPrivate::TEvFilterConstructionResult(std::move(filters)));
+    TActivationContext::AsActorContext().Send(Context.GetGlobalContext().GetOwner(),
+        new NPrivate::TEvFilterConstructionResult(std::move(filters), Context.GetGlobalContext().MakeResultInFlightGuard()));
+    Context.GetExecutor()->ScheduleNext(Context.ExtractGlobalContext());
 }
 
 void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
-    TActivationContext::AsActorContext().Send(Context.GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(reason)));
+    TActivationContext::AsActorContext().Send(Context.GetGlobalContext().GetOwner(),
+        new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(reason), Context.GetGlobalContext().MakeResultInFlightGuard()));
 }
 
 THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInterval(const TIntervalInfo& interval,
     NArrow::NMerger::TMergePartialStream& merger, const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData) {
     merger.SkipToBound(*interval.GetBegin().GetKey(), !interval.GetBegin().GetIsLast());
 
-    AFL_VERIFY(interval.GetIntersectingPortionsCount() != 0);
-    if (interval.GetIntersectingPortionsCount() == 1) {
+    AFL_VERIFY(!interval.IsEmpty());
+    if (interval.IsExclusive()) {
         THashMap<ui64, NArrow::TColumnFilter> result;
         for (const auto& [portionId, _] : columnData) {
             result.emplace(portionId, NArrow::TColumnFilter::BuildAllowFilter());
@@ -86,8 +86,8 @@ THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInte
         const ui64 recordsOnInterval = merger.SkipToBound(*interval.GetEnd().GetKey(), !interval.GetEnd().GetIsLast());
         NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, recordsOnInterval);
-        result.insert_or_assign(Context.GetContext()->GetRequest()->Get()->GetSourceId(), std::move(filter));
-        Context.GetCounters()->OnRowsMerged(0, 0, recordsOnInterval);
+        result.insert_or_assign(interval.GetExclusivePortionId(), std::move(filter));
+        Context.GetGlobalContext().GetCounters()->OnRowsMerged(0, 0, recordsOnInterval);
         return result;
     }
 
@@ -97,7 +97,7 @@ THashMap<ui64, NArrow::TColumnFilter> TBuildDuplicateFilters::BuildFiltersOnInte
     }
     merger.PutControlPoint(*interval.GetEnd().GetKey(), false);
     merger.DrainToControlPoint(filtersBuilder, interval.GetEnd().GetIsLast());
-    Context.GetCounters()->OnRowsMerged(filtersBuilder.GetRowsAdded(), filtersBuilder.GetRowsSkipped(), 0);
+    Context.GetGlobalContext().GetCounters()->OnRowsMerged(filtersBuilder.GetRowsAdded(), filtersBuilder.GetRowsSkipped(), 0);
     return std::move(filtersBuilder).ExtractFilters();
 }
 

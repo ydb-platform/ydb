@@ -301,5 +301,60 @@ namespace {
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::REQUEST_TIMED_OUT);
         }
+
+        Y_UNIT_TEST(OnProduce_andPipeDisconnected) {
+            i64 producerId = 1;
+            i32 producerEpoch = 2;
+
+            int writeRequestsCounter = 0;
+            int poisonPillCounter = 0;
+
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    if (writeRequestsCounter++ == 0) {
+                        auto r = std::make_unique<TEvPartitionWriter::TEvDisconnected>(TEvPartitionWriter::TEvWriteResponse::EErrorCode::InternalError);
+                        Ctx->Runtime->Send(new IEventHandle(input->Sender, input->Recipient, r.release()));
+                        return TTestActorRuntimeBase::EEventAction::DROP;
+                    }
+                } else if (input->CastAsLocal<TEvents::TEvPoison>()) {
+                    poisonPillCounter++;
+                }
+
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            SendProduce({}, producerId, producerEpoch);
+
+            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
+            UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
+        }
+
+        Y_UNIT_TEST(OnProduce_ManyRequests) {
+            i64 producerId = 1;
+            i32 producerEpoch = 2;
+
+            SendProduce({}, producerId, producerEpoch, 1);
+            SendProduce({}, producerId, producerEpoch, 2);
+
+            {
+                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+                UNIT_ASSERT(response);
+                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                    NKafka::EKafkaErrors::NONE_ERROR);
+            }
+            {
+                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+                UNIT_ASSERT(response);
+                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                    NKafka::EKafkaErrors::NONE_ERROR);
+            }
+        }
     }
 } // anonymous namespace

@@ -47,6 +47,9 @@ public:
 
 std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, ui32 maxRounds, TString& error);
 
+// Auto-detect vector type and dimension from target vector when settings have dimension=0
+std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSettings settings, const TStringBuf& targetVector, ui32 maxRounds, TString& error);
+
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error);
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
 bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error);

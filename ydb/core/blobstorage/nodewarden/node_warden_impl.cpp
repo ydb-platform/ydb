@@ -456,6 +456,9 @@ void TNodeWarden::Bootstrap() {
     actorSystem->RegisterLocalService(MakeBlobStorageSyncBrokerID(), Register(
         CreateSyncBrokerActor(MaxInProgressSyncCount)));
 
+    // create bridge syncer rate quoter
+    SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig.GetBridgeSyncRateBytesPerSecond());
+
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();
 
@@ -1403,6 +1406,10 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     const auto& bsFrom = appConfig.GetBlobStorageConfig();
     auto *bsTo = config->MutableBlobStorageConfig();
 
+    const auto hasStaticGroupInfo = [](const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
+        return ss.PDisksSize() && ss.VDisksSize() && ss.GroupsSize();
+    };
+
     if (bsFrom.HasServiceSet()) {
         const auto& ssFrom = bsFrom.GetServiceSet();
         auto *ssTo = bsTo->MutableServiceSet();
@@ -1418,10 +1425,6 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         } else {
             ssTo->ClearReplBrokerConfig();
         }
-
-        const auto hasStaticGroupInfo = [](const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
-            return ss.PDisksSize() && ss.VDisksSize() && ss.GroupsSize();
-        };
 
         // update static group information unless distconf is enabled
         if (!hasStaticGroupInfo(ssFrom) && config->GetSelfManagementConfig().GetEnabled()) {
@@ -1554,6 +1557,25 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         bsTo->MutableBscSettings()->CopyFrom(bsFrom.GetBscSettings());
     } else {
         bsTo->ClearBscSettings();
+    }
+
+    // copy PDiskConfig from DefineHostConfig/DefineBox if this section is managed automatically
+    if (!hasStaticGroupInfo(bsFrom.GetServiceSet()) && config->GetSelfManagementConfig().GetEnabled()) {
+        THashMap<std::tuple<ui32, TString>, NKikimrBlobStorage::TPDiskConfig> pdiskConfigs;
+        auto callback = [&](const auto& node, const auto& drive) {
+            if (drive.HasPDiskConfig()) {
+                pdiskConfigs.emplace(std::make_tuple(node.GetNodeId(), drive.GetPath()), drive.GetPDiskConfig());
+            }
+        };
+        EnumerateConfigDrives(*config, 0, callback, nullptr, true);
+        for (auto& pdisk : *bsTo->MutableServiceSet()->MutablePDisks()) {
+            const auto key = std::make_tuple(pdisk.GetNodeID(), pdisk.GetPath());
+            if (const auto it = pdiskConfigs.find(key); it != pdiskConfigs.end()) {
+                pdisk.MutablePDiskConfig()->CopyFrom(it->second);
+            } else {
+                pdisk.ClearPDiskConfig();
+            }
+        }
     }
 
     // copy nameservice-related things

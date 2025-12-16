@@ -257,6 +257,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--data-center=%s" % self.data_center
             )
 
+        if self.__configurator.module is not None:
+            command.append(
+                "--module=%s" % self.__configurator.module
+            )
+
         if self.__configurator.breakpad_minidumps_path:
             command.extend(["--breakpad-minidumps-path", self.__configurator.breakpad_minidumps_path])
         if self.__configurator.breakpad_minidumps_script:
@@ -465,14 +470,14 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def start(self):
+    def start(self, timeout_seconds=240):
         """
         Safely starts kikimr instance.
         Do not override this method.
         """
         try:
             logger.debug("Working directory: " + self.__tmpdir)
-            self.__run()
+            self.__run(timeout_seconds=timeout_seconds)
             return self
 
         except Exception:
@@ -510,7 +515,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 time.sleep(interval)
         raise last_exception
 
-    def __run(self):
+    def __run(self, timeout_seconds=240):
         self.prepare()
 
         for node_id in self.__configurator.all_node_ids():
@@ -525,7 +530,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
-            self.__wait_for_bs_controller_to_start()
+            self.__wait_for_bs_controller_to_start(timeout_seconds=timeout_seconds)
             if not self.__configurator.use_self_management:
                 self.__add_bs_box()
 
@@ -790,6 +795,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 drive_proto.Kind = drive['pdisk_user_kind']
                 drive_proto.Type = drive.get('pdisk_type', 0)
 
+                for key, value in drive.get('pdisk_config', {}).items():
+                    if key == 'expected_slot_count':
+                        drive_proto.PDiskConfig.ExpectedSlotCount = value
+                    else:
+                        raise KeyError("unknown pdisk_config option %s" % key)
+
         cmd = request.Command.add()
         cmd.DefineBox.BoxId = 1
         for node_id, node in self.nodes.items():
@@ -848,13 +859,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
         return name
 
-    def __wait_for_bs_controller_to_start(self):
+    def __wait_for_bs_controller_to_start(self, timeout_seconds=240):
         monitors = [node.monitor for node in self.nodes.values()]
 
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)
 
-        timeout_seconds = 240
         bs_controller_started = wait_for(
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )

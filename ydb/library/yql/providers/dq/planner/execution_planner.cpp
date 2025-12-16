@@ -266,7 +266,8 @@ namespace NYql::NDqs {
             SourceTaskID = resultTask.Id;
         }
 
-        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default");
+        // TODO switch from `PRAGMA dq.WatermarksIdleTimeoutMs` to `... WITH Watermarks IDLE TIMEOUT ....`
+        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default", Settings->WatermarksIdleTimeoutMs.Get().Transform([](auto t) { return TDuration::MilliSeconds(t).MicroSeconds();}));
 
         return TasksGraph.GetTasks().size() <= maxTasksPerOperation;
     }
@@ -324,6 +325,9 @@ namespace NYql::NDqs {
                     *sourceProto->MutableSettings() = *input.SourceSettings;
                     sourceProto->SetType(input.SourceType);
                     sourceProto->SetWatermarksMode(input.WatermarksMode);
+                    if (input.WatermarksIdleTimeoutUs) {
+                        sourceProto->SetWatermarksIdleTimeoutUs(*input.WatermarksIdleTimeoutUs);
+                    }
                 } else {
                     FillInputDesc(inputDesc, input);
                 }
@@ -605,6 +609,10 @@ namespace NYql::NDqs {
         channelDesc.SetDstTaskId(channel.DstTask);
         channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
         channelDesc.SetTransportVersion(Settings->GetDataTransportVersion());
+        channelDesc.SetWatermarksMode(channel.WatermarksMode);
+        if (channel.WatermarksIdleTimeoutUs) {
+            channelDesc.SetWatermarksIdleTimeoutUs(*channel.WatermarksIdleTimeoutUs);
+        }
         channelDesc.SetEnableSpilling(enableSpilling);
 
         if (channel.SrcTask) {

@@ -213,7 +213,7 @@ class BridgeClient(object):
 
     def rejoin(self, pile_name, primary_pile_name=None):
         """
-        Rejoin pile to unsynchronized using specific pile ids.
+        Rejoin pile to unsynchronized.
 
         Args:
             pile_name: Pile name to restore
@@ -225,23 +225,15 @@ class BridgeClient(object):
 
         # TODO (@apkobzev): Implement split brain recovery
 
-        current_primary_pile_name = self.primary_pile
         updates = [
             PileState(pile_name=pile_name, state=PileState.NOT_SYNCHRONIZED),
         ]
-        result = self.update_cluster_state_result(updates, specific_pile_ids=[current_primary_pile_name])
+        result = self.update_cluster_state_result(updates)
         if result is None:
-            logger.error("Failed to update pile %s to NOT_SYNCHRONIZED using specific pile ids [%s]", pile_name, current_primary_pile_name)
+            logger.error("Failed to update pile %s to NOT_SYNCHRONIZED", pile_name)
             return False
 
-        logger.info("Switched: pile %s from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%s]", pile_name, current_primary_pile_name)
-
-        result = self.update_cluster_state_result(updates, specific_pile_ids=[pile_name])
-        if result is None:
-            logger.error("Failed to update pile %s to NOT_SYNCHRONIZED using specific pile ids [%s]", pile_name, pile_name)
-            return False
-
-        logger.info("Switched: pile %s from DISCONNECTED to NOT_SYNCHRONIZED using specific pile ids [%s]", pile_name, pile_name)
+        logger.info("Switched: pile %s from DISCONNECTED to NOT_SYNCHRONIZED", pile_name)
         return True
 
     def takedown(self, pile_name, primary_pile_name=None):

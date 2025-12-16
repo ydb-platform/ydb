@@ -196,28 +196,50 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         return "Value: <key = {key}, tablet_id = {tablet_id}>".format(
             key=key, tablet_id=tablet_id)
 
-    def _check_cluster_kv_operations(self, table_path, tablet_ids):
+    def _check_cluster_kv_operations(self, table_path, tablet_ids, max_retries=10, retry_delay=2):
         """
         Проверяет работоспособность кластера через KV операции записи/чтения.
         Аналогично check_kikimr_is_operational из test_distconf.py
+        С retry логикой для случаев, когда кластер временно недоступен после failover.
+        
+        Args:
+            table_path: Путь к KV таблице
+            tablet_ids: Список tablet IDs для проверки
+            max_retries: Максимальное количество попыток при ошибках подключения
+            retry_delay: Задержка между попытками в секундах
         """
         self.logger.info("=== CHECKING CLUSTER KV OPERATIONS ===")
-        for partition_id, tablet_id in enumerate(tablet_ids):
-            # Запись
-            write_resp = self.cluster.kv_client.kv_write(
-                table_path, partition_id, "key", self._value_for("key", tablet_id)
-            )
-            assert_that(write_resp.operation.status == StatusIds.SUCCESS)
-            self.logger.info("✓ KV write successful for partition %d, tablet %d", partition_id, tablet_id)
+        
+        for attempt in range(max_retries):
+            try:
+                for partition_id, tablet_id in enumerate(tablet_ids):
+                    # Запись
+                    write_resp = self.cluster.kv_client.kv_write(
+                        table_path, partition_id, "key", self._value_for("key", tablet_id)
+                    )
+                    assert_that(write_resp.operation.status == StatusIds.SUCCESS)
+                    self.logger.info("✓ KV write successful for partition %d, tablet %d", partition_id, tablet_id)
 
-            # Чтение
-            read_resp = self.cluster.kv_client.kv_read(
-                table_path, partition_id, "key"
-            )
-            assert_that(read_resp.operation.status == StatusIds.SUCCESS)
-            self.logger.info("✓ KV read successful for partition %d, tablet %d", partition_id, tablet_id)
+                    # Чтение
+                    read_resp = self.cluster.kv_client.kv_read(
+                        table_path, partition_id, "key"
+                    )
+                    assert_that(read_resp.operation.status == StatusIds.SUCCESS)
+                    self.logger.info("✓ KV read successful for partition %d, tablet %d", partition_id, tablet_id)
 
-        self.logger.info("✓ Cluster KV operations are working correctly")
+                self.logger.info("✓ Cluster KV operations are working correctly")
+                return  # Успешно выполнили все операции
+                
+            except (AssertionError, Exception) as e:
+                if attempt < max_retries - 1:
+                    self.logger.warning(
+                        "KV operations failed (attempt %d/%d): %s. Retrying in %d seconds...",
+                        attempt + 1, max_retries, e, retry_delay
+                    )
+                    time.sleep(retry_delay)
+                else:
+                    self.logger.error("KV operations failed after %d attempts", max_retries)
+                    raise
 
     def test_failover_after_stopping_primary_pile_nodes(self):
         """

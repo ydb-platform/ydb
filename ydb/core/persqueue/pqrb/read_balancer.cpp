@@ -428,7 +428,9 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
 {
     TActorId pipeClient = GetPipeClient(tabletId, ctx);
 
-    NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
+    if (SchemeShardId != tabletId) {
+        NTabletPipe::SendData(ctx, pipeClient, new TEvPQ::TEvSubDomainStatus(SubDomainOutOfSpace));
+    }
 
     auto it = StatsRequestTracker.Cookies.find(tabletId);
     if (!pipeReconnected || it != StatsRequestTracker.Cookies.end()) {

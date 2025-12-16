@@ -1,30 +1,13 @@
 #pragma once
 
+#include "column_statistic_eval.h"
+
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NStat {
-
-class TSelectBuilder;
-
-class IColumnStatisticEval {
-public:
-    using TPtr = std::unique_ptr<IColumnStatisticEval>;
-
-    static TVector<EStatType> SupportedTypes();
-    static TPtr MaybeCreate(
-        EStatType,
-        const NKikimrStat::TSimpleColumnStatistics&,
-        const NScheme::TTypeInfo&);
-
-    virtual EStatType GetType() const = 0;
-    virtual size_t EstimateSize() const = 0;
-    virtual void AddAggregations(const TString& columnName, TSelectBuilder&) = 0;
-    virtual TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const = 0;
-    virtual ~IColumnStatisticEval() = default;
-};
 
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
     TActorId Parent;

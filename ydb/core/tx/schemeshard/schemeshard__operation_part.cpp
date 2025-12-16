@@ -83,6 +83,19 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
         << ", ev# " << ev;
 }
 
+template <typename TEvPtr>
+static bool IsIgnorableDuplicateReply(const TEvPtr&) {
+    return false;
+}
+
+template <>
+bool IsIgnorableDuplicateReply(const TEvColumnShard::TEvProposeTransactionResult::TPtr& ev) {
+    const auto& record = ev->Get()->Record;
+    // ColumnShard may resend PREPARED reply after restart; treat such duplicate as ignorable
+    return record.GetStatus() == NKikimrTxColumnShard::EResultStatus::PREPARED
+        && record.GetStatusMessage().Contains("before restart");
+}
+
 #define DefaultHandleReply(NS, TEvType, ...) \
     bool ISubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
         const auto msg = LogMessage(DebugReply(ev), context, false); \
@@ -91,7 +104,7 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
     } \
     \
     bool TSubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
-        const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType); \
+        const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType) || IsIgnorableDuplicateReply(ev); \
         const auto msg = LogMessage(DebugReply(ev), context, ignore); \
         if (ignore) { \
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \

@@ -185,7 +185,7 @@ void TUserInfo::SetupDetailedMetrics(const TActorContext& ctx, NMonitoring::TDyn
     auto getCounter = [&](const TString& forFCC, const TString& forFederation, bool deriv) {
         return consumerSubgroup->GetExpiringNamedCounter(
             fcc ? "name" : "sensor",
-            fcc ? "topic.partition." + forFCC : forFederation + "PerPartition",
+            fcc ? "topic.partition." + forFCC : forFederation,
             deriv);
     };
 

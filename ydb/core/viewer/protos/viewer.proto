@@ -419,6 +419,8 @@ message TTenant {
     optional NKikimrMemory.TMemoryStats MemoryStats = 51;
     float NetworkUtilization = 52;
     uint64 NetworkWriteThroughput = 53;
+    uint64 GrpcRequestBytes = 54;
+    uint64 GrpcResponseBytes = 55;
 }
 
 message TTenants {
@@ -922,4 +924,38 @@ message TTopicDataResponse {
     uint64 EndOffset = 2;
     repeated TMessage Messages = 3;
     bool Truncated = 4;
+}
+
+message TDatabaseStats {
+    // common
+    repeated string Problems = 10;
+
+    // grpc
+    optional uint64 GrpcRequestBytes = 101;
+    optional uint64 GrpcResponseBytes = 102;
+    
+    // database nodes
+    optional uint32 DatabaseNodes = 201;
+    optional float DatabaseCpuUsage = 202;
+    optional float DatabaseMemoryUsage = 203;
+    optional uint64 DatabaseNetwork = 204;
+
+    // database to storage
+    optional uint64 StorageNetworkRead = 301;
+    optional uint64 StorageNetworkWrite = 302;
+
+    // storage nodes
+    optional uint32 StorageNodes = 401;
+    optional float StorageCpuUsage = 402;
+    optional float StorageMemoryUsage = 403;
+    optional uint64 StorageNetwork = 404;
+
+    // storage to disk
+    optional uint64 DiskRead = 501;
+    optional uint64 DiskWrite = 502;
+
+    // disk
+    optional uint32 StorageGroups = 601;
+    optional uint64 StorageTotal = 602;
+    optional uint64 StorageConsumed = 603;
 }

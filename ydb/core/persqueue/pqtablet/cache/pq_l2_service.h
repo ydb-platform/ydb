@@ -64,6 +64,8 @@ struct TCacheValue : TNonCopyable {
         }
         
         Value = std::make_shared<TVector<TBatch>>(GetUnpackedBatches(Key, RawValue));
+        RawValue.clear();
+        Key.Clear();
         return Value;
     }
 

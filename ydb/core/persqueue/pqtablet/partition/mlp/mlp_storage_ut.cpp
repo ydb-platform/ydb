@@ -1661,6 +1661,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
             auto [message, _] = storage.GetMessage(3);
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 5);
+            UNIT_ASSERT_VALUES_EQUAL(message->LockingTimestampMilliSecondsDelta, 0);
         }
 
         timeProvider->Tick(TDuration::Seconds(3));
@@ -1676,11 +1677,15 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
             auto [message, _] = storage.GetMessage(3);
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 2); // 5 - 3
+            UNIT_ASSERT_VALUES_EQUAL(message->LockingTimestampMilliSecondsDelta, 3000);
+            UNIT_ASSERT_VALUES_EQUAL(message->LockingTimestampSign, 1);
         }
         {
             auto [message, _] = storage.GetMessage(4);
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 10);
+            UNIT_ASSERT_VALUES_EQUAL(message->LockingTimestampMilliSecondsDelta, 0);
+            UNIT_ASSERT_VALUES_EQUAL(message->LockingTimestampSign, 0);
         }
 
         auto batch = storage.GetBatch();

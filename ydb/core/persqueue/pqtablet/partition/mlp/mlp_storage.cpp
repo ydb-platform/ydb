@@ -605,7 +605,8 @@ void TStorage::UpdateMessageLockingDurationMetrics(const TMessage& message) {
     if (message.GetStatus() != EMessageStatus::Locked) {
         return;
     }
-    Metrics.MessageLockingDuration.IncrementFor((TimeProvider->Now() - GetMessageLockingTime(message)).MilliSeconds());
+    auto lockingDuration = TimeProvider->Now() - GetMessageLockingTime(message);
+    Metrics.MessageLockingDuration.IncrementFor(lockingDuration.MilliSeconds());
 }
 
 bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {

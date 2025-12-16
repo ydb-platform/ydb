@@ -24,7 +24,7 @@ struct TSnapshotMessage {
             static_assert(sizeof(Value) == sizeof(Fields));
         } Common;
         ui32 WriteTimestampDelta;
-        i32 LockingTimestampMilliSecondsDelta;
+        i64 LockingTimestampMilliSecondsDelta;
 };
 
 struct TAddedMessage {
@@ -54,10 +54,10 @@ struct TMessageChange {
 
         static_assert(sizeof(Value) == sizeof(Fields));
     } Common;
-    i32 LockingTimestampMilliSecondsDelta;
+    i64 LockingTimestampMilliSecondsDelta;
 };
 
-static_assert(sizeof(TMessageChange) == sizeof(ui32) + sizeof(i32));
+static_assert(sizeof(TMessageChange::Common) == sizeof(ui32));
 
 struct TDLQMessageV1 {
     ui64 Offset;
@@ -112,11 +112,11 @@ struct TItemSerializer<TSnapshotMessage> {
     ui64 LastWriteTimestampDelta = 0;
 
     void Serialize(TString& buffer, const TSnapshotMessage& msg) {
-        buffer.append(reinterpret_cast<const char*>(&msg.Common.Value), sizeof(msg.Common.Value));
+        buffer.append(reinterpret_cast<const char*>(&msg.Common.Value), sizeof(TSnapshotMessage::Common.Value));
         VarintSerialize(buffer, static_cast<ui64>(msg.WriteTimestampDelta - LastWriteTimestampDelta));
         LastWriteTimestampDelta = msg.WriteTimestampDelta;
         if (msg.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
-            VarintSerialize(buffer, i64(msg.LockingTimestampMilliSecondsDelta));
+            VarintSerialize(buffer, msg.LockingTimestampMilliSecondsDelta);
         }
     }
 };
@@ -126,12 +126,13 @@ struct TItemDeserializer<TSnapshotMessage> {
     ui64 LastWriteTimestampDelta = 0;
 
     bool Deserialize(const char*& data, const char* end, TSnapshotMessage& msg) {
-        if (data >= end) {
+        if (data == end) {
             return false;
         }
+        AFL_ENSURE(data < end)("data", (long)data)("end", (long)end);
 
-        memcpy(&msg.Common.Value, data, sizeof(msg.Common.Value));  // TODO BIGENDIAN/LOWENDIAN
-        data += sizeof(msg.Common.Value);
+        memcpy(&msg.Common.Value, data, sizeof(TSnapshotMessage::Common.Value));  // TODO BIGENDIAN/LOWENDIAN
+        data += sizeof(TSnapshotMessage::Common.Value);
 
         ui64 delta;
         VarintDeserialize(data, delta);
@@ -139,9 +140,7 @@ struct TItemDeserializer<TSnapshotMessage> {
         msg.WriteTimestampDelta = LastWriteTimestampDelta;
 
         if (msg.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
-            i64 lockingTimestampMilliSecondsDelta;
-            VarintDeserialize(data, lockingTimestampMilliSecondsDelta);
-            msg.LockingTimestampMilliSecondsDelta = lockingTimestampMilliSecondsDelta;
+            VarintDeserialize(data, msg.LockingTimestampMilliSecondsDelta);
         }
 
         return true;
@@ -183,9 +182,9 @@ struct TItemDeserializer<TAddedMessage> {
 template<>
 struct TItemSerializer<TMessageChange> {
     void Serialize(TString& buffer, const TMessageChange& msg) {
-        buffer.append(reinterpret_cast<const char*>(&msg.Common.Value), sizeof(msg.Common.Value));
+        buffer.append(reinterpret_cast<const char*>(&msg.Common.Value), sizeof(TMessageChange::Common.Value));
         if (msg.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
-            VarintSerialize(buffer, i64(msg.LockingTimestampMilliSecondsDelta));
+            VarintSerialize(buffer, msg.LockingTimestampMilliSecondsDelta);
         }
     }
 };
@@ -193,17 +192,15 @@ struct TItemSerializer<TMessageChange> {
 template<>
 struct TItemDeserializer<TMessageChange> {
     bool Deserialize(const char*& data, const char* end, TMessageChange& msg) {
-        if (data >= end) {
+        if (data == end) {
             return false;
         }
+        AFL_ENSURE(data < end)("data", (long)data)("end", (long)end);
 
-        memcpy(&msg.Common.Value, data, sizeof(msg.Common.Value));  // TODO BIGENDIAN/LOWENDIAN
-        data += sizeof(&msg.Common.Value);
-
+        memcpy(&msg.Common.Value, data, sizeof(TMessageChange::Common.Value));  // TODO BIGENDIAN/LOWENDIAN
+        data += sizeof(TMessageChange::Common.Value);
         if (msg.Common.Fields.Status == static_cast<ui32>(TStorage::EMessageStatus::Locked)) {
-            i64 lockingTimestampMilliSecondsDelta;
-            VarintDeserialize(data, lockingTimestampMilliSecondsDelta);
-            msg.LockingTimestampMilliSecondsDelta = lockingTimestampMilliSecondsDelta;
+            VarintDeserialize(data, msg.LockingTimestampMilliSecondsDelta);
         }
 
         return true;

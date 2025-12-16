@@ -254,6 +254,7 @@ public:
         : Info(info)
         , ActorSystem(actorSystem)
         , GenMajor(0)
+        , WaitQueueBytes(0)
         , WaitQueueSize(0)
         , PushBytes(0)
         , RemotePopBytes(0)
@@ -295,6 +296,7 @@ public:
     IDqChannelStorage::TPtr Storage;
 
     mutable std::mutex WaitQueueMutex;
+    std::atomic<ui64> WaitQueueBytes;
     std::atomic<ui64> WaitQueueSize;
     mutable std::queue<TDataChunk> WaitQueue;
     mutable TInstant WaitTimestamp;
@@ -509,6 +511,7 @@ public:
         , MaxInflightBytes(maxInflightBytes)
         , WaitersQueueSize(0)
         , Reconciliation(0)
+        , WaiterBytes(0)
         , WaiterMessages(0)
     {
         OutputBufferCount = counters->GetCounter("OutputBuffer/Count", false);
@@ -517,6 +520,7 @@ public:
         OutputBufferInflightBytes = counters->GetCounter("OutputBuffer/InflightBytes", false);
         OutputBufferInflightMessages = counters->GetCounter("OutputBuffer/InflightMessages", false);
         OutputBufferWaiterCount = counters->GetCounter("OutputBuffer/WaiterCount", false);
+        OutputBufferWaiterBytes = counters->GetCounter("OutputBuffer/WaiterBytes", false);
         OutputBufferWaiterMessages = counters->GetCounter("OutputBuffer/WaiterMessages", false);
         InputBufferCount = counters->GetCounter("InputBuffer/Count", false);
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
@@ -582,6 +586,7 @@ public:
     std::atomic<ui64> WaitersQueueSize;
     const TDuration UnbindedWaitPeriod = TDuration::Minutes(10);
     std::atomic<ui64> Reconciliation;
+    std::atomic<ui64> WaiterBytes;
     std::atomic<ui64> WaiterMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferBytes;
@@ -589,6 +594,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferInflightBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferInflightMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;

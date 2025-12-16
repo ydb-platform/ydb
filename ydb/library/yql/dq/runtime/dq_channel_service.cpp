@@ -724,6 +724,7 @@ TNodeState::~TNodeState() {
     *OutputBufferInflightBytes -= InflightBytes;
     *OutputBufferInflightMessages -= Queue.size();
     *OutputBufferWaiterCount -= WaitersQueue.size();
+    *OutputBufferWaiterBytes -= WaiterBytes.load();
     *OutputBufferWaiterMessages -= WaiterMessages.load();
 }
 
@@ -737,9 +738,12 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         if (!descriptor->WaitQueue.empty()) {
 
             descriptor->WaitQueue.push(std::move(data));
+            descriptor->WaitQueueBytes += bytes;
             descriptor->WaitQueueSize++;
 
+            WaiterBytes += bytes;
             WaiterMessages++;
+            *OutputBufferWaiterBytes += bytes;
             (*OutputBufferWaiterMessages)++;
 
             return;
@@ -772,9 +776,12 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         result = true;
     }
     descriptor->WaitQueue.push(std::move(data));
+    descriptor->WaitQueueBytes += bytes;
     descriptor->WaitQueueSize++;
 
+    WaiterBytes += bytes;
     WaiterMessages++;
+    *OutputBufferWaiterBytes += bytes;
     (*OutputBufferWaiterMessages)++;
 
     if (result) {
@@ -1085,8 +1092,11 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 
                 if (WaitersQueue.top()->IsTerminatedOrAborted()) {
 
+                    auto waitQueueBytes = WaitersQueue.top()->WaitQueueBytes.load();
                     auto waitQueueSize = WaitersQueue.top()->WaitQueueSize.load();
+                    WaiterBytes -= waitQueueBytes;
                     WaiterMessages -= waitQueueSize;
+                    *OutputBufferWaiterBytes -= waitQueueBytes;
                     *OutputBufferWaiterMessages -= waitQueueSize;
 
                     WaitersQueue.pop();
@@ -1110,20 +1120,20 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
         if (waiter->CheckGenMajor(GenMajor, "Inconsistent Waiter Gen")) {
             std::shared_ptr<TOutputItem> item;
 
-            waiter->WaitQueueSize--;
-            WaiterMessages--;
-            (*OutputBufferWaiterMessages)--;
+            ui64 bytes = 0;
 
             {
                 std::lock_guard lock(waiter->WaitQueueMutex);
                 Y_ENSURE(!waiter->WaitQueue.empty());
 
                 auto& data = waiter->WaitQueue.front();
-                auto bytes = data.Bytes;
+                bytes = data.Bytes;
 
                 waiter->AddPopChunk(data.Bytes, data.Rows);
                 item = std::make_shared<TOutputItem>(std::move(data), waiter);
                 waiter->WaitQueue.pop();
+                waiter->WaitQueueBytes -= bytes;
+                waiter->WaitQueueSize--;
 
                 std::lock_guard lock1(Mutex);
 
@@ -1143,9 +1153,17 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
                 Queue.push_back(item);
                 SendMessage(item);
             }
+
+            WaiterBytes -= bytes;
+            WaiterMessages--;
+            *OutputBufferWaiterBytes -= bytes;
+            (*OutputBufferWaiterMessages)--;
         } else {
+            auto waitQueueBytes = waiter->WaitQueueBytes.load();
             auto waitQueueSize = waiter->WaitQueueSize.load();
+            WaiterBytes -= waitQueueBytes;
             WaiterMessages -= waitQueueSize;
+            *OutputBufferWaiterBytes -= waitQueueBytes;
             *OutputBufferWaiterMessages -= waitQueueSize;
         }
     }
@@ -1932,7 +1950,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH() {str << "MaxInflightBytes";}
                         TABLEH() {str << "MinInflightBytes";}
                         TABLEH() {str << "InflightBytes";}
-                        TABLEH() {str << "WaitQueueSize";}
+                        TABLEH() {str << "WaitQueueBytes";}
                         TABLEH() {str << "SpilledBytes";}
                         TABLEH() {str << "LoadingQueueSize";}
                         TABLEH() {str << "HeadBlobId";}
@@ -1962,7 +1980,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << descriptor->MaxInflightBytes;}
                                 TABLED() {str << descriptor->MinInflightBytes;}
                                 TABLED() {str << (pushBytes - popBytes);}
-                                TABLED() {str << descriptor->WaitQueueSize.load();}
+                                TABLED() {str << descriptor->WaitQueueBytes.load();}
                                 TABLED() {str << descriptor->SpilledBytes.load();}
                                 TABLED() {str << descriptor->LoadingQueue.size();}
                                 TABLED() {str << descriptor->HeadBlobId;}

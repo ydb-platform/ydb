@@ -51,15 +51,13 @@ namespace NPQ {
     };
 
     struct TRequestedBlob {
-    private:
-        TString Value;
-
-    public:
         ui64 Offset;
         ui16 PartNo;
         ui32 Count;
         ui16 InternalPartsCount;
         ui32 Size;
+        ui32 PackedSize;
+        ui32 UnpackedSize;
         bool Cached;
         TKey Key;
         ui64 CreationUnixTime;
@@ -68,10 +66,8 @@ namespace NPQ {
         TRequestedBlob() = delete;
         TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value, const TKey& key, ui64 creationUnixTime);
         bool Empty() const;
-        void ExtractBatches();
         void Clear();
         void SetValue(const TString& value);
-        void Verify() const;
     };
 
     struct TDataKey {

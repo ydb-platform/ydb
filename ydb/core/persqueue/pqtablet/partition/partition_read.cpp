@@ -463,12 +463,8 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         }
 
         auto blobBatches = blobs[pos].Batches;
-        ui32 totalSize = std::accumulate(blobBatches->begin(), blobBatches->end(), 0, [](ui32 sum, const TBatch& batch) {
-            return sum + batch.GetUnpackedSize();
-        });
-
-        AFL_ENSURE(totalSize <= blobs[pos].Size)("value for offset", offset)("count", count)
-            ("size must be",  blobs[pos].Size)("got", totalSize);
+        AFL_ENSURE(blobs[pos].PackedSize <= blobs[pos].Size)("value for offset", offset)("count", count)
+            ("size must be",  blobs[pos].Size)("got", blobs[pos].PackedSize);
 
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
             Offset = offset;

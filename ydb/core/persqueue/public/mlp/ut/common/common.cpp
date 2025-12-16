@@ -167,6 +167,7 @@ void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& top
     auto session = client.CreateSimpleBlockingWriteSession(settings);
 
     for(; messageCount; --messageCount) {
+        Cout << "Writing message " << messageCount << Endl << Flush;
         auto message = NUnitTest::RandomString(messageSize);
         UNIT_ASSERT(session->Write(message));
     }

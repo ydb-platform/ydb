@@ -126,9 +126,7 @@ namespace NKikimr::NPQ {
             ui64 size = 0;
             ui32 cropped = 0;
             for (ui32 i = 0; i < Blobs.size(); ++i) {
-                TRequestedBlob& blob = Blobs[i];
-                if (!blob.Empty())
-                    blob.Verify();
+                auto& blob = Blobs[i];
                 size += blob.Size;
                 if (size > MAX_RESPONSE_SIZE) {
                     ++cropped;

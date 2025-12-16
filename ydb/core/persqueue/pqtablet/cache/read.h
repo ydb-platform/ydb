@@ -211,7 +211,6 @@ namespace NPQ {
                         AFL_ENSURE(outBlobs[pos].Empty());
                         outBlobs[pos].SetValue(r->GetValue());
                         outBlobs[pos].CreationUnixTime = r->GetCreationUnixTime();
-                        outBlobs[pos].ExtractBatches();
                     } else {
                         LOG_E("Got Error response " << r->GetStatus()
                                         << " for " << i << "'s blob from " << resp.ReadResultSize() << " blobs");
@@ -249,10 +248,6 @@ namespace NPQ {
                 for (ui32 i = 0; i < resp.WriteResultSize(); ++i) {
                     auto status = resp.GetWriteResult(i).GetStatus();
                     AFL_ENSURE(status == NKikimrProto::OK)("Not OK from KV blob", ev->Get()->ToString());
-                }
-
-                for (auto& blob : kvReq.Blobs) {
-                    blob.ExtractBatches();
                 }
 
                 Cache.SaveHeadBlobs(ctx, kvReq);

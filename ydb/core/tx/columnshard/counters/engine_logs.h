@@ -227,6 +227,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataUsageBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr BadPortionsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr BadPortionsLimit;
+
+    NMonitoring::TDynamicCounters::TCounterPtr CleanupPortionsSkippedByLock;
+    NMonitoring::TDynamicCounters::TCounterPtr CleanupPortionsLimitExceeded;
 
     TAgentGranuleDataCounters GranuleDataAgent;
     std::vector<std::shared_ptr<TIncrementalHistogram>> BlobSizeDistribution;
@@ -337,6 +341,14 @@ public:
 
     void OnGranuleOptimizerLocked() const {
         GranuleOptimizerLocked->Add(1);
+    }
+
+    void OnCleanupPortionSkippedByLock(ui32 count) const {
+        CleanupPortionsSkippedByLock->Add(count);
+    }
+
+    void OnCleanupPortionsLimitExceed() const {
+        CleanupPortionsLimitExceeded->Add(1);
     }
 
     TEngineLogsCounters();

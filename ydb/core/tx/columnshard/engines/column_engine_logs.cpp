@@ -331,6 +331,11 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
         changes->AddTableToDrop(pathId);
     }
 
+    SignalCounters.OnCleanupPortionSkippedByLock(skipLocked);
+    if (limitExceeded) {
+        SignalCounters.OnCleanupPortionsLimitExceed();
+    }
+
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())("portions_prepared",
         changes->GetPortionsToAccess().size())("drop", portionsFromDrop)("skip", skipLocked)("portions_counter", portionsCount)(
         "chunks", chunksCount)("limit", limitExceeded)("max_portions", maxPortionsCount)("max_chunks", maxChunksCount);
@@ -339,7 +344,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     if (LWPROBE_ENABLED(StartCleanup)) {
         ui64 totalPortions = 0;
         for (const auto& [_, portions]: CleanupPortions) {
-        totalPortions += portions.size();
+            totalPortions += portions.size();
         }
         LWPROBE(StartCleanup, TabletId, CleanupPortions.size(), totalPortions, changes->GetPortionsToAccess().size(), portionsFromDrop, skipLocked, portionsCount, chunksCount, limitExceeded, maxPortionsCount, maxChunksCount);
     }
@@ -483,7 +488,7 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
             continue;
         }
 
-        auto nonconflicting = portion->IsVisible(snapshot, true); 
+        auto nonconflicting = portion->IsVisible(snapshot, true);
         auto conflicting = !nonconflicting;
 
         // take compacted portions only if all the records are visible in the snapshot

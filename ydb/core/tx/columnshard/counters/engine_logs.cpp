@@ -79,6 +79,13 @@ TEngineLogsCounters::TEngineLogsCounters()
     ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
 
     BadPortionsCount = TBase::GetValue("BadPortions/Count");
+
+    BadPortionsLimit = TBase::GetValue("BadPortions/Limit");
+
+    BadPortionsLimit->Set(GetBadPortionSizeLimit());
+
+    CleanupPortionsSkippedByLock = TBase::GetDeriviative("CleanupPortions/SkippedByLock");
+    CleanupPortionsLimitExceeded = TBase::GetDeriviative("CleanupPortions/LimitExceeded");
 }
 
 void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const {

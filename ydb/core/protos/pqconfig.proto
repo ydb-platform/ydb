@@ -785,6 +785,7 @@ message TAggregatedCounters {
 
         repeated uint64 CountersValues = 2;
         repeated uint64 MessageLocksValues = 3;
+        repeated uint64 MessageLockingDurationValues = 4;
     }
 }
 

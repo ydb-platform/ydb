@@ -65,6 +65,34 @@ const TVector<std::pair<ui64, TString>> SLOW_LATENCY_MS_INTERVALS = {
     {9'999'999, "999999ms"}
 };
 
+const TTabletPercentileCounter::TRangeDef SLOW_LATENCY_RANGES[11] = {
+    {100, "100"},
+    {200, "200"},
+    {500, "500"},
+    {1000, "1000"},
+    {2000, "2000"},
+    {5000, "5000"},
+    {10'000, "10000"},
+    {30'000, "30000"},
+    {60'000, "60000"},
+    {180'000, "180000"},
+    {9'999'999, "999999"}
+};
+
+const NMonitoring::TBucketBounds SLOW_LATENCY_BOUNDS = NMonitoring::TBucketBounds{
+    100,
+    200,
+    500,
+    1000,
+    2000,
+    5000,
+    10000,
+    30000,
+    60000,
+    180000,
+    999999
+};
+
 const TVector<std::pair<ui64, TString>> SIZE_INTERVALS = {
     {1024, "1024"},
     {5120, "5120"},
@@ -99,7 +127,7 @@ const TVector<std::pair<ui64, TString>> SIZE_KB_INTERVALS = {
     {999'999'999, "99999999kb"}
 };
 
-const TTabletPercentileCounter::TRangeDef MLP_LOCKS_INTERVALS[10] = {
+const TTabletPercentileCounter::TRangeDef MLP_LOCKS_RANGES[10] = {
     {1, "1"},
     {2, "2"},
     {5, "5"},

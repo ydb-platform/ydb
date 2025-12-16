@@ -198,6 +198,7 @@ struct TUtils {
             UNIT_ASSERT_VALUES_EQUAL_C((*i).ProcessingCount, (*m).ProcessingCount, (*i).Offset);
             UNIT_ASSERT_VALUES_EQUAL_C((*i).ProcessingDeadline, (*m).ProcessingDeadline, (*i).Offset);
             UNIT_ASSERT_VALUES_EQUAL_C((*i).WriteTimestamp, (*m).WriteTimestamp, (*i).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).LockingTimestamp, (*m).LockingTimestamp, (*i).Offset);
 
             ++i;
             ++m;

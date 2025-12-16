@@ -51,7 +51,7 @@ public:
 
     struct TMessage {
         ui32 Status: 3 = static_cast<ui32>(EMessageStatus::Unprocessed);
-        ui32 Reserve: 3;
+        ui32 Reserve: 3 = 0;
         // It stores how many times the message was submitted to work.
         // If the value is large, then the message has been processed several times,
         // but it has never been processed successfully.
@@ -64,7 +64,10 @@ public:
         // in the topic.
         ui32 MessageGroupIdHash: 31 = 0;
         ui32 WriteTimestampDelta: 26 = 0;
-        ui32 Reserve2: 6;
+        ui32 Reserve2: 6 = 0;
+        ui32 LockingTimestampMilliSecondsDelta: 26 = 0;
+        ui32 LockingTimestampSign: 1 = 0;
+        ui32 Reserve3: 5 = 0;
 
         EMessageStatus GetStatus() const {
             return static_cast<EMessageStatus>(Status);
@@ -74,7 +77,7 @@ public:
             Status = static_cast<ui32>(status);
         }
     };
-    static_assert(sizeof(TMessage) == sizeof(ui32) * 3);
+    static_assert(sizeof(TMessage) == sizeof(ui32) * 4);
 
     struct TMessageWrapper {
         bool SlowZone;
@@ -83,6 +86,7 @@ public:
         ui32 ProcessingCount;
         TInstant ProcessingDeadline;
         TInstant WriteTimestamp;
+        TInstant LockingTimestamp;
     };
 
     struct TMessageIterator {
@@ -208,6 +212,8 @@ private:
 
     void UpdateFirstUncommittedOffset();
 
+    TInstant GetMessageLockingTime(const TMessage& message) const;
+    void UpdateMessageLockingDurationMetrics(const TMessage& message);
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 
     void RemoveMessage(ui64 offset, const TMessage& message);

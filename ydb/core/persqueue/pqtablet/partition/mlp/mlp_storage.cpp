@@ -25,7 +25,8 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     , Batch(this)
 {
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
-    Metrics.MessageLocks.Initialize(MLP_LOCKS_INTERVALS, std::size(MLP_LOCKS_INTERVALS), true);
+    Metrics.MessageLocks.Initialize(MLP_LOCKS_RANGES, std::size(MLP_LOCKS_RANGES), true);
+    Metrics.MessageLockingDuration.Initialize(SLOW_LATENCY_RANGES, std::size(SLOW_LATENCY_RANGES), true);
 }
 
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
@@ -572,6 +573,8 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
         ++message.ProcessingCount;
         Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
     }
+    message.LockingTimestampMilliSecondsDelta = static_cast<ui32>(TimeProvider->Now().MilliSeconds() - BaseDeadline.MilliSeconds());
+    message.LockingTimestampSign = 0;
 
     Batch.AddChange(offset);
 
@@ -586,6 +589,23 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     --Metrics.UnprocessedMessageCount;
 
     return offset;
+}
+
+TInstant TStorage::GetMessageLockingTime(const TMessage& message) const {
+    if (message.GetStatus() != EMessageStatus::Locked) {
+        return TInstant::Zero();
+    }
+
+    return message.LockingTimestampSign == 0 ?
+        BaseDeadline + TDuration::MilliSeconds(message.LockingTimestampMilliSecondsDelta) :
+        BaseDeadline - TDuration::MilliSeconds(message.LockingTimestampMilliSecondsDelta);
+}
+
+void TStorage::UpdateMessageLockingDurationMetrics(const TMessage& message) {
+    if (message.GetStatus() != EMessageStatus::Locked) {
+        return;
+    }
+    Metrics.MessageLockingDuration.IncrementFor((TimeProvider->Now() - GetMessageLockingTime(message)).MilliSeconds());
 }
 
 bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
@@ -605,7 +625,7 @@ bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
             --Metrics.UnprocessedMessageCount;
             ++totalMetrics;
             break;
-        case EMessageStatus::Locked:
+        case EMessageStatus::Locked: {
             if (!slowZone) {
                 Batch.AddChange(offset);
                 ++Metrics.CommittedMessageCount;
@@ -622,7 +642,12 @@ bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
 
             ++totalMetrics;
 
+            UpdateMessageLockingDurationMetrics(*message);
+            message->LockingTimestampMilliSecondsDelta = 0;
+            message->LockingTimestampSign = 0;
+
             break;
+        }
         case EMessageStatus::Delayed:
             if (!slowZone) {
                 Batch.AddChange(offset);
@@ -673,8 +698,12 @@ bool TStorage::DoUnlock(ui64 offset) {
 }
 
 void TStorage::DoUnlock(ui64 offset, TMessage& message) {
+    UpdateMessageLockingDurationMetrics(message);
+
     message.SetStatus(EMessageStatus::Unprocessed);
     message.DeadlineDelta = 0;
+    message.LockingTimestampMilliSecondsDelta = 0;
+    message.LockingTimestampSign = 0;
 
     Batch.AddChange(offset);
 
@@ -762,6 +791,7 @@ void TStorage::MoveBaseDeadline() {
 
 void TStorage::MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp) {
     auto deadlineDiff = (newBaseDeadline - BaseDeadline).Seconds();
+    auto deadlineDiffMilliSeconds = deadlineDiff * 1000;
     auto writeTimestampDiff = (newBaseWriteTimestamp - BaseWriteTimestamp).Seconds();
 
     if (deadlineDiff == 0 && writeTimestampDiff == 0) {
@@ -771,6 +801,17 @@ void TStorage::MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteT
     auto doChange = [&](auto& message) {
         message.DeadlineDelta = message.DeadlineDelta > deadlineDiff ? message.DeadlineDelta - deadlineDiff : 0;
         message.WriteTimestampDelta = message.WriteTimestampDelta > writeTimestampDiff ? message.WriteTimestampDelta - writeTimestampDiff : 0;
+
+        if (message.LockingTimestampSign == 0) {
+            if (message.LockingTimestampMilliSecondsDelta >= deadlineDiffMilliSeconds) {
+                message.LockingTimestampMilliSecondsDelta -= deadlineDiffMilliSeconds;
+            } else {
+                message.LockingTimestampMilliSecondsDelta = deadlineDiffMilliSeconds - message.LockingTimestampMilliSecondsDelta;
+                message.LockingTimestampSign = 1;
+            }
+        } else {
+            message.LockingTimestampMilliSecondsDelta += deadlineDiffMilliSeconds;
+        }
     };
 
     for (auto& [_, message] : SlowMessages) {
@@ -848,6 +889,7 @@ TString TStorage::DebugString() const {
             << static_cast<EMessageStatus>(message.Status) << ", "
             << message.DeadlineDelta << ", "
             << message.WriteTimestampDelta << ", "
+            << GetMessageLockingTime(message).ToString() << ", "
             << message.MessageGroupIdHash << "} ";
     };
 
@@ -968,6 +1010,7 @@ TStorage::TMessageWrapper TStorage::TMessageIterator::operator*() const {
         .ProcessingDeadline = static_cast<EMessageStatus>(message->Status) == EMessageStatus::Locked || static_cast<EMessageStatus>(message->Status) == EMessageStatus::Delayed ?
             Storage.BaseDeadline + TDuration::Seconds(message->DeadlineDelta) : TInstant::Zero(),
         .WriteTimestamp = Storage.BaseWriteTimestamp + TDuration::Seconds(message->WriteTimestampDelta),
+        .LockingTimestamp = Storage.GetMessageLockingTime(*message),
     };
 }
 

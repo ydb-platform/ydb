@@ -30,13 +30,13 @@
 | `Yson`                            | `byte[]`                                           |                                                           |
 | `Uuid`                            | `Guid`                                             |                                                           |
 | `Date`                            | `DateTime`                                         | `DateOnly`                                                |
-| `Date32`                          | `DateTime`                                         | `DateOnly`, `int(GetInt32())` — «сырой» value        |
+| `Date32`                          | `DateTime`                                         | `DateOnly`, `int` (`GetInt32()` — «сырой» value)        |
 | `Datetime`                        | `DateTime`                                         | `DateOnly`                                                |
-| `Datetime64`                      | `DateTime`                                         | `DateOnly`, `long(GetInt64()` — «сырой» value       |
+| `Datetime64`                      | `DateTime`                                         | `DateOnly`, `long` (`GetInt64()` — («сырой» value)       |
 | `Timestamp`                       | `DateTime`                                         | `DateOnly`                                                |
-| `Timestamp64`                     | `DateTime`                                         | `DateOnly`, `long(GetInt64()` — «сырой» value       |
-| `Interval`                        | `TimeSpan`                                         | `long(GetInt64()` — «сырой» value                   |
-| `Interval64`                      | `TimeSpan`                                         | `long(GetInt64()` — «сырой» value                   |
+| `Timestamp64`                     | `DateTime`                                         | `DateOnly`, `long` (`GetInt64()` — «сырой» value)       |
+| `Interval`                        | `TimeSpan`                                         | `long`(`GetInt64()` — «сырой» value)                   |
+| `Interval64`                      | `TimeSpan`                                         | `long`(`GetInt64()` — «сырой» value)                   |
 
 ## Decimal {#decimal}
 

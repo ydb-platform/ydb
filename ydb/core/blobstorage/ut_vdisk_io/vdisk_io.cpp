@@ -18,11 +18,6 @@ Y_UNIT_TEST_SUITE(VDiskIOTest) {
         }
 
         struct TTabletContext {
-            std::pair<ui32, ui32> Barrier;
-            std::pair<ui32, ui32> IssuedBarrier;
-            TVector<TLogoBlobID> Keep;
-            TVector<TLogoBlobID> DoNotKeep;
-            ui32 GarbageCounter = 0;
             ui32 Gen = 1, Step = 1;
         };
         std::unordered_map<ui64, TTabletContext> tablets;
@@ -53,9 +48,9 @@ Y_UNIT_TEST_SUITE(VDiskIOTest) {
         ui64 totalPDiskReqWritesLog = 0;
         ui64 totalPDiskReqWritesHugeUser = 0;
 
-        const ui16 puts = 5000;
+        const ui16 putCount = 5000;
 
-        for (ui16 i = 0; i < puts; ++i) {
+        for (ui16 i = 0; i < putCount; ++i) {
             const ui64 tabletId = tabletIds[RandomNumber(tabletIds.size())];
             TTabletContext& tablet = tablets[tabletId];
 

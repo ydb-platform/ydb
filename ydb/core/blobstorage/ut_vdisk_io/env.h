@@ -59,13 +59,9 @@ namespace NKikimr {
             , AllVDiskKinds(new TAllVDiskKinds)
         {
             Runtime->Initialize();
-            CreatePDisk1();
+            CreatePDiskService();
             CreateVDisk();
             CreateQueues();
-        }
-
-        ~TTestEnv() {
-            
         }
 
         TRuntime *GetRuntime() {
@@ -126,7 +122,7 @@ namespace NKikimr {
 
         std::shared_ptr<NKikimr::NPDisk::TIoContextFactoryOSS> ioContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
 
-        void CreatePDisk1() {
+        void CreatePDiskService() {
             NPDisk::TKey mainKey = 123;
             ui64 pDiskGuid = 1;
             ui32 chunkSize = 32 << 20;

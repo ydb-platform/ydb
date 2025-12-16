@@ -29,7 +29,7 @@ await using var ydbDataSource = new YdbDataSource(
 
 Источник данных будет использовать URL: `grpc://database-sample-grpc:2135/root/database-sample`. Поддерживаемый набор настроек описан на [странице параметров подключения](connection-parameters.md).
 
-### Использование конструктора с аргументом `YdbConnectionStringBuilder`:
+### Использование конструктора с аргументом `YdbConnectionStringBuilder`
 
 ```c#
 var ydbConnectionBuilder = new YdbConnectionStringBuilder
@@ -68,6 +68,7 @@ await using var ydbConnection = ydbDataSource.OpenRetryableConnectionAsync();
 ```
 
 Особенности режима:
+
 - Транзакции не поддерживаются. Попытка использовать транзакцию приведет к исключению (см. [раздел Транзакции](#transactions)).
 - Команды (`YdbCommand`), созданные из такого подключения, автоматически повторяют одиночные операции при временных ошибках.
 

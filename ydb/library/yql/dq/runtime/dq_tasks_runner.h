@@ -490,9 +490,8 @@ public:
 
     virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
     virtual TString GetOutputDebugString() = 0;
-    ui32 ChannelId = 0;
-    TInstant LastFetch;
-    ERunStatus LastStatus = ERunStatus::PendingInput;
+    TInstant LastFetchTime;
+    ERunStatus LastFetchStatus = ERunStatus::PendingInput;
 
 };
 

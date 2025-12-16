@@ -850,8 +850,8 @@ public:
 
         InputConsumed = false;
         auto runStatus = FetchAndDispatch();
-        LastFetch = TInstant::Now();
-        LastStatus = runStatus;
+        LastFetchTime = TInstant::Now();
+        LastFetchStatus = runStatus;
 
         if (Y_UNLIKELY(CollectFull())) {
             if (SpillingTaskCounters) {

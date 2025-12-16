@@ -16,10 +16,6 @@
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
-#include <ydb/library/actors/core/log.h>
-
-#define LOGA_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, stream)
-
 namespace NYql::NDq {
 
 using namespace NKikimr;

@@ -440,7 +440,6 @@ protected:
                     } else {
                         ProcessOutputsState.HasDataToSend = true;
                     }
-                    // ProcessOutputsState.HasDataToSend |= !outputChannel.Channel->IsFinished();
                 }
             } else {
                 CA_LOG_T("Do not drain channelId: " << channelId << ", finished");
@@ -532,16 +531,12 @@ protected:
                         return;
                     }
                 } else {
-                    // bool finished = true;
                     for (auto& [channelId, info] : InputChannelsMap) {
                         if (!info.Channel->IsFinished()) {
                             info.Channel->Finish();
-                            // finished = false;
+                            // TBD: wait for confirmation?
                         }
                     }
-                    // if (!finished) {
-                    //     return;
-                    // }
                 }
                 if ((!Channels || Channels->CheckInFlight("Tasks execution finished")) && AllAsyncOutputsFinished()) {
                     State = NDqProto::COMPUTE_STATE_FINISHED;
@@ -1099,9 +1094,7 @@ protected:
     }
 
 protected:
-    void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr& ev) {
-        ResumeCookie = ev->Cookie;
-
+    void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {
         ResumeEventScheduled = false;
         if (Running) {
             DoExecute();
@@ -1127,6 +1120,10 @@ protected:
                     inputChannel->Channel->Bind(peer, this->SelfId());
                 } else {
                     Channels->SetInputChannelPeer(channelUpdate.GetId(), peer);
+                    // bind is noop here
+                    // if (inputChannel->Channel) {
+                    //     inputChannel->Channel->Bind(this->SelfId(), peer);
+                    // }
                 }
 
                 continue;
@@ -1581,6 +1578,10 @@ protected:
 #undef DUMP_PREFIXED
     }
 
+    virtual void TaskRunnerMonitoringInfo(TStringStream& str) {
+        Y_UNUSED(str);
+    }
+
     void DefaultMonitoringPage(TStringStream& str) {
         HTML(str) {
             PRE() {
@@ -1593,6 +1594,9 @@ protected:
                     str << "Run";
                 }
                 str << Endl;
+                str << "  State: " << (unsigned int)State << Endl;
+
+                TaskRunnerMonitoringInfo(str);
 
                 COLLAPSED_BUTTON_CONTENT("ProcessOutputsState", TStringBuilder() << "ProcessOutputsState: " << ProcessOutputsState.LastRunTime << ' ' << ProcessOutputsState.LastRunStatus) {
                     str << "  Inflight: " << ProcessOutputsState.Inflight << Endl;
@@ -1618,6 +1622,9 @@ protected:
                             TABLEH() {str << "Push.Rows";}
                             TABLEH() {str << "Pop.Bytes";}
                             TABLEH() {str << "Pop.Rows";}
+                            TABLEH_ATTRS({{"title", "Empty"}}) {str << "E";}
+                            TABLEH() {str << "PopTime";}
+                            TABLEH() {str << "PopResult";}
                         }
                     }
                     TABLEBODY() {
@@ -1658,7 +1665,13 @@ protected:
                                     auto& popStats = channel->GetPopStats();
                                     TABLED() {str << popStats.Bytes;}
                                     TABLED() {str << popStats.Rows;}
+                                    TABLED() {str << channel->Empty();}
+                                    TABLED() {str << pushStats.PopTime;}
+                                    TABLED() {str << pushStats.PopResult;}
                                 } else {
+                                    TABLED() {str << "N/A";}
+                                    TABLED() {str << "N/A";}
+                                    TABLED() {str << "N/A";}
                                     TABLED() {str << "N/A";}
                                     TABLED() {str << "N/A";}
                                     TABLED() {str << "N/A";}
@@ -1683,6 +1696,8 @@ protected:
                             TABLEH() {str << "Push.Rows";}
                             TABLEH() {str << "Pop.Bytes";}
                             TABLEH() {str << "Pop.Rows";}
+                            TABLEH() {str << "FinishCheckTime";}
+                            TABLEH() {str << "FinishCheckResult";}
                         }
                     }
                     TABLEBODY() {
@@ -1723,7 +1738,11 @@ protected:
                                     auto& popStats = channel->GetPopStats();
                                     TABLED() {str << popStats.Bytes;}
                                     TABLED() {str << popStats.Rows;}
+                                    TABLED() {str << popStats.FinishCheckTime;}
+                                    TABLED() {str << popStats.FinishCheckResult;}
                                 } else {
+                                    TABLED() {str << "N/A";}
+                                    TABLED() {str << "N/A";}
                                     TABLED() {str << "N/A";}
                                     TABLED() {str << "N/A";}
                                     TABLED() {str << "N/A";}
@@ -2605,7 +2624,6 @@ protected:
     NWilson::TSpan ComputeActorSpan;
     TDuration SourceCpuTime;
     TDuration InputTransformCpuTime;
-    ui32 ResumeCookie = 0;
 private:
     TInstant StartTime;
     bool Running = true;

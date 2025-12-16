@@ -453,6 +453,11 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     error = "";
 
+    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+        return false;
+    }
+
     if (!settings.has_settings()) {
         error = TStringBuilder() << "vector index settings should be set";
         return false;
@@ -497,7 +502,10 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
 }
 
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
-    error = "";
+    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+        return false;
+    }
 
     if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
         error = TStringBuilder() << "either distance or similarity should be set";

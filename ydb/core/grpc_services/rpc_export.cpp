@@ -552,7 +552,7 @@ public:
                 }
             }
             if (settings.items().empty() && !commonDestSpecified) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No destination prefix specified. Don't know where to export");
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No destination prefix nor items specified. Don't know where to export");
             }
             for (const auto& item : settings.items()) {
                 if (TTraits::GetDestination(item).empty() && !commonDestSpecified) {

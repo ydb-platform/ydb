@@ -145,7 +145,15 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         ui64 cookie = RandomNumber<ui64>();
         RequestCookies ^= cookie;
 
-        SendPutToGroup(ctx, x->GroupID, Info.Get(), MakeHolder<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), handleClass, tactic, false, Relevance), cookie, std::move(traceId));
+        SendPutToGroup(ctx, x->GroupID, Info.Get(),
+            MakeHolder<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+                .BlobId = id,
+                .Buffer = TRope(buffer),
+                .Deadline = TInstant::Max(),
+                .HandleClass = handleClass,
+                .Tactic = tactic,
+                .ExternalRelevanceWatcher = Relevance,
+            }), cookie, std::move(traceId));
     }
 
 public:

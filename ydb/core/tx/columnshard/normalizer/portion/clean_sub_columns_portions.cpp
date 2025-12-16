@@ -63,6 +63,9 @@ INormalizerTask::TPtr TCleanSubColumnsPortionsNormalizer::BuildTask(
     AFL_VERIFY(schemas);
 
     for (auto&& portion : portions) {
+        if (portion.GetPortionInfo().HasRemoveSnapshot()) {
+             continue;
+        }
         auto it = schemas->find(portion.GetPortionInfo().GetPortionId());
         AFL_VERIFY(it != schemas->end());
         const auto& indexInfo = it->second->GetIndexInfo();

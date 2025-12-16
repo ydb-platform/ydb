@@ -12,7 +12,7 @@ from collections import defaultdict
 # Add the parent directory to the path to import update_mute_issues
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from transform_ya_junit import YaMuteCheck
+from mute_check import YaMuteCheck
 from update_mute_issues import (
     create_and_add_issue_to_project,
     generate_github_issue_title_and_body,

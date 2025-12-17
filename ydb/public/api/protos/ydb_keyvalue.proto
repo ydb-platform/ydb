@@ -306,68 +306,6 @@ message ReadResult {
     repeated Ydb.Issue.IssueMessage issues = 17;
 }
 
-message ReadBatchRequest {
-    message ReadItem {
-        // Key of the key-value pair to read.
-        string key = 1;
-
-        // Offset in bytes from the beginning of the value to read data from.
-        uint64 offset = 2;
-
-        // Size of the data to read in bytes. 0 means "read to the end of the value".
-        uint64 size = 3;
-    }
-
-    // Volume path.
-    string path = 2;
-    // Partition of the volume.
-    uint64 partition_id = 3;
-
-    // Generation of the exclusive lock acquired for the partition as a result of an AcquireLock call.
-    optional uint64 lock_generation = 4;
-
-    // Items to read.
-    repeated ReadItem items = 5;
-
-    // Result protobuf size limit.
-    // Overrides the default limit only with a smaller value.
-    // 0 means "use the default limit".
-    uint64 limit_bytes = 8;
-
-    // Priority to use for the Distributed Storage Get operation.
-    // Has no effect for the INLINE storage channel.
-    Priorities.Priority priority = 9;
-}
-
-message ReadBatchResult {
-    message ReadResultItem {
-        // The key of the requested key-value pair.
-        string requested_key = 1;
-
-        // Offset in bytes from the beginning of the value requested.
-        uint64 requested_offset = 2;
-
-        // Size of the data requested.
-        uint64 requested_size = 3;
-
-        // The bytes of the requested part of the value.
-        bytes value = 4;
-
-        // If requested data size is larger than limit_bytes then result will contain only part of the requested value and
-        // the is_overrun flag will be set.
-        bool is_overrun = 5;
-    }
-
-    repeated ReadResultItem items = 1;
-
-    // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
-    uint32 node_id = 2;
-
-    // Response status, use in V2.
-    StatusIds.StatusCode status = 16;
-    repeated Ydb.Issue.IssueMessage issues = 17; 
-}
-
 message ReadRangeRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 

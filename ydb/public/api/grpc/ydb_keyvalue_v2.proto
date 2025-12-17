@@ -23,9 +23,6 @@ service KeyValueService {
     // Read the value stored in the item with the key specified.
     rpc Read(KeyValue.ReadRequest) returns (KeyValue.ReadResult);
 
-    // Read the batch of values stored in the items with the keys specified.
-    rpc ReadBatch(KeyValue.ReadBatchRequest) returns (KeyValue.ReadBatchResult);
-
     // Read items with keys in the specified range.
     rpc ReadRange(KeyValue.ReadRangeRequest) returns (KeyValue.ReadRangeResult);
 

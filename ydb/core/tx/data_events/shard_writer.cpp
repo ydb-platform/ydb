@@ -178,7 +178,7 @@ namespace NKikimr::NEvWrite {
         return NumRetries >= GetMaxRetriesPerShard();
     }
     
-    ui32 GetMaxRetriesPerShard() const {
+    ui32 TShardWriter::GetMaxRetriesPerShard() const {
         return AppData() ? AppData()->ColumnShardConfig.GetProxyMaxRetriesPerShard() : MaxRetriesPerShard;
     }
 

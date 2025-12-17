@@ -226,5 +226,6 @@ protected:
 private:
     bool RetryWriteRequest(const bool delayed = true);
     bool IsMaxRetriesReached() const;
+    ui32 GetMaxRetriesPerShard() const;
 };
 }   // namespace NKikimr::NEvWrite

@@ -2123,7 +2123,7 @@ void TPartition::ReportCounters(const TActorContext& ctx, bool force) {
 void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext&) {
     for (auto& [consumerStr, quota] : ev->Get()->UpdatedConsumerQuotas) {
         TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumerStr);
-        if (userInfo) {
+        if (userInfo && userInfo->LabeledCounters) {
             userInfo->LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Set(quota);
         }
     }

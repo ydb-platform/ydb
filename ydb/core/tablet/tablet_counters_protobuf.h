@@ -649,6 +649,20 @@ public:
     }
 };
 
+namespace {
+
+void VerifyGroups(const auto* simpleOpts, const auto& group, const char delimiter) {
+    const size_t groups = StringSplitter(group).Split(delimiter).Count();
+    Y_ABORT_UNLESS(simpleOpts->GetGroupNamesSize() == groups, "%zu != %zu; group=%s", simpleOpts->GetGroupNamesSize(), groups, group.Quote().c_str());
+}
+
+void VerifyGroupsSkipEmpty(const auto* simpleOpts, const auto& group, const char delimiter) {
+    const size_t groups = StringSplitter(group).Split(delimiter).SkipEmpty().Count();
+    Y_ABORT_UNLESS(simpleOpts->GetGroupNamesSize() == groups, "%zu != %zu; group=%s", simpleOpts->GetGroupNamesSize(), groups, group.Quote().c_str());
+}
+
+}
+
 // Tablet app user counters
 template <const NProtoBuf::EnumDescriptor* SimpleDesc()>
 TTabletLabeledCountersBase CreateProtobufTabletLabeledCounters(TMaybe<TString> databasePath = Nothing(), const ui64 id = 0) {
@@ -662,8 +676,7 @@ template <const NProtoBuf::EnumDescriptor* SimpleDesc()>
 TTabletLabeledCountersBase CreateProtobufTabletLabeledCounters(const TString& group, const ui64 id) {
     const auto* simpleOpts = NAux::GetLabeledCounterOpts<SimpleDesc>();
 
-    const size_t groups = StringSplitter(group).Split('/').SkipEmpty().Count();
-    Y_ABORT_UNLESS(simpleOpts->GetGroupNamesSize() == groups, "%zu != %zu; group=%s", simpleOpts->GetGroupNamesSize(), groups, group.Quote().c_str());
+    VerifyGroupsSkipEmpty(simpleOpts, group, '/');
 
     return TTabletLabeledCountersBase(simpleOpts->Size, simpleOpts->GetNames(), simpleOpts->GetCounterTypes(),
         simpleOpts->GetAggregateFuncs(), group, simpleOpts->GetGroupNames(), id, Nothing());
@@ -673,8 +686,7 @@ template <const NProtoBuf::EnumDescriptor* SimpleDesc()>
 TTabletLabeledCountersBase CreateProtobufTabletLabeledCounters(const TString& group, const ui64 id, const TString& databasePath) {
     const auto* simpleOpts = NAux::GetLabeledCounterOpts<SimpleDesc>();
 
-    const size_t groups = StringSplitter(group).Split('|').Count();
-    Y_ABORT_UNLESS(simpleOpts->GetGroupNamesSize() == groups, "%zu != %zu; group=%s", simpleOpts->GetGroupNamesSize(), groups, group.Quote().c_str());
+    VerifyGroups(simpleOpts, group, '|');
 
     return TTabletLabeledCountersBase(simpleOpts->Size, simpleOpts->GetSVNames(), simpleOpts->GetCounterTypes(),
         simpleOpts->GetAggregateFuncs(), group, simpleOpts->GetGroupNames(), id, databasePath);

@@ -9,6 +9,12 @@
 
 #include <vector>
 
+namespace NKikimr::NAux {
+
+struct TLabeledCounterParsedOpts;
+
+}
+
 namespace NKikimr::NPQ {
 
 struct TDatabaseInfo;
@@ -33,7 +39,7 @@ struct TPartitionMetrics {
 };
 
 struct TCounters {
-    std::vector<ui8> Types;
+    const NAux::TLabeledCounterParsedOpts* Config;
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> Counters;
 };
 

@@ -963,7 +963,6 @@ private:
     TTabletCountersBase TabletCounters;
     std::optional<TTabletLabeledCountersBase> PartitionCountersLabeled;
     std::optional<TTabletLabeledCountersBase> PartitionCountersExtended;
-
     std::optional<TTabletLabeledCountersBase> PartitionCompactionCounters;
 
     // Per partition counters

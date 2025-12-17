@@ -175,7 +175,7 @@ namespace NKikimr::NEvWrite {
     }
 
     bool TShardWriter::IsMaxRetriesReached() const {
-        return NumRetries >= MaxRetriesPerShard;
+        return NumRetries >= GetMaxRetriesPerShard();
     }
     
     ui32 GetMaxRetriesPerShard() const {

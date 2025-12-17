@@ -14,6 +14,7 @@
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 #include <util/string/strip.h>
+#include <util/system/env.h>
 #include <util/system/file.h>
 
 namespace NYdb::NConsoleClient {
@@ -78,7 +79,7 @@ class TLineReader final : public ILineReader {
 public:
     TLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log)
         : Log(log)
-        , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
+        , YQLHighlighter(MakeYQLHighlighter(GetColorSchema()))
         , ContinueAfterCancel(settings.ContinueAfterCancel)
         , EnableSwitchMode(settings.EnableSwitchMode)
         , Prompt(settings.Prompt)
@@ -91,7 +92,7 @@ public:
 
         std::optional<TYQLCompleterConfig> yqlCompleterConfig;
         if (settings.EnableYqlCompletion) {
-            yqlCompleterConfig = TYQLCompleterConfig{.Color = TColorSchema::Monaco(), .Driver = settings.Driver, .Database = settings.Database, .IsVerbose = Log.IsVerbose()};
+            yqlCompleterConfig = TYQLCompleterConfig{.Color = GetColorSchema(), .Driver = settings.Driver, .Database = settings.Database, .IsVerbose = Log.IsVerbose()};
         }
         YQLCompleter = MakeYQLCompositeCompleter(completionCommands, yqlCompleterConfig);
 

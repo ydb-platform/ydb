@@ -148,7 +148,7 @@ Tool will return:
 public:
     TExecQueryTool(const TExecQueryToolSettings& settings, const TInteractiveLogger& log)
         : TBase(CreateParametersSchema(), DESCRIPTION, log)
-        , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
+        , YQLHighlighter(MakeYQLHighlighter(GetColorSchema()))
         , Prompt(settings.Prompt)
         , Database(settings.Database)
         , Driver(settings.Driver)

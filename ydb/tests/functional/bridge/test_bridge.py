@@ -212,6 +212,9 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         context = f" (step: {step_name})" if step_name else ""
         self.logger.info("=== CHECKING DATA INTEGRITY%s ===", context)
         
+        start_time = time.time()
+        total_timeout = max_retries * retry_delay
+        
         for attempt in range(max_retries):
             try:
                 all_success = True
@@ -224,20 +227,24 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                         self.logger.info(f"✓ Data integrity check passed for partition {partition_id}%s", context)
                     except Exception as e:
                         all_success = False
+                        elapsed_time = time.time() - start_time
                         if attempt < max_retries - 1:
                             self.logger.warning(
                                 f"[Step: {step_name}] Failed to read partition {partition_id} "
-                                f"(attempt {attempt + 1}/{max_retries}): {e}. Retrying in {retry_delay} seconds..."
+                                f"(attempt {attempt + 1}/{max_retries}, elapsed: {elapsed_time:.1f}s): {e}. "
+                                f"Retrying in {retry_delay} seconds..."
                             )
                             break
                         else:
                             raise AssertionError(
-                                f"[Step: {step_name}] Failed to read initial data after {max_retries} attempts: "
+                                f"[Step: {step_name}] Failed to read initial data after {max_retries} attempts "
+                                f"(total time: {elapsed_time:.1f}s, max timeout: {total_timeout}s): "
                                 f"partition={partition_id}, key={key}, table_path={table_path}, error={e}"
                             ) from e
 
                 if all_success:
-                    self.logger.info("✓ All data integrity checks passed%s", context)
+                    elapsed_time = time.time() - start_time
+                    self.logger.info("✓ All data integrity checks passed%s (took %.1fs)", context, elapsed_time)
                     return  # Все успешно прочитаны
 
             except AssertionError:
@@ -247,8 +254,10 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                     raise
         else:
             # Если вышли из цикла без break
+            elapsed_time = time.time() - start_time
             raise AssertionError(
-                f"[Step: {step_name}] Failed to read initial data after {max_retries} attempts"
+                f"[Step: {step_name}] Failed to read initial data after {max_retries} attempts "
+                f"(total time: {elapsed_time:.1f}s, max timeout: {total_timeout}s)"
             )
 
     def _check_cluster_kv_operations(self, table_path, tablet_ids, step_name="", max_retries=10, retry_delay=2):
@@ -267,6 +276,9 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         context = f" (step: {step_name})" if step_name else ""
         self.logger.info("=== CHECKING CLUSTER KV OPERATIONS%s ===", context)
         
+        start_time = time.time()
+        total_timeout = max_retries * retry_delay
+        
         for attempt in range(max_retries):
             try:
                 for partition_id, tablet_id in enumerate(tablet_ids):
@@ -281,8 +293,10 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                         self.logger.info("✓ KV write successful for partition %d, tablet %d%s", 
                                        partition_id, tablet_id, context)
                     except Exception as e:
+                        elapsed_time = time.time() - start_time
                         raise AssertionError(
-                            f"[Step: {step_name}] KV write operation failed: partition={partition_id}, "
+                            f"[Step: {step_name}] KV write operation failed (attempt {attempt + 1}/{max_retries}, "
+                            f"elapsed: {elapsed_time:.1f}s): partition={partition_id}, "
                             f"tablet={tablet_id}, table_path={table_path}, error={e}"
                         ) from e
 
@@ -297,24 +311,34 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                         self.logger.info("✓ KV read successful for partition %d, tablet %d%s", 
                                        partition_id, tablet_id, context)
                     except Exception as e:
+                        elapsed_time = time.time() - start_time
                         raise AssertionError(
-                            f"[Step: {step_name}] KV read operation failed: partition={partition_id}, "
+                            f"[Step: {step_name}] KV read operation failed (attempt {attempt + 1}/{max_retries}, "
+                            f"elapsed: {elapsed_time:.1f}s): partition={partition_id}, "
                             f"tablet={tablet_id}, table_path={table_path}, error={e}"
                         ) from e
 
-                self.logger.info("✓ Cluster KV operations are working correctly%s", context)
+                elapsed_time = time.time() - start_time
+                self.logger.info("✓ Cluster KV operations are working correctly%s (took %.1fs)", context, elapsed_time)
                 return  # Успешно выполнили все операции
                 
             except (AssertionError, Exception) as e:
+                elapsed_time = time.time() - start_time
                 if attempt < max_retries - 1:
                     self.logger.warning(
-                        "KV operations failed%s (attempt %d/%d): %s. Retrying in %d seconds...",
-                        context, attempt + 1, max_retries, e, retry_delay
+                        "KV operations failed%s (attempt %d/%d, elapsed: %.1fs): %s. Retrying in %d seconds...",
+                        context, attempt + 1, max_retries, elapsed_time, e, retry_delay
                     )
                     time.sleep(retry_delay)
                 else:
-                    self.logger.error("KV operations failed after %d attempts%s", max_retries, context)
-                    raise
+                    self.logger.error(
+                        "KV operations failed after %d attempts%s (total time: %.1fs, max timeout: %ds)",
+                        max_retries, context, elapsed_time, total_timeout
+                    )
+                    raise AssertionError(
+                        f"[Step: {step_name}] KV operations failed after {max_retries} attempts "
+                        f"(total time: {elapsed_time:.1f}s, max timeout: {total_timeout}s): {e}"
+                    ) from e
 
     def test_failover_after_stopping_primary_pile_nodes(self):
         """

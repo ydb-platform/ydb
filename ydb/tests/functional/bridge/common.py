@@ -96,16 +96,55 @@ class BridgeKiKiMRTest(object):
     def wait_for_cluster_state(self, client, expected_states, timeout_seconds=5):
         start_time = time.time()
         last_exception = None
+        attempt = 0
+        retry_delay = 0.5
+        max_attempts = int(timeout_seconds / retry_delay)
+        
         while time.time() - start_time < timeout_seconds:
+            attempt += 1
             try:
                 self.get_cluster_state_and_check(client, expected_states)
+                elapsed_time = time.time() - start_time
+                if attempt > 1:
+                    self.logger.debug(
+                        "Cluster state reached expected state after %d attempts (took %.1fs)",
+                        attempt, elapsed_time
+                    )
                 return
             except (AssertionError, Exception) as e:
                 # Ловим как AssertionError (неправильное состояние), так и другие исключения
                 # (ошибки подключения, когда кластер еще не готов)
                 last_exception = e
-                time.sleep(0.5)
-        raise AssertionError(f"Cluster state did not reach expected state in {timeout_seconds}s") from last_exception
+                elapsed_time = time.time() - start_time
+                if elapsed_time + retry_delay < timeout_seconds:
+                    time.sleep(retry_delay)
+                else:
+                    # Не хватает времени на еще одну попытку
+                    break
+        
+        elapsed_time = time.time() - start_time
+        
+        # Получаем текущее состояние для детального сообщения
+        current_states = None
+        get_state_error_msg = None
+        try:
+            current_result = self.get_cluster_state(client)
+            current_states = {s.pile_name: s.state for s in current_result.pile_states}
+        except Exception as get_state_error:
+            get_state_error_msg = str(get_state_error)
+        
+        expected_str = ", ".join([f"{k}={v}" for k, v in expected_states.items()])
+        if current_states:
+            current_str = ", ".join([f"{k}={v}" for k, v in current_states.items()])
+        else:
+            error_info = f" (error: {get_state_error_msg})" if get_state_error_msg else ""
+            current_str = f"unavailable{error_info}"
+        
+        raise AssertionError(
+            f"Cluster state did not reach expected state after {attempt} attempts "
+            f"(total time: {elapsed_time:.1f}s, timeout: {timeout_seconds}s). "
+            f"Expected: {expected_str}. Current state: {current_str}"
+        ) from last_exception
 
     def wait_for_cluster_state_with_step(self, client, expected_states, step_name, timeout_seconds=30):
         """
@@ -120,28 +159,45 @@ class BridgeKiKiMRTest(object):
         try:
             return self.wait_for_cluster_state(client, expected_states, timeout_seconds=timeout_seconds)
         except AssertionError as e:
-            # Получаем текущее состояние для детального сообщения
-            current_states = None
-            get_state_error_msg = None
-            try:
-                current_result = self.get_cluster_state(client)
-                current_states = {s.pile_name: s.state for s in current_result.pile_states}
-            except Exception as get_state_error:
-                get_state_error_msg = str(get_state_error)
+            # Извлекаем информацию из оригинального сообщения
+            original_msg = str(e)
             
+            # Извлекаем количество попыток и время
+            attempts_info = ""
+            time_info = ""
+            if "after" in original_msg and "attempts" in original_msg:
+                # Извлекаем "X attempts"
+                attempts_part = original_msg.split("after")[1].split("(")[0].strip()
+                attempts_info = f" {attempts_part}"
+            
+            if "total time:" in original_msg:
+                # Извлекаем информацию о времени
+                time_part = original_msg.split("total time:")[1].split(",")[0].strip()
+                timeout_part = original_msg.split("timeout:")[1].split(")")[0].strip() if "timeout:" in original_msg else ""
+                time_info = f" (total time: {time_part}, timeout: {timeout_part})" if timeout_part else f" (total time: {time_part})"
+            
+            # Извлекаем Expected и Current state из оригинального сообщения (если они там есть)
             expected_str = ", ".join([f"{k}={v}" for k, v in expected_states.items()])
-            if current_states:
-                current_str = ", ".join([f"{k}={v}" for k, v in current_states.items()])
+            current_str = "unknown"
+            
+            if "Expected:" in original_msg and "Current state:" in original_msg:
+                # Используем информацию из оригинального сообщения
+                expected_part = original_msg.split("Expected:")[1].split(".")[0].strip() if "Expected:" in original_msg else expected_str
+                current_part = original_msg.split("Current state:")[1].strip() if "Current state:" in original_msg else "unknown"
+                expected_str = expected_part
+                current_str = current_part
             else:
-                error_info = f" (error: {get_state_error_msg})" if get_state_error_msg else ""
-                current_str = f"unavailable{error_info}"
+                # Получаем текущее состояние сами
+                try:
+                    current_result = self.get_cluster_state(client)
+                    current_states = {s.pile_name: s.state for s in current_result.pile_states}
+                    current_str = ", ".join([f"{k}={v}" for k, v in current_states.items()])
+                except Exception as get_state_error:
+                    current_str = f"unavailable (error: {get_state_error})"
             
             raise AssertionError(
-                f"[Step: {step_name}] Failed to reach expected cluster state. "
-                f"Expected: {expected_str}. "
-                f"Current state: {current_str}. "
-                f"Timeout: {timeout_seconds}s. "
-                f"Original error: {e}"
+                f"[Step: {step_name}] Failed to reach expected cluster state{attempts_info}{time_info}. "
+                f"Expected: {expected_str}. Current state: {current_str}"
             ) from e
 
     @staticmethod

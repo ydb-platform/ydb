@@ -14,18 +14,6 @@ TDqTaskRunnerExecutionContext::TDqTaskRunnerExecutionContext(TTxId txId, TWakeUp
 {
 }
 
-IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling) const {
-    return CreateChannelStorage(channelId, withSpilling, NActors::TlsActivationContext->ActorSystem());
-}
-
-IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 channelId, bool withSpilling,  NActors::TActorSystem* actorSystem) const {
-    if (withSpilling) {
-        return CreateDqChannelStorage(TxId_, channelId, WakeUpCallback_, ErrorCallback_, SpillingTaskCounters_, actorSystem);
-    } else {
-        return nullptr;
-    }
-}
-
 TWakeUpCallback TDqTaskRunnerExecutionContext::GetWakeupCallback() const {
     return WakeUpCallback_;
 }

@@ -2,6 +2,7 @@
 #include "dq_tasks_counters.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
+#include <ydb/library/yql/dq/actors/spilling/channel_storage.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
@@ -573,7 +574,7 @@ public:
         if (SpillerFactory) {
             SpillerFactory->SetTaskCounters(SpillingTaskCounters);
         }
-        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = SpillerFactory;
 
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
@@ -688,6 +689,11 @@ public:
             }
         }
 
+        ISpiller::TPtr spiller = nullptr;
+        if (SpillerFactory) {
+            spiller = SpillerFactory->CreateSpiller();
+        }
+
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
         for (ui32 i = 0; i < task.OutputsSize(); ++i) {
             const auto& outputDesc = task.GetOutputs(i);
@@ -744,7 +750,9 @@ public:
                     settings.ValuePackerVersion = task.GetValuePackerVersion();
 
                     if (!outputChannelDesc.GetInMemory()) {
-                        settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                        if (spiller && outputChannelDesc.GetEnableSpilling()) {
+                            settings.ChannelStorage = CreateDqChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                        }
                     }
 
                     if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {

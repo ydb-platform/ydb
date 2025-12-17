@@ -164,9 +164,6 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* pgBuilder) const = 0;
 
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling) const = 0;
-    virtual IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId, bool withSpilling, NActors::TActorSystem* actorSystem) const = 0;
-
     virtual TWakeUpCallback GetWakeupCallback() const = 0;
     virtual TErrorCallback GetErrorCallback() const = 0;
     virtual TIntrusivePtr<TSpillingTaskCounters> GetSpillingTaskCounters() const = 0;
@@ -184,14 +181,6 @@ public:
 
 class TDqTaskRunnerExecutionContextDefault : public TDqTaskRunnerExecutionContextBase {
 public:
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/) const override {
-        return {};
-    };
-
-    IDqChannelStorage::TPtr CreateChannelStorage(ui64 /*channelId*/, bool /*withSpilling*/, NActors::TActorSystem* /*actorSystem*/) const override {
-        return {};
-    };
-
     TWakeUpCallback GetWakeupCallback() const override {
         return {};
     }

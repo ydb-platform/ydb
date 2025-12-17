@@ -2,7 +2,7 @@
 
 [SQLAlchemy](https://www.sqlalchemy.org/) — это популярная Python-библиотека для работы с базами данных, предоставляющая как ORM (Object-Relational Mapping), так и Core API для выполнения SQL-запросов.
 
-YDB поддерживает интеграцию с SQLAlchemy через специальный диалект `ydb-sqlalchemy`, который обеспечивает полную совместимость с SQLAlchemy 2.0 и частичную поддержку SQLAlchemy 1.4.
+{{ ydb-short-name }} поддерживает интеграцию с SQLAlchemy через специальный диалект `ydb-sqlalchemy`, который обеспечивает полную совместимость с SQLAlchemy 2.0 и частичную поддержку SQLAlchemy 1.4.
 
 ## Установка
 
@@ -14,157 +14,191 @@ pip install ydb-sqlalchemy
 
 ## Быстрый старт
 
-### Синхронное подключение
+### Строка подключения
 
-```python
-import sqlalchemy as sa
+Для подключения к {{ ydb-short-name }} через SQLAlchemy используйте следующую строку подключения:
 
-# Создание engine
-engine = sa.create_engine("yql+ydb://localhost:2136/local")
-
-# Выполнение запроса
-with engine.connect() as conn:
-    result = conn.execute(sa.text("SELECT 1 AS value"))
-    print(result.fetchone())
+```bash
+yql+ydb://<cluster_url>:<port><db_path>
 ```
 
-### Асинхронное подключение
+**Параметры строки подключения:**
 
-```python
-import asyncio
-import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import create_async_engine
+- `<cluster_url>` — адрес сервера {{ ydb-short-name }} (например, `localhost`)
+- `<port>` — порт gRPC-сервиса (по умолчанию `2136`)
+- `<db_path>` — абсолютный путь к базе данных (например, `/local` или `/Root/db`)
 
-async def main():
-    # Создание асинхронного engine
-    engine = create_async_engine("yql+ydb_async://localhost:2136/local")
+Пример строки подключения:
 
-    # Выполнение запроса
-    async with engine.connect() as conn:
-        result = await conn.execute(sa.text("SELECT 1 AS value"))
-        print(await result.fetchone())
-
-asyncio.run(main())
+```bash
+yql+ydb://localhost:2136/local
 ```
+
+### Подключение
+
+{% list tabs %}
+
+- Синхронное подключение
+
+  ```python
+  import sqlalchemy as sa
+
+  # Пример настройки подключения к {{ ydb-short-name }} через SQLAlchemy (синхронный режим)
+  engine = sa.create_engine("yql+ydb://localhost:2136/local")
+
+  # Выполнение простого запроса
+  with engine.connect() as conn:
+      result = conn.execute(sa.text("SELECT 1 AS value"))
+      print(result.fetchone())
+  ```
+
+
+- Асинхронное подключение
+
+  ```python
+  import asyncio
+  import sqlalchemy as sa
+  from sqlalchemy.ext.asyncio import create_async_engine
+
+  async def main():
+      # Создание асинхронного `engine`
+      engine = create_async_engine("yql+ydb_async://localhost:2136/local")
+
+      # Выполнение запроса
+      async with engine.connect() as conn:
+          result = await conn.execute(sa.text("SELECT 1 AS value"))
+          print(result.fetchone())
+
+  asyncio.run(main())
+  ```
+
+{% endlist %}
 
 ## Конфигурация подключения
 
 ### Методы аутентификации
 
-#### Анонимный доступ
+{% list tabs %}
 
-Для локальной разработки или тестирования:
+- Анонимная
 
-```python
-import sqlalchemy as sa
+  Для локальной разработки или тестирования:
 
-engine = sa.create_engine("yql+ydb://localhost:2136/local")
-```
+  ```python
+  import sqlalchemy as sa
 
-#### Статические учетные данные
+  engine = sa.create_engine("yql+ydb://localhost:2136/local")
+  ```
 
-Использование имени пользователя и пароля:
+- С помощью логина и пароля
 
-```python
-engine = sa.create_engine(
-    "yql+ydb://localhost:2136/local",
-    connect_args={
-        "credentials": {
-            "username": "your_username",
-            "password": "your_password"
-        }
-    }
-)
-```
+  Использование имени пользователя и пароля:
 
-#### Аутентификация по токену
+  ```python
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": {
+              "username": "your_username",
+              "password": "your_password"
+          }
+      }
+  )
+  ```
 
-Использование токена доступа:
+- С помощью токена
 
-```python
-engine = sa.create_engine(
-    "yql+ydb://localhost:2136/local",
-    connect_args={
-        "credentials": {
-            "token": "your_access_token"
-        }
-    }
-)
-```
+  Использование токена доступа:
 
-#### Аутентификация через сервисный аккаунт
+  ```python
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": {
+              "token": "your_access_token"
+          }
+      }
+  )
+  ```
 
-Использование JSON-ключа сервисного аккаунта:
+- С помощью сервисного аккаунта
 
-```python
-import json
+  Использование JSON-ключа сервисного аккаунта:
 
-# Загрузка из файла
-with open('service_account_key.json', 'r') as f:
-    service_account_json = json.load(f)
+  ```python
+  import json
 
-engine = sa.create_engine(
-    "yql+ydb://localhost:2136/local",
-    connect_args={
-        "credentials": {
-            "service_account_json": service_account_json
-        }
-    }
-)
+  # Загрузка из файла
+  with open('service_account_key.json', 'r') as f:
+      service_account_json = json.load(f)
 
-# Или напрямую передача JSON
-engine = sa.create_engine(
-    "yql+ydb://localhost:2136/local",
-    connect_args={
-        "credentials": {
-            "service_account_json": {
-                "id": "your_key_id",
-                "service_account_id": "your_service_account_id",
-                "created_at": "2023-01-01T00:00:00Z",
-                "key_algorithm": "RSA_2048",
-                "public_key": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
-                "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-            }
-        }
-    }
-)
-```
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": {
+              "service_account_json": service_account_json
+          }
+      }
+  )
 
-#### Использование YDB SDK Credentials
+  # Или передача JSON напрямую
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": {
+              "service_account_json": {
+                  "id": "your_key_id",
+                  "service_account_id": "your_service_account_id",
+                  "created_at": "2023-01-01T00:00:00Z",
+                  "key_algorithm": "RSA_2048",
+                  "public_key": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
+                  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+              }
+          }
+      }
+  )
+  ```
 
-Можно использовать любые доступные методы аутентификации из YDB Python SDK:
+- С помощью SDK {{ ydb-short-name }}
 
-```python
-import ydb.iam
+  Можно использовать любые доступные методы аутентификации из Python SDK для {{ ydb-short-name }}:
 
-# Метаданные сервиса
-engine = sa.create_engine(
-    "yql+ydb://localhost:2136/local",
-    connect_args={
-        "credentials": ydb.iam.MetadataUrlCredentials()
-    }
-)
+  ```python
+  import ydb.iam
 
-# OAuth токен
-engine = sa.create_engine(
-    "yql+ydb://localhost:2136/local",
-    connect_args={
-        "credentials": ydb.iam.OAuthCredentials("your_oauth_token")
-    }
-)
+  # Метаданные сервиса
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": ydb.iam.MetadataUrlCredentials()
+      }
+  )
 
-# Статические учетные данные
-engine = sa.create_engine(
-    "yql+ydb://localhost:2136/local",
-    connect_args={
-        "credentials": ydb.iam.StaticCredentials("username", "password")
-    }
-)
-```
+  # OAuth-токен
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": ydb.iam.OAuthCredentials("your_oauth_token")
+      }
+  )
 
-### TLS конфигурация
+  # Статические учетные данные
+  engine = sa.create_engine(
+      "yql+ydb://localhost:2136/local",
+      connect_args={
+          "credentials": ydb.iam.StaticCredentials("username", "password")
+      }
+  )
+  ```
 
-Для безопасных соединений с YDB:
+{% endlist %}
+
+### Использование шифрования
+
+Если у вас развёрнут кластер {{ ydb-short-name }} с использованием шифрования, необходимо добавить в настройки подключения блок с указанием протокола и пути к сертификату.
+Это обеспечит защищённое соединение с кластером {{ ydb-short-name }}.
+
+Например:
 
 ```python
 engine = sa.create_engine(
@@ -173,7 +207,7 @@ engine = sa.create_engine(
         "credentials": {"token": "your_token"},
         "protocol": "grpc",
         "root_certificates_path": "/path/to/ca-certificates.crt",
-        # "root_certificates": crt_string,  # Альтернативно - строка с сертификатами
+        # "root_certificates": crt_string,  # Альтернативно — строка с сертификатами
     }
 )
 ```
@@ -181,11 +215,11 @@ engine = sa.create_engine(
 
 ## Поддерживаемые типы данных
 
-YDB SQLAlchemy предоставляет полную поддержку типов данных YDB через пользовательские типы SQLAlchemy. Для получения подробной информации о системе типов YDB см. [документацию по типам данных YDB](https://ydb.tech/docs/ru/concepts/datatypes).
+{{ ydb-short-name }} SQLAlchemy предоставляет полную поддержку типов данных {{ ydb-short-name }} через пользовательские типы SQLAlchemy. Для получения подробной информации о системе типов {{ ydb-short-name }} см. [документацию по типам данных {{ ydb-short-name }}](https://ydb.tech/docs/ru/concepts/datatypes).
 
 ### Сводная таблица типов
 
-| YDB тип | YDB SQLAlchemy тип | Стандартный SQLAlchemy тип | Python тип | Примечания |
+| {{ ydb-short-name }} тип | {{ ydb-short-name }} SQLAlchemy тип | Стандартный SQLAlchemy тип | Python тип | Примечания |
 |---------|-------------------|---------------------------|------------|------------|
 | `Bool` | `Boolean` | `Boolean` | `bool` | |
 | `Int8` | `Int8` | | `int` | -2^7 до 2^7-1 |
@@ -215,9 +249,9 @@ YDB SQLAlchemy предоставляет полную поддержку тип
 
 ## Миграции с Alembic
 
-### YDB-специфичная конфигурация
+### Конфигурация, специфичная для {{ ydb-short-name }}
 
-YDB требует специальной конфигурации в `env.py` из-за своих уникальных характеристик:
+{{ ydb-short-name }} требует специальной конфигурации в `env.py` из-за своих уникальных характеристик:
 
 ```python
 # migrations/env.py
@@ -237,8 +271,8 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# YDB-специфичная реализация
-class YDBImpl(DefaultImpl):
+# Реализация для {{ ydb-short-name }} (диалект yql)
+class YqlImpl(DefaultImpl):
     __dialect__ = "yql"
 
 def run_migrations_offline() -> None:

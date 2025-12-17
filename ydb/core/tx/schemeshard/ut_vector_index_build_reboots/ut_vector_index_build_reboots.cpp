@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
                 auto indexColumns = (Prefixed ? TVector<TString>{"prefix", "embedding"} : TVector<TString>{"embedding"});
                 auto sender = runtime.AllocateEdgeActor();
                 auto request = CreateBuildIndexRequest(buildIndexId, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{
-                    "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, indexColumns, {"value"}
+                    "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, indexColumns, {"value"}, {}
                 });
                 // with too many scan events, the test works infinite time
                 request->Record.MutableSettings()->MutableScanSettings()->Clear();

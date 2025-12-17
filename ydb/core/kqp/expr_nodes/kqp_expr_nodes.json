@@ -813,7 +813,8 @@
                 {"Index": 0, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 1, "Name": "Alias", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "SourceType", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "SourceType", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "UniqueId", "Type": "TCoAtom"}
             ]
         },
         {

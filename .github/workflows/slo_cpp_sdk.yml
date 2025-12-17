@@ -128,7 +128,7 @@ jobs:
             echo "Building current app image..."
             cd "$GITHUB_WORKSPACE/current"
 
-            # Temporarily use SLO-specific .dockerignore
+            # Use SLO-specific .dockerignore
             cp ydb/public/sdk/cpp/tests/slo_workloads/.dockerignore .dockerignore
 
             CURRENT_REF="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
@@ -138,7 +138,7 @@ jobs:
               --build-arg REF="${CURRENT_REF}" \
               -f ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile .
 
-            # Clean up temporary .dockerignore
+            # Clean up .dockerignore
             rm -f .dockerignore
           else
             echo "No current app Dockerfile found"
@@ -153,7 +153,7 @@ jobs:
             echo "Building baseline app image..."
             cd "$GITHUB_WORKSPACE/baseline"
 
-            # Temporarily use SLO-specific .dockerignore
+            # Use SLO-specific .dockerignore
             cp ydb/public/sdk/cpp/tests/slo_workloads/.dockerignore .dockerignore
 
             docker build -t ydb-app-baseline \
@@ -162,7 +162,7 @@ jobs:
               --build-arg REF="${{ steps.baseline.outputs.ref }}" \
               -f ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile .
 
-            # Clean up temporary .dockerignore
+            # Clean up .dockerignore
             rm -f .dockerignore
           else
             echo "No baseline app Dockerfile found"

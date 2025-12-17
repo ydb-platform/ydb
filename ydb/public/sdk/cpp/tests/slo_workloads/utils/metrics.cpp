@@ -41,19 +41,10 @@ public:
 
         auto metricReader = opentelemetry::sdk::metrics::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), readerOptions);
 
-        // Create resource with ref, sdk, sdk_version attributes
-        opentelemetry::sdk::resource::ResourceAttributes attributes = {
-            {"ref", REF_LABEL},
-            {"sdk", "cpp"},
-            {"sdk_version", NYdb::GetSdkSemver()}
-        };
-
-        auto resource = opentelemetry::sdk::resource::Resource::Create(attributes);
-
         // Create MeterContext with resource
         auto context = std::make_unique<opentelemetry::sdk::metrics::MeterContext>(
             std::unique_ptr<opentelemetry::sdk::metrics::ViewRegistry>(new opentelemetry::sdk::metrics::ViewRegistry()),
-            resource
+            opentelemetry::sdk::resource::Resource::Create(opentelemetry::common::MakeKeyValueIterableView(CommonAttributes_))
         );
 
         MeterProvider_ = opentelemetry::sdk::metrics::MeterProviderFactory::Create(std::move(context));

@@ -12,10 +12,6 @@ bool EqualHistograms(const std::shared_ptr<TEqWidthHistogram>& left, const std::
     } else if (!left->BucketsEqual<T>(*right)) {
         return false;
     }
-    if (left->GetBucketWidth<T>() != right->GetBucketWidth<T>()) {
-        return false;
-    }
-
     for (ui32 i = 0; i < left->GetNumBuckets(); ++i) {
         if (left->GetNumElementsInBucket(i) != right->GetNumElementsInBucket(i)) {
             return false;
@@ -32,10 +28,22 @@ std::shared_ptr<TEqWidthHistogram> CreateHistogram(ui32 numBuckets, T start, T e
 }
 
 template <typename T>
-void PopulateHistogram(std::shared_ptr<TEqWidthHistogram> histogram, const std::pair<T, T>& range) {
+void PopulateHistogram(std::shared_ptr<TEqWidthHistogram> histogram, const std::pair<T, T>& range,
+                       EHistogramValueType valueType) {
     // NOTE: reconsider the loop on string, date, and bool due to i++
-    for (T i = range.first; i < range.second; ++i) {
-        histogram->AddElement(i);
+    if (valueType == EHistogramValueType::Float || valueType == EHistogramValueType::Double) {
+        T bucketWidth = histogram->template GetBucketWidth<T>();
+        T step = bucketWidth / 2;
+        T rangeStart = LoadFrom<T>(histogram->GetDomainRange().Start);
+        for (ui32 i = 0; i < histogram->GetNumBuckets(); ++i) {
+            T border = rangeStart + i * bucketWidth;
+            histogram->AddElement(border - step);
+            histogram->AddElement(border + step);
+        }
+    } else {
+        for (T i = range.first; i < range.second; ++i) {
+            histogram->AddElement(i);
+        }
     }
 }
 
@@ -55,7 +63,7 @@ void TestHistogramSerialization(ui32 numBuckets, std::pair<T, T> range, std::pai
                                 EHistogramValueType valueType) {
     auto histogram = CreateHistogram<T>(numBuckets, domainRange.first, domainRange.second, valueType);
     UNIT_ASSERT(histogram);
-    PopulateHistogram<T>(histogram, range);
+    PopulateHistogram<T>(histogram, range, valueType);
     TString hString = histogram->Serialize();
     UNIT_ASSERT(!hString.empty());
     auto histogramFromString = std::make_shared<TEqWidthHistogram>(hString.data(), hString.size());
@@ -68,9 +76,9 @@ void TestHistogramAggregate(ui32 numBuckets, std::pair<T, T> range, std::pair<T,
                             EHistogramValueType valueType, ui32 numCombine, const TVector<ui64>& resultCount) {
     auto histogram = CreateHistogram<T>(numBuckets, domainRange.first, domainRange.second, valueType);
     UNIT_ASSERT(histogram);
-    PopulateHistogram<T>(histogram, range);
+    PopulateHistogram<T>(histogram, range, valueType);
     auto histogramToAdd = CreateHistogram<T>(numBuckets, domainRange.first, domainRange.second, valueType);
-    PopulateHistogram<T>(histogramToAdd, range);
+    PopulateHistogram<T>(histogramToAdd, range, valueType);
     UNIT_ASSERT(histogramToAdd);
     for (ui32 i = 0; i < numCombine; ++i) {
         histogram->Aggregate(*histogramToAdd);
@@ -83,44 +91,49 @@ void TestHistogramAggregate(ui32 numBuckets, std::pair<T, T> range, std::pair<T,
 Y_UNIT_TEST_SUITE(EqWidthHistogram) {
 
 Y_UNIT_TEST(Basic) {
-    TestHistogramBasic<ui32>(10, /*values range=*/{0, 10}, /*column range=*/{0, 20}, EHistogramValueType::Uint32,
-                             /*{value, result}=*/{9, 10},
-                             /*{value, result}=*/{10, 0});
-    TestHistogramBasic<ui64>(10, /*values range=*/{0, 10}, /*column range=*/{0, 20}, EHistogramValueType::Uint64,
-                             /*{value, result}=*/{9, 10},
-                             /*{value, result}=*/{10, 0});
-    TestHistogramBasic<i32>(10, /*values range=*/{0, 10}, /*column range=*/{0, 20}, EHistogramValueType::Int32,
-                            /*{value, result}=*/{9, 10},
-                            /*{value, result}=*/{10, 0});
-    TestHistogramBasic<i64>(10, /*values range=*/{0, 10}, /*column range=*/{0, 20}, EHistogramValueType::Int64,
-                            /*{value, result}=*/{9, 10},
-                            /*{value, result}=*/{10, 0});
-    TestHistogramBasic<double>(10, /*values range=*/{0.0, 10.0}, /*column range=*/{0.0, 20.0},
+    TestHistogramBasic<ui32>(1, /*values range=*/{0, 25}, /*column range=*/{0, 20}, EHistogramValueType::Uint32,
+                             /*{value, result}=*/{25, 25},
+                             /*{value, result}=*/{4, 25});
+    TestHistogramBasic<i32>(1, /*values range=*/{-5, 25}, /*column range=*/{0, 20}, EHistogramValueType::Int32,
+                            /*{value, result}=*/{25, 30},
+                            /*{value, result}=*/{4, 30});
+    TestHistogramBasic<double>(1, /*values range=*/{-5.0, 25.0}, /*column range=*/{0.0, 20.0}, EHistogramValueType::Double,
+                               /*{value, result}=*/{25.0, 2},
+                               /*{value, result}=*/{4.0, 2});
+
+    TestHistogramBasic<ui32>(10, /*values range=*/{0, 25}, /*column range=*/{0, 20}, EHistogramValueType::Uint32,
+                             /*{value, result}=*/{25, 25},
+                             /*{value, result}=*/{4, 21});
+    TestHistogramBasic<ui64>(10, /*values range=*/{0, 25}, /*column range=*/{0, 20}, EHistogramValueType::Uint64,
+                             /*{value, result}=*/{25, 25},
+                             /*{value, result}=*/{4, 21});
+
+    TestHistogramBasic<i32>(10, /*values range=*/{-5, 25}, /*column range=*/{0, 20}, EHistogramValueType::Int32,
+                            /*{value, result}=*/{25, 30},
+                            /*{value, result}=*/{4, 21});
+    TestHistogramBasic<i64>(10, /*values range=*/{-5, 25}, /*column range=*/{0, 20}, EHistogramValueType::Int64,
+                            /*{value, result}=*/{25, 30},
+                            /*{value, result}=*/{4, 21});
+
+    TestHistogramBasic<float>(10, /*values range=*/{-5.0, 25.0}, /*column range=*/{0.0, 20.0},
+                              EHistogramValueType::Float,
+                              /*{value, result}=*/{25.0, 20},
+                              /*{value, result}=*/{4.0, 15});
+    TestHistogramBasic<double>(10, /*values range=*/{-5.0, 25.0}, /*column range=*/{0.0, 20.0},
+                               EHistogramValueType::Double,
+                               /*{value, result}=*/{25.0, 20},
+                               /*{value, result}=*/{4.0, 15});
+
+    TestHistogramBasic<double>(10, /*values range=*/{-0.1, 1.5},
+                               /*column range=*/{1.0, 1.0 + 30 * std::numeric_limits<double>::epsilon()},
+                               EHistogramValueType::Double,
+                               /*{value, result}=*/{2.0, 20},
+                               /*{value, result}=*/{2.0, 1});
+    TestHistogramBasic<double>(10, /*values range=*/{99.0, 100.5},
+                               /*column range=*/{100.0, 100.0 + 300 * std::numeric_limits<double>::epsilon()},
                                EHistogramValueType::Double,
                                /*{value, result}=*/{98.0, 4},
                                /*{value, result}=*/{101.0, 0});
-}
-
-Y_UNIT_TEST(Overload) {
-    TestHistogramBasic<ui32>(1, /*values range=*/{0, 25}, /*column range=*/{5, 10}, EHistogramValueType::Uint32,
-                             /*{value, result}=*/{25, 25},
-                             /*{value, result}=*/{4, 25});
-
-    TestHistogramBasic<i32>(1, /*values range=*/{0, 25}, /*column range=*/{-10, -5}, EHistogramValueType::Int32,
-                            /*{value, result}=*/{25, 25},
-                            /*{value, result}=*/{4, 25});
-
-    TestHistogramBasic<i32>(1, /*values range=*/{0, 25}, /*column range=*/{-5, 10}, EHistogramValueType::Int32,
-                            /*{value, result}=*/{25, 25},
-                            /*{value, result}=*/{4, 25});
-
-    TestHistogramBasic<i32>(1, /*values range=*/{0, 25}, /*column range=*/{-1, std::numeric_limits<i32>::max()}, EHistogramValueType::Int32,
-                            /*{value, result}=*/{25, 25},
-                            /*{value, result}=*/{4, 25});
-    TestHistogramBasic<i32>(1, /*values range=*/{std::numeric_limits<i32>::min(), std::numeric_limits<i32>::max()},
-                            /*column range=*/{std::numeric_limits<i32>::min(), std::numeric_limits<i32>::max()}, EHistogramValueType::Int32,
-                            /*{value, result}=*/{25, 25},
-                            /*{value, result}=*/{4, 25});
 }
 
 Y_UNIT_TEST(Serialization) {
@@ -130,14 +143,19 @@ Y_UNIT_TEST(Serialization) {
                                      EHistogramValueType::Uint64);
     TestHistogramSerialization<i32>(10, /*values range=*/{0, 10}, /*column range=*/{0, 20}, EHistogramValueType::Int32);
     TestHistogramSerialization<i64>(10, /*values range=*/{0, 10}, /*column range=*/{0, 20}, EHistogramValueType::Int64);
-    TestHistogramSerialization<double>(10, /*values range=*/{0.0, 10.0}, /*column range=*/{0.0, 20.0},
+    TestHistogramSerialization<double>(10, /*values range=*/{-0.1, 1.5},
+                                       /*column range=*/{1.0, 1.0 + 30 * std::numeric_limits<double>::epsilon()},
                                        EHistogramValueType::Double);
 }
 
 Y_UNIT_TEST(AggregateHistogram) {
-    TVector<ui64> resultCount{20, 20, 20, 20, 20, 0, 0, 0, 0, 0};
+    TVector<ui64> resultCountInt{20, 20, 20, 20, 20, 0, 0, 0, 0, 0};
     TestHistogramAggregate<ui32>(10, /*values range=*/{0, 10}, /*column range=*/{0, 20}, EHistogramValueType::Uint32, 9,
-                                 resultCount);
+                                 resultCountInt);
+    TVector<ui64> resultCountFloat{30, 20, 20, 20, 20, 20, 20, 20, 20, 10};
+    TestHistogramAggregate<double>(10, /*values range=*/{-0.1, 1.5},
+                                   /*column range=*/{1.0, 1.0 + 30 * std::numeric_limits<double>::epsilon()},
+                                   EHistogramValueType::Double, 9, resultCountFloat);
 }
 } // Y_UNIT_TEST_SUITE(EqWidthHistogram)
 } // namespace NKikimr

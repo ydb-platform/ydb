@@ -134,9 +134,6 @@ constexpr const ui32 EqWidthHistogramBucketStorageSize = 8;
 class TEqWidthHistogram {
 public:
 #pragma pack(push, 1)
-    struct THistValue {
-        ui8 Value[EqWidthHistogramBucketStorageSize];
-    };
     struct TDomainRange {
         ui8 Start[EqWidthHistogramBucketStorageSize];
         ui8 End[EqWidthHistogramBucketStorageSize];
@@ -152,13 +149,7 @@ public:
     template <typename T>
     void AddElement(T val) {
         const auto index = FindBucketIndex(val);
-        // The given `index` in range [0, numBuckets - 1].
-        const T bucketValue = LoadFrom<T>(Buckets_[index].Start);
-        if (!index || (CmpEqual<T>(bucketValue, val) || CmpLess<T>(bucketValue, val))) {
-            Buckets_[index].Count++;
-        } else {
-            Buckets_[index - 1].Count++;
-        }
+        Buckets_[index]++;
     }
 
     // Returns an index of the bucket which stores the given `val`.
@@ -166,39 +157,26 @@ public:
     // Not using `std::lower_bound()` here because need an index to map to `suffix` and `prefix` sum.
     template <typename T>
     ui32 FindBucketIndex(T val) const {
-        ui32 start = 0;
-        ui32 end = GetNumBuckets() - 1;
-        while (start < end) {
-            auto it = start + (end - start + 1) / 2;
-            if (CmpLess<T>(val, LoadFrom<T>(Buckets_[it].Start))) {
-                end = it - 1;
-            } else {
-                start = it;
-            }
-        }
-        return start;
+        T bucketWidth = GetBucketWidth<T>();
+        T bucketIndex = std::floor((val - LoadFrom<T>(DomainRange_.Start)) / bucketWidth);
+        bucketIndex = std::max<T>(0, bucketIndex);
+        bucketIndex = std::min<T>(GetNumBuckets() - 1, bucketIndex);
+        return static_cast<ui32>(bucketIndex);
     }
 
-    // Returns a number of buckets in a histogram.
+    // Returns a number of buckets in histogram.
     ui32 GetNumBuckets() const {
         return Buckets_.size();
     }
 
+    // Returns bucket width based on domain range and number of buckets.
     template <typename T>
-    ui32 GetBucketWidth() const {
-        if (ValueType_ == EHistogramValueType::Float || ValueType_ == EHistogramValueType::Double) {
-            return 1;
-        }
-        if (GetNumBuckets() == 1) {
-            auto val = LoadFrom<T>(Buckets_.front().Start);
-            // to avoid returning zero value and casting negative values
-            return val > 0 ? static_cast<ui32>(val) : 1;
-        } else {
-            return static_cast<ui32>(LoadFrom<T>(Buckets_[1].Start) - LoadFrom<T>(Buckets_[0].Start));
-        }
-        T bucketIndex = std::floor((val - domainStart) / LoadFrom<T>(bucketWidth.Value));
-        bucketIndex = std::min<T>(GetNumBuckets() - 1, bucketIndex);
-        return static_cast<ui32>(bucketIndex);
+    T GetBucketWidth() const {
+        const T start = LoadFrom<T>(DomainRange_.Start);
+        const T end = LoadFrom<T>(DomainRange_.End);
+        const T rangeLen = end - start;
+        T bucketWidth = rangeLen / static_cast<T>(GetNumBuckets());
+        return bucketWidth;
     }
 
     // Returns histogram type.
@@ -209,41 +187,32 @@ public:
     // Returns a number of elements in a bucket by the given `index`.
     ui64 GetNumElementsInBucket(ui32 index) const {
         Y_ENSURE(index < GetNumBuckets());
-        return Buckets_[index].Count;
+        return Buckets_[index];
     }
 
-    // Returns the start boundary value of a bucket by the given `index`.
-    template <typename T>
-    T GetBucketStartBoundary(ui32 index) const {
-        Y_ENSURE(index < GetNumBuckets());
-        return LoadFrom<T>(Buckets_[index].Start);
+    // Returns domain range.
+    TDomainRange GetDomainRange() const {
+        return DomainRange_;
     }
 
     // Initializes buckets with a given `range`.
     template <typename T>
     void InitializeBuckets(T rangeStart, T rangeEnd) {
-        TEqWidthHistogram::TBucketRange range;
-        StoreTo<T>(range.Start, rangeStart);
-        StoreTo<T>(range.End, rangeEnd);
-        const T start = LoadFrom<T>(range.Start);
-        const T end = LoadFrom<T>(range.End);
-        Y_ENSURE(CmpLess<T>(start, end));
-        const T rangeLen = end - start;
-        T bucketWidth = rangeLen / static_cast<T>(GetNumBuckets());
-        Y_ENSURE(start + bucketWidth > start); // non-zero positive width of each bucket
-        WriteUnaligned<ui8[EqWidthHistogramBucketStorageSize]>(Buckets_[0].Start, range.Start);
-        for (ui32 i = 1; i < GetNumBuckets(); ++i) {
-            const T prevStart = LoadFrom<T>(Buckets_[i - 1].Start);
-            StoreTo<T>(Buckets_[i].Start, prevStart + bucketWidth);
-        }
+        Y_ENSURE(CmpLess<T>(rangeStart, rangeEnd));
+        DomainRange_ = {};
+        StoreTo<T>(DomainRange_.Start, rangeStart);
+        StoreTo<T>(DomainRange_.End, rangeEnd);
+        T bucketWidth = GetBucketWidth<T>(); // non-zero positive width of each bucket
+        Y_ENSURE(CmpLess<T>(0, bucketWidth), "Domain range is too close");
     }
 
-    // Seriailizes to a binary representation
+    // Seriailizes to a binary representation.
     TString Serialize() const;
 
+    // Merge two histograms given their parameters match.
     void Aggregate(const TEqWidthHistogram& other);
 
-private:
+    // Checks whether two histograms have same parameters.
     template <typename T>
     bool BucketsEqual(const TEqWidthHistogram& other) {
         if (GetNumBuckets() != other.GetNumBuckets()) {
@@ -255,16 +224,13 @@ private:
         } else if (!CmpEqual<T>(LoadFrom<T>(DomainRange_.End), LoadFrom<T>(other.GetDomainRange().End))) {
             return false;
         }
-        for (ui32 i = 0; i < Buckets_.size(); ++i) {
-            if (!CmpEqual<T>(LoadFrom<T>(Buckets_[i].Start), other.GetBucketStartBoundary<T>(i))) {
-                return false;
-            }
-        }
         return true;
     }
 
+private:
     // Returns binary size of the histogram.
     ui64 GetBinarySize(ui32 nBuckets) const;
+
     EHistogramValueType ValueType_;
     TDomainRange DomainRange_;
     TVector<ui64> Buckets_;

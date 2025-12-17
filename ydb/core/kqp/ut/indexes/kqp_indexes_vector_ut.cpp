@@ -682,7 +682,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             TString query1(Q_(R"(
                 INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
                 (10, "\x11\x62\x02", "10"),
-                (11, "\x77\x75\x02", "11")
+                (11, "\x75\x77\x02", "11")
             )"));
             query1 += (flags & F_RETURNING ? " RETURNING data, emb, pk;" : ";");
 
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             if (flags & F_RETURNING) {
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"10\"];[\"\\021b\\2\"];[10]];[[\"11\"];[\"wu\\2\"];[11]]]");
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"10\"];[\"\\021b\\2\"];[10]];[[\"11\"];[\"uw\\2\"];[11]]]");
             }
         }
 

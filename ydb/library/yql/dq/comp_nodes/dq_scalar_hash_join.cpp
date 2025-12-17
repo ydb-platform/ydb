@@ -213,10 +213,9 @@ private:
                                   static_cast<int>(std::ssize(Meta_->InputTypes.Build))},
                         .Probe = {ctx, flows.Probe, Converters_.Probe.get(),
                                   static_cast<int>(std::ssize(Meta_->InputTypes.Probe))}},
-                    ctx.MakeLogger(), "ScalarHashJoinPacked",
+                    ctx, "ScalarHashJoinPacked",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
-                                                              .Probe = Converters_.Probe->GetTupleLayout()},
-                    ctx)
+                                                              .Probe = Converters_.Probe->GetTupleLayout()})
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
         {}
 

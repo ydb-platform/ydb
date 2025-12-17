@@ -3402,15 +3402,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 }
 Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
     TKikimrRunner CreateKikimrWithDiscardSelect(bool useRealThreads = true) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableDiscardSelect(true);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags)
-                                                            .SetUseRealThreads(useRealThreads);
-        return TKikimrRunner(settings);
-    }
-
-    TKikimrRunner CreateKikimrWithDiscardSelect(TKikimrSettings settings) {
-        settings.FeatureFlags.SetEnableDiscardSelect(true);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableDiscardSelect(true);
+        auto settings = TKikimrSettings(appConfig).SetUseRealThreads(useRealThreads);
         return TKikimrRunner(settings);
     }
 

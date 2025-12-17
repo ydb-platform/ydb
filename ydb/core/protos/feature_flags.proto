@@ -246,5 +246,4 @@ message TFeatureFlags {
     optional bool UseYdsTopicStorageMetering = 220 [default = false];
     optional bool EnableIndexMaterialization = 221 [default = false];
     optional bool EnableFsBackups = 222 [default = false];
-    optional bool EnableDiscardSelect = 223 [default = false];
 }

@@ -583,10 +583,10 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST_TWIN(Discard, DiscardSelectIsOn) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableDiscardSelect(DiscardSelectIsOn);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableDiscardSelect(DiscardSelectIsOn);
 
-        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags));
+        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
         auto db = kikimr.GetQueryClient();
         auto result = db.ExecuteQuery(R"(
             DISCARD SELECT 1;

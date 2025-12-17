@@ -229,6 +229,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableDqHashCombineByDefault = true;
     bool EnableWatermarks = false;
     bool DefaultUseFastChannels = false;
+    bool EnableDiscardSelect = false;
 
     bool Antlr4ParserIsAmbiguityError = false;
 

@@ -743,7 +743,7 @@ public:
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
         queryProto.SetEnableWatermarks(Config->EnableWatermarks);
 
-        bool enableDiscardSelect = Config->FeatureFlags.GetEnableDiscardSelect();
+        bool enableDiscardSelect = Config->EnableDiscardSelect;
 
         TDynBitMap resultDiscardFlags;
         ui32 resultCount = 0;
@@ -1227,7 +1227,7 @@ private:
                     columnHintsProto.Add(TString(columnHint.Value()));
                 }
             }
-            if (Config->FeatureFlags.GetEnableDiscardSelect() && hasDiscards) {
+            if (Config->EnableDiscardSelect && hasDiscards) {
                 bool canSkip = (shouldCreateChannel.find(std::make_pair(txIdx, resIdx)) == shouldCreateChannel.end());
                 resultProto.SetCanSkipChannel(canSkip);
             }

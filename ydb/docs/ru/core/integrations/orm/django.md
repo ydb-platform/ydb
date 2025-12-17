@@ -10,6 +10,14 @@
 
 {% endnote %}
 
+## Установка
+
+Установите пакет django-ydb-backend с помощью pip:
+
+```python
+pip install django-ydb-backend
+```
+
 ## Конфигурация
 
 ### Настройки подключения
@@ -42,6 +50,7 @@ DATABASES = {
 ### Методы аутентификации
 
 {% list tabs %}
+
 - Анонимная
 
   Для использования анонимной аутентификации не нужно передавать дополнительные параметры.
@@ -98,6 +107,7 @@ DATABASES = {
       }
   }
   ```
+
 {% endlist %}
 
 
@@ -161,10 +171,11 @@ DATABASES = {
 Перед началом работы убедитесь, что:
 
 1. Развернут кластер {{ ydb-short-name }} [локально](../../quickstart.md) или [используя Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
-2. Установлены Python-пакеты: `Django`, [`django-ydb-backend`](https://pypi.org/project/django-ydb-backend/), `djangorestframework`
+2. Установлены Python-пакеты: `Django`, `django-ydb-backend`, `djangorestframework`
 3. Склонирован репозиторий с [примером](https://github.com/ydb-platform/django-ydb-backend/tree/main/examples/bookstore)
 
 ### Перейдите в рабочую директорию
+
 ```bash
 cd examples/bookstore
 ```

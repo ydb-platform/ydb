@@ -1,4 +1,7 @@
 #include "datashard_cdc_stream_common.h"
+#include "datashard_impl.h"
+#include "datashard_locks_db.h"
+#include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
@@ -102,14 +105,15 @@ public:
         const auto& params = schemeTx.GetCreateCdcStreamNotice();
         const auto& streamDesc = params.GetStreamDescription();
         const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
+
         const auto pathId = TPathId::FromProto(params.GetPathId());
+        Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
+
         const auto version = params.GetTableSchemaVersion();
 
-        Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
         Y_ENSURE(version);
 
         auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, streamDesc);
-
         TDataShardLocksDb locksDb(DataShard, txc);
         DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 

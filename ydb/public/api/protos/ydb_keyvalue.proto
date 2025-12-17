@@ -358,8 +358,10 @@ message ReadBatchResult {
         bool is_overrun = 5;
     }
 
+    repeated ReadResultItem items = 1;
+
     // Contains 0 if the request was sent to the node of the partition, node ID of the partition otherwise.
-    uint32 node_id = 6;
+    uint32 node_id = 2;
 
     // Response status, use in V2.
     StatusIds.StatusCode status = 16;

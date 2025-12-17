@@ -14,9 +14,10 @@ namespace NKikimr::NPQ {
 
 namespace {
 
-template<const NProtoBuf::EnumDescriptor* SimpleDesc()>
 struct TMetricCollector {
-    using TConfig = TProtobufTabletLabeledCounters<SimpleDesc>;
+    TMetricCollector(TTabletLabeledCountersBase&& counters)
+        : Counters(std::move(counters))
+    {}
 
     void Collect(const auto& values) {
         Collect(values.begin(), values.end());
@@ -36,7 +37,7 @@ struct TMetricCollector {
         Aggregator.AggregateWith(Counters);
     }
 
-    TConfig Counters;
+    TTabletLabeledCountersBase Counters;
     TTabletLabeledCountersBase Aggregator;
 };
 
@@ -67,8 +68,8 @@ struct THistogramMetricCollector {
 };
 
 struct TConsumerMetricCollector {
-    TMetricCollector<EClientLabeledCounters_descriptor> ClientLabeledCounters;
-    TMetricCollector<EMLPConsumerLabeledCounters_descriptor> MLPConsumerLabeledCounters;
+    TMetricCollector ClientLabeledCounters = TMetricCollector(CreateProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>());
+    TMetricCollector MLPConsumerLabeledCounters = TMetricCollector(CreateProtobufTabletLabeledCounters<EMLPConsumerLabeledCounters_descriptor>());
     THistogramMetricCollector MLPMessageLockAttemptsCounter{MLP_LOCKS_BOUNDS};
 };
 
@@ -82,9 +83,9 @@ struct TTopicMetricCollector {
 
     TTopicMetrics TopicMetrics;
 
-    TMetricCollector<EPartitionLabeledCounters_descriptor> PartitionLabeledCounters;
-    TMetricCollector<EPartitionExtendedLabeledCounters_descriptor> PartitionExtendedLabeledCounters;
-    TMetricCollector<EPartitionKeyCompactionLabeledCounters_descriptor> PartitionKeyCompactionLabeledCounters;
+    TMetricCollector PartitionLabeledCounters = TMetricCollector(CreateProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>());
+    TMetricCollector PartitionExtendedLabeledCounters = TMetricCollector(CreateProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>());
+    TMetricCollector PartitionKeyCompactionLabeledCounters = TMetricCollector(CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>());
 
     absl::flat_hash_map<TString, TConsumerMetricCollector> Consumers;
 

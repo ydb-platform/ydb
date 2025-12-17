@@ -1041,8 +1041,6 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         for (auto&& userInfoPair : UsersInfoStorage->ViewAll()) {
 
             auto& userInfo = userInfoPair.second;
-            if (!userInfo.LabeledCounters)
-                continue;
             if (userInfoPair.first != CLIENTID_WITHOUT_CONSUMER && !userInfo.HasReadRule && !ImporantOrExtendedAvailabilityPeriod(userInfo))
                 continue;
             auto* cac = ac->AddConsumerAggregatedCounters();
@@ -1883,10 +1881,12 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     // per client counters
     for (auto&& userInfoPair : UsersInfoStorage->GetAll()) {
         auto& userInfo = userInfoPair.second;
-        if (!userInfo.LabeledCounters)
+        if (!userInfo.LabeledCounters) {
             continue;
-        if (userInfoPair.first != CLIENTID_WITHOUT_CONSUMER && !userInfo.HasReadRule && !userInfo.Important)
+        }
+        if (userInfoPair.first != CLIENTID_WITHOUT_CONSUMER && !userInfo.HasReadRule && !userInfo.Important) {
             continue;
+        }
         bool haveChanges = false;
         const auto snapshot = CreateSnapshot(userInfo);
 
@@ -2120,7 +2120,7 @@ void TPartition::ReportCounters(const TActorContext& ctx, bool force) {
 
 void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext&) {
     for (auto& [consumerStr, quota] : ev->Get()->UpdatedConsumerQuotas) {
-        const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumerStr);
+        TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumerStr);
         if (userInfo) {
             userInfo->LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Set(quota);
         }

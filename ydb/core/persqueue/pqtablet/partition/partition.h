@@ -36,10 +36,6 @@ static const ui32 MAX_USER_ACTS = 1000;
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
 
-using TPartitionLabeledCounters =
-    TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
-using TPartitionExtendedLabeledCounters = TProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>;
-
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
 TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp);
 
@@ -965,10 +961,10 @@ private:
     std::deque<THolder<TEvPQ::TEvChangeOwner>> WaitToChangeOwner;
 
     TTabletCountersBase TabletCounters;
-    THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
-    THolder<TPartitionExtendedLabeledCounters> PartitionCountersExtended;
+    std::optional<TTabletLabeledCountersBase> PartitionCountersLabeled;
+    std::optional<TTabletLabeledCountersBase> PartitionCountersExtended;
 
-    THolder<TPartitionKeyCompactionCounters> PartitionCompactionCounters;
+    std::optional<TTabletLabeledCountersBase> PartitionCompactionCounters;
 
     // Per partition counters
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;

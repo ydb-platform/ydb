@@ -695,11 +695,13 @@ namespace {
         }
 
         void TestReplication(const TString& scheme, const TString& expected) {
-            Env();
+            auto options = TTestEnvOptions()
+                .InitYdbDriver(true);
+            TTestEnv env(Runtime(), options);
             ui64 txId = 100;
 
             TestCreateReplication(Runtime(), ++txId, "/MyRoot", scheme);
-            Env().TestWaitNotification(Runtime(), txId);
+            env.TestWaitNotification(Runtime(), txId);
 
             TString request = Sprintf(R"(
                 ExportToS3Settings {
@@ -713,7 +715,7 @@ namespace {
             )", S3Port());
 
             TestExport(Runtime(), ++txId, "/MyRoot", request);
-            Env().TestWaitNotification(Runtime(), txId);
+            env.TestWaitNotification(Runtime(), txId);
 
             TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
@@ -3268,7 +3270,7 @@ attributes {
             Config {
                 SrcConnectionParams {
                     Endpoint: "localhost:2135"
-                    Database: ""
+                    Database: "/MyRoot"
                     StaticCredentials {
                         User: "user"
                         Password: "pwd"
@@ -3290,7 +3292,7 @@ CREATE ASYNC REPLICATION `Replication`
 FOR
   `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
 WITH (
-  CONNECTION_STRING = 'grpc://localhost:2135/?database=',
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
   USER = 'user',
   PASSWORD_SECRET_NAME = 'pwd-secret-name',
   CONSISTENCY_LEVEL = 'Row'
@@ -3304,7 +3306,7 @@ WITH (
             Config {
                 SrcConnectionParams {
                     Endpoint: "localhost:2135"
-                    Database: ""
+                    Database: "/MyRoot"
                     OAuthToken {
                         Token: "super-secret-token"
                         TokenSecretName: "token-secret-name"
@@ -3325,7 +3327,7 @@ CREATE ASYNC REPLICATION `Replication`
 FOR
   `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
 WITH (
-  CONNECTION_STRING = 'grpc://localhost:2135/?database=',
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
   TOKEN_SECRET_NAME = 'token-secret-name',
   CONSISTENCY_LEVEL = 'Row'
 );)";
@@ -3338,7 +3340,7 @@ WITH (
             Config {
                 SrcConnectionParams {
                     Endpoint: "localhost:2135"
-                    Database: ""
+                    Database: "/MyRoot"
                 }
                 Specific {
                     Targets {
@@ -3364,7 +3366,7 @@ FOR
   `/MyRoot/Table2` AS `/MyRoot/Table2Replica`,
   `/MyRoot/Table3` AS `/MyRoot/Table3Replica`
 WITH (
-  CONNECTION_STRING = 'grpc://localhost:2135/?database=',
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
   CONSISTENCY_LEVEL = 'Row'
 );)";
         TestReplication(scheme, expected);
@@ -3376,7 +3378,7 @@ WITH (
             Config {
                 SrcConnectionParams {
                     Endpoint: "localhost:2135"
-                    Database: ""
+                    Database: "/MyRoot"
                 }
                 ConsistencySettings {
                     Global {
@@ -3397,7 +3399,7 @@ CREATE ASYNC REPLICATION `Replication`
 FOR
   `/MyRoot/Table1` AS `/MyRoot/Table1Replica`
 WITH (
-  CONNECTION_STRING = 'grpc://localhost:2135/?database=',
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
   CONSISTENCY_LEVEL = 'Global',
   COMMIT_INTERVAL = Interval('PT17S')
 );)";

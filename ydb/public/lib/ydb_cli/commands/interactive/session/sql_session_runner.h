@@ -11,6 +11,7 @@ struct TSqlSessionSettings {
     TString YdbPath;
     TDriver Driver;
     TString Database;
+    bool EnableAiInteractive = false;
 };
 
 ISessionRunner::TPtr CreateSqlSessionRunner(const TSqlSessionSettings& settings, const TInteractiveLogger& log);

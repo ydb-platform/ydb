@@ -36,6 +36,10 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     const TDriver driver(config.CreateDriverConfig());
     const auto versionInfo = ResolveVersionInfo(driver);
     const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile, Log);
+    
+    if (config.EnableAiInteractive) {
+        configurationManager->EnsurePredefinedProfiles(config.AiPredefinedProfiles, config.AiTokenGetter);
+    }
 
     Cout << "Welcome to YDB CLI";
     if (versionInfo.CliVersion) {
@@ -58,8 +62,10 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         Cout << "Database: " << Log.EntityName(config.Database) << Endl;
     }
 
-    if (const auto& aiProfile = configurationManager->GetAiProfile(configurationManager->GetActiveAiProfileName())) {
-        Cout << "AI profile: " << Log.EntityName(aiProfile->GetName()) << Endl;
+    if (config.EnableAiInteractive) {
+        if (const auto& aiProfile = configurationManager->GetAiProfile(configurationManager->GetActiveAiProfileName())) {
+            Cout << "AI profile: " << Log.EntityName(aiProfile->GetName()) << Endl;
+        }
     }
 
     TStringBuilder connectionStringBuilder;
@@ -78,7 +84,11 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     TString connectionString = connectionStringBuilder;
 
     ui64 activeSession = static_cast<ui64>(configurationManager->GetDefaultMode());
-    if (!activeSession) {
+    if (!config.EnableAiInteractive) {
+        activeSession = 0;
+    }
+
+    if (!activeSession && config.EnableAiInteractive) {
         Cout << "Type YQL query text or type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
     } else {
         Cout << "Type " << Log.EntityNameQuoted("/help") << " for more info." << Endl << Endl;
@@ -86,37 +96,50 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     Y_VALIDATE(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid), "Unexpected default mode: " << activeSession);
 
-    const std::vector sessions = {
-        CreateSqlSessionRunner({
-            .YdbPath = YdbPath,
-            .Driver = driver,
-            .Database = config.Database,
-        }, Log),
-        CreateAiSessionRunner({
+    std::vector<ISessionRunner::TPtr> sessions;
+    
+    sessions.push_back(CreateSqlSessionRunner({
+        .YdbPath = YdbPath,
+        .Driver = driver,
+        .Database = config.Database,
+        .EnableAiInteractive = config.EnableAiInteractive,
+    }, Log));
+
+    if (config.EnableAiInteractive) {
+        sessions.push_back(CreateAiSessionRunner({
             .YdbPath = YdbPath,
             .ConfigurationManager = configurationManager,
             .Database = config.Database,
             .Driver = driver,
             .ConnectionString = connectionString,
-        }, Log),
-    };
-    Y_VALIDATE(sessions.size() > activeSession, "Unexpected number of sessions: " << sessions.size() << " for default mode: " << activeSession);
+        }, Log));
+    }
+
+    if (activeSession >= sessions.size()) {
+        activeSession = 0;
+    }
 
     ILineReader::TPtr lineReader;
     if (lineReader = sessions[activeSession]->Setup(); !lineReader) {
         YDB_CLI_LOG(Error, "Failed to perform initial setup in " << (activeSession ? "AI" : "SQL") << " mode");
-        Y_VALIDATE(lineReader = sessions[activeSession ^= 1]->Setup(), "Failed to change session to " << activeSession << " after error");
+        if (sessions.size() > 1) {
+             Y_VALIDATE(lineReader = sessions[activeSession ^= 1]->Setup(), "Failed to change session to " << activeSession << " after error");
+        } else {
+             return EXIT_FAILURE;
+        }
     }
 
     while (const auto inputOptional = lineReader->ReadLine()) {
         const auto& input = *inputOptional;
         if (std::holds_alternative<ILineReader::TSwitch>(input)) {
-            activeSession ^= 1;
-            if (lineReader = sessions[activeSession]->Setup()) {
-                YDB_CLI_LOG(Info, "Switching to " << (activeSession ? "AI" : "SQL") << " mode");
-            } else {
-                YDB_CLI_LOG(Error, "Failed to switch to " << (activeSession ? "AI" : "SQL") << " mode");
-                Y_VALIDATE(lineReader = sessions[activeSession ^= 1]->Setup(), "Failed to change session to " << activeSession << " after error");
+            if (sessions.size() > 1) {
+                activeSession ^= 1;
+                if (lineReader = sessions[activeSession]->Setup()) {
+                    YDB_CLI_LOG(Info, "Switching to " << (activeSession ? "AI" : "SQL") << " mode");
+                } else {
+                    YDB_CLI_LOG(Error, "Failed to switch to " << (activeSession ? "AI" : "SQL") << " mode");
+                    Y_VALIDATE(lineReader = sessions[activeSession ^= 1]->Setup(), "Failed to change session to " << activeSession << " after error");
+                }
             }
             continue;
         }

@@ -11,6 +11,7 @@
 #include <util/string/strip.h>
 
 #include <library/cpp/yaml/as/tstring.h>
+#include <yaml-cpp/yaml.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -471,6 +472,75 @@ TInteractiveConfigurationManager::TInteractiveConfigurationManager(const TString
     CanonizeStructure();
 }
 
+void TInteractiveConfigurationManager::EnsurePredefinedProfiles(const std::vector<TAiPresetConfig>& profiles, std::function<TAiTokenConfig()> tokenGetter) {
+    if (profiles.empty()) {
+        return;
+    }
+
+    std::optional<TAiTokenConfig> tokenInfo;
+    if (tokenGetter) {
+        tokenInfo = tokenGetter();
+    }
+
+    if (!Config["ai_profiles"]) {
+        Config["ai_profiles"] = YAML::Node(YAML::NodeType::Map);
+    }
+    auto aiProfiles = Config["ai_profiles"];
+
+    bool updated = false;
+    if (tokenInfo && !tokenInfo->Token.empty()) {
+        for (const auto& profile : profiles) {
+            TString profileName = profile.Name;
+            bool exists = aiProfiles[profileName].IsDefined();
+            
+            if (!exists) {
+                // Create new profile
+                YAML::Node newProfile;
+                if (profile.ApiType == "OpenAI") {
+                    newProfile["api_type"] = static_cast<ui64>(EAiApiType::OpenAI);
+                } else if (profile.ApiType == "Anthropic") {
+                    newProfile["api_type"] = static_cast<ui64>(EAiApiType::Anthropic);
+                } else {
+                     YDB_CLI_LOG(Warning, "Unknown API type for predefined profile: " << profile.ApiType);
+                     continue;
+                }
+                newProfile["api_endpoint"] = profile.ApiEndpoint;
+                newProfile["model_name"] = profile.ModelName;
+                
+                newProfile["api_token"] = tokenInfo->Token;
+
+                aiProfiles[profileName] = newProfile;
+                YDB_CLI_LOG(Info, "Created predefined AI profile: " << profileName);
+                updated = true;
+            } else if (tokenInfo->WasUpdated) {
+                // Update token for existing predefined profile
+                aiProfiles[profileName]["api_token"] = tokenInfo->Token;
+                YDB_CLI_LOG(Info, "Updated token for predefined AI profile: " << profileName);
+                updated = true;
+            }
+        }
+    }
+
+    if (!profiles.empty()) {
+        const auto& recommendedProfile = profiles.front().Name;
+        if (const auto& currentRecommendedNode = Config["recommended_ai_profile"]) {
+            TString currentRecommended = currentRecommendedNode.as<TString>("");
+            if (currentRecommended != recommendedProfile) {
+                Config["recommended_ai_profile"] = recommendedProfile;
+                updated = true;
+            }
+        } else {
+            Config["recommended_ai_profile"] = recommendedProfile;
+            updated = true;
+        }
+    }
+
+    if (updated) {
+        ConfigChanged = true;
+        SaveConfig();
+    }
+}
+
 TInteractiveConfigurationManager::~TInteractiveConfigurationManager() {
     if (ConfigChanged) {
         SaveConfig();
@@ -507,6 +577,12 @@ TString TInteractiveConfigurationManager::GetActiveAiProfileName() const {
     TString activeProfile;
     if (const auto& activeAiProfileNode = Config["active_ai_profile"]) {
         activeProfile = activeAiProfileNode.as<TString>("");
+    }
+
+    if (activeProfile.empty()) {
+        if (const auto& recommendedAiProfileNode = Config["recommended_ai_profile"]) {
+            activeProfile = recommendedAiProfileNode.as<TString>("");
+        }
     }
 
     YDB_CLI_LOG(Debug, "Current active profile name: " << activeProfile);
@@ -720,8 +796,13 @@ void TInteractiveConfigurationManager::SaveConfig() {
             }
         }
 
+        YAML::Emitter out;
+        out.SetMapFormat(YAML::Block);
+        out.SetSeqFormat(YAML::Block);
+        out << Config;
+
         TFileOutput resultConfigFile(TFile(configFilePath, CreateAlways | WrOnly | AWUser | ARUser));
-        resultConfigFile << YAML::Dump(Config);
+        resultConfigFile << out.c_str();
     } catch (...) {
         YDB_CLI_LOG(Critical, "Couldn't save configuration to file \"" << ConfigurationPath << "\": " << CurrentExceptionMessage());
     }

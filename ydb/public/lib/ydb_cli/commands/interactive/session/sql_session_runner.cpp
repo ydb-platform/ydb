@@ -79,6 +79,7 @@ public:
         , QueryPlanPrinter(EDataFormat::Default)
         , ExplainRunner(settings.Driver)
         , ExecuteRunner(settings.Driver)
+        , EnableAiInteractive(settings.EnableAiInteractive)
     {}
 
     void HandleLine(const TString& line) final {
@@ -86,7 +87,7 @@ public:
 
         if (to_lower(line) == "/help") {
             Cout << Endl;
-            PrintFtxuiMessage(CreateHelpMessage(), "YDB CLI Interactive Mode – Hotkeys and Special Commands", ftxui::Color::White);
+            PrintFtxuiMessage(CreateHelpMessage(EnableAiInteractive), "YDB CLI Interactive Mode – Hotkeys and Special Commands", ftxui::Color::White);
             Cout << Endl;
             return;
         }
@@ -130,23 +131,29 @@ public:
     }
 
 private:
-    static ftxui::Element CreateHelpMessage() {
+    static ftxui::Element CreateHelpMessage(bool enableAiInteractive) {
         using namespace ftxui;
 
         std::vector<ftxui::Element> elements = {
             paragraph("By default, any input is treated as an YQL query and sent directly to the YDB server."),
             text(""),
             CreateEntityName("Hotkeys:"),
-            CreateListItem(hbox({
-                CreateEntityName("Ctrl+T"), text(" or "), CreateEntityName("/switch"), 
-                text(": switch to "), 
-                text(ToString(TInteractiveConfigurationManager::EMode::AI)) | color(Color::Cyan), 
-                text(" interactive mode.")
-            })),
-            CreateListItem(hbox({
-                CreateEntityName("TAB"), text(": complete the current word based on YQL syntax.")
-            })),
         };
+
+        if (enableAiInteractive) {
+            elements.emplace_back(
+                CreateListItem(hbox({
+                    CreateEntityName("Ctrl+T"), text(" or "), CreateEntityName("/switch"), 
+                    text(": switch to "), 
+                    text(ToString(TInteractiveConfigurationManager::EMode::AI)) | color(Color::Cyan), 
+                    text(" interactive mode.")
+                }))
+            );
+        }
+
+        elements.emplace_back(CreateListItem(hbox({
+            CreateEntityName("TAB"), text(": complete the current word based on YQL syntax.")
+        })));
 
         PrintCommonHotKeys(elements);
 
@@ -174,13 +181,19 @@ private:
     }
 
     static TLineReaderSettings CreateSessionSettings(const TSqlSessionSettings& settings) {
+        TString placeholder = "Type YQL query (Enter to execute, Ctrl+J for newline";
+        if (settings.EnableAiInteractive) {
+            placeholder += ", Ctrl+T for AI mode";
+        }
+        placeholder += ", Ctrl+D to exit)";
+
         return {
             .Driver = settings.Driver,
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
             .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_sql_history.txt",
             .AdditionalCommands = {"/help"},
-            .Placeholder = "Type YQL query (Enter to execute, Ctrl+J for newline, Ctrl+T for AI mode, Ctrl+D to exit)",
+            .Placeholder = placeholder,
         };
     }
 
@@ -220,6 +233,7 @@ private:
     TExplainGenericQuery ExplainRunner;
     TExecuteGenericQuery ExecuteRunner;
     NQuery::EStatsMode CollectStatsMode = NQuery::EStatsMode::None;
+    bool EnableAiInteractive;
 };
 
 } // anonymous namespace

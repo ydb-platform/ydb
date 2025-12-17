@@ -16,6 +16,7 @@
 #include <util/string/type.h>
 #include <util/system/info.h>
 #include <string>
+#include <functional>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -23,6 +24,18 @@ namespace NConsoleClient {
 struct TCommandFlags {
     bool Dangerous = false;
     bool OnlyExplicitProfile = false;
+};
+
+struct TAiPresetConfig {
+    TString Name;
+    TString ApiType;
+    TString ApiEndpoint;
+    TString ModelName;
+};
+
+struct TAiTokenConfig {
+    TString Token;
+    bool WasUpdated = false;
 };
 
 class TClientCommand {
@@ -169,6 +182,11 @@ public:
         // Whether a command is local (need no connection to YDB) or not
         bool LocalCommand = false;
         std::optional<std::string> StorageUrl = std::nullopt;
+
+        // AI configuration
+        bool EnableAiInteractive = false;
+        std::vector<TAiPresetConfig> AiPredefinedProfiles;
+        std::function<TAiTokenConfig()> AiTokenGetter;
 
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;

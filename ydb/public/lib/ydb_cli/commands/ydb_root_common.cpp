@@ -143,6 +143,21 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
     config.StorageUrl = Settings.StorageUrl;
+
+    if (Settings.EnableAiInteractive) {
+        config.EnableAiInteractive = *Settings.EnableAiInteractive;
+    }
+    config.AiTokenGetter = [getter = Settings.AiTokenGetter]() -> TAiTokenConfig {
+        if (getter) {
+            auto req = getter();
+            return {req.Token, req.WasUpdated};
+        }
+        return {};
+    };
+    for (const auto& profile : Settings.AiPredefinedProfiles) {
+        config.AiPredefinedProfiles.push_back({profile.Name, profile.ApiType, profile.ApiEndpoint, profile.ModelName});
+    }
+
     SetCredentialsGetter(config);
 }
 

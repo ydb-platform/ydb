@@ -5,6 +5,9 @@
 #include <util/generic/fwd.h>
 
 #include <yaml-cpp/node/node.h>
+#include <functional>
+
+#include <ydb/public/lib/ydb_cli/common/command.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -41,7 +44,7 @@ public:
         static std::unordered_map<TString, TInfo> GetOssPresets();
 
     private:
-        inline static std::unordered_map<TString, TInfo> Presets = GetOssPresets();
+        inline static std::unordered_map<TString, TInfo> Presets;
     };
 
     class TAiProfile {
@@ -92,6 +95,8 @@ public:
     TInteractiveConfigurationManager(const TString& configurationPath, const TInteractiveLogger& log);
 
     ~TInteractiveConfigurationManager();
+
+    void EnsurePredefinedProfiles(const std::vector<TAiPresetConfig>& profiles, std::function<TAiTokenConfig()> tokenGetter = {});
 
     enum class EMode {
         YQL,

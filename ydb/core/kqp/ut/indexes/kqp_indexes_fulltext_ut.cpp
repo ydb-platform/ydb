@@ -174,7 +174,7 @@ Y_UNIT_TEST(AddIndexCovered) {
 Y_UNIT_TEST(AddIndexNGram) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertTexts(db);
     AddIndexNGram(db);
@@ -221,7 +221,7 @@ Y_UNIT_TEST(AddIndexNGram) {
 Y_UNIT_TEST(AddIndexEdgeNGram) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertTexts(db);
     AddIndexNGram(db, 3, 3, true);
@@ -383,7 +383,7 @@ Y_UNIT_TEST(InsertRow) {
 Y_UNIT_TEST(InsertRowMultipleTimes) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -435,7 +435,7 @@ Y_UNIT_TEST(InsertRowMultipleTimes) {
 Y_UNIT_TEST(InsertRowReturning) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -476,7 +476,7 @@ Y_UNIT_TEST(InsertRowReturning) {
 Y_UNIT_TEST(InsertRowCovered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndexCovered(db);
@@ -513,7 +513,7 @@ Y_UNIT_TEST(InsertRowCovered) {
 Y_UNIT_TEST(InsertRowCoveredReturning) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndexCovered(db);
@@ -554,7 +554,7 @@ Y_UNIT_TEST(InsertRowCoveredReturning) {
 Y_UNIT_TEST(UpsertRow) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -612,7 +612,7 @@ Y_UNIT_TEST(UpsertRow) {
 Y_UNIT_TEST(UpsertRowMultipleTimes) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -691,7 +691,7 @@ Y_UNIT_TEST(UpsertRowMultipleTimes) {
 Y_UNIT_TEST(UpsertRowReturning) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -756,7 +756,7 @@ Y_UNIT_TEST(UpsertRowReturning) {
 Y_UNIT_TEST(UpsertRowCovered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndexCovered(db);
@@ -814,7 +814,7 @@ Y_UNIT_TEST(UpsertRowCovered) {
 Y_UNIT_TEST(UpsertRowCoveredReturning) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndexCovered(db);
@@ -879,7 +879,7 @@ Y_UNIT_TEST(UpsertRowCoveredReturning) {
 Y_UNIT_TEST(ReplaceRow) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -937,7 +937,7 @@ Y_UNIT_TEST(ReplaceRow) {
 Y_UNIT_TEST(ReplaceRowMultipleTimes) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -1016,7 +1016,7 @@ Y_UNIT_TEST(ReplaceRowMultipleTimes) {
 Y_UNIT_TEST(ReplaceRowReturning) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -1081,7 +1081,7 @@ Y_UNIT_TEST(ReplaceRowReturning) {
 Y_UNIT_TEST(ReplaceRowCovered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndexCovered(db);
@@ -1139,7 +1139,7 @@ Y_UNIT_TEST(ReplaceRowCovered) {
 Y_UNIT_TEST(ReplaceRowCoveredReturning) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndexCovered(db);
@@ -1204,7 +1204,7 @@ Y_UNIT_TEST(ReplaceRowCoveredReturning) {
 Y_UNIT_TEST(DeleteRow) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertTexts(db);
     AddIndex(db);
@@ -1281,7 +1281,7 @@ Y_UNIT_TEST(DeleteRow) {
 Y_UNIT_TEST(DeleteRowMultipleTimes) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertTexts(db);
     AddIndex(db);
@@ -1323,7 +1323,7 @@ Y_UNIT_TEST(DeleteRowMultipleTimes) {
 Y_UNIT_TEST(DeleteRowReturning) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertTexts(db);
     AddIndex(db);
@@ -1412,7 +1412,7 @@ Y_UNIT_TEST(DeleteRowReturning) {
 Y_UNIT_TEST(DeleteRowCovered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertTexts(db);
     AddIndexCovered(db);
@@ -1489,7 +1489,7 @@ Y_UNIT_TEST(DeleteRowCovered) {
 Y_UNIT_TEST(DeleteRowCoveredReturning) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertTexts(db);
     AddIndexCovered(db);
@@ -1578,7 +1578,7 @@ Y_UNIT_TEST(DeleteRowCoveredReturning) {
 Y_UNIT_TEST(UpdateRow) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -1646,7 +1646,7 @@ Y_UNIT_TEST(UpdateRow) {
 Y_UNIT_TEST(UpdateRowCovered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndexCovered(db);
@@ -1714,7 +1714,7 @@ Y_UNIT_TEST(UpdateRowCovered) {
 Y_UNIT_TEST(UpdateRowMultipleTimes) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -1748,7 +1748,7 @@ Y_UNIT_TEST(UpdateRowMultipleTimes) {
 Y_UNIT_TEST(UpdateRowReturning) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndex(db);
@@ -1828,7 +1828,7 @@ Y_UNIT_TEST(UpdateRowReturning) {
 Y_UNIT_TEST(UpdateRowCoveredReturning) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertSomeTexts(db);
     AddIndexCovered(db);
@@ -1908,7 +1908,7 @@ Y_UNIT_TEST(UpdateRowCoveredReturning) {
 Y_UNIT_TEST(Select) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertTexts(db);
     AddIndex(db);
@@ -1956,7 +1956,7 @@ Y_UNIT_TEST(Select) {
             [[400u]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
-    
+
     { // Select by two tokens using AND
         TString query = R"sql(
             SELECT Key FROM `/Root/Texts/fulltext_idx/indexImplTable`
@@ -1976,7 +1976,7 @@ Y_UNIT_TEST(Select) {
 Y_UNIT_TEST(SelectCovered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     UpsertTexts(db);
     AddIndexCovered(db);
@@ -2024,7 +2024,7 @@ Y_UNIT_TEST(SelectCovered) {
             [[400u];["foxes data"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
-    
+
     { // Select by two tokens using AND
         TString query = R"sql(
             SELECT Key, Data FROM `/Root/Texts/fulltext_idx/indexImplTable`
@@ -2044,7 +2044,7 @@ Y_UNIT_TEST(SelectCovered) {
 Y_UNIT_TEST(CreateTable) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     { // CreateTexts
         TString query = R"sql(
             CREATE TABLE `/Root/Texts` (
@@ -2083,7 +2083,7 @@ Y_UNIT_TEST(CreateTable) {
 Y_UNIT_TEST(CreateTableCovered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     { // CreateTexts
         TString query = R"sql(
             CREATE TABLE `/Root/Texts` (
@@ -2122,7 +2122,7 @@ Y_UNIT_TEST(CreateTableCovered) {
 Y_UNIT_TEST(NoBulkUpsert) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     AddIndex(db);
 
@@ -2145,7 +2145,7 @@ Y_UNIT_TEST(NoBulkUpsert) {
 Y_UNIT_TEST(NoIndexImplTableUpdates) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     CreateTexts(db);
     AddIndex(db);
 
@@ -2165,7 +2165,7 @@ Y_UNIT_TEST(NoIndexImplTableUpdates) {
 Y_UNIT_TEST(Utf8) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
-    
+
     { // CreateTexts
         TString query = R"sql(
             CREATE TABLE `/Root/Texts` (
@@ -2221,7 +2221,92 @@ Y_UNIT_TEST(Utf8) {
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 }
-    
+
+Y_UNIT_TEST(SelectWithFulltextContains) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with fulltext index
+        TString query = R"sql(
+            CREATE TABLE `/Root/table` (
+                Key Uint64,
+                body String,
+                PRIMARY KEY (Key),
+                INDEX index_fulltext
+                    GLOBAL USING fulltext
+                    ON (body)
+                    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Insert data with Russian text about machine learning
+        TString query = R"sql(
+            UPSERT INTO `/Root/table` (Key, body) VALUES
+                (1, "Машинное обучение - это важная область искусственного интеллекта"),
+                (2, "Глубокое обучение является подмножеством машинного обучения"),
+                (3, "Нейронные сети используются в машинном обучении"),
+                (4, "Машинное обучение помогает решать сложные задачи"),
+                (5, "Алгоритмы машинного обучения обрабатывают большие данные"),
+                (6, "Обучение моделей требует много вычислительных ресурсов"),
+                (7, "Машинное обучение применяется в различных областях"),
+                (8, "Современные методы машинного обучения очень эффективны"),
+                (9, "Исследования в области машинного обучения продолжаются"),
+                (10, "Практическое применение машинного обучения растет"),
+                (11, "Коты любят играть"),
+                (12, "Собаки любят бегать")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    std::vector<std::pair<std::string, std::vector<ui64>>> searchingTerms = {
+        {"машинное обучение", {1, 4, 7}},
+        {"моделей", {6}},
+        {"собаки любят ", {12}},
+        {"коты любят", {11}}
+    };
+
+    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+        TString query = Sprintf(R"sql(
+            SELECT Key, body FROM `/Root/table` VIEW `index_fulltext`
+            WHERE FullText::FulltextContains(body, "%s")
+            ORDER BY Key
+        )sql", term.c_str());
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        // Should return rows 1-10 (all contain "машинное обучение"), but not 11-12
+        UNIT_ASSERT_C(resultSet.RowsCount() == expectedKeys.size(), "Expected " + std::to_string(expectedKeys.size()) + " rows with " + term + " content");
+
+        // Verify that all returned rows actually contain the search term
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto bodyValue = parser.ColumnParser("body").GetOptionalString();
+            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            UNIT_ASSERT_C(bodyValue, "Body should not be null");
+            Cerr << "Key: " << key << Endl;
+            UNIT_ASSERT_C(
+                IsIn(expectedKeys, key),
+                "All returned rows should contain machine learning related text"
+            );
+        }
+    }
+
+    {
+        TString query = R"sql(
+            SELECT Key, body FROM `/Root/table`
+            WHERE FullText::FulltextContains(body, "машинное обучение")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+    }
+}
+
 }
 
 }

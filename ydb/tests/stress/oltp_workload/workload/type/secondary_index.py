@@ -780,32 +780,37 @@ class WorkloadSecondaryIndex(WorkloadBase):
             key = tuple(row[f'c{col}'] for col in range(pk_size))
             index_data[key] = row
 
-        logger.info(f"Index idx{index_id} has {len(index_data)} rows")
+        try:
+            logger.info(f"Index idx{index_id} has {len(index_data)} rows")
 
-        # Check data size consistency
-        if len(main_data) != len(index_data):
-            raise TableVerificationError(
-                f"Data size mismatch between main table {table_name} and index {index_id}: "
-                f"main={len(main_data)}, index={len(index_data)}"
-            )
+            # Check data size consistency
+            if len(main_data) != len(index_data):
+                raise TableVerificationError(
+                    f"Data size mismatch between main table {table_name} and index {index_id}: "
+                    f"main={len(main_data)}, index={len(index_data)}"
+                )
 
-        # Check data consistency
-        for key, main_row in main_data.items():
-            if key not in index_data:
-                raise TableVerificationError(f"Key {key} not found in index {index_id} for table {table_name}")
+            # Check data consistency
+            for key, main_row in main_data.items():
+                if key not in index_data:
+                    raise TableVerificationError(f"Key {key} not found in index {index_id} for table {table_name}")
 
-            index_row = index_data[key]
-            for column in index_row.keys():
-                if main_row[column] != index_row[column]:
-                    raise TableVerificationError(
-                        f"Data mismatch between main table {table_name} and index {index_id} "
-                        f"for key {key} and column {column}: "
-                        f"main={main_row[column]}, index={index_row[column]}"
-                    )
+                index_row = index_data[key]
+                for column in index_row.keys():
+                    if main_row[column] != index_row[column]:
+                        raise TableVerificationError(
+                            f"Data mismatch between main table {table_name} and index {index_id} "
+                            f"for key {key} and column {column}: "
+                            f"main={main_row[column]}, index={index_row[column]}"
+                        )
 
-        # Check uniqueness constraint if applicable
-        if index_desc.unique:
-            self._verify_index_uniqueness(index_rows, index_desc, index_id, table_name)
+            # Check uniqueness constraint if applicable
+            if index_desc.unique:
+                self._verify_index_uniqueness(index_rows, index_desc, index_id, table_name)
+        except TableVerificationError:
+            logger.error(f"Main: {main_data}")
+            logger.error(f"Index: {index_data}")
+            raise
 
     def _verify_index_uniqueness(
         self, index_rows: List[Any], index_desc: IndexInfo, index_id: int, table_name: str

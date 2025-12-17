@@ -25,10 +25,16 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
                     "TTxListUsers Execute"
                     << " at schemeshard: " << Self->TabletID());
 
+        const auto& requestUser = Request->Get()->Record.GetUser();
         for (const auto& [_, sid] : Self->LoginProvider.Sids) {
             if (sid.Type != NLoginProto::ESidType::USER) {
                 continue;
             }
+
+            if (requestUser && sid.Name != requestUser) {
+                continue;
+            }
+
             auto user = Result->Record.AddUsers();
             user->SetName(sid.Name);
             user->SetIsEnabled(sid.IsEnabled);

@@ -11,6 +11,8 @@ import os
 import signal
 import sys
 import time
+import urllib.request
+import urllib.error
 
 from ydb.tests.library.harness import kikimr_config
 from ydb.tests.library.harness import kikimr_runner
@@ -26,12 +28,47 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def download_binary_from_s3(version, working_dir):
+    """
+    Downloads ydbd binary from S3 storage if not already downloaded.
+    Each version is stored in a separate directory: binary/<version>/ydbd
+    
+    Args:
+        version: Git ref/version (e.g., '25.3.1.21')
+        working_dir: Base working directory
+        
+    Returns:
+        Path to downloaded binary
+    """
+    binary_dir = os.path.join(working_dir, "binary", version)
+    binary_path = os.path.join(binary_dir, "ydbd")
+    
+    if os.path.exists(binary_path) and os.access(binary_path, os.X_OK):
+        logger.info("Binary already exists for version %s: %s", version, binary_path)
+        return binary_path
+    
+    url = f"https://storage.yandexcloud.net/ydb-builds/{version}/release/ydbd"
+    
+    logger.info("Downloading ydbd binary from S3...")
+    logger.info("Version: %s", version)
+    logger.info("URL: %s", url)
+    logger.info("Destination: %s", binary_path)
+    
+    try:
+        os.makedirs(binary_dir, exist_ok=True)
+        urllib.request.urlretrieve(url, binary_path)
+        os.chmod(binary_path, 0o755)
+        
+        logger.info("Binary downloaded successfully")
+        return binary_path
+    except Exception as e:
+        logger.error("Unexpected error during download: %s", e)
+        raise RuntimeError(f"Failed to download binary: {e}") from e
+
+
 class LocalCluster:
-    def __init__(self, working_dir=None, binary_path=None):
+    def __init__(self, working_dir, binary_path=None):
         self.cluster = None
-        # Default working directory if not specified
-        if working_dir is None:
-            working_dir = os.path.abspath(".ydbd_working_dir")
         self.working_dir = working_dir
         self.binary_path = binary_path
 
@@ -62,7 +99,6 @@ class LocalCluster:
         try:
             self.cluster.start()
         except Exception as e:
-            # On any error during startup, add port information
             error_msg = "Failed to start cluster.\n\n"
             error_msg += "\nOriginal error:\n"
             error_msg += str(e)
@@ -95,7 +131,6 @@ class LocalCluster:
         try:
             while True:
                 time.sleep(1)
-                # Check that processes are still alive
                 if self.cluster and self.cluster.nodes:
                     for node_id, node in self.cluster.nodes.items():
                         if node.daemon.process.poll() is not None:
@@ -125,27 +160,38 @@ def main():
     parser.add_argument(
         '--working-dir',
         type=str,
-        default=None,
+        default='.ydbd_working_dir',
         help='Working directory for cluster data storage (default: .ydbd_working_dir in current directory)'
     )
     parser.add_argument(
         '--binary-path',
         type=str,
-        required=True,
-        help='Path to ydbd binary'
+        default=None,
+        help='Path to ydbd binary (overrides --version if specified)'
+    )
+    parser.add_argument(
+        '--version',
+        type=str,
+        default="main",
+        help='Git ref/version to download from S3 (e.g., 25.3.1.21). Binary will be downloaded to working-dir. Ignored if --binary-path is specified'
     )
 
     args = parser.parse_args()
 
-    # Validate binary path
-    if not os.path.exists(args.binary_path):
-        logger.error("Binary path does not exist: %s", args.binary_path)
-        sys.exit(1)
-    if not os.access(args.binary_path, os.X_OK):
-        logger.error("Binary path is not executable: %s", args.binary_path)
-        sys.exit(1)
+    working_dir = os.path.abspath(args.working_dir)
 
-    cluster_manager = LocalCluster(working_dir=args.working_dir, binary_path=args.binary_path)
+    if args.binary_path is not None:
+        binary_path = args.binary_path
+        if not os.path.exists(binary_path):
+            logger.error("Binary path does not exist: %s", binary_path)
+            sys.exit(1)
+        if not os.access(binary_path, os.X_OK):
+            logger.error("Binary path is not executable: %s", binary_path)
+            sys.exit(1)
+    else:
+        binary_path = download_binary_from_s3(args.version, working_dir)
+
+    cluster_manager = LocalCluster(working_dir=working_dir, binary_path=binary_path)
 
     try:
         cluster_manager.start()

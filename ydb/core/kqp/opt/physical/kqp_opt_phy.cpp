@@ -37,6 +37,7 @@ public:
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TKqlReadTable::Match, HNDL(BuildReadTableStage));
+        AddHandler(0, &TKqlReadTableFullTextIndex::Match, HNDL(BuildReadTableFullTextIndexStage));
         AddHandler(0, &TKqlReadTableRanges::Match, HNDL(BuildReadTableRangesStage));
         AddHandler(0, &TKqlStreamLookupTable::Match, HNDL(BuildStreamLookupTableStages));
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStagesKeepSorted));
@@ -143,6 +144,7 @@ public:
         AddHandler(1, &TKqpReadOlapTableRanges::Match, HNDL(AddColumnForEmptyColumnsOlapRead));
 
 
+        AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTableFullText));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpLookupTable));
         AddHandler(2, &TKqlUpsertRows::Match, HNDL(RewriteReturningUpsert));
@@ -182,6 +184,12 @@ protected:
     TMaybeNode<TExprBase> BuildReadTableStage(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildReadTableStage(node, ctx, KqpCtx);
         DumpAppliedRule("BuildReadTableStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> BuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpBuildReadTableFullTextIndexStage(node, ctx, KqpCtx);
+        DumpAppliedRule("BuildReadTableFullTextIndexStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -236,6 +244,12 @@ protected:
             DumpAppliedRule("RemoveRedundantSortOverReadTable", node.Ptr(), output.Ptr(), ctx);
             return output;
         }
+    }
+
+    TMaybeNode<TExprBase> RewriteKqpReadTableFullText(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteReadTableFullText(node, ctx, KqpCtx);
+        DumpAppliedRule("RewriteKqpReadTableFullText", node.Ptr(), output.Ptr(), ctx);
+        return output;
     }
 
     TMaybeNode<TExprBase> RewriteKqpReadTable(TExprBase node, TExprContext& ctx) {

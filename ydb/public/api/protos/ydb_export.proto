@@ -44,6 +44,11 @@ message ExportToYtSettings {
     string description = 5 [(length).le = 128];
     uint32 number_of_retries = 6;
     bool use_type_v3 = 7;
+
+    // Patterns (PCRE) for paths excluded from export operation.
+    // - Patterns are matched against the object path relative to database root path.
+    // - Object is excluded from export operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 8;
 }
 
 message ExportToYtResult {
@@ -145,6 +150,11 @@ message ExportToS3Settings {
     // and reduces export time, but it can potentially increase the import time.
     // Indexes can be materialized, then their data will be uploaded during export and downloaded during import.
     bool materialize_indexes = 16;
+
+    // Patterns (PCRE) for paths excluded from export operation.
+    // - Patterns are matched against the object path relative to the export's source_path.
+    // - Object is excluded from export operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 17;
 }
 
 message ExportToS3Result {
@@ -209,16 +219,16 @@ message ExportToFsSettings {
     // Example: /mnt/exports
     // SchemaMapping file with the list of objects is written to this path
     string base_path = 1 [(required) = true];
-    
+
     // List of items to export
     repeated Item items = 2;
-    
+
     // Optional description
     string description = 3 [(length).le = 128];
-    
+
     // Number of retries for failed operations
     uint32 number_of_retries = 4;
-    
+
     // Codec used to compress data. Codecs are available:
     // - zstd.
     // - zstd-N, where N is compression level, e.g. zstd-3.
@@ -232,6 +242,11 @@ message ExportToFsSettings {
     // Defaults to database root if not provided.
     // All object names are calculated and written relative to this path.
     string source_path = 7;
+
+    // Patterns (PCRE) for paths excluded from export operation.
+    // - Patterns are matched against the object path relative to the export's source_path.
+    // - Object is excluded from export operation if it matches any of the specified exclude regexps.
+    repeated string exclude_regexps = 8;
 }
 
 message ExportToFsResult {

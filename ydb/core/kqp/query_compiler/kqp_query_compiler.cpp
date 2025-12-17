@@ -1264,6 +1264,18 @@ private:
             if (readSettings.VectorTopKColumn) {
                 FillVectorTopKSettings(*readProto.MutableVectorTopK(), readSettings, settings.Columns().Cast());
             }
+
+        } else if (auto settings = source.Settings().Maybe<TKqpReadTableFullTextIndexSourceSettings>()) {
+            NKqpProto::TKqpFullTextSource& fullTextProto = *protoSource->MutableFullTextSource();
+            auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
+            FillTableId(settings.Table().Cast(), *fullTextProto.MutableTable());
+            fullTextProto.SetIndex(settings.Index().Cast().StringValue());
+            FillColumns(settings.ResultColumns().Cast(), *tableMeta, fullTextProto, false);
+            fullTextProto.MutableQuerySettings()->SetQuery(TString(settings.Query().Cast().Ptr()->Content()));
+            FillColumns(settings.Columns().Cast(), *tableMeta, *fullTextProto.MutableQuerySettings(), false);
         } else {
             YQL_ENSURE(false, "Unsupported source type");
         }
@@ -1273,7 +1285,7 @@ private:
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx)
     {
         const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
-        if (dataSourceCategory == NYql::KikimrProviderName || dataSourceCategory == NYql::YdbProviderName || dataSourceCategory == NYql::KqpReadRangesSourceName) {
+        if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName}, dataSourceCategory)) {
             FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
         } else {
             FillDqInput(source.Ptr(), protoSource, dataSourceCategory, ctx, true);

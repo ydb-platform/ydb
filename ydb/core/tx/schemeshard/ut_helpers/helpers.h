@@ -416,7 +416,7 @@ namespace NSchemeShardUT_Private {
         NKikimrSchemeOp::EIndexType IndexType = NKikimrSchemeOp::EIndexTypeGlobal;
         TVector<TString> IndexColumns;
         TVector<TString> DataColumns;
-        TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings = {};
+        TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings;
         // implementation note: it was made a pointer, not optional, to enable forward declaration
         std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> KMeansTreeSettings = {};
     };

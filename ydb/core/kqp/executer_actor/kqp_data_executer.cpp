@@ -314,13 +314,15 @@ public:
 
         ResponseEv->Snapshot = GetSnapshot();
 
-        if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
+        if (TxManager && LockHandle) {
+            // Keep LockHandle even if locks are empty.
+            ResponseEv->LockHandle = std::move(LockHandle);
+        }
+        if (!TxManager && !Locks.empty()) {
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-            if (!TxManager) {
-                BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
-            }
+            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
         }
 
         if (TxManager) {
@@ -1856,7 +1858,6 @@ private:
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];
-            AFL_ENSURE(tx.Body->StagesSize() < (static_cast<ui64>(1) << TKqpTasksGraph::PriorityTxShift));
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 const auto& stage = tx.Body->GetStages(stageIdx);
                 const auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
@@ -2079,6 +2080,11 @@ private:
                 }
                 const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
+                    HasDatashardSourceScan = true;
+                }
+
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
                     YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
                     HasDatashardSourceScan = true;
                 }

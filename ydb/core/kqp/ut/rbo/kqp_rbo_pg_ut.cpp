@@ -695,7 +695,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 select t1.b, sum(t1.c) from t1 inner join t2 on t1.a = t2.a group by t1.b order by t1.b;
             )",
-            /*
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -704,7 +703,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 select sum(t1.b) as sum from t1
                 order by sum;
             )",
-            */
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -858,7 +856,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         std::vector<std::string> results = {
             R"([["1";"4"];["2";"6"]])",
             R"([["1";"4"];["2";"6"]])",
-            //R"([["4"];["6"];["8"]])",
+            R"([["4"];["6"];["8"]])",
             R"([["1";"1"];["2";"0"]])",
             R"([["1";"3"];["2";"4"]])",
             R"([["1";"2"];["2";"3"]])",

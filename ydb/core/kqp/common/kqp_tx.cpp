@@ -204,7 +204,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
                         // Lookup for index update
                         ++readPhases;
                     }
-                    
+
                     for (const auto& index : sinkSettings.GetIndexes()) {
                         if (index.GetIsUniq()) {
                             // Unique index check
@@ -291,6 +291,10 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
         for (const auto &stage : tx.GetStages()) {
             for (const auto &source : stage.GetSources()) {
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource){
+                    return true;
+                }
+
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
                     return true;
                 }
             }
@@ -392,6 +396,10 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     if (modifiedTables.contains(getTable(source.GetReadRangesSource().GetTable()))) {
                         return true;
                     }
+                } else if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                    if (modifiedTables.contains(getTable(source.GetFullTextSource().GetTable()))) {
+                        return true;
+                    }
                 } else {
                     return true;
                 }
@@ -403,19 +411,25 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 
-                    if (!settings.GetLookupColumns().empty() && modifiedTables.contains(getTable(settings.GetTable()))) {
+                    const bool tableModifiedBefore = modifiedTables.contains(getTable(settings.GetTable()));
+                    modifiedTables.insert(getTable(settings.GetTable()));
+                    for (const auto& index : settings.GetIndexes()) {
+                        modifiedTables.insert(getTable(index.GetTable()));
+                    }
+
+                    // For plans compatibility with old indexes. Don't need it for new.
+                    if (!settings.GetLookupColumns().empty() && tableModifiedBefore) {
                         AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-                        modifiedTables.insert(getTable(settings.GetTable()));
                         return true;
                     }
 
+                    // For plans compatibility with old indexes. Don't need it for new.
                     for (const auto& index : settings.GetIndexes()) {
-                        if (index.GetIsUniq() && modifiedTables.contains(getTable(settings.GetTable()))) {
+                        if (index.GetIsUniq() && tableModifiedBefore) {
                             return true;
                         }
                     }
 
-                    modifiedTables.insert(getTable(settings.GetTable()));
                     if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !commit) {
                         // INSERT with sink should be executed immediately, because it returns an error in case of duplicate rows.
                         return true;

@@ -1061,7 +1061,7 @@ config:
         auto& appData = *(Runtime->GetNode(nodeId)->AppData.get());
         TIntrusivePtr<NKikimr::TDsProxyNodeMon> nodeMon = new NKikimr::TDsProxyNodeMon(appData.Counters, true);
         TString name = Sprintf("%09" PRIu64, groupId);
-        
+
         TDsProxyPerPoolCounters perPoolCounters(appData.Counters);
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(true, false, true);

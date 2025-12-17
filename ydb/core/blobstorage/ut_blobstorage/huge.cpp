@@ -79,7 +79,7 @@ namespace {
 
             auto* put1 = new TEvBlobStorage::TEvPut(blobId1, data1, TInstant::Max(),
                 NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault);
-            
+
             TLogoBlobID blobId2{1000, 2, 1, 0, dataSize2, 0};
             TString data2 = FastGenDataForLZ4(dataSize2, 1 /*seed*/);
             auto* put2 = new TEvBlobStorage::TEvPut(blobId2, data2, TInstant::Max(),
@@ -121,7 +121,7 @@ namespace {
         }
 
         void SetHugeBlobSizeOnAllVDisks(ui32 hugeBlobSize) {
-            Cerr << "small blob size# " << hugeBlobSize << Endl;
+            Cerr << "new MinHugeBlobSize# " << hugeBlobSize << Endl;
 
             for (auto& serviceId : ServiceIds) {
                 auto ev = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();

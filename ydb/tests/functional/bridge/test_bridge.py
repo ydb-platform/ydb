@@ -16,68 +16,84 @@ from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start, g
 class TestBridgeBasic(BridgeKiKiMRTest):
 
     def test_update_and_get_cluster_state(self):
+        # Определяем текущее состояние кластера (независимо от конкретных имен piles)
+        primary_pile_name, secondary_pile_name = self._determine_current_cluster_state("checking initial state", timeout_seconds=60)
+
         # Ждем, пока кластер достигнет начального состояния
         self.wait_for_cluster_state(
             self.bridge_client,
-            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}
+            {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.SYNCHRONIZED},
+            timeout_seconds=60
         )
         initial_result = self.get_cluster_state(self.bridge_client)
-        self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        self.check_states(initial_result, {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.SYNCHRONIZED})
 
         updates = [
-            PileState(pile_name="r2", state=PileState.PROMOTED),
+            PileState(pile_name=secondary_pile_name, state=PileState.PROMOTED),
         ]
         self.update_cluster_state(self.bridge_client, updates)
-        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.PROMOTED})
+        self.wait_for_cluster_state(self.bridge_client, {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.PROMOTED})
 
     def test_failover(self):
+        # Определяем текущее состояние кластера (независимо от конкретных имен piles)
+        primary_pile_name, secondary_pile_name = self._determine_current_cluster_state("checking initial state", timeout_seconds=60)
+
         # Ждем, пока кластер достигнет начального состояния
         self.wait_for_cluster_state(
             self.bridge_client,
-            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}
+            {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.SYNCHRONIZED},
+            timeout_seconds=60
         )
         initial_result = self.get_cluster_state(self.bridge_client)
-        self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        self.check_states(initial_result, {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.SYNCHRONIZED})
 
         updates = [
-            PileState(pile_name="r1", state=PileState.DISCONNECTED),
-            PileState(pile_name="r2", state=PileState.PRIMARY),
+            PileState(pile_name=primary_pile_name, state=PileState.DISCONNECTED),
+            PileState(pile_name=secondary_pile_name, state=PileState.PRIMARY),
         ]
         self.update_cluster_state(self.bridge_client, updates)
-        self.wait_for_cluster_state(self.secondary_bridge_client, {"r1": PileState.DISCONNECTED, "r2": PileState.PRIMARY})
+        self.wait_for_cluster_state(self.secondary_bridge_client, {primary_pile_name: PileState.DISCONNECTED, secondary_pile_name: PileState.PRIMARY})
 
     def test_takedown(self):
+        # Определяем текущее состояние кластера (независимо от конкретных имен piles)
+        primary_pile_name, secondary_pile_name = self._determine_current_cluster_state("checking initial state", timeout_seconds=60)
+
         # Ждем, пока кластер достигнет начального состояния
         self.wait_for_cluster_state(
             self.bridge_client,
-            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}
+            {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.SYNCHRONIZED},
+            timeout_seconds=60
         )
         initial_result = self.get_cluster_state(self.bridge_client)
-        self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        self.check_states(initial_result, {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.SYNCHRONIZED})
         updates = [
-            PileState(pile_name="r2", state=PileState.SUSPENDED),
+            PileState(pile_name=secondary_pile_name, state=PileState.SUSPENDED),
         ]
         self.update_cluster_state(self.bridge_client, updates)
-        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.DISCONNECTED})
+        self.wait_for_cluster_state(self.bridge_client, {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.DISCONNECTED})
 
     def test_rejoin(self):
+        # Определяем текущее состояние кластера (независимо от конкретных имен piles)
+        primary_pile_name, secondary_pile_name = self._determine_current_cluster_state("checking initial state", timeout_seconds=60)
+
         # Ждем, пока кластер достигнет начального состояния
         self.wait_for_cluster_state(
             self.bridge_client,
-            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}
+            {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.SYNCHRONIZED},
+            timeout_seconds=60
         )
         initial_result = self.get_cluster_state(self.bridge_client)
-        self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        self.check_states(initial_result, {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.SYNCHRONIZED})
         updates = [
-            PileState(pile_name="r2", state=PileState.SUSPENDED),
+            PileState(pile_name=secondary_pile_name, state=PileState.SUSPENDED),
         ]
         self.update_cluster_state(self.bridge_client, updates)
-        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.DISCONNECTED})
+        self.wait_for_cluster_state(self.bridge_client, {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.DISCONNECTED})
         updates = [
-            PileState(pile_name="r2", state=PileState.NOT_SYNCHRONIZED),
+            PileState(pile_name=secondary_pile_name, state=PileState.NOT_SYNCHRONIZED),
         ]
         self.update_cluster_state(self.bridge_client, updates)
-        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        self.wait_for_cluster_state(self.bridge_client, {primary_pile_name: PileState.PRIMARY, secondary_pile_name: PileState.SYNCHRONIZED}, timeout_seconds=60)
 
 
 class TestBridgeValidation(BridgeKiKiMRTest):

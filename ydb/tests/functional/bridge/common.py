@@ -6,6 +6,7 @@ from ydb.tests.library.harness.util import LogLevels
 
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
+from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 
 from hamcrest import assert_that, is_, has_entries
 
@@ -105,8 +106,25 @@ class BridgeKiKiMRTest(object):
                 last_exception = e
                 time.sleep(0.5)
 
+        # Пытаемся получить текущее состояние для более информативного сообщения об ошибке
+        current_states = None
+        get_state_error_msg = None
+        try:
+            current_result = self.get_cluster_state(client)
+            current_states = {s.pile_name: s.state for s in current_result.pile_states}
+        except Exception as get_state_error:
+            get_state_error_msg = str(get_state_error)
+
+        expected_str = ", ".join([f"{k}={v}" for k, v in expected_states.items()])
+        if current_states:
+            current_str = ", ".join([f"{k}={v}" for k, v in current_states.items()])
+        else:
+            error_info = f" (error: {get_state_error_msg})" if get_state_error_msg else ""
+            current_str = f"unavailable{error_info}"
+
         raise AssertionError(
-            f"Cluster state did not reach expected state in {timeout_seconds}s"
+            f"Cluster state did not reach expected state in {timeout_seconds}s. "
+            f"Expected: {expected_str}. Current state: {current_str}"
         ) from last_exception
 
     def wait_for_cluster_state_with_step(self, client, expected_states, step_name, timeout_seconds=30):
@@ -164,6 +182,62 @@ class BridgeKiKiMRTest(object):
                 f"[Step: {step_name}] Failed to reach expected cluster state{attempts_info}{time_info}. "
                 f"Expected: {expected_str}. Current state: {current_str}"
             ) from e
+
+    def _determine_current_cluster_state(self, step_name="determining current cluster state", timeout_seconds=60):
+        """
+        Определяет текущее состояние кластера и возвращает имена primary и secondary piles.
+        Независимо от конкретных имен piles (r1/r2), определяет какой pile сейчас PRIMARY.
+
+        Args:
+            step_name: Название шага для логирования
+            timeout_seconds: Таймаут для ожидания стабильного состояния
+
+        Returns:
+            tuple: (primary_pile_name, secondary_pile_name)
+        """
+        self.logger.info(f"=== {step_name.upper()} ===")
+        try:
+            current_state = self.get_cluster_state(self.bridge_client)
+            current_states = {s.pile_name: s.state for s in current_state.pile_states}
+        except Exception as e:
+            # Если не удалось получить состояние, ждем стабильного состояния
+            self.logger.warning(f"Failed to get cluster state: {e}. Waiting for stable state...")
+            # Ждем, что есть один PRIMARY и один SYNCHRONIZED (независимо от имен)
+            # Пробуем оба варианта
+            try:
+                self.wait_for_cluster_state(
+                    self.bridge_client,
+                    {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
+                    timeout_seconds=timeout_seconds
+                )
+            except AssertionError:
+                # Если r1 не PRIMARY, пробуем r2
+                self.wait_for_cluster_state(
+                    self.bridge_client,
+                    {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY},
+                    timeout_seconds=timeout_seconds
+                )
+            current_state = self.get_cluster_state(self.bridge_client)
+            current_states = {s.pile_name: s.state for s in current_state.pile_states}
+
+        # Определяем какой pile сейчас PRIMARY
+        primary_pile_name = "r1" if current_states.get("r1") == PileState.PRIMARY else "r2"
+        secondary_pile_name = "r2" if primary_pile_name == "r1" else "r1"
+
+        self.logger.info(f"Current primary: {primary_pile_name}, secondary: {secondary_pile_name}")
+
+        # Проверяем, что состояние корректное (один PRIMARY, один SYNCHRONIZED)
+        primary_count = sum(1 for state in current_states.values() if state == PileState.PRIMARY)
+        synchronized_count = sum(1 for state in current_states.values() if state == PileState.SYNCHRONIZED)
+        assert primary_count == 1, \
+            f"[Step: {step_name}] Expected exactly one PRIMARY, got {primary_count}. " \
+            f"Full state: {current_states}"
+        assert synchronized_count == 1, \
+            f"[Step: {step_name}] Expected exactly one SYNCHRONIZED, got {synchronized_count}. " \
+            f"Full state: {current_states}"
+
+        self.logger.info(f"✓ Initial state: {primary_pile_name}=PRIMARY, {secondary_pile_name}=SYNCHRONIZED")
+        return primary_pile_name, secondary_pile_name
 
     @staticmethod
     def check_states(result, expected_states):

@@ -196,6 +196,61 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         return "Value: <key = {key}, tablet_id = {tablet_id}>".format(
             key=key, tablet_id=tablet_id)
 
+
+    def _check_data_integrity(self, table_path, initial_data, step_name, max_retries=20, retry_delay=3):
+        """
+        Проверяет целостность данных через чтение всех записей из initial_data.
+        С retry логикой для случаев, когда кластер временно недоступен после failover/rejoin.
+        
+        Args:
+            table_path: Путь к KV таблице
+            initial_data: Словарь {partition_id: (key, expected_value)} с данными для проверки
+            step_name: Название шага теста для логирования (например, "checking data integrity after failover")
+            max_retries: Максимальное количество попыток при ошибках подключения
+            retry_delay: Задержка между попытками в секундах
+        """
+        context = f" (step: {step_name})" if step_name else ""
+        self.logger.info("=== CHECKING DATA INTEGRITY%s ===", context)
+        
+        for attempt in range(max_retries):
+            try:
+                all_success = True
+                for partition_id, (key, expected_value) in initial_data.items():
+                    try:
+                        read_resp = self.cluster.kv_client.kv_read(table_path, partition_id, key)
+                        assert read_resp.operation.status == StatusIds.SUCCESS, \
+                            f"[Step: {step_name}] KV read failed: partition={partition_id}, " \
+                            f"key={key}, status={read_resp.operation.status}, table_path={table_path}"
+                        self.logger.info(f"✓ Data integrity check passed for partition {partition_id}%s", context)
+                    except Exception as e:
+                        all_success = False
+                        if attempt < max_retries - 1:
+                            self.logger.warning(
+                                f"[Step: {step_name}] Failed to read partition {partition_id} "
+                                f"(attempt {attempt + 1}/{max_retries}): {e}. Retrying in {retry_delay} seconds..."
+                            )
+                            break
+                        else:
+                            raise AssertionError(
+                                f"[Step: {step_name}] Failed to read initial data after {max_retries} attempts: "
+                                f"partition={partition_id}, key={key}, table_path={table_path}, error={e}"
+                            ) from e
+
+                if all_success:
+                    self.logger.info("✓ All data integrity checks passed%s", context)
+                    return  # Все успешно прочитаны
+
+            except AssertionError:
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                else:
+                    raise
+        else:
+            # Если вышли из цикла без break
+            raise AssertionError(
+                f"[Step: {step_name}] Failed to read initial data after {max_retries} attempts"
+            )
+
     def _check_cluster_kv_operations(self, table_path, tablet_ids, step_name="", max_retries=10, retry_delay=2):
         """
         Проверяет работоспособность кластера через KV операции записи/чтения.
@@ -287,9 +342,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         11. Проверяем работоспособность через KV операции после rejoin
             - Проверяем что после починки кластер работает, все наши проверки в т.ч. kv
         """
-        # Шаг 1: Проверяем начальное состояние
-        initial_result = self.get_cluster_state(self.bridge_client)
-        self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        # Шаг 1: Проверяем начальное состояние (с retry логикой)
+        self.wait_for_cluster_state_with_step(
+            self.bridge_client,
+            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
+            step_name="checking initial state",
+            timeout_seconds=30
+        )
         self.logger.info("✓ Initial state: r1=PRIMARY, r2=SYNCHRONIZED")
 
         # Шаг 1.5: Создаем KV таблицу для проверки работоспособности кластера (нагрузка)
@@ -357,9 +416,10 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         # Шаг 6: Проверяем состояние после failover
         # /bridge_list должна вернуть что pile r1 в disconnected, r2 в primary
         self.logger.info("=== CHECKING STATE AFTER FAILOVER ===")
-        self.wait_for_cluster_state(
+        self.wait_for_cluster_state_with_step(
             secondary_bridge_client,
             {"r1": PileState.DISCONNECTED, "r2": PileState.PRIMARY},
+            step_name="checking state after failover",
             timeout_seconds=30
         )
         self.logger.info("✓ State after failover: r1=DISCONNECTED, r2=PRIMARY")
@@ -411,9 +471,10 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
 
         # Ждем, пока r1 вернется в SYNCHRONIZED
         self.logger.info("=== WAITING FOR REJOIN TO COMPLETE ===")
-        self.wait_for_cluster_state(
+        self.wait_for_cluster_state_with_step(
             secondary_bridge_client,
             {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY},
+            step_name="waiting for rejoin to complete",
             timeout_seconds=50
         )
         self.logger.info("✓ Rejoin completed: r1=SYNCHRONIZED, r2=PRIMARY")
@@ -462,9 +523,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         11. Проверяем работоспособность через KV операции после rejoin
             - Проверяем что после починки кластер работает, все наши проверки в т.ч. kv
         """
-        # Шаг 1: Проверяем начальное состояние
-        initial_result = self.get_cluster_state(self.bridge_client)
-        self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        # Шаг 1: Проверяем начальное состояние (с retry логикой)
+        self.wait_for_cluster_state_with_step(
+            self.bridge_client,
+            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
+            step_name="checking initial state",
+            timeout_seconds=30
+        )
         self.logger.info("✓ Initial state: r1=PRIMARY, r2=SYNCHRONIZED")
 
         # Шаг 1.5: Создаем KV таблицу для проверки работоспособности кластера (нагрузка)
@@ -532,9 +597,10 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         # Шаг 6: Проверяем состояние после failover
         # /bridge_list должна вернуть что pile r2 в disconnected, r1 остается primary
         self.logger.info("=== CHECKING STATE AFTER FAILOVER ===")
-        self.wait_for_cluster_state(
+        self.wait_for_cluster_state_with_step(
             primary_bridge_client,
             {"r1": PileState.PRIMARY, "r2": PileState.DISCONNECTED},
+            step_name="checking state after failover",
             timeout_seconds=30
         )
         self.logger.info("✓ State after failover: r1=PRIMARY, r2=DISCONNECTED")
@@ -632,9 +698,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         10. Проверяем финальное состояние: r1=SYNCHRONIZED, r2=PRIMARY
         11. Проверяем работоспособность через KV операции после rejoin
         """
-        # Шаг 1: Проверяем начальное состояние
-        initial_result = self.get_cluster_state(self.bridge_client)
-        self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        # Шаг 1: Проверяем начальное состояние (с retry логикой)
+        self.wait_for_cluster_state_with_step(
+            self.bridge_client,
+            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
+            step_name="checking initial state",
+            timeout_seconds=30
+        )
         self.logger.info("✓ Initial state: r1=PRIMARY, r2=SYNCHRONIZED")
 
         # Шаг 2: Создаем KV таблицу для проверки работоспособности
@@ -700,9 +770,10 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
 
         # Шаг 6: Проверяем состояние после failover
         self.logger.info("=== CHECKING STATE AFTER FAILOVER ===")
-        self.wait_for_cluster_state(
+        self.wait_for_cluster_state_with_step(
             secondary_bridge_client,
             {"r1": PileState.DISCONNECTED, "r2": PileState.PRIMARY},
+            step_name="checking state after failover",
             timeout_seconds=30
         )
         self.logger.info("✓ State after failover: r1=DISCONNECTED, r2=PRIMARY")
@@ -740,9 +811,10 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
 
         # Ждем, пока r1 вернется в SYNCHRONIZED
         self.logger.info("=== WAITING FOR REJOIN TO COMPLETE ===")
-        self.wait_for_cluster_state(
+        self.wait_for_cluster_state_with_step(
             secondary_bridge_client,
             {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY},
+            step_name="waiting for rejoin to complete",
             timeout_seconds=50
         )
         self.logger.info("✓ Rejoin completed: r1=SYNCHRONIZED, r2=PRIMARY")
@@ -781,9 +853,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
            - Проверяем работоспособность
         4. Проверяем финальное состояние и работоспособность
         """
-        # Шаг 1: Проверяем начальное состояние
-        initial_result = self.get_cluster_state(self.bridge_client)
-        self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        # Шаг 1: Проверяем начальное состояние (с retry логикой)
+        self.wait_for_cluster_state_with_step(
+            self.bridge_client,
+            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
+            step_name="checking initial state",
+            timeout_seconds=30
+        )
         self.logger.info("✓ Initial state: r1=PRIMARY, r2=SYNCHRONIZED")
 
         # Шаг 2: Создаем KV таблицу
@@ -809,9 +885,21 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         for cycle in range(cycles_count):
             self.logger.info(f"=== CYCLE {cycle + 1}/{cycles_count} ===")
 
-            # Определяем какой pile сейчас PRIMARY
-            current_state = self.get_cluster_state(self.bridge_client)
-            current_states = {s.pile_name: s.state for s in current_state.pile_states}
+            # Определяем какой pile сейчас PRIMARY (с retry логикой)
+            try:
+                current_state = self.get_cluster_state(self.bridge_client)
+                current_states = {s.pile_name: s.state for s in current_state.pile_states}
+            except Exception as e:
+                # Если не удалось получить состояние, ждем стабильного состояния
+                self.logger.warning(f"[Step: cycle {cycle + 1}] Failed to get cluster state: {e}. Waiting for stable state...")
+                self.wait_for_cluster_state_with_step(
+                    self.bridge_client,
+                    {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
+                    step_name=f"cycle {cycle + 1}, waiting for stable state",
+                    timeout_seconds=30
+                )
+                current_state = self.get_cluster_state(self.bridge_client)
+                current_states = {s.pile_name: s.state for s in current_state.pile_states}
             primary_pile_name = "r1" if current_states.get("r1") == PileState.PRIMARY else "r2"
             secondary_pile_name = "r2" if primary_pile_name == "r1" else "r1"
 
@@ -857,7 +945,12 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                 primary_pile_name: PileState.DISCONNECTED,
                 secondary_pile_name: PileState.PRIMARY
             }
-            self.wait_for_cluster_state(bridge_client, expected_states, timeout_seconds=30)
+            self.wait_for_cluster_state_with_step(
+                bridge_client,
+                expected_states,
+                step_name=f"cycle {cycle + 1}, checking state after failover",
+                timeout_seconds=30
+            )
             self.logger.info(f"✓ State after failover: {expected_states}")
 
             # Проверяем работоспособность
@@ -881,7 +974,12 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                 primary_pile_name: PileState.SYNCHRONIZED,
                 secondary_pile_name: PileState.PRIMARY
             }
-            self.wait_for_cluster_state(bridge_client, expected_states_after_rejoin, timeout_seconds=50)
+            self.wait_for_cluster_state_with_step(
+                bridge_client,
+                expected_states_after_rejoin,
+                step_name=f"cycle {cycle + 1}, waiting for rejoin to complete",
+                timeout_seconds=50
+            )
             self.logger.info(f"✓ Rejoin completed: {expected_states_after_rejoin}")
 
             # Проверяем работоспособность после rejoin
@@ -922,9 +1020,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         8. Восстанавливаем ноды и делаем rejoin
         9. Проверяем финальную целостность данных
         """
-        # Шаг 1: Проверяем начальное состояние
-        initial_result = self.get_cluster_state(self.bridge_client)
-        self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
+        # Шаг 1: Проверяем начальное состояние (с retry логикой)
+        self.wait_for_cluster_state_with_step(
+            self.bridge_client,
+            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
+            step_name="checking initial state",
+            timeout_seconds=30
+        )
         self.logger.info("✓ Initial state: r1=PRIMARY, r2=SYNCHRONIZED")
 
         # Шаг 2: Создаем KV таблицу и записываем начальные данные
@@ -947,9 +1049,17 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         for partition_id, tablet_id in enumerate(tablet_ids):
             key = f"initial_key_{partition_id}"
             value = self._value_for(key, tablet_id)
-            write_resp = self.cluster.kv_client.kv_write(table_path, partition_id, key, value)
-            assert_that(write_resp.operation.status == StatusIds.SUCCESS)
-            initial_data[partition_id] = (key, value)
+            try:
+                write_resp = self.cluster.kv_client.kv_write(table_path, partition_id, key, value)
+                assert write_resp.operation.status == StatusIds.SUCCESS, \
+                    f"[Step: writing initial data] KV write failed: partition={partition_id}, " \
+                    f"key={key}, status={write_resp.operation.status}, table_path={table_path}"
+                initial_data[partition_id] = (key, value)
+            except Exception as e:
+                raise AssertionError(
+                    f"[Step: writing initial data] Failed to write initial data: "
+                    f"partition={partition_id}, key={key}, table_path={table_path}, error={e}"
+                ) from e
         self.logger.info("✓ Initial data written")
 
         # Шаг 3: Запускаем фоновые KV операции
@@ -1040,11 +1150,11 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         self.logger.info(f"✓ Background operations completed: {operations_count} operations, {len(operations_errors)} errors")
 
         # Шаг 6: Проверяем, что начальные данные сохранились
-        self.logger.info("=== CHECKING DATA INTEGRITY AFTER FAILOVER ===")
-        for partition_id, (key, expected_value) in initial_data.items():
-            read_resp = self.cluster.kv_client.kv_read(table_path, partition_id, key)
-            assert_that(read_resp.operation.status == StatusIds.SUCCESS)
-            self.logger.info(f"✓ Initial data preserved for partition {partition_id}")
+        self._check_data_integrity(
+            table_path,
+            initial_data,
+            step_name="checking data integrity after failover"
+        )
 
         # Шаг 7: Продолжаем выполнять KV операции после failover
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="after failover during operations")
@@ -1061,19 +1171,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             f"[Step: executing rejoin] Failed to execute rejoin on r1. " \
             f"Current state: {[(s.pile_name, s.state) for s in current_state_before_rejoin.pile_states]}"
 
-        self.wait_for_cluster_state(
+        self.wait_for_cluster_state_with_step(
             secondary_bridge_client,
             {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY},
+            step_name="waiting for rejoin to complete",
             timeout_seconds=50
         )
         self.logger.info("✓ Rejoin completed")
 
         # Шаг 9: Финальная проверка целостности данных
-        self.logger.info("=== FINAL DATA INTEGRITY CHECK ===")
-        for partition_id, (key, expected_value) in initial_data.items():
-            read_resp = self.cluster.kv_client.kv_read(table_path, partition_id, key)
-            assert_that(read_resp.operation.status == StatusIds.SUCCESS)
-            self.logger.info(f"✓ Final data integrity check passed for partition {partition_id}")
+        self._check_data_integrity(
+            table_path,
+            initial_data,
+            step_name="final data integrity check"
+        )
 
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="final after rejoin")
 

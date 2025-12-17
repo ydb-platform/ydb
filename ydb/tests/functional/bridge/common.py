@@ -107,6 +107,43 @@ class BridgeKiKiMRTest(object):
                 time.sleep(0.5)
         raise AssertionError(f"Cluster state did not reach expected state in {timeout_seconds}s") from last_exception
 
+    def wait_for_cluster_state_with_step(self, client, expected_states, step_name, timeout_seconds=30):
+        """
+        Обертка над wait_for_cluster_state с указанием шага теста для понятных assert-сообщений.
+        
+        Args:
+            client: BridgeClient для получения состояния
+            expected_states: Словарь ожидаемых состояний {pile_name: PileState}
+            step_name: Название шага теста (например, "checking state after failover")
+            timeout_seconds: Максимальное время ожидания
+        """
+        try:
+            return self.wait_for_cluster_state(client, expected_states, timeout_seconds=timeout_seconds)
+        except AssertionError as e:
+            # Получаем текущее состояние для детального сообщения
+            current_states = None
+            get_state_error_msg = None
+            try:
+                current_result = self.get_cluster_state(client)
+                current_states = {s.pile_name: s.state for s in current_result.pile_states}
+            except Exception as get_state_error:
+                get_state_error_msg = str(get_state_error)
+            
+            expected_str = ", ".join([f"{k}={v}" for k, v in expected_states.items()])
+            if current_states:
+                current_str = ", ".join([f"{k}={v}" for k, v in current_states.items()])
+            else:
+                error_info = f" (error: {get_state_error_msg})" if get_state_error_msg else ""
+                current_str = f"unavailable{error_info}"
+            
+            raise AssertionError(
+                f"[Step: {step_name}] Failed to reach expected cluster state. "
+                f"Expected: {expected_str}. "
+                f"Current state: {current_str}. "
+                f"Timeout: {timeout_seconds}s. "
+                f"Original error: {e}"
+            ) from e
+
     @staticmethod
     def check_states(result, expected_states):
         actual_states = {s.pile_name: s.state for s in result.pile_states}

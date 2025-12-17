@@ -11,7 +11,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.clients.kikimr_bridge_client import bridge_client_factory
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.clients.kikimr_keyvalue_client import keyvalue_client_factory
-from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
+from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start, get_kv_tablet_ids
 
 
 class TestBridgeBasic(BridgeKiKiMRTest):
@@ -383,6 +383,17 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         while time.time() - start_time < max_total_timeout_seconds:
             attempt += 1
             try:
+                # Проверяем, что tablet_ids не пустой
+                assert len(tablet_ids) > 0, \
+                    f"[Step: {step_name}] tablet_ids is empty, cannot perform KV operations"
+                
+                # Логируем количество tablets для отладки (только при первой попытке)
+                if attempt == 1:
+                    self.logger.debug(
+                        "[Step: %s] Processing %d tablets: %s",
+                        step_name, len(tablet_ids), tablet_ids[:5] if len(tablet_ids) > 5 else tablet_ids
+                    )
+                
                 for partition_id, tablet_id in enumerate(tablet_ids):
                     # Запись
                     try:
@@ -530,7 +541,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         table_path = '/Root/test_bridge_operational_primary'
         number_of_tablets = 3
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
-        tablet_ids = create_kv_tablets_and_wait_for_start(
+        
+        # Проверяем, какие tablets уже есть в таблице ДО создания новых
+        existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
+        
+        # Создаем новые tablets
+        create_kv_tablets_and_wait_for_start(
             self.cluster.client,
             self.cluster.kv_client,
             swagger_client,
@@ -538,7 +555,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path,
             timeout_seconds=10
         )
-        self.logger.info("✓ Created KV table %s with %d tablets", table_path, len(tablet_ids))
+        
+        # Получаем список всех tablets ПОСЛЕ создания
+        all_tablet_ids_after = get_kv_tablet_ids(swagger_client)
+        
+        # Используем только те tablets, которых не было до создания (новые)
+        new_tablet_ids = [tid for tid in all_tablet_ids_after if tid not in existing_tablet_ids]
+        tablet_ids = new_tablet_ids[:number_of_tablets]  # Берем только нужное количество
+        
+        assert len(tablet_ids) == number_of_tablets, \
+            f"[Step: creating KV table] Expected {number_of_tablets} new tablets, got {len(tablet_ids)} " \
+            f"(existing: {len(existing_tablet_ids)}, total after: {len(all_tablet_ids_after)}). " \
+            f"This may indicate leftover tablets from previous test runs."
+        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)", 
+                        table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
 
         # Проверяем работоспособность до failover
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="before failover")
@@ -720,7 +750,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         table_path = '/Root/test_bridge_operational_synchronized'
         number_of_tablets = 3
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
-        tablet_ids = create_kv_tablets_and_wait_for_start(
+        
+        # Проверяем, какие tablets уже есть в таблице ДО создания новых
+        existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
+        
+        # Создаем новые tablets
+        create_kv_tablets_and_wait_for_start(
             self.cluster.client,
             self.cluster.kv_client,
             swagger_client,
@@ -728,7 +764,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path,
             timeout_seconds=10
         )
-        self.logger.info("✓ Created KV table %s with %d tablets", table_path, len(tablet_ids))
+        
+        # Получаем список всех tablets ПОСЛЕ создания
+        all_tablet_ids_after = get_kv_tablet_ids(swagger_client)
+        
+        # Используем только те tablets, которых не было до создания (новые)
+        new_tablet_ids = [tid for tid in all_tablet_ids_after if tid not in existing_tablet_ids]
+        tablet_ids = new_tablet_ids[:number_of_tablets]  # Берем только нужное количество
+        
+        assert len(tablet_ids) == number_of_tablets, \
+            f"[Step: creating KV table] Expected {number_of_tablets} new tablets, got {len(tablet_ids)} " \
+            f"(existing: {len(existing_tablet_ids)}, total after: {len(all_tablet_ids_after)}). " \
+            f"This may indicate leftover tablets from previous test runs."
+        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)", 
+                        table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
 
         # Проверяем работоспособность до failover
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="before failover")
@@ -899,7 +948,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         table_path = '/Root/test_bridge_operational_partial'
         number_of_tablets = 3
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
-        tablet_ids = create_kv_tablets_and_wait_for_start(
+        
+        # Проверяем, какие tablets уже есть в таблице ДО создания новых
+        existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
+        
+        # Создаем новые tablets
+        create_kv_tablets_and_wait_for_start(
             self.cluster.client,
             self.cluster.kv_client,
             swagger_client,
@@ -907,7 +962,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path,
             timeout_seconds=10
         )
-        self.logger.info("✓ Created KV table %s with %d tablets", table_path, len(tablet_ids))
+        
+        # Получаем список всех tablets ПОСЛЕ создания
+        all_tablet_ids_after = get_kv_tablet_ids(swagger_client)
+        
+        # Используем только те tablets, которых не было до создания (новые)
+        new_tablet_ids = [tid for tid in all_tablet_ids_after if tid not in existing_tablet_ids]
+        tablet_ids = new_tablet_ids[:number_of_tablets]  # Берем только нужное количество
+        
+        assert len(tablet_ids) == number_of_tablets, \
+            f"[Step: creating KV table] Expected {number_of_tablets} new tablets, got {len(tablet_ids)} " \
+            f"(existing: {len(existing_tablet_ids)}, total after: {len(all_tablet_ids_after)}). " \
+            f"This may indicate leftover tablets from previous test runs."
+        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)", 
+                        table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
 
         # Проверяем работоспособность до failover
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="before failover")
@@ -1063,7 +1131,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         table_path = '/Root/test_bridge_operational_cycles'
         number_of_tablets = 3
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
-        tablet_ids = create_kv_tablets_and_wait_for_start(
+        
+        # Проверяем, какие tablets уже есть в таблице ДО создания новых
+        existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
+        
+        # Создаем новые tablets
+        create_kv_tablets_and_wait_for_start(
             self.cluster.client,
             self.cluster.kv_client,
             swagger_client,
@@ -1071,7 +1145,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path,
             timeout_seconds=10
         )
-        self.logger.info("✓ Created KV table %s with %d tablets", table_path, len(tablet_ids))
+        
+        # Получаем список всех tablets ПОСЛЕ создания
+        all_tablet_ids_after = get_kv_tablet_ids(swagger_client)
+        
+        # Используем только те tablets, которых не было до создания (новые)
+        new_tablet_ids = [tid for tid in all_tablet_ids_after if tid not in existing_tablet_ids]
+        tablet_ids = new_tablet_ids[:number_of_tablets]  # Берем только нужное количество
+        
+        assert len(tablet_ids) == number_of_tablets, \
+            f"[Step: creating KV table] Expected {number_of_tablets} new tablets, got {len(tablet_ids)} " \
+            f"(existing: {len(existing_tablet_ids)}, total after: {len(all_tablet_ids_after)}). " \
+            f"This may indicate leftover tablets from previous test runs."
+        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)", 
+                        table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
 
         # Проверяем работоспособность до циклов
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="before cycles")
@@ -1214,7 +1301,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         table_path = '/Root/test_bridge_operational_during_failover'
         number_of_tablets = 3
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
-        tablet_ids = create_kv_tablets_and_wait_for_start(
+        
+        # Проверяем, какие tablets уже есть в таблице ДО создания новых
+        existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
+        
+        # Создаем новые tablets
+        create_kv_tablets_and_wait_for_start(
             self.cluster.client,
             self.cluster.kv_client,
             swagger_client,
@@ -1222,7 +1315,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path,
             timeout_seconds=10
         )
-        self.logger.info("✓ Created KV table %s with %d tablets", table_path, len(tablet_ids))
+        
+        # Получаем список всех tablets ПОСЛЕ создания
+        all_tablet_ids_after = get_kv_tablet_ids(swagger_client)
+        
+        # Используем только те tablets, которых не было до создания (новые)
+        new_tablet_ids = [tid for tid in all_tablet_ids_after if tid not in existing_tablet_ids]
+        tablet_ids = new_tablet_ids[:number_of_tablets]  # Берем только нужное количество
+        
+        assert len(tablet_ids) == number_of_tablets, \
+            f"[Step: creating KV table] Expected {number_of_tablets} new tablets, got {len(tablet_ids)} " \
+            f"(existing: {len(existing_tablet_ids)}, total after: {len(all_tablet_ids_after)}). " \
+            f"This may indicate leftover tablets from previous test runs."
+        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)", 
+                        table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
 
         # Записываем начальные данные
         initial_data = {}

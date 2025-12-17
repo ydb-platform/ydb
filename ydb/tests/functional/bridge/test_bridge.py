@@ -2,7 +2,6 @@
 import pytest
 import time
 import threading
-from hamcrest import assert_that
 
 from common import BridgeKiKiMRTest
 
@@ -200,10 +199,10 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         """
         Определяет текущее состояние кластера и возвращает имена primary и secondary piles.
         Независимо от конкретных имен piles (r1/r2), определяет какой pile сейчас PRIMARY.
-        
+
         Args:
             step_name: Название шага для логирования
-            
+
         Returns:
             tuple: (primary_pile_name, secondary_pile_name)
         """
@@ -223,13 +222,13 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             )
             current_state = self.get_cluster_state(self.bridge_client)
             current_states = {s.pile_name: s.state for s in current_state.pile_states}
-        
+
         # Определяем какой pile сейчас PRIMARY
         primary_pile_name = "r1" if current_states.get("r1") == PileState.PRIMARY else "r2"
         secondary_pile_name = "r2" if primary_pile_name == "r1" else "r1"
-        
+
         self.logger.info(f"Current primary: {primary_pile_name}, secondary: {secondary_pile_name}")
-        
+
         # Проверяем, что состояние корректное (один PRIMARY, один SYNCHRONIZED)
         primary_count = sum(1 for state in current_states.values() if state == PileState.PRIMARY)
         synchronized_count = sum(1 for state in current_states.values() if state == PileState.SYNCHRONIZED)
@@ -239,16 +238,15 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         assert synchronized_count == 1, \
             f"[Step: {step_name}] Expected exactly one SYNCHRONIZED, got {synchronized_count}. " \
             f"Full state: {current_states}"
-        
+
         self.logger.info(f"✓ Initial state: {primary_pile_name}=PRIMARY, {secondary_pile_name}=SYNCHRONIZED")
         return primary_pile_name, secondary_pile_name
-
 
     def _check_data_integrity(self, table_path, initial_data, step_name, kv_client=None, max_total_timeout_seconds=60):
         """
         Проверяет целостность данных через чтение всех записей из initial_data.
         С retry логикой для случаев, когда кластер временно недоступен после failover/rejoin.
-        
+
         Args:
             table_path: Путь к KV таблице
             initial_data: Словарь {partition_id: (key, expected_value)} с данными для проверки
@@ -258,14 +256,14 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         """
         context = f" (step: {step_name})" if step_name else ""
         self.logger.info("=== CHECKING DATA INTEGRITY%s ===", context)
-        
+
         # Используем переданный клиент или дефолтный
         client_to_use = kv_client if kv_client is not None else self.cluster.kv_client
-        
+
         start_time = time.time()
         retry_delay = 3  # Задержка между попытками
         attempt = 0
-        
+
         while time.time() - start_time < max_total_timeout_seconds:
             attempt += 1
             try:
@@ -276,44 +274,43 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                         assert read_resp.operation.status == StatusIds.SUCCESS, \
                             f"[Step: {step_name}] KV read failed: partition={partition_id}, " \
                             f"key={key}, status={read_resp.operation.status}, table_path={table_path}"
-                        
 
                         if not hasattr(read_resp, 'operation'):
                             raise AssertionError(
                                 f"[Step: {step_name}] KV read response does not contain 'operation' field: "
                                 f"partition={partition_id}, key={key}, table_path={table_path}"
                             )
-                        
+
                         operation = read_resp.operation
                         if not hasattr(operation, 'result'):
                             raise AssertionError(
                                 f"[Step: {step_name}] KV read response operation does not contain 'result' field: "
                                 f"partition={partition_id}, key={key}, table_path={table_path}"
                             )
-                        
+
                         result = operation.result
                         if not hasattr(result, 'value'):
                             raise AssertionError(
                                 f"[Step: {step_name}] KV read response result does not contain 'value' field: "
                                 f"partition={partition_id}, key={key}, table_path={table_path}"
                             )
-                        
+
                         read_value = result.value
-                        
+
                         if isinstance(read_value, bytes):
                             read_value = read_value.decode('utf-8', errors='replace')
                         if isinstance(expected_value, bytes):
                             expected_value = expected_value.decode('utf-8')
-                        
+
                         # Извлекаем ожидаемое значение из строки (может содержать служебные символы)
                         if expected_value in read_value:
                             value_pos = read_value.find(expected_value)
                             read_value = read_value[value_pos:value_pos + len(expected_value)]
-                        
+
                         assert read_value == expected_value, \
                             f"[Step: {step_name}] Data integrity check failed: partition={partition_id}, " \
                             f"key={key}, expected={expected_value!r}, got={read_value!r}, table_path={table_path}"
-                        
+
                         self.logger.info(f"✓ Data integrity check passed for partition {partition_id}%s (value verified)", context)
                     except Exception as e:
                         all_success = False
@@ -345,7 +342,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                     time.sleep(retry_delay)
                 else:
                     raise
-        
+
         # Если вышли из цикла по таймауту
         elapsed_time = time.time() - start_time
         raise AssertionError(
@@ -358,7 +355,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         Проверяет работоспособность кластера через KV операции записи/чтения.
         Аналогично check_kikimr_is_operational из test_distconf.py
         С retry логикой для случаев, когда кластер временно недоступен после failover.
-        
+
         Args:
             table_path: Путь к KV таблице
             tablet_ids: Список tablet IDs для проверки
@@ -368,28 +365,28 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         """
         context = f" (step: {step_name})" if step_name else ""
         self.logger.info("=== CHECKING CLUSTER KV OPERATIONS%s ===", context)
-        
+
         # Используем переданный клиент или дефолтный
         client_to_use = kv_client if kv_client is not None else self.cluster.kv_client
-        
+
         start_time = time.time()
         retry_delay = 2  # Задержка между попытками
         attempt = 0
-        
+
         while time.time() - start_time < max_total_timeout_seconds:
             attempt += 1
             try:
                 # Проверяем, что tablet_ids не пустой
                 assert len(tablet_ids) > 0, \
                     f"[Step: {step_name}] tablet_ids is empty, cannot perform KV operations"
-                
+
                 # Логируем количество tablets для отладки (только при первой попытке)
                 if attempt == 1:
                     self.logger.debug(
                         "[Step: %s] Processing %d tablets: %s",
                         step_name, len(tablet_ids), tablet_ids[:5] if len(tablet_ids) > 5 else tablet_ids
                     )
-                
+
                 for partition_id, tablet_id in enumerate(tablet_ids):
                     # Запись
                     try:
@@ -399,8 +396,8 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                         assert write_resp.operation.status == StatusIds.SUCCESS, \
                             f"[Step: {step_name}] KV write failed: partition={partition_id}, tablet={tablet_id}, " \
                             f"status={write_resp.operation.status}, table_path={table_path}"
-                        self.logger.info("✓ KV write successful for partition %d, tablet %d%s", 
-                                       partition_id, tablet_id, context)
+                        self.logger.info("✓ KV write successful for partition %d, tablet %d%s",
+                                         partition_id, tablet_id, context)
                     except Exception as e:
                         elapsed_time = time.time() - start_time
                         if elapsed_time + retry_delay < max_total_timeout_seconds:
@@ -422,46 +419,45 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                         assert read_resp.operation.status == StatusIds.SUCCESS, \
                             f"[Step: {step_name}] KV read failed: partition={partition_id}, tablet={tablet_id}, " \
                             f"status={read_resp.operation.status}, table_path={table_path}"
-                        
 
                         if not hasattr(read_resp, 'operation'):
                             raise AssertionError(
                                 f"[Step: {step_name}] KV read response does not contain 'operation' field: "
                                 f"partition={partition_id}, tablet={tablet_id}, table_path={table_path}"
                             )
-                        
+
                         operation = read_resp.operation
                         if not hasattr(operation, 'result'):
                             raise AssertionError(
                                 f"[Step: {step_name}] KV read response operation does not contain 'result' field: "
                                 f"partition={partition_id}, tablet={tablet_id}, table_path={table_path}"
                             )
-                        
+
                         result = operation.result
                         if not hasattr(result, 'value'):
                             raise AssertionError(
                                 f"[Step: {step_name}] KV read response result does not contain 'value' field: "
                                 f"partition={partition_id}, tablet={tablet_id}, table_path={table_path}"
                             )
-                        
+
                         read_value = result.value
-                        
+
                         if isinstance(read_value, bytes):
                             read_value = read_value.decode('utf-8', errors='replace')
                         if isinstance(expected_value, bytes):
                             expected_value = expected_value.decode('utf-8')
-                        
+
                         # Извлекаем ожидаемое значение из строки (может содержать служебные символы)
                         if expected_value in read_value:
                             value_pos = read_value.find(expected_value)
                             read_value = read_value[value_pos:value_pos + len(expected_value)]
-                        
+
                         assert read_value == expected_value, \
                             f"[Step: {step_name}] KV read value mismatch: partition={partition_id}, tablet={tablet_id}, " \
                             f"expected={expected_value!r}, got={read_value!r}, table_path={table_path}"
-                        
-                        self.logger.info("✓ KV read successful for partition %d, tablet %d%s (value verified)", 
-                                       partition_id, tablet_id, context)
+
+                        self.logger.info("✓ KV read successful for partition %d, tablet %d%s (value verified)",
+                                         partition_id, tablet_id, context)
                     except Exception as e:
                         elapsed_time = time.time() - start_time
                         if elapsed_time + retry_delay < max_total_timeout_seconds:
@@ -477,7 +473,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                 elapsed_time = time.time() - start_time
                 self.logger.info("✓ Cluster KV operations are working correctly%s (took %.1fs)", context, elapsed_time)
                 return  # Успешно выполнили все операции
-                
+
             except (AssertionError, Exception) as e:
                 elapsed_time = time.time() - start_time
                 if elapsed_time + retry_delay < max_total_timeout_seconds:
@@ -495,7 +491,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                         f"[Step: {step_name}] KV operations failed after {attempt} attempts "
                         f"(total time: {elapsed_time:.1f}s, max timeout: {max_total_timeout_seconds}s): {e}"
                     ) from e
-        
+
         # Если вышли из цикла по таймауту
         elapsed_time = time.time() - start_time
         raise AssertionError(
@@ -537,11 +533,11 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         table_path = '/Root/test_bridge_operational_primary'
         number_of_tablets = 3
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
-        
+
         # Проверяем, какие tablets уже есть в таблице ДО создания новых
         existing_tablet_ids = get_kv_tablet_ids(swagger_client)
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
-        
+
         # Создаем новые tablets
         create_kv_tablets_and_wait_for_start(
             self.cluster.client,
@@ -551,20 +547,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path,
             timeout_seconds=10
         )
-        
+
         # Получаем список всех tablets ПОСЛЕ создания
         all_tablet_ids_after = get_kv_tablet_ids(swagger_client)
-        
+
         # Используем только те tablets, которых не было до создания (новые)
         new_tablet_ids = [tid for tid in all_tablet_ids_after if tid not in existing_tablet_ids]
         tablet_ids = new_tablet_ids[:number_of_tablets]  # Берем только нужное количество
-        
+
         assert len(tablet_ids) == number_of_tablets, \
             f"[Step: creating KV table] Expected {number_of_tablets} new tablets, got {len(tablet_ids)} " \
             f"(existing: {len(existing_tablet_ids)}, total after: {len(all_tablet_ids_after)}). " \
             f"This may indicate leftover tablets from previous test runs."
-        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)", 
-                        table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
+        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)",
+                         table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
 
         # Проверяем работоспособность до failover
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="before failover")
@@ -746,11 +742,11 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         table_path = '/Root/test_bridge_operational_synchronized'
         number_of_tablets = 3
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
-        
+
         # Проверяем, какие tablets уже есть в таблице ДО создания новых
         existing_tablet_ids = get_kv_tablet_ids(swagger_client)
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
-        
+
         # Создаем новые tablets
         create_kv_tablets_and_wait_for_start(
             self.cluster.client,
@@ -760,20 +756,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path,
             timeout_seconds=10
         )
-        
+
         # Получаем список всех tablets ПОСЛЕ создания
         all_tablet_ids_after = get_kv_tablet_ids(swagger_client)
-        
+
         # Используем только те tablets, которых не было до создания (новые)
         new_tablet_ids = [tid for tid in all_tablet_ids_after if tid not in existing_tablet_ids]
         tablet_ids = new_tablet_ids[:number_of_tablets]  # Берем только нужное количество
-        
+
         assert len(tablet_ids) == number_of_tablets, \
             f"[Step: creating KV table] Expected {number_of_tablets} new tablets, got {len(tablet_ids)} " \
             f"(existing: {len(existing_tablet_ids)}, total after: {len(all_tablet_ids_after)}). " \
             f"This may indicate leftover tablets from previous test runs."
-        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)", 
-                        table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
+        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)",
+                         table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
 
         # Проверяем работоспособность до failover
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="before failover")
@@ -944,11 +940,11 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         table_path = '/Root/test_bridge_operational_partial'
         number_of_tablets = 3
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
-        
+
         # Проверяем, какие tablets уже есть в таблице ДО создания новых
         existing_tablet_ids = get_kv_tablet_ids(swagger_client)
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
-        
+
         # Создаем новые tablets
         create_kv_tablets_and_wait_for_start(
             self.cluster.client,
@@ -958,20 +954,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path,
             timeout_seconds=10
         )
-        
+
         # Получаем список всех tablets ПОСЛЕ создания
         all_tablet_ids_after = get_kv_tablet_ids(swagger_client)
-        
+
         # Используем только те tablets, которых не было до создания (новые)
         new_tablet_ids = [tid for tid in all_tablet_ids_after if tid not in existing_tablet_ids]
         tablet_ids = new_tablet_ids[:number_of_tablets]  # Берем только нужное количество
-        
+
         assert len(tablet_ids) == number_of_tablets, \
             f"[Step: creating KV table] Expected {number_of_tablets} new tablets, got {len(tablet_ids)} " \
             f"(existing: {len(existing_tablet_ids)}, total after: {len(all_tablet_ids_after)}). " \
             f"This may indicate leftover tablets from previous test runs."
-        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)", 
-                        table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
+        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)",
+                         table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
 
         # Проверяем работоспособность до failover
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="before failover")
@@ -1127,11 +1123,11 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         table_path = '/Root/test_bridge_operational_cycles'
         number_of_tablets = 3
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
-        
+
         # Проверяем, какие tablets уже есть в таблице ДО создания новых
         existing_tablet_ids = get_kv_tablet_ids(swagger_client)
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
-        
+
         # Создаем новые tablets
         create_kv_tablets_and_wait_for_start(
             self.cluster.client,
@@ -1141,20 +1137,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path,
             timeout_seconds=10
         )
-        
+
         # Получаем список всех tablets ПОСЛЕ создания
         all_tablet_ids_after = get_kv_tablet_ids(swagger_client)
-        
+
         # Используем только те tablets, которых не было до создания (новые)
         new_tablet_ids = [tid for tid in all_tablet_ids_after if tid not in existing_tablet_ids]
         tablet_ids = new_tablet_ids[:number_of_tablets]  # Берем только нужное количество
-        
+
         assert len(tablet_ids) == number_of_tablets, \
             f"[Step: creating KV table] Expected {number_of_tablets} new tablets, got {len(tablet_ids)} " \
             f"(existing: {len(existing_tablet_ids)}, total after: {len(all_tablet_ids_after)}). " \
             f"This may indicate leftover tablets from previous test runs."
-        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)", 
-                        table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
+        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)",
+                         table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
 
         # Проверяем работоспособность до циклов
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="before cycles")
@@ -1297,11 +1293,11 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         table_path = '/Root/test_bridge_operational_during_failover'
         number_of_tablets = 3
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
-        
+
         # Проверяем, какие tablets уже есть в таблице ДО создания новых
         existing_tablet_ids = get_kv_tablet_ids(swagger_client)
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
-        
+
         # Создаем новые tablets
         create_kv_tablets_and_wait_for_start(
             self.cluster.client,
@@ -1311,20 +1307,20 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path,
             timeout_seconds=10
         )
-        
+
         # Получаем список всех tablets ПОСЛЕ создания
         all_tablet_ids_after = get_kv_tablet_ids(swagger_client)
-        
+
         # Используем только те tablets, которых не было до создания (новые)
         new_tablet_ids = [tid for tid in all_tablet_ids_after if tid not in existing_tablet_ids]
         tablet_ids = new_tablet_ids[:number_of_tablets]  # Берем только нужное количество
-        
+
         assert len(tablet_ids) == number_of_tablets, \
             f"[Step: creating KV table] Expected {number_of_tablets} new tablets, got {len(tablet_ids)} " \
             f"(existing: {len(existing_tablet_ids)}, total after: {len(all_tablet_ids_after)}). " \
             f"This may indicate leftover tablets from previous test runs."
-        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)", 
-                        table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
+        self.logger.info("✓ Created KV table %s with %d new tablets (existing: %d, total: %d)",
+                         table_path, len(tablet_ids), len(existing_tablet_ids), len(all_tablet_ids_after))
 
         # Записываем начальные данные
         initial_data = {}

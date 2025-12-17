@@ -156,7 +156,7 @@ TCounters InitializeCounters(
     }
 
     return {
-        .Config = config,
+        .Types = config->GetCounterTypes(),
         .Counters = std::move(result)
     };
 }
@@ -174,7 +174,7 @@ void SetCounters(TCounters& counters, const auto& metrics) {
         }
 
         auto value = aggregatedCounters[i].Get();
-        const auto& type = counters.Config->GetTypes()[i];
+        const auto& type = counters.Types[i];
         if (type == TLabeledCounterOptions::CT_TIMELAG) {
             value = value < now ? now - value : 0;
         }

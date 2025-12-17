@@ -39,7 +39,7 @@ struct TPartitionMetrics {
 };
 
 struct TCounters {
-    const NAux::TLabeledCounterParsedOpts* Config;
+    const ui8* Types;
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> Counters;
 };
 

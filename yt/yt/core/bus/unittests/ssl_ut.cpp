@@ -735,11 +735,19 @@ TEST_F(TSslTest, ServerStop)
     auto message = CreateMessage(1);
     auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     auto error = sendFuture.Get();
-    EXPECT_EQ(error.GetCode(), EErrorCode::TransportError);
-    EXPECT_THROW_MESSAGE_HAS_SUBSTR(
-        error.ThrowOnError(),
-        NYT::TErrorException,
-        "Socket was closed");
+
+    if (error.GetCode() == NRpc::EErrorCode::SslError) {
+        EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+            error.ThrowOnError(),
+            NYT::TErrorException,
+            "Connection reset by peer");
+    } else {
+        EXPECT_EQ(error.GetCode(), EErrorCode::TransportError);
+        EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+            error.ThrowOnError(),
+            NYT::TErrorException,
+            "Socket was closed");
+    }
 }
 
 TEST_F(TSslTest, BlackHole)

@@ -297,10 +297,8 @@ public:
     }
 
     void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
-        if (ev->Get()->Stats) {
-            if (Stats) {
-                Stats->AddBufferStats(std::move(*ev->Get()->Stats));
-            }
+        if (ev->Get()->Stats && Stats) {
+            Stats->AddBufferStats(std::move(*ev->Get()->Stats));
         }
         MakeResponseAndPassAway();
     }
@@ -316,13 +314,15 @@ public:
 
         ResponseEv->Snapshot = GetSnapshot();
 
-        if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
+        if (TxManager && LockHandle) {
+            // Keep LockHandle even if locks are empty.
+            ResponseEv->LockHandle = std::move(LockHandle);
+        }
+        if (!TxManager && !Locks.empty()) {
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-            if (!TxManager) {
-                BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
-            }
+            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
         }
 
         if (TxManager) {
@@ -593,7 +593,7 @@ private:
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 return;
             }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
             case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
                 if (res->Record.HasOverloadSubscribed()) {
                     LOG_D("Shard " << shardId << " is overloaded. Waiting.");
@@ -903,9 +903,9 @@ private:
                         case NKikimrTxDataShard::TError::SCHEME_ERROR:
                             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, YqlIssue({},
                                 TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
-                        //TODO Split OUT_OF_SPACE and DISK_SPACE_EXHAUSTED cases. The first one is temporary, the second one is permanent.
-                        case NKikimrTxDataShard::TError::OUT_OF_SPACE:
-                        case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED: {
+                        //TODO Split DISK_GROUP_OUT_OF_SPACE and DATABASE_DISK_SPACE_QUOTA_EXCEEDED cases. The first one is temporary, the second one is permanent.
+                        case NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE:
+                        case NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED: {
                             auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
                             AddDataShardErrors(result, issue);
                             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
@@ -1142,6 +1142,7 @@ private:
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
+                hFunc(NActors::NMon::TEvHttpInfo, HandleHttpInfo);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
@@ -1857,7 +1858,6 @@ private:
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];
-            AFL_ENSURE(tx.Body->StagesSize() < (static_cast<ui64>(1) << TKqpTasksGraph::PriorityTxShift));
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 const auto& stage = tx.Body->GetStages(stageIdx);
                 const auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
@@ -1882,7 +1882,8 @@ private:
                 }
 
                 if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))) {
-                    auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
+                    auto error = TStringBuilder()
+                        << "Data manipulation queries with column-oriented tables are supported only by API QueryService.";
                     LOG_E(error);
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                         YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
@@ -2079,6 +2080,11 @@ private:
                 }
                 const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
+                    HasDatashardSourceScan = true;
+                }
+
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
                     YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
                     HasDatashardSourceScan = true;
                 }
@@ -2791,9 +2797,11 @@ private:
 
     void StartCheckpointCoordinator() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
+        bool disableCheckpoints = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetDisableCheckpoints();
+
         bool enableCheckpointCoordinator = AppData()->FeatureFlags.GetEnableStreamingQueries()
             && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
-            && context && context->CheckpointId;
+            && context && context->CheckpointId && !disableCheckpoints;
         if (!enableCheckpointCoordinator) {
             return;
         }
@@ -2812,13 +2820,17 @@ private:
             }
         }
 
+        auto counters = Counters->Counters->GetKqpCounters();
+        if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
+            counters = counters->GetSubgroup("path", context->StreamingQueryPath);
+        }
         const auto& checkpointId = context->CheckpointId;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
             ::NFq::TCoordinatorId(checkpointId, Generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
             {},
-            Counters->Counters->GetKqpCounters()->GetSubgroup("path", context->StreamingQueryPath),
+            counters,
             graphParams,
             stateLoadMode,
             streamingDisposition).Release());

@@ -10,6 +10,13 @@ on:
       - main
       - stable-*
 
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull Request number to validate'
+        required: true
+        type: string
+
 jobs:
   validate-pr-description:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
@@ -20,11 +27,21 @@ jobs:
         with:
           ref: main
 
+      - name: Get PR body (manual run)
+        if: github.event_name == 'workflow_dispatch'
+        id: get_pr
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          python3 -m pip install PyGithub -q
+          python3 ./.github/actions/validate_pr_description/get_pr_body.py
+
       - name: Use custom PR validation action
         id: validate
         uses: ./.github/actions/validate_pr_description
         with:
-          pr_body: "${{ github.event.pull_request.body }}"
+          pr_body: ${{ github.event_name == 'workflow_dispatch' && steps.get_pr.outputs.pr_body || github.event.pull_request.body }}
 
       - name: Test output
         if: always()

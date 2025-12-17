@@ -1,0 +1,8 @@
+PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
+
+SRCS(
+    task.proto
+)
+
+END()

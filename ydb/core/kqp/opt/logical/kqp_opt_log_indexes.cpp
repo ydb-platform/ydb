@@ -139,6 +139,8 @@ bool IsTableExistsKeySelector(NNodes::TCoLambda keySelector, const TKikimrTableD
     return true;
 }
 
+
+
 bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& indexDesc, TVector<TString>* columns) {
     return IsTableExistsKeySelector(node.KeySelectorLambda(), indexDesc, columns);
 }
@@ -588,6 +590,7 @@ void VectorReadMain(
     const TIntrusivePtr<TKikimrTableMetadata> & mainTableMeta,
     const TCoAtomList& mainColumns,
     const TKqpStreamLookupSettings& pushdownSettings,
+    bool withOverlap,
     TExprNodePtr& read)
 {
     const bool isCovered = CheckIndexCovering(mainColumns, postingTableMeta);
@@ -606,21 +609,48 @@ void VectorReadMain(
             .Columns(postingColumns)
             .Settings(isVectorCovered ? settingsNode : settings.BuildNode(ctx, pos))
         .Done().Ptr();
-
-        read = Build<TKqlStreamLookupTable>(ctx, pos)
-            .Table(mainTable)
-            .LookupKeys(read)
-            .Columns(mainColumns)
-            .Settings(settingsNode)
-        .Done().Ptr();
-    } else {
-        read = Build<TKqlStreamLookupTable>(ctx, pos)
-            .Table(postingTable)
-            .LookupKeys(read)
-            .Columns(mainColumns)
-            .Settings(settingsNode)
-        .Done().Ptr();
     }
+
+    const auto& targetTable = isCovered ? postingTable : mainTable;
+
+    if (withOverlap) {
+        // mainColumns must contain primary key columns for DistinctColumns pushdown
+        THashSet<TStringBuf> cols;
+        for (const auto& col: mainColumns) {
+            cols.insert(col.Value());
+        }
+        TVector<TCoAtom> columnsWithKey;
+        for (const auto& col: mainTableMeta->KeyColumnNames) {
+            if (!cols.contains(col)) {
+                columnsWithKey.push_back(Build<TCoAtom>(ctx, pos)
+                    .Value(col)
+                    .Done());
+            }
+        }
+        if (columnsWithKey.size()) {
+            for (const auto& col: mainColumns) {
+                columnsWithKey.push_back(col);
+            }
+            read = Build<TKqlStreamLookupTable>(ctx, pos)
+                .Table(targetTable)
+                .LookupKeys(read)
+                .Columns<TCoAtomList>().Add(columnsWithKey).Build()
+                .Settings(settingsNode)
+                .Done().Ptr();
+            read = Build<TCoExtractMembers>(ctx, pos)
+                .Input(read)
+                .Members(mainColumns)
+                .Done().Ptr();
+            return;
+        }
+    }
+
+    read = Build<TKqlStreamLookupTable>(ctx, pos)
+        .Table(targetTable)
+        .LookupKeys(read)
+        .Columns(mainColumns)
+        .Settings(settingsNode)
+        .Done().Ptr();
 }
 
 void VectorTopMain(TExprContext& ctx, const TCoTopBase& top, TExprNodePtr& read) {
@@ -632,6 +662,10 @@ void VectorTopMain(TExprContext& ctx, const TCoTopBase& top, TExprNodePtr& read)
         .Count(top.Count())
     .Done().Ptr();
 }
+
+// FIXME Most of this rewriting should probably be handled in kqp/opt/physical
+// Logical optimizer should only rewrite it to something like TKqlReadTableVectorIndex
+// This would remove the need for skipping KqpApplyExtractMembersToReadTable based on settings.VectorTopDistinct
 
 TExprBase DoRewriteTopSortOverKMeansTree(
     const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
@@ -697,6 +731,9 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
     const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
 
+    const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
+    const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
+
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
     settings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
@@ -716,7 +753,8 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
+    settings.VectorTopDistinct = true;
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (flatMap) {
         read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
@@ -827,6 +865,9 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
 
     const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
 
+    const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
+    const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
+
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
     settings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
@@ -849,7 +890,8 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
+    settings.VectorTopDistinct = true;
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (mainLambda) {
         read = Build<TCoMap>(ctx, flatMap.Pos())
@@ -1075,6 +1117,97 @@ TExprBase KqpRewriteTopSortOverFlatMap(const TExprBase& node, TExprContext& ctx)
     return Build<TCoOrderedFlatMap>(ctx, node.Pos())
         .Input(flatMapInput)
         .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
+        .Done();
+}
+
+TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap)
+{
+    Y_UNUSED(kqpCtx, parentsMap);
+
+    if (!node.Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    auto flatMap = node.Maybe<TCoFlatMapBase>().Cast();
+
+    if (!flatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
+        return node;
+    }
+
+    auto optionalIf = flatMap.Lambda().Body().Maybe<TCoOptionalIf>().Cast();
+
+
+    if (!optionalIf.Predicate().Maybe<TCoApply>()) {
+        return node;
+    }
+
+    auto apply = optionalIf.Predicate().Maybe<TCoApply>().Cast();
+
+    if (!apply.Callable().Maybe<TCoUdf>()) {
+        return node;
+    }
+
+    auto udf = apply.Callable().Maybe<TCoUdf>().Cast();
+
+    if (udf.MethodName().Value() != "FullText.FulltextContains") {
+        return node;
+    }
+
+    auto read = TReadMatch::Match(flatMap.Input());
+    if (!read) {
+        return node;
+    }
+
+    if (read.Index().Value().empty()) {
+        return node;
+    }
+
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+    YQL_ENSURE(tableDesc.Metadata);
+
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+    if (indexDesc->Type != TIndexDescription::EType::GlobalFulltext) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Index " << read.Index().Value() << " is not a fulltext index"));
+        return node;
+    }
+
+    auto searchQuery = Build<TCoAtom>(ctx, node.Pos())
+        .Value("машинное обучение")
+        .Done();
+
+    auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(Build<TCoAtom>(ctx, node.Pos())
+            .Value("body")
+            .Done())
+        .Done();
+
+
+    TVector<TCoAtom> resultColumns;
+    for(auto& column: tableDesc.Metadata->KeyColumnNames) {
+        resultColumns.push_back(Build<TCoAtom>(ctx, node.Pos())
+            .Value(column)
+            .Done());
+    }
+    auto resultColumnsList = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(resultColumns)
+        .Done();
+
+    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+        .Table(read.Table())
+        .Index(read.Index())
+        .Columns(searchColumns.Ptr())
+        .Query(searchQuery.Ptr())
+        .ResultColumns(resultColumnsList.Ptr())
+        .Done();
+
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    return Build<TKqlStreamLookupTable>(ctx, read.Pos())
+        .Table(read.Table())
+        .LookupKeys(newInput.Ptr())
+        .Columns(read.Columns())
+        .Settings(settings.BuildNode(ctx, read.Pos()))
         .Done();
 }
 

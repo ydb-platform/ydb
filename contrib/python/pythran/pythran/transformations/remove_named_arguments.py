@@ -1,9 +1,12 @@
 """ RemoveNamedArguments turns named arguments into regular ones.  """
 
-from pythran.analyses import Aliases
+from pythran.analyses import Aliases, DefUseChains
+from pythran.conversion import PYTHRAN_IMPORT_MANGLING
+from pythran.errors import PythranInternalError
 from pythran.passmanager import Transformation
 from pythran.syntax import PythranSyntaxError
 from pythran.tables import MODULES
+
 
 import gast as ast
 from copy import deepcopy
@@ -15,7 +18,20 @@ def handle_special_calls(func_alias, node):
             node.args.insert(0, ast.Constant(0, None))
 
 
-class RemoveNamedArguments(Transformation[Aliases]):
+def same_nodes(n0, n1):
+    if type(n0) is not type(n1):
+        return False
+    if isinstance(n0, ast.Constant):
+        return type(n0.value) is type(n1.value) and n0.value == n1.value
+    if isinstance(n0, ast.Attribute):
+        return n0.attr == n1.attr and same_nodes(n0.value, n1.value)
+    if isinstance(n0, ast.Name):
+        assert n0.id.startswith(PYTHRAN_IMPORT_MANGLING), "should be an import"
+        return n0.id == n1.id
+    raise NotImplementedError((n0, n1))
+
+
+class RemoveNamedArguments(Transformation[Aliases, DefUseChains]):
     '''
     Replace call with named arguments to regular calls
 
@@ -92,6 +108,10 @@ class RemoveNamedArguments(Transformation[Aliases]):
 
         return replacements
 
+    def visit_FunctionDef(self, node):
+        self.current_function = node
+        return super().generic_visit(node)
+
     def visit_Call(self, node):
         if node.keywords:
             self.update = True
@@ -102,22 +122,59 @@ class RemoveNamedArguments(Transformation[Aliases]):
             # all aliases should have the same structural type...
             # call to self.handle_keywords raises an exception otherwise
             try:
-                replacements = {}
-                for func_alias in aliases:
-                    handle_special_calls(func_alias, node)
+                def visit_aliases(aliases):
+                    all_replacements = []
+                    for func_alias in aliases:
+                        handle_special_calls(func_alias, node)
 
-                    if func_alias is None:  # aliasing computation failed
-                        pass
-                    elif isinstance(func_alias, ast.Call):  # nested function
-                        # func_alias looks like functools.partial(foo, a)
-                        # so we reorder using alias for 'foo'
-                        offset = len(func_alias.args) - 1
-                        call = func_alias.args[0]
-                        for func_alias in self.aliases[call]:
-                            replacements = self.handle_keywords(func_alias,
-                                                                node, offset)
+                        if func_alias is None:  # aliasing computation failed
+                            pass
+                        elif isinstance(func_alias, ast.Call):  # nested function
+                            # func_alias looks like functools.partial(foo, a)
+                            # so we reorder using alias for 'foo'
+                            offset = len(func_alias.args) - 1
+                            call = func_alias.args[0]
+                            for func_alias in self.aliases[call]:
+                                all_replacements.append(self.handle_keywords(func_alias,
+                                                                    node,
+                                                                             offset))
+                        elif isinstance(func_alias, ast.Name):
+                            if not isinstance(func_alias.ctx, ast.Param):
+                                raise PythranInternalError(
+                                "Unexpected non-parameter reference in call")
+                            index = self.current_function.args.args.index(func_alias)
+                            def_ = self.def_use_chains.chains[self.current_function]
+                            for def_user in def_.users():
+                                for user in def_user.users():
+                                    if not isinstance(user.node, ast.Call):
+                                        continue
+                                    effective_arg = user.node.args[index]
+                                    arg_aliases = self.aliases[effective_arg]
+                                    all_replacements.append(visit_aliases(arg_aliases))
+
+
+                        else:
+                            all_replacements.append(self.handle_keywords(func_alias,
+                                                                     node))
+
+                    if not all_replacements:
+                        return {}
+                    elif len(all_replacements) == 1:
+                        return all_replacements[0]
                     else:
-                        replacements = self.handle_keywords(func_alias, node)
+                        replacement = {}
+                        for candidate in all_replacements:
+                            for k, v in candidate.items():
+                                if k not in replacement:
+                                    replacement[k] = v
+                                else:
+                                    if not same_nodes(v, replacement[k]):
+                                        raise PythranSyntaxError(
+                                            "different default argument values depending on the call site for this node", node)
+
+                        return replacement
+
+                replacements = visit_aliases(aliases)
 
                 # if we reach this point, we should have a replacement
                 # candidate, or nothing structural typing issues would have

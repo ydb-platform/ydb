@@ -30,7 +30,9 @@
 
 #include <yt/yt/client/ypath/public.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
+
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/ytree/convert.h>
@@ -773,6 +775,20 @@ void TAlterTableCommand::Register(TRegistrar registrar)
         "schema_id",
         [] (TThis* command) -> auto& {
             return command->Options.SchemaId;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TConstrainedTableSchema>>(
+        "constrained_schema",
+        [] (TThis* command) -> auto& {
+            return command->Options.ConstrainedSchema;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TColumnNameToConstraintMap>>(
+        "constraints",
+        [] (TThis* command) -> auto& {
+            return command->Options.Constraints;
         })
         .Optional(/*init*/ false);
 

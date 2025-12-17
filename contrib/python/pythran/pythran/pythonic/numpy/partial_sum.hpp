@@ -73,8 +73,7 @@ namespace numpy
   } // namespace
 
   template <class Op, class E, class dtype>
-  types::ndarray<typename dtype::type, types::pshape<long>>
-  partial_sum(E const &expr, dtype d)
+  types::ndarray<typename dtype::type, types::pshape<long>> partial_sum(E const &expr, dtype d)
   {
     const long count = expr.flat_size();
     types::ndarray<typename dtype::type, types::pshape<long>> the_partial_sum{
@@ -85,9 +84,8 @@ namespace numpy
   }
 
   template <class Op, class E, class dtype>
-  auto partial_sum(E const &expr, long axis, dtype d) ->
-      typename std::enable_if<E::value == 1,
-                              decltype(partial_sum<Op, E, dtype>(expr))>::type
+  auto partial_sum(E const &expr, long axis, dtype d)
+      -> std::enable_if_t<E::value == 1, decltype(partial_sum<Op, E, dtype>(expr))>
   {
     if (axis != 0)
       throw types::ValueError("axis out of bounds");
@@ -95,8 +93,8 @@ namespace numpy
   }
 
   template <class Op, class E, class dtype>
-  typename std::enable_if<E::value != 1, partial_sum_type<Op, E, dtype>>::type
-  partial_sum(E const &expr, long axis, dtype d)
+  std::enable_if_t<E::value != 1, partial_sum_type<Op, E, dtype>> partial_sum(E const &expr,
+                                                                              long axis, dtype d)
   {
     if (axis < 0 || size_t(axis) >= E::value)
       throw types::ValueError("axis out of bounds");
@@ -109,9 +107,9 @@ namespace numpy
     } else {
       std::transform(
           expr.begin(), expr.end(), the_partial_sum.begin(),
-          [axis,
-           d](typename std::iterator_traits<typename E::iterator>::value_type
-                  other) { return partial_sum<Op>(other, axis - 1, d); });
+          [axis, d](typename std::iterator_traits<typename E::iterator>::value_type other) {
+            return partial_sum<Op>(other, axis - 1, d);
+          });
     }
     return the_partial_sum;
   }

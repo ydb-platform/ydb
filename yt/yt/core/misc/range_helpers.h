@@ -22,6 +22,20 @@ auto ZipMutable(TRanges&&... ranges);
 template <class TContainer, std::ranges::input_range TRange>
 auto RangeTo(TRange&& range);
 
+//! Converts a parameter pack into the specified container.
+//! Useful for constructing containers of move-only types.
+//! Note that `std::vector<TMoveOnly>{std::move(a), std::move(b)}`
+//! will not compile since std::initializer_list has only const iterators.
+//! However, `StaticRangeTo<std::vector<TMoveOnly>>(std::move(a), std::move(b))` will work.
+template <class TContainer, class... TValues>
+    requires (std::constructible_from<typename TContainer::value_type, TValues> && ...)
+TContainer StaticRangeTo(TValues... values);
+
+//! A tuple wrapper with implicit casts to containers via `StaticRangeTo`.
+//! Useful for container list-initialization e.g. `std::vector<TMoveOnly> foo = TStaticRange{std::move(bar)};`.
+template <class... TValues>
+struct TStaticRange;
+
 //! Shortcut for `RangeTo(std::ranges::views::transform)`.
 template <class TContainer, std::ranges::input_range TRange, class TTransformFunction>
 auto TransformRangeTo(TRange&& range, TTransformFunction&& function);

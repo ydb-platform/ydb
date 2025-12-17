@@ -466,7 +466,7 @@ namespace NActors {
             return ReceiveContext->ClockSkew_us;
         }
 
-        std::optional<ui8> GetXDCFlags() const;
+        std::optional<ui8> GetXDCFlags() const noexcept;
 
     private:
         friend class TInterconnectProxyTCP;

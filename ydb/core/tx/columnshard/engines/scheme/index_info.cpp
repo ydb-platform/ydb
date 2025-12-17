@@ -137,6 +137,9 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
         InitializeCaches(operators, columns, nullptr);
         Precalculate();
     }
+    for (auto&& [id, column] : columns) {
+        Columns.emplace_back(TNameTypeInfo(column.Name, column.PType));
+    }
 }
 
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId) const {

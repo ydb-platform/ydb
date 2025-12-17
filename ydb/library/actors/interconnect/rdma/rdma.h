@@ -79,6 +79,7 @@ private:
 };
 
 ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept;
+ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept;
 
 struct THandshakeData {
     ui32 QpNum;
@@ -95,7 +96,7 @@ public:
     struct TQpS {
         int State;
     };
-    static bool IsRtsState(TQpS state);
+    static bool IsRtsState(TQpS state) noexcept;
     struct TQpErr {
         int Err;
     };

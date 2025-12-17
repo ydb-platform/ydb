@@ -375,7 +375,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
                         commit_tx=True,
                     )
         except ydb.Unavailable as e:
-            if not ignore_out_of_space or 'DISK_SPACE_EXHAUSTED' not in str(e):
+            if not ignore_out_of_space or 'DATABASE_DISK_SPACE_QUOTA_EXCEEDED' not in str(e):
                 raise
 
     @restart_coro_on_bad_session
@@ -448,7 +448,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
 
         # Writes should be denied when database moves into DiskQuotaExceeded state
         time.sleep(1)
-        with pytest.raises(ydb.Unavailable, match=r'.*DISK_SPACE_EXHAUSTED.*'):
+        with pytest.raises(ydb.Unavailable, match=r'.*DATABASE_DISK_SPACE_QUOTA_EXCEEDED.*'):
             IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
         with pytest.raises(ydb.Unavailable, match=r'.*out of disk space.*'):
             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(0, 'test')]))
@@ -537,7 +537,7 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             assert False, 'database did not move into Overloaded state'
 
         logger.info("Upsert data whith SQL")
-        with pytest.raises(ydb.issues.Overloaded, match=r'.*overload data error.*'):
+        with pytest.raises(ydb.issues.Overloaded, match=r'.*Column shard.*is overloaded.*'):
             qpool.execute_with_retries(
                 "UPSERT INTO `{}` (ts, value_string) VALUES(Timestamp('2020-01-01T00:00:00.000000Z'), 'xxx')".format(path),
                 retry_settings=RetrySettings(max_retries=0))

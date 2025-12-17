@@ -1,4 +1,5 @@
 RECURSE(
+    backup
     cdc
     common
     ctas
@@ -16,8 +17,10 @@ RECURSE(
     show_create/table
     simple_queue
     statistics_workload
+    testshard_workload
     topic
     topic_kafka
     transfer
     viewer
+    streaming
 )

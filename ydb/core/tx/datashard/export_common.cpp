@@ -24,8 +24,10 @@ static void ResortColumns(
         return it->second;
     });
 }
-static TMaybe<Ydb::Table::CreateTableRequest> GenRowTableScheme(const TMap<ui32, TUserTable::TUserColumn>& columns,
-                                                             const NKikimrSchemeOp::TPathDescription& pathDesc) {
+static TMaybe<Ydb::Table::CreateTableRequest> GenRowTableScheme(
+        const TMap<ui32, TUserTable::TUserColumn>& columns,
+        const NKikimrSchemeOp::TPathDescription& pathDesc)
+{
     if (!pathDesc.HasTable()) {
         return Nothing();
     }
@@ -68,8 +70,10 @@ static TMaybe<Ydb::Table::CreateTableRequest> GenRowTableScheme(const TMap<ui32,
     return scheme;
 }
 
-static TMaybe<Ydb::Table::CreateTableRequest> GenColumnTableScheme(const TMap<ui32, TUserTable::TUserColumn>& columns,
-                                                                   const NKikimrSchemeOp::TPathDescription& pathDesc) {
+static TMaybe<Ydb::Table::CreateTableRequest> GenColumnTableScheme(
+        const TMap<ui32, TUserTable::TUserColumn>& columns,
+        const NKikimrSchemeOp::TPathDescription& pathDesc)
+{
     if (!pathDesc.HasColumnTableDescription()) {
         return Nothing();
     }

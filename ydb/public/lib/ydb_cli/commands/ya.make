@@ -15,6 +15,8 @@ SRCS(
     ydb_bridge.cpp
     ydb_cluster.cpp
     ydb_debug.cpp
+    ydb_diagnostics.cpp
+    ydb_diagnostics.h
     ydb_dynamic_config.cpp
     ydb_latency.cpp
     ydb_node_config.cpp
@@ -31,13 +33,12 @@ SRCS(
     ydb_service_topic.cpp
     ydb_service_table.cpp
     ydb_sql.cpp
-    ydb_state.cpp
-    ydb_state.h
     ydb_storage_config.cpp
     ydb_tools_infer.cpp
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_workload_import.cpp
+    ydb_workload_testshard.cpp
     ydb_workload_tpcc.cpp
     ydb_yql.cpp
 )
@@ -59,6 +60,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
+    ydb/public/lib/ydb_cli/commands/sqs_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump
@@ -93,6 +95,7 @@ RECURSE(
     interactive
     sdk_core_access
     topic_workload
+    sqs_workload
     transfer_workload
     ydb_discovery
 )

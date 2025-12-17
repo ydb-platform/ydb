@@ -45,8 +45,6 @@ from typing import (
 )
 from uuid import UUID
 
-import attr
-
 from hypothesis._settings import note_deprecation
 from hypothesis.control import (
     cleanup,
@@ -172,7 +170,7 @@ def sampled_from(
     ...
 
 
-@defines_strategy(try_non_lazy=True)
+@defines_strategy(eager="try")
 def sampled_from(
     elements: type[enum.Enum] | Sequence[Any],
 ) -> SearchStrategy[Any]:
@@ -1154,7 +1152,11 @@ def builds(
     required = required_args(target, args, kwargs)
     to_infer = {k for k, v in kwargs.items() if v is ...}
     if required or to_infer:
-        if isinstance(target, type) and attr.has(target):
+        if (
+            isinstance(target, type)
+            and (attr := sys.modules.get("attr")) is not None
+            and attr.has(target)
+        ):  # pragma: no cover  # covered by our attrs tests in check-niche
             # Use our custom introspection for attrs classes
             from hypothesis.strategies._internal.attrs import from_attrs
 
@@ -1188,7 +1190,7 @@ def builds(
 
 
 @cacheable
-@defines_strategy(never_lazy=True)
+@defines_strategy(eager=True)
 def from_type(thing: type[T]) -> SearchStrategy[T]:
     """Looks up the appropriate search strategy for the given type.
 
@@ -1536,7 +1538,7 @@ def _from_type(thing: type[Ex]) -> SearchStrategy[Ex]:
         required = required_args(thing)
         if required and not (
             required.issubset(get_type_hints(thing))
-            or attr.has(thing)
+            or ((attr := sys.modules.get("attr")) is not None and attr.has(thing))
             or is_typed_named_tuple(thing)  # weird enough that we have a specific check
         ):
             raise ResolutionFailed(
@@ -1826,7 +1828,7 @@ def decimals(
     return strat | (sampled_from(special) if special else nothing())
 
 
-@defines_strategy(never_lazy=True)
+@defines_strategy(eager=True)
 def recursive(
     base: SearchStrategy[Ex],
     extend: Callable[[SearchStrategy[Any]], SearchStrategy[T]],
@@ -2171,7 +2173,7 @@ def complex_numbers(
     return constrained_complex()
 
 
-@defines_strategy(never_lazy=True)
+@defines_strategy(eager=True)
 def shared(
     base: SearchStrategy[Ex],
     *,
@@ -2338,7 +2340,7 @@ class DataStrategy(SearchStrategy):
 
 
 @cacheable
-@defines_strategy(never_lazy=True)
+@defines_strategy(eager=True)
 def data() -> SearchStrategy[DataObject]:
     """
     Provides an object ``data`` with a ``data.draw`` function which acts like
@@ -2486,7 +2488,7 @@ def register_type_strategy(
 
 
 @cacheable
-@defines_strategy(never_lazy=True)
+@defines_strategy(eager=True)
 def deferred(definition: Callable[[], SearchStrategy[Ex]]) -> SearchStrategy[Ex]:
     """A deferred strategy allows you to write a strategy that references other
     strategies that have not yet been defined. This allows for the easy

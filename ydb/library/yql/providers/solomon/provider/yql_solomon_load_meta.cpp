@@ -74,7 +74,7 @@ public:
                         return TStatus::Error;
                     }
                 } else {
-                    from = TInstant::Zero();
+                    from = TInstant::ParseIso8601("2010-01-01T00:00:00Z");
                 }
                 
                 TInstant to;

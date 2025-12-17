@@ -29,8 +29,8 @@
 #endif
 
 // Do not misrepresent host on Android and iOS.
-#undef CURL_OS
-#define CURL_OS "arcadia"
+#undef OS
+#define OS "arcadia"
 
 // c-ares resolver is known to be buggy.
 //

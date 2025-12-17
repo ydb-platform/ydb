@@ -15,8 +15,7 @@ private:
 
 public:
     TDataSourceConstructor(const ui64 tabletId, std::vector<ISnapshotSchema::TPtr>&& schemas)
-        : TBase(tabletId, schemas.front()->GetIndexInfo().GetPresetId() + 1,
-              TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.front()->GetIndexInfo().GetPresetId(), schemas.front()->GetVersion()),
+        : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.front()->GetIndexInfo().GetPresetId(), schemas.front()->GetVersion()),
               TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.back()->GetIndexInfo().GetPresetId(), schemas.back()->GetVersion()))
         , Schemas(std::move(schemas))
     {
@@ -27,7 +26,15 @@ public:
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
         return std::make_shared<TSourceData>(
-            GetSourceId(), GetSourceIdx(), GetTabletId(), std::move(Schemas), ExtractStart(), ExtractFinish(), context);
+            GetSourceIdx(), GetTabletId(), std::move(Schemas), ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context);
+    }
+
+    virtual bool QueryAgnosticLess(const NCommon::TDataSourceConstructor& rhs) const override {
+        auto* rhsLocal = VerifyDynamicCast<const TDataSourceConstructor*>(&rhs);
+        AFL_VERIFY(!Schemas.empty());
+        AFL_VERIFY(!rhsLocal->Schemas.empty());
+        return std::make_tuple(GetTabletId(), Schemas.front()->GetVersion()) <
+               std::make_tuple(rhsLocal->GetTabletId(), rhsLocal->Schemas.front()->GetVersion());
     }
 };
 

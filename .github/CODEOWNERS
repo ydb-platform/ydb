@@ -17,13 +17,14 @@
 /ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
-/ydb/core/kqp/ut/indexes/*vector*
+/ydb/core/kqp/ut/indexes/ @ydb-platform/qp @ydb-platform/datashard
+/ydb/core/kqp/ut/knn/ @ydb-platform/datashard
 /ydb/core/public_http/ @ydb-platform/fq
 
 /ydb/docs/ @ydb-platform/docs
 
-/ydb/library/yql/ @ydb-platform/yql
-/ydb/library/yql/dq @ydb-platform/yql @ydb-platform/qp
+/ydb/library/yql/ @ydb-platform/qp
+/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yql
 /ydb/library/yql/dq/actors/common @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
@@ -74,6 +75,7 @@
 /ydb/core/tx/tx_proxy/schemereq.cpp @ydb-platform/schemeshard
 
 /ydb/core/scheme @ydb-platform/datashard
+/ydb/core/statistics @ydb-platform/datashard
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard

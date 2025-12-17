@@ -24,13 +24,15 @@
  *
  ***************************************************************************/
 
-#include "../curl_setup.h"
-#include "../bufq.h"
+#include "curl_setup.h"
+#include "bufq.h"
 
-#ifdef USE_HTTP3
+#ifdef ENABLE_QUIC
 
 #define MAX_PKT_BURST 10
 #define MAX_UDP_PAYLOAD_SIZE  1452
+/* Default QUIC connection timeout we announce from our side */
+#define CURL_QUIC_MAX_IDLE_MS   (120 * 1000)
 
 struct cf_quic_ctx {
   curl_socket_t sockfd; /* connected UDP socket */
@@ -38,7 +40,6 @@ struct cf_quic_ctx {
   socklen_t local_addrlen; /* length of local address */
 
   struct bufq sendbuf; /* buffer for sending one or more packets */
-  struct curltime first_byte_at;     /* when first byte was recvd */
   struct curltime last_op; /* last (attempted) send/recv operation */
   struct curltime last_io; /* last successful socket IO */
   size_t gsolen; /* length of individual packets in send buf */
@@ -47,12 +48,8 @@ struct cf_quic_ctx {
 #ifdef DEBUGBUILD
   int wblock_percent; /* percent of writes doing EAGAIN */
 #endif
-  BIT(got_first_byte); /* if first byte was received */
-  BIT(no_gso); /* do not use gso on sending */
+  bool no_gso; /* do not use gso on sending */
 };
-
-#define H3_STREAM_CTX(ctx,data)                                         \
-  (data ? Curl_uint_hash_get(&(ctx)->streams, (data)->mid) : NULL)
 
 CURLcode vquic_ctx_init(struct cf_quic_ctx *qctx);
 void vquic_ctx_free(struct cf_quic_ctx *qctx);
@@ -68,7 +65,7 @@ CURLcode vquic_send_blocked_pkts(struct Curl_cfilter *cf,
                                  struct cf_quic_ctx *qctx);
 
 CURLcode vquic_send(struct Curl_cfilter *cf, struct Curl_easy *data,
-                    struct cf_quic_ctx *qctx, size_t gsolen);
+                        struct cf_quic_ctx *qctx, size_t gsolen);
 
 CURLcode vquic_send_tail_split(struct Curl_cfilter *cf, struct Curl_easy *data,
                                struct cf_quic_ctx *qctx, size_t gsolen,
@@ -89,15 +86,6 @@ CURLcode vquic_recv_packets(struct Curl_cfilter *cf,
                             size_t max_pkts,
                             vquic_recv_pkt_cb *recv_cb, void *userp);
 
-#endif /* !USE_HTTP3 */
-
-#ifdef USE_NGTCP2
-struct ngtcp2_mem;
-struct ngtcp2_mem *Curl_ngtcp2_mem(void);
-#endif
-#ifdef USE_NGHTTP3
-struct nghttp3_mem;
-struct nghttp3_mem *Curl_nghttp3_mem(void);
-#endif
+#endif /* !ENABLE_QUIC */
 
 #endif /* HEADER_CURL_VQUIC_QUIC_INT_H */

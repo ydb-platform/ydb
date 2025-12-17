@@ -64,6 +64,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetTablePivotKeys);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CreateTableBackup);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RestoreTableBackup);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, TransferBundleResources);
 
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, LookupRows);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, VersionedLookupRows);
@@ -117,7 +118,11 @@ public:
 
     // Jobs
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobs);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobTraces);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJob);
+
+    // Operations
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckOperationPermission);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, DumpJobContext);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobInput,
         .SetStreamingEnabled(true));

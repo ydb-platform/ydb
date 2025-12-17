@@ -21,9 +21,9 @@ namespace NExport {
 using namespace NThreading;
 using namespace Ydb::Export;
 
-const std::string TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM = "AES-128-GCM";
-const std::string TExportToS3Settings::TEncryptionAlgorithm::AES_256_GCM = "AES-256-GCM";
-const std::string TExportToS3Settings::TEncryptionAlgorithm::CHACHA_20_POLY_1305 = "ChaCha20-Poly1305";
+const std::string TEncryptionAlgorithm::AES_128_GCM = "AES-128-GCM";
+const std::string TEncryptionAlgorithm::AES_256_GCM = "AES-256-GCM";
+const std::string TEncryptionAlgorithm::CHACHA_20_POLY_1305 = "ChaCha20-Poly1305";
 
 /// Common
 namespace {
@@ -95,6 +95,7 @@ TExportToS3Response::TExportToS3Response(TStatus&& status, Ydb::Operations::Oper
 
     Metadata_.Settings.Description(metadata.settings().description());
     Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
+    Metadata_.Settings.MaterializeIndexes(metadata.settings().materialize_indexes());
 
     if (!metadata.settings().compression().empty()) {
         Metadata_.Settings.Compression(metadata.settings().compression());
@@ -247,6 +248,7 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     }
 
     request.mutable_settings()->set_disable_virtual_addressing(!settings.UseVirtualAddressing_);
+    request.mutable_settings()->set_materialize_indexes(settings.MaterializeIndexes_);
 
     if (settings.EncryptionAlgorithm_.empty() != settings.SymmetricKey_.empty()) {
         throw TContractViolation("Encryption algorithm and symmetric key must be set together");
@@ -281,6 +283,19 @@ TFuture<TExportToFsResponse> TExportClient::ExportToFs(const TExportToFsSettings
 
     if (settings.Compression_) {
         request.mutable_settings()->set_compression(TStringType{settings.Compression_.value()});
+    }
+
+    if (settings.SourcePath_) {
+        request.mutable_settings()->set_source_path(settings.SourcePath_.value());
+    }
+
+    if (settings.EncryptionAlgorithm_.empty() != settings.SymmetricKey_.empty()) {
+        throw TContractViolation("Encryption algorithm and symmetric key must be set together");
+    }
+
+    if (!settings.EncryptionAlgorithm_.empty() && !settings.SymmetricKey_.empty()) {
+        request.mutable_settings()->mutable_encryption_settings()->set_encryption_algorithm(settings.EncryptionAlgorithm_);
+        request.mutable_settings()->mutable_encryption_settings()->mutable_symmetric_key()->set_key(settings.SymmetricKey_);
     }
 
     return Impl_->ExportToFs(std::move(request), settings);

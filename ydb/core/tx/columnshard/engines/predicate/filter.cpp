@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+#include <type_traits>
 
 namespace NKikimr::NOlap {
 
@@ -281,8 +282,14 @@ TConclusion<TPKRangesFilter> TRangesBuilder::Finish() {
 namespace {
 template <typename T>
 TCell MakeDefaultCellByPrimitiveType() {
-    return TCell::Make<T>(T());
+    if constexpr (sizeof(T) <= TCell::MaxInlineSize()) {
+        return TCell::Make<T>(T());
+    } else {
+        alignas(T) static const T kDefault{};
+        return TCell(reinterpret_cast<const char*>(&kDefault), sizeof(T));
+    }
 }
+
 }   // namespace
 
 TConclusion<TCell> TRangesBuilder::MakeDefaultCell(const NScheme::TTypeInfo typeInfo) {

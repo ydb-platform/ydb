@@ -14,6 +14,7 @@ public:
     virtual void IncDatabaseAccessDenyCounter() = 0;
     virtual void IncDatabaseSchemeErrorCounter() = 0;
     virtual void IncDatabaseUnavailableCounter() = 0;
+    virtual void IncEmptyDatabaseNameCounter() = 0;
     virtual void IncDatabaseRateLimitedCounter() = 0;
 
     virtual void AddConsumedRequestUnits(ui64 requestUnits) = 0;

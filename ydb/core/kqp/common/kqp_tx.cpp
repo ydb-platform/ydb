@@ -172,8 +172,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     size_t readPhases = 0;
     bool hasEffects = false;
-    bool hasStreamLookup = false;
-    bool hasVectorResolve = false;
+    bool hasInsert = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
         if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
@@ -194,6 +193,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings));
                     AFL_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
                     if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                        hasInsert = true;
                         // Insert operations create new read phases,
                         // so in presence of other reads we have to acquire snapshot.
                         // This is unique to INSERT operation, because it can fail.
@@ -204,7 +204,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
                         // Lookup for index update
                         ++readPhases;
                     }
-                    
+
                     for (const auto& index : sinkSettings.GetIndexes()) {
                         if (index.GetIsUniq()) {
                             // Unique index check
@@ -215,8 +215,11 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
             }
 
             for (const auto &input : stage.GetInputs()) {
-                hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
-                hasVectorResolve |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve;
+                if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup
+                        || input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve) {
+                    // We need snapshot for stream lookup, besause it's used for dependent reads
+                    return true;
+                }
             }
 
             for (const auto &tableOp : stage.GetTableOps()) {
@@ -232,22 +235,11 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         return true;
     }
 
-    // We need snapshot for stream lookup, besause it's used for dependent reads
-    if (hasStreamLookup || hasVectorResolve) {
-        return true;
-    }
-
-    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
-        if (hasEffects && !txCtx.HasTableRead) {
-            YQL_ENSURE(txCtx.HasTableWrite);
-            // Don't need snapshot for WriteOnly transaction.
-            return false;
-        } else if (hasEffects) {
-            YQL_ENSURE(txCtx.HasTableWrite);
-            // ReadWrite transaction => need snapshot
-            return true;
-        }
-        // ReadOnly transaction here
+    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && hasEffects) {
+        // Avoid acquiring snapshot for WriteOnly transactions.
+        // If there are more than one INSERT, we have to acquiring snapshot,
+        // because INSERT has output (error or no error).
+        return hasInsert ? readPhases > 1 : readPhases > 0;
     }
 
     // We need snapshot when there are multiple table read phases, most
@@ -299,6 +291,10 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
         for (const auto &stage : tx.GetStages()) {
             for (const auto &source : stage.GetSources()) {
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource){
+                    return true;
+                }
+
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
                     return true;
                 }
             }
@@ -400,6 +396,10 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     if (modifiedTables.contains(getTable(source.GetReadRangesSource().GetTable()))) {
                         return true;
                     }
+                } else if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                    if (modifiedTables.contains(getTable(source.GetFullTextSource().GetTable()))) {
+                        return true;
+                    }
                 } else {
                     return true;
                 }
@@ -411,19 +411,25 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 
-                    if (!settings.GetLookupColumns().empty() && modifiedTables.contains(getTable(settings.GetTable()))) {
+                    const bool tableModifiedBefore = modifiedTables.contains(getTable(settings.GetTable()));
+                    modifiedTables.insert(getTable(settings.GetTable()));
+                    for (const auto& index : settings.GetIndexes()) {
+                        modifiedTables.insert(getTable(index.GetTable()));
+                    }
+
+                    // For plans compatibility with old indexes. Don't need it for new.
+                    if (!settings.GetLookupColumns().empty() && tableModifiedBefore) {
                         AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-                        modifiedTables.insert(getTable(settings.GetTable()));
                         return true;
                     }
 
+                    // For plans compatibility with old indexes. Don't need it for new.
                     for (const auto& index : settings.GetIndexes()) {
-                        if (index.GetIsUniq() && modifiedTables.contains(getTable(settings.GetTable()))) {
+                        if (index.GetIsUniq() && tableModifiedBefore) {
                             return true;
                         }
                     }
 
-                    modifiedTables.insert(getTable(settings.GetTable()));
                     if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !commit) {
                         // INSERT with sink should be executed immediately, because it returns an error in case of duplicate rows.
                         return true;

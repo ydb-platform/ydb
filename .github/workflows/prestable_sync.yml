@@ -1,4 +1,4 @@
-name: Sync prestables
+name: Prestable sync
 on:
   schedule:
     - cron: "30 0 * * *"   # At 00:30 -- for PR creation

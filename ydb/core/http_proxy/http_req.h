@@ -52,6 +52,7 @@ private:
 
 struct THttpResponseData {
     bool IsYmq = false;
+    bool UseYmqStatusCode = false;
     NYdb::EStatus Status{NYdb::EStatus::SUCCESS};
     NJson::TJsonValue Body;
     TString ErrorText{"OK"};

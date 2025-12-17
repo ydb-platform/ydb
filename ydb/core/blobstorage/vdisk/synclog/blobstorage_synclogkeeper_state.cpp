@@ -34,8 +34,7 @@ namespace NKikimr {
                 std::unique_ptr<TSyncLogRepaired> repaired,
                 ui64 syncLogMaxMemAmount,
                 ui64 syncLogMaxDiskAmount,
-                ui64 syncLogMaxEntryPointSize,
-                const TActorId& selfId)
+                ui64 syncLogMaxEntryPointSize)
             : SlCtx(std::move(slCtx))
             , SyncLogPtr(std::move(repaired->SyncLogPtr))
             , ChunksToDelete(std::move(repaired->ChunksToDelete))
@@ -44,13 +43,17 @@ namespace NKikimr {
             , MaxDiskChunks(CalcMaxDiskChunks(syncLogMaxDiskAmount, SyncLogPtr->GetChunkSize()))
             , SyncLogMaxEntryPointSize(syncLogMaxEntryPointSize)
             , NeedsInitialCommit(repaired->NeedsInitialCommit)
-            , SelfId(selfId)
-            , PhantomFlagStorageState(SlCtx->VCtx->Top->GType)
+            , PhantomFlagStorageState(SlCtx)
             , EnablePhantomFlagStorage(SlCtx->EnablePhantomFlagStorage)
+            , PhantomFlagStorageLimit(SlCtx->PhantomFlagStorageLimit)
+            , SelfOrderNumber(SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk))
         {
+            Y_VERIFY_S(SlCtx->VCtx->Top->GetTotalVDisksNum() <= MaxPossibleDisksInGroup,
+                    "Bad erasure# " << TBlobStorageGroupType::ErasureSpeciesName(SlCtx->VCtx->Top->GType.GetErasure()));
             SyncedLsns.resize(SlCtx->VCtx->Top->GetTotalVDisksNum());
-            ui32 selfOrderNum = SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk);
-            SyncedLsns[selfOrderNum] = Max<ui64>();
+            SyncedLsns[SelfOrderNumber] = Max<ui64>();
+            SyncedMask.reset();
+            SyncedMask.set(SelfOrderNumber, true);
         }
 
         // Calculate first lsn in recovery log we must keep
@@ -82,8 +85,9 @@ namespace NKikimr {
                 DelayedActions.SetMemOverflow();
 
             // Put blob record to PhantomFlagStorage
-            if (rec->RecType == TRecordHdr::RecLogoBlob) {
-                PhantomFlagStorageState.ProcessBlobRecordFromSyncLog(rec->GetLogoBlob());
+            if (PhantomFlagStorageState.IsActive() && rec->RecType == TRecordHdr::RecLogoBlob) {
+                PhantomFlagStorageState.ProcessBlobRecordFromSyncLog(rec->GetLogoBlob(),
+                        PhantomFlagStorageLimit);
             }
         }
 
@@ -99,8 +103,9 @@ namespace NKikimr {
             do {
                 recSize = rec->GetSize();
                 Y_DEBUG_ABORT_UNLESS(recSize <= size);
-                if (rec->RecType == TRecordHdr::RecLogoBlob) {
-                    PhantomFlagStorageState.ProcessBlobRecordFromSyncLog(rec->GetLogoBlob());
+                if (PhantomFlagStorageState.IsActive() && rec->RecType == TRecordHdr::RecLogoBlob) {
+                    PhantomFlagStorageState.ProcessBlobRecordFromSyncLog(rec->GetLogoBlob(),
+                            PhantomFlagStorageLimit);
                 }
                 rec = rec->Next();
                 size -= recSize;
@@ -139,14 +144,28 @@ namespace NKikimr {
             DelayedActions.SetTrimTail();
         }
 
-        void TSyncLogKeeperState::BaldLogEvent() {
-            const ui64 baldLsn = SyncLogPtr->GetLastLsn();
-            LOG_DEBUG(*LoggerCtx, BS_SYNCLOG,
-                    VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                        "KEEPER: TEvSyncLogBaldLog: baldLsn# %" PRIu64, baldLsn));
+        void TSyncLogKeeperState::BaldLogEvent(bool dropChunksExplicitly) {
+            if (dropChunksExplicitly) {
+                TSyncLogSnapshotPtr snapshot = SyncLogPtr->GetSnapshot();
+                const ui32 numCurChunks = SyncLogPtr->GetSizeInChunks();
+                if (numCurChunks > 0) {
+                    TVector<ui32> droppedChunks = SyncLogPtr->TrimLogByRemovingChunks(numCurChunks, Notifier);
+                    DropUnsyncedChunks(droppedChunks, snapshot);
+                }
 
-            TrimTailLsn = baldLsn;
-            DelayedActions.SetTrimTail();
+                LOG_DEBUG(*LoggerCtx, BS_SYNCLOG,
+                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
+                            "KEEPER: TEvSyncLogBaldLog DropChunksExplicitly: numChunks# %" PRIu32,
+                            numCurChunks));
+            } else {
+                const ui64 baldLsn = SyncLogPtr->GetLastLsn();
+                LOG_DEBUG(*LoggerCtx, BS_SYNCLOG,
+                        VDISKP(SlCtx->VCtx->VDiskLogPrefix,
+                            "KEEPER: TEvSyncLogBaldLog: baldLsn# %" PRIu64, baldLsn));
+    
+                TrimTailLsn = baldLsn;
+                DelayedActions.SetTrimTail();
+            }
         }
 
         void TSyncLogKeeperState::CutLogEvent(ui64 freeUpToLsn) {
@@ -290,9 +309,9 @@ namespace NKikimr {
             // we _copy_ ChunksToDeleteDelayed and _move_ ChunksToDelete
 
             // take snap
-            Snapshot = SyncLogPtr->GetSnapshot();
+            TSyncLogSnapshotPtr syncLogSnapshot = SyncLogPtr->GetSnapshot();
             // fix mem and disk overflow
-            TMemRecLogSnapshotPtr swapSnap = FixMemoryAndDiskOverflow();
+            TMemRecLogSnapshotPtr swapSnap = FixMemoryAndDiskOverflow(syncLogSnapshot);
             // copy from TSet to vector
             TVector<ui32> deleteDelayed = ChunksToDeleteDelayed.Copy();
 
@@ -306,12 +325,11 @@ namespace NKikimr {
             const ui64 refinedRecoveryLogConfirmedLsn = Max(LastCommit.EntryPointLsn, recoveryLogConfirmedLsn);
 
             TSyncLogKeeperCommitData result(
-                    Snapshot,
+                    std::move(syncLogSnapshot),
                     std::move(swapSnap),
                     std::move(deleteDelayed),
                     std::move(ChunksToDelete),
                     refinedRecoveryLogConfirmedLsn);
-
             return result;
         }
 
@@ -383,7 +401,7 @@ namespace NKikimr {
             return swapSnap;
         }
 
-        TMemRecLogSnapshotPtr TSyncLogKeeperState::FixMemoryAndDiskOverflow() {
+        TMemRecLogSnapshotPtr TSyncLogKeeperState::FixMemoryAndDiskOverflow(const TSyncLogSnapshotPtr& snapshot) {
             // build a bunch of memory pages to swap to disk
             TMemRecLogSnapshotPtr swapSnap = BuildSwapSnap();
             // find out how many new chunks we must add
@@ -404,18 +422,7 @@ namespace NKikimr {
 
             // trim SyncLog in case of disk overflow
             TVector<ui32> scheduledChunks = FixDiskOverflow(numChunksToAdd);
-
-            if (EnablePhantomFlagStorage) {
-                if (!scheduledChunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
-                    PhantomFlagStorageState.Activate();
-                    TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, Snapshot));
-                }
-            } else if (PhantomFlagStorageState.IsActive()) {
-                PhantomFlagStorageState.Deactivate();
-            }
-            
-            // append scheduledChunks to ChunksToDeleteDelayed
-            ChunksToDeleteDelayed.Insert(scheduledChunks);
+            DropUnsyncedChunks(scheduledChunks, snapshot);
 
             return swapSnap;
         }
@@ -455,15 +462,15 @@ namespace NKikimr {
             ui64 firstStoredLsn = SyncLogPtr->GetFirstLsn();
             if (PhantomFlagStorageState.IsActive()) {
                 if (std::all_of(SyncedLsns.begin(), SyncedLsns.end(), [&](ui64 lsn) {
-                    return lsn >= firstStoredLsn;
+                    return lsn == Max<ui64>() || lsn + 1 >= firstStoredLsn;
                 })) {
                     PhantomFlagStorageState.Deactivate();
                 }
             }
         }
 
-        void TSyncLogKeeperState::AddFlagsToPhantomFlagStorage(TPhantomFlags&& flags) {
-            PhantomFlagStorageState.AddFlags(std::move(flags));
+        void TSyncLogKeeperState::FinishPhantomFlagStorageBuilder(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds) {
+            PhantomFlagStorageState.FinishBuilding(std::move(flags), std::move(thresholds), PhantomFlagStorageLimit);
         }
 
         TPhantomFlagStorageSnapshot TSyncLogKeeperState::GetPhantomFlagStorageSnapshot() const {
@@ -472,6 +479,29 @@ namespace NKikimr {
 
         void TSyncLogKeeperState::ProcessLocalSyncData(ui32 orderNumber, const TString& data) {
             PhantomFlagStorageState.ProcessLocalSyncData(orderNumber, data);
+        }
+
+        void TSyncLogKeeperState::DropUnsyncedChunks(const TVector<ui32>& chunks, const TSyncLogSnapshotPtr& snapshot) {
+            ui64 firstStoredLsn = SyncLogPtr->GetFirstLsn();
+            for (ui32 orderNumber = 0; orderNumber < SlCtx->VCtx->Top->GType.BlobSubgroupSize(); ++orderNumber) {
+                bool synced = (orderNumber == SelfOrderNumber) || (SyncedLsns[orderNumber] + 1 >= firstStoredLsn);
+                SyncedMask.set(orderNumber, synced);
+            }
+
+            if (EnablePhantomFlagStorage) {
+                PhantomFlagStorageState.UpdateSyncedMask(SyncedMask);
+                if (!chunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
+                    PhantomFlagStorageState.StartBuilding();
+                    TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, snapshot));
+                }
+            }
+
+            ChunksToDeleteDelayed.Insert(chunks);
+        }
+
+        void TSyncLogKeeperState::UpdateMetrics() {
+            PhantomFlagStorageState.UpdateMetrics();
+            SlCtx->PhantomFlagStorageGroup.SyncedMask() = SyncedMask.to_ullong();
         }
 
     } // NSyncLog

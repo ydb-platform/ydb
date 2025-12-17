@@ -3,6 +3,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/library/ut/ut.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -179,6 +180,14 @@ namespace NKqpHelpers {
 
     inline TString KqpSimpleExec(TTestActorRuntime& runtime, const TString& query, bool staleRo = false, const TString& database = {}) {
         auto response = AwaitResponse(runtime, KqpSimpleSend(runtime, query, staleRo, database));
+        return FormatResult(response);
+    }
+
+    inline TString KqpSimpleExecSuccess(TTestActorRuntime& runtime, const TString& query, bool staleRo = false, const TString& database = {}, NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext()) {
+        auto response = AwaitResponse(runtime, KqpSimpleSend(runtime, query, staleRo, database));
+        CTX_UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS,
+            "Query failed: " << query << ", status: " << response.operation().status()
+            << ", issues: " << response.operation().issues());
         return FormatResult(response);
     }
 

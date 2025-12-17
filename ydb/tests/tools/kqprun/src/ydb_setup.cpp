@@ -20,6 +20,21 @@ namespace NKqpRun {
 
 namespace {
 
+class TKqprunServer : public NKikimr::Tests::TServer {
+    using TBase = NKikimr::Tests::TServer;
+
+public:
+    using TPtr = TIntrusivePtr<TKqprunServer>;
+
+    explicit TKqprunServer(const NKikimr::Tests::TServerSettings& settings)
+        : TBase(settings, /* defaultInit */ false)
+    {}
+
+    void Initialize() {
+        TBase::Initialize();
+    }
+};
+
 class TSessionState {
 public:
     explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId, TYdbSetupSettings::EVerbosity verbosityLevel)
@@ -111,6 +126,12 @@ class TYdbSetup::TImpl : public TKikimrSetupBase {
         ui32 Port_;
     };
 
+    inline static NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
+    inline static NColorizer::TColors CerrColors_ = NColorizer::AutoColors(Cerr);
+    inline static std::terminate_handler TerminateHandler;
+    inline static std::unordered_map<int, void (*)(int)> SignalHandlers_;
+    inline static std::unique_ptr<TFileHandle> StorageHolder_;
+
 private:
     void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) {
         TFsPath diskPath;
@@ -172,11 +193,47 @@ private:
 
         serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.PDisksPath);
         serverSettings.SetCustomDiskParams(storage);
-
-        const auto storageGeneration = StorageMeta_.GetStorageGeneration();
-        serverSettings.SetStorageGeneration(storageGeneration, storageGeneration > 0);
+        serverSettings.SetStorageGeneration(0, /* fetchPoolsGeneration */ true);
     }
 
+    static void FlushStorageFileHolder() {
+        if (StorageHolder_ && !StorageHolder_->Flush()) {
+            Cerr << CerrColors_.Red() << "Failed to flush storage data, errno: " << errno << CerrColors_.Default() << Endl;
+        }
+    }
+
+    static void FlushStorageFileHolderOnTerminate() {
+        FlushStorageFileHolder();
+
+        if (TerminateHandler) {
+            TerminateHandler();
+        }
+    }
+
+    static void FlushStorageFileHolderOnSignal(int signal) {
+        FlushStorageFileHolder();
+        std::signal(signal, SignalHandlers_[signal]);
+        std::raise(signal);
+        std::exit(1);
+    }
+
+    void SetupStorageFileHolder(const TString& storagePath) {
+        StorageHolder_ = std::make_unique<TFileHandle>(TFsPath(storagePath).Child("pdisk_1.dat"), RdWr);
+        if (!StorageHolder_->IsOpen()) {
+            ythrow yexception() << "Failed to open storage file: " << storagePath;
+        }
+
+        std::atexit(&FlushStorageFileHolder);
+        TerminateHandler = std::set_terminate(&FlushStorageFileHolderOnTerminate);
+
+        for (auto sig : {SIGTERM, SIGABRT, SIGINT}) {
+            const auto prevHandler = std::signal(sig, &FlushStorageFileHolderOnSignal);
+            Y_ENSURE(prevHandler != SIG_ERR);
+            SignalHandlers_.emplace(sig, prevHandler);
+        }
+    }
+
+private:
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
         auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerbosityLevel >= EVerbosity::InitLogs);
         serverSettings
@@ -293,10 +350,12 @@ private:
         const ui32 domainGrpcPort = grpcPortGen.GetPort();
         NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(domainGrpcPort);
 
-        Server_ = MakeIntrusive<NKikimr::Tests::TServer>(serverSettings);
+        Server_ = MakeIntrusive<TKqprunServer>(serverSettings);
+        Server_->Initialize();
 
-        StorageMeta_.SetStorageGeneration(StorageMeta_.GetStorageGeneration() + 1);
-        UpdateStorageMeta();
+        if (serverSettings.CustomDiskParams.UseDisk) {
+            SetupStorageFileHolder(serverSettings.CustomDiskParams.DiskPath);
+        }
 
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
 
@@ -386,7 +445,6 @@ private:
 public:
     explicit TImpl(const TYdbSetupSettings& settings)
         : Settings_(settings)
-        , CoutColors_(NColorizer::AutoColors(Cout))
     {
         TPortGenerator grpcPortGen(PortManager, Settings_.FirstGrpcPort);
         InitializeYqlLogger();
@@ -537,6 +595,16 @@ public:
         NYql::NLog::YqlLogger().ResetBackend(NActors::CreateNullBackend());
     }
 
+    TString GetDefaultDatabase() const {
+        if (StorageMeta_.TenantsSize() > 1) {
+            ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
+        }
+        if (StorageMeta_.TenantsSize() == 1) {
+            return GetTenantPath(StorageMeta_.GetTenants().begin()->first);
+        }
+        return Settings_.DomainName;
+    }
+
 private:
     NActors::TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
@@ -574,7 +642,7 @@ private:
         request->SetQuery(query.Query);
         request->SetType(type);
         request->SetAction(query.Action);
-        request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+        request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
         request->SetDatabase(database);
         request->SetPoolId(query.PoolId);
         request->MutableYdbParameters()->insert(query.Params.begin(), query.Params.end());
@@ -635,16 +703,6 @@ private:
         ythrow yexception() << "Unknown tenant '" << canonizedPath << "'";
     }
 
-    TString GetDefaultDatabase() const {
-        if (StorageMeta_.TenantsSize() > 1) {
-            ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
-        }
-        if (StorageMeta_.TenantsSize() == 1) {
-            return GetTenantPath(StorageMeta_.GetTenants().begin()->first);
-        }
-        return Settings_.DomainName;
-    }
-
     void UpdateStorageMeta() const {
         if (StorageMetaPath_) {
             TString storageMetaStr;
@@ -658,9 +716,8 @@ private:
 
 private:
     TYdbSetupSettings Settings_;
-    NColorizer::TColors CoutColors_;
 
-    NKikimr::Tests::TServer::TPtr Server_;
+    TKqprunServer::TPtr Server_;
     THolder<NKikimr::Tests::TClient> Client_;
     THolder<NKikimr::Tests::TTenants> Tenants_;
 
@@ -706,6 +763,12 @@ TRequestResult TYdbSetup::QueryRequest(const TRequestOptions& query, TQueryMeta&
     FillQueryMeta(meta, responseRecord);
 
     return TRequestResult(queryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
+}
+
+TRequestResult TYdbSetup::QueryRequest(const TRequestOptions& query) const {
+    TQueryMeta meta;
+    std::vector<Ydb::ResultSet> resultSets;
+    return QueryRequest(query, meta, resultSets, nullptr);
 }
 
 TRequestResult TYdbSetup::YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const {
@@ -784,6 +847,10 @@ void TYdbSetup::StartTraceOpt() const {
 
 void TYdbSetup::StopTraceOpt() {
     TYdbSetup::TImpl::StopTraceOpt();
+}
+
+TString TYdbSetup::GetDefaultDatabase() const {
+    return Impl_->GetDefaultDatabase();
 }
 
 }  // namespace NKqpRun

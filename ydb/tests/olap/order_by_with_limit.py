@@ -60,7 +60,7 @@ class TestOrderBy(object):
 
     def test_random(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
-        table_path = f"{test_dir}/table"
+        table_path = f"{test_dir}/test_random"
 
         self.ydb_client.query(
             f"""
@@ -119,7 +119,7 @@ class TestOrderBy(object):
 
     def test_fetch_race(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
-        table_path = f"{test_dir}/table"
+        table_path = f"{test_dir}/test_fetch_race"
 
         self.ydb_client.query(
             f"""
@@ -161,7 +161,7 @@ class TestOrderBy(object):
 
     def test_filtered_portion(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
-        table_path = f"{test_dir}/table"
+        table_path = f"{test_dir}/test_filtered_portion"
 
         self.ydb_client.query(
             f"""
@@ -205,7 +205,7 @@ class TestOrderBy(object):
 
     def test_stress_sorting(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
-        table_path = f"{test_dir}/table"
+        table_path = f"{test_dir}/test_stress_sorting"
 
         self.ydb_client.query(
             f"""

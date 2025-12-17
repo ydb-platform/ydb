@@ -388,6 +388,25 @@ TMaybe<TString> DeriveClusterFromSection(const NNodes::TYtSection& section, ERun
     return result;
 }
 
+void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType &needCalc, TNodeSet &uniqNodes) {
+    YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
+    const auto lambdaBody = qlFilter.Child(1)->Child(1);
+    VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
+        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
+            return true;
+        }
+        if (node->IsCallable("Member")) {
+            return false;
+        }
+        if (uniqNodes.insert(node.Get()).second) {
+            if (NeedCalc(TExprBase(node.Get()))) {
+                needCalc.push_back(node);
+            }
+        }
+        return false;
+    });
+}
+
 } // unnamed
 
 TString GetClusterFromSection(const NNodes::TYtSection& section) {
@@ -715,25 +734,6 @@ bool IsConstExpSortDirections(NNodes::TExprBase sortDirections) {
     return false;
 }
 
-void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType &needCalc, TNodeSet &uniqNodes) {
-    YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
-    const auto lambdaBody = qlFilter.Child(1)->Child(1);
-    VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
-        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
-            return true;
-        }
-        if (node->IsCallable("Member")) {
-            return false;
-        }
-        if (uniqNodes.insert(node.Get()).second) {
-            if (NeedCalc(TExprBase(node.Get()))) {
-                needCalc.push_back(node);
-            }
-        }
-        return false;
-    });
-}
-
 TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
     TExprNode::TListType needCalc;
     TNodeSet uniqNodes;
@@ -752,9 +752,6 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                             }
                         }
                     }
-                    break;
-                case EYtSettingType::QLFilter:
-                    GetNodesToCalculateFromQLFilter(setting.Value().Cast().Ref(), needCalc, uniqNodes);
                     break;
                 default:
                     break;
@@ -796,6 +793,14 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                         }
                     }
                     break;
+                }
+                case EYtSettingType::QLFilter: {
+                    for (const auto& p : section.Paths()) {
+                        TYtPathInfo pathInfo(p);
+                        if (pathInfo.QLFilter) {
+                            GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
+                        }
+                    }
                 }
                 default:
                     break;

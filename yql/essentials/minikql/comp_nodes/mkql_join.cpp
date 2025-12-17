@@ -356,10 +356,8 @@ public:
         TValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TSelf* self)
             : TBase(memInfo)
             , Self(self)
-            , Logger(ctx.MakeLogger())
-            , LogComponent(Logger->RegisterComponent("CommonJoinCore"))
-            , List1(Logger, LogComponent, Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings))
-            , List2(Logger, LogComponent, Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings))
+            , List1(Self->GetLogger(ctx), Self->GetLogComponent(ctx), Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings))
+            , List2(Self->GetLogger(ctx), Self->GetLogComponent(ctx), Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings))
         {
             Init();
         }
@@ -677,8 +675,6 @@ public:
 
     private:
         const TSelf* const Self;
-        const NUdf::TLoggerPtr Logger;
-        const NUdf::TLogComponentId LogComponent;
         bool EatInput;
         bool KeyHasNulls;
         std::optional<ui64> InitialUsage;
@@ -715,6 +711,8 @@ public:
         , ResStruct(mutables)
         , ResStreamIndex(mutables.CurValueIndex++)
         , AnyJoinSettings(anyJoinSettings)
+        , Logger(mutables)
+        , LogComponent(mutables)
     {
     }
 
@@ -729,6 +727,20 @@ public:
 private:
     void RegisterDependencies() const final {
         this->FlowDependsOn(Flow);
+    }
+
+    NUdf::TLoggerPtr GetLogger(TComputationContext& ctx) const {
+        if (Logger.Empty(ctx)) {
+            return Logger.GetOrCreate(ctx, ctx.MakeLogger());
+        }
+        return Logger.Get(ctx);
+    }
+
+    NUdf::TLogComponentId GetLogComponent(TComputationContext& ctx) const {
+        if (LogComponent.Empty(ctx)) {
+            return LogComponent.GetOrCreate(ctx, GetLogger(ctx)->RegisterComponent("CommonJoinCore"));
+        }
+        return LogComponent.Get(ctx);
     }
 
     IComputationNode* const Flow;
@@ -748,6 +760,8 @@ private:
     const TContainerCacheOnContext ResStruct;
     const ui32 ResStreamIndex;
     const EAnyJoinSettings AnyJoinSettings;
+    const TMutableDataOnContext<NUdf::TLoggerPtr> Logger;
+    const TMutableDataOnContext<NUdf::TLogComponentId> LogComponent;
 };
 
 template <EJoinKind Kind, bool TTrackRss>
@@ -771,16 +785,14 @@ public:
         TValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TSelf* self, TFetcher&& fetcher)
             : TBase(memInfo)
             , Self(self)
-            , Logger(ctx.MakeLogger())
-            , LogComponent(Logger->RegisterComponent("WideCommonJoinCore"))
             , Fetcher(std::move(fetcher))
-            , Values(Self->InputRepresentations.size(), NUdf::TUnboxedValuePod())
-            , CrossValues1(std::max(Self->LeftInputColumns.size(), Self->RightInputColumns.size()), NUdf::TUnboxedValuePod())
-            , CrossValues2(std::max(Self->LeftInputColumns.size(), Self->RightInputColumns.size()), NUdf::TUnboxedValuePod())
-            , List1(Logger, LogComponent, Self->PackerLeft.RefMutableObject(ctx, false, Self->InputLeftType), IsAnyJoinLeft(Self->AnyJoinSettings), Self->InputLeftType->GetElementsCount())
-            , List2(Logger, LogComponent, Self->PackerRight.RefMutableObject(ctx, false, Self->InputRightType), IsAnyJoinRight(Self->AnyJoinSettings), Self->InputRightType->GetElementsCount())
-            , Fields(GetPointers(Values))
-            , Stubs(Values.size(), nullptr)
+            , Values(Self->GetValues(ctx))
+            , CrossValues1(Self->GetCrossValues(ctx, true))
+            , CrossValues2(Self->GetCrossValues(ctx, false))
+            , List1(Self->GetLogger(ctx), Self->GetLogComponent(ctx), Self->PackerLeft.RefMutableObject(ctx, false, Self->InputLeftType), IsAnyJoinLeft(Self->AnyJoinSettings), Self->InputLeftType->GetElementsCount())
+            , List2(Self->GetLogger(ctx), Self->GetLogComponent(ctx), Self->PackerRight.RefMutableObject(ctx, false, Self->InputRightType), IsAnyJoinRight(Self->AnyJoinSettings), Self->InputRightType->GetElementsCount())
+            , Fields(Self->GetFields(ctx))
+            , Stubs(Self->Stubs)
         {
             Init();
         }
@@ -793,6 +805,12 @@ public:
             KeyHasNulls = false;
             OutputMode = EOutputMode::Unknown;
             InitialUsage = std::nullopt;
+        }
+
+        virtual ~TValue() {
+            std::fill(Values.begin(), Values.end(), NUdf::TUnboxedValuePod());
+            std::fill(CrossValues1.begin(), CrossValues1.end(), NUdf::TUnboxedValuePod());
+            std::fill(CrossValues2.begin(), CrossValues2.end(), NUdf::TUnboxedValuePod());
         }
 
     private:
@@ -1120,16 +1138,7 @@ public:
         }
 
     private:
-        static std::vector<NUdf::TUnboxedValue*> GetPointers(std::vector<NUdf::TUnboxedValue>& array) {
-            std::vector<NUdf::TUnboxedValue*> pointers;
-            pointers.reserve(array.size());
-            std::transform(array.begin(), array.end(), std::back_inserter(pointers), [](NUdf::TUnboxedValue& v) { return std::addressof(v); });
-            return pointers;
-        }
-
         const TSelf* const Self;
-        const NUdf::TLoggerPtr Logger;
-        const NUdf::TLogComponentId LogComponent;
         TFetcher Fetcher;
         bool EatInput;
         bool KeyHasNulls;
@@ -1138,13 +1147,15 @@ public:
 
         bool CrossMove1;
 
-        std::vector<NUdf::TUnboxedValue> Values, CrossValues1, CrossValues2;
+        TArrayRef<NUdf::TUnboxedValue> Values;
+        TArrayRef<NUdf::TUnboxedValue> CrossValues1;
+        TArrayRef<NUdf::TUnboxedValue> CrossValues2;
 
         TSpillList List1, List2;
 
         NUdf::TUnboxedValue* ResItems = nullptr;
-        const std::vector<NUdf::TUnboxedValue*> Fields;
-        const std::vector<NUdf::TUnboxedValue*> Stubs;
+        const std::vector<NUdf::TUnboxedValue*>& Fields;
+        const std::vector<NUdf::TUnboxedValue*>& Stubs;
     };
 
     TWideCommonJoinCoreWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, const TTupleType* inputLeftType, const TTupleType* inputRightType,
@@ -1171,7 +1182,16 @@ public:
         , KeyColumns(std::move(keyColumns))
         , IsRequiredColumn(FillRequiredStructColumn(InputRepresentations.size(), RequiredColumns))
         , AnyJoinSettings(anyJoinSettings)
+        , InputColumnsSize(std::max(LeftInputColumns.size(), RightInputColumns.size()))
+        , Logger(mutables)
+        , LogComponent(mutables)
+        , Fields(mutables)
+        , ValuesIndex(mutables.CurValueIndex)
+        , CrossValues1Index(ValuesIndex + InputRepresentations.size())
+        , CrossValues2Index(CrossValues1Index + InputColumnsSize)
+        , Stubs(InputRepresentations.size(), nullptr)
     {
+        mutables.CurValueIndex += InputRepresentations.size() + InputColumnsSize + InputColumnsSize;
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
@@ -1275,6 +1295,42 @@ private:
         this->FlowDependsOn(Flow);
     }
 
+    NUdf::TLoggerPtr GetLogger(TComputationContext& ctx) const {
+        if (Logger.Empty(ctx)) {
+            return Logger.GetOrCreate(ctx, ctx.MakeLogger());
+        }
+        return Logger.Get(ctx);
+    }
+
+    NUdf::TLogComponentId GetLogComponent(TComputationContext& ctx) const {
+        if (LogComponent.Empty(ctx)) {
+            return LogComponent.GetOrCreate(ctx, GetLogger(ctx)->RegisterComponent("WideCommonJoinCore"));
+        }
+        return LogComponent.Get(ctx);
+    }
+
+    TArrayRef<NUdf::TUnboxedValue> GetValues(TComputationContext& ctx) const {
+        auto begin = &ctx.MutableValues[ValuesIndex];
+        return TArrayRef<NUdf::TUnboxedValue>(begin, InputRepresentations.size());
+    }
+
+    TArrayRef<NUdf::TUnboxedValue> GetCrossValues(TComputationContext& ctx, bool one) const {
+        auto begin = &ctx.MutableValues[one ? CrossValues1Index : CrossValues2Index];
+        return TArrayRef<NUdf::TUnboxedValue>(begin, InputColumnsSize);
+    }
+
+    const std::vector<NUdf::TUnboxedValue*>& GetFields(TComputationContext& ctx) const {
+        if (Fields.Empty(ctx)) {
+            auto values = GetValues(ctx);
+            auto& ptrs = Fields.GetOrCreate(ctx, values.size());
+            for (size_t i = 0; i < ptrs.size(); ++i) {
+                ptrs[i] = &values[i];
+            }
+            return ptrs;
+        }
+        return Fields.Get(ctx);
+    }
+
     IComputationWideFlowNode* const Flow;
     const std::vector<EValueRepresentation> InputRepresentations;
     const std::vector<EValueRepresentation> OutputRepresentations;
@@ -1292,6 +1348,14 @@ private:
     const std::vector<ui32> KeyColumns;
     const std::vector<bool> IsRequiredColumn;
     const EAnyJoinSettings AnyJoinSettings;
+    const ui32 InputColumnsSize;
+    const TMutableDataOnContext<NUdf::TLoggerPtr> Logger;
+    const TMutableDataOnContext<NUdf::TLogComponentId> LogComponent;
+    const TMutableDataOnContext<std::vector<NUdf::TUnboxedValue*>> Fields;
+    const ui32 ValuesIndex;
+    const ui32 CrossValues1Index;
+    const ui32 CrossValues2Index;
+    const std::vector<NUdf::TUnboxedValue*> Stubs;
 #ifndef MKQL_DISABLE_CODEGEN
     typedef EFetchResult (*TFetchPtr)(TComputationContext&, NUdf::TUnboxedValue* const*);
 

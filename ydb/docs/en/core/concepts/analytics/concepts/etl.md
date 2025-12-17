@@ -46,7 +46,7 @@ Orchestrators are used to run pipelines on a schedule and manage dependencies.
 
 * Apache Airflow: an [Apache Airflow provider](../../../integrations/orchestration/airflow.md) is supported for orchestrating data in {{ydb-short-name}}. It can be used to create DAGs that run `dbt run`, execute YQL scripts, or initiate Spark jobs.
 * built-in mechanisms: For some tasks, an external orchestrator is not required. {{ydb-short-name}} can perform some operations automatically:
-   
+
     * TTL-based data expiration: automatically cleans up partitions after a specified time;
     * automatic compaction: data merging and optimization processes for the LSM tree run in the background, eliminating the need to regularly run commands like `VACUUM`;
 * other orchestrators: if your company uses a different tool (e.g., Dagster, Prefect) or a custom scheduler, you can use it to run the same commands. Most orchestrators can execute shell scripts, allowing you to call the YDB CLI, [dbt](#dbt) run, and other utilities.

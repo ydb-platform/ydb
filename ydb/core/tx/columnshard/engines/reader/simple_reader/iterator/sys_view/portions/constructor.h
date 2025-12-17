@@ -16,15 +16,24 @@ private:
 
 public:
     TDataSourceConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const std::vector<TPortionInfo::TConstPtr>& portions)
-        : TBase(tabletId, portions.back()->GetPortionId(), TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portions.front()->GetPortionId()),
+        : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portions.front()->GetPortionId()),
               TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portions.back()->GetPortionId()))
         , PathId(pathId)
-        , Portions(portions) {
+        , Portions(portions)
+    {
     }
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {
         return std::make_shared<TSourceData>(
-            GetSourceId(), GetSourceIdx(), PathId, GetTabletId(), std::move(Portions), ExtractStart(), ExtractFinish(), context);
+            GetSourceIdx(), PathId, GetTabletId(), std::move(Portions), ExtractStart().ExtractValue(), ExtractFinish().ExtractValue(), context);
+    }
+
+    virtual bool QueryAgnosticLess(const NCommon::TDataSourceConstructor& rhs) const override {
+        auto* rhsLocal = VerifyDynamicCast<const TDataSourceConstructor*>(&rhs);
+        AFL_VERIFY(!Portions.empty());
+        AFL_VERIFY(!rhsLocal->Portions.empty());
+        return std::make_tuple(GetTabletId(), Portions.front()->GetPortionId()) <
+               std::make_tuple(rhsLocal->GetTabletId(), rhsLocal->Portions.front()->GetPortionId());
     }
 };
 

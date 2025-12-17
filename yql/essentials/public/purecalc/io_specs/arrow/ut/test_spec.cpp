@@ -29,13 +29,13 @@ namespace {
     void N(NUnitTest::TTestContext&)
 
 NYql::NPureCalc::TProgramFactoryOptions TestOptions(NYql::EBlockEngineMode mode) {
-    static const TMap<NYql::EBlockEngineMode, const TString> mode2settings = {
+    static const TMap<NYql::EBlockEngineMode, const TString> Mode2settings = {
         {NYql::EBlockEngineMode::Disable, "disable"},
         {NYql::EBlockEngineMode::Auto, "auto"},
         {NYql::EBlockEngineMode::Force, "force"},
     };
     auto options = NYql::NPureCalc::TProgramFactoryOptions();
-    options.SetBlockEngineSettings(mode2settings.at(mode));
+    options.SetBlockEngineSettings(Mode2settings.at(mode));
     return options;
 }
 

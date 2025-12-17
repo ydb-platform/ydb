@@ -69,6 +69,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableParameterizedDecimal, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicAutopartitioningForCDC, std::nullopt);
         OPTION(std::optional<bool>, EnableBackupService, std::nullopt);
+        OPTION(std::optional<bool>, EnableReplication, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicTransfer, std::nullopt);
         OPTION(bool, SetupKqpProxy, false);
         OPTION(bool, EnableStrictAclCheck, false);
@@ -83,6 +84,8 @@ namespace NSchemeShardUT_Private {
         OPTION(ui32, NStoragePools, 2);
         OPTION(std::optional<ui32>, DataShardStatsReportIntervalSeconds, std::nullopt);
         OPTION(bool, EnableAlterDatabase, false);
+        OPTION(std::optional<bool>, EnableAccessToIndexImplTables, std::nullopt);
+        OPTION(std::optional<bool>, EnableIndexMaterialization, std::nullopt);
 
         #undef OPTION
     };

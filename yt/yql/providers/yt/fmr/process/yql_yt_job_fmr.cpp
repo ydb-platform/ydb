@@ -30,10 +30,6 @@ void TFmrUserJob::Load(IInputStream& s) {
     );
 }
 
-TString TFmrUserJob::GetJobFactoryPrefix() const {
-    return "Fmr";
-}
-
 TIntrusivePtr<NYT::IReaderImplBase> TFmrUserJob::MakeMkqlJobReader() {
     return MakeIntrusive<TMkqlReaderImpl>(*QueueReader_, YQL_JOB_CODEC_BLOCK_COUNT, YQL_JOB_CODEC_BLOCK_SIZE);
 }

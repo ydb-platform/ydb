@@ -6,6 +6,7 @@
 #include <yt/yt/client/table_client/chunk_stripe_statistics.h>
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/constrained_schema.h>
 
 #include <yt/yt/client/chaos_client/replication_card.h>
 
@@ -123,6 +124,8 @@ struct TAlterTableOptions
 {
     std::optional<NTableClient::TTableSchema> Schema;
     std::optional<NTableClient::TMasterTableSchemaId> SchemaId;
+    std::optional<NTableClient::TConstrainedTableSchema> ConstrainedSchema;
+    std::optional<NTableClient::TColumnNameToConstraintMap> Constraints;
     std::optional<bool> Dynamic;
     std::optional<NTabletClient::TTableReplicaId> UpstreamReplicaId;
     std::optional<NTableClient::ETableSchemaModification> SchemaModification;

@@ -423,7 +423,8 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (const std::string&, const NYPath::TYPath&, NYTree::EPermission, const TCheckPermissionOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (const std::optional<std::string>&, NYTree::EPermission, NYTree::INodePtr, const TCheckPermissionByAclOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, TransferAccountResources, (const std::string&, const std::string&, NYTree::INodePtr, const TTransferAccountResourcesOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<void>, TransferPoolResources, (const TString&, const TString&, const TString&, NYTree::INodePtr, const TTransferPoolResourcesOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, TransferPoolResources, (const std::string&, const std::string&, const std::string&, NYTree::INodePtr, const TTransferPoolResourcesOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, TransferBundleResources, (const std::string&, const std::string&, NYTree::INodePtr, const TTransferBundleResourcesOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NScheduler::TOperationId>, StartOperation, (NScheduler::EOperationType, const NYson::TYsonString&, const TStartOperationOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AbortOperation, (const NScheduler::TOperationIdOrAlias&, const TAbortOperationOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, SuspendOperation, (const NScheduler::TOperationIdOrAlias&, const TSuspendOperationOptions&));
@@ -441,6 +442,8 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TSharedRef>, GetJobFailContext, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobFailContextOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (const NScheduler::TOperationIdOrAlias&, const TListOperationEventsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListOperationsResult>, ListOperations, (const TListOperationsOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<std::vector<TJobTraceMeta>>, ListJobTraces, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TListJobTracesOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (const std::string&, const NScheduler::TOperationIdOrAlias&, NYTree::EPermission, const TCheckOperationPermissionOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListJobsResult>, ListJobs, (const NScheduler::TOperationIdOrAlias&, const TListJobsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NYson::TYsonString>, GetJob, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AbandonJob, (NJobTrackerClient::TJobId, const TAbandonJobOptions&));
@@ -611,7 +614,7 @@ TFuture<ITransactionPtr> TTransaction::StartTransaction(
     NTransactionClient::ETransactionType type,
     const TTransactionStartOptions& options)
 {
-    return Underlying_->StartTransaction(type, options).ApplyUnique(BIND(
+    return Underlying_->StartTransaction(type, options).AsUnique().Apply(BIND(
         [this, this_ = MakeStrong(this)] (TErrorOr<ITransactionPtr>&& result) -> TErrorOr<ITransactionPtr> {
             if (!result.IsOK()) {
                 Client_->HandleError(result, ClientIndex_);
@@ -704,7 +707,7 @@ template <class T>
 TFuture<T> TClient::DoCall(int retryAttemptCount, const TCallback<TFuture<T>(const IClientPtr&, int)>& callee)
 {
     auto [client, clientIndex] = GetActiveClient();
-    return callee(client, clientIndex).ApplyUnique(BIND(
+    return callee(client, clientIndex).AsUnique().Apply(BIND(
         [
             this,
             this_ = MakeStrong(this),
@@ -727,7 +730,7 @@ TFuture<ITransactionPtr> TClient::StartTransaction(
     const NApi::TTransactionStartOptions& options)
 {
     auto callee = BIND([this_ = MakeStrong(this), type, options] (const IClientPtr& client, int clientIndex) {
-        return client->StartTransaction(type, options).ApplyUnique(BIND(
+        return client->StartTransaction(type, options).AsUnique().Apply(BIND(
             [this_, clientIndex] (ITransactionPtr&& transaction) -> ITransactionPtr {
                 return New<TTransaction>(std::move(this_), clientIndex, std::move(transaction));
             }));

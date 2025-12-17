@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -231,6 +232,8 @@ struct TKqpTableWriterStatistics {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
+    ui64 LocksBrokenAsBreaker = 0;
+    ui64 LocksBrokenAsVictim = 0;
 
     THashSet<ui64> AffectedPartitions;
 
@@ -251,9 +254,28 @@ struct TKqpTableWriterStatistics {
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
             AffectedPartitions.insert(perShardStats.GetShardId());
         }
+
+        LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+        LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+    }
+
+    static void AddLockStats(NYql::NDqProto::TDqTaskStats* stats, ui64 brokenAsBreaker, ui64 brokenAsVictim) {
+        NKqpProto::TKqpTaskExtraStats extraStats;
+        if (stats->HasExtra()) {
+            stats->GetExtra().UnpackTo(&extraStats);
+        }
+        extraStats.MutableLockStats()->SetBrokenAsBreaker(
+            extraStats.GetLockStats().GetBrokenAsBreaker() + brokenAsBreaker);
+        extraStats.MutableLockStats()->SetBrokenAsVictim(
+            extraStats.GetLockStats().GetBrokenAsVictim() + brokenAsVictim);
+        stats->MutableExtra()->PackFrom(extraStats);
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
+        AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim);
+        LocksBrokenAsBreaker = 0;
+        LocksBrokenAsVictim = 0;
+
         if (ReadRows + WriteRows + EraseRows == 0) {
             // Avoid empty table_access stats
             return;
@@ -439,7 +461,6 @@ public:
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata,
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata,
-        std::vector<ui32> writeIndexes,
         i64 priority) {
         YQL_ENSURE(!Closed);
         ShardedWriteController->Open(
@@ -448,9 +469,8 @@ public:
             operationType,
             std::move(keyColumnsMetadata),
             std::move(columnsMetadata),
-            std::move(writeIndexes),
             priority);
-        
+
         // At current time only insert operation can fail.
         NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
 
@@ -714,11 +734,10 @@ public:
                 return builder;
             }()
             << ", Cookie=" << ev->Cookie);
-        UpdateStats(ev->Get()->Record.GetTxStats());
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
-        const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE
+        const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 
         if (ev->Get()->Record.HasOverloadSubscribed() && handleOverload) {
@@ -743,6 +762,7 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+            UpdateStats(ev->Get()->Record.GetTxStats());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNSPECIFIED,
@@ -766,6 +786,7 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+            UpdateStats(ev->Get()->Record.GetTxStats());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             RuntimeError(
                 NYql::NDqProto::StatusIds::ABORTED,
@@ -785,6 +806,7 @@ public:
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
                 RetryResolve();
             } else {
+                UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
@@ -800,6 +822,7 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+            UpdateStats(ev->Get()->Record.GetTxStats());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             RuntimeError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -808,23 +831,24 @@ public:
                 getIssues());
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED: {
-            CA_LOG_E("Got DISK_SPACE_EXHAUSTED for table `"
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED: {
+            CA_LOG_E("Got DATABASE_DISK_SPACE_QUOTA_EXCEEDED for table `"
                     << TablePath << "`."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+            UpdateStats(ev->Get()->Record.GetTxStats());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED,
+                NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED,
                 TStringBuilder() << "Disk space exhausted. Table `"
                     << TablePath << "`.",
                 getIssues());
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE: {
-            CA_LOG_W("Got OUT_OF_SPACE for table `"
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE: {
+            CA_LOG_W("Got DISK_GROUP_OUT_OF_SPACE for table `"
                 << TablePath << "`."
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                 << " Sink=" << this->SelfId() << "."
@@ -832,6 +856,7 @@ public:
                 << getIssues().ToOneLineString());
             // TODO: support waiting
             if (!InconsistentTx)  {
+                UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
                     NYql::NDqProto::StatusIds::OVERLOADED,
@@ -851,6 +876,7 @@ public:
                 << getIssues().ToOneLineString());
             // TODO: support waiting
             if (!InconsistentTx)  {
+                UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
                     NYql::NDqProto::StatusIds::OVERLOADED,
@@ -868,6 +894,7 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+            UpdateStats(ev->Get()->Record.GetTxStats());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             RuntimeError(
                 NYql::NDqProto::StatusIds::CANCELLED,
@@ -882,6 +909,7 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+            UpdateStats(ev->Get()->Record.GetTxStats());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             RuntimeError(
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
@@ -901,6 +929,7 @@ public:
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
                 RetryResolve();
             } else {
+                UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
                     NYql::NDqProto::StatusIds::SCHEME_ERROR,
@@ -918,6 +947,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
 
+            UpdateStats(ev->Get()->Record.GetTxStats());
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
@@ -934,6 +964,7 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+            UpdateStats(ev->Get()->Record.GetTxStats());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             RuntimeError(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
@@ -950,6 +981,8 @@ public:
         YQL_ENSURE(Mode == EMode::PREPARE);
         const auto& record = ev->Get()->Record;
         AFL_ENSURE(record.GetTxLocks().empty());
+
+        UpdateStats(record.GetTxStats());
 
         IKqpTransactionManager::TPrepareResult preparedInfo;
         preparedInfo.ShardId = record.GetOrigin();
@@ -988,6 +1021,7 @@ public:
         if (Mode == EMode::WRITE) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
+                    UpdateStats(ev->Get()->Record.GetTxStats());
                     YQL_ENSURE(TxManager->BrokenLocks());
                     NYql::TIssues issues;
                     issues.AddIssue(*TxManager->GetLockIssue());
@@ -1000,6 +1034,7 @@ public:
         }
 
         if (Mode == EMode::COMMIT) {
+            UpdateStats(ev->Get()->Record.GetTxStats());
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0);
             return;
         }
@@ -1008,9 +1043,11 @@ public:
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
+            UpdateStats(ev->Get()->Record.GetTxStats());
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
             AFL_ENSURE(Mode == EMode::WRITE);
+            UpdateStats(ev->Get()->Record.GetTxStats());
             Callbacks->OnMessageAcknowledged(result->DataSize);
         }
     }
@@ -1121,15 +1158,14 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
-            evWrite->Record.SetLockMode(LockMode);
-
-            if (LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
-                YQL_ENSURE(MvccSnapshot);
-            }
 
             if (MvccSnapshot) {
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
             }
+        }
+
+        if (LockMode != NKikimrDataEvents::OPTIMISTIC) {
+            evWrite->Record.SetLockMode(LockMode);
         }
 
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
@@ -1161,13 +1197,16 @@ public:
             Counters->WriteActorImmediateWritesRetries->Inc();
         }
 
-        if (isPrepare && MvccSnapshot) {
-            bool needMvccSnapshot = false;
-            for (const auto& operation : evWrite->Record.GetOperations()) {
-                if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
-                    // This operation may fail with an incorrect unique constraint violation otherwise
-                    needMvccSnapshot = true;
-                    break;
+        if (MvccSnapshot && (isPrepare || isImmediateCommit)) {
+            // Commit in snapshot isolation must validate writes against a snapshot
+            bool needMvccSnapshot = LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
+            if (!needMvccSnapshot && isPrepare) {
+                for (const auto& operation : evWrite->Record.GetOperations()) {
+                    if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+                        // This operation may fail with an incorrect unique constraint violation otherwise
+                        needMvccSnapshot = true;
+                        break;
+                    }
                 }
             }
             if (needMvccSnapshot) {
@@ -1463,23 +1502,33 @@ private:
 class TKqpWriteTask {
 public:
     struct TPathWriteInfo {
-        IDataBatchProjectionPtr Projection = nullptr;
-        IDataBatchProjectionPtr DeleteProjection = nullptr;
+        std::vector<ui32> DeleteKeysIndexes;
+        std::vector<ui32> NewColumnsIndexes;
+        std::vector<ui32> OldColumnsIndexes;
         TKqpTableWriteActor* WriteActor = nullptr;
+        std::vector<NScheme::TTypeInfo> ColumnTypes;
+        bool SkipEqualRows = false;
+        bool NeedWriteProjection = true;
     };
 
     struct TPathLookupInfo {
-        std::vector<ui32> KeyIndexes;
-        std::vector<ui32> FullKeyIndexes;
-        std::vector<ui32> PkInFullKeyIndexes;
+        std::vector<ui32> KeyIndexes; // Secondary key
+        std::vector<ui32> FullKeyIndexes; // Secondary table key (includes primary key columns)
+        std::vector<ui32> PrimaryInFullKeyIndexes; // Primary key in secondary table key
+        std::vector<ui32> OldKeyIndexes; // Old secondary key
+
         IKqpBufferTableLookup* Lookup = nullptr;
+        bool SkipEqualRowsForUniqCheck = false;
     };
 
 private:
     enum class EState {
+        BLOCKED,
         BUFFERING,
         LOOKUP_MAIN_TABLE,
         LOOKUP_UNIQUE_INDEX,
+        WRITING,
+        CLOSING,
         FINISHED,
     };
 
@@ -1500,14 +1549,15 @@ public:
         , PathId(pathId)
         , OperationType(operationType)
         , Alloc(std::move(alloc)) {
-
         for (const auto& keyColumn : keyColumns) {
             NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
             KeyColumnTypes.push_back(typeInfo);
         }
 
         for (const auto& write : writes) {
-            AFL_ENSURE(write.Projection || write.WriteActor->GetTableId().PathId == pathId);
+            AFL_ENSURE(write.NewColumnsIndexes.size() == write.OldColumnsIndexes.size());
+            AFL_ENSURE(write.NewColumnsIndexes.empty() || write.NewColumnsIndexes.size() == write.ColumnTypes.size());
+            AFL_ENSURE(write.OldColumnsIndexes.empty() || write.OldColumnsIndexes.size() == write.ColumnTypes.size());
             PathWriteInfo[write.WriteActor->GetTableId().PathId] = write;
         }
         for (const auto& lookup : lookups) {
@@ -1515,6 +1565,15 @@ public:
 
             if (lookup.Lookup->GetTableId().PathId == PathId) {
                 AFL_ENSURE(lookup.Lookup->GetKeyColumnTypes().size() == KeyColumnTypes.size());
+                AFL_ENSURE(lookup.KeyIndexes.empty());
+                AFL_ENSURE(lookup.OldKeyIndexes.empty());
+                AFL_ENSURE(lookup.FullKeyIndexes.empty());
+                AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.empty());
+                AFL_ENSURE(!lookup.SkipEqualRowsForUniqCheck);
+            } else {
+                AFL_ENSURE(lookup.OldKeyIndexes.size() == lookup.KeyIndexes.size());
+                AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.size() == KeyColumnTypes.size());
+                AFL_ENSURE(lookup.FullKeyIndexes.size() >= KeyColumnTypes.size());
             }
         }
     }
@@ -1522,36 +1581,43 @@ public:
     void Write(IDataBatchPtr data) {
         AFL_ENSURE(!Closed);
         AFL_ENSURE(!IsError());
-        Memory += data->GetMemory();
-        BufferedBatches.push_back(std::move(data));
+        if (!data->IsEmpty()) {
+            Memory += data->GetMemory();
+            BufferedBatches.push_back(std::move(data));
+        }
     }
 
     void Close() {
         Closed = true;
     }
 
-    void Process() {
+    void Start() {
+        State = EState::BUFFERING;
+    }
+
+    void Process(bool forceFlush) {
         AFL_ENSURE(!IsFinished());
 
         auto stateIteration = [&]() -> bool {
             switch (State) {
+                case EState::BLOCKED:
+                    return false;
                 case EState::BUFFERING:
-                    return ProcessBuffering();
+                    return ProcessBuffering(forceFlush);
                 case EState::LOOKUP_MAIN_TABLE:
                     return ProcessLookupMainTable();
                 case EState::LOOKUP_UNIQUE_INDEX:
                     return ProcessLookupUniqueIndex();
+                case EState::WRITING:
+                    return ProcessWriting();
+                case EState::CLOSING:
+                    return ProcessClosing();
                 case EState::FINISHED:
-                    YQL_ENSURE(false);
+                    return false;
             }
         };
 
         while (stateIteration());
-
-        if (!IsError() && IsClosed() && IsEmpty()) {
-            AFL_ENSURE(GetMemory() == 0);
-            CloseWrite();
-        }
     }
 
     i64 GetMemory() const {
@@ -1570,8 +1636,24 @@ public:
         return State == EState::FINISHED;
     }
 
+    bool IsBlocked() const {
+        return State == EState::BLOCKED;
+    }
+
     i64 GetPriority() const {
         return Priority;
+    }
+
+    ui64 GetCookie() const {
+        return Cookie;
+    }
+
+    const THashMap<TPathId, TPathWriteInfo>& GetPathWriteInfo() const {
+        return PathWriteInfo;
+    }
+
+    const THashMap<TPathId, TPathLookupInfo>& GetPathLookupInfo() const {
+        return PathLookupInfo;
     }
 
     bool IsError() const {
@@ -1584,12 +1666,24 @@ public:
     }
 
 private:
-    bool ProcessBuffering() {
+    bool ProcessBuffering(bool forceFlush) {
         AFL_ENSURE(!IsError());
         AFL_ENSURE(ProcessBatches.empty());
         AFL_ENSURE(ProcessCells.empty());
-        if (BufferedBatches.empty()) {
-            return false;
+        AFL_ENSURE(Writes.empty());
+
+        if (IsClosed()) {
+            if (BufferedBatches.empty()) {
+                AFL_ENSURE(IsEmpty());
+                AFL_ENSURE(!IsError());
+                AFL_ENSURE(GetMemory() == 0);
+                State = EState::CLOSING;
+                return true;
+            }
+        } else {
+            if (!forceFlush || BufferedBatches.empty()) {
+                return false;
+            }
         }
 
         if (auto lookupInfoIt = PathLookupInfo.find(PathId); lookupInfoIt != PathLookupInfo.end()) {
@@ -1643,7 +1737,7 @@ private:
             });
         }
         BufferedBatches.clear();
-        
+
         if (!PathLookupInfo.empty()) {
             // Need to lookup unique indexes.
             // In this case unique indexes keys are subsets of main table key or operation is INSERT.
@@ -1651,13 +1745,13 @@ private:
 
             for (auto& [pathId, lookupInfo] : PathLookupInfo) {
                 AFL_ENSURE(pathId != PathId);
-                
+
                 TUniqueSecondaryKeyCollector collector(
                     KeyColumnTypes,
                     lookupInfo.Lookup->GetKeyColumnTypes(),
                     lookupInfo.KeyIndexes,
                     lookupInfo.FullKeyIndexes,
-                    lookupInfo.PkInFullKeyIndexes);
+                    lookupInfo.PrimaryInFullKeyIndexes);
                 for (const auto& write : Writes) {
                     for (const auto& row : GetRows(write.Batch)) {
                         if (!collector.AddRow(row)) {
@@ -1678,10 +1772,7 @@ private:
 
             State = EState::LOOKUP_UNIQUE_INDEX;
         } else {
-            // Write without lookups.
-            FlushWritesToActors();
-
-            State = EState::BUFFERING;
+            State = EState::WRITING;
         }
         return true;
     }
@@ -1711,6 +1802,9 @@ private:
             AFL_ENSURE(keyToReadCellsIndex.emplace(key, readCells.size() - 1).second);
         });
 
+        const auto& mainWriteInfo = PathWriteInfo.at(PathId);
+        THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> keyChanged;
+
         std::vector<bool> existsMask;
         existsMask.reserve(ProcessCells.size());
         for (size_t index = 0; index < ProcessCells.size(); ++index) {
@@ -1719,19 +1813,30 @@ private:
 
             const auto keyIt = keyToReadCellsIndex.find(key);
             if (keyIt != keyToReadCellsIndex.end()) {
+                const auto& newCells = TConstArrayRef<TCell>(readCells[keyIt->second]).last(readCells[keyIt->second].size() - KeyColumnTypes.size());
+                AFL_ENSURE(lookupColumnsCount == newCells.size());
+
+                if (mainWriteInfo.SkipEqualRows && !keyChanged.contains(key) && IsEqual(
+                        processCells,
+                        newCells,
+                        mainWriteInfo.NewColumnsIndexes,
+                        mainWriteInfo.OldColumnsIndexes,
+                        mainWriteInfo.ColumnTypes)) {
+                    // skip unchanged rows
+                    Memory -= EstimateSize(processCells);
+                    continue;
+                }
+                keyChanged.insert(key);
+
                 for (const auto& cell : processCells) {
                     rowsBatcher->AddCell(cell);
                 }
-
-                const auto& newCells = TConstArrayRef<TCell>(readCells[keyIt->second]).last(readCells[keyIt->second].size() - KeyColumnTypes.size());
-                AFL_ENSURE(lookupColumnsCount == newCells.size());
 
                 Memory += EstimateSize(newCells);
                 for (const auto& cell : newCells) {
                     rowsBatcher->AddCell(cell);
                 }
 
-                // TODO: skip unchanged rows?
                 rowsBatcher->AddRow();
                 existsMask.push_back(true);
             } else if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
@@ -1760,6 +1865,7 @@ private:
             .Batch = rowsBatcher->Flush(),
             .ExistsMask = std::move(existsMask),
         });
+        AFL_ENSURE(rowsBatcher->IsEmpty());
 
         if (PathLookupInfo.size() > 1) {
             // Lookup unique indexes
@@ -1767,20 +1873,47 @@ private:
 
             AFL_ENSURE(Writes.size() == 1);
             const auto writeRows = GetRows(Writes[0].Batch);
+            const auto& existsMask = Writes[0].ExistsMask;
+            AFL_ENSURE(writeRows.size() == existsMask.size());
 
             for (auto& [pathId, lookupInfo] : PathLookupInfo) {
                 if (pathId == PathId) {
                     continue;
                 }
 
+                const bool isPrimaryKeySubset = std::equal(
+                    lookupInfo.KeyIndexes.begin(),
+                    lookupInfo.KeyIndexes.end(),
+                    lookupInfo.OldKeyIndexes.begin(),
+                    lookupInfo.OldKeyIndexes.end());
+
                 TUniqueSecondaryKeyCollector collector(
                         KeyColumnTypes,
                         lookupInfo.Lookup->GetKeyColumnTypes(),
                         lookupInfo.KeyIndexes,
                         lookupInfo.FullKeyIndexes,
-                        lookupInfo.PkInFullKeyIndexes);
+                        lookupInfo.PrimaryInFullKeyIndexes);
 
-                for (const auto& row : writeRows) {
+                AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
+                AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
+                for (size_t index = 0; index < writeRows.size(); ++index) {
+                    const auto& row = writeRows[index];
+                    if (isPrimaryKeySubset && existsMask[index]
+                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+                        Error = ConflictWithExistingKeyErrorText;
+                        return false;
+                    }
+                    if (!isPrimaryKeySubset && lookupInfo.SkipEqualRowsForUniqCheck && IsEqual(
+                            row,
+                            {},
+                            lookupInfo.KeyIndexes,
+                            lookupInfo.OldKeyIndexes,
+                            TConstArrayRef<NScheme::TTypeInfo>(lookupInfo.Lookup->GetKeyColumnTypes())
+                                .first(lookupInfo.KeyIndexes.size()))) {
+                        // skip unchanged keys
+                        continue;
+                    }
                     if (!collector.AddRow(row)) {
                         Error = DuplicateKeyErrorText;
                         return false;
@@ -1788,6 +1921,7 @@ private:
                 }
 
                 const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
+
                 lookupInfo.Lookup->AddUniqueCheckTask(
                     Cookie,
                     std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
@@ -1797,10 +1931,7 @@ private:
 
             State = EState::LOOKUP_UNIQUE_INDEX;
         } else {
-            // Write
-            FlushWritesToActors();
-
-            State = EState::BUFFERING;
+            State = EState::WRITING;
         }
         return true;
     }
@@ -1825,7 +1956,7 @@ private:
                         lookupInfo.Lookup->GetKeyColumnTypes(),
                         lookupInfo.KeyIndexes,
                         lookupInfo.FullKeyIndexes,
-                        lookupInfo.PkInFullKeyIndexes);
+                        lookupInfo.PrimaryInFullKeyIndexes);
                 std::vector<TOwnedCellVec> extractedRows;
                 lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
                     extractedRows.emplace_back(cells);
@@ -1843,9 +1974,35 @@ private:
             }
         }
 
+        State = EState::WRITING;
+        return true;
+    }
+
+    bool ProcessWriting() {
+        AFL_ENSURE(State == EState::WRITING);
+        AFL_ENSURE(!IsError());
+
+        if (!AllOf(PathWriteInfo, [](const auto& writeInfo) {
+                return writeInfo.second.WriteActor->IsReady();
+            })) {
+            return false;
+        }
+
         FlushWritesToActors();
         State = EState::BUFFERING;
+        return true;
+    }
 
+    bool ProcessClosing() {
+        AFL_ENSURE(State == EState::CLOSING);
+        AFL_ENSURE(!IsError());
+        if (!AllOf(PathWriteInfo, [](const auto& writeInfo) {
+                return writeInfo.second.WriteActor->IsReady();
+            })) {
+            return false;
+        }
+        CloseWrite();
+        State = EState::FINISHED;
         return true;
     }
 
@@ -1854,23 +2011,46 @@ private:
 
         if (PathWriteInfo.contains(PathId) ? PathWriteInfo.size() > 1 : PathWriteInfo.size() > 0) {
             // Secondary index exists
-            std::vector<NKikimr::NKqp::IDataBatchPtr> batches;
-            std::vector<TConstArrayRef<bool>> masks;
-            for (auto& write : Writes) {
-                batches.push_back(write.Batch);
-                masks.emplace_back(write.ExistsMask);
+            THashMap<
+                TConstArrayRef<TCell>,
+                std::pair<TConstArrayRef<TCell>, bool>,
+                NKikimr::TCellVectorsHash,
+                NKikimr::TCellVectorsEquals> keyToRow;
+
+            for (int batchIndex = static_cast<int>(Writes.size()) - 1; batchIndex >= 0; --batchIndex) {
+                const auto& write = Writes[batchIndex];
+                const auto rows = GetRows(write.Batch);
+                AFL_ENSURE(rows.size() == write.ExistsMask.size());
+                for (int index = static_cast<int>(rows.size()) - 1; index >= 0; --index) {
+                    keyToRow.emplace(
+                        rows[index].first(KeyColumnTypes.size()),
+                        std::make_pair(rows[index], write.ExistsMask[index]));
+                }
             }
-            const auto deleteRows = GetSortedUniqueRows(batches, masks, KeyColumnTypes);
-            const auto writeRows = GetSortedUniqueRows(batches, {}, KeyColumnTypes);
 
             for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
                 // At first, write to indexes
                 if (PathId != actorPathId) {
-                    // TODO: skip unchanged rows for UPSERT/REPLACE/UPDATE
-                    if (actorInfo.DeleteProjection) {
+                    const bool hasDelete = !actorInfo.DeleteKeysIndexes.empty();
+                    if (hasDelete) {
+                        AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
                         {
-                            actorInfo.DeleteProjection->Fill(deleteRows);
-                            auto preparedKeyBatch = actorInfo.DeleteProjection->Flush();
+                            auto deleteProjection = CreateDataBatchProjection(
+                                actorInfo.DeleteKeysIndexes, Alloc);
+                            for (const auto& [key, rowAndExists] : keyToRow) {
+                                if (rowAndExists.second && (
+                                        !actorInfo.SkipEqualRows
+                                        || !IsEqual(
+                                            rowAndExists.first,
+                                            {},
+                                            actorInfo.NewColumnsIndexes,
+                                            actorInfo.OldColumnsIndexes,
+                                            actorInfo.ColumnTypes))) {
+                                    deleteProjection->AddRow(rowAndExists.first);
+                                }
+                            }
+                            auto preparedKeyBatch = deleteProjection->Flush();
                             actorInfo.WriteActor->Write(
                                 DeleteCookie,
                                 std::move(preparedKeyBatch));
@@ -1878,9 +2058,21 @@ private:
                         actorInfo.WriteActor->FlushBuffer(DeleteCookie);
                     }
 
-                    AFL_ENSURE(actorInfo.Projection);
-                    actorInfo.Projection->Fill(writeRows);
-                    auto preparedBatch = actorInfo.Projection->Flush();
+                    AFL_ENSURE(!actorInfo.NewColumnsIndexes.empty());
+                    auto projection = CreateDataBatchProjection(
+                                actorInfo.NewColumnsIndexes, Alloc);
+
+                    for (const auto& [key, rowAndExists] : keyToRow) {
+                        if (!rowAndExists.second || !actorInfo.SkipEqualRows || !IsEqual(
+                                rowAndExists.first,
+                                {},
+                                actorInfo.NewColumnsIndexes,
+                                actorInfo.OldColumnsIndexes,
+                                actorInfo.ColumnTypes)) {
+                            projection->AddRow(rowAndExists.first);
+                        }
+                    }
+                    auto preparedBatch = projection->Flush();
                     actorInfo.WriteActor->Write(
                         Cookie,
                         preparedBatch);
@@ -1891,15 +2083,21 @@ private:
 
         for (auto& write : Writes) {
             auto& batch = write.Batch;
-
             Memory -= batch->GetMemory();
 
             auto& actorInfo = PathWriteInfo.at(PathId);
-            if (actorInfo.Projection) {
-                actorInfo.Projection->Fill(batch);
-                batch = actorInfo.Projection->Flush();
+            AFL_ENSURE(actorInfo.DeleteKeysIndexes.empty());
+
+            if (actorInfo.NeedWriteProjection) {
+                AFL_ENSURE(!actorInfo.NewColumnsIndexes.empty());
+                auto projection = CreateDataBatchProjection(
+                    actorInfo.NewColumnsIndexes,
+                    Alloc);
+                for (const auto& row : GetRows(batch)) {
+                    projection->AddRow(row);
+                }
+                batch = projection->Flush();
             }
-            AFL_ENSURE(!actorInfo.DeleteProjection);
             PathWriteInfo.at(PathId).WriteActor->Write(
                 Cookie,
                 std::move(batch));
@@ -1912,12 +2110,11 @@ private:
         AFL_ENSURE(!IsError());
         for (auto& [pathId, actorInfo] : PathWriteInfo) {
             actorInfo.WriteActor->Close(Cookie);
-            if (actorInfo.DeleteProjection) {
+            if (!actorInfo.DeleteKeysIndexes.empty()) {
                 AFL_ENSURE(pathId != PathId);
                 actorInfo.WriteActor->Close(DeleteCookie);
             }
         }
-        State = EState::FINISHED;
     }
 
     const ui64 Cookie;
@@ -1928,7 +2125,7 @@ private:
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
-    EState State = EState::BUFFERING;
+    EState State = EState::BLOCKED;
 
     THashMap<TPathId, TPathWriteInfo> PathWriteInfo;
     THashMap<TPathId, TPathLookupInfo> PathLookupInfo;
@@ -1948,6 +2145,127 @@ private:
     std::vector<TWrite> Writes;
     std::vector<TConstArrayRef<TCell>> ProcessCells;
     THashMap<TConstArrayRef<TCell>, std::vector<ui32>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> KeyToIndexes;
+};
+
+class TWriteTasksPlanner {
+public:
+    void AddTask(TKqpWriteTask& task) {
+        AFL_ENSURE(!task.IsFinished());
+        AFL_ENSURE(PriorityToBlockedTask.emplace(task.GetPriority(), task).second);
+        while (PriorityToBlockedTask.contains(FirstUnknownPriority)) {
+            ++FirstUnknownPriority;
+        }
+    }
+
+    void ReleaseTask(TKqpWriteTask& task) {
+        AFL_ENSURE(task.IsFinished());
+        for (const auto& [pathId, _] : task.GetPathWriteInfo()) {
+            TableLocks.at(pathId).Release(task.GetCookie());
+        }
+        for (const auto& [pathId, _] : task.GetPathLookupInfo()) {
+            TableLocks.at(pathId).Release(task.GetCookie());
+        }
+    }
+
+    bool StartUnblockedTasks() {
+        bool startedTasks = false;
+        THashSet<TPathId> failedLocks;
+        for (auto it = PriorityToBlockedTask.begin(); it != PriorityToBlockedTask.end() && it->first < FirstUnknownPriority;) {
+            auto& task = it->second.get();
+            bool canAquireLocks = true;
+            // If some task failed to lock a path, then next tasks also can't lock this path.
+            for (const auto& [pathId, _] : task.GetPathWriteInfo()) {
+                if (failedLocks.contains(pathId)) {
+                    canAquireLocks = false;
+                } else if (!TableLocks[pathId].CheckAcquire(
+                        task.GetCookie(),
+                        TTableLock::ETableLockMode::EXCLUSIVE)) {
+                    canAquireLocks = false;
+                    failedLocks.insert(pathId);
+                }
+            }
+            for (const auto& [pathId, _] : task.GetPathLookupInfo()) {
+                if (failedLocks.contains(pathId)) {
+                    canAquireLocks = false;
+                } else if (!TableLocks[pathId].CheckAcquire(
+                        task.GetCookie(),
+                        TTableLock::ETableLockMode::SHARED)) {
+                    canAquireLocks = false;
+                    failedLocks.insert(pathId);
+                }
+            }
+            if (canAquireLocks) {
+                for (const auto& [pathId, _] : task.GetPathWriteInfo()) {
+                    TableLocks.at(pathId).Acquire(
+                        task.GetCookie(),
+                        TTableLock::ETableLockMode::EXCLUSIVE);
+                }
+                for (const auto& [pathId, _] : task.GetPathLookupInfo()) {
+                    TableLocks.at(pathId).Acquire(
+                        task.GetCookie(),
+                        TTableLock::ETableLockMode::SHARED);
+                }
+                task.Start();
+                it = PriorityToBlockedTask.erase(it);
+                startedTasks = true;
+            } else {
+                ++it;
+            }
+        }
+
+        return startedTasks;
+    }
+
+private:
+    class TTableLock {
+    public:
+        enum class ETableLockMode {
+            NONE,
+            SHARED,
+            EXCLUSIVE,
+        };
+
+        bool CheckAcquire(ui64 taskCookie, ETableLockMode mode) const {
+            AFL_ENSURE(mode != ETableLockMode::NONE);
+            if (Mode == ETableLockMode::NONE) {
+                AFL_ENSURE(Owners.empty());
+                return true;
+            } else if (Mode == ETableLockMode::SHARED) {
+                AFL_ENSURE(!Owners.empty());
+                if (mode == ETableLockMode::SHARED) {
+                    return true;
+                } else {
+                    return Owners.size() == 1 && Owners.contains(taskCookie);
+                }
+            } else {
+                AFL_ENSURE(Owners.size() == 1);
+                return Owners.contains(taskCookie);
+            }
+        }
+
+        void Acquire(ui64 taskCookie, ETableLockMode mode) {
+            AFL_ENSURE(CheckAcquire(taskCookie, mode));
+            if (Mode < mode) {
+                Mode = mode;
+            }
+            Owners.insert(taskCookie);
+        }
+
+        void Release(ui64 taskCookie) {
+            Owners.erase(taskCookie);
+            if (Owners.empty()) {
+                Mode = ETableLockMode::NONE;
+            }
+        }
+
+    private:
+        ETableLockMode Mode = ETableLockMode::NONE;
+        THashSet<ui64> Owners;
+    };
+
+    THashMap<TPathId, TTableLock> TableLocks;
+    TMap<i64, std::reference_wrapper<TKqpWriteTask>> PriorityToBlockedTask;
+    i64 FirstUnknownPriority = 0;
 };
 
 class TKqpDirectWriteActor : public TActorBootstrapped<TKqpDirectWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput, public IKqpTableWriterCallbacks {
@@ -2023,19 +2341,17 @@ public:
             TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
                 Settings.GetKeyColumns().begin(),
                 Settings.GetKeyColumns().end());
-            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
-                Settings.GetColumns().begin(),
-                Settings.GetColumns().end());
-            std::vector<ui32> writeIndex(
-                Settings.GetWriteIndexes().begin(),
-                Settings.GetWriteIndexes().end());
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(Settings.GetColumns().size());
+            AFL_ENSURE(Settings.GetColumns().size() == Settings.GetWriteIndexes().size());
+            for (int index = 0; index < Settings.GetColumns().size(); ++index) {
+                columnsMetadata[Settings.GetWriteIndexes()[index]] = Settings.GetColumns()[index];
+            }
             YQL_ENSURE(Settings.GetPriority() == 0);
             WriteTableActor->Open(
                 WriteToken,
                 GetOperation(Settings.GetType()),
                 std::move(keyColumnsMetadata),
                 std::move(columnsMetadata),
-                std::move(writeIndex),
                 Settings.GetPriority());
             WaitingForTableActor = true;
         } catch (const TMemoryLimitExceededException&) {
@@ -2341,7 +2657,6 @@ struct TWriteSettings {
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
-    std::vector<ui32> WriteIndex;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
     TTransactionSettings TransactionSettings;
     i64 Priority;
@@ -2354,7 +2669,6 @@ struct TWriteSettings {
         TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
         ui32 KeyPrefixSize;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
-        std::vector<ui32> WriteIndex;
         bool IsUniq;
     };
 
@@ -2449,6 +2763,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
             default:
                 AFL_ENSURE(false)("StateWaitTasks: unknown message", ev->GetTypeRewrite());
             }
@@ -2463,6 +2778,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
             default:
                 AFL_ENSURE(false)("StateFlush: unknown message", ev->GetTypeRewrite());
             }
@@ -2477,6 +2793,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
@@ -2500,6 +2817,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, Handle);
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleCommit);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleCommit);
@@ -2625,7 +2943,7 @@ public:
                         {});
                     return false;
                 }
-                AFL_ENSURE(actor->GetTableId() == tableId);  
+                AFL_ENSURE(actor->GetTableId() == tableId);
                 return true;
             };
 
@@ -2676,6 +2994,7 @@ public:
             }
 
             if (!settings.LookupColumns.empty()) {
+                AFL_ENSURE(!settings.IsOlap);
                 auto& lookupInfo = LookupInfos[settings.TableId.PathId];
                 if (!lookupInfo.Actors.contains(settings.TableId.PathId)) {
                     const auto [ptr, id] = createLookupActor(settings.TableId, settings.TablePath);
@@ -2704,6 +3023,7 @@ public:
             };
 
             for (const auto& indexSettings : settings.Indexes) {
+                AFL_ENSURE(!settings.IsOlap);
                 if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
                     const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns);
                     writeInfo.Actors.emplace(indexSettings.TableId.PathId, TWriteInfo::TActorInfo{
@@ -2750,27 +3070,7 @@ public:
 
             AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
             for (auto& indexSettings : settings.Indexes) {
-                auto projection = CreateDataBatchProjection(
-                    settings.Columns,
-                    settings.WriteIndex,
-                    settings.LookupColumns,
-                    indexSettings.Columns,
-                    indexSettings.WriteIndex,
-                    /* preferAdditionalInputColumns */ false,
-                    Alloc);
-
-                std::vector<ui32> keyWriteIndex(indexSettings.KeyColumns.size());
-                std::iota(std::begin(keyWriteIndex), std::end(keyWriteIndex), 0);
-
-                auto deleteProjection = CreateDataBatchProjection(
-                    settings.Columns,
-                    settings.WriteIndex,
-                    settings.LookupColumns,
-                    indexSettings.KeyColumns,
-                    keyWriteIndex,
-                    /* preferAdditionalInputColumns */ true,
-                    Alloc);
-
+                AFL_ENSURE(!settings.IsOlap);
                 // Flag for the case of UPDATE been processed without doing lookup,
                 // so no secondary index key columns are touched.
                 // In this case we must use UPDATE operation at shards for all table,
@@ -2789,11 +3089,11 @@ public:
                             : NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
                     indexSettings.KeyColumns,
                     indexSettings.Columns,
-                    indexSettings.WriteIndex,
                     settings.Priority);
 
                 const bool needAdditionalDelete = !isSubsetOfPrimaryKeyColumns(indexSettings.KeyColumns)
-                    && settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE;
+                    && settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                    && settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
 
                 if (needAdditionalDelete) {
                     writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
@@ -2801,39 +3101,59 @@ public:
                         NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
                         indexSettings.KeyColumns,
                         indexSettings.KeyColumns,
-                        keyWriteIndex,
                         settings.Priority);
                 }
 
                 writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                    .Projection = std::move(projection),
-                    .DeleteProjection = needAdditionalDelete ? std::move(deleteProjection) : nullptr,
+                    .DeleteKeysIndexes = needAdditionalDelete
+                                ? GetIndexes(
+                                    settings.Columns,
+                                    settings.LookupColumns,
+                                    indexSettings.KeyColumns,
+                                    /* preferAdditionalInputColumns */ true)
+                                : std::vector<ui32>{},
+                    .NewColumnsIndexes = GetIndexes(
+                                settings.Columns,
+                                settings.LookupColumns,
+                                indexSettings.Columns,
+                                /* preferAdditionalInputColumns */ false),
+                    .OldColumnsIndexes = GetIndexes(
+                                settings.Columns,
+                                settings.LookupColumns,
+                                indexSettings.Columns,
+                                /* preferAdditionalInputColumns */ true),
                     .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
+                    .ColumnTypes = [&]() {
+                        std::vector<NScheme::TTypeInfo> result(indexSettings.Columns.size());
+                        for (ui32 index = 0; index < indexSettings.Columns.size(); ++index) {
+                            const auto& column = indexSettings.Columns[index];
+                            result[index] = NScheme::TypeInfoFromProto(
+                                column.GetTypeId(), column.GetTypeInfo());
+                        }
+                        return result;
+                    }(),
+                    .SkipEqualRows = !settings.LookupColumns.empty()
+                        && (settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE),
+                    .NeedWriteProjection = true,
                 });
 
                 if (indexSettings.IsUniq) {
                     auto lookupInfo = LookupInfos.at(indexSettings.TableId.PathId);
                     auto lookupActor = lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor;
                     lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
-                        .KeyIndexes = GetKeyIndexes( // inserted secondary keys
+                        .KeyIndexes = GetIndexes( // inserted secondary keys
                             settings.Columns,
-                            settings.WriteIndex,
                             settings.LookupColumns,
                             TConstArrayRef{
                                 indexSettings.KeyColumns.data(),
                                 indexSettings.KeyPrefixSize},
-                            TConstArrayRef{
-                                keyWriteIndex.data(),
-                                indexSettings.KeyPrefixSize},
                             /* preferAdditionalInputColumns */ false),
-                        .FullKeyIndexes = GetKeyIndexes( // full secondary table keys
+                        .FullKeyIndexes = GetIndexes( // full secondary table keys
                             settings.Columns,
-                            settings.WriteIndex,
                             settings.LookupColumns,
                             indexSettings.KeyColumns,
-                            keyWriteIndex,
                             /* preferAdditionalInputColumns */ false),
-                        .PkInFullKeyIndexes = [&](){ // primary key in full secondary table keys
+                        .PrimaryInFullKeyIndexes = [&](){ // primary key in full secondary table keys
                             THashMap<TStringBuf, ui32> ColumnNameToIndex;
                             for (ui32 index = 0; index < indexSettings.KeyColumns.size(); ++index) {
                                 ColumnNameToIndex[indexSettings.KeyColumns[index].GetName()] = index;
@@ -2844,7 +3164,15 @@ public:
                             }
                             return result;
                         }(),
+                        .OldKeyIndexes = GetIndexes( // old secondary keys
+                                settings.Columns,
+                                settings.LookupColumns,
+                                TConstArrayRef{
+                                    indexSettings.KeyColumns.data(),
+                                    indexSettings.KeyPrefixSize},
+                                /* preferAdditionalInputColumns */ true),
                         .Lookup = lookupActor,
+                        .SkipEqualRowsForUniqCheck = !settings.LookupColumns.empty(),
                     });
 
                     lookupActor->SetLookupSettings(
@@ -2855,24 +3183,17 @@ public:
                 }
             }
 
-            IDataBatchProjectionPtr projection = nullptr;
             if (!settings.LookupColumns.empty()) {
-                projection = CreateDataBatchProjection(
-                    settings.Columns,
-                    settings.WriteIndex,
-                    settings.LookupColumns,
-                    settings.Columns,
-                    settings.WriteIndex,
-                    /* preferAdditionalInputColumns */ false,
-                    Alloc);
-                
+                AFL_ENSURE(!settings.IsOlap);
                 auto lookupInfo = LookupInfos.at(settings.TableId.PathId);
                 auto lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
                 lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
                     .KeyIndexes = {},
                     .FullKeyIndexes = {},
-                    .PkInFullKeyIndexes = {},
+                    .PrimaryInFullKeyIndexes = {},
+                    .OldKeyIndexes = {},
                     .Lookup = lookupActor,
+                    .SkipEqualRowsForUniqCheck = false,
                 });
 
                 lookupActor->SetLookupSettings(
@@ -2888,16 +3209,38 @@ public:
                     ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT // Avoid unnecessary reads at datashard if we have already done lookup
                     : settings.OperationType,
                 settings.KeyColumns,
-                std::move(settings.Columns),
-                std::move(settings.WriteIndex),
+                settings.Columns,
                 settings.Priority);
+
+            AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
             writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
-                .Projection = std::move(projection),
-                .DeleteProjection = nullptr,
+                .DeleteKeysIndexes = {},
+                .NewColumnsIndexes = GetIndexes(
+                            settings.Columns,
+                            settings.LookupColumns,
+                            settings.Columns,
+                            /* preferAdditionalInputColumns */ false),
+                .OldColumnsIndexes = GetIndexes(
+                            settings.Columns,
+                            settings.LookupColumns,
+                            settings.Columns,
+                            /* preferAdditionalInputColumns */ true),
                 .WriteActor = writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
+                .ColumnTypes = [&]() {
+                    std::vector<NScheme::TTypeInfo> result(settings.Columns.size());
+                    for (ui32 index = 0; index < settings.Columns.size(); ++index) {
+                        const auto& column = settings.Columns[index];
+                        result[index] = NScheme::TypeInfoFromProto(
+                            column.GetTypeId(), column.GetTypeInfo());
+                    }
+                    return result;
+                }(),
+                .SkipEqualRows = !settings.LookupColumns.empty()
+                    && (settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE),
+                .NeedWriteProjection = !settings.LookupColumns.empty(),
             });
 
-            WriteTasks.emplace(
+            auto [taskIter, _] = WriteTasks.emplace(
                 token.Cookie,
                 TKqpWriteTask{
                     writeCookie,
@@ -2910,6 +3253,8 @@ public:
                     settings.KeyColumns,
                     Alloc
                 });
+
+            TasksPlanner.AddTask(taskIter->second);
         } else {
             token = *ev->Get()->Token;
         }
@@ -2948,7 +3293,7 @@ public:
         }
 
         ProcessRequestQueue();
-        if (!ProcessTasks()) {
+        if (!ProcessTasks(/* forceFlush */ EnableStreamWrite && GetTotalFreeSpace() <= 0)) {
             return false;
         }
         if (!ProcessFlush()) {
@@ -2974,26 +3319,17 @@ public:
 
     void ProcessRequestQueue() {
         for (auto& [pathId, queue] : RequestQueues) {
-            auto& writeInfo = WriteInfos.at(pathId);
-
-            for (const auto& [_, actor] : writeInfo.Actors) {
-                if (!actor.WriteActor->IsReady()) {
-                    CA_LOG_D("ProcessRequestQueue " << pathId << " NOT READY queue=" << queue.size());
-                    return;
-                }
-            }
-
             while (!queue.empty()) {
                 auto& message = queue.front();
 
                 AFL_ENSURE(message.Token.PathId == pathId);
                 auto& writeTask = WriteTasks.at(message.Token.Cookie);
-
                 writeTask.Write(std::move(message.Data));
                 if (message.Close) {
                     writeTask.Close();
                 }
 
+                // TODO: For stream write must send AckMessage only for working tasks.
                 AckQueue.push(TAckMessage{
                     .ForwardActorId = message.From,
                     .Token = message.Token,
@@ -3005,26 +3341,29 @@ public:
         }
     }
 
-    bool ProcessTasks() {
+    bool ProcessTasks(bool forceFlush) {
         TVector<ui64> finishedCookies;
-        for (auto& [cookie, writeTask] : WriteTasks) {
-            writeTask.Process();
-            if (writeTask.IsError()) {
-                ReplyError(
-                    NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
-                    NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                    TStringBuilder() << writeTask.GetError(),
-                    {});
-                return false;
+        do {
+            for (auto& [cookie, writeTask] : WriteTasks) {
+                writeTask.Process(forceFlush);
+                if (writeTask.IsError()) {
+                    ReplyError(
+                        NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                        NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                        TStringBuilder() << writeTask.GetError(),
+                        {});
+                    return false;
+                }
+                if (writeTask.IsFinished()) {
+                    TasksPlanner.ReleaseTask(writeTask);
+                    finishedCookies.push_back(cookie);
+                }
             }
-            if (writeTask.IsFinished()) {
-                finishedCookies.push_back(cookie);
-            }
-        }
 
-        for (const auto& cookie : finishedCookies) {
-            WriteTasks.erase(cookie);
-        }
+            for (const auto& cookie : finishedCookies) {
+                WriteTasks.erase(cookie);
+            }
+        } while (TasksPlanner.StartUnblockedTasks());
 
         return true;
     }
@@ -3414,6 +3753,13 @@ public:
             }
         }
 
+        Clear();
+
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        TActorBootstrapped<TKqpBufferWriteActor>::PassAway();
+    }
+
+    void Clear() {
         ForEachLookupActor([](IKqpBufferTableLookup* actor, const TActorId) {
             actor->Terminate();
         });
@@ -3431,9 +3777,6 @@ public:
             HolderFactory.reset();
             TypeEnv.reset();
         }
-
-        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
-        TActorBootstrapped<TKqpBufferWriteActor>::PassAway();
     }
 
     void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev) {
@@ -3801,7 +4144,7 @@ public:
             ProcessWritePreparedShard(ev);
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             if (ev->Get()->Record.HasOverloadSubscribed()) {
                 CA_LOG_D("Shard " << ev->Get()->Record.GetOrigin() << " is overloaded. Waiting.");
@@ -3946,21 +4289,21 @@ public:
                 getIssues());
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED: {
-            CA_LOG_E("Got DISK_SPACE_EXHAUSTED for tables."
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED: {
+            CA_LOG_E("Got DATABASE_DISK_SPACE_QUOTA_EXCEEDED for tables."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             ReplyError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED,
+                NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED,
                 TStringBuilder() << "Disk space exhausted. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
             return;
         }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE: {
-            CA_LOG_W("Got OUT_OF_SPACE for tables."
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE: {
+            CA_LOG_W("Got DISK_GROUP_OUT_OF_SPACE for tables."
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                 << " Sink=" << this->SelfId() << "."
                 << " Ignored this error."
@@ -4141,6 +4484,11 @@ public:
                 return builder;
             }());
 
+        if (ev->Get()->Record.HasTxStats()) {
+            LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
+            LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
+        }
+
         OnCommitted(ev->Get()->Record.GetOrigin(), 0);
     }
 
@@ -4304,6 +4652,8 @@ public:
             std::move(issues),
             BuildStats()
         });
+
+        Clear();
     }
 
     TString GetPathes(ui64 shardId) const {
@@ -4326,6 +4676,7 @@ public:
         ForEachLookupActor([&](IKqpBufferTableLookup* actor, const TActorId) {
             actor->FillStats(&result);
         });
+        TKqpTableWriterStatistics::AddLockStats(&result, LocksBrokenAsBreaker, LocksBrokenAsVictim);
         return result;
     }
 
@@ -4400,6 +4751,9 @@ private:
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
 
+    ui64 LocksBrokenAsBreaker = 0;
+    ui64 LocksBrokenAsVictim = 0;
+
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     std::shared_ptr<NMiniKQL::TTypeEnvironment> TypeEnv;
     NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
@@ -4429,6 +4783,7 @@ private:
     TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
 
     THashMap<TPathId, std::queue<TBufferWriteMessage>> RequestQueues;
+    TWriteTasksPlanner TasksPlanner;
 
     struct TAckMessage {
         TActorId ForwardActorId;
@@ -4562,12 +4917,11 @@ private:
             TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
                 Settings.GetKeyColumns().begin(),
                 Settings.GetKeyColumns().end());
-            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
-                Settings.GetColumns().begin(),
-                Settings.GetColumns().end());
-            std::vector<ui32> writeIndex(
-                Settings.GetWriteIndexes().begin(),
-                Settings.GetWriteIndexes().end());
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(Settings.GetColumns().size());
+            AFL_ENSURE(Settings.GetColumns().size() == Settings.GetWriteIndexes().size());
+            for (int index = 0; index < Settings.GetColumns().size(); ++index) {
+                columnsMetadata[Settings.GetWriteIndexes()[index]] = Settings.GetColumns()[index];
+            }
             TVector<NKikimrKqp::TKqpColumnMetadataProto> lookupColumnsMetadata(
                 Settings.GetLookupColumns().begin(),
                 Settings.GetLookupColumns().end());
@@ -4579,7 +4933,6 @@ private:
                 .OperationType = GetOperation(Settings.GetType()),
                 .KeyColumns = std::move(keyColumnsMetadata),
                 .Columns = std::move(columnsMetadata),
-                .WriteIndex = std::move(writeIndex),
                 .LookupColumns = std::move(lookupColumnsMetadata),
                 .TransactionSettings = TTransactionSettings{
                     .TxId = TxId,
@@ -4598,13 +4951,11 @@ private:
                 TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
                     indexSettings.GetKeyColumns().begin(),
                     indexSettings.GetKeyColumns().end());
-                TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
-                    indexSettings.GetColumns().begin(),
-                    indexSettings.GetColumns().end());
-                std::vector<ui32> writeIndex(
-                    indexSettings.GetWriteIndexes().begin(),
-                    indexSettings.GetWriteIndexes().end());
-                AFL_ENSURE(writeIndex.size() == columnsMetadata.size());
+                TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(indexSettings.GetColumns().size());
+                AFL_ENSURE(indexSettings.GetColumns().size() == indexSettings.GetWriteIndexes().size());
+                for (int index = 0; index < indexSettings.GetColumns().size(); ++index) {
+                    columnsMetadata[indexSettings.GetWriteIndexes()[index]] = indexSettings.GetColumns()[index];
+                }
 
                 ev->Settings->Indexes.push_back(TWriteSettings::TIndex {
                     .TableId = TTableId(indexSettings.GetTable().GetOwnerId(),
@@ -4614,19 +4965,12 @@ private:
                     .KeyColumns = std::move(keyColumnsMetadata),
                     .KeyPrefixSize = indexSettings.GetKeyPrefixSize(),
                     .Columns = std::move(columnsMetadata),
-                    .WriteIndex = std::move(writeIndex),
                     .IsUniq = indexSettings.GetIsUniq(),
                 });
             }
         }
 
         ev->SendTime = TInstant::Now();
-
-        if (ev->Data->IsEmpty() && ev->Close && WriteToken.IsEmpty()) {
-            // Nothing was written
-            OnFlushed();
-            return;
-        }
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));
@@ -4655,6 +4999,7 @@ private:
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
+        AFL_ENSURE(!InFlight);
         Closed |= finished;
         Batcher->AddData(data);
         DataSize += size;

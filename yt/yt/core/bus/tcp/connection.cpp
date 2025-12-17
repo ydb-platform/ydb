@@ -964,7 +964,13 @@ void TTcpConnection::OnEvent(EPollControl control)
             // Client initiates a handshake.
             TryEnqueueHandshake();
         }
-        ProcessQueuedMessages();
+
+        // We should not process messages unless all handshakes have been performed.
+        bool sslHandshakeImminent = EstablishSslSession_ && SslState_ == ESslState::None;
+        if (HandshakeReceived_ && !sslHandshakeImminent) {
+            ProcessQueuedMessages();
+        }
+
         OnSocketWrite();
     }
 
@@ -1202,6 +1208,23 @@ bool TTcpConnection::AdvanceDecoder(size_t size)
 
 bool TTcpConnection::OnPacketReceived() noexcept
 {
+    bool packetIsHandshake = Decoder_->GetPacketId() == HandshakePacketId;
+    if (HandshakeReceived_) {
+        YT_ASSERT(!packetIsHandshake, "Only the first packet can be a handshake");
+    } else if (!packetIsHandshake) {
+        if (EncryptionMode_ == EEncryptionMode::Required) {
+            Abort(TError(NBus::EErrorCode::TransportError, "Failed to negotiate TLS/SSL encryption")
+                << TErrorAttribute("mode", EncryptionMode_)
+                << TErrorAttribute("packet_id", Decoder_->GetPacketId())
+                << TErrorAttribute("packet_type", Decoder_->GetPacketType()));
+            return false;
+        }
+        // COMPAT(dann239): Java client apparently doesn't send handshakes, so let's
+        // consider the handshake performed if the client opens up with something else.
+        YT_ASSERT(ConnectionType_ == EConnectionType::Server);
+        HandshakeReceived_ = true;
+    }
+
     UpdateBusCounter(&TBusNetworkBandCounters::InPackets, 1);
     switch (Decoder_->GetPacketType()) {
         case EPacketType::Ack:
@@ -1318,7 +1341,6 @@ bool TTcpConnection::OnHandshakePacketReceived()
         if (EncryptionMode_ == EEncryptionMode::Disabled || otherEncryptionMode == EEncryptionMode::Disabled) {
             if (ConnectionType_ == EConnectionType::Server) {
                 // Send handshake response before abort to let client deduce reason.
-                ProcessQueuedMessages();
                 OnSocketWrite();
             }
             Abort(TError(NBus::EErrorCode::SslError, "TLS/SSL client/server encryption mode compatibility error")

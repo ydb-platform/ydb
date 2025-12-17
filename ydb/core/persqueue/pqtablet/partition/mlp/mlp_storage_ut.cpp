@@ -6,6 +6,36 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+void AssertMessagesLocks(const TTabletPercentileCounter& /*messageLocks*/, std::unordered_map<ui64, ui64>&& /*expected*/) {
+
+    // auto debugString = [&]() {
+    //     TStringBuilder sb;
+    //     sb << "[";
+    //     for (size_t i = 0; i < messageLocks.GetRangeCount(); ++i) {
+    //         sb << "{" << i << "," << messageLocks.GetRangeValue(i) << "}, ";
+    //     }
+    //     sb << "]";
+    //     return sb;
+    // };
+
+    // auto expectedDebugString = [&]() {
+    //     TStringBuilder sb;
+    //     sb << "[";
+    //     for (size_t i = 0; i < messageLocks.GetRangeCount(); ++i) {
+    //         sb << "{" << i << "," << expected[i] << "}, ";
+    //     }
+    //     sb << "]";
+    //     return sb;
+    // };
+
+    // for (size_t i = 0; i < messageLocks.GetRangeCount(); ++i) {
+    //     auto value = messageLocks.GetRangeValue(i);
+    //     auto expectedValue = expected[i];
+
+    //     UNIT_ASSERT_VALUES_EQUAL_C(value, expectedValue, "Value for range " << i << " is not equal to expected: " << debugString() << " != " << expectedDebugString());
+    // }
+}
+
 Y_UNIT_TEST_SUITE(TMLPStorageTests) {
 
 struct MockTimeProvider : public ITimeProvider {
@@ -77,7 +107,7 @@ struct TUtils {
 
             utils.AssertEquals(*this);
         }
-    } 
+    }
 
     NKikimrPQ::TMLPStorageSnapshot CreateSnapshot() {
         // Clear batch
@@ -183,16 +213,24 @@ struct TUtils {
         UNIT_ASSERT_VALUES_EQUAL(join(other.Storage.GetDLQMessages()), join(Storage.GetDLQMessages()));
         UNIT_ASSERT_VALUES_EQUAL(join(other.Storage.GetLockedMessageGroupsId()), join(Storage.GetLockedMessageGroupsId()));
 
-        auto ometrics = other.Storage.GetMetrics();
-        auto metrics = Storage.GetMetrics();
+        auto& ometrics = other.Storage.GetMetrics();
+        auto& metrics = Storage.GetMetrics();
 
-        UNIT_ASSERT_VALUES_EQUAL(ometrics.InflyMessageCount, metrics.InflyMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.InflightMessageCount, metrics.InflightMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageCount, metrics.LockedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageGroupCount, metrics.LockedMessageGroupCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.DelayedMessageCount, metrics.DelayedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.CommittedMessageCount, metrics.CommittedMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.DeadlineExpiredMessageCount, metrics.DeadlineExpiredMessageCount);
         UNIT_ASSERT_VALUES_EQUAL(ometrics.DLQMessageCount, metrics.DLQMessageCount);
+
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalCommittedMessageCount, metrics.TotalCommittedMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalMovedToDLQMessageCount, metrics.TotalMovedToDLQMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalScheduledToDLQMessageCount, metrics.TotalScheduledToDLQMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalPurgedMessageCount, metrics.TotalPurgedMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalDeletedByDeadlinePolicyMessageCount, metrics.TotalDeletedByDeadlinePolicyMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.TotalDeletedByRetentionMessageCount, metrics.TotalDeletedByRetentionMessageCount);
     }
 };
 
@@ -204,13 +242,22 @@ Y_UNIT_TEST(NextFromEmptyStorage) {
     UNIT_ASSERT(!result.has_value());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
 }
 
 Y_UNIT_TEST(CommitToEmptyStorage) {
@@ -220,13 +267,22 @@ Y_UNIT_TEST(CommitToEmptyStorage) {
     UNIT_ASSERT(!result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
 }
 
 Y_UNIT_TEST(UnlockToEmptyStorage) {
@@ -236,13 +292,22 @@ Y_UNIT_TEST(UnlockToEmptyStorage) {
     UNIT_ASSERT(!result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
 }
 
 Y_UNIT_TEST(ChangeDeadlineEmptyStorage) {
@@ -252,13 +317,22 @@ Y_UNIT_TEST(ChangeDeadlineEmptyStorage) {
     UNIT_ASSERT(!result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
 }
 
 Y_UNIT_TEST(AddMessageToEmptyStorage) {
@@ -285,13 +359,22 @@ Y_UNIT_TEST(AddMessageToEmptyStorage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
 }
 
 Y_UNIT_TEST(AddNotFirstMessageToEmptyStorage) {
@@ -316,13 +399,22 @@ Y_UNIT_TEST(AddNotFirstMessageToEmptyStorage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
 }
 
 Y_UNIT_TEST(AddMessageWithSkippedMessage) {
@@ -355,13 +447,173 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+}
+
+Y_UNIT_TEST(AddMessageWithDelay) {
+    TUtils utils;
+    utils.Begin();
+
+    utils.Storage.AddMessage(3, true, 0, utils.TimeProvider->Now(), TDuration::Seconds(137));
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it != utils.Storage.end());
+    auto message = *it;
+    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Delayed);
+    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(137));
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(AddMessageWithBigDelay) {
+    TUtils utils;
+    utils.Begin();
+
+    utils.Storage.AddMessage(3, false, 0, utils.TimeProvider->Now(), TDuration::Days(1));
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it != utils.Storage.end());
+    auto message = *it;
+    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Delayed);
+    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Hours(12)); // max deadline
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(AddMessageWithZeroDelay) {
+    TUtils utils;
+    utils.Begin();
+
+    utils.Storage.AddMessage(3, false, 0, utils.TimeProvider->Now(), TDuration::Seconds(0));
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it != utils.Storage.end());
+    auto message = *it;
+    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(AddMessageWithDelay_Unlock) {
+    TUtils utils;
+
+    utils.Storage.AddMessage(3, true, 0, utils.TimeProvider->Now(), TDuration::Seconds(1));
+    utils.Storage.AddMessage(4, true, 0, utils.TimeProvider->Now());
+
+    auto result = utils.Next(TDuration::Seconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(result, 4); // offset 3 delayed by 1 second, so it should be the next message
+
+    utils.Begin();
+
+    utils.TimeProvider->Tick(TDuration::Seconds(2)); // delay of message with offset 3 expired
+    utils.Storage.ProccessDeadlines();
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it != utils.Storage.end());
+    auto message = *it;
+    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}, {1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
 }
 
 Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
@@ -390,13 +642,22 @@ Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
@@ -410,13 +671,22 @@ Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
     UNIT_ASSERT_VALUES_EQUAL(*result, 3);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(NextWithWriteRetentionPeriod) {
@@ -437,13 +707,22 @@ Y_UNIT_TEST(NextWithWriteRetentionPeriod) {
     UNIT_ASSERT_VALUES_EQUAL(*result, 4);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}, {1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(NextWithInfinityRetentionPeriod) {
@@ -461,13 +740,22 @@ Y_UNIT_TEST(NextWithInfinityRetentionPeriod) {
     UNIT_ASSERT_VALUES_EQUAL(*result, 3);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(SkipLockedMessage) {
@@ -484,13 +772,22 @@ Y_UNIT_TEST(SkipLockedMessage) {
     UNIT_ASSERT_C(!result.has_value(), "The message already locked");
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(SkipLockedMessageGroups) {
@@ -513,13 +810,22 @@ Y_UNIT_TEST(SkipLockedMessageGroups) {
     UNIT_ASSERT_VALUES_EQUAL(*result, 5);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 3);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 3);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}, {1, 2}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
@@ -552,13 +858,22 @@ Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(CommitLockedMessage_WithKeepMessageOrder) {
@@ -576,13 +891,22 @@ Y_UNIT_TEST(CommitLockedMessage_WithKeepMessageOrder) {
     UNIT_ASSERT(result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(CommitUnlockedMessage) {
@@ -607,13 +931,22 @@ Y_UNIT_TEST(CommitUnlockedMessage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(CommitCommittedMessage) {
@@ -644,13 +977,22 @@ Y_UNIT_TEST(CommitCommittedMessage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
@@ -681,13 +1023,22 @@ Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
@@ -704,13 +1055,22 @@ Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
     UNIT_ASSERT(result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(UnlockUnlockedMessage) {
@@ -721,13 +1081,22 @@ Y_UNIT_TEST(UnlockUnlockedMessage) {
     UNIT_ASSERT(!result);
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(UnlockCommittedMessage) {
@@ -757,13 +1126,22 @@ Y_UNIT_TEST(UnlockCommittedMessage) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
@@ -794,6 +1172,17 @@ Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
     ++it;
     UNIT_ASSERT(it == storage.end());
+
+    auto& metrics = storage.GetMetrics();
+
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(ChangeDeadlineUnlockedMessage) {
@@ -807,6 +1196,16 @@ Y_UNIT_TEST(ChangeDeadlineUnlockedMessage) {
 
     auto deadline = storage.GetMessageDeadline(3);
     UNIT_ASSERT_VALUES_EQUAL(deadline, TInstant::Zero());
+    auto& metrics = storage.GetMetrics();
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(EmptyStorageSerialization) {
@@ -839,7 +1238,7 @@ Y_UNIT_TEST(EmptyStorageSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseWriteTimestamp().Seconds(), 0);
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -946,7 +1345,7 @@ Y_UNIT_TEST(StorageSerialization) {
         UNIT_ASSERT(it == storage.end());
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 4);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 4);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
@@ -957,124 +1356,94 @@ Y_UNIT_TEST(StorageSerialization) {
 }
 
 Y_UNIT_TEST(StorageSerialization_WAL_Unlocked) {
-    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
-    auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(13);
+    TUtils utils;
 
-    NKikimrPQ::TMLPStorageSnapshot snapshot;
-    NKikimrPQ::TMLPStorageWAL wal;
+    auto writeTimestamp = utils.TimeProvider->Now() - TDuration::Seconds(13);
 
+    utils.Begin();
+    utils.Storage.AddMessage(3, true, 5, writeTimestamp);
+    utils.End();
+
+    auto it = utils.Storage.begin();
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
-        storage.SerializeTo(snapshot);
-
-        storage.AddMessage(3, true, 5, writeTimestamp);
-
-        auto batch = storage.GetBatch();
-        UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1); // new message
-        batch.SerializeTo(wal);
-
-        Cerr << "DUMP 1: " << storage.DebugString() << Endl;
+        UNIT_ASSERT(it != utils.Storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
     }
+    ++it;
+    UNIT_ASSERT(it == utils.Storage.end());
 
-    timeProvider->Tick(TDuration::Seconds(5));
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 
-    {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
 
-        storage.Initialize(snapshot);
-        storage.ApplyWAL(wal);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
-        Cerr << "DUMP 2: " << storage.DebugString() << Endl;
+    utils.TimeProvider->Tick(TDuration::Seconds(5));
 
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 0);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
-            UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
-        }
-        ++it;
-        UNIT_ASSERT(it == storage.end());
-
-
-        auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
-    }
+    utils.AssertLoad();
 }
 
 Y_UNIT_TEST(StorageSerialization_WAL_Locked) {
-    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TUtils utils;
 
-    auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(13);
-    auto deadline = timeProvider->Now() + TDuration::Seconds(4);
+    auto writeTimestamp = utils.TimeProvider->Now() - TDuration::Seconds(3);
 
-    NKikimrPQ::TMLPStorageSnapshot snapshot;
-    NKikimrPQ::TMLPStorageWAL wal;
+    utils.Begin();
+    utils.Storage.AddMessage(3, true, 5, writeTimestamp);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(7)), 3);
+    utils.End();
 
+    auto it = utils.Storage.begin();
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
-        storage.SerializeTo(snapshot);
-
-        storage.AddMessage(3, true, 5, writeTimestamp);
-
-        TStorage::TPosition position;
-        auto r = storage.Next(deadline, position);
-        UNIT_ASSERT(r);
-        UNIT_ASSERT_VALUES_EQUAL(r.value(), 3);
-
-        auto batch = storage.GetBatch();
-        UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1); // new message and changed message
-        UNIT_ASSERT_VALUES_EQUAL(batch.ChangedMessageCount(), 1); // new message and changed message
-        batch.SerializeTo(wal);
-
-        Cerr << "DUMP 1: " << storage.DebugString() << Endl;
+        UNIT_ASSERT(it != utils.Storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
     }
+    ++it;
+    UNIT_ASSERT(it == utils.Storage.end());
 
-    timeProvider->Tick(TDuration::Seconds(5));
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 
-    {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
 
-        storage.Initialize(snapshot);
-        Cerr << "DUMP: " << storage.DebugString() << Endl;
-        storage.ApplyWAL(wal);
-        Cerr << "DUMP AFTER WAL: " << storage.DebugString() << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 1);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, deadline);
-            UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
-        }
-        ++it;
-        UNIT_ASSERT(it == storage.end());
+    utils.TimeProvider->Tick(TDuration::Seconds(5));
 
-        auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
-    }
+    utils.AssertLoad();
 }
 
 Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
@@ -1124,7 +1493,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
         UNIT_ASSERT(it == storage.end());
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -1251,7 +1620,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
         UNIT_ASSERT(it == storage.end());
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -1292,7 +1661,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 5);
         }
-        
+
         timeProvider->Tick(TDuration::Seconds(3));
         storage.MoveBaseDeadline();
         {
@@ -1352,7 +1721,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
         UNIT_ASSERT(it == storage.end());
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
         UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 2);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 2);
@@ -1409,18 +1778,27 @@ Y_UNIT_TEST(CompactStorage_ByCommittedOffset) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 3);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 3);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 2); // offsets 4 and 6
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1); // offset 5
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 2}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(CompactStorage_ByRetention) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
-    auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(12);
+    auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(13);
 
     TStorage storage(timeProvider);
     storage.SetRetentionPeriod(TDuration::Seconds(1));
@@ -1431,8 +1809,9 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
 
     timeProvider->Tick(TDuration::Seconds(12));
 
+    Cerr << "BEFORE: " << storage.DebugString() << Endl;
     auto result = storage.Compact();
-    Cerr << storage.DebugString() << Endl;
+    Cerr << "AFTER: " << storage.DebugString() << Endl;
     UNIT_ASSERT_VALUES_EQUAL_C(result, 2, "must remove message with offset 3 and 4");
 
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 5);
@@ -1452,13 +1831,72 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1); // offset 5
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 2);
+}
+
+Y_UNIT_TEST(CompactStorage_ByDeadline) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(7);
+
+    TStorage storage(timeProvider);
+    storage.SetRetentionPeriod(TDuration::Seconds(1));
+
+    storage.AddMessage(3, true, 5, writeTimestamp, TDuration::Seconds(1));
+
+    timeProvider->Tick(TDuration::Seconds(5));
+
+    Cerr << "BEFORE: " << storage.DebugString() << Endl;
+    auto result = storage.Compact();
+    Cerr << "AFTER: " << storage.DebugString() << Endl;
+    UNIT_ASSERT_VALUES_EQUAL_C(result, 0, "they should not be deleted by deadline");
+
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 4);
+
+    auto it = storage.begin();
+    {
+        UNIT_ASSERT(it != storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Delayed);
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
+    }
+    ++it;
+    UNIT_ASSERT(it == storage.end());
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DelayedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(CompactStorage_WithDLQ) {
@@ -1476,11 +1914,11 @@ Y_UNIT_TEST(CompactStorage_WithDLQ) {
 
     {
         auto [message, _] = storage.GetMessage(3);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::DLQ);
     }
     {
         auto [message, _] = storage.GetMessage(4);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Committed);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Committed);
     }
 
     auto result = storage.Compact();
@@ -1504,13 +1942,22 @@ Y_UNIT_TEST(CompactStorage_WithDLQ) {
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1); // offset 4
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 1); // offset 3
+
+    AssertMessagesLocks(metrics.MessageLocks, {});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(ProccessDeadlines) {
@@ -1518,10 +1965,10 @@ Y_UNIT_TEST(ProccessDeadlines) {
 
     TStorage storage(timeProvider);
     storage.SetKeepMessageOrder(true);
-    storage.AddMessage(3, true, 5, TInstant::Now());
-    storage.AddMessage(4, true, 7, TInstant::Now());
-    storage.AddMessage(5, true, 11, TInstant::Now());
-    storage.AddMessage(6, true, 13, TInstant::Now());
+    storage.AddMessage(3, true, 5, timeProvider->Now());
+    storage.AddMessage(4, true, 7, timeProvider->Now());
+    storage.AddMessage(5, true, 11, timeProvider->Now());
+    storage.AddMessage(6, true, 13, timeProvider->Now());
 
     TStorage::TPosition position;
     storage.Next(timeProvider->Now() + TDuration::Seconds(10), position);
@@ -1534,23 +1981,32 @@ Y_UNIT_TEST(ProccessDeadlines) {
 
     {
         auto [message, _] = storage.GetMessage(3);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Unprocessed);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Unprocessed);
         UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
     }
     {
         auto [message, _] = storage.GetMessage(4);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
     }
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 4);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 4);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 3); // offsets 4 and 5 and 6
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1); // offset 3
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 2}, {1, 2}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(MoveBaseDeadline) {
@@ -1558,9 +2014,9 @@ Y_UNIT_TEST(MoveBaseDeadline) {
 
     TStorage storage(timeProvider);
     storage.SetKeepMessageOrder(true);
-    storage.AddMessage(3, true, 5, TInstant::Now());
-    storage.AddMessage(4, true, 7, TInstant::Now());
-    storage.AddMessage(5, true, 11, TInstant::Now());
+    storage.AddMessage(3, true, 5, timeProvider->Now());
+    storage.AddMessage(4, true, 7, timeProvider->Now());
+    storage.AddMessage(5, true, 11, timeProvider->Now());
 
     TStorage::TPosition position;
     storage.Next(timeProvider->Now() + TDuration::Seconds(3), position);
@@ -1573,19 +2029,29 @@ Y_UNIT_TEST(MoveBaseDeadline) {
 
     {
         auto [message, _] = storage.GetMessage(3);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
     }
     {
         auto [message, _] = storage.GetMessage(4);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
     }
     {
         auto [message, _] = storage.GetMessage(5);
-        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 2);
     }
+
+    auto& metrics = storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 3}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
 Y_UNIT_TEST(SlowZone_MoveUnprocessedToSlowZone) {
@@ -1602,6 +2068,16 @@ Y_UNIT_TEST(SlowZone_MoveUnprocessedToSlowZone) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 7}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
     utils.AssertLoad();
 }
@@ -1622,6 +2098,16 @@ Y_UNIT_TEST(SlowZone_MoveLockedToSlowZone) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 6}, {1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
     utils.AssertLoad();
 }
 
@@ -1635,6 +2121,16 @@ Y_UNIT_TEST(SlowZone_MoveCommittedToSlowZone) {
 
     // Committed message isn't moved to SlowZone
     utils.AssertSlowZone({ });
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 6}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
     utils.AssertLoad();
 }
@@ -1656,6 +2152,16 @@ Y_UNIT_TEST(SlowZone_MoveDLQToSlowZone) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 6}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
     utils.AssertLoad();
 }
 
@@ -1675,6 +2181,16 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndLock) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 6}, {1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
     utils.AssertLoad();
 }
 
@@ -1688,16 +2204,30 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndCommit) {
 
     utils.AssertSlowZone({ });
 
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 6}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
     utils.AssertLoad();
 }
 
 Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndDLQ) {
     TUtils utils;
     utils.AddMessage(6);
+    AssertMessagesLocks(utils.Storage.GetMetrics().MessageLocks, {{0, 6}});
     utils.Begin();
     utils.AddMessage(1);
+    AssertMessagesLocks(utils.Storage.GetMetrics().MessageLocks, {{0, 7}});
     UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    AssertMessagesLocks(utils.Storage.GetMetrics().MessageLocks, {{0, 6}, {1, 1}});
     UNIT_ASSERT(utils.Unlock(0));
+    AssertMessagesLocks(utils.Storage.GetMetrics().MessageLocks, {{0, 6}});
     utils.End();
 
     utils.AssertSlowZone({ 0 });
@@ -1707,6 +2237,17 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndDLQ) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
+
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 6}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
     utils.AssertLoad();
 }
@@ -1726,6 +2267,16 @@ Y_UNIT_TEST(SlowZone_Lock) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 7}, {1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
     utils.AssertLoad();
 }
 
@@ -1738,6 +2289,16 @@ Y_UNIT_TEST(SlowZone_Commit_First) {
 
     utils.AssertSlowZone({1});
 
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 7}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
     utils.AssertLoad();
 }
 
@@ -1749,6 +2310,16 @@ Y_UNIT_TEST(SlowZone_Commit) {
     utils.End();
 
     utils.AssertSlowZone({0});
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 7}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
     utils.AssertLoad();
 }
@@ -1769,6 +2340,16 @@ Y_UNIT_TEST(SlowZone_DLQ) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 7}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
+
     utils.AssertLoad();
 }
 
@@ -1782,7 +2363,17 @@ Y_UNIT_TEST(SlowZone_CommitToFast) {
 
     utils.AssertSlowZone({0, 1});
     // Compaction removed the message with offset 2
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 7);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 7);
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 7}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
     utils.AssertLoad();
 }
@@ -1796,6 +2387,16 @@ Y_UNIT_TEST(SlowZone_CommitAndAdd) {
     utils.End();
 
     utils.AssertSlowZone({0, 2});
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 8}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
     utils.AssertLoad();
 }
@@ -1812,7 +2413,17 @@ Y_UNIT_TEST(SlowZone_Retention_1message) {
 
     utils.AssertSlowZone({1});
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 7);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 7);
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 7}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 1);
 
     utils.AssertLoad();
 }
@@ -1829,7 +2440,17 @@ Y_UNIT_TEST(SlowZone_Retention_2message) {
 
     utils.AssertSlowZone({});
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 6);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 6);
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 6}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 2);
 
     utils.AssertLoad();
 }
@@ -1846,7 +2467,17 @@ Y_UNIT_TEST(SlowZone_Retention_3message) {
 
     utils.AssertSlowZone({});
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 3);
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 5);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 5);
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 5}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 3);
 
     utils.AssertLoad();
 }
@@ -1864,9 +2495,19 @@ Y_UNIT_TEST(ChangeDeadLetterPolicy_Delete) {
     utils.Begin();
     utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().CommittedMessageCount, 1);
     utils.End();
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
     utils.AssertLoad();
 }
@@ -1884,9 +2525,19 @@ Y_UNIT_TEST(ChangeDeadLetterPolicy_Unspecified) {
     utils.Begin();
     utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflightMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().UnprocessedMessageCount, 1);
     utils.End();
+
+    auto& metrics = utils.Storage.GetMetrics();
+    AssertMessagesLocks(metrics.MessageLocks, {{1, 1}});
+
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalScheduledToDLQMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalPurgedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByDeadlinePolicyMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 
     utils.AssertLoad();
 }

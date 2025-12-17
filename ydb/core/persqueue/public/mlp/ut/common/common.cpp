@@ -7,17 +7,27 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     auto setup = std::make_shared<TTopicSdkTestSetup>("TODO");
     setup->GetServer().EnableLogs({
             NKikimrServices::PQ_MLP_READER,
+            NKikimrServices::PQ_MLP_WRITER,
             NKikimrServices::PQ_MLP_COMMITTER,
             NKikimrServices::PQ_MLP_UNLOCKER,
             NKikimrServices::PQ_MLP_DEADLINER,
             NKikimrServices::PQ_MLP_CONSUMER,
             NKikimrServices::PQ_MLP_ENRICHER,
             NKikimrServices::PQ_MLP_DLQ_MOVER,
-            NKikimrServices::PERSQUEUE,
-            NKikimrServices::PERSQUEUE_READ_BALANCER,
         },
         NActors::NLog::PRI_DEBUG
     );
+    setup->GetServer().EnableLogs({
+            NKikimrServices::PERSQUEUE,
+            NKikimrServices::PERSQUEUE_READ_BALANCER,
+            NKikimrServices::PQ_WRITE_PROXY
+        },
+        NActors::NLog::PRI_INFO
+    );
+
+    setup->GetRuntime().GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+    setup->GetRuntime().GetAppData().PQConfig.SetBalancerStatsWakeupIntervalSec(1);
+
     return setup;
 }
 
@@ -38,15 +48,16 @@ void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topi
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    client.CreateTopic(topicName, settings);
+    client.CreateTopic(topicName, settings).GetValueSync();
 
     setup->GetServer().WaitInit(GetTopicPath(topicName));
 }
 
-void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName) {
+void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount, bool keepMessagesOrder) {
     return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .PartitioningSettings(partitionCount, partitionCount)
             .BeginAddSharedConsumer(consumerName)
-                .KeepMessagesOrder(false)
+                .KeepMessagesOrder(keepMessagesOrder)
                 .BeginDeadLetterPolicy()
                     .Enable()
                     .BeginCondition()
@@ -65,6 +76,15 @@ TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&
     runtime.DispatchEvents();
 
     return readerId;
+}
+
+TActorId CreateWriterActor(NActors::TTestActorRuntime& runtime, TWriterSettings&& settings) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto actorId = runtime.Register(CreateWriter(edgeId, std::move(settings)));
+    runtime.EnableScheduleForActor(actorId);
+    runtime.DispatchEvents();
+
+    return actorId;
 }
 
 TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSettings&& settings) {
@@ -109,6 +129,10 @@ THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtim
 
 THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return runtime.GrabEdgeEvent<TEvReadResponse>(timeout);
+}
+
+THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+    return runtime.GrabEdgeEvent<TEvWriteResponse>(timeout);
 }
 
 THolder<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
@@ -157,6 +181,13 @@ ui64 GetTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& data
     return result->Topics[topic].Info->PartitionGraph->GetPartition(partitionId)->TabletId;
 }
 
+ui64 GetPQRBTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic) {
+    CreateDescriberActor(setup->GetRuntime(), database, topic);
+    auto result = GetDescriberResponse(setup->GetRuntime());
+    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::SUCCESS);
+    return result->Topics[topic].Info->Description.GetBalancerTabletID();
+}
+
 THolder<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse> GetConsumerState(std::shared_ptr<TTopicSdkTestSetup>& setup,
     const TString& database, const TString& topic, const TString& consumer, ui32 partitionId) {
     auto tabletId = GetTabletId(setup, database, topic, partitionId);
@@ -167,9 +198,21 @@ THolder<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse> GetConsumerState(std::sh
 }
 
 void ReloadPQTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId) {
+    Cerr << ">>>>>> reload PQ tablet" << Endl;
+
     auto& runtime = setup->GetRuntime();
     auto tabletId = GetTabletId(setup, database, topic, partitionId);
     ForwardToTablet(runtime, tabletId, runtime.AllocateEdgeActor(), new TEvents::TEvPoison());
+    Sleep(TDuration::Seconds(1));
+}
+
+void ReloadPQRBTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic) {
+    Cerr << ">>>>> reload PQRB tablet" << Endl;
+
+    auto& runtime = setup->GetRuntime();
+    auto tabletId = GetPQRBTabletId(setup, database, topic);
+    ForwardToTablet(runtime, tabletId, runtime.AllocateEdgeActor(), new TEvents::TEvPoison());
+    Sleep(TDuration::Seconds(1));
 }
 
 }

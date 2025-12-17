@@ -28,17 +28,34 @@
 
 #include <curl/curl.h>
 #include "curl_sspi.h"
-#include "strdup.h"
-#include "curlx/multibyte.h"
+#include "curl_multibyte.h"
 #include "system_win32.h"
-#include "curlx/warnless.h"
+#include "version_win32.h"
+#include "warnless.h"
 
 /* The last #include files should be: */
 #include "curl_memory.h"
 #include "memdebug.h"
 
+/* We use our own typedef here since some headers might lack these */
+typedef PSecurityFunctionTable (APIENTRY *INITSECURITYINTERFACE_FN)(VOID);
+
+/* See definition of SECURITY_ENTRYPOINT in sspi.h */
+#ifdef UNICODE
+#  ifdef _WIN32_WCE
+#    define SECURITYENTRYPOINT L"InitSecurityInterfaceW"
+#  else
+#    define SECURITYENTRYPOINT "InitSecurityInterfaceW"
+#  endif
+#else
+#  define SECURITYENTRYPOINT "InitSecurityInterfaceA"
+#endif
+
+/* Handle of security.dll or secur32.dll, depending on Windows version */
+HMODULE s_hSecDll = NULL;
+
 /* Pointer to SSPI dispatch table */
-PSecurityFunctionTable Curl_pSecFn = NULL;
+PSecurityFunctionTable s_pSecFn = NULL;
 
 /*
  * Curl_sspi_global_init()
@@ -59,15 +76,32 @@ PSecurityFunctionTable Curl_pSecFn = NULL;
  */
 CURLcode Curl_sspi_global_init(void)
 {
+  INITSECURITYINTERFACE_FN pInitSecurityInterface;
+
   /* If security interface is not yet initialized try to do this */
-  if(!Curl_pSecFn) {
+  if(!s_hSecDll) {
+    /* Security Service Provider Interface (SSPI) functions are located in
+     * security.dll on WinNT 4.0 and in secur32.dll on Win9x. Win2K and XP
+     * have both these DLLs (security.dll forwards calls to secur32.dll) */
+
+    /* Load SSPI dll into the address space of the calling process */
+    if(curlx_verify_windows_version(4, 0, 0, PLATFORM_WINNT, VERSION_EQUAL))
+      s_hSecDll = Curl_load_library(TEXT("security.dll"));
+    else
+      s_hSecDll = Curl_load_library(TEXT("secur32.dll"));
+    if(!s_hSecDll)
+      return CURLE_FAILED_INIT;
+
+    /* Get address of the InitSecurityInterfaceA function from the SSPI dll */
+    pInitSecurityInterface =
+      CURLX_FUNCTION_CAST(INITSECURITYINTERFACE_FN,
+                          (GetProcAddress(s_hSecDll, SECURITYENTRYPOINT)));
+    if(!pInitSecurityInterface)
+      return CURLE_FAILED_INIT;
+
     /* Get pointer to Security Service Provider Interface dispatch table */
-#ifdef __MINGW32CE__
-    Curl_pSecFn = InitSecurityInterfaceW();
-#else
-    Curl_pSecFn = InitSecurityInterface();
-#endif
-    if(!Curl_pSecFn)
+    s_pSecFn = pInitSecurityInterface();
+    if(!s_pSecFn)
       return CURLE_FAILED_INIT;
   }
 
@@ -85,20 +119,22 @@ CURLcode Curl_sspi_global_init(void)
  */
 void Curl_sspi_global_cleanup(void)
 {
-  if(Curl_pSecFn) {
-    Curl_pSecFn = NULL;
+  if(s_hSecDll) {
+    FreeLibrary(s_hSecDll);
+    s_hSecDll = NULL;
+    s_pSecFn = NULL;
   }
 }
 
 /*
  * Curl_create_sspi_identity()
  *
- * This is used to populate an SSPI identity structure based on the supplied
+ * This is used to populate a SSPI identity structure based on the supplied
  * username and password.
  *
  * Parameters:
  *
- * userp    [in]     - The username in the format User or Domain\User.
+ * userp    [in]     - The user name in the format User or Domain\User.
  * passwdp  [in]     - The user's password.
  * identity [in/out] - The identity structure.
  *
@@ -118,7 +154,7 @@ CURLcode Curl_create_sspi_identity(const char *userp, const char *passwdp,
   /* Initialize the identity */
   memset(identity, 0, sizeof(*identity));
 
-  useranddomain.tchar_ptr = curlx_convert_UTF8_to_tchar(userp);
+  useranddomain.tchar_ptr = curlx_convert_UTF8_to_tchar((char *)userp);
   if(!useranddomain.tchar_ptr)
     return CURLE_OUT_OF_MEMORY;
 
@@ -162,7 +198,7 @@ CURLcode Curl_create_sspi_identity(const char *userp, const char *passwdp,
   curlx_unicodefree(useranddomain.tchar_ptr);
 
   /* Setup the identity's password and length */
-  passwd.tchar_ptr = curlx_convert_UTF8_to_tchar(passwdp);
+  passwd.tchar_ptr = curlx_convert_UTF8_to_tchar((char *)passwdp);
   if(!passwd.tchar_ptr)
     return CURLE_OUT_OF_MEMORY;
   dup_passwd.tchar_ptr = _tcsdup(passwd.tchar_ptr);
@@ -177,12 +213,7 @@ CURLcode Curl_create_sspi_identity(const char *userp, const char *passwdp,
   curlx_unicodefree(passwd.tchar_ptr);
 
   /* Setup the identity's flags */
-  identity->Flags = (unsigned long)
-#ifdef UNICODE
-    SEC_WINNT_AUTH_IDENTITY_UNICODE;
-#else
-    SEC_WINNT_AUTH_IDENTITY_ANSI;
-#endif
+  identity->Flags = SECFLAG_WINNT_AUTH_IDENTITY;
 
   return CURLE_OK;
 }
@@ -190,7 +221,7 @@ CURLcode Curl_create_sspi_identity(const char *userp, const char *passwdp,
 /*
  * Curl_sspi_free_identity()
  *
- * This is used to free the contents of an SSPI identifier structure.
+ * This is used to free the contents of a SSPI identifier structure.
  *
  * Parameters:
  *

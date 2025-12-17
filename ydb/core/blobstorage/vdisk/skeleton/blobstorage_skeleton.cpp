@@ -1931,6 +1931,17 @@ namespace NKikimr {
             ApplyHugeBlobSize(Config->MinHugeBlobInBytes);
             Y_VERIFY_S(MinHugeBlobInBytes, VCtx->VDiskLogPrefix);
 
+            if (Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
+                Config->GroupSizeInUnits = GInfo->GroupSizeInUnits;
+                Y_VERIFY(PDiskCtx);
+                Y_VERIFY(PDiskCtx->Dsk);
+                ctx.Send(PDiskCtx->PDiskId,
+                    new NPDisk::TEvYardResize(
+                        PDiskCtx->Dsk->Owner,
+                        PDiskCtx->Dsk->OwnerRound,
+                        Config->GroupSizeInUnits));
+            }
+
             // handle special case when donor disk starts and finds out that it has been wiped out
             if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
                 // send drop donor cmd to NodeWarden
@@ -2010,13 +2021,15 @@ namespace NKikimr {
                     PDiskCtx,
                     Db->LoggerID,
                     Db->LogCutterID,
+                    Db->SkeletonID,
                     Config->SyncLogMaxDiskAmount,
                     Config->SyncLogMaxEntryPointSize,
                     Config->SyncLogMaxMemAmount,
                     Config->MaxResponseSize,
                     Db->SyncLogFirstLsnToKeep,
                     Config->BaseInfo.ReadOnly,
-                    Config->EnablePhantomFlagStorage);
+                    Config->EnablePhantomFlagStorage,
+                    Config->PhantomFlagStorageLimit);
             Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
             ActiveActors.Insert(Db->SyncLogID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
@@ -2096,6 +2109,9 @@ namespace NKikimr {
                     Db->LoggerID,
                     Db->LogCutterID,
                     Db->SyncLogID,
+                    Hull->GetHullDs()->LogoBlobs,
+                    Hull->GetHullDs()->Blocks,
+                    Hull->GetHullDs()->Barriers,
                     Config);
                 // syncer performes sync recovery
                 Db->SyncerID.Set(ctx.Register(CreateSyncerActor(sc, GInfo, ev->Get()->SyncerData)));
@@ -2449,10 +2465,11 @@ namespace NKikimr {
             GInfo = msg->NewInfo;
             SelfVDiskId = msg->NewVDiskId;
 
-            if (Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
+            if (PDiskCtx && Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
                 Config->GroupSizeInUnits = GInfo->GroupSizeInUnits;
                 UpdateWhiteboard(ctx);
 
+                Y_VERIFY(PDiskCtx->Dsk);
                 ctx.Send(PDiskCtx->PDiskId,
                     new NPDisk::TEvYardResize(
                         PDiskCtx->Dsk->Owner,

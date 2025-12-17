@@ -16,9 +16,7 @@
 #include <ydb/core/base/tracing.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 
-namespace NKikimr {
-
-namespace NNodeWhiteboard {
+namespace NKikimr::NNodeWhiteboard {
 
 using TTabletId = ui64;
 using TFollowerId = ui32;
@@ -480,10 +478,6 @@ struct TEvWhiteboard {
 
     struct TEvSignalBodyRequest : TEventPB<TEvSignalBodyRequest, NKikimrWhiteboard::TEvSignalBodyRequest, EvSignalBodyRequest> {};
     struct TEvSignalBodyResponse : TEventPB<TEvSignalBodyResponse, NKikimrWhiteboard::TEvSignalBodyResponse, EvSignalBodyResponse> {};
-
-    struct TEvBridgeInfoUpdate : public TEventPB<TEvBridgeInfoUpdate, NKikimrWhiteboard::TBridgeInfo, EvBridgeInfoUpdate> {};
-    struct TEvBridgeInfoRequest : public TEventPB<TEvBridgeInfoRequest, NKikimrWhiteboard::TEvBridgeInfoRequest, EvBridgeInfoRequest> {};
-    struct TEvBridgeInfoResponse : public TEventPB<TEvBridgeInfoResponse, NKikimrWhiteboard::TEvBridgeInfoResponse, EvBridgeInfoResponse> {};
 };
 
 inline TActorId MakeNodeWhiteboardServiceId(ui32 node) {
@@ -529,5 +523,4 @@ struct WhiteboardResponse<TEvWhiteboard::TEvNodeStateRequest> {
 template<typename TResponseType>
 ::google::protobuf::RepeatedField<int> GetDefaultWhiteboardFields();
 
-} // NNodeWhiteboard
-} // NKikimr
+} // NKikimr::NNodeWhiteboard

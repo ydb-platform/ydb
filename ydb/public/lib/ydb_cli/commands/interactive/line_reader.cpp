@@ -10,6 +10,8 @@
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
+#include <util/generic/maybe.h>
+#include <util/system/env.h>
 #include <util/system/file.h>
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
@@ -63,8 +65,8 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
     : Prompt(std::move(prompt))
     , HistoryFilePath(std::move(historyFilePath))
     , HistoryFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup)
-    , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco(), TYdbCommand::CreateDriver(config), config.Database, config.IsVerbose()))
-    , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
+    , YQLCompleter(MakeYQLCompleter(GetColorSchema(), TYdbCommand::CreateDriver(config), config.Database, config.IsVerbose()))
+    , YQLHighlighter(MakeYQLHighlighter(GetColorSchema()))
 {
     Rx.install_window_change_handler();
 
@@ -120,6 +122,12 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
     Rx.set_unique_history(true);
     if (!Rx.history_load(HistoryFilePath)) {
         Rx.print("Loading history failed: %s\n", strerror(errno));
+    }
+
+    // no-color.org
+    // TODO: do not set no_color if any other color schema is set explicitly
+    if (TryGetEnv("NO_COLOR").Defined()) {
+        Rx.set_no_color(true);
     }
 }
 

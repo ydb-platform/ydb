@@ -25,17 +25,18 @@
  ***************************************************************************/
 #include "tool_setup.h"
 
-/**
- * Return timeval of the REALTIME clock.
+struct timeval tvnow(void);
+
+/*
+ * Make sure that the first argument (t1) is the more recent time and t2 is
+ * the older time, as otherwise you get a weird negative time-diff back...
+ *
+ * Returns: the time difference in number of milliseconds.
  */
-struct timeval tvrealnow(void);
+long tvdiff(struct timeval t1, struct timeval t2);
 
 /* Case insensitive comparison support. */
 int struplocompare(const char *p1, const char *p2);
 int struplocompare4sort(const void *p1, const void *p2);
-
-#if defined(_WIN32) && !defined(UNDER_CE)
-FILE *tool_execpath(const char *filename, char **pathp);
-#endif
 
 #endif /* HEADER_CURL_TOOL_UTIL_H */

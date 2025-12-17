@@ -1051,10 +1051,14 @@
     </div>
 {% for status in status_order %}
 {% set sanitizer_count = tests[status] | selectattr('is_sanitizer_issue') | list | length %}
+{% set timeout_count = tests[status] | selectattr('is_timeout_issue') | list | length %}
 <h1 id="{{ status.name}}" class="collapsible-header">
     {{ status.name }} ({{ tests[status] | length }})
     {% if sanitizer_count > 0 %}
         <span style="color: #ff4500; font-weight: bold;">- {{ sanitizer_count }} SANITIZER ISSUE{{ 's' if sanitizer_count != 1 else '' }}</span>
+    {% endif %}
+    {% if timeout_count > 0 %}
+        <span style="color: #ff8c00; font-weight: bold;">- {{ timeout_count }} TIMEOUT ISSUE{{ 's' if timeout_count != 1 else '' }}</span>
     {% endif %}
 </h1>
 <table class="collapsible-content active" border="1">
@@ -1091,6 +1095,9 @@
             {% endif %}
             {% if t.is_sanitizer_issue %}
                 <span style="background-color: #ff4500; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">SANITIZER</span>
+            {% endif %}
+            {% if t.is_timeout_issue %}
+                <span style="background-color: #ff8c00; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">TIMEOUT</span>
             {% endif %}
             {% if status.is_error %}
             <div class="button-group">
@@ -1169,7 +1176,7 @@
             <button class="error-button" onclick="toggleError(this)"></button>
             <div style="display: none;" class="error-content">
                 <div class="console-frame" style="display: none;">
-                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") }}</code></pre>
+                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") | e }}</code></pre>
                 </div>
             </div>
             {% endif %}
@@ -1181,7 +1188,7 @@
                       data-test-name="{{ t.full_name }}" 
                       data-status="{{ history[t.full_name][h].status }}" 
                       data-date="{{ history[t.full_name][h].datetime }}" 
-                      data-error="{{ history[t.full_name][h].status_description }}" 
+                      data-error="{{ history[t.full_name][h].status_description | e }}" 
                       data-commit="{{ history[t.full_name][h].commit }}"
                       data-job-name="{{ history[t.full_name][h].job_name }}[{{ history[t.full_name][h].branch}}:{{ build_preset }}]"
                       data-job-id="{{ history[t.full_name][h].job_id }}">

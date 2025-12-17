@@ -643,17 +643,17 @@ inline TTableReaderPtr<TNode> IIOClient::CreateTablePartitionReader<TNode>(
 
 template <class T>
 inline TTableReaderPtr<T> IIOClient::CreateTablePartitionReader(
-    const TString& path, const TTablePartitionReaderOptions& options)
+    const TString& cookie, const TTablePartitionReaderOptions& options)
 {
     if constexpr (TIsBaseOf<Message, T>::Value) {
         T prototype;
-        return new TTableReader<T>(CreateProtoReader(path, options, &prototype));
+        return new TTableReader<T>(CreateProtoTablePartitionReader(cookie, options, &prototype));
     } else if constexpr (TIsSkiffRow<T>::value) {
         const auto& hints = options.FormatHints_ ? options.FormatHints_->SkiffRowHints_ : Nothing();
         auto requestedSchema = GetSkiffSchema<T>(hints);
         auto parserSchema = GetParserSkiffSchema<T>(hints);
         auto skipper = CreateSkiffSkipper<T>(hints);
-        return new TTableReader<T>(CreateSkiffRowReader(path, options, skipper, requestedSchema, parserSchema), hints);
+        return new TTableReader<T>(CreateSkiffRowTablePartitionReader(cookie, options, skipper, requestedSchema, parserSchema), hints);
     } else {
         static_assert(TDependentFalse<T>, "Unsupported type for table reader");
     }
@@ -1025,18 +1025,23 @@ inline ITableFragmentWriterPtr<TNode> IIOClient::CreateTableFragmentWriter<TNode
 
 template <>
 inline ITableFragmentWriterPtr<TYaMRRow> IIOClient::CreateTableFragmentWriter<TYaMRRow>(
-    const TDistributedWriteTableCookie& /*cookie*/,
-    const TTableFragmentWriterOptions& /*options*/)
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
 {
-    ythrow yexception() << "Not implemented";
+    return CreateYaMRFragmentWriter(cookie, options);
 }
 
 template <class T>
 inline ITableFragmentWriterPtr<T> IIOClient::CreateTableFragmentWriter(
-    const TDistributedWriteTableCookie& /*cookie*/,
-    const TTableFragmentWriterOptions& /*options*/)
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
 {
-    ythrow yexception() << "Not implemented";
+    if constexpr (TIsBaseOf<Message, T>::Value) {
+        auto prototype = std::make_unique<T>();
+        return CreateProtoFragmentWriter(cookie, options, prototype.get());
+    } else {
+        static_assert(TDependentFalse<T>, "Unsupported type for table fragment writer");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

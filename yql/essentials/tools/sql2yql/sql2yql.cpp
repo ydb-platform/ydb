@@ -264,8 +264,8 @@ int BuildAST(int argc, char* argv[]) {
 
     IOutputStream& out = outFile ? *outFile.Get() : Cout;
 
-    if (gatewaysConfig && gatewaysConfig->HasSqlCore()) {
-        flags.insert(gatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), gatewaysConfig->GetSqlCore().GetTranslationFlags().end());
+    if (gatewaysConfig) {
+        NYql::TGatewaySQLFlags::FromTesting(*gatewaysConfig).CollectAllTo(flags);
     }
 
     if (!res.Has("query") && queryFiles.empty()) {

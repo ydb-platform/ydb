@@ -160,7 +160,7 @@ struct TSelectRowsOptionsBase
     //! Use fixed and rewritten range inference.
     bool NewRangeInference = true;
     //! Typed expression builder version.
-    int ExpressionBuilderVersion = 1;
+    std::optional<int> ExpressionBuilderVersion = 1;
 };
 
 struct TSelectRowsOptions

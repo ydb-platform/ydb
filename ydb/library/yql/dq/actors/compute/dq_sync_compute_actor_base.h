@@ -111,6 +111,13 @@ protected: //TDqComputeActorChannels::ICallbacks
             channel->Push(std::move(batch));
         }
 
+        if (channelData.Proto.HasWatermark()) {
+            Y_ABORT_UNLESS(inputChannel->WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
+            const auto& watermarkRequest = channelData.Proto.GetWatermark();
+            const auto watermark = TInstant::MicroSeconds(watermarkRequest.GetTimestampUs());
+            channel->Push(watermark);
+        }
+
         if (channelData.Proto.HasCheckpoint()) {
             Y_ABORT_UNLESS(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             Y_ABORT_UNLESS(this->Checkpoints);

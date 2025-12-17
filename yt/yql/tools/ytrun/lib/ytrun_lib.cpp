@@ -1,5 +1,6 @@
 #include "ytrun_lib.h"
 
+#include <util/system/env.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider_impl.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
 #include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
@@ -107,9 +108,6 @@ TYtRunTool::TYtRunTool(TString name)
             .Optional()
             .NoArgument()
             .SetFlag(&GetRunOptions().UseMetaFromGrpah);
-        opts.AddLongOption("fmr-coordinator-server-url", "Fast map reduce coordinator server url")
-            .Optional()
-            .StoreResult(&FmrCoordinatorServerUrl_);
         opts.AddLongOption("disable-local-fmr-worker", "Disable local fast map reduce worker")
             .Optional()
             .NoArgument()
@@ -124,8 +122,9 @@ TYtRunTool::TYtRunTool(TString name)
         opts.AddLongOption( "fmrjob-bin", "Path to fmrjob binary")
             .Optional()
             .StoreResult(&FmrJobBin_);
-
-
+        opts.AddLongOption( "fmr-pool-name", "Fmr pool name")
+            .Optional()
+            .StoreResult(&FmrPoolName_);
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
@@ -194,11 +193,30 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
         return ytGateway;
     }
 
+    bool fmrConfigurationFound = false;
+    NFmr::TFmrInitializationOptions fmrInitializationOpts;
+
+    if (FmrPoolName_.empty()) {
+        throw yexception() << "Pool should be specified for fmr gateway";
+    }
+
+    for (const auto& fmrConfiguration: GetRunOptions().GatewaysConfig->GetFmr().GetFmrConfigurations()) {
+        if (fmrConfiguration.GetName() == FmrPoolName_) {
+            fmrConfigurationFound = true;
+            fmrInitializationOpts = NFmr::GetFmrInitializationInfoFromConfig(fmrConfiguration, GetRunOptions().GatewaysConfig->GetFmr().GetFileCacheConfigurations());
+            break;
+        }
+    }
+
+    if (!fmrConfigurationFound) {
+        throw yexception() << "Fmr configuration was not found for pool " << FmrPoolName_;
+    }
+
     NFmr::TFmrServices fmrServices;
     fmrServices.FunctionRegistry = GetFuncRegistry().Get();
     fmrServices.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
     fmrServices.DisableLocalFmrWorker = DisableLocalFmrWorker_;
-    fmrServices.CoordinatorServerUrl = FmrCoordinatorServerUrl_;
+    fmrServices.CoordinatorServerUrl = *fmrInitializationOpts.FmrCoordinatorUrl;
     fmrServices.TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_;
     fmrServices.YtJobService = NFmr::MakeYtJobSerivce();
     fmrServices.YtCoordinatorService = NFmr::MakeYtCoordinatorService();
@@ -209,6 +227,9 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
         .TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_,
         .GatewayType = "native"
     });
+
+    fmrServices.FileUploadService = fmrInitializationOpts.FmrFileUploadService;
+    fmrServices.FileMetadataService = fmrInitializationOpts.FmrFileMetadataService;
 
     auto [fmrGateway, worker] = NFmr::InitializeFmrGateway(ytGateway, MakeIntrusive<NFmr::TFmrServices>(fmrServices));
     FmrWorker_ = std::move(worker);

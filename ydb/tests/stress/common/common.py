@@ -2,7 +2,9 @@
 import ydb
 import os
 import threading
+import multiprocessing
 import logging
+from typing import Optional
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -10,27 +12,28 @@ logger = logging.getLogger(__name__)
 
 
 class YdbClient:
-    def __init__(self, endpoint, database, use_query_service=False):
+    def __init__(self, endpoint, database, use_query_service=False, sessions=100):
         self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)
         self.database = database
         self.use_query_service = use_query_service
-        self.session_pool = ydb.QuerySessionPool(self.driver) if use_query_service else ydb.SessionPool(self.driver)
+        self.session_pool = ydb.QuerySessionPool(self.driver, size=sessions) if use_query_service else ydb.SessionPool(self.driver, size=sessions)
 
     def wait_connection(self, timeout=5):
         self.driver.wait(timeout, fail_fast=True)
 
-    def query(self, statement, is_ddl, retry_settings=None):
+    def query(self, statement, is_ddl, parameters=None, retry_settings=None, log_error=True):
         if self.use_query_service:
             try:
-                return self.session_pool.execute_with_retries(query=statement, retry_settings=retry_settings)
+                return self.session_pool.execute_with_retries(query=statement, parameters=parameters, retry_settings=retry_settings)
             except Exception as e:
-                logger.error(f"Error: {e} while executing query: {statement}")
+                if log_error:
+                    logger.error(f"Error: {e} while executing query: {statement}")
                 raise e
         else:
             if is_ddl:
                 return self.session_pool.retry_operation_sync(lambda session: session.execute_scheme(statement))
             else:
-                raise "Unsuppported dml"  # TODO implement me
+                return self.session_pool.retry_operation_sync(lambda session: session.transaction().execute(statement, parameters=parameters, commit_tx=True))
 
     def drop_table(self, path_to_table):
         if self.use_query_service:
@@ -81,7 +84,8 @@ class WorkloadBase:
         self.table_prefix = tables_prefix + '/' + workload_name
         self.name = workload_name
         self.stop = stop
-        self.workload_threads = []
+        self.workload_entities = []
+        self.use_multiprocessing = False
 
     def name(self):
         return self.name
@@ -92,7 +96,13 @@ class WorkloadBase:
     def is_stop_requested(self):
         return self.stop.is_set()
 
-    def start(self):
+    def start(self, use_multiprocessing: bool = False):
+        self.use_multiprocessing = use_multiprocessing
+
+        if hasattr(self, '_pre_start'):
+            if not self._pre_start():
+                return False
+
         funcs = self.get_workload_thread_funcs()
 
         def wrapper(f):
@@ -102,14 +112,30 @@ class WorkloadBase:
                 logger.exception(f"FATAL: {e}")
                 os._exit(1)
 
+        entity_factory = multiprocessing.Process if self.use_multiprocessing else threading.Thread
         for f in funcs:
-            t = threading.Thread(target=lambda: wrapper(f))
-            t.start()
-            self.workload_threads.append(t)
+            p = entity_factory(target=lambda: wrapper(f))
+            p.start()
+            self.workload_entities.append(p)
 
-    def join(self, timeout=None):
-        for t in self.workload_threads:
+        return True
+
+    def join(self, timeout: Optional[float] = None):
+        for t in self.workload_entities:
             t.join(timeout)
 
-    def is_alive(self):
-        return any(t.is_alive() for t in self.workload_threads)
+    def wait_stop(self, timeout: Optional[float] = None) -> bool:
+        self.join(timeout)
+        if hasattr(self, '_post_stop'):
+            if not self._post_stop():
+                return False
+        return True
+
+    def is_alive(self) -> bool:
+        return any(t.is_alive() for t in self.workload_entities)
+
+    def terminate(self):
+        if self.use_multiprocessing:
+            for p in self.workload_entities:
+                if p.is_alive():
+                    p.terminate()

@@ -22,11 +22,11 @@
 #include <cstdint>
 #include <memory>
 
-#include "arrow/util/bit_util.h"
-#include "arrow/util/logging.h"
-#include "parquet/hasher.h"
-#include "parquet/platform.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/hasher.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace parquet20 {
 

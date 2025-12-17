@@ -14,14 +14,13 @@ namespace numpy
   namespace details
   {
     template <class E>
-    types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>
-    diff(E const &arr, long n, long axis)
+    types::ndarray<typename E::dtype, types::array_tuple<long, E::value>> diff(E const &arr, long n,
+                                                                               long axis)
     {
       auto shape = sutils::getshape(arr);
-      auto stride = (axis == E::value - 1)
-                        ? arr.template shape<E::value - 1>()
-                        : std::accumulate(shape.begin() + axis + 1, shape.end(),
-                                          1L, std::multiplies<long>());
+      auto stride = (axis == E::value - 1) ? arr.template shape<E::value - 1>()
+                                           : std::accumulate(shape.begin() + axis + 1, shape.end(),
+                                                             1L, std::multiplies<long>());
       --shape[axis];
 
       // this does not leak, but uses slightly too much memory
@@ -52,8 +51,8 @@ namespace numpy
     }
   } // namespace details
   template <class E>
-  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>>
-  diff(E const &expr, long n, long axis)
+  types::ndarray<typename E::dtype, types::array_tuple<long, E::value>> diff(E const &expr, long n,
+                                                                             long axis)
   {
     if (axis < 0)
       axis += E::value;

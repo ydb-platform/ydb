@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <util/string/strip.h>
 
 namespace NKikimr::NViewer {
 
@@ -174,6 +175,27 @@ struct TRequestState {
             return (*request)->UserToken;
         }
         return {};
+    }
+
+    bool Accepts(const TString& type) const {
+        const TString acceptHeader = GetHeader("Accept");
+        if (acceptHeader.empty()) {
+            return false;
+        }
+        TVector<TString> acceptedTypes = StringSplitter(acceptHeader).Split(',');
+        for (const auto& token : acceptedTypes) {
+            TString trimmed = StripString(token);
+            if (trimmed.empty()) {
+                continue;
+            }
+            if (const size_t semicolonPos = trimmed.find(';'); semicolonPos != TString::npos) {
+                trimmed = StripString(trimmed.substr(0, semicolonPos));
+            }
+            if (trimmed == type) {
+                return true;
+            }
+        }
+        return false;
     }
 
     explicit operator bool() const {

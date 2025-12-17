@@ -455,15 +455,6 @@ class ParallelTestsInSingleNode:
         return value
 
 
-# TODO(bulatman) Temporary class for backward compatibility.
-class ParallelTestsInSingleNodeOnYt:
-    KEY = 'PARALLEL-TESTS-WITHIN-NODE-ON-YT'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        return ParallelTestsInSingleNode.get_value(unit, "PARALLEL_TESTS_ON_YT_WITHIN_NODE_WORKERS")
-
-
 class ForkMode:
     KEY = 'FORK-MODE'
 
@@ -1152,6 +1143,23 @@ class TsStylelintConfig:
         return test_config
 
 
+class TsBiomeConfig:
+    KEY = 'TS_BIOME_CONFIG'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        # config can be empty
+        test_config = unit.get('_TS_BIOME_CONFIG')
+        abs_test_config = unit.resolve(unit.resolve_arc_path(test_config))
+        if not abs_test_config:
+            ymake.report_configure_error(
+                f"Config for biome not found: {test_config}.\n"
+                "Set the correct value in `TS_BIOME(<config_filename>)` macro in the `ya.make` file."
+            )
+
+        return {cls.KEY: test_config}
+
+
 class TsTestDataDirs:
     KEY = 'TS-TEST-DATA-DIRS'
 
@@ -1272,9 +1280,6 @@ class TestFiles:
         'maps/b2bgeo/mvrp_solver/aws_docker',
     )
 
-    # XXX: this is a temporarty fence allowing only taxi to use STYLE_JSON and STYLE_YAML macro
-    _TAXI_PREFIX = 'taxi'
-
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         data_re = re.compile(r"sbr:/?/?(\d+)=?.*")
@@ -1351,6 +1356,13 @@ class TestFiles:
         return value
 
     @classmethod
+    def ts_biome_srcs(cls, unit, flat_args, spec_args):
+        test_files = get_values_list(unit, "_TS_BIOME_FILES")
+        test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
+        value = serialize_list(test_files)
+        return value
+
+    @classmethod
     def py_linter_files(cls, unit, flat_args, spec_args):
         files = unit.get('PY_LINTER_FILES')
         if not files:
@@ -1398,14 +1410,6 @@ class TestFiles:
         if not files:
             raise HaltDartConstruction()
         else:
-            upath = unit.path()[3:]
-            lint_name = spec_args['NAME'][0]
-
-            if not upath.startswith(cls._TAXI_PREFIX):
-                if lint_name == 'clang_format_json':
-                    raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_JSON")
-                if lint_name == 'yamlfmt':
-                    raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_YAML")
             resolved_files = []
             for path in files:
                 if path.endswith('ya.make'):

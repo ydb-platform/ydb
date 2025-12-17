@@ -81,6 +81,8 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TKMeansTreeSettings, stream, value) {
         "{ settings: " << value.Settings << 
         ", clusters: " << value.Clusters << 
         ", levels: " << value.Levels << 
+        ", overlap_clusters: " << value.OverlapClusters << 
+        ", overlap_ratio: " << value.OverlapRatio << 
         " }";
 }
 
@@ -88,6 +90,9 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ELayout, stream, valu
     switch (value) {
         case NYdb::NTable::TFulltextIndexSettings::ELayout::Flat:
             stream << "flat";
+            break;
+        case NYdb::NTable::TFulltextIndexSettings::ELayout::FlatRelevance:
+            stream << "flat_relevance";
             break;
         case NYdb::NTable::TFulltextIndexSettings::ELayout::Unspecified:
             stream << "unspecified";

@@ -389,10 +389,11 @@ THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal
 
 THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(
         const TPathId& pathId, const TOperationId& opId,
-        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const
+        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx,
+        NKikimrTxColumnShard::ETransactionKind kind) const
 {
     return MakeHolder<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_SCHEMA, TabletID(), ctx.SelfID,
+        kind, TabletID(), ctx.SelfID,
         ui64(opId.GetTxId()), body, seqNo,  SelectProcessingParams(pathId),
         0, 0
     );
@@ -5395,11 +5396,13 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvRecomputeKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvFilterKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvValidateUniqueIndexResponse, Handle);
         HFuncTraced(TEvDataShard::TEvBuildFulltextIndexResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvBuildFulltextDictResponse, Handle);
         // } // NIndexBuilder
 
         //namespace NCdcStreamScan {

@@ -66,6 +66,7 @@ Compatible with the `Number` type in AWS DynamoDB. Not recommended for use in {{
 {% endif %}
 |#
 
+{% include [x](../_includes/type_literals_examples.md) %}
 
 ## String types {#string}
 

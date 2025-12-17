@@ -5,6 +5,7 @@
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
 
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
@@ -69,9 +70,9 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());
-    Y_ABORT_UNLESS(request);
+    AFL_ENSURE(request);
     ClientId = NPersQueue::ConvertNewConsumerName(request->consumer(), ctx);
-    PartitionId = request->Getpartition_id();
+    PartitionId = request->partition_id();
 
     if (TopicsHandler == nullptr) {
         TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
@@ -116,6 +117,17 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     ));
 }
 
+bool TCommitOffsetActor::OnUnhandledException(const std::exception& exc) {
+    NPQ::DoLogUnhandledException(NKikimrServices::PQ_READ_PROXY, "[CommitOffsetActor]", exc);
+
+    Ydb::Topic::CommitOffsetResult result;
+    Request().SendResult(result, Ydb::StatusIds::INTERNAL_ERROR);
+
+    this->Die(ActorContext());
+
+    return true;
+}
+
 void TCommitOffsetActor::Die(const TActorContext& ctx) {
     if (PipeClient)
         NTabletPipe::CloseClient(ctx, PipeClient);
@@ -132,7 +144,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
         return;
     }
-    Y_ABORT_UNLESS(TopicAndTablets.size() == 1);
+    AFL_ENSURE(TopicAndTablets.size() == 1);
     auto& [topic, topicInitInfo] = *TopicAndTablets.begin();
 
     if (topicInitInfo.Partitions.find(PartitionId) == topicInitInfo.Partitions.end()) {
@@ -226,7 +238,7 @@ void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActo
     // Convert to correct response.
 
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
-    Y_ABORT_UNLESS(!partitionResult.HasCmdReadResult());
+    AFL_ENSURE(!partitionResult.HasCmdReadResult());
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "CommitOffset, commit done.");
 
@@ -253,7 +265,7 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
     request.MutablePartitionRequest()->SetTopic(topic.TopicNameConverter->GetPrimaryPath());
     request.MutablePartitionRequest()->SetPartition(commitRequest->partition_id());
 
-    Y_ABORT_UNLESS(PipeClient);
+    AFL_ENSURE(PipeClient);
 
     auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
     commit->SetClientId(ClientId);

@@ -2,15 +2,6 @@
 
 namespace NYdb::inline Dev {
 
-namespace {
-    TDeadline::TimePoint SafeSum(TDeadline::TimePoint timePoint, TDeadline::Duration duration) {
-        if (duration > TDeadline::TimePoint::max() - timePoint) {
-            return TDeadline::TimePoint::max();
-        }
-        return timePoint + duration;
-    }
-}
-
 TDeadline TDeadline::Now() {
     return TDeadline(Clock::now());
 }
@@ -43,8 +34,33 @@ bool TDeadline::operator<(const TDeadline& other) const noexcept {
     return TimePoint_ < other.TimePoint_;
 }
 
+bool TDeadline::operator<=(const TDeadline& other) const noexcept {
+    return TimePoint_ <= other.TimePoint_;
+}
+
 bool TDeadline::operator==(const TDeadline& other) const noexcept {
     return TimePoint_ == other.TimePoint_;
+}
+
+TDeadline TDeadline::operator+(const Duration& duration) const noexcept {
+    return TDeadline(SafeSum(TimePoint_, duration));
+}
+
+TDeadline TDeadline::operator-(const Duration& duration) const noexcept {
+    return TDeadline(SafeSum(TimePoint_, -duration));
+}
+
+TDeadline::TimePoint TDeadline::SafeSum(TDeadline::TimePoint timePoint, TDeadline::Duration duration) noexcept {
+    if (duration > TDeadline::Duration::zero()) {
+        if (timePoint > TDeadline::TimePoint::max() - duration) {
+            return TDeadline::TimePoint::max();
+        }
+    } else {
+        if (TDeadline::TimePoint::min() - duration > timePoint) {
+            return TDeadline::TimePoint::min();
+        }
+    }
+    return timePoint + duration;
 }
 
 } // namespace NYdb

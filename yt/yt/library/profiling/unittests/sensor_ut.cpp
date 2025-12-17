@@ -16,7 +16,7 @@ TProfiler EventQueue{"/event_queue"};
 auto GlobalEventCounter = EventQueue.Counter("/event_counter");
 auto GlobalQueueSize = EventQueue.Gauge("/queue_size");
 
-TEST(Sensor, TestingApi)
+TEST(TSensorTest, TestingApi)
 {
     GlobalEventCounter.Increment();
     ASSERT_EQ(1, TTesting::ReadCounter(GlobalEventCounter));

@@ -7,7 +7,9 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -17,13 +19,13 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
-    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view path) const {
-        auto idx = Stats.GetKeyIndexOptional(path);
-        if (!idx) {
-            return nullptr;
-        } else {
-            return Records->GetColumnVerified(*idx);
+    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path) const {
+        auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
+        for (ui32 i = 0; i < Stats.GetColumnsCount(); ++i) {
+            auto insertResult = jsonPathAccessorTrie->Insert(ToSubcolumnName(Stats.GetColumnName(i)), Records->GetColumnVerified(i));
+            AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
         }
+        return jsonPathAccessorTrie->GetAccessor(path);
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -76,7 +78,7 @@ public:
             return std::string_view(view.data(), view.size());
         }
 
-        NJson::TJsonValue GetValue() const;
+        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
 
         bool HasValue() const {
             return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));

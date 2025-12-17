@@ -5779,6 +5779,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 SELECT * FROM `%s`;
             )", implTablePath), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         };
+        auto copyImplTableQuery = [&]() {
+            return userSession.CopyTable(implTablePath, "/Root/ImplTableCopy").ExtractValueSync();
+        };
         auto upsertTableQuery = [&]() {
             return userSession.ExecuteDataQuery(Sprintf(R"(
                 UPSERT INTO `%s` (Key, Fk, Value) VALUES
@@ -5810,6 +5813,9 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             .EndStruct();
             builder.EndList();
             return userClient.BulkUpsert(implTablePath, builder.Build()).ExtractValueSync();
+        };
+        auto recreateUserSession = [&]() {
+            userSession = userClient.CreateSession().GetValueSync().GetSession();
         };
 
         // try accessing tables without permissions
@@ -5869,6 +5875,14 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 result.GetIssues().ToString()
             );
         }
+        {
+            auto result = copyImplTableQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Access denied for user@builtin on path /Root",
+                result.GetIssues().ToString()
+            );
+        }
 
         // grant necessary permission
         Grant(adminSession, "USE", tablePath, "user@builtin");
@@ -5918,6 +5932,14 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 result.GetIssues().ToString()
             );
         }
+        {
+            Grant(adminSession, "CREATE TABLE", "/Root", "user@builtin");
+            recreateUserSession();
+            auto result = copyImplTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Revoke(adminSession, "CREATE TABLE", "/Root", "user@builtin");
+            recreateUserSession();
+        }
 
         // become superuser
         kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user@builtin");
@@ -5966,6 +5988,14 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 "Writing to index implementation tables is not allowed",
                 result.GetIssues().ToString()
             );
+        }
+        {
+            Grant(adminSession, "CREATE TABLE", "/Root", "user@builtin");
+            recreateUserSession();
+            auto result = copyImplTableQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            Revoke(adminSession, "CREATE TABLE", "/Root", "user@builtin");
+            recreateUserSession();
         }
     }
 

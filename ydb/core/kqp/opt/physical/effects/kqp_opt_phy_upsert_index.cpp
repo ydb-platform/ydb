@@ -615,13 +615,14 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     const auto indexes = BuildAffectedIndexTables(table, pos, ctx, filter);
 
     const bool isSink = NeedSinks(table, kqpCtx);
-    const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
-        && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return index.second->Type == TIndexDescription::EType::GlobalSync
-                || index.second->Type == TIndexDescription::EType::GlobalSyncUnique;
+    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+    const bool needPrecompute = !useStreamIndex
+        || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
+            return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
+                || index.second->Type == TIndexDescription::EType::GlobalFulltext;
         });
 
-    if (isSink && canUseStreamIndex) {
+    if (!needPrecompute) {
         TVector<TExprBase> effects;
         effects.emplace_back(Build<TKqlUpsertRows>(ctx, pos)
             .Table(tableExpr.Ptr())
@@ -688,19 +689,22 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         : rowsPrecompute.Cast();
 
     auto mainTableNode = BuildTableMeta(table, pos, ctx);
-    auto tableUpsert = Build<TKqlUpsertRows>(ctx, pos)
+    TVector<TExprBase> effects;
+    effects.emplace_back(Build<TKqlUpsertRows>(ctx, pos)
         .Table(mainTableNode)
         .Input(tableUpsertRows)
         .Columns(inputColumns)
         .ReturningColumns(returningColumns)
         .IsBatch(ctx.NewAtom(pos, "false"))
         .Settings(settings)
-        .Done();
-
-    TVector<TExprBase> effects;
-    effects.emplace_back(tableUpsert);
+        .Done());
 
     for (const auto& [tableNode, indexDesc] : indexes) {
+        if (useStreamIndex
+                && (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+            continue;
+        }
         bool indexKeyColumnsUpdated = false;
         THashSet<TStringBuf> indexTableColumnsSet;
         TVector<TStringBuf> indexTableColumns;

@@ -131,6 +131,11 @@ protected:
         YQL_ENSURE(ctx.Settings.Mode == mode);
     }
 
+public:
+    void SetYqlSelectProduced(bool value) noexcept {
+        IsYqlSelectProduced_ = value;
+    }
+
 protected:
     enum class EExpr {
         Regular,
@@ -138,13 +143,13 @@ protected:
         SqlLambdaParams,
     };
 
-    TNodePtr NamedExpr(
+    TNodeResult NamedExpr(
         const TRule_expr& exprTree,
         const TRule_an_id_or_type* nameTree,
         EExpr exprMode = EExpr::Regular);
 
-    TNodePtr NamedExpr(const TRule_named_expr& node, EExpr exprMode = EExpr::Regular);
-    bool NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode = EExpr::Regular);
+    TNodeResult NamedExpr(const TRule_named_expr& node, EExpr exprMode = EExpr::Regular);
+    TSQLStatus NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode = EExpr::Regular);
     bool BindList(const TRule_bind_parameter_list& node, TVector<TSymbolNameWithPos>& bindNames);
     bool ActionOrSubqueryArgs(const TRule_action_or_subquery_args& node, TVector<TSymbolNameWithPos>& bindNames, ui32& optionalArgsCount);
     bool ModulePath(const TRule_module_path& node, TVector<TString>& path);
@@ -159,7 +164,7 @@ protected:
     bool DefineActionOrSubqueryBody(TSqlQuery& query, TBlocks& blocks, const TRule_define_action_or_subquery_body& body);
     TNodePtr IfStatement(const TRule_if_stmt& stmt);
     TNodePtr ForStatement(const TRule_for_stmt& stmt);
-    TMaybe<TTableArg> TableArgImpl(const TRule_table_arg& node);
+    TSQLResult<TTableArg> TableArgImpl(const TRule_table_arg& node);
     bool TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery);
     TMaybe<TSourcePtr> AsTableImpl(const TRule_table_ref& node);
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, TString& service, TDeferredAtom& cluster);
@@ -245,7 +250,7 @@ protected:
     bool ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_external_data_source_action& alterActions);
-    bool ParseSecretSettings(const TPosition stmBeginPos, const TRule_with_secret_settings& settings, TSecretParameters& secretParams, const TSecretParameters::TOperationMode mode);
+    bool ParseSecretSettings(const TPosition stmBeginPos, const TRule_with_secret_settings& settings, TSecretParameters& secretParams, const TSecretParameters::EOperationMode mode);
     [[nodiscard]] bool ParseSecretId(const TRule_id_or_at& node, TString& objectId);
     bool ParseViewOptions(std::map<TString, TDeferredAtom>& features, const TRule_with_table_settings& options);
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);
@@ -294,7 +299,6 @@ protected:
     bool ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings);
     bool ParseAlterStreamingQueryAction(const TRule_alter_streaming_query_action& node, TStreamingQuerySettings& settings);
 
-    bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
     bool ValidateSubqueryOrViewBody(const TBlocks& blocks);
 
@@ -315,6 +319,7 @@ private:
 
 protected:
     NSQLTranslation::ESqlMode Mode_;
+    bool IsYqlSelectProduced_ = false;
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);
@@ -374,6 +379,6 @@ TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& patter
 
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix);
 
-std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4);
+std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token);
 
 } // namespace NSQLTranslationV1

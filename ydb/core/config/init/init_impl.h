@@ -35,6 +35,7 @@
 #include <util/system/hostname.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
+#include <util/folder/path.h>
 #include <util/generic/maybe.h>
 #include <util/generic/map.h>
 #include <util/generic/string.h>
@@ -297,6 +298,7 @@ struct TCommonAppOptions {
     ui32 MonitoringThreads = 10;
     ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
+    TString MonitoringPrivateKeyFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
     TString UDFsDir;
@@ -343,6 +345,7 @@ struct TCommonAppOptions {
     TString BridgePileName;
     TString SeedNodesFile;
     TVector<TString> SeedNodes;
+    bool ForceDatabaseLabels = false;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -392,7 +395,8 @@ struct TCommonAppOptions {
             .RequiredArgument("NAME").StoreResult(&TenantName);
         opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&MonitoringPort);
         opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&MonitoringAddress);
-        opts.AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
+        opts.AddLongOption("mon-cert", "Path to monitoring certificate file (https)").OptionalArgument("PATH").StoreResult(&MonitoringCertificateFile);
+        opts.AddLongOption("mon-key", "Path to monitoring private key file (https)").OptionalArgument("PATH").StoreResult(&MonitoringPrivateKeyFile);
         opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
         opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().SetFlag(&SuppressVersionCheck);
 
@@ -436,15 +440,14 @@ struct TCommonAppOptions {
             .RequiredArgument("NUM").StoreResult(&Body);
         opts.AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").StoreResult(&YamlConfigFile);
         opts.AddLongOption("config-dir", "Directory to store Yaml config").RequiredArgument("PATH").StoreResult(&ConfigDirPath);
-
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
-
         opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are %s", GetEnumAllNames<EWorkload>().data()))
             .RequiredArgument("NAME").StoreResult(&Workload);
-
         opts.AddLongOption("seed-nodes", "Path to seed nodes configuration file")
             .RequiredArgument("PATH").StoreResult(&SeedNodesFile);
+        opts.AddLongOption("force-database-labels", "Forced reporting of a label with the name of the database (tenant/domain)")
+            .NoArgument().SetFlag(&ForceDatabaseLabels);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
@@ -469,9 +472,39 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().HasCert()) {
-            appConfig.MutableGRpcConfig()->SetPathToCertificateFile(appConfig.GetGRpcConfig().GetCert());
-            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        if (appConfig.HasGRpcConfig()) {
+            if (appConfig.GetGRpcConfig().HasCert()) {
+                appConfig.MutableGRpcConfig()->SetPathToCertificateFile(appConfig.GetGRpcConfig().GetCert());
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            }
+            if (appConfig.GetGRpcConfig().HasXdsBootstrap()) {
+                auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
+                if (xdsBootstrapConfig->GetNode().GetId().empty()) {
+                    xdsBootstrapConfig->MutableNode()->SetId(env.FQDNHostName());
+                    ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+                }
+                if (xdsBootstrapConfig->GetNode().GetLocality().GetZone().empty()) {
+                    TString dataCenter;
+                    if (DataCenter) {
+                        dataCenter = to_lower(DataCenter.GetRef());
+                    } else if (appConfig.HasNameserviceConfig()) {
+                        for (const auto& node : appConfig.GetNameserviceConfig().GetNode()) {
+                            if (node.GetNodeId() == NodeId) {
+                                if (node.HasLocation()) {
+                                    dataCenter = to_lower(node.GetLocation().GetDataCenter());
+                                } else if (node.HasWalleLocation()) {
+                                    dataCenter = to_lower(node.GetWalleLocation().GetDataCenter());
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    if (!dataCenter.empty()) {
+                        xdsBootstrapConfig->MutableNode()->MutableLocality()->SetZone(dataCenter);
+                        ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+                    }
+                }
+            }
         }
 
         if (!GrpcSslSettings.PathToGrpcCertFile.empty()) {
@@ -568,13 +601,12 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (MonitoringCertificateFile) {
-            TString sslCertificate = TUnbufferedFileInput(MonitoringCertificateFile).ReadAll();
-            if (!sslCertificate.empty()) {
-                appConfig.MutableMonitoringConfig()->SetMonitoringCertificate(sslCertificate);
-                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
-            } else {
-                ythrow yexception() << "invalid ssl certificate file";
-            }
+            appConfig.MutableMonitoringConfig()->SetMonitoringCertificateFile(MonitoringCertificateFile);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+        if (MonitoringPrivateKeyFile) {
+            appConfig.MutableMonitoringConfig()->SetMonitoringPrivateKeyFile(MonitoringPrivateKeyFile);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (SqsHttpPort) {
             appConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
@@ -622,7 +654,7 @@ struct TCommonAppOptions {
             }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
-	if (KafkaPort) {
+	    if (KafkaPort) {
             auto& conf = *appConfig.MutableKafkaProxyConfig();
             conf.SetEnableKafkaProxy(true);
             conf.SetListeningPort(KafkaPort);
@@ -698,6 +730,11 @@ struct TCommonAppOptions {
                     // default, do nothing
                     break;
             }
+        }
+
+        if (ForceDatabaseLabels) {
+            appConfig.MutableMonitoringConfig()->SetForceDatabaseLabels(ForceDatabaseLabels);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
     }
 
@@ -1144,6 +1181,13 @@ public:
 
         LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
 
+        // disable as early as possible to properly propagate it everywhere
+        if (CommonAppOptions.TinyMode) {
+            if (!AppConfig.GetFeatureFlags().HasEnableBackgroundCompaction()) {
+                AppConfig.MutableFeatureFlags()->SetEnableBackgroundCompaction(false);
+            }
+        }
+
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
 
         Option("domains-file", TCfg::TDomainsConfigFieldTag{});
@@ -1182,6 +1226,7 @@ public:
         Option(nullptr, TCfg::TTracingConfigFieldTag{});
         Option(nullptr, TCfg::TFailureInjectionConfigFieldTag{});
 
+        ValidateCertPaths();
         CommonAppOptions.ApplyFields(AppConfig, Env, ConfigUpdateTracer);
 
        // MessageBus options.
@@ -1476,6 +1521,9 @@ public:
         clusterName = ClusterName;
         configsDispatcherInitInfo.InitialConfig = appConfig;
         configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();
+        if (appConfig.HasStartupStorageYaml()) {
+            configsDispatcherInitInfo.StartupStorageYaml = appConfig.GetStartupStorageYaml();
+        }
         configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
         configsDispatcherInitInfo.Labels = Labels;
         configsDispatcherInitInfo.Labels["configuration_version"] = appConfig.GetConfigDirPath() ? "v2" : "v1";
@@ -1631,6 +1679,28 @@ public:
 
         Logger.Out() << "Successfully applied dynamic config from seed nodes" << Endl;
         ApplyConfigForNode(yamlConfig);
+    }
+
+    void ValidateCertPaths() const {
+        auto ensureFileExists = [](const TString& path, TStringBuf optName) {
+            if (path.empty()) {
+                return;
+            }
+            TFsPath fspath(path);
+            TFileStat filestat;
+            if (!fspath.Stat(filestat) || !filestat.IsFile()) {
+                ythrow yexception() << "File passed to --" << optName << " does not exist: " << path;
+            }
+        };
+
+        ensureFileExists(CommonAppOptions.PathToInterconnectCertFile, "cert/ic-cert");
+        ensureFileExists(CommonAppOptions.PathToInterconnectPrivateKeyFile, "key/ic-key");
+        ensureFileExists(CommonAppOptions.PathToInterconnectCaFile, "ca/ic-ca");
+        ensureFileExists(CommonAppOptions.GrpcSslSettings.PathToGrpcCertFile, "grpc-cert");
+        ensureFileExists(CommonAppOptions.GrpcSslSettings.PathToGrpcPrivateKeyFile, "grpc-key");
+        ensureFileExists(CommonAppOptions.GrpcSslSettings.PathToGrpcCaFile, "grpc-ca");
+        ensureFileExists(CommonAppOptions.MonitoringCertificateFile, "mon-cert");
+        ensureFileExists(CommonAppOptions.MonitoringPrivateKeyFile, "mon-key");
     }
 };
 

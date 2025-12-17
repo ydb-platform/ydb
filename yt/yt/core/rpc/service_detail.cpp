@@ -1905,11 +1905,16 @@ void TServiceBase::OnRequestAuthenticated(
     }
 
     const auto& authResult = authResultOrError.Value();
-    const auto& Logger = RpcServerLogger;
-    YT_LOG_DEBUG("Request authenticated (RequestId: %v, User: %v, Realm: %v)",
+    auto Logger = RpcServerLogger().WithTag("RequestId: %v, User: %v, Realm: %v",
         incomingRequest.RequestId,
         authResult.User,
         authResult.Realm);
+
+    if (authResult.Warning.IsOK()) {
+        YT_LOG_DEBUG("Request authenticated");
+    } else {
+        YT_LOG_DEBUG(authResult.Warning, "Request authenticated with warning");
+    }
     const auto& authenticatedUser = authResult.User;
     if (incomingRequest.Header->has_user()) {
         const auto& user = incomingRequest.Header->user();
@@ -2442,7 +2447,7 @@ void TServiceBase::ProfileRequest(TIncomingRequest* incomingRequest)
         methodPerformanceCounters->RemoteWaitTimeCounter.Record(incomingRequest->ArriveInstant - retryStart);
     }
 
-    if (!incomingRequest->ReplyBus->IsEndpointLocal()) {
+    if (!incomingRequest->ReplyBus->IsEndpointLocal() && IsAuthenticationNeeded(*incomingRequest)) {
         bool authenticated = incomingRequest->Header->HasExtension(NRpc::NProto::TCredentialsExt::credentials_ext) &&
             incomingRequest->Header->GetExtension(NRpc::NProto::TCredentialsExt::credentials_ext).has_service_ticket();
         if (!authenticated && incomingRequest->RuntimeInfo) {

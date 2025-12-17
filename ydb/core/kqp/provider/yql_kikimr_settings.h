@@ -99,6 +99,7 @@ public:
     NCommon::TConfSetting<ui32, Static> MaxSequentialReadsInFlight;
 
     NCommon::TConfSetting<ui32, Static> KMeansTreeSearchTopSize;
+    NCommon::TConfSetting<bool, Static> DisableCheckpoints;
 
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;
@@ -194,6 +195,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOltpSink = false;
     bool EnableHtapTx = false;
     bool EnableStreamWrite = false;
+    bool EnableBatchUpdates = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
@@ -224,8 +226,11 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
     bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
     bool EnableDqHashCombineByDefault = true;
+    bool EnableWatermarks = false;
 
     bool Antlr4ParserIsAmbiguityError = false;
+
+    bool EnableFallbackToYqlOptimizer = false;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;

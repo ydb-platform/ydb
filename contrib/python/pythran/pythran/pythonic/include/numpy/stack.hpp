@@ -15,14 +15,12 @@ namespace numpy
   namespace details
   {
     template <class... Tys>
-    using stack_helper_t =
-        typename __combined<typename assignable<Tys>::type...>::type;
+    using stack_helper_t = typename __combined<typename assignable<Tys>::type...>::type;
   }
 
   template <class... Tys>
-  types::ndarray<
-      typename details::stack_helper_t<Tys...>::dtype,
-      types::array_tuple<long, details::stack_helper_t<Tys...>::value + 1>>
+  types::ndarray<typename details::stack_helper_t<Tys...>::dtype,
+                 types::array_tuple<long, details::stack_helper_t<Tys...>::value + 1>>
   stack(std::tuple<Tys...> const &args, long axis = 0);
 
   DEFINE_FUNCTOR(pythonic::numpy, stack);

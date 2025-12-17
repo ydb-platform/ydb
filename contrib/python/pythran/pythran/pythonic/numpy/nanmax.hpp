@@ -33,8 +33,7 @@ namespace numpy
     {
       bool found = false;
       for (; begin != end; ++begin)
-        found |= _nanmax((*begin).begin(), (*begin).end(), max,
-                         utils::int_<N - 1>());
+        found |= _nanmax((*begin).begin(), (*begin).end(), max, utils::int_<N - 1>());
       return found;
     }
   } // namespace

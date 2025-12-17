@@ -337,6 +337,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
             MaxInputTables = value;
         })
         .Deprecated("Pragma ExtendTableLimit is deprecated. Use MaxInputTables instead");
+    REGISTER_SETTING(*this, _CacheSchemaBySchemaId);
     REGISTER_SETTING(*this, CommonJoinCoreLimit);
     REGISTER_SETTING(*this, CombineCoreLimit).Lower(1_MB); // Min 1Mb
     REGISTER_SETTING(*this, SwitchLimit).Lower(1_MB); // Min 1Mb
@@ -498,7 +499,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, PruneKeyFilterLambda);
     REGISTER_SETTING(*this, DqPruneKeyFilterLambda);
     REGISTER_SETTING(*this, UseQLFilter);
-    REGISTER_SETTING(*this, PruneQLFilterLambda);
+    REGISTER_SETTING(*this, PruneQLFilterLambda).Deprecated();
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
     REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
@@ -609,13 +610,16 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, UseNativeDynamicTableRead);
     REGISTER_SETTING(*this, _ForbidSensitiveDataInOperationSpec);
     REGISTER_SETTING(*this, DontForceTransformForInputTables);
+    REGISTER_SETTING(*this, _RequestOnlyRequiredAttrs);
     REGISTER_SETTING(*this, _LocalTableContentLimit);
     REGISTER_SETTING(*this, ValidatePool);
     REGISTER_SETTING(*this, ValidateClusters);
     REGISTER_SETTING(*this, _QueryDumpFolder);
+    REGISTER_SETTING(*this, _QueryDumpAccount);
     REGISTER_SETTING(*this, _QueryDumpTableSizeLimit);
     REGISTER_SETTING(*this, _QueryDumpTableCountPerClusterLimit);
     REGISTER_SETTING(*this, _QueryDumpFileCountPerOperationLimit);
+    REGISTER_SETTING(*this, KeepWorldDepForFillOp);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

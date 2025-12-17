@@ -25,4 +25,23 @@ namespace numpy
 } // namespace numpy
 PYTHONIC_NS_END
 
+#ifdef ENABLE_PYTHON_MODULE
+
+#include "pythonic/python/core.hpp"
+
+PYTHONIC_NS_BEGIN
+
+template <>
+struct to_python<numpy::functor::int_> {
+  static PyObject *convert(numpy::functor::int_ const &c);
+};
+
+template <>
+struct from_python<numpy::functor::int_> {
+  static bool is_convertible(PyObject *obj);
+  static numpy::functor::int_ convert(PyObject *obj);
+};
+PYTHONIC_NS_END
+#endif
+
 #endif

@@ -15,11 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/array/array_run_end.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/array/util.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/ree_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_run_end.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ree_util.h"
 
 namespace arrow20 {
 

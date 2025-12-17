@@ -25,22 +25,51 @@
 
 #include "curl_setup.h"
 
-#if !defined(CURL_DISABLE_AWS) || !defined(CURL_DISABLE_DIGEST_AUTH) || \
-  defined(USE_LIBSSH2) || defined(USE_SSL)
+#if !defined(CURL_DISABLE_AWS) || !defined(CURL_DISABLE_DIGEST_AUTH) \
+    || defined(USE_LIBSSH2)
 
-#include "curlx/warnless.h"
+#include "warnless.h"
 #include "curl_sha256.h"
 #include "curl_hmac.h"
 
-#ifdef USE_OPENSSL
+#ifdef USE_WOLFSSL
+#error #include <wolfssl/options.h>
+#ifndef NO_SHA256
+#define USE_OPENSSL_SHA256
+#endif
+#endif
+
+#if defined(USE_OPENSSL)
+
+#include <openssl/opensslv.h>
+
+#if (OPENSSL_VERSION_NUMBER >= 0x0090800fL)
+#define USE_OPENSSL_SHA256
+#endif
+
+#endif /* USE_OPENSSL */
+
+#ifdef USE_MBEDTLS
+#error #include <mbedtls/version.h>
+
+#if(MBEDTLS_VERSION_NUMBER >= 0x02070000) && \
+   (MBEDTLS_VERSION_NUMBER < 0x03000000)
+  #define HAS_MBEDTLS_RESULT_CODE_BASED_FUNCTIONS
+#endif
+#endif /* USE_MBEDTLS */
+
+#if defined(USE_OPENSSL_SHA256)
+
+/* When OpenSSL or wolfSSL is available we use their SHA256-functions. */
+#if defined(USE_OPENSSL)
 #include <openssl/evp.h>
+#elif defined(USE_WOLFSSL)
+#error #include <wolfssl/openssl/evp.h>
+#endif
+
 #elif defined(USE_GNUTLS)
 #error #include <nettle/sha.h>
 #elif defined(USE_MBEDTLS)
-#error #include <mbedtls/version.h>
-#if MBEDTLS_VERSION_NUMBER < 0x03020000
-  #error "mbedTLS 3.2.0 or later required"
-#endif
 #error #include <mbedtls/sha256.h>
 #elif (defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && \
               (__MAC_OS_X_VERSION_MAX_ALLOWED >= 1040)) || \
@@ -69,16 +98,15 @@
  * file even if multiple backends are enabled at the same time.
  */
 
-#ifdef USE_OPENSSL
+#if defined(USE_OPENSSL_SHA256)
 
-struct ossl_sha256_ctx {
+struct sha256_ctx {
   EVP_MD_CTX *openssl_ctx;
 };
-typedef struct ossl_sha256_ctx my_sha256_ctx;
+typedef struct sha256_ctx my_sha256_ctx;
 
-static CURLcode my_sha256_init(void *in)
+static CURLcode my_sha256_init(my_sha256_ctx *ctx)
 {
-  my_sha256_ctx *ctx = (my_sha256_ctx *)in;
   ctx->openssl_ctx = EVP_MD_CTX_create();
   if(!ctx->openssl_ctx)
     return CURLE_OUT_OF_MEMORY;
@@ -90,17 +118,15 @@ static CURLcode my_sha256_init(void *in)
   return CURLE_OK;
 }
 
-static void my_sha256_update(void *in,
+static void my_sha256_update(my_sha256_ctx *ctx,
                              const unsigned char *data,
                              unsigned int length)
 {
-  my_sha256_ctx *ctx = (my_sha256_ctx *)in;
   EVP_DigestUpdate(ctx->openssl_ctx, data, length);
 }
 
-static void my_sha256_final(unsigned char *digest, void *in)
+static void my_sha256_final(unsigned char *digest, my_sha256_ctx *ctx)
 {
-  my_sha256_ctx *ctx = (my_sha256_ctx *)in;
   EVP_DigestFinal_ex(ctx->openssl_ctx, digest, NULL);
   EVP_MD_CTX_destroy(ctx->openssl_ctx);
 }
@@ -109,20 +135,20 @@ static void my_sha256_final(unsigned char *digest, void *in)
 
 typedef struct sha256_ctx my_sha256_ctx;
 
-static CURLcode my_sha256_init(void *ctx)
+static CURLcode my_sha256_init(my_sha256_ctx *ctx)
 {
   sha256_init(ctx);
   return CURLE_OK;
 }
 
-static void my_sha256_update(void *ctx,
+static void my_sha256_update(my_sha256_ctx *ctx,
                              const unsigned char *data,
                              unsigned int length)
 {
   sha256_update(ctx, length, data);
 }
 
-static void my_sha256_final(unsigned char *digest, void *ctx)
+static void my_sha256_final(unsigned char *digest, my_sha256_ctx *ctx)
 {
   sha256_digest(ctx, SHA256_DIGEST_SIZE, digest);
 }
@@ -131,43 +157,55 @@ static void my_sha256_final(unsigned char *digest, void *ctx)
 
 typedef mbedtls_sha256_context my_sha256_ctx;
 
-static CURLcode my_sha256_init(void *ctx)
+static CURLcode my_sha256_init(my_sha256_ctx *ctx)
 {
-  (void)mbedtls_sha256_starts(ctx, 0);
+#if !defined(HAS_MBEDTLS_RESULT_CODE_BASED_FUNCTIONS)
+  (void) mbedtls_sha256_starts(ctx, 0);
+#else
+  (void) mbedtls_sha256_starts_ret(ctx, 0);
+#endif
   return CURLE_OK;
 }
 
-static void my_sha256_update(void *ctx,
+static void my_sha256_update(my_sha256_ctx *ctx,
                              const unsigned char *data,
                              unsigned int length)
 {
-  (void)mbedtls_sha256_update(ctx, data, length);
+#if !defined(HAS_MBEDTLS_RESULT_CODE_BASED_FUNCTIONS)
+  (void) mbedtls_sha256_update(ctx, data, length);
+#else
+  (void) mbedtls_sha256_update_ret(ctx, data, length);
+#endif
 }
 
-static void my_sha256_final(unsigned char *digest, void *ctx)
+static void my_sha256_final(unsigned char *digest, my_sha256_ctx *ctx)
 {
-  (void)mbedtls_sha256_finish(ctx, digest);
+#if !defined(HAS_MBEDTLS_RESULT_CODE_BASED_FUNCTIONS)
+  (void) mbedtls_sha256_finish(ctx, digest);
+#else
+  (void) mbedtls_sha256_finish_ret(ctx, digest);
+#endif
 }
 
 #elif defined(AN_APPLE_OS)
 typedef CC_SHA256_CTX my_sha256_ctx;
 
-static CURLcode my_sha256_init(void *ctx)
+static CURLcode my_sha256_init(my_sha256_ctx *ctx)
 {
-  (void)CC_SHA256_Init(ctx);
+  (void) CC_SHA256_Init(ctx);
   return CURLE_OK;
 }
 
-static void my_sha256_update(void *ctx,
+static void my_sha256_update(my_sha256_ctx *ctx,
                              const unsigned char *data,
                              unsigned int length)
 {
-  (void)CC_SHA256_Update(ctx, data, length);
+  (void) CC_SHA256_Update(ctx, data, length);
 }
 
-static void my_sha256_final(unsigned char *digest, void *ctx)
+static void my_sha256_final(unsigned char *digest, my_sha256_ctx *ctx)
 {
-  (void)CC_SHA256_Final(digest, ctx);
+  (void) CC_SHA256_Final(digest, ctx);
 }
 
 #elif defined(USE_WIN32_CRYPTO)
@@ -178,14 +216,12 @@ struct sha256_ctx {
 };
 typedef struct sha256_ctx my_sha256_ctx;
 
-/* Offered when targeting Vista (XP SP2+) */
-#ifndef CALG_SHA_256
+#if !defined(CALG_SHA_256)
 #define CALG_SHA_256 0x0000800c
 #endif
 
-static CURLcode my_sha256_init(void *in)
+static CURLcode my_sha256_init(my_sha256_ctx *ctx)
 {
-  my_sha256_ctx *ctx = (my_sha256_ctx *)in;
   if(!CryptAcquireContext(&ctx->hCryptProv, NULL, NULL, PROV_RSA_AES,
                          CRYPT_VERIFYCONTEXT | CRYPT_SILENT))
     return CURLE_OUT_OF_MEMORY;
@@ -199,25 +235,19 @@ static CURLcode my_sha256_init(void *in)
   return CURLE_OK;
 }
 
-static void my_sha256_update(void *in,
+static void my_sha256_update(my_sha256_ctx *ctx,
                              const unsigned char *data,
                              unsigned int length)
 {
-  my_sha256_ctx *ctx = (my_sha256_ctx *)in;
-#ifdef __MINGW32CE__
-  CryptHashData(ctx->hHash, (BYTE *)CURL_UNCONST(data), length, 0);
-#else
-  CryptHashData(ctx->hHash, (const BYTE *)data, length, 0);
-#endif
+  CryptHashData(ctx->hHash, (unsigned char *) data, length, 0);
 }
 
-static void my_sha256_final(unsigned char *digest, void *in)
+static void my_sha256_final(unsigned char *digest, my_sha256_ctx *ctx)
 {
-  my_sha256_ctx *ctx = (my_sha256_ctx *)in;
   unsigned long length = 0;
 
   CryptGetHashParam(ctx->hHash, HP_HASHVAL, NULL, &length, 0);
-  if(length == CURL_SHA256_DIGEST_LENGTH)
+  if(length == SHA256_DIGEST_LENGTH)
     CryptGetHashParam(ctx->hHash, HP_HASHVAL, digest, &length, 0);
 
   if(ctx->hHash)
@@ -304,18 +334,18 @@ static const unsigned long K[64] = {
 #define RORc(x, y) \
 (((((unsigned long)(x) & 0xFFFFFFFFUL) >> (unsigned long)((y) & 31)) | \
    ((unsigned long)(x) << (unsigned long)(32 - ((y) & 31)))) & 0xFFFFFFFFUL)
-#define Sha256_Ch(x,y,z)  (z ^ (x & (y ^ z)))
-#define Sha256_Maj(x,y,z) (((x | y) & z) | (x & y))
-#define Sha256_S(x, n)    RORc((x), (n))
-#define Sha256_R(x, n)    (((x)&0xFFFFFFFFUL)>>(n))
-#define Sigma0(x)         (Sha256_S(x, 2) ^ Sha256_S(x, 13) ^ Sha256_S(x, 22))
-#define Sigma1(x)         (Sha256_S(x, 6) ^ Sha256_S(x, 11) ^ Sha256_S(x, 25))
-#define Gamma0(x)         (Sha256_S(x, 7) ^ Sha256_S(x, 18) ^ Sha256_R(x, 3))
-#define Gamma1(x)         (Sha256_S(x, 17) ^ Sha256_S(x, 19) ^ Sha256_R(x, 10))
+#define Ch(x,y,z)   (z ^ (x & (y ^ z)))
+#define Maj(x,y,z)  (((x | y) & z) | (x & y))
+#define S(x, n)     RORc((x), (n))
+#define R(x, n)     (((x)&0xFFFFFFFFUL)>>(n))
+#define Sigma0(x)   (S(x, 2) ^ S(x, 13) ^ S(x, 22))
+#define Sigma1(x)   (S(x, 6) ^ S(x, 11) ^ S(x, 25))
+#define Gamma0(x)   (S(x, 7) ^ S(x, 18) ^ R(x, 3))
+#define Gamma1(x)   (S(x, 17) ^ S(x, 19) ^ R(x, 10))
 
 /* Compress 512-bits */
 static int sha256_compress(struct sha256_state *md,
-                           const unsigned char *buf)
+                           unsigned char *buf)
 {
   unsigned long S[8], W[64];
   int i;
@@ -334,12 +364,12 @@ static int sha256_compress(struct sha256_state *md,
   }
 
   /* Compress */
-#define RND(a,b,c,d,e,f,g,h,i)                                           \
-  do {                                                                   \
-    unsigned long t0 = h + Sigma1(e) + Sha256_Ch(e, f, g) + K[i] + W[i]; \
-    unsigned long t1 = Sigma0(a) + Sha256_Maj(a, b, c);                  \
-    d += t0;                                                             \
-    h = t0 + t1;                                                         \
+#define RND(a,b,c,d,e,f,g,h,i)                                          \
+  do {                                                                  \
+    unsigned long t0 = h + Sigma1(e) + Ch(e, f, g) + K[i] + W[i];       \
+    unsigned long t1 = Sigma0(a) + Maj(a, b, c);                        \
+    d += t0;                                                            \
+    h = t0 + t1;                                                        \
   } while(0)
 
   for(i = 0; i < 64; ++i) {
@@ -358,9 +388,8 @@ static int sha256_compress(struct sha256_state *md,
 }
 
 /* Initialize the hash state */
-static CURLcode my_sha256_init(void *in)
+static CURLcode my_sha256_init(struct sha256_state *md)
 {
-  struct sha256_state *md = (struct sha256_state *)in;
   md->curlen = 0;
   md->length = 0;
   md->state[0] = 0x6A09E667UL;
@@ -380,39 +409,41 @@ static CURLcode my_sha256_init(void *in)
    @param md     The hash state
    @param in     The data to hash
    @param inlen  The length of the data (octets)
+   @return 0 if successful
 */
-static void my_sha256_update(void *ctx,
-                             const unsigned char *in,
-                             unsigned int len)
+static int my_sha256_update(struct sha256_state *md,
+                            const unsigned char *in,
+                            unsigned long inlen)
 {
-  unsigned long inlen = len;
   unsigned long n;
-  struct sha256_state *md = (struct sha256_state *)ctx;
-#define CURL_SHA256_BLOCK_SIZE 64
+
+#define block_size 64
   if(md->curlen > sizeof(md->buf))
-    return;
+    return -1;
   while(inlen > 0) {
-    if(md->curlen == 0 && inlen >= CURL_SHA256_BLOCK_SIZE) {
-      if(sha256_compress(md, in) < 0)
-        return;
-      md->length += CURL_SHA256_BLOCK_SIZE * 8;
-      in += CURL_SHA256_BLOCK_SIZE;
-      inlen -= CURL_SHA256_BLOCK_SIZE;
+    if(md->curlen == 0 && inlen >= block_size) {
+      if(sha256_compress(md, (unsigned char *)in) < 0)
+        return -1;
+      md->length += block_size * 8;
+      in += block_size;
+      inlen -= block_size;
     }
     else {
-      n = CURLMIN(inlen, (CURL_SHA256_BLOCK_SIZE - md->curlen));
+      n = CURLMIN(inlen, (block_size - md->curlen));
       memcpy(md->buf + md->curlen, in, n);
       md->curlen += n;
       in += n;
       inlen -= n;
-      if(md->curlen == CURL_SHA256_BLOCK_SIZE) {
+      if(md->curlen == block_size) {
         if(sha256_compress(md, md->buf) < 0)
-          return;
-        md->length += 8 * CURL_SHA256_BLOCK_SIZE;
+          return -1;
+        md->length += 8 * block_size;
         md->curlen = 0;
       }
     }
   }
+
+  return 0;
 }
 
 /*
@@ -421,13 +452,13 @@ static void my_sha256_update(void *ctx,
    @param out [out] The destination of the hash (32 bytes)
    @return 0 if successful
 */
-static void my_sha256_final(unsigned char *out, void *ctx)
+static int my_sha256_final(unsigned char *out,
+                           struct sha256_state *md)
 {
-  struct sha256_state *md = ctx;
   int i;
 
   if(md->curlen >= sizeof(md->buf))
-    return;
+    return -1;
 
   /* Increase the length of the message */
   md->length += md->curlen * 8;
@@ -436,7 +467,7 @@ static void my_sha256_final(unsigned char *out, void *ctx)
   md->buf[md->curlen++] = (unsigned char)0x80;
 
   /* If the length is currently above 56 bytes we append zeros
-   * then compress. Then we can fall back to padding zeros and length
+   * then compress.  Then we can fall back to padding zeros and length
    * encoding like normal.
    */
   if(md->curlen > 56) {
@@ -459,6 +490,8 @@ static void my_sha256_final(unsigned char *out, void *ctx)
   /* Copy output */
   for(i = 0; i < 8; i++)
     WPA_PUT_BE32(out + (4 * i), md->state[i]);
+
+  return 0;
 }
 
 #endif /* CRYPTO LIBS */
@@ -477,7 +510,7 @@ static void my_sha256_final(unsigned char *out, void *ctx)
  * Returns CURLE_OK on success.
  */
 CURLcode Curl_sha256it(unsigned char *output, const unsigned char *input,
-                       const size_t length)
+                   const size_t length)
 {
   CURLcode result;
   my_sha256_ctx ctx;
@@ -491,13 +524,22 @@ CURLcode Curl_sha256it(unsigned char *output, const unsigned char *input,
 }
 
 
-const struct HMAC_params Curl_HMAC_SHA256 = {
-  my_sha256_init,        /* Hash initialization function. */
-  my_sha256_update,      /* Hash update function. */
-  my_sha256_final,       /* Hash computation end function. */
-  sizeof(my_sha256_ctx), /* Size of hash context structure. */
-  64,                    /* Maximum key length. */
-  32                     /* Result size. */
+const struct HMAC_params Curl_HMAC_SHA256[] = {
+  {
+    /* Hash initialization function. */
+    CURLX_FUNCTION_CAST(HMAC_hinit_func, my_sha256_init),
+    /* Hash update function. */
+    CURLX_FUNCTION_CAST(HMAC_hupdate_func, my_sha256_update),
+    /* Hash computation end function. */
+    CURLX_FUNCTION_CAST(HMAC_hfinal_func, my_sha256_final),
+    /* Size of hash context structure. */
+    sizeof(my_sha256_ctx),
+    /* Maximum key length. */
+    64,
+    /* Result size. */
+    32
+  }
 };
 
-#endif /* AWS, DIGEST, or libssh2 */
+
+#endif /* AWS, DIGEST, or libSSH2 */

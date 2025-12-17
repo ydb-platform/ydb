@@ -21,6 +21,15 @@
 
 namespace NYql::NDq {
 
+TString FillLevelToString(EDqFillLevel level) {
+    switch(level) {
+        case NoLimit : return "No";
+        case SoftLimit : return "Soft";
+        case HardLimit : return "Hard";
+        default: return "-";
+    }
+}
+
 namespace {
 
 using namespace NKikimr;
@@ -323,6 +332,12 @@ public:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& consumer : Consumers) {
+            consumer->Consume(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() override {
         for (auto& consumer : Consumers) {
             consumer->Finish();
@@ -352,6 +367,10 @@ public:
 
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
         Output->Push(std::move(checkpoint));
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        Output->Push(std::move(watermark));
     }
 
     void Finish() override {
@@ -424,6 +443,12 @@ public:
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
         for (auto& output : Outputs) {
             output->Push(NDqProto::TCheckpoint(checkpoint));
+        }
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
         }
     }
 
@@ -527,6 +552,12 @@ private:
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
         for (auto& output : Outputs_) {
             output->Push(NDqProto::TCheckpoint(checkpoint));
+        }
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs_) {
+            output->Push(NDqProto::TWatermark(watermark));
         }
     }
 
@@ -707,6 +738,12 @@ private:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs_) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() final {
         for (auto& output : Outputs_) {
             output->Finish();
@@ -817,6 +854,12 @@ public:
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
         for (auto& output : Outputs) {
             output->Push(NDqProto::TCheckpoint(checkpoint));
+        }
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
         }
     }
 

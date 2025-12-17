@@ -1,7 +1,7 @@
 self: super: with self; {
   boost_xpressive = stdenv.mkDerivation rec {
     pname = "boost_xpressive";
-    version = "1.89.0";
+    version = "1.90.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";

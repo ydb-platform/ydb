@@ -1142,29 +1142,25 @@ public:
         QueryState->TxCtx->HasOltpTable |= hasOltpWrite || hasOltpRead;
         QueryState->TxCtx->HasTableWrite |= hasOlapWrite || hasOltpWrite;
         QueryState->TxCtx->HasTableRead |= hasOlapRead || hasOltpRead;
-        if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
-                && !QueryState->TxCtx->EnableHtapTx.value_or(false) && !QueryState->IsSplitted()) {
-            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Write transactions that use both row-oriented and column-oriented tables are disabled at current time.");
-            return false;
-        }
-        if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
-            && QueryState->TxCtx->HasOltpTable) {
-            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "SnapshotRW can only be used with olap tables.");
-            return false;
-        }
 
         if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
                 && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_AST_SCAN
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
                 && QueryState->TxCtx->HasOlapTable) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             TStringBuilder()
-                                << "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. "
+                                << "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes. "
                                 << "Use Serializable or Snapshot Read-Only mode instead.");
+            return false;
+        }
+
+        if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
+                && !QueryState->TxCtx->EnableHtapTx.value_or(false) && !QueryState->IsSplitted()) {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Write transactions that use both row-oriented and column-oriented tables are disabled at current time.");
             return false;
         }
 
@@ -1492,7 +1488,7 @@ public:
             return;
         }
 
-        if (QueryState->TxCtx->EnableOltpSink.value_or(false) && isBatchQuery && (!tx || !tx->IsLiteralTx())) {
+        if (isBatchQuery && (!tx || !tx->IsLiteralTx())) {
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
             ExecuteDeferredEffectsImmediately(tx);
@@ -1506,7 +1502,12 @@ public:
     void ExecutePartitioned(const TKqpPhyTxHolder::TConstPtr& tx) {
         if (!Settings.TableService.GetEnableBatchUpdates()) {
             return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                "BATCH operations are disabled by EnableBatchUpdates flag.");
+                "BATCH operations are not supported at the current time.");
+        }
+
+        if (!QueryState->TxCtx->EnableOltpSink.value_or(false)) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                "BATCH operations are not supported at the current time.");
         }
 
         if (QueryState->TxCtx->HasOlapTable) {
@@ -1514,9 +1515,8 @@ public:
                 "BATCH operations are not supported for column tables at the current time.");
         }
 
-        if (QueryState->HasTxControl()) {
-            NYql::TIssues issues;
-            return ReplyQueryError(::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST,
+        if (!QueryState->HasImplicitTx()) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                 "BATCH operation can be executed only in the implicit transaction mode.");
         }
 
@@ -2064,6 +2064,9 @@ public:
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
 
+        QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
+        QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
+
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
         } else {
@@ -2208,6 +2211,30 @@ public:
         }
     }
 
+    void HandleCleanup(TEvKqpBuffer::TEvError::TPtr& ev) {
+        auto& msg = *ev->Get();
+
+        TString logMsg = TStringBuilder() << "got TEvKqpBuffer::TEvError in " << CurrentStateFuncName()
+            << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId << " from: " << ev->Sender;
+
+        if (CleanupCtx->TransactionsToBeAborted.empty()) {
+            LOG_E(logMsg <<  ": Ignored error. TransactionsToBeAborted is empty.");
+        }
+
+        AFL_ENSURE(ExecuterId); // ExecuterId can't be empty during cleanup if TransactionsToBeAborted is not empty.
+
+        const auto& txCtx = CleanupCtx->TransactionsToBeAborted.front();
+        AFL_ENSURE(txCtx);
+        if (txCtx->BufferActorId != ev->Sender) {
+            LOG_E(logMsg <<  ": Ignored error. Current BufferActorId is not sender.");
+            return;
+        } else {
+            LOG_W(logMsg);
+        }
+
+        Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
+    }
+
     void CollectSystemViewQueryStats(const TKqpQueryStats* stats, TDuration queryDuration,
         const TString& database, ui64 requestUnits)
     {
@@ -2240,6 +2267,8 @@ public:
 
         stats->DurationUs = ((TInstant::Now() - QueryState->StartTime).MicroSeconds());
         stats->WorkerCpuTimeUs = (QueryState->GetCpuTime().MicroSeconds());
+        stats->LocksBrokenAsBreaker = QueryState->QueryStats.LocksBrokenAsBreaker;
+        stats->LocksBrokenAsVictim = QueryState->QueryStats.LocksBrokenAsVictim;
         if (const auto continueTime = QueryState->ContinueTime) {
             stats->QueuedTimeUs = (continueTime - QueryState->StartTime).MicroSeconds();
         }
@@ -2895,6 +2924,7 @@ public:
         if (QueryState) {
             QueryState->Orbit = std::move(ev->Get()->Orbit);
         }
+        ExecuterId = {};
 
         auto& response = ev->Get()->Record.GetResponse();
         if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -2907,6 +2937,8 @@ public:
                 // Terminate BufferActors without waiting
                 TerminateBufferActor(txCtx);
             }
+            CleanupCtx->TransactionsToBeAborted.clear();
+
             EndCleanup(CleanupCtx->Final);
             return;
         }
@@ -3151,7 +3183,7 @@ public:
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
                 hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
-                hFunc(TEvKqpBuffer::TEvError, Handle);
+                hFunc(TEvKqpBuffer::TEvError, HandleCleanup);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);

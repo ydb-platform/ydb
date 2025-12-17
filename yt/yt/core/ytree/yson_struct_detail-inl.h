@@ -8,6 +8,7 @@
 #include "yson_schema.h"
 #include "yson_struct.h"
 #include "proto_yson_struct.h"
+#include "traverse.h"
 
 #include <yt/yt/core/yson/token_writer.h>
 
@@ -316,15 +317,20 @@ void LoadFromSource(
     const std::function<NYPath::TYPath()>& pathGetter,
     std::optional<EUnrecognizedStrategy> unrecognizedStrategy)
 {
-    if (!parameter) {
-        parameter = New<T>();
-    }
+    try {
+        if (!parameter) {
+            parameter = New<T>();
+        }
 
-    if (unrecognizedStrategy) {
-        parameter->SetUnrecognizedStrategy(*unrecognizedStrategy);
-    }
+        if (unrecognizedStrategy) {
+            parameter->SetUnrecognizedStrategy(*unrecognizedStrategy);
+        }
 
-    parameter->Load(std::move(source), /*postprocess*/ false, /*setDefaults*/ false, pathGetter);
+        parameter->Load(std::move(source), /*postprocess*/ false, /*setDefaults*/ false, pathGetter);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error loading parameter %v", pathGetter())
+            << ex;
+    }
 }
 
 // YsonStructLite
@@ -1176,7 +1182,6 @@ std::any TYsonStructParameter<TValue>::FindOption(const std::type_info& typeInfo
 
 template <class TValue>
 void TYsonStructParameter<TValue>::WriteMemberSchema(
-    const TYsonStructBase* self,
     NYson::IYsonConsumer* consumer,
     const std::function<NYTree::INodePtr()>& defaultValueGetter,
     const TYsonStructWriteSchemaOptions& options) const
@@ -1195,7 +1200,7 @@ void TYsonStructParameter<TValue>::WriteMemberSchema(
                 }
             })
             .Item("type").Do([&] (auto fluent) {
-                WriteTypeSchema(self, fluent.GetConsumer(), options);
+                WriteTypeSchema(fluent.GetConsumer(), options);
             })
             .DoIf(IsRequired(), [] (auto fluent) {
                 fluent.Item("required").Value(true);
@@ -1205,11 +1210,16 @@ void TYsonStructParameter<TValue>::WriteMemberSchema(
 
 template <class TValue>
 void TYsonStructParameter<TValue>::WriteTypeSchema(
-    const TYsonStructBase* self,
     NYson::IYsonConsumer* consumer,
     const TYsonStructWriteSchemaOptions& options) const
 {
-    NPrivate::WriteSchema(FieldAccessor_->GetValue(self), consumer, options);
+    WriteSchema<TValue>(consumer, options);
+}
+
+template <class TValue>
+void TYsonStructParameter<TValue>::TraverseParameter(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path) const
+{
+    TraverseYsonStruct<TValue>(visitor, path);
 }
 
 template <class TValue>

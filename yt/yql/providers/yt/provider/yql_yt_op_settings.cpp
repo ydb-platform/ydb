@@ -974,17 +974,13 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             break;
         }
         case EYtSettingType::QLFilter: {
-            if (!EnsureTupleSize(*setting, 2, ctx)) {
+            if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
-            }
-            const auto qlFilter = setting->Child(1);
-            if (!qlFilter->IsCallable("YtQLFilter")) {
-                ctx.AddError(TIssue(ctx.GetPosition(qlFilter->Pos()), TStringBuilder()
-                    << "Expected YtQLFilter node, got: " << qlFilter->Content()));
             }
             break;
         }
-        case EYtSettingType::Actions: {
+        case EYtSettingType::Actions:
+        case EYtSettingType::Features: {
             ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), TStringBuilder()
                 << "Feature '" << nameNode->Content() << "' isn't supported."));
             return false;

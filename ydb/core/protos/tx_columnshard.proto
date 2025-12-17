@@ -147,6 +147,7 @@ enum ETransactionKind {
     TX_KIND_SHARING = 7;
     TX_KIND_COMMIT_WRITE_PRIMARY = 8;
     TX_KIND_COMMIT_WRITE_SECONDARY = 9;
+    TX_KIND_RESTORE = 10;
 }
 
 enum ETransactionFlag {
@@ -200,6 +201,10 @@ message TCommitTxBody {
 
 message TBackupTxBody {
     optional NKikimrSchemeOp.TBackupTask BackupTask = 1;
+}
+
+message TRestoreTxBody {
+    optional NKikimrSchemeOp.TRestoreTask RestoreTask = 1;
 }
 
 message TCommitWriteTxBody {

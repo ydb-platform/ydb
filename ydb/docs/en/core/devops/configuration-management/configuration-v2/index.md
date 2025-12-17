@@ -1,8 +1,8 @@
 # Configuration V2
 
-This section of the documentation describes the {{ ydb-short-name }} clusters configuration method called V2, which is the recommended way to configure {{ ydb-short-name }} clusters version v25.1 and above.
+This section of the documentation describes the {{ ydb-short-name }} clusters configuration method called V2, which is the experimental way to configure {{ ydb-short-name }} clusters version v25.1 and above.
 
-{% include [_](../_includes/configuration-version-note.md) %}
+{% include [_](../_includes/experimental_v2.md) %}
 
 Main materials:
 

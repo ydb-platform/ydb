@@ -369,6 +369,12 @@ void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event
     ++PartitionRepliesCount;
 }
 
+void TDistributedTransaction::SendPlanStepAcksAfterCompletion(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event)
+{
+    PlanStepSender = sender;
+    PlanStepEvent = std::move(event);
+}
+
 auto TDistributedTransaction::GetDecision() const -> EDecision
 {
     constexpr EDecision commit = NKikimrTx::TReadSetData::DECISION_COMMIT;
@@ -413,6 +419,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     auto command = request.AddCmdWrite();
     command->SetKey(GetKey());
     command->SetValue(value);
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
 NKikimrPQ::TTransaction TDistributedTransaction::Serialize() {

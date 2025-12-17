@@ -15,7 +15,8 @@ namespace NKikimr {
             CommitFresh,
             CommitLevel,
             CommitAdvanceLsn,
-            CommitReplSst
+            CommitReplSst,
+            CommitSyncSst,
         };
 
         EType Type;
@@ -30,6 +31,7 @@ namespace NKikimr {
                 case CommitLevel:      return "CommitLevel";
                 case CommitAdvanceLsn: return "CommitAdvanceLsn";
                 case CommitReplSst:    return "CommitReplSst";
+                case CommitSyncSst:    return "CommitSyncSst";
                 default:               return "<invalid>";
             }
         }
@@ -188,4 +190,3 @@ namespace NKikimr {
     };
 
 } // NKikimr
-

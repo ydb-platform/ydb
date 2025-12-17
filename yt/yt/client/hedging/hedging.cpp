@@ -167,7 +167,8 @@ public:
     UNSUPPORTED_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (const std::string&, const TYPath&, NYTree::EPermission, const TCheckPermissionOptions&));
     UNSUPPORTED_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (const std::optional<std::string>&, NYTree::EPermission, NYTree::INodePtr, const TCheckPermissionByAclOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, TransferAccountResources, (const std::string&, const std::string&, NYTree::INodePtr, const TTransferAccountResourcesOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, TransferPoolResources, (const TString&, const TString&, const TString&, NYTree::INodePtr, const TTransferPoolResourcesOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, TransferPoolResources, (const std::string&, const std::string&, const std::string&, NYTree::INodePtr, const TTransferPoolResourcesOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, TransferBundleResources, (const std::string&, const std::string&, NYTree::INodePtr, const TTransferBundleResourcesOptions&));
     UNSUPPORTED_METHOD(TFuture<NScheduler::TOperationId>, StartOperation, (NScheduler::EOperationType, const NYson::TYsonString&, const TStartOperationOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortOperation, (const NScheduler::TOperationIdOrAlias&, const TAbortOperationOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SuspendOperation, (const NScheduler::TOperationIdOrAlias&, const TSuspendOperationOptions&));
@@ -186,6 +187,8 @@ public:
     UNSUPPORTED_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (const NScheduler::TOperationIdOrAlias&, const TListOperationEventsOptions&));
     UNSUPPORTED_METHOD(TFuture<TListOperationsResult>, ListOperations, (const TListOperationsOptions&));
     UNSUPPORTED_METHOD(TFuture<TListJobsResult>, ListJobs, (const NScheduler::TOperationIdOrAlias&, const TListJobsOptions&));
+    UNSUPPORTED_METHOD(TFuture<std::vector<TJobTraceMeta>>, ListJobTraces, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TListJobTracesOptions&));
+    UNSUPPORTED_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (const std::string&, const NScheduler::TOperationIdOrAlias&, NYTree::EPermission, const TCheckOperationPermissionOptions&));
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetJob, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbandonJob, (NJobTrackerClient::TJobId, const TAbandonJobOptions&));
     UNSUPPORTED_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (NJobTrackerClient::TJobId, const std::optional<TString>&, const NYson::TYsonString&, const TPollJobShellOptions&));

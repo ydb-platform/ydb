@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/digest/old_crc/crc.h>
+#include <library/cpp/streams/bzip2/bzip2.h>
 
 #include <util/random/shuffle.h>
 
@@ -21,6 +22,7 @@
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <ydb/core/protos/cluster_state_info.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <google/protobuf/util/json_util.h>
 
@@ -63,8 +65,8 @@ public:
             , Sensitive(sensitive)
             {}
 
-            TString ToSelect() const {
-                if (Sensitive) {
+            TString ToSelect(bool sanitize) const {
+                if (sanitize && Sensitive) {
                     return TStringBuilder() << "Unicode::ReplaceLast(Unicode::SplitToList(`" << Name << "`, ' ')[0], '', '...') AS `" << Name << '`';
                 }
                 return TStringBuilder() << '`' << Name << '`';
@@ -75,7 +77,7 @@ public:
         TString TableName;
         bool Sensitive = false;
 
-        TString ToSelect() {
+        TString ToSelect(bool sanitize) {
             TStringBuilder sb;
             sb << "SELECT ";
             ui32 cnt = 0;
@@ -83,7 +85,7 @@ public:
                 if (cnt++) {
                     sb << ',';
                 }
-                sb << c.ToSelect();
+                sb << c.ToSelect(sanitize);
             }
             sb << " FROM `" << TableName << '`';
             return sb;
@@ -109,7 +111,7 @@ public:
         {{ "OwnerId", "PathId", "PartIdx", "DataSize", "RowCount", "IndexSize", "CPUCores", "TabletId", "Path", "NodeId", "StartTime", "AccessTime", "UpdateTime", "InFlightTxCount", "RowUpdates", "RowDeletes", "RowReads", "RangeReads", "RangeReadRows", "ImmediateTxCompleted", "CoordinatedTxCompleted", "TxRejectedByOverload", "TxRejectedByOutOfStorage", "LastTtlRunTime", "LastTtlRowsProcessed", "LastTtlRowsErased", "FollowerId", "LocksAcquired", "LocksWholeShard", "LocksBroken", "TxCompleteLag" }, ".sys/partition_stats" },
         {{ "oid", "relacl", "relallvisible", "relam", "relchecks", "relfilenode", "relforcerowsecurity", "relfrozenxid", "relhasindex", "relhasrules", "relhassubclass", "relhastriggers", "relispartition", "relispopulated", "relisshared", "relkind", "relminmxid", "relname", "relnamespace", "relnatts", "reloftype", "reloptions", "relowner", "relpages", "relpartbound", "relpersistence", "relreplident", "relrewrite", "relrowsecurity", "reltablespace", "reltoastrelid", "reltuples", "reltype" }, ".sys/pg_class" },
         {{ "hasindexes", "hasrules", "hastriggers", "rowsecurity", "schemaname", "tablename", "tableowner", "tablespace" }, ".sys/pg_tables", true},
-        {{ "IntervalEnd", "Rank", {"QueryText", true}, "Count", "SumCPUTime", "MinCPUTime", "MaxCPUTime", "SumDuration", "MinDuration", "MaxDuration", "MinReadRows", "MaxReadRows", "SumReadRows", "MinReadBytes", "MaxReadBytes", "SumReadBytes", "MinUpdateRows", "MaxUpdateRows", "SumUpdateRows", "MinUpdateBytes", "MaxUpdateBytes", "SumUpdateBytes", "MinDeleteRows", "MaxDeleteRows", "SumDeleteRows", "MinRequestUnits", "MaxRequestUnits", "SumRequestUnits" }, ".sys/query_metrics_one_minute" },
+        {{ "IntervalEnd", "Rank", {"QueryText", true}, "Count", "SumCPUTime", "MinCPUTime", "MaxCPUTime", "SumDuration", "MinDuration", "MaxDuration", "MinReadRows", "MaxReadRows", "SumReadRows", "MinReadBytes", "MaxReadBytes", "SumReadBytes", "MinUpdateRows", "MaxUpdateRows", "SumUpdateRows", "MinUpdateBytes", "MaxUpdateBytes", "SumUpdateBytes", "MinDeleteRows", "MaxDeleteRows", "SumDeleteRows", "MinRequestUnits", "MaxRequestUnits", "SumRequestUnits", "LocksBrokenAsBreaker", "LocksBrokenAsVictim" }, ".sys/query_metrics_one_minute" },
         {{ "SessionId", "NodeId", "State", {"Query", true}, "QueryCount", "ClientAddress", "ClientPID", "ClientUserAgent", "ClientSdkBuildInfo", "ApplicationName", "SessionStartAt", "QueryStartAt", "StateChangeAt", "UserSID" }, ".sys/query_sessions" },
         {{ "Name", "Rank", "MemberName", "ResourcePool" }, ".sys/resource_pool_classifiers" },
         {{ "Name", "ConcurrentQueryLimit", "QueueSize", "DatabaseLoadCpuThreshold", "ResourceWeight", "TotalCpuLimitPercentPerNode", "QueryCpuLimitPercentPerNode", "QueryMemoryLimitPercentPerNode" }, ".sys/resource_pools" },
@@ -135,6 +137,8 @@ public:
     TInstant Started;
     TDuration Duration;
     TDuration Period;
+    bool Sanitize;
+    bool CountersOnly;
 
     void SendRequest(ui32 i) {
         ui32 nodeId = Nodes[i].NodeId;
@@ -148,16 +152,19 @@ public:
         request(TEvTabletStateRequest);
         request(TEvBSGroupStateRequest);
         request(TEvSystemStateRequest);
-        request(TEvBridgeInfoRequest);
         request(TEvNodeStateRequest);
 #undef request
     }
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        RequestSession();
-        RequestHealthCheck();
-        RequestBaseConfig();
         Nodes = ev->Get()->Nodes;
+        CountersOnly = GetProtoRequest()->counters_only();
+        if (!CountersOnly) {
+            RequestSession();
+            RequestHealthCheck();
+            RequestBaseConfig();
+            RequestStorageConfig();
+        }
         NodeReceived.resize(Nodes.size());
         NodeRequested.resize(Nodes.size());
         for (ui32 i : xrange(Nodes.size())) {
@@ -167,7 +174,9 @@ public:
             node->SetHost(ni.Host);
             node->SetPort(ni.Port);
             node->SetLocation(ni.Location.ToString());
-            SendRequest(i);
+            if (!CountersOnly) {
+                SendRequest(i);
+            }
         }
         Counters.resize(Nodes.size());
         RequestCounters();
@@ -210,7 +219,7 @@ public:
         ActorIdToProto(SelfId(), request->Record.MutableRequestActorId());
         request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-        request->Record.MutableRequest()->SetQuery(Queries[QueryIdx].ToSelect());
+        request->Record.MutableRequest()->SetQuery(Queries[QueryIdx].ToSelect(Sanitize));
         request->Record.MutableRequest()->SetKeepSession(true);
         request->Record.MutableRequest()->MutableTxControl()->Mutablebegin_tx()->Mutablestale_read_only();
         ++Requested;
@@ -227,11 +236,11 @@ public:
         auto record = ev->Get()->Record;
         auto* q = State.AddQueries();
         q->SetTableName(Queries[QueryIdx].TableName);
-        q->SetQuery(Queries[QueryIdx].ToSelect());
+        q->SetQuery(Queries[QueryIdx].ToSelect(Sanitize));
         q->MutableResponse()->CopyFrom(record.GetResponse());
         ++Received;
         ++QueryIdx;
-        while (QueryIdx < Queries.size() && Queries[QueryIdx].Sensitive) {
+        while (QueryIdx < Queries.size() && Queries[QueryIdx].Sensitive && Sanitize) {
             QueryIdx++;
         }
         CloseSession();
@@ -243,8 +252,20 @@ public:
         Requested++;
     }
 
+    void RequestStorageConfig() {
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NKikimr::TEvNodeWardenQueryStorageConfig(/*subscribe=*/false));
+        Requested++;
+    }
+
     void Handle(NKikimr::NStorage::TEvNodeWardenBaseConfig::TPtr ev) {
         State.MutableBaseConfig()->CopyFrom(ev->Get()->BaseConfig);
+        ++Received;
+        CheckReply();
+    }
+
+    void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr ev) {
+        State.MutableBridgeClusterState()->CopyFrom(ev->Get()->Config->GetClusterState());
+        State.MutableBridgeClusterStateDetails()->CopyFrom(ev->Get()->Config->GetClusterStateDetails());
         ++Received;
         CheckReply();
     }
@@ -272,7 +293,6 @@ public:
     HandleWhiteboard(TEvTabletStateResponse, TabletInfo)
     HandleWhiteboard(TEvBSGroupStateResponse, BSGroupInfo)
     HandleWhiteboard(TEvSystemStateResponse, SystemInfo)
-    HandleWhiteboard(TEvBridgeInfoResponse, BridgeInfo)
     HandleWhiteboard(TEvNodeStateResponse, NodeStateInfo)
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
@@ -314,7 +334,7 @@ public:
         const TActorId nameserviceId = GetNameserviceActorId();
         Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         TBase::Become(&TThis::StateRequestedBrowse);
-
+        Sanitize = !GetProtoRequest()->no_sanitize();
         Duration = TDuration::Seconds(GetProtoRequest()->duration_seconds() ? GetProtoRequest()->duration_seconds() : defaultDurationSec);
         Started = TInstant::Now();
         Schedule(Duration, new TEvents::TEvWakeup());
@@ -359,16 +379,36 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
-            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvNodeStateResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle)
             hFunc(NKikimr::NStorage::TEvNodeWardenBaseConfig, Handle);
+            hFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
             hFunc(NKikimr::NCountersInfo::TEvCountersInfoResponse, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, Wakeup);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
         }
+    }
+
+    TString Pack(const TString& data) {
+        TString dataPack;
+        TStringOutput output(dataPack);
+        TBZipCompress compress(&output);
+        compress.Write(data);
+        compress.Finish();
+        return dataPack;
+    }
+
+    void AddBlock(Ydb::Monitoring::ClusterStateResult& result, const TString& name, const auto& obj) {
+        google::protobuf::util::JsonPrintOptions jsonOpts;
+        jsonOpts.add_whitespace = true;
+        TString data;
+        google::protobuf::util::MessageToJsonString(obj, &data, jsonOpts);
+        auto* block = result.Addblocks();
+        block->Setname(name);
+        block->Setcontent(Pack(data));
+        block->Mutabletimestamp()->set_seconds(TInstant::Now().Seconds());
     }
 
     void ReplyAndPassAway() {
@@ -377,21 +417,26 @@ public:
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);
         operation.set_status(Ydb::StatusIds::SUCCESS);
-        google::protobuf::util::JsonPrintOptions jsonOpts;
-        jsonOpts.add_whitespace = true;
-        TString data;
-        google::protobuf::util::MessageToJsonString(State, &data, jsonOpts);
-        Ydb::Monitoring::ClusterStateResult result;
-        auto* block = result.Addblocks();
-        block->Setname("cluster_state.json");
-        block->Setcontent(data);
-        block->Mutabletimestamp()->set_seconds(TInstant::Now().Seconds());
 
+        Ydb::Monitoring::ClusterStateResult result;
+
+        if (!CountersOnly) {
+            AddBlock(result, "cluster_state", State);
+            NKikimrClusterStateInfoProto::TClusterStateInfoParameters params;
+            params.SetStartedAt(Started.ToStringUpToSeconds());
+            params.SetDurationSeconds(Duration.Seconds());
+            params.SetPeriodSeconds(Period.Seconds());
+            AddBlock(result, "cluster_state_fetch_parameters", params);
+        }
         for (ui32 node : xrange(Counters.size())) {
             for (ui32 i : xrange(Counters[node].size())) {
                 auto* counterBlock = result.Addblocks();
                 TStringBuilder sb;
-                sb << "node_" << node << "_counters_" << i << ".json";
+                auto nodeId = Nodes[node].NodeId;
+                sb << "node_" << nodeId << "_counters";
+                if (Counters[node].size() > 1) {
+                    sb << "_" << i;
+                }
                 counterBlock->Setname(sb);
                 counterBlock->Setcontent(Counters[node][i].first);
                 counterBlock->Mutabletimestamp()->set_seconds(Counters[node][i].second.Seconds());

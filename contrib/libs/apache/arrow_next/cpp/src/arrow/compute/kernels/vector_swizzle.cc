@@ -15,12 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.#include "arrow/compute/api_vector.h"
 
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/function.h"
-#include "arrow/compute/kernels/codegen_internal.h"
-#include "arrow/compute/registry.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20::compute::internal {
 

@@ -1,0 +1,3 @@
+pragma config.flags("NamedArgsIgnoreCase");
+select Yson::Parse('[', Yson::Options(false as strict));
+

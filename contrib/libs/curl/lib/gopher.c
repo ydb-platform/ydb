@@ -39,7 +39,7 @@
 #include "vtls/vtls.h"
 #include "url.h"
 #include "escape.h"
-#include "curlx/warnless.h"
+#include "warnless.h"
 #include "curl_printf.h"
 #include "curl_memory.h"
 /* The last #include file should be: */
@@ -62,7 +62,7 @@ static CURLcode gopher_connecting(struct Curl_easy *data, bool *done);
  */
 
 const struct Curl_handler Curl_handler_gopher = {
-  "gopher",                             /* scheme */
+  "GOPHER",                             /* scheme */
   ZERO_NULL,                            /* setup_connection */
   gopher_do,                            /* do_it */
   ZERO_NULL,                            /* done */
@@ -70,16 +70,14 @@ const struct Curl_handler Curl_handler_gopher = {
   ZERO_NULL,                            /* connect_it */
   ZERO_NULL,                            /* connecting */
   ZERO_NULL,                            /* doing */
-  ZERO_NULL,                            /* proto_pollset */
-  ZERO_NULL,                            /* doing_pollset */
-  ZERO_NULL,                            /* domore_pollset */
-  ZERO_NULL,                            /* perform_pollset */
+  ZERO_NULL,                            /* proto_getsock */
+  ZERO_NULL,                            /* doing_getsock */
+  ZERO_NULL,                            /* domore_getsock */
+  ZERO_NULL,                            /* perform_getsock */
   ZERO_NULL,                            /* disconnect */
-  ZERO_NULL,                            /* write_resp */
-  ZERO_NULL,                            /* write_resp_hd */
+  ZERO_NULL,                            /* readwrite */
   ZERO_NULL,                            /* connection_check */
   ZERO_NULL,                            /* attach connection */
-  ZERO_NULL,                            /* follow */
   PORT_GOPHER,                          /* defport */
   CURLPROTO_GOPHER,                     /* protocol */
   CURLPROTO_GOPHER,                     /* family */
@@ -88,7 +86,7 @@ const struct Curl_handler Curl_handler_gopher = {
 
 #ifdef USE_SSL
 const struct Curl_handler Curl_handler_gophers = {
-  "gophers",                            /* scheme */
+  "GOPHERS",                            /* scheme */
   ZERO_NULL,                            /* setup_connection */
   gopher_do,                            /* do_it */
   ZERO_NULL,                            /* done */
@@ -96,16 +94,14 @@ const struct Curl_handler Curl_handler_gophers = {
   gopher_connect,                       /* connect_it */
   gopher_connecting,                    /* connecting */
   ZERO_NULL,                            /* doing */
-  ZERO_NULL,                            /* proto_pollset */
-  ZERO_NULL,                            /* doing_pollset */
-  ZERO_NULL,                            /* domore_pollset */
-  ZERO_NULL,                            /* perform_pollset */
+  ZERO_NULL,                            /* proto_getsock */
+  ZERO_NULL,                            /* doing_getsock */
+  ZERO_NULL,                            /* domore_getsock */
+  ZERO_NULL,                            /* perform_getsock */
   ZERO_NULL,                            /* disconnect */
-  ZERO_NULL,                            /* write_resp */
-  ZERO_NULL,                            /* write_resp_hd */
+  ZERO_NULL,                            /* readwrite */
   ZERO_NULL,                            /* connection_check */
   ZERO_NULL,                            /* attach connection */
-  ZERO_NULL,                            /* follow */
   PORT_GOPHER,                          /* defport */
   CURLPROTO_GOPHERS,                    /* protocol */
   CURLPROTO_GOPHER,                     /* family */
@@ -143,8 +139,8 @@ static CURLcode gopher_do(struct Curl_easy *data, bool *done)
   char *sel = NULL;
   char *sel_org = NULL;
   timediff_t timeout_ms;
-  ssize_t k;
-  size_t amount, len;
+  ssize_t amount, k;
+  size_t len;
   int what;
 
   *done = TRUE; /* unconditionally */
@@ -162,7 +158,7 @@ static CURLcode gopher_do(struct Curl_easy *data, bool *done)
 
   /* Create selector. Degenerate cases: / and /1 => convert to "" */
   if(strlen(gopherpath) <= 2) {
-    sel = (char *)CURL_UNCONST("");
+    sel = (char *)"";
     len = strlen(sel);
     free(gopherpath);
   }
@@ -189,7 +185,7 @@ static CURLcode gopher_do(struct Curl_easy *data, bool *done)
     if(strlen(sel) < 1)
       break;
 
-    result = Curl_xfer_send(data, sel, k, FALSE, &amount);
+    result = Curl_nwrite(data, FIRSTSOCKET, sel, k, &amount);
     if(!result) { /* Which may not have written it all! */
       result = Curl_client_write(data, CLIENTWRITE_HEADER, sel, amount);
       if(result)
@@ -211,9 +207,9 @@ static CURLcode gopher_do(struct Curl_easy *data, bool *done)
     if(!timeout_ms)
       timeout_ms = TIMEDIFF_T_MAX;
 
-    /* Do not busyloop. The entire loop thing is a work-around as it causes a
+    /* Don't busyloop. The entire loop thing is a work-around as it causes a
        BLOCKING behavior which is a NO-NO. This function should rather be
-       split up in a do and a doing piece where the pieces that are not
+       split up in a do and a doing piece where the pieces that aren't
        possible to send now will be sent in the doing function repeatedly
        until the entire request is sent.
     */
@@ -231,16 +227,16 @@ static CURLcode gopher_do(struct Curl_easy *data, bool *done)
   free(sel_org);
 
   if(!result)
-    result = Curl_xfer_send(data, "\r\n", 2, FALSE, &amount);
+    result = Curl_nwrite(data, FIRSTSOCKET, "\r\n", 2, &amount);
   if(result) {
     failf(data, "Failed sending Gopher request");
     return result;
   }
-  result = Curl_client_write(data, CLIENTWRITE_HEADER, "\r\n", 2);
+  result = Curl_client_write(data, CLIENTWRITE_HEADER, (char *)"\r\n", 2);
   if(result)
     return result;
 
-  Curl_xfer_setup_recv(data, FIRSTSOCKET, -1);
+  Curl_setup_transfer(data, FIRSTSOCKET, -1, FALSE, -1);
   return CURLE_OK;
 }
 #endif /* CURL_DISABLE_GOPHER */

@@ -169,13 +169,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "FlattenMembers") {
-                static ui32 count1 = 0;
-                if (++count1 == 1) {
+                static ui32 Count1 = 0;
+                if (++Count1 == 1) {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
                 }
             } else if (word == "AsStruct") {
-                static ui32 count2 = 0;
-                if (++count2 == 2) {
+                static ui32 Count2 = 0;
+                if (++Count2 == 2) {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("megahelpful_len"));
                 }
             }
@@ -192,13 +192,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "FlattenMembers") {
-                static ui32 count1 = 0;
-                if (++count1 == 1) {
+                static ui32 Count1 = 0;
+                if (++Count1 == 1) {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("interested_table."));
                 }
             } else if (word == "AsStruct") {
-                static ui32 count2 = 0;
-                if (++count2 == 2) {
+                static ui32 Count2 = 0;
+                if (++Count2 == 2) {
                     UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("megahelpful_len"));
                 }
             }

@@ -137,4 +137,31 @@ NImport::EImportProgress TProtoAccessor::FromProto(Ydb::Import::ImportProgress::
     }
 }
 
+Ydb::Import::ImportFromS3Settings::IndexFillingMode TProtoAccessor::GetProto(NImport::EIndexFillingMode value) {
+    switch (value) {
+    case NImport::EIndexFillingMode::Build:
+        return Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD;
+    case NImport::EIndexFillingMode::Import:
+        return Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT;
+    case NImport::EIndexFillingMode::Auto:
+        return Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO;
+    default:
+        return Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_UNSPECIFIED;
+    }
+}
+
+NImport::EIndexFillingMode TProtoAccessor::FromProto(Ydb::Import::ImportFromS3Settings::IndexFillingMode value) {
+    switch (value) {
+    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_UNSPECIFIED:
+    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD:
+        return NImport::EIndexFillingMode::Build;
+    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
+        return NImport::EIndexFillingMode::Import;
+    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+        return NImport::EIndexFillingMode::Auto;
+    default:
+        return NImport::EIndexFillingMode::Unknown;
+    }
+}
+
 } // namespace NYdb

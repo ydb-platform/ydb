@@ -27,7 +27,9 @@ namespace NYdb::inline Dev {
 namespace NYdb::inline Dev::NQuery {
 
 struct TCreateSessionSettings : public TSimpleRequestSettings<TCreateSessionSettings> {
-    TCreateSessionSettings();
+    TCreateSessionSettings() {
+        ClientTimeout(TDuration::Seconds(5));
+    }
 };
 
 using TAsyncCreateSessionResult = NThreading::TFuture<TCreateSessionResult>;
@@ -213,6 +215,7 @@ public:
         return TTxControl(settings);
     }
 
+    // Do not explicitly set the transaction mode. YDB determines the behavior automatically
     static TTxControl NoTx() {
         return TTxControl();
     }

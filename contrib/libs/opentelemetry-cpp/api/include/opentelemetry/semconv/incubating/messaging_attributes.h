@@ -164,8 +164,8 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kMessagingKafkaConsumerGro
   Deprecated, use @code messaging.destination.partition.id @endcode instead.
 
   @deprecated
-  {"note": "Replaced by @code messaging.destination.partition.id @endcode.", "reason": "renamed",
-  "renamed_to": "messaging.destination.partition.id"}
+  {"note": "Record string representation of the partition id in @code
+  messaging.destination.partition.id @endcode attribute.", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMessagingKafkaDestinationPartition =
     "messaging.kafka.destination.partition";

@@ -30,6 +30,13 @@ struct TReadResult : public TResult {
     std::deque<ui64> Offsets;
 };
 
+std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
+    const TString& consumerName,
+    ui32 partitionId,
+    ui64 startOffset,
+    std::optional<ui64> count = std::nullopt
+);
+
 std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
     const NActors::TActorId& selfId,
     const TString& consumerName,

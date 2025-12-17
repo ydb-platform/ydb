@@ -23,6 +23,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 
@@ -77,7 +79,7 @@ LWTRACE_USING(DQ_PQ_PROVIDER);
 } // namespace
 
 struct TRowDispatcherReadActorMetrics {
-    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams)
+    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
         if (Counters) {
@@ -85,11 +87,15 @@ struct TRowDispatcherReadActorMetrics {
         } else {
             SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         }
-        for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
-            SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+
+        auto task = SubGroup;
+        if (enableStreamingQueriesCounters) {
+            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
+            auto source = SubGroup->GetSubgroup("tx_id", TxId);
+            task = source->GetSubgroup("task_id", ToString(taskId));
         }
-        auto source = SubGroup->GetSubgroup("tx_id", TxId);
-        auto task = source->GetSubgroup("task_id", ToString(taskId));
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
         ReInit = task->GetCounter("ReInit", true);
@@ -318,6 +324,7 @@ private:
     // Set on Parent
     ui64 NextGeneration = 0;
     ui64 NextEventQueueId = 0;
+    bool EnableStreamingQueriesCounters = false;
 
     TMap<NActors::TActorId, TSet<ui32>> LastUsedPartitionDistribution;
     TMap<NActors::TActorId, TSet<ui32>> LastReceivedPartitionDistribution;
@@ -341,6 +348,7 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
+        bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent = nullptr,
         const TString& cluster = {});
 
@@ -527,6 +535,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
+        bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent,
         const TString& cluster)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
@@ -535,13 +544,14 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Cluster(cluster)
         , Token(token)
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
-        , Metrics(txId, taskId, counters, SourceParams)
+        , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
         , PqGateway(pqGateway)
         , HolderFactory(holderFactory)
         , TypeEnv(typeEnv)
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , MaxBufferSize(bufferSize)
+        , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {
     SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
         << ", partitions: " << JoinSeq(',', GetPartitionsToRead()) << ", skip json errors: " << SourceParams.GetSkipJsonErrors());
@@ -1536,6 +1546,7 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
         {},
         MaxBufferSize,
         PqGateway,
+        EnableStreamingQueriesCounters,
         this,
         TString(Clusters[clusterIndex].Info.Name));
     Clusters[clusterIndex].Child = actor;
@@ -1576,7 +1587,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize,
-    const IPqGateway::TPtr& pqGateway)
+    const IPqGateway::TPtr& pqGateway,
+    bool enableStreamingQueriesCounters)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1598,7 +1610,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         token,
         counters,
         bufferSize,
-        pqGateway);
+        pqGateway,
+        enableStreamingQueriesCounters);
 
     return {actor, actor};
 }

@@ -4708,7 +4708,7 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
     if (type2.GetKind() == ETypeAnnotationKind::Optional && type1.GetKind() != ETypeAnnotationKind::Optional) {
         auto type1Opt = ctx.MakeType<TOptionalExprType>(&type1);
         auto prev = node1;
-        node1 = ctx.NewCallable(node1->Pos(), "Just", { std::move(node1) });
+        node1 = ctx.NewCallable(node1->Pos(), "Just", { node1 });
 
         const TTypeAnnotationNode* commonItemType;
         if (SilentInferCommonTypeInternal(node1, *type1Opt, node2, type2, ctx, commonItemType, flags, typeCtx)
@@ -4723,7 +4723,7 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
     if (type1.GetKind() == ETypeAnnotationKind::Optional && type2.GetKind() != ETypeAnnotationKind::Optional) {
         auto type2Opt = ctx.MakeType<TOptionalExprType>(&type2);
         auto prev = node2;
-        node2 = ctx.NewCallable(node2->Pos(), "Just", { std::move(node2) });
+        node2 = ctx.NewCallable(node2->Pos(), "Just", { node2 });
 
         const TTypeAnnotationNode* commonItemType;
         if (SilentInferCommonTypeInternal(node1, type1, node2, *type2Opt, ctx, commonItemType, flags, typeCtx)
@@ -4743,7 +4743,7 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
         } else {
             auto type2Opt = ctx.MakeType<TOptionalExprType>(&type2);
             node1 = ctx.NewCallable(node1->Pos(), "Nothing", { ExpandType(node2->Pos(), *type2Opt, ctx) });
-            node2 = ctx.NewCallable(node2->Pos(), "Just", { std::move(node2) });
+            node2 = ctx.NewCallable(node2->Pos(), "Just", { node2 });
             commonType = type2Opt;
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -4758,7 +4758,7 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
         else {
             auto type1Opt = ctx.MakeType<TOptionalExprType>(&type1);
             node2 = ctx.NewCallable(node2->Pos(), "Nothing", { ExpandType(node1->Pos(), *type1Opt, ctx) });
-            node1 = ctx.NewCallable(node1->Pos(), "Just", { std::move(node1) });
+            node1 = ctx.NewCallable(node1->Pos(), "Just", { node1 });
             commonType = type1Opt;
             return IGraphTransformer::TStatus::Repeat;
         }

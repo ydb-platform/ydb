@@ -1915,6 +1915,20 @@
             "uri": "https://{canondata_backend}/1946324/b1200e4ee6378d25b0736975348a8b807be45f4d/resource.tar.gz#test.test_select-values-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-correlated_projection_trivial-default.txt-Debug]": [
+        {
+            "checksum": "c208bb2fea57104a74efa6a98f757297",
+            "size": 1749,
+            "uri": "https://{canondata_backend}/1936273/9e98947f2d27dfd7f20b3f1980b42116b575e145/resource.tar.gz#test.test_select_yql-correlated_projection_trivial-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-correlated_projection_trivial-default.txt-Results]": [
+        {
+            "checksum": "254f27efe62f676831a0e5dee2911967",
+            "size": 1145,
+            "uri": "https://{canondata_backend}/1936273/9e98947f2d27dfd7f20b3f1980b42116b575e145/resource.tar.gz#test.test_select_yql-correlated_projection_trivial-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-from_values_limit_offset-default.txt-Debug]": [
         {
             "checksum": "a69bb53dbc3ba38d86d3bba36a5762c6",
@@ -1927,6 +1941,20 @@
             "checksum": "8b45e46038f06c7c0ebcb4903e751fdb",
             "size": 835,
             "uri": "https://{canondata_backend}/1903885/12f6cc565cf0090627f6b1767c82793293ed3703/resource.tar.gz#test.test_select_yql-from_values_limit_offset-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-group_by_a_max_b-default.txt-Debug]": [
+        {
+            "checksum": "84ed2170675e6733d086808eab9845bc",
+            "size": 975,
+            "uri": "https://{canondata_backend}/937458/2e118f1a0c737559cd3d388bd81a3a07953be03c/resource.tar.gz#test.test_select_yql-group_by_a_max_b-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-group_by_a_max_b-default.txt-Results]": [
+        {
+            "checksum": "02f23d8dd49d494d0bd0963001b6cf45",
+            "size": 1189,
+            "uri": "https://{canondata_backend}/937458/2e118f1a0c737559cd3d388bd81a3a07953be03c/resource.tar.gz#test.test_select_yql-group_by_a_max_b-default.txt-Results_/results.txt"
         }
     ],
     "test.test[seq_mode-simple2-default.txt-Debug]": [

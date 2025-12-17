@@ -47,9 +47,9 @@ private:
     struct TTxConfigure;
     struct TTxSchemeShardStats;
     struct TTxAnalyze;
-    struct TTxAnalyzeTableRequest;
-    struct TTxAnalyzeTableResponse;
-    struct TTxAnalyzeTableDeliveryProblem;
+    struct TTxAnalyzeShardRequest;
+    struct TTxAnalyzeShardResponse;
+    struct TTxAnalyzeShardDeliveryProblem;
     struct TTxAnalyzeDeadline;
     struct TTxNavigate;
     struct TTxResolve;
@@ -121,7 +121,7 @@ private:
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
     void Handle(TEvPrivate::TEvFastPropagateCheck::TPtr& ev);
     void Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev);
-    void Handle(TEvStatistics::TEvAnalyzeTableResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeShardResponse::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessUrgent::TPtr& ev);
     void Handle(TEvPrivate::TEvPropagateTimeout::TPtr& ev);
 
@@ -140,6 +140,7 @@ private:
     void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
+    void Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleTraversal::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev);
     void Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev);
@@ -165,13 +166,14 @@ private:
     void PersistGlobalTraversalRound(NIceDb::TNiceDb& db);
 
     void ResetTraversalState(NIceDb::TNiceDb& db);
-    void ScheduleNextAnalyze(NIceDb::TNiceDb& db);
-    void ScheduleNextTraversal(NIceDb::TNiceDb& db);
+    void ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActorContext& ctx);
+    void ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db);
     void StartTraversal(NIceDb::TNiceDb& db);
-    void FinishTraversal(NIceDb::TNiceDb& db);
+    void FinishTraversal(NIceDb::TNiceDb& db, bool finishAllForceTraversalTables);
 
     void ReportBaseStatisticsCounters();
 
+    std::optional<bool> IsKnownTable(const TPathId& pathId) const;
     std::optional<bool> IsColumnTable(const TPathId& pathId) const;
 
     TString LastTraversalWasForceString() const;
@@ -194,7 +196,7 @@ private:
             hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             hFunc(TEvPrivate::TEvFastPropagateCheck, Handle);
             hFunc(TEvStatistics::TEvPropagateStatisticsResponse, Handle);
-            hFunc(TEvStatistics::TEvAnalyzeTableResponse, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeShardResponse, Handle);
             hFunc(TEvPrivate::TEvProcessUrgent, Handle);
             hFunc(TEvPrivate::TEvPropagateTimeout, Handle);
 
@@ -206,6 +208,7 @@ private:
             hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
             hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
             hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
+            hFunc(TEvStatistics::TEvFinishTraversal, Handle);
             hFunc(TEvPrivate::TEvScheduleTraversal, Handle);
             hFunc(TEvStatistics::TEvAnalyzeStatus, Handle);
             hFunc(TEvHive::TEvResponseTabletDistribution, Handle);
@@ -238,6 +241,7 @@ private:
 
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;
+    bool EnableBackgroundColumnStatsCollection = false;
 
     static constexpr size_t StatsOptimizeFirstNodesCount = 3; // optimize first nodes - fast propagation
     static constexpr size_t StatsSizeLimitBytes = 2 << 20; // limit for stats size in one message
@@ -280,6 +284,7 @@ private:
 
     bool IsStatisticsTableCreated = false;
     bool PendingSaveStatistics = false;
+    std::vector<TStatisticsItem> StatisticsToSave;
     bool PendingDeleteStatistics = false;
 
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -341,14 +346,6 @@ private:
     static constexpr TDuration AnalyzeDeadline = TDuration::Days(1);
     static constexpr TDuration AnalyzeDeadlinePeriod = TDuration::Seconds(1);
 
-    enum ENavigateType {
-        Analyze,
-        Traversal
-    };
-    ENavigateType NavigateType = Analyze;
-    TString GetNavigateTypeString() const;
-
-    TString NavigateAnalyzeOperationId;
     TString NavigateDatabase;
     TPathId NavigatePathId;
 
@@ -390,7 +387,7 @@ private: // stored in local db
 
     struct TForceTraversalTable {
         TPathId PathId;
-        TString ColumnTags;
+        TVector<ui32> ColumnTags;
         std::vector<TAnalyzedShard> AnalyzedShards;
 
         enum class EStatus : ui8 {

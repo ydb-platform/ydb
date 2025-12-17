@@ -323,11 +323,19 @@
             ]
         },
         {
-            "Name": "TYtWriteTable",
+            "Name": "TYtIsolatedOpBase",
             "Base": "TYtOpBase",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
+            "Children": [
+                {"Index": 2, "Name": "Table", "Type": "TYtTable"}
+            ]
+        },
+        {
+            "Name": "TYtWriteTable",
+            "Base": "TYtIsolatedOpBase",
             "Match": {"Type": "Callable", "Name": "YtWriteTable!"},
             "Children": [
-                {"Index": 2, "Name": "Table", "Type": "TYtTable"},
                 {"Index": 3, "Name": "Content", "Type": "TExprBase"},
                 {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
@@ -386,18 +394,14 @@
             ]
         },
         {
-            "Name": "TYtIsolatedOpBase",
-            "Base": "TYtOpBase",
-            "Match": {"Type": "CallableBase"},
-            "Builder": {"Generate": "None"},
-            "Children": [
-                {"Index": 2, "Name": "Table", "Type": "TYtTable"}
-            ]
-        },
-        {
             "Name": "TYtDropTable",
             "Base": "TYtIsolatedOpBase",
             "Match": {"Type": "Callable", "Name": "YtDropTable!"}
+        },
+        {
+            "Name": "TYtDropView",
+            "Base": "TYtIsolatedOpBase",
+            "Match": {"Type": "Callable", "Name": "YtDropView!"}
         },
         {
             "Name": "TYtCreateTable",
@@ -406,6 +410,16 @@
             "Children": [
                 {"Index": 3, "Name": "Columns", "Type": "TExprList"},
                 {"Index": 4, "Name": "OrderBy", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TYtCreateView",
+            "Base": "TYtIsolatedOpBase",
+            "Match": {"Type": "Callable", "Name": "YtCreateView!"},
+            "Children": [
+                {"Index": 3, "Name": "Original", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Compiled", "Type": "TExprBase"},
                 {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },

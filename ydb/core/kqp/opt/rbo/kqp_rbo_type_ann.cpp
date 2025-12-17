@@ -11,7 +11,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct"};
+THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct", "avg"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -59,8 +59,12 @@ TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
 
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
-    for (auto t : structItemTypes) {
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>("_alias_" + read->Alias + "." + t->GetName(), t->GetItemType()));
+    for (const auto* t : structItemTypes) {
+        TString columnName = TString(t->GetName());
+        auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
+        auto columnIndex = std::distance(read->Columns.begin(), it);
+        auto fullName = read->OutputIUs[columnIndex].GetFullName();
+        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, t->GetItemType()));
     }
 
     auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
@@ -78,13 +82,13 @@ TStatus ComputeTypes(std::shared_ptr<TOpEmptySource> emptySource, TRBOContext & 
     return TStatus::Ok;
 }
 
-const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<TInfoUnit> scalarContextIUs, TRBOContext & ctx, TPlanProps& props) {
+const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<TInfoUnit> scalarContextIUs, TRBOContext& ctx, TPlanProps& props) {
     TVector<const TItemExprType*> structItemTypes;
-    for (auto t : itemType->GetItems()) {
-        structItemTypes.push_back(t);
+    for (const auto *item : itemType->GetItems()) {
+        structItemTypes.push_back(item);
     }
 
-    for (auto iu : scalarContextIUs) {
+    for (const auto& iu : scalarContextIUs) {
         auto subplan = props.ScalarSubplans.PlanMap.at(iu);
         auto subplanType = subplan->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         auto scalarExprType = subplanType->GetItems()[0];
@@ -96,7 +100,7 @@ const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<T
     return ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes);
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext & ctx, TPlanProps& props) {
+TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanProps& props) {
     const TTypeAnnotationNode* inputType = filter->GetInput()->Type;
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, inputType: " << *inputType;
 
@@ -105,8 +109,8 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext & ctx, TPlan
 
     auto filterIUs = filter->GetFilterIUs(props);
     TVector<TInfoUnit> scalarContextIUs;
-    for (auto iu : filterIUs ) {
-        if (iu.ScalarContext) {
+    for (const auto& iu : filterIUs) {
+        if (iu.IsScalarContext()) {
             scalarContextIUs.push_back(iu);
         }
     }
@@ -171,8 +175,8 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
         const TTypeAnnotationNode* inputType = map->GetInput()->Type;
         auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
-        for (auto t : structType->GetItems()) {
-            resStructItemTypes.push_back(t);
+        for (const auto* item : structType->GetItems()) {
+            resStructItemTypes.push_back(item);
         }
     }
 
@@ -182,13 +186,17 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
             auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t){
                 return from.GetFullName() == t->GetName();
             });
+            if (typeIt==typeItems.end()) {
+                YQL_CLOG(TRACE, CoreDq) << "Did not find column: " 
+                << from.GetFullName() << " in " << *inputType << " while processing map " << map->ToString(ctx.ExprCtx);
+            }
             Y_ENSURE(typeIt!=typeItems.end());
 
             auto renameType = ctx.ExprCtx.MakeType<TItemExprType>(mapEl.first.GetFullName(), (*typeIt)->GetItemType());
             resStructItemTypes.push_back(renameType);
         }
         else {
-            auto & lambda = std::get<TExprNode::TPtr>(mapEl.second);
+            auto& lambda = std::get<TExprNode::TPtr>(mapEl.second);
             if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -229,12 +237,10 @@ TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
 TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    THashMap<TString, std::pair<TString, TString>> aggTraitsMap;
+    THashMap<TString, TString> aggTraitsMap;
     for (const auto& aggTraits : aggregate->AggregationTraitsList) {
-        const auto originalColName = TString(aggTraits.OriginalColName.GetFullName());
-        const auto resultColName = TString(aggTraits.ResultColName.GetFullName());
-        const auto funcName = TString(aggTraits.AggFunction);
-        aggTraitsMap[originalColName] = {resultColName, funcName};
+        const auto originalColName = aggTraits.OriginalColName.GetFullName();
+        aggTraitsMap[originalColName] = aggTraits.AggFunction;
     }
 
     THashSet<TString> keyColumns;
@@ -247,19 +253,22 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
         // The type of the column could be changed after aggregation.
         const auto itemName = itemType->GetName();
         if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
-            const auto& resultColName = it->second.first;
-            const auto& aggFunction = it->second.second;
+            const auto& colName = it->first;
+            const auto& aggFunction = it->second;
             Y_ENSURE(SupportedAggregationFunctions.count(aggFunction), "Unsupported aggregation function " + aggFunction);
+            TPositionHandle dummyPos;
 
             const TTypeAnnotationNode* aggFieldType = itemType->GetItemType();
             if (aggFunction == "count") {
                 aggFieldType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
             } else if (aggFunction == "sum") {
-                TPositionHandle dummyPos;
                 Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
                          "Unsupported type for sum aggregation function");
+            } else if (aggFunction == "avg") {
+                Y_ENSURE(GetAvgResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
+                         "Unsupported type for avg aggregation function");
             }
-            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(resultColName, aggFieldType));
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(colName, aggFieldType));
         } else if (keyColumns.contains(itemName)) {
             newItemTypes.push_back(itemType);
         }
@@ -279,7 +288,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
 
     TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
 
-    for (auto item : rightItemType->Cast<TStructExprType>()->GetItems()){
+    for (const auto* item : rightItemType->Cast<TStructExprType>()->GetItems()){
         structItemTypes.push_back(item);
     }
 
@@ -295,6 +304,26 @@ TStatus ComputeTypes(std::shared_ptr<TOpLimit> limit, TRBOContext & ctx) {
     auto inputType = limit->GetInput()->Type;
     // TODO: Add sanity checks.
     limit->Type = inputType;
+    return TStatus::Ok;
+}
+
+TStatus ComputeTypes(std::shared_ptr<TOpSort> sort, TRBOContext & ctx) {
+    Y_UNUSED(ctx);
+    auto inputType = sort->GetInput()->Type;
+    // TODO: Add sanity checks.
+    sort->Type = inputType;
+    return TStatus::Ok;
+}
+
+TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProps& props);
+
+TStatus ComputeTypes(std::shared_ptr<TOpCBOTree> cboTree, TRBOContext &ctx, TPlanProps& props) {
+    for (auto op : cboTree->TreeNodes) {
+        if (auto status = ComputeTypes(op, ctx, props); status != TStatus::Ok) {
+            return status;
+        }
+    }
+    cboTree->Type = cboTree->TreeRoot->Type;
     return TStatus::Ok;
 }
 
@@ -320,8 +349,14 @@ TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProp
     else if(MatchOperator<TOpLimit>(op)) {
         return ComputeTypes(CastOperator<TOpLimit>(op), ctx);
     }
+    else if (MatchOperator<TOpSort>(op)) {
+        return ComputeTypes(CastOperator<TOpSort>(op), ctx);
+    }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);
+    }
+    else if (MatchOperator<TOpCBOTree>(op)) {
+        return ComputeTypes(CastOperator<TOpCBOTree>(op), ctx, props);
     }
     else {
         Y_ENSURE(false, "Invalid operator type in RBO type inference");

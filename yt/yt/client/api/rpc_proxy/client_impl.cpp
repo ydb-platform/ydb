@@ -1923,6 +1923,7 @@ TFuture<std::vector<TColumnarStatistics>> TClient::GetColumnarStatistics(
     }
 
     req->set_enable_early_finish(options.EnableEarlyFinish);
+    req->set_enable_read_size_estimation(options.EnableReadSizeEstimation);
 
     ToProto(req->mutable_transactional_options(), options);
 

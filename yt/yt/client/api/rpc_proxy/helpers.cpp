@@ -1268,6 +1268,8 @@ void ToProto(
     YT_OPTIONAL_SET_PROTO(protoStatistics, legacy_chunk_row_count, statistics.LegacyChunkRowCount);
 
     ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
+
+    YT_OPTIONAL_SET_PROTO(protoStatistics, read_size_estimation, statistics.ReadDataSizeEstimate);
 }
 
 void FromProto(
@@ -1286,6 +1288,8 @@ void FromProto(
     statistics->LegacyChunkRowCount = YT_OPTIONAL_FROM_PROTO(protoStatistics, legacy_chunk_row_count);
 
     FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
+
+    statistics->ReadDataSizeEstimate = YT_OPTIONAL_FROM_PROTO(protoStatistics, read_size_estimation);
 }
 
 void ToProto(

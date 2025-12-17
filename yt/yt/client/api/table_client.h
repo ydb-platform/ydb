@@ -309,6 +309,7 @@ struct TGetColumnarStatisticsOptions
     NChunkClient::TFetcherConfigPtr FetcherConfig;
     NTableClient::EColumnarStatisticsFetcherMode FetcherMode = NTableClient::EColumnarStatisticsFetcherMode::FromNodes;
     bool EnableEarlyFinish = true;
+    bool EnableReadSizeEstimation = false;
 };
 
 struct TPartitionTablesOptions

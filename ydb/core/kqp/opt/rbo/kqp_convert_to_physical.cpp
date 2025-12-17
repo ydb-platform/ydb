@@ -1234,16 +1234,24 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                 }
                 case NYql::EStorageType::ColumnStorage: {
                     // clang-format off
+                    auto processLambda = Build<TCoLambda>(ctx, op->Pos)
+                        .Args({"arg"})
+                        .Body("arg")
+                    .Done().Ptr();
+                    // clang-format on
+
+                    if (opSource->OlapFilterLambda) {
+                        processLambda = opSource->OlapFilterLambda;
+                    }
+
+                    // clang-format off
                     auto olapRead = Build<TKqpBlockReadOlapTableRanges>(ctx, op->Pos)
                             .Table(opSource->TableCallable)
                             .Ranges<TCoVoid>().Build()
                             .Columns().Add(columns).Build()
                             .Settings<TCoNameValueTupleList>().Build()
                             .ExplainPrompt<TCoNameValueTupleList>().Build()
-                            .Process()
-                            .Args({"row"})
-                                .Body("row")
-                            .Build()
+                            .Process(processLambda)
                     .Done().Ptr();
 
                     auto flowNonBlockRead = Build<TCoToFlow>(ctx, op->Pos)

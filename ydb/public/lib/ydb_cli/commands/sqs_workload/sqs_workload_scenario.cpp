@@ -21,7 +21,7 @@ namespace NYdb::NConsoleClient {
 
     TSqsWorkloadScenario::TSqsWorkloadScenario()
         : Log(std::make_shared<TLog>(CreateLogBackend(
-              "stderr", ELogPriority::TLOG_DEBUG, true))),
+              "cerr", ELogPriority::TLOG_DEBUG, true))),
         ErrorFlag(std::make_shared<std::atomic_bool>(false)),
         AwsOptions(),
         Mutex(std::make_shared<std::mutex>()),

@@ -13,7 +13,7 @@ namespace NYdb::NConsoleClient {
         TDriver driver(TYdbCommand::CreateDriver(
             config, std::unique_ptr<TLogBackend>(
                         CreateLogBackend(
-                            "stderr",
+                            "cerr",
                             TClientCommand::TConfig::VerbosityLevelToELogPriority(
                                 config.VerbosityLevel))
                             .Release())));

@@ -170,7 +170,7 @@ class TestCompactionConfig(object):
         self.init(config)
         self.check("test_constructor_overrides_preset")
 
-    def test_preset_overrides_constructor(self):
+    def test_constructor_still_overrides_preset(self):
         config = KikimrConfigGenerator(
             column_shard_config={
                 "default_compaction_constructor": {
@@ -183,4 +183,4 @@ class TestCompactionConfig(object):
             })
 
         self.init(config)
-        self.check("test_preset_overrides_constructor")
+        self.check("test_constructor_still_overrides_preset")

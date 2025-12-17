@@ -1,5 +1,6 @@
 #include "sqs_workload_reader.h"
 #include "consts.h"
+#include "utils.h"
 #include "sqs_workload_stats.h"
 #include <library/cpp/logger/log.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_defines.h>
@@ -46,43 +47,14 @@ namespace NYdb::NConsoleClient {
             return;
         }
 
-        ui64 sendMessageTime = Now().MilliSeconds();
         const auto& messages = outcome.GetResult().GetMessages();
-        if (!messages.empty()) {
-            const auto& body = messages[0].GetBody();
-            auto sepIndex = body.find(SQS_MESSAGE_START_TIME_SEPARATOR);
-
-            if (sepIndex != std::string::npos) {
-                try {
-                    sendMessageTime = std::stoll(body.substr(0, sepIndex));
-                    auto endToEndLatency = Now().MilliSeconds() - sendMessageTime;
-                    TSqsWorkloadStats::GotMessageEvent gotMessageEvent{
-                        body.size() * messages.size(), endToEndLatency,
-                        messages.size()};
-                    params.StatsCollector->AddGotMessageEvent(gotMessageEvent);
-                } catch (const std::exception& e) {
-                    params.Log->Write(ELogPriority::TLOG_ERR,
-                                      TStringBuilder() << "Can not parse send message time: " << e.what());
-                }
-            }
-        }
-
+        
         Aws::Vector<Aws::SQS::Model::DeleteMessageBatchRequestEntry>
             deleteMessageBatchRequestEntries;
         for (size_t i = 0; i < messages.size(); ++i) {
-            if (params.ValidateFifo && !ValidateFifo(params, messages[i], sendMessageTime)) {
-                params.Log->Write(ELogPriority::TLOG_ERR,
-                                  TStringBuilder()
-                                      << "FIFO validation failed for message: "
-                                      << messages[i].GetMessageId());
-                params.ErrorFlag->store(true);
-                DecrementStartedCountAndNotify(params);
-                params.StatsCollector->AddFinishProcessMessagesEvent(
-                    TSqsWorkloadStats::FinishProcessMessagesEvent{messages.size()});
-                return;
-            }
+            auto sendTimestamp = ExtractSendTimestamp(messages[i].GetBody());
 
-            if (ShouldFail(params, i, sendMessageTime)) {
+            if (ShouldFail(params, i, sendTimestamp)) {
                 params.StatsCollector->AddErrorWhileProcessingMessagesEvent(TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent());
 
                 continue;
@@ -154,10 +126,19 @@ namespace NYdb::NConsoleClient {
         const auto& attributes = message.GetAttributes();
         auto messageGroupId = attributes.find(
             Aws::SQS::Model::MessageSystemAttributeName::MessageGroupId);
+        if (messageGroupId == attributes.end()) {
+            return true;
+        }
 
         std::unique_lock locker(*params.HashMapMutex);
         auto [it, newGroup] = params.LastReceivedMessageInGroup->try_emplace(messageGroupId->second, sendTimestamp);
-        if (it->second > sendTimestamp) {
+        if (!newGroup) {
+            params.Log->Write(ELogPriority::TLOG_ERR,
+                              TStringBuilder() << "Message group already exists: " << messageGroupId->second << " with send timestamp: " << it->second << " and current send timestamp: " << sendTimestamp);
+            return false;
+        }
+        
+        if (!newGroup && it->second > sendTimestamp) {
             return false;
         }
 

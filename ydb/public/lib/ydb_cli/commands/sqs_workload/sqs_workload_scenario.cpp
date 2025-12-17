@@ -1,4 +1,5 @@
 #include "sqs_workload_scenario.h"
+#include "sqs_client_wrapper.h"
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentials.h>
@@ -37,6 +38,12 @@ namespace NYdb::NConsoleClient {
         Aws::ShutdownAPI(AwsOptions);
     }
 
+    void TSqsWorkloadScenario::InitStatsCollector(size_t writerCount, size_t readerCount) {
+        StatsCollector = std::make_shared<TSqsWorkloadStatsCollector>(
+            writerCount, readerCount, Quiet, PrintTimestamp, WindowSec.Seconds(),
+            TotalSec.Seconds(), 0, Percentile, ErrorFlag);
+    }
+
     void TSqsWorkloadScenario::InitSqsClient() {
         Aws::Client::ClientConfiguration sqsClientConfiguration;
 
@@ -64,11 +71,14 @@ namespace NYdb::NConsoleClient {
         credentials.SetSessionToken(tokenStr.c_str());
 
         if (UseJsonAPI) {
-            SqsClient = Aws::MakeShared<TSQSJsonClient>(
-                "sqs-json-client", credentials, sqsClientConfiguration);
+            auto jsonSqsClient = Aws::MakeShared<TSQSJsonClient>(
+                "json-sqs-client", credentials, sqsClientConfiguration);
+            SqsClient = Aws::MakeShared<TSQSClientWrapper>(
+                "sqs-client-wrapper", credentials, sqsClientConfiguration, jsonSqsClient, StatsCollector, ValidateFifo);
         } else {
-            SqsClient = Aws::MakeShared<Aws::SQS::SQSClient>(
-                "sqs-client", credentials, sqsClientConfiguration);
+            SqsClient = Aws::MakeShared<TSQSClientWrapper>(
+                "sqs-client-wrapper", credentials, sqsClientConfiguration, Aws::MakeShared<Aws::SQS::SQSClient>(
+                    "sqs-client", credentials, sqsClientConfiguration), StatsCollector, ValidateFifo);
         }
     }
 

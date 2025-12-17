@@ -2,7 +2,6 @@
 
 #include "datashard.h"
 #include "export_common.h"
-#include "export_s3.h"
 #include "extstorage_usage_config.h"
 
 #include <ydb/core/base/appdata.h>
@@ -12,14 +11,11 @@
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/wrappers/retry_policy.h>
-#include <ydb/core/wrappers/s3_storage_config.h>
-#include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/events/common.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/buffer.h>
@@ -46,121 +42,11 @@ struct TChangefeedExportDescriptions {
     TString Prefix;
 };
 
-class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
-    using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
-    using THttpResolverConfig = NKikimrConfig::TS3ProxyResolverConfig::THttpResolverConfig;
+class TStorageUploader: public TActorBootstrapped<TStorageUploader> {
     using TEvExternalStorage = NWrappers::TEvExternalStorage;
     using TEvBuffer = TEvExportScan::TEvBuffer<TBuffer>;
 
-    static TMaybe<THttpResolverConfig> GetHttpResolverConfig(TStringBuf endpoint) {
-        for (const auto& entry : AppData()->S3ProxyResolverConfig.GetEndpoints()) {
-            if (entry.GetEndpoint() == endpoint && entry.HasHttpResolver()) {
-                return entry.GetHttpResolver();
-            }
-        }
-
-        return Nothing();
-    }
-
-    static TStringBuf NormalizeEndpoint(TStringBuf endpoint) {
-        Y_UNUSED(endpoint.SkipPrefix("http://") || endpoint.SkipPrefix("https://"));
-        Y_UNUSED(endpoint.ChopSuffix(":80") || endpoint.ChopSuffix(":443"));
-        return endpoint;
-    }
-
-    static TMaybe<THttpResolverConfig> GetHttpResolverConfig(const TS3ExternalStorageConfig& settings) {
-        return GetHttpResolverConfig(NormalizeEndpoint(settings.GetConfig().endpointOverride));
-    }
-
-    std::shared_ptr<TS3ExternalStorageConfig> GetS3StorageConfig() const {
-        return std::dynamic_pointer_cast<TS3ExternalStorageConfig>(ExternalStorageConfig);
-    }
-
-    TString GetResolveProxyUrl(const TS3ExternalStorageConfig& settings) const {
-        Y_ENSURE(HttpResolverConfig);
-
-        TStringBuilder url;
-        switch (settings.GetConfig().scheme) {
-        case Aws::Http::Scheme::HTTP:
-            url << "http://";
-            break;
-        case Aws::Http::Scheme::HTTPS:
-            url << "https://";
-            break;
-        }
-
-        url << HttpResolverConfig->GetResolveUrl();
-        return url;
-    }
-
-    void ApplyProxy(TS3ExternalStorageConfig& settings, const TString& proxyHost) const {
-        Y_ENSURE(HttpResolverConfig);
-
-        settings.ConfigRef().proxyScheme = settings.GetConfig().scheme;
-        settings.ConfigRef().proxyHost = proxyHost;
-        settings.ConfigRef().proxyCaPath = settings.GetConfig().caPath;
-
-        switch (settings.GetConfig().proxyScheme) {
-        case Aws::Http::Scheme::HTTP:
-            settings.ConfigRef().proxyPort = HttpResolverConfig->GetHttpPort();
-            break;
-        case Aws::Http::Scheme::HTTPS:
-            settings.ConfigRef().proxyPort = HttpResolverConfig->GetHttpsPort();
-            break;
-        }
-    }
-
-    void ResolveProxy() {
-        if (!HttpProxy) {
-            HttpProxy = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
-        }
-
-        Send(HttpProxy, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
-            NHttp::THttpOutgoingRequest::CreateRequestGet(GetResolveProxyUrl(*GetS3StorageConfig())),
-            TDuration::Seconds(10)
-        ));
-
-        Become(&TThis::StateResolveProxy);
-    }
-
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
-        const auto& msg = *ev->Get();
-
-        EXPORT_LOG_D("Handle NHttp::TEvHttpProxy::TEvHttpIncomingResponse"
-            << ": self# " << SelfId()
-            << ", status# " << (msg.Response ? msg.Response->Status : "null")
-            << ", body# " << (msg.Response ? msg.Response->Body : "null"));
-
-        if (!msg.Response || !msg.Response->Status.StartsWith("200")) {
-            EXPORT_LOG_E("Error at 'GetProxy'"
-                << ": self# " << SelfId()
-                << ", error# " << msg.GetError());
-            return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
-        }
-
-        if (msg.Response->Body.find('<') != TStringBuf::npos) {
-            EXPORT_LOG_E("Error at 'GetProxy'"
-                << ": self# " << SelfId()
-                << ", error# " << "invalid body"
-                << ", body# " << msg.Response->Body);
-            return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
-        }
-
-        ApplyProxy(*GetS3StorageConfig(), TString(msg.Response->Body));
-        ProxyResolved = true;
-
-        const auto& cfg = GetS3StorageConfig()->GetConfig();
-        EXPORT_LOG_N("Using proxy: "
-            << (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")
-            << cfg.proxyHost << ":" << cfg.proxyPort);
-
-        Restart();
-    }
-
     void Restart() {
-        Y_ENSURE(ProxyResolved);
-
-        MultiPart = false;
         Last = false;
         Parts.clear();
 
@@ -168,7 +54,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             this->Send(std::exchange(Client, TActorId()), new TEvents::TEvPoisonPill());
         }
 
-        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        Client = this->RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
         if (!MetadataUploaded) {
             UploadMetadata();
@@ -750,7 +636,7 @@ public:
         return "s3"sv;
     }
 
-    explicit TS3Uploader(
+    explicit TStorageUploader(
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
@@ -925,7 +811,7 @@ private:
     TString PermissionsChecksum;
     std::function<void()> ChecksumUploadedCallback;
 
-}; // TS3Uploader
+}; // TStorageUploader
 
 IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     auto scheme = (Task.GetShardNum() == 0)
@@ -1020,7 +906,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     };
     metadata.AddFullBackup(backup);
 
-    return new TS3Uploader(
+    return new TStorageUploader(
         dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), metadata.Serialize());
 }
 

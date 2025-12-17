@@ -157,56 +157,58 @@ public:
     }
 };
 
-#define DEFINE_REQUEST(name, base) \
-    struct TEv##name##Request: public base<TEv##name##Request, Ev##name##Request, Aws::S3::Model::name##Request> { \
+#define DEFINE_REQUEST(name, base, type) \
+    struct TEv##name##Request: public base<TEv##name##Request, Ev##name##Request, type> { \
         using TBase::TBase; \
     }
 
-#define DEFINE_GENERIC_REQUEST(name) \
-    DEFINE_REQUEST(name, TGenericRequest)
+#define DEFINE_REQUEST_S3(name, base) \
+    DEFINE_REQUEST(name, base, Aws::S3::Model::name##Request)
 
-#define DECLARE_GENERIC_RESPONSE_K(name, hasKey) \
-    struct TEv##name##Response: public TGenericResponse<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result, Aws::S3::Model::name##Result, hasKey> { \
+#define DEFINE_GENERIC_S3_REQUEST(name) \
+    DEFINE_REQUEST_S3(name, TGenericRequest)
+
+#define DECLARE_GENERIC_RESPONSE_K(name, hasKey, type) \
+    struct TEv##name##Response: public TGenericResponse<TEv##name##Response, Ev##name##Response, type, type, hasKey> { \
     private: \
-        using TBase = TGenericResponse<TEv##name##Response, Ev##name##Response, Aws::S3::Model::name##Result, Aws::S3::Model::name##Result, hasKey>; \
+        using TBase = TGenericResponse<TEv##name##Response, Ev##name##Response, type, type, hasKey>; \
     public: \
         using TBase::TBase;
 
-#define DEFINE_GENERIC_RESPONSE_K(name, hasKey) \
-    DECLARE_GENERIC_RESPONSE_K(name, hasKey) \
+#define DECLARE_GENERIC_S3_RESPONSE_K(name, hasKey) \
+    DECLARE_GENERIC_RESPONSE_K(name, hasKey, Aws::S3::Model::name##Result) \
     }
 
-#define DEFINE_GENERIC_RESPONSE(name) \
-    DEFINE_GENERIC_RESPONSE_K(name, true)
+#define DEFINE_GENERIC_S3_RESPONSE(name) \
+    DECLARE_GENERIC_S3_RESPONSE_K(name, true); \
 
-#define DEFINE_GENERIC_REQUEST_RESPONSE_K(name, hasKey) \
-    DEFINE_GENERIC_REQUEST(name); \
-    DEFINE_GENERIC_RESPONSE_K(name, hasKey)
+#define DEFINE_GENERIC_S3_REQUEST_RESPONSE_K(name, hasKey) \
+    DEFINE_GENERIC_S3_REQUEST(name); \
+    DECLARE_GENERIC_S3_RESPONSE_K(name, hasKey); \
 
 #define DEFINE_GENERIC_REQUEST_RESPONSE(name) \
-    DEFINE_GENERIC_REQUEST_RESPONSE_K(name, true)
+    DEFINE_GENERIC_S3_REQUEST_RESPONSE_K(name, true)
 
-DEFINE_REQUEST(PutObject, TRequestWithBody);
-DEFINE_GENERIC_RESPONSE(PutObject);
+DEFINE_REQUEST_S3(PutObject, TRequestWithBody);
+DEFINE_GENERIC_S3_RESPONSE(PutObject);
 
-DEFINE_REQUEST(UploadPart, TRequestWithBody);
-DEFINE_GENERIC_RESPONSE(UploadPart);
+DEFINE_REQUEST_S3(UploadPart, TRequestWithBody);
+DEFINE_GENERIC_S3_RESPONSE(UploadPart);
 
 DEFINE_GENERIC_REQUEST_RESPONSE(AbortMultipartUpload);
 DEFINE_GENERIC_REQUEST_RESPONSE(CompleteMultipartUpload);
 DEFINE_GENERIC_REQUEST_RESPONSE(CreateMultipartUpload);
 DEFINE_GENERIC_REQUEST_RESPONSE(DeleteObject);
-DEFINE_GENERIC_REQUEST_RESPONSE_K(DeleteObjects, false);
+DEFINE_GENERIC_S3_REQUEST_RESPONSE_K(DeleteObjects, false);
 DEFINE_GENERIC_REQUEST_RESPONSE(HeadObject);
-DEFINE_GENERIC_REQUEST_RESPONSE_K(ListObjects, false);
+DEFINE_GENERIC_S3_REQUEST_RESPONSE_K(ListObjects, false);
 DEFINE_GENERIC_REQUEST_RESPONSE(UploadPartCopy);
 
 #undef DEFINE_REQUEST
-#undef DEFINE_GENERIC_REQUEST
+#undef DEFINE_GENERIC_S3_REQUEST
 #undef DECLARE_GENERIC_RESPONSE_K
-#undef DEFINE_GENERIC_RESPONSE
-#undef DEFINE_GENERIC_RESPONSE_K
-#undef DEFINE_GENERIC_REQUEST_RESPONSE
-#undef DEFINE_GENERIC_REQUEST_RESPONSE_K
+#undef DEFINE_GENERIC_S3_RESPONSE
+#undef DEFINE_GENERIC_S3_RESPONSE_K
+#undef DEFINE_GENERIC_S3_REQUEST_RESPONSE_K
 
 }

@@ -53,7 +53,7 @@ private:
 
 } // NExternalStorage
 
-IActor* CreateS3Wrapper(NExternalStorage::IExternalStorageOperator::TPtr storage) {
+IActor* CreateStorageWrapper(NExternalStorage::IExternalStorageOperator::TPtr storage) {
     return new NExternalStorage::TS3Wrapper(storage);
 }
 

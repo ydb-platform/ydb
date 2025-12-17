@@ -191,7 +191,7 @@ private:
 
     void SendWriteRequest();
     static TDuration OverloadTimeout() {
-        ui32 overloadedDelayMs = min(AppData() ? AppData()->ColumnShardConfig.GetProxyOverloadedDelayMs() : OverloadedDelayMs, std::numeric_limits<ui32>::max() / 2);
+        ui32 overloadedDelayMs = std::min(AppData() ? AppData()->ColumnShardConfig.GetProxyOverloadedDelayMs() : OverloadedDelayMs, ui32(TDuration::Hours(1).MilliSeconds()));
         return TDuration::MilliSeconds(overloadedDelayMs + RandomNumber<ui32>(overloadedDelayMs));
     }
     void SendToTablet(THolder<IEventBase> event) {

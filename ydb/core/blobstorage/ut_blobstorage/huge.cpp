@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(HugeBlobOnlineSizeChange) {
         // https://github.com/ydb-platform/ydb/issues/30753
         THugeBlobTest test = THugeBlobTest::CreateHugeBlobTest();
         // On VDisk over MockPDisk HugeBlobSize=32513 will be 28673 because of different chunk and append block size
-        // this makes target part size 28672 (since with header it is 28680 which is > 28673 on VDisk but on DSProxy we didn't account for header)
+        // this makes target part size 28672 (since with header it is 28680 which is > 28673 on VDisk, but DSProxy didn't account for the header)
         test.SetHugeBlobSizeOnAllVDisks(32513);
         test.CreateDSProxy();
         // Before the fix both puts would go in a one MultiPut which is illegal

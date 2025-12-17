@@ -93,57 +93,22 @@ class BridgeKiKiMRTest(object):
         assert_that(len(actual_states), is_(len(expected_states)))
         return result
 
-    def wait_for_cluster_state(self, client, expected_states, timeout_seconds=5):
+    def wait_for_cluster_state(self, client, expected_states, timeout_seconds=30):
         start_time = time.time()
         last_exception = None
-        attempt = 0
-        retry_delay = 0.5
-        max_attempts = int(timeout_seconds / retry_delay)
         
         while time.time() - start_time < timeout_seconds:
-            attempt += 1
             try:
                 self.get_cluster_state_and_check(client, expected_states)
-                elapsed_time = time.time() - start_time
-                if attempt > 1:
-                    self.logger.debug(
-                        "Cluster state reached expected state after %d attempts (took %.1fs)",
-                        attempt, elapsed_time
-                    )
                 return
             except (AssertionError, Exception) as e:
                 # Ловим как AssertionError (неправильное состояние), так и другие исключения
                 # (ошибки подключения, когда кластер еще не готов)
                 last_exception = e
-                elapsed_time = time.time() - start_time
-                if elapsed_time + retry_delay < timeout_seconds:
-                    time.sleep(retry_delay)
-                else:
-                    # Не хватает времени на еще одну попытку
-                    break
-        
-        elapsed_time = time.time() - start_time
-        
-        # Получаем текущее состояние для детального сообщения
-        current_states = None
-        get_state_error_msg = None
-        try:
-            current_result = self.get_cluster_state(client)
-            current_states = {s.pile_name: s.state for s in current_result.pile_states}
-        except Exception as get_state_error:
-            get_state_error_msg = str(get_state_error)
-        
-        expected_str = ", ".join([f"{k}={v}" for k, v in expected_states.items()])
-        if current_states:
-            current_str = ", ".join([f"{k}={v}" for k, v in current_states.items()])
-        else:
-            error_info = f" (error: {get_state_error_msg})" if get_state_error_msg else ""
-            current_str = f"unavailable{error_info}"
+                time.sleep(0.5)
         
         raise AssertionError(
-            f"Cluster state did not reach expected state after {attempt} attempts "
-            f"(total time: {elapsed_time:.1f}s, timeout: {timeout_seconds}s). "
-            f"Expected: {expected_str}. Current state: {current_str}"
+            f"Cluster state did not reach expected state in {timeout_seconds}s"
         ) from last_exception
 
     def wait_for_cluster_state_with_step(self, client, expected_states, step_name, timeout_seconds=30):

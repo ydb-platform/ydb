@@ -20,8 +20,7 @@ class TestBridgeBasic(BridgeKiKiMRTest):
         # Ждем, пока кластер достигнет начального состояния
         self.wait_for_cluster_state(
             self.bridge_client,
-            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
-            timeout_seconds=30
+            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}
         )
         initial_result = self.get_cluster_state(self.bridge_client)
         self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
@@ -36,8 +35,7 @@ class TestBridgeBasic(BridgeKiKiMRTest):
         # Ждем, пока кластер достигнет начального состояния
         self.wait_for_cluster_state(
             self.bridge_client,
-            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
-            timeout_seconds=30
+            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}
         )
         initial_result = self.get_cluster_state(self.bridge_client)
         self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
@@ -53,8 +51,7 @@ class TestBridgeBasic(BridgeKiKiMRTest):
         # Ждем, пока кластер достигнет начального состояния
         self.wait_for_cluster_state(
             self.bridge_client,
-            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
-            timeout_seconds=30
+            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}
         )
         initial_result = self.get_cluster_state(self.bridge_client)
         self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
@@ -68,8 +65,7 @@ class TestBridgeBasic(BridgeKiKiMRTest):
         # Ждем, пока кластер достигнет начального состояния
         self.wait_for_cluster_state(
             self.bridge_client,
-            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
-            timeout_seconds=30
+            {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}
         )
         initial_result = self.get_cluster_state(self.bridge_client)
         self.check_states(initial_result, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
@@ -82,7 +78,7 @@ class TestBridgeBasic(BridgeKiKiMRTest):
             PileState(pile_name="r2", state=PileState.NOT_SYNCHRONIZED),
         ]
         self.update_cluster_state(self.bridge_client, updates)
-        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED}, timeout_seconds=50)
+        self.wait_for_cluster_state(self.bridge_client, {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED})
 
 
 class TestBridgeValidation(BridgeKiKiMRTest):

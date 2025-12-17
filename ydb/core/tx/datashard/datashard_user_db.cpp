@@ -319,7 +319,7 @@ void TDataShardUserDb::IncreaseUpdateCounters(
 }
 
 void TDataShardUserDb::IncreaseSelectCounters(
-    const TArrayRef<const TRawTypeValue> key) 
+    const TArrayRef<const TRawTypeValue> key)
 {
     ui64 keyBytes = CalculateKeyBytes(key);
 
@@ -781,6 +781,10 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
 
         // Upgrade to volatile ordered commit and ignore the page fault
         if (!VolatileCommitOrdered) {
+            if (GlobalTxId == 0) {
+                // Cannot upgrade to volatile commit without GlobalTxId (e.g. upload rows)
+                throw TNotReadyTabletException();
+            }
             EnsureVolatileTxId();
             VolatileCommitOrdered = true;
             VolatileDependencies.clear();

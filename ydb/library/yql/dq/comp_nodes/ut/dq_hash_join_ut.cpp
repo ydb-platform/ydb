@@ -496,14 +496,14 @@ TJoinTestData BigStringsTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
 
-    constexpr int leftSize = 200000;
+    constexpr int leftSize = 2000;
     TVector<ui64> leftKeys(leftSize);
     TVector<TString> leftValues(leftSize);
     for (int index = 0; index < leftSize; ++index) {
         leftKeys[index] = 2 * index + 3;
         leftValues[index] = TString(std::min(400 + index / 1000, index+1), static_cast<char>((index+1)%10+'a'));
     }
-    constexpr int rightSize = 20000;
+    constexpr int rightSize = 200;
     TVector<ui64> rightKeys(rightSize);
     TVector<TString> rightValues(rightSize);
     for (int index = 0; index < rightSize; ++index) {

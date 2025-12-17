@@ -57,6 +57,65 @@ Y_UNIT_TEST_SUITE(TPackedTupleDeepCopy) {
         }
 
     }
+    Y_UNIT_TEST(TestAppendBigString) {
+        TScalarLayoutConverterTestData data;
+        NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);
+        NKikimr::NMiniKQL::TType* stringType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::String);
+        TVector<TType*> types{ intType, intType, stringType, stringType };
+        TVector<NPackedTuple::EColumnRole> roles{ NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload,
+            NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Payload };
+        auto converter = MakeScalarLayoutConverter(TTypeInfoHelper{}, types, roles, data.HolderFactory);
+
+        const auto intEq = MakeEquateImpl(intType);
+        const auto stringEq = MakeEquateImpl(intType);
+        std::vector<NYql::NUdf::IEquate::TPtr> eqs;
+        std::vector<IPrint::TPtr> prints;
+        for (auto* type : types) {
+            eqs.push_back(MakeEquateImpl(type));
+            prints.push_back(MakePrinter(type));
+        }
+
+        TPackResult first;
+        TPackResult second;
+        std::vector<NYql::NUdf::TUnboxedValue> values{};
+        int total_values = 10;
+        for (int index = 0; index < total_values; ++index) {
+            values.push_back(TUnboxedValuePod(123 + index));
+            values.push_back(TUnboxedValuePod(12930));
+            auto smallstr = std::string(123 + index, 'b');
+            smallstr[index] = 'e';
+            smallstr[index * 2] = 'e';
+            values.push_back(MakeString(smallstr));
+            values.push_back(MakeString(std::string(1230 + index, 'a')));
+        }
+        converter->PackBatch(values.data(), total_values / 2, first);
+        converter->PackBatch(values.data() + total_values / 2 * 4, total_values / 2, second);
+        std::vector<NYql::NUdf::TUnboxedValue> expectedOut(values.size() * 4);
+
+        for (int index = 0; index < total_values / 2; ++index) {
+            converter->Unpack(first, index, expectedOut.data() + index * 4);
+        }
+        for (int index = 0; index < total_values / 2; ++index) {
+            converter->Unpack(second, index, expectedOut.data() + index * 4 + total_values / 2 * 4);
+        }
+
+        std::vector<NYql::NUdf::TUnboxedValue> concatOut(values.size() * 4);
+        for (int index = 0; index < total_values / 2; ++index) {
+            first.AppendTuple({ .PackedData = second.PackedTuples.data() + index * converter->GetTupleLayout()->TotalRowSize,
+                                  .OverflowBegin = second.Overflow.data() }, converter->GetTupleLayout());
+        }
+
+        for (int index = 0; index < total_values; ++index) {
+            converter->Unpack(first, index, concatOut.data() + 4 * index);
+        }
+        for (int index = 0; index < total_values * 4; ++index) {
+            auto eq = eqs[index % types.size()];
+            auto print = prints[index % types.size()];
+            UNIT_ASSERT_C(eq->Equals(concatOut[index], expectedOut[index]),
+                std::format("concat != expected: {} vs {}", print->Stringify(concatOut[index]), print->Stringify(expectedOut[index])));
+        }
+    }
+
     Y_UNIT_TEST(TestFlatten) {
         TScalarLayoutConverterTestData data;
         NKikimr::NMiniKQL::TType* intType = data.PgmBuilder.NewDataType(NYql::NUdf::EDataSlot::Int64);

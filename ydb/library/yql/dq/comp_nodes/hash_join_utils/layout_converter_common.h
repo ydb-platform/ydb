@@ -1,16 +1,17 @@
 #pragma once
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/tuple.h>
+
+#include <util/string/printf.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NKikimr::NMiniKQL {
-
 
 // Common types used by both IBlockLayoutConverter and IScalarLayoutConverter
 struct TPackResult {
     std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;
     std::vector<ui8, TMKQLAllocator<ui8>> Overflow;
-    i64 NTuples{0};
+    i64 NTuples{ 0 };
     i64 AllocatedBytes() const;
     TPackResult() = default;
     ~TPackResult() = default;
@@ -44,17 +45,17 @@ struct TPackResult {
         return allFieldEmpty;
     }
 
-    void ForEachTuple(std::invocable<TSingleTuple> auto fn) const {
+    void ForEachTuple(std::invocable<TSingleTuple> auto fn) const {   // todo: add range-based for support
         int tupleSize = std::ssize(PackedTuples) / NTuples;
         for (int index = 0; index < NTuples; ++index) {
-            Cout << index << ' ';
-            Cout.Flush(); 
-            fn(TSingleTuple{.PackedData = &PackedTuples[index * tupleSize], .OverflowBegin = Overflow.data()});
+            // Cout << Sprintf("index: %i, ", index);
+            Cout.Flush();
+            fn(TSingleTuple{ .PackedData = &PackedTuples[index * tupleSize], .OverflowBegin = Overflow.data() });
         }
     }
 
     void Clear() {
-        *this= TPackResult{};
+        *this = TPackResult{};
         MKQL_ENSURE(Empty(), "sanity check");
     }
 
@@ -65,4 +66,4 @@ struct TPackResult {
 using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;
 using TOverflow = std::vector<ui8, TMKQLAllocator<ui8>>;
 
-} // namespace NKikimr::NMiniKQL
+}   // namespace NKikimr::NMiniKQL

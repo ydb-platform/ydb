@@ -107,30 +107,17 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     }
 
     i64 SizeTuples() const {
-        MKQL_ENSURE(Output_.Data.Build.NTuples == Output_.Data.Probe.NTuples, "inconsistent state");
-        return Output_.Data.Build.NTuples;
+        AssertSizeConsistent();
+        return Output_.Build.NTuples;
     }
 
 
-    struct TuplePairs {
-        TSides<TPackResult> Data;
-    };
+    using TuplePairs = TSides<TPackResult>;
 
     auto MakeConsumeFn() {
         return [this](TSides<TSingleTuple> tuples) {
-            // Cout << "Out:\n";
             ForEachSide([&](ESide side) {
-                // Cout << AsString(side) << std::format(": side, {}: "
-                MKQL_ENSURE(!Converters_.SelectSide(side)->GetTupleLayout()->Stringify(tuples.SelectSide(side)).contains("N"), "invalid N");
-                Output_.Data.SelectSide(side).AppendTuple(tuples.SelectSide(side), Converters_.SelectSide(side)->GetTupleLayout());
-                // Out
-                // Output_.Data.cle
-                Cout << AsString(side) << 128 << " " ;
-                Output_.Data.SelectSide(side).ForEachTuple([&](TSingleTuple tuple){
-                    if (Converters_.SelectSide(side)->GetTupleLayout()->Stringify(tuple).contains("N")){
-                        MKQL_ENSURE(false, "invalid N");
-                    }
-                });
+                Output_.SelectSide(side).AppendTuple(tuples.SelectSide(side), Converters_.SelectSide(side)->GetTupleLayout());
             });
         };
     }
@@ -149,15 +136,15 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         TSides<TVector<arrow::Datum>> out;
         ForEachSide([&](ESide side) {
 
-            Output_.Data.SelectSide(side).ForEachTuple([&](TSingleTuple tuple){
-                MKQL_ENSURE(!Converters_.SelectSide(side)->GetTupleLayout()->Stringify(tuple).contains("N"), "invalid N");
-            });
-            Converters_.SelectSide(side)->Unpack(Output_.Data.SelectSide(side), out.SelectSide(side));
-            Output_.Data.SelectSide(side).Clear();
+            Converters_.SelectSide(side)->Unpack(Output_.SelectSide(side), out.SelectSide(side));
+            Output_.SelectSide(side).Clear();
 
         });
 
         return out;
+    }
+    void AssertSizeConsistent() const{
+        MKQL_ENSURE(Output_.Build.NTuples == Output_.Probe.NTuples, "inconsistent state");
     }
 
     TuplePairs Output_;

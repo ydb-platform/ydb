@@ -3,20 +3,9 @@
 #include <deque>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
-
+#include "better_mkql_ensure.h"
 namespace NKikimr::NMiniKQL {
 
-#ifdef MKQL_ENSURE
-#undef MKQL_ENSURE
-#endif
-#define MKQL_ENSURE(condition, message)                                   \
-    do {                                                                  \
-        if (Y_UNLIKELY(!(condition))) {                                   \
-            PrintBackTrace();                                             \
-            (THROW yexception() << __FUNCTION__ << "(): requirement "     \
-                                << #condition << " failed. " << message); \
-        }                                                                 \
-    } while (0)
 
 
 template <typename T> using TMKQLDeque = std::deque<T, TMKQLAllocator<T>>;

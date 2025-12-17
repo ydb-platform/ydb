@@ -3,7 +3,7 @@
 namespace NYdb::NConsoleClient {
 
 void TMessageGroupsLocker::Lock(const std::unordered_set<Aws::String>& messageGroups) {
-    std::unique_lock<std::mutex> lock(MessageGroupsMutex);
+    std::unique_lock lock(MessageGroupsMutex);
     std::unordered_map<Aws::String, ui64> messageGroupsTickets;
     for (const auto& messageGroupId : messageGroups) {
         auto [it, wasInserted] = MessageGroupsFreeTickets.try_emplace(messageGroupId, 0);
@@ -22,7 +22,7 @@ void TMessageGroupsLocker::Lock(const std::unordered_set<Aws::String>& messageGr
 }
 
 void TMessageGroupsLocker::Unlock(const std::unordered_set<Aws::String>& messageGroups) {
-    std::unique_lock<std::mutex> lock(MessageGroupsMutex);
+    std::unique_lock lock(MessageGroupsMutex);
     for (const auto& messageGroupId : messageGroups) {
         MessageGroupsCurrentTickets[messageGroupId]++;
     }

@@ -86,7 +86,7 @@ namespace NYdb::NConsoleClient {
 
         ReceiverMessageGroupsLocker.Lock(messageGroups);
 
-        std::unique_lock<std::mutex> lock(MessageGroupsMutex);
+        std::unique_lock lock(MessageGroupsMutex);
         for (auto& message : response.GetResult().GetMessages()) {
             const auto& body = message.GetBody();
             auto sendTimestamp = ExtractSendTimestamp(body);

@@ -753,7 +753,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    settings.VectorTopDistinct = true;
+    settings.VectorTopDistinct = withOverlap;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (flatMap) {
@@ -890,7 +890,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    settings.VectorTopDistinct = true;
+    settings.VectorTopDistinct = withOverlap;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (mainLambda) {

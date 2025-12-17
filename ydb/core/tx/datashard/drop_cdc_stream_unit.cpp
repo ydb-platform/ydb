@@ -1,7 +1,4 @@
 #include "datashard_cdc_stream_common.h"
-#include "datashard_impl.h"
-#include "datashard_locks_db.h"
-#include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
@@ -30,7 +27,6 @@ public:
         }
 
         const auto& params = schemeTx.GetDropCdcStreamNotice();
-
         const auto pathId = TPathId::FromProto(params.GetPathId());
         Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
 
@@ -46,10 +42,9 @@ public:
         tableInfo = DataShard.AlterTableDropCdcStreams(ctx, txc, pathId, version, streamPathIds);
 
         for (const auto& streamPathId : streamPathIds) {
-            StopCdcStream(txc, pathId, streamPathId, tableInfo);
+            DropCdcStream(txc, pathId, streamPathId, *tableInfo);
         }
 
-        // Update table info once after processing all streams
         TDataShardLocksDb locksDb(DataShard, txc);
         DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 
@@ -59,10 +54,10 @@ public:
 
         if (params.HasDropSnapshot()) {
             const auto& snapshot = params.GetDropSnapshot();
-            Y_ENSURE(snapshot.GetStep() != 0);
-
-            const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
-            DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
+            if (snapshot.GetStep() != 0) {
+                const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
+                DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
+            }
         }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

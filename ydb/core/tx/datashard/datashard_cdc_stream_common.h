@@ -1,6 +1,7 @@
 #pragma once
 
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 
 namespace NKikimr {
@@ -9,6 +10,7 @@ namespace NDataShard {
 class TCdcStreamUnitBase : public TExecutionUnit {
 protected:
     TVector<THolder<TEvChangeExchange::TEvRemoveSender>> RemoveSenders;
+    THolder<TEvChangeExchange::TEvAddSender> AddSender;
 
 public:
     TCdcStreamUnitBase(EExecutionUnitKind kind, bool createCdcStream, TDataShard& self, TPipeline& pipeline)
@@ -16,20 +18,54 @@ public:
     {
     }
 
-    void StopCdcStream(TTransactionContext& txc, const TPathId& tablePathId, const TPathId& streamPathId, const TUserTable::TPtr& tableInfo) {
+    void DropCdcStream(
+        TTransactionContext& txc,
+        const TPathId& tablePathId,
+        const TPathId& streamPathId,
+        const TUserTable& tableInfo)
+    {
         auto& scanManager = DataShard.GetCdcStreamScanManager();
         scanManager.Forget(txc.DB, tablePathId, streamPathId);
 
         if (const auto* info = scanManager.Get(streamPathId)) {
-            if (tableInfo) {
-                DataShard.CancelScan(tableInfo->LocalTid, info->ScanId);
-            }
+            DataShard.CancelScan(tableInfo.LocalTid, info->ScanId);
             scanManager.Complete(streamPathId);
         }
 
         DataShard.GetCdcStreamHeartbeatManager().DropCdcStream(txc.DB, tablePathId, streamPathId);
-
         RemoveSenders.emplace_back(new TEvChangeExchange::TEvRemoveSender(streamPathId));
+    }
+
+    void AddCdcStream(
+        TTransactionContext& txc,
+        const TPathId& tablePathId,
+        const TPathId& streamPathId,
+        const NKikimrSchemeOp::TCdcStreamDescription& streamDesc,
+        const TString& snapshotName,
+        ui64 step,
+        ui64 txId)
+    {
+        if (!snapshotName.empty()) {
+            Y_ENSURE(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateScan);
+            Y_ENSURE(step != 0);
+
+            DataShard.GetSnapshotManager().AddSnapshot(txc.DB,
+                TSnapshotKey(tablePathId, step, txId),
+                snapshotName, TSnapshot::FlagScheme, TDuration::Zero());
+
+            DataShard.GetCdcStreamScanManager().Add(txc.DB,
+                tablePathId, streamPathId, TRowVersion(step, txId));
+        }
+
+        if (streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
+            if (const auto heartbeatInterval = TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs())) {
+                DataShard.GetCdcStreamHeartbeatManager().AddCdcStream(txc.DB, tablePathId, streamPathId, heartbeatInterval);
+            }
+        }
+
+        AddSender.Reset(new TEvChangeExchange::TEvAddSender(
+            tablePathId, TEvChangeExchange::ESenderType::CdcStream, streamPathId
+        ));
     }
 
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
@@ -41,6 +77,11 @@ public:
                 }
             }
             RemoveSenders.clear();
+        }
+
+        if (AddSender) {
+            ctx.Send(DataShard.GetChangeSender(), AddSender.Release());
+            DataShard.EmitHeartbeats();
         }
     }
 };

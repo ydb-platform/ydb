@@ -289,6 +289,8 @@ private:
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
             "Got query compile cache request, snapshot has " << snapshot.size() << " entries");
         const auto& tenant = ev->Get()->Record.GetTenantName();
+        Cerr << "[KqpCompileCacheWarmup] cache list request tenant: '" << tenant
+             << "', service tenant: '" << AppData()->TenantName << "', entries: " << snapshot.size() << Endl;
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
         if (AppData()->TenantName != tenant or snapshot.empty()) {
             response->Record.SetFinished(true);
@@ -1240,7 +1242,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     if (query->UserSid.empty()) {
         query->UserSid = userSid;
     } else {
-        Y_ENSURE(query->UserSid == userSid);
+    Y_ENSURE(query->UserSid == userSid);
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Try to find query by queryId, queryId: "

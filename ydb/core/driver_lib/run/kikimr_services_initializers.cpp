@@ -2304,7 +2304,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             TString database = appData->TenantName;
             TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
 
-            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, {}, database);
+            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, {}, database, cluster);
             setup->LocalServices.push_back(std::make_pair(
                 NKqp::MakeKqpWarmupActorId(NodeId),
                 TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));

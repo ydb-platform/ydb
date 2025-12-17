@@ -15,37 +15,47 @@ using namespace NYdb::NTable;
 
 namespace {
 
-void ExecuteVariousQueries(TKikimrRunner& kikimr, ui32 count) {
-    auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
-    auto session = kikimr.RunCall([&] { return db.GetSession().ExtractValueSync().GetSession(); });
+void FillCache(TKikimrRunner& kikimr, ui32 queryCount) {
+    auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+    auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
     
-    for (ui32 i = 0; i < count; ++i) {
+    for (ui32 i = 0; i < queryCount; ++i) {
         TString query = TStringBuilder() 
             << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = " << i << ";";
         
+        TExecDataQuerySettings settings;
+        settings.KeepInQueryCache(true);
+        
         auto result = kikimr.RunCall([&] { 
-            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
+            return session.ExecuteDataQuery(
+                query, 
+                TTxControl::BeginTx().CommitTx(),
+                settings
+            ).ExtractValueSync(); 
         });
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
     }
+    
+
 }
 
 ui64 GetCompileCacheCount(TKikimrRunner& kikimr) {
-    auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
-    auto session = kikimr.RunCall([&] { return db.GetSession().ExtractValueSync().GetSession(); });
+    auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+    auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
     
     auto result = kikimr.RunCall([&] {
-        return session.ExecuteQuery(
+        return session.ExecuteDataQuery(
             "SELECT COUNT(*) AS cnt FROM `/Root/.sys/compile_cache_queries`",
-            NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            TTxControl::BeginTx().CommitTx()
         ).ExtractValueSync();
     });
     
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
     
-    auto resultSet = result.GetResultSetParser(0);
-    UNIT_ASSERT(resultSet.TryNextRow());
-    return resultSet.ColumnParser("cnt").GetUint64();
+    auto resultSet = result.GetResultSet(0);
+    TResultSetParser parser(resultSet);
+    UNIT_ASSERT(parser.TryNextRow());
+    return parser.ColumnParser("cnt").GetUint64();
 }
 
 } // namespace
@@ -53,18 +63,24 @@ ui64 GetCompileCacheCount(TKikimrRunner& kikimr) {
 Y_UNIT_TEST_SUITE(KqpWarmup) {
 
     Y_UNIT_TEST(WarmupActorBasic) {
+        ui32 nodeCount = 2;
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
-        settings.SetNodeCount(2);
+        settings.SetNodeCount(nodeCount);
+
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableCompileCacheView(true);
+        settings.SetFeatureFlags(featureFlags);
 
         TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
-        ExecuteVariousQueries(kikimr, 10);
+        FillCache(kikimr, 10);
 
         ui64 cacheCountBeforeWarmup = GetCompileCacheCount(kikimr);
         UNIT_ASSERT_C(cacheCountBeforeWarmup > 0,
             "Compile cache should have entries after executing queries, got: " << cacheCountBeforeWarmup);
+        Cerr << "=== Cache count before warmup: " << cacheCountBeforeWarmup << Endl;
 
         TKqpWarmupConfig warmupActorConfig;
         warmupActorConfig.Enabled = true;
@@ -72,19 +88,18 @@ Y_UNIT_TEST_SUITE(KqpWarmup) {
         warmupActorConfig.CompileCacheWarmupEnabled = true;
         warmupActorConfig.MaxConcurrentCompilations = 5;
 
-        auto warmupEdge = runtime.AllocateEdgeActor();
-        auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, warmupEdge, "/Root");
-        runtime.Register(warmupActor);
+        ui32 const nodeId = 0;
+        auto warmupEdge = runtime.AllocateEdgeActor(nodeId);
+        auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, warmupEdge, "/Root", "");
+        runtime.Register(warmupActor, nodeId);
 
         auto warmupComplete = runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(warmupEdge, TDuration::Seconds(30));
 
         UNIT_ASSERT_C(warmupComplete, "Warmup actor did not complete within timeout");
-        
         UNIT_ASSERT_C(warmupComplete->Get()->Success, 
             "Warmup should complete successfully: " << warmupComplete->Get()->Message);
-        
-        UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded == cacheCountBeforeWarmup, 
-        "Entries loaded: " << warmupComplete->Get()->EntriesLoaded << " != " << cacheCountBeforeWarmup);
+        UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > cacheCountBeforeWarmup * nodeCount, 
+            "Entries loaded: " << warmupComplete->Get()->EntriesLoaded << " != " << cacheCountBeforeWarmup);
     }
 }
 

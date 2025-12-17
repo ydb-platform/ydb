@@ -12,7 +12,6 @@ ENDIF()
 
 SRCS(
     kqp_compile_fallback_ut.cpp
-    kqp_warmup_ut.cpp
 )
 
 PEERDIR(

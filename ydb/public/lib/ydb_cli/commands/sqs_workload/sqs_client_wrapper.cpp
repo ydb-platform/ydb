@@ -1,5 +1,6 @@
 #include "sqs_client_wrapper.h"
 #include "consts.h"
+#include "utils.h"
 
 #include <aws/sqs/model/SendMessageBatchRequest.h>
 #include <util/datetime/base.h>
@@ -117,14 +118,6 @@ namespace NYdb::NConsoleClient {
     Aws::SQS::Model::DeleteMessageBatchOutcome TSQSClientWrapper::DeleteMessageBatch(
         const Aws::SQS::Model::DeleteMessageBatchRequest& request) const {
         return Client->DeleteMessageBatch(request);
-    }
-
-    ui64 TSQSClientWrapper::ExtractSendTimestamp(const Aws::String& messageBody) const {
-        auto sepIndex = messageBody.find(SQS_MESSAGE_START_TIME_SEPARATOR);
-        if (sepIndex == std::string::npos) {
-            return 0;
-        }
-        return std::stoull(messageBody.substr(0, sepIndex));
     }
 
 } // namespace NYdb::NConsoleClient

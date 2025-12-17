@@ -36,8 +36,6 @@ namespace NYdb::NConsoleClient {
             mutable std::unordered_map<Aws::String, ui64> LastReceivedMessageInGroup;
 
             bool fifoValidationEnabled;
-
-            ui64 ExtractSendTimestamp(const Aws::String& messageBody) const;
     };
 
 } // namespace NYdb::NConsoleClient

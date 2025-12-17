@@ -49,11 +49,9 @@ namespace NYdb::NConsoleClient {
 
         const auto& messages = outcome.GetResult().GetMessages();
         
-        Aws::Vector<Aws::SQS::Model::DeleteMessageBatchRequestEntry>
-            deleteMessageBatchRequestEntries;
+        Aws::Vector<Aws::SQS::Model::DeleteMessageBatchRequestEntry> deleteMessageBatchRequestEntries;
         for (size_t i = 0; i < messages.size(); ++i) {
             auto sendTimestamp = ExtractSendTimestamp(messages[i].GetBody());
-
             if (ShouldFail(params, i, sendTimestamp)) {
                 params.StatsCollector->AddErrorWhileProcessingMessagesEvent(TSqsWorkloadStats::ErrorWhileProcessingMessagesEvent());
 

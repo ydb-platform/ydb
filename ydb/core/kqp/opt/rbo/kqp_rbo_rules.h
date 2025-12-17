@@ -161,5 +161,14 @@ class TConstantFoldingStage : public IRBOStage {
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 };
 
+/**
+ * Prune unnecessary columns stage
+ */
+class TPruneColumnsStage : public IRBOStage {
+  public:
+    TPruneColumnsStage();
+    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
+};
+
 } // namespace NKqp
 } // namespace NKikimr

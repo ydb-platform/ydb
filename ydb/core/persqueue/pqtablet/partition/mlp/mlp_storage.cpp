@@ -573,8 +573,8 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
         ++message.ProcessingCount;
         Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
     }
-    message.LockingTimestampMilliSecondsDelta = static_cast<ui32>(TimeProvider->Now().MilliSeconds() - BaseDeadline.MilliSeconds());
-    message.LockingTimestampSign = 0;
+
+    SetMessageLockingTime(message, TimeProvider->Now(), BaseDeadline);
 
     Batch.AddChange(offset);
 
@@ -599,6 +599,14 @@ TInstant TStorage::GetMessageLockingTime(const TMessage& message) const {
     return message.LockingTimestampSign == 0 ?
         BaseDeadline + TDuration::MilliSeconds(message.LockingTimestampMilliSecondsDelta) :
         BaseDeadline - TDuration::MilliSeconds(message.LockingTimestampMilliSecondsDelta);
+}
+
+void TStorage::SetMessageLockingTime(TMessage& message, const TInstant& lockingTime, const TInstant& baseDeadline) const {
+    const ui64 MaxLockingTimestampMilliSecondsDelta = (1 << 26) - 1;
+
+    auto delta = std::abs(static_cast<i64>(baseDeadline.MilliSeconds()) - static_cast<i64>(lockingTime.MilliSeconds()));
+    message.LockingTimestampMilliSecondsDelta = std::min<ui64>(delta, MaxLockingTimestampMilliSecondsDelta);
+    message.LockingTimestampSign = baseDeadline > lockingTime;
 }
 
 void TStorage::UpdateMessageLockingDurationMetrics(const TMessage& message) {
@@ -792,7 +800,6 @@ void TStorage::MoveBaseDeadline() {
 
 void TStorage::MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp) {
     auto deadlineDiff = (newBaseDeadline - BaseDeadline).Seconds();
-    auto deadlineDiffMilliSeconds = deadlineDiff * 1000;
     auto writeTimestampDiff = (newBaseWriteTimestamp - BaseWriteTimestamp).Seconds();
 
     if (deadlineDiff == 0 && writeTimestampDiff == 0) {
@@ -800,21 +807,10 @@ void TStorage::MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteT
     }
 
     auto doChange = [&](auto& message) {
-        const ui64 MaxLockingTimestampMilliSecondsDelta = (1 << 26) - 1;
-
         message.DeadlineDelta = message.DeadlineDelta > deadlineDiff ? message.DeadlineDelta - deadlineDiff : 0;
         message.WriteTimestampDelta = message.WriteTimestampDelta > writeTimestampDiff ? message.WriteTimestampDelta - writeTimestampDiff : 0;
 
-        if (message.LockingTimestampSign == 0) {
-            if (message.LockingTimestampMilliSecondsDelta >= deadlineDiffMilliSeconds) {
-                message.LockingTimestampMilliSecondsDelta -= deadlineDiffMilliSeconds;
-            } else {
-                message.LockingTimestampMilliSecondsDelta = std::min<ui64>(deadlineDiffMilliSeconds - message.LockingTimestampMilliSecondsDelta, MaxLockingTimestampMilliSecondsDelta);
-                message.LockingTimestampSign = 1;
-            }
-        } else {
-            message.LockingTimestampMilliSecondsDelta = std::min<ui64>(message.LockingTimestampMilliSecondsDelta + deadlineDiffMilliSeconds, MaxLockingTimestampMilliSecondsDelta);
-        }
+        SetMessageLockingTime(message, GetMessageLockingTime(message), newBaseDeadline);
     };
 
     for (auto& [_, message] : SlowMessages) {

@@ -213,6 +213,7 @@ private:
     void UpdateFirstUncommittedOffset();
 
     TInstant GetMessageLockingTime(const TMessage& message) const;
+    void SetMessageLockingTime(TMessage& message, const TInstant& lockingTime, const TInstant& baseDeadline) const;
     void UpdateMessageLockingDurationMetrics(const TMessage& message);
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 

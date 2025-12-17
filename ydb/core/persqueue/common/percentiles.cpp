@@ -76,7 +76,7 @@ const TTabletPercentileCounter::TRangeDef SLOW_LATENCY_RANGES[11] = {
     {30'000, "30000"},
     {60'000, "60000"},
     {180'000, "180000"},
-    {9'999'999, "999999"}
+    {9'999'999, "9999999"}
 };
 
 const NMonitoring::TBucketBounds SLOW_LATENCY_BOUNDS = NMonitoring::TBucketBounds{

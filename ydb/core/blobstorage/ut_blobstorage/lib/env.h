@@ -904,14 +904,14 @@ struct TEnvironmentSetup {
         auto realProxyActorId = MakeBlobStorageProxyID(groupId);
         auto& appData = *(Runtime->GetNode(nodeId)->AppData.get());
         TIntrusivePtr<NKikimr::TDsProxyNodeMon> nodeMon = new NKikimr::TDsProxyNodeMon(appData.Counters, true);
-        TString name = Sprintf("%09" PRIu64, groupId);
+        TString name = Sprintf("%09" PRIu64, (ui64)groupId);
 
         TDsProxyPerPoolCounters perPoolCounters(appData.Counters);
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(true, false, true);
         TControlWrapper enableVPatch(false, false, true);
         auto info = GetGroupInfo(groupId);
-        IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(info), nullptr, true, nodeMon,
+        IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(info), true, nodeMon,
             std::move(storagePoolCounters), TBlobStorageProxyParameters{
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = enablePutBatching,

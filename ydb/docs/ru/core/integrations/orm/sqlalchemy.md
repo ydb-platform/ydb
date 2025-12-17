@@ -271,8 +271,8 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# Реализация для {{ ydb-short-name }} (диалект yql)
-class YqlImpl(DefaultImpl):
+# {{ ydb-short-name }}-специфичная реализация
+class YDBImpl(DefaultImpl):
     __dialect__ = "yql"
 
 def run_migrations_offline() -> None:

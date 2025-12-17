@@ -374,7 +374,141 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.SetIsOlap(true);
         tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
-       tester.Execute();
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TSnapshotTwoInsertOltp) {
+        TSnapshotTwoInsert tester;
+        tester.SetIsOlap(false);
+        tester.SetDisableSinks(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    class TSnapshotTwoUpdate : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            auto edgeActor = runtime.AllocateEdgeActor();
+
+            const auto& describe = DescribeTable(
+                 &Kikimr->GetTestServer(),
+                edgeActor,
+                "/Root/KV2");
+
+            {
+                const TString insertQuery(Q1_(R"(
+                    INSERT INTO `/Root/KV2` (Key, Value) VALUES (4u, "test");
+                )"));
+                auto insetResult = Kikimr->RunCall([&]{
+                    auto txc = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx();
+                    return session2.ExecuteQuery(insertQuery, txc).ExtractValueSync();
+                });
+
+                UNIT_ASSERT_VALUES_EQUAL_C(insetResult.GetStatus(), EStatus::SUCCESS, insetResult.GetIssues().ToString());
+            }
+
+            {
+                const TString updateQuery(Q1_(R"(
+                    UPDATE `/Root/KV2` ON (Key, Value) VALUES (4u, "test2");
+                    UPDATE `/Root/KV` ON (Key, Value) VALUES (5u, "test2");
+                )"));
+
+                std::vector<std::unique_ptr<IEventHandle>> writes;
+                size_t evWriteCounter = 0;
+                size_t evWriteResultCounter = 0;
+
+                auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                    if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                        ++evWriteCounter;
+                        auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                        UNIT_ASSERT(evWrite->Record.OperationsSize() <= 1);
+                        if (evWrite->Record.OperationsSize() == 1) {
+                            if (evWriteCounter <= 2) {
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() == 0);
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() == 0);
+                            }
+
+                            if (evWrite->Record.GetOperations()[0].GetTableId().GetTableId() == describe.GetPathId() && evWriteCounter <= 2) {
+                                writes.emplace_back(ev.Release());
+                                return TTestActorRuntime::EEventAction::DROP;
+                            }
+                        }
+                        
+                    } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWriteResult::EventType) {
+                        ++evWriteResultCounter;
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                };
+
+                auto saveObserver = runtime.SetObserverFunc(grab);
+                Y_DEFER {
+                    runtime.SetObserverFunc(saveObserver);
+                };
+
+                auto future = Kikimr->RunInThreadPool([&]{
+                    auto txc = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx();
+                    return session1.ExecuteQuery(updateQuery, txc).ExtractValueSync();
+                });
+
+                {
+                    TDispatchOptions opts;
+                    opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                        return evWriteCounter == 2 && evWriteResultCounter == 1;
+                    });
+                    runtime.DispatchEvents(opts);
+                    UNIT_ASSERT(evWriteCounter == 2);
+                    UNIT_ASSERT(evWriteResultCounter == 1);
+                    UNIT_ASSERT(writes.size() == 1);
+                }
+
+                {
+                    // Another request changes data
+                    const TString insertQuery(Q1_(R"(
+                        INSERT INTO `/Root/KV` (Key, Value) VALUES (5u, "test");
+                    )"));
+                    auto insetResult = Kikimr->RunCall([&]{
+                        auto txc = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx();
+                        return session2.ExecuteQuery(insertQuery, txc).ExtractValueSync();
+                    });
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(insetResult.GetStatus(), EStatus::SUCCESS, insetResult.GetIssues().ToString());
+                }
+
+                UNIT_ASSERT(evWriteCounter == (GetIsOlap() ? 4 : 3));
+                UNIT_ASSERT(writes.size() == 1);
+
+                for(auto& ev: writes) {
+                    runtime.Send(ev.release());
+                }
+
+                auto result = runtime.WaitFuture(future);
+                // Tx was write only, so it is executed with snapshot timestamp = commit timestamp, like serializable.
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), GetIsOlap() ? EStatus::ABORTED : EStatus::SUCCESS, result.GetIssues().ToString());// TODO: ?
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TSnapshotTwoUpdateOlap) {
+        TSnapshotTwoUpdate tester;
+        tester.SetIsOlap(true);
+        tester.SetDisableSinks(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TSnapshotTwoUpdateOltp) {
+        TSnapshotTwoUpdate tester;
+        tester.SetIsOlap(false);
+        tester.SetDisableSinks(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
     }
 
     class TReadOwnChanges : public TTableDataModificationTester {

@@ -1490,7 +1490,7 @@ public:
 
         if (isBatchQuery && (!tx || !tx->IsLiteralTx())) {
             ExecutePartitioned(tx);
-        } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
+        } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
             ExecuteDeferredEffectsImmediately(tx);
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
             ExecutePhyTx(tx, commit);
@@ -1547,7 +1547,7 @@ public:
     }
 
     void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
-        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects(tx));
+        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects());
 
         auto& txCtx = *QueryState->TxCtx;
         auto request = PrepareRequest(/* tx */ nullptr, /* literal */ false, QueryState.get());

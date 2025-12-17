@@ -3398,6 +3398,9 @@ public:
             YQL_ENSURE(TxId);
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             evWrite->Record.SetOverloadSubscribe(++ExternalShardIdToOverloadSeqNo[shardId]);
+            //if (MvccSnapshot && LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
+            //    *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
+            //}
         }
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "BufferActor");

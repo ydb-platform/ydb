@@ -175,15 +175,13 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     bool hasInsert = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
-        if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
-            ++readPhases;
-        }
-
         if (tx.GetHasEffects()) {
             hasEffects = true;
         }
 
         for (const auto &stage : tx.GetStages()) {
+            readPhases += stage.SourcesSize();
+
             for (const auto &sink : stage.GetSinks()) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
                     && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())

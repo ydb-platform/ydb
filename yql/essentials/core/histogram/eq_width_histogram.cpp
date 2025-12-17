@@ -31,6 +31,7 @@ void TEqWidthHistogram::Aggregate(const TEqWidthHistogram& other) {
 #define HIST_TYPE_CHECK(layout, type)        \
     case EHistogramValueType::layout: {      \
         Y_ENSURE(BucketsEqual<type>(other)); \
+        break;                               \
     }
         KNOWN_FIXED_HISTOGRAM_TYPES(HIST_TYPE_CHECK)
 #undef HIST_TYPE_CHECK

@@ -1,4 +1,5 @@
 #include "ftxui.h"
+#include "colors.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -242,7 +243,7 @@ std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TStri
     try {
         result = TFtxuiMenuRunner(title, options, maxPageSize).Run();
     } catch (const std::exception& e) {
-        const auto& colors = NColorizer::AutoColors(Cerr);
+        const auto& colors = NConsoleClient::AutoColors(Cerr);
         Cerr << colors.Yellow() << "FTXUI menu failed: " << e.what() << colors.OldColor() << Endl;
     }
 

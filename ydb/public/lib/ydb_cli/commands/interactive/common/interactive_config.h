@@ -12,7 +12,7 @@
 namespace NYdb::NConsoleClient {
 
 class TInteractiveConfigurationManager : public std::enable_shared_from_this<TInteractiveConfigurationManager> {
-    inline static const NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
+    inline static const NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
 public:
     using TPtr = std::shared_ptr<TInteractiveConfigurationManager>;

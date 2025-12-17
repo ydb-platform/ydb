@@ -1,5 +1,6 @@
 #include "ydb_profile.h"
 
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 
@@ -72,7 +73,7 @@ namespace {
             }
         );
 
-        const auto& colors = NColorizer::AutoColors(Cout);
+        const auto& colors = NConsoleClient::AutoColors(Cout);
         const auto& activeProfileName = profileManager->GetActiveProfileName();
         for (size_t i = 0; i < profileNames.size(); ++i) {
             TStringBuilder description;

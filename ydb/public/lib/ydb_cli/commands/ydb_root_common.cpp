@@ -40,7 +40,7 @@ namespace {
 std::terminate_handler DefaultTerminateHandler;
 
 void TerminateHandler() {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
 
     Cerr << colors.Red() << "======= terminate() call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);
@@ -66,7 +66,7 @@ TString SignalToString(int signal) {
 }
 
 void BackTraceSignalHandler(int signal) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cerr);
 
     Cerr << colors.Red() << "======= " << SignalToString(signal) << " call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);

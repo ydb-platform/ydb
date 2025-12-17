@@ -14,7 +14,7 @@ namespace NYdb::NConsoleClient {
 
 class TSessionRunnerBase : public ISessionRunner {
 protected:
-    inline const static NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
+    inline const static NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
 public:
     TSessionRunnerBase(const TLineReaderSettings& settings, const TInteractiveLogger& log);

@@ -11,7 +11,7 @@
 namespace NYdb::NConsoleClient {
 
 class TInteractiveCLI {
-    inline const static NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
+    inline const static NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
     struct TVersionInfo {
         TString CliVersion;

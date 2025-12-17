@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 
 #include <library/cpp/logger/log.h>
@@ -7,7 +8,7 @@
 namespace NYdb::NConsoleClient {
 
 class TInteractiveLogger {
-    inline static const NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
+    inline static const NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
     class TEntry : public TStringBuilder {
     public:

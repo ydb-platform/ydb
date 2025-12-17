@@ -1,4 +1,5 @@
 #include "interactive.h"
+#include "colors.h"
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
@@ -19,7 +20,7 @@
 namespace NYdb::NConsoleClient {
 
 bool AskInputWithPrompt(const TString& prompt, std::function<bool(const TString&)> handler, bool verbose, bool exitOnError) {
-    const auto& colors = NColorizer::AutoColors(Cout);
+    const auto& colors = NConsoleClient::AutoColors(Cout);
     replxx::Replxx rx;
 
     while (true) {
@@ -185,7 +186,7 @@ TNumericOptionsPicker::TNumericOptionsPicker(bool verbose)
 {}
 
 void TNumericOptionsPicker::AddOption(const TString& description, TPickableAction&& action) {
-    const auto& colors = NColorizer::AutoColors(Cout);
+    const auto& colors = NConsoleClient::AutoColors(Cout);
     Cout << " [" << colors.Green() << ++OptionsCount << colors.OldColor() << "] " << description << Endl;
     Options.emplace(OptionsCount, std::move(action));
 }

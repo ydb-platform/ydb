@@ -10,7 +10,7 @@ namespace NYdb::NConsoleClient::NAi {
 
 class TToolBase : public ITool {
 protected:
-    inline const static NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
+    inline const static NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
 public:
     TToolBase(const NJson::TJsonValue& parametersSchema, const TString& description, const TInteractiveLogger& log);

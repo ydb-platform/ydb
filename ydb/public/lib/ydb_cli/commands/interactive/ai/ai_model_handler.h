@@ -11,7 +11,7 @@
 namespace NYdb::NConsoleClient::NAi {
 
 class TModelHandler {
-    inline const static NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
+    inline const static NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
 public:
     struct TSettings {

@@ -1,7 +1,7 @@
 #include "describe.h"
+#include "colors.h"
 #include "pretty_table.h"
 #include "print_utils.h"
-#include "scheme_printers.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 
+#include <util/generic/hash.h>
 #include <util/stream/format.h>
 #include <util/string/join.h>
 
@@ -437,7 +438,7 @@ void PrintTtlSettings(const NTable::TTableDescription& tableDescription, IOutput
         break;
     }
     default:
-        NColorizer::TColors colors = NColorizer::AutoColors(out);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(out);
         out << "(unknown):" << Endl
             << colors.RedColor() << "Unknown ttl settings mode. Please update your version of YDB cli"
             << colors.OldColor() << Endl;
@@ -486,7 +487,7 @@ void PrintReadReplicasSettings(const NTable::TTableDescription& tableDescription
         out << "Read replicas total count in all AZs: " << settings->GetReadReplicasCount() << Endl;
         break;
     default:
-        NColorizer::TColors colors = NColorizer::AutoColors(out);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(out);
         out << colors.RedColor() << "Unknown read replicas settings mode. Please update your version of YDB cli"
             << colors.OldColor() << Endl;
     }

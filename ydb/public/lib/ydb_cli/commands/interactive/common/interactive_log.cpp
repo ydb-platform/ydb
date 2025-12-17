@@ -31,7 +31,7 @@ void TInteractiveLogger::Setup(const TClientCommand::TConfig& config) {
         TClientCommand::TConfig::VerbosityLevelToELogPrioritySilent(config.VerbosityLevel)
     ));
 
-    Log->SetFormatter([colors = NColorizer::AutoColors(Cerr)](ELogPriority priority, TStringBuf message) {
+    Log->SetFormatter([colors = NConsoleClient::AutoColors(Cerr)](ELogPriority priority, TStringBuf message) {
         TStringBuilder prefix;
         switch (priority) {
         case TLOG_EMERG:

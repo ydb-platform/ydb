@@ -216,13 +216,13 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
         auto container =
             NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(optionsProto.GetCompactionPlannerConstructor());
         CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
-    } else if (AppDataVerified().ColumnShardConfig.HasCompactionConstructor()) {
+    } else if (AppDataVerified().ColumnShardConfig.HasDefaultCompactionConstructor()) {
         auto container =
-            NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(AppDataVerified().ColumnShardConfig.GetCompactionConstructor());
+            NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(AppDataVerified().ColumnShardConfig.GetDefaultCompactionConstructor());
         CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
     }
     else {
-        CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault(AppDataVerified().ColumnShardConfig.GetCompactionPreset());
+        CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault(AppDataVerified().ColumnShardConfig.GetDefaultCompactionPreset());
     }
     if (optionsProto.HasMetadataManagerConstructor()) {
         auto container =

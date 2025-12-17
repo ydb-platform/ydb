@@ -46,7 +46,7 @@ class TestCompactionConfig(object):
     def test_lc_buckets(self):
         config = KikimrConfigGenerator(
             column_shard_config={
-                "compaction_preset": "lc-buckets",
+                "default_compaction_preset": "lc-buckets",
             })
 
         self.init(config)
@@ -55,7 +55,7 @@ class TestCompactionConfig(object):
     def test_tiling(self):
         config = KikimrConfigGenerator(
             column_shard_config={
-                "compaction_preset": "tiling",
+                "default_compaction_preset": "tiling",
             })
 
         self.init(config)
@@ -64,7 +64,7 @@ class TestCompactionConfig(object):
     def test_wrong_preset(self):
         config = KikimrConfigGenerator(
             column_shard_config={
-                "compaction_preset": "ydb",
+                "default_compaction_preset": "ydb",
             })
 
         with pytest.raises(Exception, match="Socket closed"):
@@ -80,7 +80,7 @@ class TestCompactionConfig(object):
     def test_tiling_constructor(self):
         config = KikimrConfigGenerator(
             column_shard_config={
-                "compaction_constructor": {
+                "default_compaction_constructor": {
                     "class_name" : "tiling",
                     "tiling" : {
                         "json" : "{}"
@@ -94,7 +94,7 @@ class TestCompactionConfig(object):
     def test_lc_buckets_constructor(self):
         config = KikimrConfigGenerator(
             column_shard_config={
-                "compaction_constructor": {
+                "default_compaction_constructor": {
                     "class_name" : "lc-buckets",
                     "node_portions_count_limit" : 6000000,
                     "weight_kff" : 1,
@@ -132,7 +132,7 @@ class TestCompactionConfig(object):
     def test_wrong_constructor(self):
         config = KikimrConfigGenerator(
             column_shard_config={
-                "compaction_constructor": {
+                "default_compaction_constructor": {
                     "class_name" : "ydb",
                 },
             })
@@ -144,7 +144,7 @@ class TestCompactionConfig(object):
     def test_mix_constructor(self):
         config = KikimrConfigGenerator(
             column_shard_config={
-                "compaction_constructor": {
+                "default_compaction_constructor": {
                     "class_name" : "lc-buckets",
                     "tiling" : {
                         "json" : "{}"
@@ -158,8 +158,8 @@ class TestCompactionConfig(object):
     def test_constructor_overrides_preset(self):
         config = KikimrConfigGenerator(
             column_shard_config={
-                "compaction_preset": "tiling",
-                "compaction_constructor": {
+                "default_compaction_preset": "tiling",
+                "default_compaction_constructor": {
                     "class_name" : "tiling",
                     "tiling" : {
                         "json" : "{}"
@@ -173,13 +173,13 @@ class TestCompactionConfig(object):
     def test_preset_overrides_constructor(self):
         config = KikimrConfigGenerator(
             column_shard_config={
-                "compaction_constructor": {
+                "default_compaction_constructor": {
                     "class_name" : "tiling",
                     "tiling" : {
                         "json" : "{}"
                     }
                 },
-                "compaction_preset": "tiling",
+                "default_compaction_preset": "tiling",
             })
 
         self.init(config)

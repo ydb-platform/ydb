@@ -307,7 +307,7 @@ public:
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        return BuildDefault(NKikimrConfig::TColumnShardConfig::default_instance().GetCompactionPreset());
+        return BuildDefault(NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompactionPreset());
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {

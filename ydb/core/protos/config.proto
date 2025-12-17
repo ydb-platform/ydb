@@ -2459,8 +2459,8 @@ message TColumnShardConfig {
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
 
     oneof DefaultCompaction {
-        string CompactionPreset = 59 [default = "tiling"];
-        NKikimrSchemeOp.TCompactionPlannerConstructorContainer CompactionConstructor = 60;
+        string DefaultCompactionPreset = 59 [default = "tiling"];
+        NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 60;
     }
 }
 

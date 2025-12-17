@@ -244,7 +244,7 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTablet
 
             auto consumerGroup = DynamicCounters->GetSubgroup("consumer", metricsConsumerName);
             counters.MLPMessageLockAttemptsCounter = consumerGroup->GetExpiringNamedHistogram("name", "topic.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
-            counters.MLPMessageLockingDurationCounter = consumerGroup->GetExpiringNamedHistogram("name", "message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
+            counters.MLPMessageLockingDurationCounter = consumerGroup->GetExpiringNamedHistogram("name", "topic.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
         }
     }
 

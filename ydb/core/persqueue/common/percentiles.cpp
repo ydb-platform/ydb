@@ -48,7 +48,7 @@ const TVector<std::pair<ui64, TString>> SLOW_LATENCY_INTERVALS = {
     {30'000, "30000"},
     {60'000, "60000"},
     {180'000, "180000"},
-    {9'999'999, "999999"}
+    {9'999'999, "9999999"}
 };
 
 const TVector<std::pair<ui64, TString>> SLOW_LATENCY_MS_INTERVALS = {
@@ -62,7 +62,7 @@ const TVector<std::pair<ui64, TString>> SLOW_LATENCY_MS_INTERVALS = {
     {30'000, "30000ms"},
     {60'000, "60000ms"},
     {180'000, "180000ms"},
-    {9'999'999, "999999ms"}
+    {9'999'999, "9999999ms"}
 };
 
 const TTabletPercentileCounter::TRangeDef SLOW_LATENCY_RANGES[11] = {

@@ -682,7 +682,7 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                 },
             },
             .WriteTimestampDelta = message.WriteTimestampDelta,
-            .LockingTimestampMilliSecondsDelta = message.LockingTimestampSign ? message.LockingTimestampMilliSecondsDelta : -message.LockingTimestampMilliSecondsDelta
+            .LockingTimestampMilliSecondsDelta = message.LockingTimestampSign ? -message.LockingTimestampMilliSecondsDelta : message.LockingTimestampMilliSecondsDelta
         };
     };
 
@@ -777,13 +777,13 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
                 msg.Common.Fields.Status = message->Status;
                 msg.Common.Fields.ProcessingCount = message->ProcessingCount;
                 msg.Common.Fields.DeadlineDelta = message->DeadlineDelta;
-                msg.LockingTimestampMilliSecondsDelta = message->LockingTimestampSign ? message->LockingTimestampMilliSecondsDelta : -message->LockingTimestampMilliSecondsDelta;
+                msg.LockingTimestampMilliSecondsDelta = message->LockingTimestampSign ? -message->LockingTimestampMilliSecondsDelta : message->LockingTimestampMilliSecondsDelta;
                 serializer.Add(offset, msg);
             }
         }
 
         wal.SetChangedMessages(std::move(serializer.Buffer));
-    };
+    }
 
     if (!Storage->DLQQueue.empty()) {
         auto firstSeqNo = Storage->DLQQueue.begin()->SeqNo;

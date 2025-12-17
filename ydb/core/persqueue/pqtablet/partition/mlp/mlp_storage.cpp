@@ -800,6 +800,8 @@ void TStorage::MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteT
     }
 
     auto doChange = [&](auto& message) {
+        const ui64 MaxLockingTimestampMilliSecondsDelta = (1 << 26) - 1;
+
         message.DeadlineDelta = message.DeadlineDelta > deadlineDiff ? message.DeadlineDelta - deadlineDiff : 0;
         message.WriteTimestampDelta = message.WriteTimestampDelta > writeTimestampDiff ? message.WriteTimestampDelta - writeTimestampDiff : 0;
 
@@ -807,11 +809,11 @@ void TStorage::MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteT
             if (message.LockingTimestampMilliSecondsDelta >= deadlineDiffMilliSeconds) {
                 message.LockingTimestampMilliSecondsDelta -= deadlineDiffMilliSeconds;
             } else {
-                message.LockingTimestampMilliSecondsDelta = deadlineDiffMilliSeconds - message.LockingTimestampMilliSecondsDelta;
+                message.LockingTimestampMilliSecondsDelta = std::min<ui64>(deadlineDiffMilliSeconds - message.LockingTimestampMilliSecondsDelta, MaxLockingTimestampMilliSecondsDelta);
                 message.LockingTimestampSign = 1;
             }
         } else {
-            message.LockingTimestampMilliSecondsDelta += deadlineDiffMilliSeconds;
+            message.LockingTimestampMilliSecondsDelta = std::min<ui64>(message.LockingTimestampMilliSecondsDelta + deadlineDiffMilliSeconds, MaxLockingTimestampMilliSecondsDelta);
         }
     };
 

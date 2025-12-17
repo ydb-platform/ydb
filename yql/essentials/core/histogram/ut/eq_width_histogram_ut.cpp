@@ -36,7 +36,7 @@ void PopulateHistogram(std::shared_ptr<TEqWidthHistogram> histogram, const std::
         T step = bucketWidth / 2;
         T rangeStart = LoadFrom<T>(histogram->GetDomainRange().Start);
         for (ui32 i = 0; i < histogram->GetNumBuckets(); ++i) {
-            T border = rangeStart + i * bucketWidth;
+            T border = rangeStart + static_cast<T>(i) * bucketWidth;
             histogram->AddElement(border - step);
             histogram->AddElement(border + step);
         }

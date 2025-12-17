@@ -27,12 +27,24 @@ inline bool CmpEqual(T left, T right) {
 }
 template <>
 inline bool CmpEqual(float left, float right) {
+    if (std::isinf(left) || std::isinf(right)) {
+        return left == right;
+    }
+    if (std::isnan(left) || std::isnan(right)) {
+        return false;
+    }
     float diff = std::fabs(left - right);
     float scale = std::max({1.0f, std::fabs(left), std::fabs(right)});
     return diff <= std::numeric_limits<float>::epsilon() * scale;
 }
 template <>
 inline bool CmpEqual(double left, double right) {
+    if (std::isinf(left) || std::isinf(right)) {
+        return left == right;
+    }
+    if (std::isnan(left) || std::isnan(right)) {
+        return false;
+    }
     double diff = std::fabs(left - right);
     double scale = std::max({1.0, std::fabs(left), std::fabs(right)});
     return diff <= std::numeric_limits<double>::epsilon() * scale;
@@ -158,9 +170,15 @@ public:
     template <typename T>
     ui32 FindBucketIndex(T val) const {
         T bucketWidth = GetBucketWidth<T>();
-        T bucketIndex = std::floor((val - LoadFrom<T>(DomainRange_.Start)) / bucketWidth);
-        bucketIndex = std::max<T>(0, bucketIndex);
-        bucketIndex = std::min<T>(GetNumBuckets() - 1, bucketIndex);
+        T domainStart = LoadFrom<T>(DomainRange_.Start);
+        T domainEnd = LoadFrom<T>(DomainRange_.End);
+        if (CmpLess<T>(val, domainStart)) {
+            return 0;
+        }
+        if (!CmpLess<T>(val, domainEnd)) {
+            return GetNumBuckets() - 1;
+        }
+        T bucketIndex = std::floor((val - domainStart) / bucketWidth);
         return static_cast<ui32>(bucketIndex);
     }
 
@@ -172,6 +190,14 @@ public:
     // Returns bucket width based on domain range and number of buckets.
     template <typename T>
     T GetBucketWidth() const {
+        if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
+            using UT = std::make_unsigned_t<T>;
+            const UT start = static_cast<UT>(LoadFrom<T>(DomainRange_.Start));
+            const UT end = static_cast<UT>(LoadFrom<T>(DomainRange_.End));
+            const UT rangeLen = end - start;
+            T bucketWidth = static_cast<T>(rangeLen / static_cast<UT>(GetNumBuckets()));
+            return bucketWidth;
+        }
         const T start = LoadFrom<T>(DomainRange_.Start);
         const T end = LoadFrom<T>(DomainRange_.End);
         const T rangeLen = end - start;

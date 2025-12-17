@@ -22,7 +22,11 @@ from .param_constants import kikimr_driver_path, ydb_cli_path
 from .util import LogLevels
 
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
-if PDISK_SIZE_STR.endswith("GB"):
+if PDISK_SIZE_STR.endswith("KB"):
+    PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024
+elif PDISK_SIZE_STR.endswith("MB"):
+    PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024
+elif PDISK_SIZE_STR.endswith("GB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
 else:
     PDISK_SIZE = int(PDISK_SIZE_STR)
@@ -182,7 +186,8 @@ class KikimrConfigGenerator(object):
             enable_static_auth=False,
             cms_config=None,
             explicit_statestorage_config=None,
-            protected_mode=False
+            protected_mode=False,
+            tiny_mode=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -267,6 +272,8 @@ class KikimrConfigGenerator(object):
         self.node_kind = node_kind
         self.yq_tenant = yq_tenant
         self.dc_mapping = dc_mapping
+
+        self.tiny_mode = tiny_mode
 
         self.__bs_cache_file_path = bs_cache_file_path
 

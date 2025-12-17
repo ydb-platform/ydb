@@ -245,6 +245,7 @@ namespace NKikimr {
                         .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
                         .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
+                        .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                     },
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStats,
@@ -585,6 +586,7 @@ namespace NKikimr {
                                     .ExecutionRelay = ev->Get()->ExecutionRelay,
                                     .LatencyQueueKind = kind,
                                     .ForceGroupGeneration = forceGroupGeneration,
+                                    .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                                 },
                                 .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                                 .Stats = PerDiskStats,
@@ -1064,7 +1066,7 @@ namespace NKikimr {
 
             if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> &&
                     !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
-                ev.MessageRelevanceTracker = MessageRelevanceTracker;
+                ev.MessageRelevanceTracker = TMessageRelevance(RelevanceOwner, ExternalRelevanceWatcher);
                 ui64 cost;
                 if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVMultiPut>) {
                     bool internalQueue;
@@ -1126,6 +1128,14 @@ namespace NKikimr {
         }
         Y_VERIFY_S(!Info->Group || !Info->Group->HasBridgeProxyGroupId() || ForceGroupGeneration, "Type# " << TypeName(*this));
         return true;
+    }
+
+    bool TBlobStorageGroupRequestActor::CheckForExternalCancellation() {
+        if (ExternalRelevanceWatcher && ExternalRelevanceWatcher->expired()) {
+            ReplyAndDie(NKikimrProto::ERROR);
+            return true;
+        }
+        return false;
     }
 
     void TBlobStorageGroupProxy::Handle(TEvGetQueuesInfo::TPtr ev) {

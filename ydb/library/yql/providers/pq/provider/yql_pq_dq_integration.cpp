@@ -342,8 +342,12 @@ public:
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
                 }
-                if (sharedReading && !watermarkExprSql.empty()) {
-                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));
+                if (!watermarkExprSql.empty()) {
+                    if (sharedReading) {
+                        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));
+                    } else {
+                        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Watermark expr specified, but will not be used (currently only implemented with row dispatcher): " + watermarkExprSql));
+                    }
                 }
                 sourceType = "PqSource";
             }

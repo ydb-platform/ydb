@@ -317,9 +317,19 @@ TEST(TErrorTest, WrapRValue)
     EXPECT_EQ(wrapped.InnerErrors()[0], error);
 
     TError anotherErrorCopy = error;
-    auto trviallyWrapped = std::move(anotherErrorCopy).Wrap();
+    auto triviallyWrapped = std::move(anotherErrorCopy).Wrap();
     EXPECT_TRUE(anotherErrorCopy.IsOK());
-    EXPECT_EQ(trviallyWrapped, error);
+    EXPECT_EQ(triviallyWrapped, error);
+}
+
+TEST(TErrorTest, WrapOKError)
+{
+    TError error;
+
+    auto wrapped = error.Wrap("Wrapped OK error");
+    EXPECT_EQ(wrapped.GetCode(), NYT::EErrorCode::Generic);
+    EXPECT_EQ(wrapped.GetMessage(), "Wrapped OK error");
+    EXPECT_EQ(wrapped.InnerErrors().size(), 0u);
 }
 
 TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroJustWorks)

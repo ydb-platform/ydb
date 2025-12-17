@@ -1041,6 +1041,8 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         for (auto&& userInfoPair : UsersInfoStorage->ViewAll()) {
 
             auto& userInfo = userInfoPair.second;
+            if (!userInfo.LabeledCounters)
+                continue;
             if (userInfoPair.first != CLIENTID_WITHOUT_CONSUMER && !userInfo.HasReadRule && !ImporantOrExtendedAvailabilityPeriod(userInfo))
                 continue;
             auto* cac = ac->AddConsumerAggregatedCounters();

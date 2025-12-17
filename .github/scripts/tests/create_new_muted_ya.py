@@ -148,8 +148,17 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
             logging.info("Starting to fetch results...")
             results = ydb_wrapper.execute_scan_query(query_string, query_name=f"get_tests_monitor_data_{branch}")
             
-            logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
-            return results
+            # Filter out suite-level entries (aggregates, not individual tests)
+            # Similar to generate-summary.py which skips results with suite=True
+            # Suite tests have test_name like "unittest", "py3test", "gtest"
+            suite_test_names = {'unittest', 'py3test', 'gtest'}
+            filtered_results = [
+                result for result in results
+                if result.get('test_name') and result.get('test_name') not in suite_test_names
+            ]
+            
+            logging.info(f"Query completed successfully. Total rows returned: {len(results)}, after filtering suite tests: {len(filtered_results)}")
+            return filtered_results
         
     except Exception as e:
         logging.error(f"Error executing query: {e}")

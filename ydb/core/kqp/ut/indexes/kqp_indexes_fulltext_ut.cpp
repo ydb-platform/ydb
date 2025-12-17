@@ -2222,7 +2222,7 @@ Y_UNIT_TEST(Utf8) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextScore) {
+Y_UNIT_TEST(SelectWithFulltextContains) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -2262,18 +2262,25 @@ Y_UNIT_TEST(SelectWithFulltextScore) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    { // Query with WHERE clause using FulltextContains UDF
-        TString query = R"sql(
+    std::vector<std::pair<std::string, std::vector<ui64>>> searchingTerms = {
+        {"машинное обучение", {1, 4, 7}},
+        {"моделей", {6}},
+        {"собаки любят ", {12}},
+        {"коты любят", {11}}
+    };
+
+    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+        TString query = Sprintf(R"sql(
             SELECT Key, body FROM `/Root/table` VIEW `index_fulltext`
-            WHERE FullText::FulltextContains(body, "машинное обучение")
+            WHERE FullText::FulltextContains(body, "%s")
             ORDER BY Key
-        )sql";
+        )sql", term.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto resultSet = result.GetResultSet(0);
         // Should return rows 1-10 (all contain "машинное обучение"), but not 11-12
-        UNIT_ASSERT_C(resultSet.RowsCount() >= 3, "Expected at least 10 rows with machine learning content");
+        UNIT_ASSERT_C(resultSet.RowsCount() == expectedKeys.size(), "Expected " + std::to_string(expectedKeys.size()) + " rows with " + term + " content");
 
         // Verify that all returned rows actually contain the search term
         NYdb::TResultSetParser parser(resultSet);
@@ -2283,7 +2290,7 @@ Y_UNIT_TEST(SelectWithFulltextScore) {
             UNIT_ASSERT_C(bodyValue, "Body should not be null");
             Cerr << "Key: " << key << Endl;
             UNIT_ASSERT_C(
-                IsIn({1, 4, 7}, key),
+                IsIn(expectedKeys, key),
                 "All returned rows should contain machine learning related text"
             );
         }

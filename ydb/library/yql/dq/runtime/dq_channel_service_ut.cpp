@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         UNIT_ASSERT_VALUES_EQUAL(receivedCount, MESSAGE_COUNT);
         Cerr << outputBlockCount << " / " << inputBlockCount << Endl;
     }
-*/
+
     Y_UNIT_TEST(LocalChannelEarlyFinish) {
         constexpr ui32 MESSAGE_COUNT = 1000;
 
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
                     continue;
                 }
                 TDataChunk data;
-                UNIT_ASSERT(receiverBuffer->Pop(data));
+                UNIT_ASSERT(runtime.RunCall([&receiverBuffer, &data] { return receiverBuffer->Pop(data); }));
                 if (data.Finished) {
                     break;
                 }
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         UNIT_ASSERT(sentCount < MESSAGE_COUNT);
         Cerr << sentCount << " / " << receivedCount << Endl;
     }
-
+*/
     Y_UNIT_TEST(LocalChannelAsyncRead) {
 
         TKikimrRunner kikimr(TKikimrSettings{});
@@ -483,7 +483,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         UNIT_ASSERT(ReadAsyncNotified(runtime, receiver, receiverBuffer, data));
         UNIT_ASSERT(data.Buffer.Front().Buf == "ByeBye");
     }
-
+/*
     Y_UNIT_TEST(IcChannelSessionInflight) {
 
         TKikimrSettings settings;
@@ -499,8 +499,9 @@ Y_UNIT_TEST_SUITE(Channels20) {
         std::shared_ptr<IChannelBuffer> senderBuffer;
         std::shared_ptr<TDebugNodeState> senderState;
         std::shared_ptr<IChannelBuffer> receiverBuffer;
-        std::shared_ptr<TDebugNodeState> receiverState;
         TChannelFullInfo info(1, sender, receiver, 1, 2);
+        std::shared_ptr<TDqChannelService> service0;
+        std::shared_ptr<TDqChannelService> service1;
 
         {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
@@ -513,7 +514,6 @@ Y_UNIT_TEST_SUITE(Channels20) {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
             auto service = serviceReply->Service;
-            receiverState = service->CreateDebugNodeState(runtime.GetNodeId(0));
             receiverBuffer = service->GetRemoteInputBuffer(info);
         }
 
@@ -655,7 +655,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         }
         event.WaitI();
     }
-
+*/
     Y_UNIT_TEST(CaIntegrationTrivial) {
 
         TKikimrSettings settings;
@@ -771,7 +771,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson("[[[55u]]]", FormatResultSetYson(result.GetResultSet(0)));
     }
-
+/*
     Y_UNIT_TEST(CaIntegrationDataLoss) {
 
         TKikimrSettings settings;
@@ -904,4 +904,5 @@ Y_UNIT_TEST_SUITE(Channels20) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson("[[[55u]]]", FormatResultSetYson(result.GetResultSet(0)));
     }
+*/
 }

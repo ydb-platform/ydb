@@ -963,7 +963,7 @@ private:
     TTabletCountersBase TabletCounters;
     std::optional<TTabletLabeledCountersBase> PartitionCountersLabeled;
     std::optional<TTabletLabeledCountersBase> PartitionCountersExtended;
-    std::optional<TTabletLabeledCountersBase> PartitionCompactionCounters;
+    std::optional<TTabletLabeledCountersBase> PartitionKeyCompactionCounters;
 
     // Per partition counters
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;

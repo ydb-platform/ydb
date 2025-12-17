@@ -1394,7 +1394,7 @@ void TPartition::CreateCompacter() {
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         }
         Compacter.Reset();
-        PartitionCompactionCounters.reset();
+        PartitionKeyCompactionCounters.reset();
         return;
     }
     if (Compacter) {
@@ -1407,13 +1407,13 @@ void TPartition::CreateCompacter() {
 
     //Init compacter counters
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        PartitionCompactionCounters = CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(
+        PartitionKeyCompactionCounters = CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(
                                             EscapeBadChars(TopicName()),
                                             Partition.OriginalPartitionId,
                                             Config.GetYdbDatabasePath()
                                         );
     } else {
-        PartitionCompactionCounters = CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(
+        PartitionKeyCompactionCounters = CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(
                                             TopicName(),
                                             Partition.OriginalPartitionId
                                         );

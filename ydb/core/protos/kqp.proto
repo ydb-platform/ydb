@@ -903,6 +903,24 @@ message TKqpStreamLookupSettings {
     optional TReadVectorTopK VectorTopK = 19;
 }
 
+message TKqpFullTextSourceSettings {
+    message TKqpQuerySettings {
+        repeated TKqpColumnMetadataProto Columns = 4;
+        optional string Query = 1;
+    }
+
+    optional NKqpProto.TKqpPhyTableId Table = 1;
+    optional string Index = 2;
+
+    repeated TKqpColumnMetadataProto Columns = 3;
+
+    optional TKqpQuerySettings QuerySettings = 4;
+
+    optional TKqpSnapshot Snapshot = 5;
+
+    optional string Database = 6;
+};
+
 message TKqpSequencerSettings {
     optional NKqpProto.TKqpPhyTableId Table = 1;
     repeated TKqpColumnMetadataProto Columns = 2;

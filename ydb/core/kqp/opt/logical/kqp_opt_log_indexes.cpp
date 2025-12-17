@@ -139,6 +139,8 @@ bool IsTableExistsKeySelector(NNodes::TCoLambda keySelector, const TKikimrTableD
     return true;
 }
 
+
+
 bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& indexDesc, TVector<TString>* columns) {
     return IsTableExistsKeySelector(node.KeySelectorLambda(), indexDesc, columns);
 }
@@ -1115,6 +1117,97 @@ TExprBase KqpRewriteTopSortOverFlatMap(const TExprBase& node, TExprContext& ctx)
     return Build<TCoOrderedFlatMap>(ctx, node.Pos())
         .Input(flatMapInput)
         .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
+        .Done();
+}
+
+TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap)
+{
+    Y_UNUSED(kqpCtx, parentsMap);
+
+    if (!node.Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    auto flatMap = node.Maybe<TCoFlatMapBase>().Cast();
+
+    if (!flatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
+        return node;
+    }
+
+    auto optionalIf = flatMap.Lambda().Body().Maybe<TCoOptionalIf>().Cast();
+
+
+    if (!optionalIf.Predicate().Maybe<TCoApply>()) {
+        return node;
+    }
+
+    auto apply = optionalIf.Predicate().Maybe<TCoApply>().Cast();
+
+    if (!apply.Callable().Maybe<TCoUdf>()) {
+        return node;
+    }
+
+    auto udf = apply.Callable().Maybe<TCoUdf>().Cast();
+
+    if (udf.MethodName().Value() != "FullText.FulltextContains") {
+        return node;
+    }
+
+    auto read = TReadMatch::Match(flatMap.Input());
+    if (!read) {
+        return node;
+    }
+
+    if (read.Index().Value().empty()) {
+        return node;
+    }
+
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+    YQL_ENSURE(tableDesc.Metadata);
+
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+    if (indexDesc->Type != TIndexDescription::EType::GlobalFulltext) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Index " << read.Index().Value() << " is not a fulltext index"));
+        return node;
+    }
+
+    auto searchQuery = Build<TCoAtom>(ctx, node.Pos())
+        .Value("машинное обучение")
+        .Done();
+
+    auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(Build<TCoAtom>(ctx, node.Pos())
+            .Value("body")
+            .Done())
+        .Done();
+
+
+    TVector<TCoAtom> resultColumns;
+    for(auto& column: tableDesc.Metadata->KeyColumnNames) {
+        resultColumns.push_back(Build<TCoAtom>(ctx, node.Pos())
+            .Value(column)
+            .Done());
+    }
+    auto resultColumnsList = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(resultColumns)
+        .Done();
+
+    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+        .Table(read.Table())
+        .Index(read.Index())
+        .Columns(searchColumns.Ptr())
+        .Query(searchQuery.Ptr())
+        .ResultColumns(resultColumnsList.Ptr())
+        .Done();
+
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    return Build<TKqlStreamLookupTable>(ctx, read.Pos())
+        .Table(read.Table())
+        .LookupKeys(newInput.Ptr())
+        .Columns(read.Columns())
+        .Settings(settings.BuildNode(ctx, read.Pos()))
         .Done();
 }
 

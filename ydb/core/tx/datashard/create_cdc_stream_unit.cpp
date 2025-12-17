@@ -29,24 +29,27 @@ public:
             return EExecutionStatus::Executed;
         }
 
+        TPathId pathId;
+        ui64 schemaVersion = 0;
+        TUserTable::TPtr tableInfo;
+
         if (schemeTx.HasCreateIncrementalBackupSrc()) {
             const auto& backup = schemeTx.GetCreateIncrementalBackupSrc();
 
-            TPathId pathId;
-            ui64 schemaVersion = 0;
             if (backup.HasDropCdcStreamNotice()) {
-                pathId = TPathId::FromProto(backup.GetDropCdcStreamNotice().GetPathId());
-                schemaVersion = backup.GetDropCdcStreamNotice().GetTableSchemaVersion();
+                const auto& notice = backup.GetDropCdcStreamNotice();
+                pathId = TPathId::FromProto(notice.GetPathId());
+                schemaVersion = notice.GetTableSchemaVersion();
             } else if (backup.HasCreateCdcStreamNotice()) {
-                pathId = TPathId::FromProto(backup.GetCreateCdcStreamNotice().GetPathId());
-                schemaVersion = backup.GetCreateCdcStreamNotice().GetTableSchemaVersion();
+                const auto& notice = backup.GetCreateCdcStreamNotice();
+                pathId = TPathId::FromProto(notice.GetPathId());
+                schemaVersion = notice.GetTableSchemaVersion();
             } else {
                 return EExecutionStatus::Executed;
             }
 
             Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
-
-            TUserTable::TPtr tableInfo;
+            Y_ENSURE(schemaVersion);
 
             if (backup.HasDropCdcStreamNotice()) {
                 const auto& notice = backup.GetDropCdcStreamNotice();
@@ -86,43 +89,33 @@ public:
                     notice.HasSnapshotName() ? notice.GetSnapshotName() : TString(),
                     op->GetStep(), op->GetTxId());
             }
+        } else {
+            const auto& params = schemeTx.GetCreateCdcStreamNotice();
 
-            Y_ENSURE(tableInfo, "Table info must be initialized by Drop or Create action");
+            pathId = TPathId::FromProto(params.GetPathId());
+            schemaVersion = params.GetTableSchemaVersion();
 
-            TDataShardLocksDb locksDb(DataShard, txc);
-            DataShard.AddUserTable(pathId, tableInfo, &locksDb);
+            Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
+            Y_ENSURE(schemaVersion);
 
-            if (tableInfo->NeedSchemaSnapshots()) {
-                DataShard.AddSchemaSnapshot(pathId, schemaVersion, op->GetStep(), op->GetTxId(), txc, ctx);
-            }
+            const auto& streamDesc = params.GetStreamDescription();
+            const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
 
-            BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
-            op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
+            tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, schemaVersion, streamDesc);
 
-            return EExecutionStatus::DelayCompleteNoMoreRestarts;
+            AddCdcStream(txc, pathId, streamPathId, streamDesc,
+                params.HasSnapshotName() ? params.GetSnapshotName() : TString(),
+                op->GetStep(), op->GetTxId());
         }
 
-        const auto& params = schemeTx.GetCreateCdcStreamNotice();
-        const auto& streamDesc = params.GetStreamDescription();
-        const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
+        Y_ENSURE(tableInfo, "Table info must be initialized by Drop or Create action");
 
-        const auto pathId = TPathId::FromProto(params.GetPathId());
-        Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
-
-        const auto version = params.GetTableSchemaVersion();
-        Y_ENSURE(version);
-
-        auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, streamDesc);
         TDataShardLocksDb locksDb(DataShard, txc);
         DataShard.AddUserTable(pathId, tableInfo, &locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
-            DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+            DataShard.AddSchemaSnapshot(pathId, schemaVersion, op->GetStep(), op->GetTxId(), txc, ctx);
         }
-
-        AddCdcStream(txc, pathId, streamPathId, streamDesc,
-            params.HasSnapshotName() ? params.GetSnapshotName() : TString(),
-            op->GetStep(), op->GetTxId());
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

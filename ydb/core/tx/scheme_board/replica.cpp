@@ -181,25 +181,6 @@ public:
     class TDescription {
         static constexpr char MemoryLabelDescribeResult[] = "SchemeBoard/Replica/DescribeSchemeResult";
 
-        void Notify() {
-            if (!Subscribers) {
-                return;
-            }
-
-            auto notify = BuildNotify();
-            TVector<const TActorId*> subscribers(Reserve(Subscribers.size()));
-
-            for (auto& [subscriber, info] : Subscribers) {
-                if (!info.EnqueueVersion(notify.Get())) {
-                    continue;
-                }
-
-                subscribers.push_back(&subscriber);
-            }
-
-            MultiSend(subscribers, Owner->SelfId(), std::move(notify));
-        }
-
         void TrackMemory() const {
             NActors::NMemory::TLabel<MemoryLabelDescribeResult>::Add(
                 PathDescription.DescribeSchemeResultSerialized.size()
@@ -448,6 +429,25 @@ public:
             }
 
             return notify;
+        }
+
+        void Notify() {
+            if (!Subscribers) {
+                return;
+            }
+
+            auto notify = BuildNotify();
+            TVector<const TActorId*> subscribers(Reserve(Subscribers.size()));
+
+            for (auto& [subscriber, info] : Subscribers) {
+                if (!info.EnqueueVersion(notify.Get())) {
+                    continue;
+                }
+
+                subscribers.push_back(&subscriber);
+            }
+
+            MultiSend(subscribers, Owner->SelfId(), std::move(notify));
         }
 
         void Subscribe(const TActorId& subscriber, const TString&, ui64 domainOwnerId, const TCapabilities& capabilities) {
@@ -798,7 +798,7 @@ private:
         const TString& path = ev->Get()->GetPath();
         const TPathId& pathId = ev->Get()->GetPathId();
 
-       {
+        {
             auto& record = *ev->Get()->MutableRecord();
             const ui64 owner = record.GetOwner();
             const ui64 generation = record.GetGeneration();
@@ -839,7 +839,7 @@ private:
                 SoftDeleteDescription(pathId, true);
                 return AckUpdate(ev);
             }
-       }
+        }
 
         if (TDescription* desc = Descriptions.FindPtr(pathId)) {
             if (desc->IsExplicitlyDeleted()) {
@@ -874,12 +874,23 @@ private:
             }
 
             if (curPathId < pathId) {
+                // If database changed (recreated)
+                auto subscribers = desc->GetSubscribers(SUBSCRIPTION_BY_PATH);
+
                 SoftDeleteDescription(desc->GetPathId());
                 Descriptions.DeleteIndex(path);
-                RelinkSubscribers(desc, path);
-            }
 
-            UpsertDescription(path, pathId, std::move(pathDescription));
+                UpsertDescription(path, pathId, std::move(pathDescription));
+
+                for (const auto& [subscriber, info] : subscribers) {
+                    SubscribeBy(subscriber, path, info.GetDomainOwnerId(), info.GetCapabilities(), false);
+                }
+                TDescription* newDesc = Descriptions.FindPtr(path);
+                newDesc->Notify();
+            }
+            else {
+                UpsertDescription(path, pathId, std::move(pathDescription));
+            }
             return AckUpdate(ev);
         }
 

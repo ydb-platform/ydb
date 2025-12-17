@@ -205,7 +205,7 @@ engine = sa.create_engine(
     "yql+ydb://ydb.example.com:2135/prod",
     connect_args={
         "credentials": {"token": "your_token"},
-        "protocol": "grpc",
+        "protocol": "grpcs",
         "root_certificates_path": "/path/to/ca-certificates.crt",
         # "root_certificates": crt_string,  # Альтернативно — строка с сертификатами
     }

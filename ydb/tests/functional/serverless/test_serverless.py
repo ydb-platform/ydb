@@ -645,18 +645,12 @@ def test_discovery_exclusive_nodes(ydb_hostel_db, ydb_serverless_db_with_exclusi
     assert_that(serverless_db_exclusive_endpoints, only_contains(not_(is_in(serverless_db_shared_endpoints))))
 
 
-def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nodes, ydb_endpoint, ydb_cluster, enable_pool_encryption):
+def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nodes, ydb_endpoint, ydb_cluster):
     alter_database_serverless_compute_resources_mode(
         ydb_cluster,
         ydb_serverless_db_with_exclusive_nodes,
         "EServerlessComputeResourcesModeExclusive"
     )
-
-    if enable_pool_encryption:
-        # During the test db is being moved from /Root/hostel to
-        # /Root/serverless_with_exclusive_nodes and encryption key changes
-        # The test hangs on create_table and fails after 10m timeout
-        pytest.skip("Hangs with enable_pool_encryption=True")
 
     database = ydb_serverless_db_with_exclusive_nodes
     driver_config = ydb.DriverConfig(ydb_endpoint, database)

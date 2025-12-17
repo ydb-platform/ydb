@@ -280,7 +280,45 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                         assert read_resp.operation.status == StatusIds.SUCCESS, \
                             f"[Step: {step_name}] KV read failed: partition={partition_id}, " \
                             f"key={key}, status={read_resp.operation.status}, table_path={table_path}"
-                        self.logger.info(f"✓ Data integrity check passed for partition {partition_id}%s", context)
+                        
+
+                        if not hasattr(read_resp, 'operation'):
+                            raise AssertionError(
+                                f"[Step: {step_name}] KV read response does not contain 'operation' field: "
+                                f"partition={partition_id}, key={key}, table_path={table_path}"
+                            )
+                        
+                        operation = read_resp.operation
+                        if not hasattr(operation, 'result'):
+                            raise AssertionError(
+                                f"[Step: {step_name}] KV read response operation does not contain 'result' field: "
+                                f"partition={partition_id}, key={key}, table_path={table_path}"
+                            )
+                        
+                        result = operation.result
+                        if not hasattr(result, 'value'):
+                            raise AssertionError(
+                                f"[Step: {step_name}] KV read response result does not contain 'value' field: "
+                                f"partition={partition_id}, key={key}, table_path={table_path}"
+                            )
+                        
+                        read_value = result.value
+                        
+                        if isinstance(read_value, bytes):
+                            read_value = read_value.decode('utf-8', errors='replace')
+                        if isinstance(expected_value, bytes):
+                            expected_value = expected_value.decode('utf-8')
+                        
+                        # Извлекаем ожидаемое значение из строки (может содержать служебные символы)
+                        if expected_value in read_value:
+                            value_pos = read_value.find(expected_value)
+                            read_value = read_value[value_pos:value_pos + len(expected_value)]
+                        
+                        assert read_value == expected_value, \
+                            f"[Step: {step_name}] Data integrity check failed: partition={partition_id}, " \
+                            f"key={key}, expected={expected_value!r}, got={read_value!r}, table_path={table_path}"
+                        
+                        self.logger.info(f"✓ Data integrity check passed for partition {partition_id}%s (value verified)", context)
                     except Exception as e:
                         all_success = False
                         elapsed_time = time.time() - start_time
@@ -370,13 +408,52 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
 
                     # Чтение
                     try:
+                        expected_value = self._value_for("key", tablet_id)
                         read_resp = client_to_use.kv_read(
                             table_path, partition_id, "key"
                         )
                         assert read_resp.operation.status == StatusIds.SUCCESS, \
                             f"[Step: {step_name}] KV read failed: partition={partition_id}, tablet={tablet_id}, " \
                             f"status={read_resp.operation.status}, table_path={table_path}"
-                        self.logger.info("✓ KV read successful for partition %d, tablet %d%s", 
+                        
+
+                        if not hasattr(read_resp, 'operation'):
+                            raise AssertionError(
+                                f"[Step: {step_name}] KV read response does not contain 'operation' field: "
+                                f"partition={partition_id}, tablet={tablet_id}, table_path={table_path}"
+                            )
+                        
+                        operation = read_resp.operation
+                        if not hasattr(operation, 'result'):
+                            raise AssertionError(
+                                f"[Step: {step_name}] KV read response operation does not contain 'result' field: "
+                                f"partition={partition_id}, tablet={tablet_id}, table_path={table_path}"
+                            )
+                        
+                        result = operation.result
+                        if not hasattr(result, 'value'):
+                            raise AssertionError(
+                                f"[Step: {step_name}] KV read response result does not contain 'value' field: "
+                                f"partition={partition_id}, tablet={tablet_id}, table_path={table_path}"
+                            )
+                        
+                        read_value = result.value
+                        
+                        if isinstance(read_value, bytes):
+                            read_value = read_value.decode('utf-8', errors='replace')
+                        if isinstance(expected_value, bytes):
+                            expected_value = expected_value.decode('utf-8')
+                        
+                        # Извлекаем ожидаемое значение из строки (может содержать служебные символы)
+                        if expected_value in read_value:
+                            value_pos = read_value.find(expected_value)
+                            read_value = read_value[value_pos:value_pos + len(expected_value)]
+                        
+                        assert read_value == expected_value, \
+                            f"[Step: {step_name}] KV read value mismatch: partition={partition_id}, tablet={tablet_id}, " \
+                            f"expected={expected_value!r}, got={read_value!r}, table_path={table_path}"
+                        
+                        self.logger.info("✓ KV read successful for partition %d, tablet %d%s (value verified)", 
                                        partition_id, tablet_id, context)
                     except Exception as e:
                         elapsed_time = time.time() - start_time

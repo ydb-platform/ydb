@@ -551,7 +551,12 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
 
         # Проверяем, какие tablets уже есть в таблице ДО создания новых
-        existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        # Если таблицы еще нет, get_kv_tablet_ids может вызвать KeyError - обрабатываем это
+        try:
+            existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        except KeyError:
+            # Таблицы еще нет, значит нет существующих tablets
+            existing_tablet_ids = []
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
 
         # Создаем новые tablets
@@ -760,7 +765,12 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
 
         # Проверяем, какие tablets уже есть в таблице ДО создания новых
-        existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        # Если таблицы еще нет, get_kv_tablet_ids может вызвать KeyError - обрабатываем это
+        try:
+            existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        except KeyError:
+            # Таблицы еще нет, значит нет существующих tablets
+            existing_tablet_ids = []
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
 
         # Создаем новые tablets
@@ -958,7 +968,12 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
 
         # Проверяем, какие tablets уже есть в таблице ДО создания новых
-        existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        # Если таблицы еще нет, get_kv_tablet_ids может вызвать KeyError - обрабатываем это
+        try:
+            existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        except KeyError:
+            # Таблицы еще нет, значит нет существующих tablets
+            existing_tablet_ids = []
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
 
         # Создаем новые tablets
@@ -1141,7 +1156,12 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
 
         # Проверяем, какие tablets уже есть в таблице ДО создания новых
-        existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        # Если таблицы еще нет, get_kv_tablet_ids может вызвать KeyError - обрабатываем это
+        try:
+            existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        except KeyError:
+            # Таблицы еще нет, значит нет существующих tablets
+            existing_tablet_ids = []
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
 
         # Создаем новые tablets
@@ -1311,7 +1331,12 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         swagger_client = SwaggerClient(self.cluster.nodes[1].host, self.cluster.nodes[1].mon_port)
 
         # Проверяем, какие tablets уже есть в таблице ДО создания новых
-        existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        # Если таблицы еще нет, get_kv_tablet_ids может вызвать KeyError - обрабатываем это
+        try:
+            existing_tablet_ids = get_kv_tablet_ids(swagger_client)
+        except KeyError:
+            # Таблицы еще нет, значит нет существующих tablets
+            existing_tablet_ids = []
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
 
         # Создаем новые tablets

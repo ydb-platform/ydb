@@ -187,6 +187,7 @@ class BridgeKiKiMRTest(object):
         """
         Определяет текущее состояние кластера и возвращает имена primary и secondary piles.
         Независимо от конкретных имен piles (r1/r2), определяет какой pile сейчас PRIMARY.
+        Ждет, пока кластер достигнет стабильного состояния (один PRIMARY, один SYNCHRONIZED).
 
         Args:
             step_name: Название шага для логирования
@@ -196,29 +197,26 @@ class BridgeKiKiMRTest(object):
             tuple: (primary_pile_name, secondary_pile_name)
         """
         self.logger.info(f"=== {step_name.upper()} ===")
+        
+        # Ждем стабильного состояния: один PRIMARY, один SYNCHRONIZED
+        # Пробуем оба варианта (r1=PRIMARY или r2=PRIMARY)
         try:
-            current_state = self.get_cluster_state(self.bridge_client)
-            current_states = {s.pile_name: s.state for s in current_state.pile_states}
-        except Exception as e:
-            # Если не удалось получить состояние, ждем стабильного состояния
-            self.logger.warning(f"Failed to get cluster state: {e}. Waiting for stable state...")
-            # Ждем, что есть один PRIMARY и один SYNCHRONIZED (независимо от имен)
-            # Пробуем оба варианта
-            try:
-                self.wait_for_cluster_state(
-                    self.bridge_client,
-                    {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
-                    timeout_seconds=timeout_seconds
-                )
-            except AssertionError:
-                # Если r1 не PRIMARY, пробуем r2
-                self.wait_for_cluster_state(
-                    self.bridge_client,
-                    {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY},
-                    timeout_seconds=timeout_seconds
-                )
-            current_state = self.get_cluster_state(self.bridge_client)
-            current_states = {s.pile_name: s.state for s in current_state.pile_states}
+            self.wait_for_cluster_state(
+                self.bridge_client,
+                {"r1": PileState.PRIMARY, "r2": PileState.SYNCHRONIZED},
+                timeout_seconds=timeout_seconds
+            )
+        except AssertionError:
+            # Если r1 не PRIMARY, пробуем r2
+            self.wait_for_cluster_state(
+                self.bridge_client,
+                {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY},
+                timeout_seconds=timeout_seconds
+            )
+        
+        # Получаем финальное состояние
+        current_state = self.get_cluster_state(self.bridge_client)
+        current_states = {s.pile_name: s.state for s in current_state.pile_states}
 
         # Определяем какой pile сейчас PRIMARY
         primary_pile_name = "r1" if current_states.get("r1") == PileState.PRIMARY else "r2"

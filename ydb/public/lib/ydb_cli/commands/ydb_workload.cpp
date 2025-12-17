@@ -5,6 +5,7 @@
 
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
+#include "sqs_workload/sqs_workload.h"
 #include "ydb_benchmark.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -62,6 +63,7 @@ TCommandWorkload::TCommandWorkload()
     : TClientCommandTree("workload", {}, "YDB workload service")
 {
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
+    AddHiddenCommand(std::make_unique<TCommandWorkloadSqs>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTPCC>());
     AddCommand(std::make_unique<TCommandVector>());

@@ -10,7 +10,7 @@ SRCS(
 )
 
 IF (REF)
-    CFLAGS(-DREF=\"${REF}\")
+    CFLAGS(-DREF=${REF})
 ENDIF()
 
 PEERDIR(

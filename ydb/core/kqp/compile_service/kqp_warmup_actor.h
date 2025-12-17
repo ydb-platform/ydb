@@ -9,15 +9,7 @@
 
 namespace NKikimr::NKqp {
 
-struct TKqpWarmupEvents {
-    enum EKqpWarmupEvents {
-        EvWarmupComplete = EventSpaceBegin(TKikimrEvents::ES_KQP) + 900,
-        EvWarmupRequest,
-        EvWarmupResponse,
-    };
-};
-
-struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, TKqpWarmupEvents::EvWarmupComplete> {
+struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, TKqpEvents::EvWarmupComplete> {
     bool Success;
     TString Message;
     ui32 EntriesLoaded;
@@ -44,7 +36,8 @@ inline NActors::TActorId MakeKqpWarmupActorId(ui32 nodeId) {
 
 NActors::IActor* CreateKqpWarmupActor(
     const TKqpWarmupConfig& config,
-    NActors::TActorId notifyActorId = {},
-    const TString& database = {});
+    NActors::TActorId notifyActorId = {}, // for testing
+    const TString& database = {},
+    const TString& cluster = {});
 
 } // namespace NKikimr::NKqp

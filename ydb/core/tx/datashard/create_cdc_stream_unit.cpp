@@ -83,8 +83,8 @@ public:
                 tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, schemaVersion, streamDesc);
 
                 AddCdcStream(txc, pathId, streamId, streamDesc,
-                             notice.HasSnapshotName() ? notice.GetSnapshotName() : TString(),
-                             op->GetStep(), op->GetTxId());
+                    notice.HasSnapshotName() ? notice.GetSnapshotName() : TString(),
+                    op->GetStep(), op->GetTxId());
             }
 
             Y_ENSURE(tableInfo, "Table info must be initialized by Drop or Create action");
@@ -121,8 +121,8 @@ public:
         }
 
         AddCdcStream(txc, pathId, streamPathId, streamDesc,
-                     params.HasSnapshotName() ? params.GetSnapshotName() : TString(),
-                     op->GetStep(), op->GetTxId());
+            params.HasSnapshotName() ? params.GetSnapshotName() : TString(),
+            op->GetStep(), op->GetTxId());
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

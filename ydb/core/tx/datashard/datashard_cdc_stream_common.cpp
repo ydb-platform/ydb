@@ -9,8 +9,6 @@ TCdcStreamUnitBase::TCdcStreamUnitBase(EExecutionUnitKind kind, bool createCdcSt
 {
 }
 
-TCdcStreamUnitBase::~TCdcStreamUnitBase() = default;
-
 void TCdcStreamUnitBase::DropCdcStream(
     TTransactionContext& txc,
     const TPathId& tablePathId,
@@ -69,7 +67,6 @@ void TCdcStreamUnitBase::Complete(TOperation::TPtr, const TActorContext& ctx) {
             }
         }
     }
-    RemoveSenders.clear();
 
     if (AddSender) {
         ctx.Send(DataShard.GetChangeSender(), AddSender.Release());

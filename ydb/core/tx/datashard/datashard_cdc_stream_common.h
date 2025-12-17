@@ -14,7 +14,6 @@ protected:
 
 public:
     TCdcStreamUnitBase(EExecutionUnitKind kind, bool createCdcStream, TDataShard& self, TPipeline& pipeline);
-    ~TCdcStreamUnitBase() override;
 
     void DropCdcStream(
         TTransactionContext& txc,

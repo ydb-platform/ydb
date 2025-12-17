@@ -118,33 +118,62 @@ jobs:
 
       - name: Build Workload Image
         run: |
+          echo "Cleaning up Docker system before builds..."
+          docker system prune -af --volumes
+          docker builder prune -af
+          df -h
+
           # Build current version
           if [ -f "$GITHUB_WORKSPACE/current/ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile" ]; then
             echo "Building current app image..."
             cd "$GITHUB_WORKSPACE/current"
 
+            # Use SLO-specific .dockerignore
+            cp ydb/public/sdk/cpp/tests/slo_workloads/.dockerignore .dockerignore
+
+            CURRENT_REF="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
             docker build -t ydb-app-current \
               --build-arg SRC_PATH=key_value \
               --build-arg BINARY_NAME=key_value \
+              --build-arg REF="${CURRENT_REF}" \
               -f ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile .
+
+            # Clean up .dockerignore
+            rm -f .dockerignore
           else
             echo "No current app Dockerfile found"
             exit 1
           fi
+
+          docker system prune -f --volumes
+          docker builder prune -af
 
           # Build baseline version
           if [ -f "$GITHUB_WORKSPACE/baseline/ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile" ]; then
             echo "Building baseline app image..."
             cd "$GITHUB_WORKSPACE/baseline"
 
+            # Use SLO-specific .dockerignore
+            cp ydb/public/sdk/cpp/tests/slo_workloads/.dockerignore .dockerignore
+
             docker build -t ydb-app-baseline \
               --build-arg SRC_PATH=key_value \
               --build-arg BINARY_NAME=key_value \
+              --build-arg REF="${{ steps.baseline.outputs.ref }}" \
               -f ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile .
+
+            # Clean up .dockerignore
+            rm -f .dockerignore
           else
             echo "No baseline app Dockerfile found"
             exit 1
           fi
+
+          docker system prune -f --volumes
+          docker builder prune -af
+
+          echo "Final disk space after builds:"
+          df -h
 
       - name: Initialize YDB SLO
         uses: ydb-platform/ydb-slo-action/init@main
@@ -163,7 +192,7 @@ jobs:
             --add-host "ydb:172.28.0.12" \
             --add-host "ydb:172.28.0.13" \
             --add-host "ydb:172.28.0.99" \
-            ydb-app-current --connection-string grpc://ydb:2136/?database=/Root/testdb create
+            ydb-app-current --connection-string grpc://ydb:2136/?database=/Root/testdb create --dont-push
 
       - name: Run SLO Tests (parallel)
         timeout-minutes: 15

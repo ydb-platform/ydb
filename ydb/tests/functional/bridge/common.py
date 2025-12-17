@@ -197,7 +197,7 @@ class BridgeKiKiMRTest(object):
             tuple: (primary_pile_name, secondary_pile_name)
         """
         self.logger.info(f"=== {step_name.upper()} ===")
-        
+
         # Ждем стабильного состояния: один PRIMARY, один SYNCHRONIZED
         # Пробуем оба варианта (r1=PRIMARY или r2=PRIMARY)
         try:
@@ -213,7 +213,7 @@ class BridgeKiKiMRTest(object):
                 {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY},
                 timeout_seconds=timeout_seconds
             )
-        
+
         # Получаем финальное состояние
         current_state = self.get_cluster_state(self.bridge_client)
         current_states = {s.pile_name: s.state for s in current_state.pile_states}

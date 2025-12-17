@@ -554,8 +554,8 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         # Если таблицы еще нет, get_kv_tablet_ids может вызвать KeyError - обрабатываем это
         try:
             existing_tablet_ids = get_kv_tablet_ids(swagger_client)
-        except KeyError:
-            # Таблицы еще нет, значит нет существующих tablets
+        except (KeyError, Exception):
+            # Таблицы еще нет или произошла другая ошибка, значит нет существующих tablets
             existing_tablet_ids = []
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
 
@@ -768,8 +768,8 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         # Если таблицы еще нет, get_kv_tablet_ids может вызвать KeyError - обрабатываем это
         try:
             existing_tablet_ids = get_kv_tablet_ids(swagger_client)
-        except KeyError:
-            # Таблицы еще нет, значит нет существующих tablets
+        except (KeyError, Exception):
+            # Таблицы еще нет или произошла другая ошибка, значит нет существующих tablets
             existing_tablet_ids = []
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
 
@@ -971,8 +971,8 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         # Если таблицы еще нет, get_kv_tablet_ids может вызвать KeyError - обрабатываем это
         try:
             existing_tablet_ids = get_kv_tablet_ids(swagger_client)
-        except KeyError:
-            # Таблицы еще нет, значит нет существующих tablets
+        except (KeyError, Exception):
+            # Таблицы еще нет или произошла другая ошибка, значит нет существующих tablets
             existing_tablet_ids = []
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
 
@@ -1159,8 +1159,8 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         # Если таблицы еще нет, get_kv_tablet_ids может вызвать KeyError - обрабатываем это
         try:
             existing_tablet_ids = get_kv_tablet_ids(swagger_client)
-        except KeyError:
-            # Таблицы еще нет, значит нет существующих tablets
+        except (KeyError, Exception):
+            # Таблицы еще нет или произошла другая ошибка, значит нет существующих tablets
             existing_tablet_ids = []
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
 
@@ -1334,8 +1334,8 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         # Если таблицы еще нет, get_kv_tablet_ids может вызвать KeyError - обрабатываем это
         try:
             existing_tablet_ids = get_kv_tablet_ids(swagger_client)
-        except KeyError:
-            # Таблицы еще нет, значит нет существующих tablets
+        except (KeyError, Exception):
+            # Таблицы еще нет или произошла другая ошибка, значит нет существующих tablets
             existing_tablet_ids = []
         self.logger.debug("Existing tablets before creation: %d tablets", len(existing_tablet_ids))
 

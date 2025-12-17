@@ -382,4 +382,28 @@ bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::str
     return false;
 }
 
+std::string KeyValueToString(std::string_view key, std::string_view value) {
+    // indented to follow the default YQL formatting
+    return std::format(R"(  {} = '{}')", key, value);
+}
+
+bool IsSchemaSecret(TStringBuf secretName) {
+    return secretName.StartsWith('/');
+}
+
+bool RewriteSecretsNoCheck(TString& query, const TString& dbRestoreRoot, NYql::TIssues& issues) {
+    auto secretSettings = GetSecretSettings(query);
+    for (auto& secretSetting : secretSettings) {
+        if (IsSchemaSecret(secretSetting.Value)) {
+            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, GetDatabase(query), dbRestoreRoot);
+        }
+
+        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
+           return false;
+        }
+    }
+
+    return true;
+}
+
 } // NYdb::NDump

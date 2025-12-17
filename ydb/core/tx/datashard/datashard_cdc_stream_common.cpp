@@ -63,8 +63,8 @@ void TCdcStreamUnitBase::AddCdcStream(
 
 void TCdcStreamUnitBase::Complete(TOperation::TPtr, const TActorContext& ctx) {
     if (const auto& changeSender = DataShard.GetChangeSender()) {
-        for (auto& holder : RemoveSenders) {
-            if (auto* event = holder.Release()) {
+        for (auto& removeSender : RemoveSenders) {
+            if (auto* event = removeSender.Release()) {
                 ctx.Send(changeSender, event);
             }
         }

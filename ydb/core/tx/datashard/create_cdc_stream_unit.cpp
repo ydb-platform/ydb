@@ -82,9 +82,9 @@ public:
 
                 tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, schemaVersion, streamDesc);
 
-                AddCdcStream(txc, pathId, streamId, streamDesc, 
-                               notice.HasSnapshotName() ? notice.GetSnapshotName() : TString(), 
-                               op->GetStep(), op->GetTxId());
+                AddCdcStream(txc, pathId, streamId, streamDesc,
+                             notice.HasSnapshotName() ? notice.GetSnapshotName() : TString(),
+                             op->GetStep(), op->GetTxId());
             }
 
             Y_ENSURE(tableInfo, "Table info must be initialized by Drop or Create action");
@@ -110,7 +110,6 @@ public:
         Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();
-
         Y_ENSURE(version);
 
         auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, streamDesc);
@@ -121,9 +120,9 @@ public:
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
-        AddCdcStream(txc, pathId, streamPathId, streamDesc, 
-                       params.HasSnapshotName() ? params.GetSnapshotName() : TString(),
-                       op->GetStep(), op->GetTxId());
+        AddCdcStream(txc, pathId, streamPathId, streamDesc,
+                     params.HasSnapshotName() ? params.GetSnapshotName() : TString(),
+                     op->GetStep(), op->GetTxId());
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

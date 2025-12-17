@@ -18,7 +18,7 @@
 using namespace std::chrono_literals;
 
 #ifdef REF
-static constexpr const std::string_view REF_LABEL = REF;
+static constexpr const std::string_view REF_LABEL = Y_STRINGIZE(REF);
 #else
 static constexpr const std::string_view REF_LABEL = "unknown";
 #endif

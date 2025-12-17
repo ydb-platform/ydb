@@ -10,6 +10,7 @@ from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.clients.kikimr_bridge_client import bridge_client_factory
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
+from ydb.tests.library.clients.kikimr_keyvalue_client import keyvalue_client_factory
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 
 
@@ -197,7 +198,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             key=key, tablet_id=tablet_id)
 
 
-    def _check_data_integrity(self, table_path, initial_data, step_name, max_retries=20, retry_delay=3):
+    def _check_data_integrity(self, table_path, initial_data, step_name, kv_client=None, max_total_timeout_seconds=60):
         """
         Проверяет целостность данных через чтение всех записей из initial_data.
         С retry логикой для случаев, когда кластер временно недоступен после failover/rejoin.
@@ -206,21 +207,26 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path: Путь к KV таблице
             initial_data: Словарь {partition_id: (key, expected_value)} с данными для проверки
             step_name: Название шага теста для логирования (например, "checking data integrity after failover")
-            max_retries: Максимальное количество попыток при ошибках подключения
-            retry_delay: Задержка между попытками в секундах
+            kv_client: KeyValueClient для использования (если None, используется self.cluster.kv_client)
+            max_total_timeout_seconds: Максимальное общее время на все попытки (по умолчанию 60 секунд)
         """
         context = f" (step: {step_name})" if step_name else ""
         self.logger.info("=== CHECKING DATA INTEGRITY%s ===", context)
         
-        start_time = time.time()
-        total_timeout = max_retries * retry_delay
+        # Используем переданный клиент или дефолтный
+        client_to_use = kv_client if kv_client is not None else self.cluster.kv_client
         
-        for attempt in range(max_retries):
+        start_time = time.time()
+        retry_delay = 3  # Задержка между попытками
+        attempt = 0
+        
+        while time.time() - start_time < max_total_timeout_seconds:
+            attempt += 1
             try:
                 all_success = True
                 for partition_id, (key, expected_value) in initial_data.items():
                     try:
-                        read_resp = self.cluster.kv_client.kv_read(table_path, partition_id, key)
+                        read_resp = client_to_use.kv_read(table_path, partition_id, key)
                         assert read_resp.operation.status == StatusIds.SUCCESS, \
                             f"[Step: {step_name}] KV read failed: partition={partition_id}, " \
                             f"key={key}, status={read_resp.operation.status}, table_path={table_path}"
@@ -228,17 +234,14 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                     except Exception as e:
                         all_success = False
                         elapsed_time = time.time() - start_time
-                        if attempt < max_retries - 1:
-                            self.logger.warning(
-                                f"[Step: {step_name}] Failed to read partition {partition_id} "
-                                f"(attempt {attempt + 1}/{max_retries}, elapsed: {elapsed_time:.1f}s): {e}. "
-                                f"Retrying in {retry_delay} seconds..."
-                            )
+                        if elapsed_time + retry_delay < max_total_timeout_seconds:
+                            # Пробрасываем исключение для retry
                             break
                         else:
+                            # Не хватает времени на еще одну попытку
                             raise AssertionError(
-                                f"[Step: {step_name}] Failed to read initial data after {max_retries} attempts "
-                                f"(total time: {elapsed_time:.1f}s, max timeout: {total_timeout}s): "
+                                f"[Step: {step_name}] Failed to read initial data (attempt {attempt}, "
+                                f"elapsed: {elapsed_time:.1f}s, timeout: {max_total_timeout_seconds}s): "
                                 f"partition={partition_id}, key={key}, table_path={table_path}, error={e}"
                             ) from e
 
@@ -248,19 +251,25 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                     return  # Все успешно прочитаны
 
             except AssertionError:
-                if attempt < max_retries - 1:
+                elapsed_time = time.time() - start_time
+                if elapsed_time + retry_delay < max_total_timeout_seconds:
+                    self.logger.warning(
+                        f"[Step: {step_name}] Data integrity check failed (attempt {attempt}, "
+                        f"elapsed: {elapsed_time:.1f}s, timeout: {max_total_timeout_seconds}s). "
+                        f"Retrying in {retry_delay} seconds..."
+                    )
                     time.sleep(retry_delay)
                 else:
                     raise
-        else:
-            # Если вышли из цикла без break
-            elapsed_time = time.time() - start_time
-            raise AssertionError(
-                f"[Step: {step_name}] Failed to read initial data after {max_retries} attempts "
-                f"(total time: {elapsed_time:.1f}s, max timeout: {total_timeout}s)"
-            )
+        
+        # Если вышли из цикла по таймауту
+        elapsed_time = time.time() - start_time
+        raise AssertionError(
+            f"[Step: {step_name}] Failed to read initial data: timeout exceeded "
+            f"(total time: {elapsed_time:.1f}s, max timeout: {max_total_timeout_seconds}s)"
+        )
 
-    def _check_cluster_kv_operations(self, table_path, tablet_ids, step_name="", max_retries=10, retry_delay=2):
+    def _check_cluster_kv_operations(self, table_path, tablet_ids, step_name="", kv_client=None, max_total_timeout_seconds=60):
         """
         Проверяет работоспособность кластера через KV операции записи/чтения.
         Аналогично check_kikimr_is_operational из test_distconf.py
@@ -270,21 +279,26 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             table_path: Путь к KV таблице
             tablet_ids: Список tablet IDs для проверки
             step_name: Название шага теста для логирования (например, "after failover", "after rejoin")
-            max_retries: Максимальное количество попыток при ошибках подключения
-            retry_delay: Задержка между попытками в секундах
+            kv_client: KeyValueClient для использования (если None, используется self.cluster.kv_client)
+            max_total_timeout_seconds: Максимальное общее время на все попытки (по умолчанию 60 секунд)
         """
         context = f" (step: {step_name})" if step_name else ""
         self.logger.info("=== CHECKING CLUSTER KV OPERATIONS%s ===", context)
         
-        start_time = time.time()
-        total_timeout = max_retries * retry_delay
+        # Используем переданный клиент или дефолтный
+        client_to_use = kv_client if kv_client is not None else self.cluster.kv_client
         
-        for attempt in range(max_retries):
+        start_time = time.time()
+        retry_delay = 2  # Задержка между попытками
+        attempt = 0
+        
+        while time.time() - start_time < max_total_timeout_seconds:
+            attempt += 1
             try:
                 for partition_id, tablet_id in enumerate(tablet_ids):
                     # Запись
                     try:
-                        write_resp = self.cluster.kv_client.kv_write(
+                        write_resp = client_to_use.kv_write(
                             table_path, partition_id, "key", self._value_for("key", tablet_id)
                         )
                         assert write_resp.operation.status == StatusIds.SUCCESS, \
@@ -294,15 +308,19 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                                        partition_id, tablet_id, context)
                     except Exception as e:
                         elapsed_time = time.time() - start_time
-                        raise AssertionError(
-                            f"[Step: {step_name}] KV write operation failed (attempt {attempt + 1}/{max_retries}, "
-                            f"elapsed: {elapsed_time:.1f}s): partition={partition_id}, "
-                            f"tablet={tablet_id}, table_path={table_path}, error={e}"
-                        ) from e
+                        if elapsed_time + retry_delay < max_total_timeout_seconds:
+                            raise  # Пробрасываем исключение для retry
+                        else:
+                            # Не хватает времени на еще одну попытку
+                            raise AssertionError(
+                                f"[Step: {step_name}] KV write operation failed (attempt {attempt}, "
+                                f"elapsed: {elapsed_time:.1f}s, timeout: {max_total_timeout_seconds}s): "
+                                f"partition={partition_id}, tablet={tablet_id}, table_path={table_path}, error={e}"
+                            ) from e
 
                     # Чтение
                     try:
-                        read_resp = self.cluster.kv_client.kv_read(
+                        read_resp = client_to_use.kv_read(
                             table_path, partition_id, "key"
                         )
                         assert read_resp.operation.status == StatusIds.SUCCESS, \
@@ -312,11 +330,15 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                                        partition_id, tablet_id, context)
                     except Exception as e:
                         elapsed_time = time.time() - start_time
-                        raise AssertionError(
-                            f"[Step: {step_name}] KV read operation failed (attempt {attempt + 1}/{max_retries}, "
-                            f"elapsed: {elapsed_time:.1f}s): partition={partition_id}, "
-                            f"tablet={tablet_id}, table_path={table_path}, error={e}"
-                        ) from e
+                        if elapsed_time + retry_delay < max_total_timeout_seconds:
+                            raise  # Пробрасываем исключение для retry
+                        else:
+                            # Не хватает времени на еще одну попытку
+                            raise AssertionError(
+                                f"[Step: {step_name}] KV read operation failed (attempt {attempt}, "
+                                f"elapsed: {elapsed_time:.1f}s, timeout: {max_total_timeout_seconds}s): "
+                                f"partition={partition_id}, tablet={tablet_id}, table_path={table_path}, error={e}"
+                            ) from e
 
                 elapsed_time = time.time() - start_time
                 self.logger.info("✓ Cluster KV operations are working correctly%s (took %.1fs)", context, elapsed_time)
@@ -324,21 +346,28 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
                 
             except (AssertionError, Exception) as e:
                 elapsed_time = time.time() - start_time
-                if attempt < max_retries - 1:
+                if elapsed_time + retry_delay < max_total_timeout_seconds:
                     self.logger.warning(
-                        "KV operations failed%s (attempt %d/%d, elapsed: %.1fs): %s. Retrying in %d seconds...",
-                        context, attempt + 1, max_retries, elapsed_time, e, retry_delay
+                        "KV operations failed%s (attempt %d, elapsed: %.1fs, timeout: %ds): %s. Retrying in %d seconds...",
+                        context, attempt, elapsed_time, max_total_timeout_seconds, e, retry_delay
                     )
                     time.sleep(retry_delay)
                 else:
                     self.logger.error(
-                        "KV operations failed after %d attempts%s (total time: %.1fs, max timeout: %ds)",
-                        max_retries, context, elapsed_time, total_timeout
+                        "KV operations failed%s (attempt %d, total time: %.1fs, max timeout: %ds)",
+                        context, attempt, elapsed_time, max_total_timeout_seconds
                     )
                     raise AssertionError(
-                        f"[Step: {step_name}] KV operations failed after {max_retries} attempts "
-                        f"(total time: {elapsed_time:.1f}s, max timeout: {total_timeout}s): {e}"
+                        f"[Step: {step_name}] KV operations failed after {attempt} attempts "
+                        f"(total time: {elapsed_time:.1f}s, max timeout: {max_total_timeout_seconds}s): {e}"
                     ) from e
+        
+        # Если вышли из цикла по таймауту
+        elapsed_time = time.time() - start_time
+        raise AssertionError(
+            f"[Step: {step_name}] KV operations failed: timeout exceeded "
+            f"(total time: {elapsed_time:.1f}s, max timeout: {max_total_timeout_seconds}s)"
+        )
 
     def test_failover_after_stopping_primary_pile_nodes(self):
         """
@@ -474,7 +503,14 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
 
         # Шаг 7.5: Проверяем работоспособность через KV операции после failover
         # (ошибки связанные с нагрузкой должны пропасть, кластер работает)
-        self._check_cluster_kv_operations(table_path, tablet_ids, step_name="after failover")
+        # Создаем новый kv_client к ноде из нового primary pile (r2)
+        new_primary_kv_client = keyvalue_client_factory(
+            secondary_pile_nodes[0].host,
+            secondary_pile_nodes[0].grpc_port,
+            cluster=self.cluster,
+            retry_count=10
+        )
+        self._check_cluster_kv_operations(table_path, tablet_ids, step_name="after failover", kv_client=new_primary_kv_client)
 
         # Шаг 8: Восстанавливаем ноды primary pile (чиним что сломали)
         self.logger.info("=== RESTORING PRIMARY PILE NODES ===")
@@ -655,6 +691,7 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
 
         # Шаг 7.5: Проверяем работоспособность через KV операции после failover
         # (ошибки связанные с нагрузкой должны пропасть, кластер работает)
+        # В этом сценарии r1 остается PRIMARY, поэтому используем существующий клиент
         self._check_cluster_kv_operations(table_path, tablet_ids, step_name="after failover")
 
         # Шаг 8: Восстанавливаем ноды synchronized pile (чиним что сломали)
@@ -814,7 +851,14 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             f"Full state: {actual_states}"
 
         # Шаг 7: Проверяем работоспособность через KV операции после failover
-        self._check_cluster_kv_operations(table_path, tablet_ids, step_name="after failover")
+        # Создаем новый kv_client к ноде из нового primary pile (r2)
+        new_primary_kv_client = keyvalue_client_factory(
+            secondary_pile_nodes[0].host,
+            secondary_pile_nodes[0].grpc_port,
+            cluster=self.cluster,
+            retry_count=10
+        )
+        self._check_cluster_kv_operations(table_path, tablet_ids, step_name="after failover", kv_client=new_primary_kv_client)
 
         # Шаг 8: Восстанавливаем остановленные ноды
         self.logger.info("=== RESTORING STOPPED NODES ===")
@@ -978,7 +1022,14 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
             self.logger.info(f"✓ State after failover: {expected_states}")
 
             # Проверяем работоспособность
-            self._check_cluster_kv_operations(table_path, tablet_ids, step_name=f"cycle {cycle + 1} after failover")
+            # Создаем новый kv_client к ноде из нового primary pile
+            new_primary_kv_client = keyvalue_client_factory(
+                secondary_pile_nodes[0].host,
+                secondary_pile_nodes[0].grpc_port,
+                cluster=self.cluster,
+                retry_count=10
+            )
+            self._check_cluster_kv_operations(table_path, tablet_ids, step_name=f"cycle {cycle + 1} after failover", kv_client=new_primary_kv_client)
 
             # Восстанавливаем ноды
             self.logger.info(f"=== RESTORING {primary_pile_name.upper()} PILE NODES ===")
@@ -1174,14 +1225,22 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
         self.logger.info(f"✓ Background operations completed: {operations_count} operations, {len(operations_errors)} errors")
 
         # Шаг 6: Проверяем, что начальные данные сохранились
+        # Создаем новый kv_client к ноде из нового primary pile (r2)
+        new_primary_kv_client = keyvalue_client_factory(
+            secondary_pile_nodes[0].host,
+            secondary_pile_nodes[0].grpc_port,
+            cluster=self.cluster,
+            retry_count=10
+        )
         self._check_data_integrity(
             table_path,
             initial_data,
-            step_name="checking data integrity after failover"
+            step_name="checking data integrity after failover",
+            kv_client=new_primary_kv_client
         )
 
         # Шаг 7: Продолжаем выполнять KV операции после failover
-        self._check_cluster_kv_operations(table_path, tablet_ids, step_name="after failover during operations")
+        self._check_cluster_kv_operations(table_path, tablet_ids, step_name="after failover during operations", kv_client=new_primary_kv_client)
 
         # Шаг 8: Восстанавливаем ноды и делаем rejoin
         self.logger.info("=== RESTORING PRIMARY PILE NODES ===")

@@ -154,8 +154,10 @@ class BridgeKiKiMRTest(object):
             client: BridgeClient для получения состояния
             expected_states: Словарь ожидаемых состояний {pile_name: PileState}
             step_name: Название шага теста (например, "checking state after failover")
-            timeout_seconds: Максимальное время ожидания
+            timeout_seconds: Максимальное время ожидания (ограничено максимумом 60 секунд)
         """
+        # Ограничиваем таймаут максимумом 60 секунд
+        timeout_seconds = min(timeout_seconds, 60)
         try:
             return self.wait_for_cluster_state(client, expected_states, timeout_seconds=timeout_seconds)
         except AssertionError as e:

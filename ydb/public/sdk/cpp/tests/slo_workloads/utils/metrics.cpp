@@ -11,9 +11,6 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
-#include <chrono>
-#include <unistd.h>
-#include <sys/types.h>
 
 using namespace std::chrono_literals;
 
@@ -33,11 +30,6 @@ public:
             {"sdk_version", NYdb::GetSdkSemver()}
         }
     {
-        // #region agent log
-        char hostname[256]; gethostname(hostname, sizeof(hostname));
-        std::cerr << "[DEBUG_LOG] {\"location\":\"metrics.cpp:constructor\",\"message\":\"TOtelMetricsPusher constructor called\",\"data\":{\"metricsPushUrl\":\"" << metricsPushUrl << "\",\"operationType\":\"" << operationType << "\",\"pid\":" << getpid() << ",\"hostname\":\"" << hostname << "\",\"ref\":\"" << REF_LABEL << "\"},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"A,D,E\"}" << std::endl;
-        // #endregion
-
         auto exporterOptions = opentelemetry::exporter::otlp::OtlpHttpMetricExporterOptions();
         exporterOptions.url = metricsPushUrl;
 
@@ -49,7 +41,7 @@ public:
 
         auto metricReader = opentelemetry::sdk::metrics::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), readerOptions);
 
-        // Create resource with unique instance identifier (hostname)
+        // Create resource with ref, sdk, sdk_version attributes
         opentelemetry::sdk::resource::ResourceAttributes attributes = {
             {"ref", REF_LABEL},
             {"sdk", "cpp"},
@@ -69,22 +61,10 @@ public:
 
         Meter_ = MeterProvider_->GetMeter("slo_workloads", NYdb::GetSdkSemver());
 
-        // #region agent log
-        std::cerr << "[DEBUG_LOG] {\"location\":\"metrics.cpp:after_meter\",\"message\":\"Meter created with resource\",\"data\":{\"meterName\":\"slo_workloads\",\"meterVersion\":\"" << NYdb::GetSdkSemver() << "\",\"serviceInstanceId\":\"" << hostname << "\"},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"D\"}" << std::endl;
-        // #endregion
-
         InitMetrics();
     }
 
     void PushRequestData(const TRequestData& requestData) override {
-        // #region agent log
-        static std::atomic<int> pushCounter{0};
-        int currentPush = ++pushCounter;
-        if (currentPush <= 5 || currentPush % 100 == 0) {
-            std::cerr << "[DEBUG_LOG] {\"location\":\"metrics.cpp:PushRequestData\",\"message\":\"Pushing metrics\",\"data\":{\"pushNumber\":" << currentPush << ",\"operationType\":\"" << OperationType_ << "\",\"status\":\"" << YdbStatusToString(requestData.Status) << "\",\"delayMs\":" << requestData.Delay.MilliSeconds() << ",\"pid\":" << getpid() << "},\"timestamp\":" << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() << ",\"sessionId\":\"debug-session\",\"hypothesisId\":\"B,C\"}" << std::endl;
-        }
-        // #endregion
-
         if (requestData.Status == NYdb::EStatus::SUCCESS) {
             OperationsSuccessTotal_->Add(1, MergeAttributes({{"operation_type", OperationType_}}));
         } else {

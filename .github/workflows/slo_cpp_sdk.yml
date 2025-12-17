@@ -123,10 +123,6 @@ jobs:
           docker builder prune -af
           df -h
 
-          echo "Copying SLO-specific files to baseline (temporary, will be removed after build)..."
-          rm -rf baseline/ydb/public/sdk/cpp/tests/slo_workloads/
-          cp -r current/ydb/public/sdk/cpp/tests/slo_workloads/ baseline/ydb/public/sdk/cpp/tests
-
           # Build current version
           if [ -f "$GITHUB_WORKSPACE/current/ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile" ]; then
             echo "Building current app image..."

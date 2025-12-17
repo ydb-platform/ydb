@@ -613,7 +613,8 @@ void VectorReadMain(
 
     const auto& targetTable = isCovered ? postingTable : mainTable;
 
-    if (withOverlap) {
+    const bool needPkColumns = pushdownSettings.VectorTopDistinct || withOverlap;
+    if (needPkColumns) {
         // mainColumns must contain primary key columns for DistinctColumns pushdown
         THashSet<TStringBuf> cols;
         for (const auto& col: mainColumns) {

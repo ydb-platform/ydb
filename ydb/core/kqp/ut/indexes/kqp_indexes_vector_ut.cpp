@@ -316,6 +316,88 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    // Test that vector index queries work when selecting only non-PK columns
+    Y_UNIT_TEST_TWIN(VectorIndexSelectWithoutPkColumns, WithOverlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Create table with multiple PK columns
+        {
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder
+                .AddNonNullableColumn("pk1", EPrimitiveType::Int64)
+                .AddNonNullableColumn("pk2", EPrimitiveType::Int64)
+                .AddNonNullableColumn("emb", EPrimitiveType::String)
+                .AddNonNullableColumn("data", EPrimitiveType::String);
+            tableBuilder.SetPrimaryKeyColumns({"pk1", "pk2"});
+            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Insert test data
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (pk1, pk2, emb, data) VALUES
+                (0, 0, "\x03\x30\x02", "0"),
+                (1, 1, "\x13\x31\x02", "1"),
+                (2, 2, "\x23\x32\x02", "2"),
+                (3, 3, "\x53\x33\x02", "3"),
+                (4, 4, "\x43\x34\x02", "4"),
+                (5, 5, "\x50\x60\x02", "5"),
+                (6, 6, "\x61\x11\x02", "6"),
+                (7, 7, "\x12\x62\x02", "7"),
+                (8, 8, "\x75\x76\x02", "8"),
+                (9, 9, "\x76\x76\x02", "9");
+            )"));
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Create vector index
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2%s);
+            )", WithOverlap ? ", overlap_clusters=2" : "")));
+
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Query selecting only 'data' column (not PK columns)
+        {
+            const TString query1(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                $target = "\x67\x71\x02";
+                SELECT data FROM `/Root/TestTable` VIEW index
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT 3;
+            )"));
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "Failed to execute: `" << query1 << "` with " << result.GetIssues().ToString());
+        }
+    }
+
     void DoTestOrderByCosine(ui32 indexLevels, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);

@@ -7,12 +7,14 @@
 #include "private.h"
 #include "row_batch_reader.h"
 #include "row_batch_writer.h"
+#include "row_stream.h"
 #include "table_mount_cache.h"
 #include "table_writer.h"
 #include "target_cluster_injecting_channel.h"
 #include "timestamp_provider.h"
 #include "transaction.h"
 
+#include <yt/yt/client/api/formatted_table_reader.h>
 #include <yt/yt/client/api/helpers.h>
 #include <yt/yt/client/api/table_partition_reader.h>
 #include <yt/yt/client/api/transaction.h>
@@ -2008,6 +2010,86 @@ TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
                 auto rowBatchReader = New<TRowBatchReader>(std::move(inputStream), /*isStreamWithStatistics*/ false);
 
                 return NApi::CreateTablePartitionReader(rowBatchReader, /*schemas*/ {}, /*columnFilters=*/ {});
+            }));
+        }));
+}
+
+class TDeserializingRowStream
+    : public IFormattedTableReader
+{
+public:
+    explicit TDeserializingRowStream(IAsyncZeroCopyInputStreamPtr stream, bool isStreamWithStatistics = false)
+        : Underlying_(std::move(stream))
+        , IsStreamWithStatistics_(isStreamWithStatistics)
+    { }
+
+    TFuture<TSharedRef> Read() override
+    {
+        return Underlying_->Read().Apply(BIND([=, isStreamWithStatistics = IsStreamWithStatistics_] (const TSharedRef& block) {
+            NProto::TRowsetDescriptor descriptor;
+            NProto::TRowsetStatistics statistics;
+            return DeserializeRowStreamBlockEnvelope(block, &descriptor, isStreamWithStatistics ? &statistics : nullptr);
+        }));
+    }
+
+private:
+    const IAsyncZeroCopyInputStreamPtr Underlying_;
+    const bool IsStreamWithStatistics_;
+};
+
+DEFINE_REFCOUNTED_TYPE(TDeserializingRowStream);
+
+TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
+    const TRichYPath& path,
+    const TYsonString& format,
+    const TTableReaderOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+    auto req = proxy.ReadTable();
+    InitStreamingRequest(*req);
+
+    FillRequest(req.Get(), path, format, options);
+
+    return CreateRpcClientInputStream(std::move(req))
+        .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
+            return inputStream->Read().Apply(BIND([inputStream] (const TSharedRef& metaRef) -> IFormattedTableReaderPtr {
+                // Read and deserialize meta from ApiService for protocol consistency, won't be used.
+                NApi::NRpcProxy::NProto::TRspReadTablePartitionMeta meta;
+                if (!TryDeserializeProto(&meta, metaRef)) {
+                    THROW_ERROR_EXCEPTION("Failed to deserialize table reader meta information");
+                }
+
+                return New<TDeserializingRowStream>(std::move(inputStream), /*isStreamWithStatistics*/ true);
+            }));
+        }));
+}
+
+TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTablePartitionReader(
+    const TTablePartitionCookiePtr& cookie,
+    const TYsonString& format,
+    const TReadTablePartitionOptions& /*options*/)
+{
+    YT_VERIFY(cookie);
+
+    auto proxy = CreateApiServiceProxy();
+    auto req = proxy.ReadTablePartition();
+    InitStreamingRequest(*req);
+
+    NProto::ToProto(req->mutable_cookie(), cookie);
+
+    req->set_format(ToProto(format));
+    req->set_desired_rowset_format(NProto::ERowsetFormat::RF_FORMAT);
+
+    return CreateRpcClientInputStream(std::move(req))
+        .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
+            return inputStream->Read().Apply(BIND([inputStream] (const TSharedRef& metaRef) -> IFormattedTableReaderPtr {
+                // Read and deserialize meta from ApiService for protocol consistency, won't be used.
+                NApi::NRpcProxy::NProto::TRspReadTablePartitionMeta meta;
+                if (!TryDeserializeProto(&meta, metaRef)) {
+                    THROW_ERROR_EXCEPTION("Failed to deserialize partition table reader meta information");
+                }
+
+                return New<TDeserializingRowStream>(std::move(inputStream));
             }));
         }));
 }

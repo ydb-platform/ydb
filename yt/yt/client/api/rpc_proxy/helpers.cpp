@@ -1517,6 +1517,21 @@ void FromProto(
     }
 }
 
+void FromProto(
+    NApi::TSuppressableAccessTrackingOptions* options,
+    const NApi::NRpcProxy::NProto::TSuppressableAccessTrackingOptions& proto)
+{
+    if (proto.has_suppress_access_tracking()) {
+        options->SuppressAccessTracking = proto.suppress_access_tracking();
+    }
+    if (proto.has_suppress_modification_tracking()) {
+        options->SuppressModificationTracking = proto.suppress_modification_tracking();
+    }
+    if (proto.has_suppress_expiration_timeout_renewal()) {
+        options->SuppressExpirationTimeoutRenewal = proto.suppress_expiration_timeout_renewal();
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ENUMS
 ////////////////////////////////////////////////////////////////////////////////
@@ -2069,6 +2084,77 @@ NJobTrackerClient::EJobTraceState ConvertJobTraceStateFromProto(
         case NProto::EJobTraceState::JTS_ORPHANED:
             return NJobTrackerClient::EJobTraceState::Orphaned;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqReadTable* req,
+    const NYPath::TRichYPath& path,
+    const std::optional<TYsonString>& format,
+    const TTableReaderOptions& options)
+{
+    ToProto(req->mutable_path(), path);
+
+    if (format) {
+        req->set_format(ToProto(*format));
+        req->set_desired_rowset_format(NProto::ERowsetFormat::RF_FORMAT);
+    }
+
+    req->set_unordered(options.Unordered);
+    req->set_omit_inaccessible_columns(options.OmitInaccessibleColumns);
+    req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
+    req->set_enable_table_index(options.EnableTableIndex);
+    req->set_enable_row_index(options.EnableRowIndex);
+    req->set_enable_range_index(options.EnableRangeIndex);
+    req->set_enable_any_unpacking(options.EnableAnyUnpacking);
+    if (options.Config) {
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
+    }
+
+    ToProto(req->mutable_transactional_options(), options);
+    ToProto(req->mutable_suppressable_access_tracking_options(), options);
+}
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    std::optional<TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TTableReaderOptions* mutableOptions,
+    const TReqReadTable& req)
+{
+    *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+
+    if (req.has_format()) {
+        *mutableFormat = TYsonStringBuf(req.format());
+    }
+
+    *mutableDesiredRowsetFormat = req.desired_rowset_format();
+    *mutableArrowFallbackFormat = req.arrow_fallback_rowset_format();
+
+    TTableReaderOptions parsedOptions;
+    parsedOptions.Unordered = req.unordered();
+    parsedOptions.OmitInaccessibleColumns = req.omit_inaccessible_columns();
+    parsedOptions.OmitInaccessibleRows = req.omit_inaccessible_rows();
+    parsedOptions.EnableTableIndex = req.enable_table_index();
+    parsedOptions.EnableRowIndex = req.enable_row_index();
+    parsedOptions.EnableRangeIndex = req.enable_range_index();
+    parsedOptions.EnableAnyUnpacking = req.enable_any_unpacking();
+
+    if (req.has_config()) {
+        parsedOptions.Config = ConvertTo<TTableReaderConfigPtr>(TYsonString(req.config()));
+    }
+
+    if (req.has_transactional_options()) {
+        FromProto(&parsedOptions, req.transactional_options());
+    }
+
+    if (req.has_suppressable_access_tracking_options()) {
+        FromProto(&parsedOptions, req.suppressable_access_tracking_options());
+    }
+
+    *mutableOptions = std::move(parsedOptions);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

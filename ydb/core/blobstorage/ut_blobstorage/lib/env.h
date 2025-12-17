@@ -66,6 +66,7 @@ struct TEnvironmentSetup {
         const ui32 NumPiles = 0;
         const bool AutomaticBootstrap = false;
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
+        const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
     };
 
     const TSettings Settings;
@@ -544,6 +545,7 @@ config:
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
 
                 ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
+                ADD_ICB_CONTROL("DSProxyControls.MaxPutTimeoutSeconds", 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
 
 #undef ADD_ICB_CONTROL
 

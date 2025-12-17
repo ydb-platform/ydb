@@ -2,45 +2,30 @@
 
 [Django](https://www.djangoproject.com/) — это популярный Python веб-фреймворк с мощной ORM для работы с базами данных.
 
-YDB поддерживает интеграцию с Django через специальный бэкенд `django-ydb-backend`, который обеспечивает полную поддержку Django ORM для работы с YDB.
+{{ ydb-short-name }} поддерживает интеграцию с Django через специальный бэкенд `django-ydb-backend`, который обеспечивает полную поддержку Django ORM для работы с {{ ydb-short-name }}.
 
-## Быстрый старт
+{% note alert %}
 
-### Установка
+Интеграция с Django пока находится на этапе бета-тестирования. Обратите внимание, что сейчас поля ForeignKey, ManyToManyField и OneToOneField ещё не поддерживаются — их реализация находится в процессе разработки.
 
-Установите пакет `django-ydb-backend` с помощью pip:
-
-```bash
-pip install django-ydb-backend
-```
-
-### Настройка подключения
-
-Добавьте YDB в настройки Django в файле `settings.py`:
-
-```python
-DATABASES = {
-    "default": {
-        "NAME": "ydb_db",
-        "ENGINE": "ydb_backend.backend",
-        "HOST": "localhost",
-        "PORT": "2136",
-        "DATABASE": "/local",
-    }
-}
-```
+{% endnote %}
 
 ## Конфигурация
 
-### DATABASES
+### Настройки подключения
 
-Обязательные параметры:
+Для подключения к {{ ydb-short-name }} используйте стандартный механизм настройки баз данных Django через переменную `DATABASES` в файле `settings.py`. Подробнее о конфигурации баз данных в Django можно прочитать в официальной [документации](https://docs.djangoproject.com/en/stable/ref/settings/#databases).
 
-- **NAME** (обязательно): традиционное имя базы данных Django
-- **ENGINE** (обязательно): должно быть установлено в `ydb_backend.backend`
-- **HOST** (обязательно): имя хоста или IP-адрес YDB сервера (например, "localhost")
-- **PORT** (обязательно): gRPC порт YDB (по умолчанию 2136)
-- **DATABASE** (обязательно): полный путь к базе данных YDB (например, "/local" для локального тестирования или "/my_production_db")
+
+Необходимые параметры конфигурации подключения:
+
+- `NAME` — имя базы данных Django.
+- `ENGINE` — используется значение `ydb_backend.backend`.
+- `HOST` — адрес сервера {{ ydb-short-name }} (например, `localhost`).
+- `PORT` — порт gRPC {{ ydb-short-name }} (по умолчанию 2136).
+- `DATABASE` — абсолютный путь к базе данных {{ ydb-short-name }} (например, `/local` для локальных тестов или `/my_production_db` для production).
+
+Пример настройки подключения:
 
 ```python
 DATABASES = {
@@ -56,58 +41,80 @@ DATABASES = {
 
 ### Методы аутентификации
 
-#### Анонимная аутентификация
+{% list tabs %}
+- Анонимная
 
-Для использования анонимной аутентификации не нужно передавать дополнительные параметры.
+  Для использования анонимной аутентификации не нужно передавать дополнительные параметры.
 
-#### Статическая аутентификация
+- С помощью логина и пароля
 
-Для использования статических учетных данных нужно указать `username` и `password`:
+  Для использования статических учетных данных нужно указать `username` и `password`:
+
+  ```python
+  DATABASES = {
+      "default": {
+          "ENGINE": "ydb_backend.backend",
+          "CREDENTIALS": {
+              "username": "...",
+              "password": "..."
+          }
+      }
+  }
+  ```
+
+- С помощью токена
+
+  Для использования токена доступа нужно указать `token`:
+
+  ```python
+  DATABASES = {
+      "default": {
+          "ENGINE": "ydb_backend.backend",
+          "CREDENTIALS": {
+              "token": "..."
+          },
+      }
+  }
+  ```
+
+- С помощью сервисного аккаунта
+
+  Для использования сервисного аккаунта нужно указать `service_account_json`:
+
+  ```python
+  DATABASES = {
+      "default": {
+          "ENGINE": "ydb_backend.backend",
+          "CREDENTIALS": {
+              "service_account_json": {
+                  "id": "...",
+                  "service_account_id": "...",
+                  "created_at": "...",
+                  "key_algorithm": "...",
+                  "public_key": "...",
+                  "private_key": "..."
+              }
+          }
+      }
+  }
+  ```
+{% endlist %}
+
+
+### Использование шифрования
+
+Если у вас развёрнут кластер {{ ydb-short-name }} с использованием шифрования, необходимо добавить в настройки базы данных блок `OPTIONS` с указанием протокола и пути к сертификату. Например:
+
+Это обеспечит защищённое соединение с кластером {{ ydb-short-name }}.
+
 
 ```python
 DATABASES = {
     "default": {
-        "ENGINE": "ydb_backend.backend",
-        "CREDENTIALS": {
-            "username": "...",
-            "password": "..."
-        }
-    }
-}
-```
-
-#### Аутентификация по токену
-
-Для использования токена доступа нужно указать `token`:
-
-```python
-DATABASES = {
-    "default": {
-        "ENGINE": "ydb_backend.backend",
-        "CREDENTIALS": {
-            "token": "..."
-        },
-    }
-}
-```
-
-#### Аутентификация с помощью сервисного аккаунта
-
-Для использования сервисного аккаунта нужно указать `service_account_json`:
-
-```python
-DATABASES = {
-    "default": {
-        "ENGINE": "ydb_backend.backend",
-        "CREDENTIALS": {
-            "service_account_json": {
-                "id": "...",
-                "service_account_id": "...",
-                "created_at": "...",
-                "key_algorithm": "...",
-                "public_key": "...",
-                "private_key": "..."
-            }
+        ...
+        "OPTIONS": {
+            "protocol": "grpcs",
+            "root_certificates_path": "path/to/cert.crt",
         }
     }
 }
@@ -115,17 +122,15 @@ DATABASES = {
 
 ## Поля Django
 
-YDB backend поддерживает встроенные поля Django.
-
-**Примечание:** ForeignKey, ManyToManyField и OneToOneField могут использоваться с YDB backend. Однако важно отметить, что эти связи не будут обеспечивать ограничения на уровне базы данных, что может привести к потенциальным проблемам согласованности данных.
+{{ ydb-short-name }} backend поддерживает встроенные поля Django.
 
 ### Поддерживаемые поля Django
 
-| Класс | YDB тип | Python тип | Комментарии |
+| Класс | {{ ydb-short-name }} тип | Python тип | Комментарии |
 |-------|---------|------------|-------------|
-| `SmallAutoField` | `Int16` | `int` | YDB тип SmallSerial будет генерировать значения автоматически. Диапазон -32768 до 32767 |
-| `AutoField` | `Int32` | `int` | YDB тип Serial будет генерировать значения автоматически. Диапазон -2147483648 до 2147483647 |
-| `BigAutoField` | `Int64` | `int` | YDB тип BigSerial будет генерировать значения автоматически. Диапазон -9223372036854775808 до 9223372036854775807 |
+| `SmallAutoField` | `Int16` | `int` | {{ ydb-short-name }} тип SmallSerial будет генерировать значения автоматически. Диапазон -32768 до 32767 |
+| `AutoField` | `Int32` | `int` | {{ ydb-short-name }} тип Serial будет генерировать значения автоматически. Диапазон -2147483648 до 2147483647 |
+| `BigAutoField` | `Int64` | `int` | {{ ydb-short-name }} тип BigSerial будет генерировать значения автоматически. Диапазон -9223372036854775808 до 9223372036854775807 |
 | `CharField` | `UTF-8` | `str` | |
 | `TextField` | `UTF-8` | `str` | |
 | `BinaryField` | `String` | `bytes` | |
@@ -149,6 +154,56 @@ YDB backend поддерживает встроенные поля Django.
 | `BooleanField` | `Bool` | `boolean` | |
 | `EmailField` | `UTF-8` | `str` | |
 
+## Быстрый старт
+
+### Необходимые условия
+
+Перед началом работы убедитесь, что:
+
+1. Развернут кластер {{ ydb-short-name }} [локально](../../quickstart.md) или [используя Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
+2. Установлены Python-пакеты: `Django`, [`django-ydb-backend`](https://pypi.org/project/django-ydb-backend/), `djangorestframework`
+3. Склонирован репозиторий с [примером](https://github.com/ydb-platform/django-ydb-backend/tree/main/examples/bookstore)
+
+### Перейдите в рабочую директорию
+```bash
+cd examples/bookstore
+```
+
+### Конфигурация подключения к {{ ydb-short-name }}
+
+Для интеграции {{ ydb-short-name }} с Django укажите параметры подключения в файле `config/settings.py` проекта:
+
+```python
+DATABASES = {
+    "default": {
+        "NAME": "ydb_db",
+        "ENGINE": "ydb_backend.backend",
+        "HOST": "localhost",
+        "PORT": "2136",
+        "DATABASE": "/local",
+        "OPTIONS": {
+            "protocol": "grpcs",
+            "root_certificates_path": "path/to/cert.crt",
+        }
+    }
+}
+```
+
+### Запустите миграции
+
+```python
+python manage.py migrate
+```
+
+### Запустите сервер
+
+```python
+python manage.py runserver
+```
+
+### Проверьте работу приложения
+
+После запуска приложение будет доступно по адресу `http://127.0.0.1:8000` (по умолчанию).
 
 ## Полезные ссылки
 

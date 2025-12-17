@@ -1176,9 +1176,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             SendKillLocal(runtime, nodeIdx);
             {
                 TDispatchOptions options;
-                options.FinalEvents.emplace_back(NHive::TEvPrivate::EvDeleteNode);
-                runtime.DispatchEvents(options);
                 runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+                options.FinalEvents.emplace_back(NHive::TEvPrivate::EvDeleteNode);
                 runtime.DispatchEvents(options);
             }
         }
@@ -8476,9 +8475,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         SendKillLocal(runtime, nodeIdx);
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvDeleteNode);
-            runtime.DispatchEvents(options);
             runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvDeleteNode);
             runtime.DispatchEvents(options);
         }
         UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN), 0);

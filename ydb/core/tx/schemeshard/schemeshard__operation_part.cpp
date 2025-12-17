@@ -83,6 +83,31 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
         << ", ev# " << ev;
 }
 
+static bool IsColumnShardAlreadyPrepared(NActors::IEventHandle& handle) {
+    if (const auto* msg = handle.Get<TEvColumnShard::TEvProposeTransactionResult>()) {
+        const auto status = msg->Record.GetStatus();
+        return status == NKikimrTxColumnShard::EResultStatus::ALREADY_PREPARED;
+    }
+
+    return false;
+}
+
+bool TSubOperationState::ShouldIgnore(ui32 eventType, NActors::IEventHandle& handle) const {
+    for (auto&& rule : MsgToIgnore) {
+        if (rule.EventType == eventType) {
+            if (!rule.Predicate || rule.Predicate(handle)) {
+                return true;
+            }
+        }
+    }
+
+    if (eventType == TEvColumnShard::TEvProposeTransactionResult::EventType && IsColumnShardAlreadyPrepared(handle)) {
+        return true;
+    }
+
+    return false;
+}
+
 #define DefaultHandleReply(NS, TEvType, ...) \
     bool ISubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
         const auto msg = LogMessage(DebugReply(ev), context, false); \
@@ -91,7 +116,7 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
     } \
     \
     bool TSubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
-        const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType); \
+        const bool ignore = ShouldIgnore(NS::TEvType::EventType, *ev.Get()); \
         const auto msg = LogMessage(DebugReply(ev), context, ignore); \
         if (ignore) { \
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
@@ -110,7 +135,10 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
 
 void TSubOperationState::IgnoreMessages(TString debugHint, TSet<ui32> mgsIds) {
     LogHint = debugHint;
-    MsgToIgnore.swap(mgsIds);
+    MsgToIgnore.clear();
+    for (auto&& eventType : mgsIds) {
+        MsgToIgnore.push_back({eventType, {}});
+    }
 }
 
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table) {

@@ -13,6 +13,7 @@
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler
 
+#include <functional>
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
 #include <util/generic/string.h>
@@ -199,8 +200,13 @@ public:
 };
 
 class TSubOperationState: public ISubOperationState {
+    struct TIgnoreRule {
+        ui32 EventType = 0;
+        std::function<bool(NActors::IEventHandle&)> Predicate;
+    };
+
     TString LogHint;
-    TSet<ui32> MsgToIgnore;
+    TVector<TIgnoreRule> MsgToIgnore;
 
     virtual TString DebugHint() const = 0;
 
@@ -214,6 +220,22 @@ public:
 #undef DefaultHandleReply
 
     void IgnoreMessages(TString debugHint, TSet<ui32> mgsIds);
+
+    template <class TEv>
+    void IgnoreMessageIf(std::function<bool(const TEv&)> pred) {
+        MsgToIgnore.push_back({
+            TEv::EventType,
+            [pred = std::move(pred)](NActors::IEventHandle& handle) -> decltype(auto) {
+                if (const auto* msg = handle.Get<TEv>()) {
+                    return pred(*msg);
+                }
+
+                return false;
+            }
+        });
+    }
+
+    bool ShouldIgnore(ui32 eventType, NActors::IEventHandle& handle) const;
 };
 
 class ISubOperation: public TSimpleRefCount<ISubOperation>, public ISubOperationState {

@@ -110,7 +110,9 @@ public:
         }
 
         bool IsFail() const {
-            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED && Status != NKikimrTxColumnShard::EResultStatus::SUCCESS;
+            return Status != NKikimrTxColumnShard::EResultStatus::PREPARED
+                && Status != NKikimrTxColumnShard::EResultStatus::SUCCESS
+                && Status != NKikimrTxColumnShard::EResultStatus::ALREADY_PREPARED;
         }
 
         TString DebugString() const {
@@ -340,7 +342,7 @@ public:
             }
             if (onLoad) {
                 ProposeStartInfo =
-                    TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::PREPARED, "success on iteration before restart");
+                    TTxController::TProposeResult(NKikimrTxColumnShard::EResultStatus::ALREADY_PREPARED, TString());
                 Status = {};
             }
             return result;

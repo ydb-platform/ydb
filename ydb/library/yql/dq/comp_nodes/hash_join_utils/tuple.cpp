@@ -1129,7 +1129,6 @@ void TTupleLayoutSIMD<TTraits>::Pack(
                 auto nextOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * (start + 1));
                 auto size = nextOffset - dataOffset;
-                // Cerr << std::format("data offset: {}", dataOffset) << Endl;
                 auto data = columns[col.OriginalIndex + 1] + dataOffset;
                 if (size >= col.DataSize) {
                     res[col.Offset] = 255;
@@ -1644,7 +1643,7 @@ void TTupleLayout::TupleDeepCopy(
         to.resize( offset + writeSize);
         std::memcpy(to.data() + offset, range.data(), writeSize);
     };
-    [[maybe_unused]]int initSize = std::ssize(outTuple);
+    int initSize = std::ssize(outTuple);
     appendRange(outTuple, {inTuple, TotalRowSize});
     for (const auto& col: VariableColumns) {
         ui32 size = ReadUnaligned<ui8>(inTuple + col.Offset);

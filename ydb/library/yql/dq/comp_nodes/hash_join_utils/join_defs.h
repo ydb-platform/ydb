@@ -117,12 +117,10 @@ struct TBucket {
     template <int SizeLimit> bool DetatchBuildingPageIfLimitReached() {
         if (BuildingPage.AllocatedBytes() > SizeLimit) {
             // MKQL_ENSURE(condition, message)
-            MKQL_ENSURE(!BuildingPage.Empty(), "sanity check");
             InMemoryPages_.push_back(std::move(BuildingPage));
             InMemoryPages_.back().PackedTuples.shrink_to_fit();
             InMemoryPages_.back().Overflow.shrink_to_fit();
             BuildingPage.NTuples = 0;
-            MKQL_ENSURE(BuildingPage.Empty(), "sanity check");
             return true;
         }
         return false;

@@ -1,26 +1,16 @@
 #include "print_unboxed_value.h"
 #include <yql/essentials/minikql/mkql_node_cast.h>
-// #include <util/string/printf.h>
 #include <format>
 #include <yql/essentials/public/udf/udf_data_type.h>
-#include <ranges>
 
 namespace NKikimr::NMiniKQL{
 std::string_view AsSV(TStringBuf buf) {
   return static_cast<std::string_view>(buf);
 }
 
-// template<typename T>
-// struct TPrint;
-
-// auto Enumerate(auto range) {
-//   return std::views::zip(range, std::views::iota);x
-// }
-
 template<typename T>
-struct TPrint: IPrint{
+struct TPrint: IPrint {
   TPrint() {
-    // std::views::iota
     PrintBackTrace();
     MKQL_ENSURE(false, "priting for this type is not supported, you have to manually add it");
   }
@@ -57,7 +47,6 @@ struct TTuplePrint: IPrint {
   TTuplePrint(const TType* type) {
     auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type);
     for (auto* child: tupleType->GetElements()) {
-      // child->GetKindAsStr()
       ChildPrinters_.push_back(MakePrinter(child));
     }
   }

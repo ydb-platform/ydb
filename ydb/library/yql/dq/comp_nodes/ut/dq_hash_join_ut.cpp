@@ -484,10 +484,6 @@ TJoinTestData SmallStringsTestData() {
     td.Result =
         ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
 
-    // constexpr int packedTupleSize = 2 * 8 + 5;
-    // constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
-    // [[maybe_unused]] constexpr ui64 rightSizeBytes = rightSize * packedTupleSize;
-    // td.JoinMemoryConstraint = joinMemory;
     td.Kind = EJoinKind::Inner;
     return td;
 }
@@ -520,10 +516,6 @@ TJoinTestData BigStringsTestData() {
     td.Result =
         ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
 
-    // constexpr int packedTupleSize = 2 * 8 + 5;
-    // constexpr ui64 joinMemory = packedTupleSize * (0.5 * rightSize);
-    // [[maybe_unused]] constexpr ui64 rightSizeBytes = rightSize * packedTupleSize;
-    // td.JoinMemoryConstraint = joinMemory;
     td.Kind = EJoinKind::Inner;
     return td;
 }

@@ -354,14 +354,12 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
         BuildingInMemoryTable(Self& self, TBucketsSpiller<Settings> spiller)
             : Spiller(std::move(spiller))
         {
-            // ProbeState.Buckets.resize(.size(), );
             for(int index = 0; index < std::ssize(Spiller.GetBuckets()); ++index) {
                 ProbeState.Buckets.push_back(TTable{self.Layouts_.Build});
             }
             self.Logger_.LogDebug("BuildingInMemoryTable stage started");
         }
 
-        // NJoinTable::TNeumannJoinTable EmptyTable;
         TBucketsSpiller<Settings> Spiller;
         TProbeSpiller<Settings>::State ProbeState;
     };
@@ -383,7 +381,6 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                                           inMemoryBuckets, spilledBuckets));
         }
 
-        // TTable Table;
         Source Probe;
         TProbeSpiller<Settings> Spiller;
         std::optional<TPackResult> FetchedPack;
@@ -476,9 +473,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
                            std::invocable<TSides<TSingleTuple>> auto consumePairOfTuples) {
         auto notEnoughMemory = [] {
-            bool ans = TlsAllocState->IsMemoryYellowZoneEnabled();
-            
-            return ans;
+            return TlsAllocState->IsMemoryYellowZoneEnabled();
         };
         if (std::get_if<Init>(&State_)) {
             State_ = FetchingBuild{*this};
@@ -617,7 +612,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                 }
                 state.FetchedPack->ForEachTuple([&](TSingleTuple tuple) {
                     int bucketIndex = Settings.BucketIndex(tuple);
-                    bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);// .Build.IsSpilled();
+                    bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
                     if (thisBucketSpilled) {
                         state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
                     } else {

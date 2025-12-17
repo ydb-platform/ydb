@@ -61,21 +61,8 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         }
         const size_t cols = UserDataCols();
         TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
-        std::string name;
-        for(auto& column: columns) {
-            name += column.ToString();
-            name += "-";
-        }
-        name.pop_back();
-        // Cerr << std::format("got block, size: {}, type: {}", columns[0].length(), name) << Endl;
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
-        // Cout << std::format("fetch.side: {}\n", AsString(Side_) );
-        result.ForEachTuple([&](auto single){
-            MKQL_ENSURE(!ArrowBlockToInternalConverter_->GetTupleLayout()->Stringify(single).contains("N"), std::format("invalid N, side: {}", AsString(Side_)));
-            // MKQL_ENSURE(false, "a;kdamd");
-         });
-        // Cout << Endl;
         return One{std::move(result)};
     }
 

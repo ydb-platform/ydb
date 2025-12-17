@@ -6448,7 +6448,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()
             .RunFakeConfigDispatcher(true)
-            .SetupKqpProxy(true);
+            .SetupKqpProxy(true)
+            .InitYdbDriver(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
@@ -6491,8 +6492,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        const ui64 importId = ++txId;
-        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -6507,10 +6507,85 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )", port));
 
-        env.TestWaitNotification(runtime, importId);
-        TestGetImport(runtime, importId, "/MyRoot");
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
+            NLs::Finished,
+            NLs::IsReplication,
+        });
+    }
+
+    Y_UNIT_TEST(ReplicationExportImport) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true)
+            .InitYdbDriver(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                    StaticCredentials {
+                        User: "user"
+                        Password: "pwd"
+                        PasswordSecretName: "pwd-secret-name"
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TString exportRequest = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Replication"
+                    destination_prefix: "Replication"
+                }
+            }
+        )", port);
+
+        TestExport(runtime, ++txId, "/MyRoot", exportRequest);
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TString importRequest = Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Replication"
+                destination_path: "/MyRoot/NewReplication"
+              }
+            }
+        )", port);
+
+        TestImport(runtime, ++txId, "/MyRoot", importRequest);
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/NewReplication"), {
             NLs::Finished,
             NLs::IsReplication,
         });
@@ -6542,10 +6617,10 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         TTestWithReboots t;
-        const bool createsViews = AnyOf(schemes, [](const auto& scheme) {
-            return scheme.second.Type == EPathTypeView;
+        const bool createdByQuery = AnyOf(schemes, [](const auto& scheme) {
+            return scheme.second.Scheme.Contains("CREATE"); // Hack
         });
-        if (createsViews) {
+        if (createdByQuery) {
             t.GetTestEnvOptions().RunFakeConfigDispatcher(true);
             t.GetTestEnvOptions().SetupKqpProxy(true);
         }
@@ -6556,8 +6631,9 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
                 runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
                 runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-                if (createsViews) {
+                if (createdByQuery) {
                     runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+                    runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
                 }
             }
 
@@ -7187,5 +7263,26 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 });
             }
         });
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleReplication) {
+        ShouldSucceed(
+            {
+                EPathTypeReplication,
+                R"(
+                    -- database: "/MyRoot"
+                    -- backup root: "/MyRoot"
+                    CREATE ASYNC REPLICATION `Replication`
+                    FOR
+                        `/MyRoot/Table` AS `/MyRoot/TableReplica`
+                    WITH (
+                        CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+                        USER = 'user',
+                        PASSWORD_SECRET_NAME = 'pwd-secret-name',
+                        CONSISTENCY_LEVEL = 'Row'
+                    );
+                )"
+            }
+        );
     }
 }

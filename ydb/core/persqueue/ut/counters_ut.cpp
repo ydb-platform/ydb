@@ -334,7 +334,9 @@ Y_UNIT_TEST(PartitionFirstClass) {
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy_firstclass.html"));
 
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        Cerr << "COUNTERS: " << countersStr.Str() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {

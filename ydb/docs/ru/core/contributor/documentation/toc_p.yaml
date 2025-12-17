@@ -8,4 +8,6 @@ items:
 - name: Жанры
   href: genres.md
 - name: Добавление медиа в публичные материалы
-  href: guide-to-public-material.md  
+  href: guide-to-public-material.md
+- name: Документирование новых команд CLI
+  href: cli-command-documentation.md

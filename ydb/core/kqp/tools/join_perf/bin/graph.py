@@ -86,10 +86,10 @@ for data_flavour in data_flavours:
             sizes = group.index
             group_values[name] = group.values
             print(group)
+        # umap_html_table = generate_comparison_table(sizes, key_type.lower(), group_values["unordered_map"], "unordered_map", group_values["GraceJoin"])
+        # with open(html_tables + f"/{key_type}-umap_vs_grace.html", "w", encoding="utf-8") as f:
+        #     f.write(umap_html_table)
         neumann_html_table = generate_comparison_table(sizes, key_type.lower(),  group_values["BlockHashJoin"], "BlockHashJoin", group_values["GraceJoin"])
-        umap_html_table = generate_comparison_table(sizes, key_type.lower(), group_values["unordered_map"], "unordered_map", group_values["GraceJoin"])
-        with open(html_tables + f"/{key_type}-umap_vs_grace.html", "w", encoding="utf-8") as f:
-            f.write(umap_html_table)
         with open(html_tables + f"/{key_type}-neumann_vs_grace.html", "w", encoding="utf-8") as f:
             f.write(neumann_html_table)
         
@@ -105,3 +105,5 @@ for data_flavour in data_flavours:
         plt.savefig(simple_images + "/" + file_name + ".jpeg")
         
 print(f"images and html tables are written to {out_root}") 
+os.symlink(sys.argv[1], out_root + "/src.jsonl") 
+#todo: log graphs to arcadia

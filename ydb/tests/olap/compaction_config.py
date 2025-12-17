@@ -67,7 +67,7 @@ class TestCompactionConfig(object):
                 "default_compaction_preset": "ydb",
             })
 
-        with pytest.raises(Exception, match="Socket closed"):
+        with pytest.raises(Exception, match=r"Socket closed|recvmsg:Connection reset by peer"):
             self.init(config)
             self.check("test_wrong_preset")
 
@@ -137,7 +137,7 @@ class TestCompactionConfig(object):
                 },
             })
 
-        with pytest.raises(Exception, match="Socket closed"):
+        with pytest.raises(Exception, match=r"Socket closed|recvmsg:Connection reset by peer"):
             self.init(config)
             self.check("test_wrong_constructor")
 
@@ -151,7 +151,7 @@ class TestCompactionConfig(object):
                     }
                 },
             })
-        with pytest.raises(Exception, match="Socket closed"):
+        with pytest.raises(Exception, match=r"Socket closed|recvmsg:Connection reset by peer"):
             self.init(config)
             self.check("test_mix_constructor")
 

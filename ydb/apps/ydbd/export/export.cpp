@@ -13,7 +13,7 @@ NKikimr::NDataShard::IExport* TDataShardExportFactory::CreateExportToYt(
 NKikimr::NDataShard::IExport* TDataShardExportFactory::CreateExportToS3(
         const IExport::TTask& task, const IExport::TTableColumns& columns) const
 {
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
     return new NKikimr::NDataShard::TS3Export(task, columns);
 #else
     Y_UNUSED(task);

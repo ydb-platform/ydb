@@ -39,7 +39,7 @@ namespace NKikimr {
         IExport* CreateExportToS3(
                 const IExport::TTask& task, const IExport::TTableColumns& columns) const override
         {
-        #ifndef KIKIMR_DISABLE_S3_OPS
+        #ifndef KIKIMR_DISABLE_EXPORT_OPS
             return new NDataShard::TS3Export(task, columns);
         #else
             Y_UNUSED(task);

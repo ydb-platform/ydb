@@ -83,7 +83,7 @@ PEERDIR(
 
 IF (OS_WINDOWS)
     CFLAGS(
-        -DKIKIMR_DISABLE_S3_OPS
+        -DKIKIMR_DISABLE_EXPORT_OPS
     )
     SRCS(
         aws_windows_stub.cpp

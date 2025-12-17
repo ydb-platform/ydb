@@ -3,7 +3,7 @@
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/threading/Executor.h>
 
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
 namespace NKikimr::NWrappers::NExternalStorage {
 
 class TS3ThreadsPoolByEndpoint {
@@ -248,4 +248,4 @@ Aws::S3::Model::StorageClass TS3ExternalStorageConfig::ConvertStorageClass(const
 
 }
 
-#endif // KIKIMR_DISABLE_S3_OPS
+#endif // KIKIMR_DISABLE_EXPORT_OPS

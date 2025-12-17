@@ -298,12 +298,12 @@ YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     CFLAGS(
-        -DKIKIMR_DISABLE_S3_OPS
+        -DKIKIMR_DISABLE_EXPORT_OPS
     )
 ELSE()
     SRCS(
         export_s3_buffer.cpp
-        export_s3_uploader.cpp
+        export_uploader.cpp
         extstorage_usage_config.cpp
         import_s3.cpp
     )

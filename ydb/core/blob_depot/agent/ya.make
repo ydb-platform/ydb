@@ -2,7 +2,7 @@ LIBRARY()
 
     IF (OS_WINDOWS)
         CFLAGS(
-            -DKIKIMR_DISABLE_S3_OPS
+            -DKIKIMR_DISABLE_EXPORT_OPS
         )
     ELSE()
         SRCS(

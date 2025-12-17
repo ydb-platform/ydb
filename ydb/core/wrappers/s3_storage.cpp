@@ -10,7 +10,7 @@
 
 #include <util/string/cast.h>
 
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
 namespace NKikimr::NWrappers::NExternalStorage {
 
 using namespace Aws;
@@ -336,4 +336,4 @@ void TS3ExternalStorage::Execute(TEvUploadPartCopyRequest::TPtr& ev) const {
 
 }
 
-#endif // KIKIMR_DISABLE_S3_OPS
+#endif // KIKIMR_DISABLE_EXPORT_OPS

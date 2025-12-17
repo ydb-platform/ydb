@@ -1,7 +1,7 @@
 #include "extstorage_usage_config.h"
 #include <ydb/core/wrappers/s3_storage_config.h>
 
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
 namespace NKikimr::NDataShard {
 
 Aws::S3::Model::StorageClass TS3Settings::GetStorageClass() const {
@@ -10,4 +10,4 @@ Aws::S3::Model::StorageClass TS3Settings::GetStorageClass() const {
 
 }
 
-#endif // KIKIMR_DISABLE_S3_OPS
+#endif // KIKIMR_DISABLE_EXPORT_OPS

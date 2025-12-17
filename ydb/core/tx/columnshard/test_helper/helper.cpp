@@ -13,7 +13,7 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
 #include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
 #endif
 
@@ -110,7 +110,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TTestStoragesManager::DoB
         return std::make_shared<NOlap::NBlobOperations::NLocal::TOperator>(
             storageId, SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));
     } else if (storageId == TBase::MemoryStorageId) {
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
         Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
         return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, NActors::TActorId(),
             std::make_shared<NWrappers::NExternalStorage::TFakeExternalStorageConfig>("fakeBucket", "fakeSecret"),

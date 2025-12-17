@@ -1,4 +1,4 @@
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
 
 #include "datashard.h"
 #include "export_common.h"
@@ -1027,4 +1027,4 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
 } // NDataShard
 } // NKikimr
 
-#endif // KIKIMR_DISABLE_S3_OPS
+#endif // KIKIMR_DISABLE_EXPORT_OPS

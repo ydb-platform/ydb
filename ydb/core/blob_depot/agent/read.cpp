@@ -191,7 +191,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         for (TS3ReadItem& item : s3items) {
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
             STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA57, "starting S3 read", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
                 (ReadId, context->GetTag()), (Key, item.Key), (Offset, item.Offset), (Size, item.Size),
                 (OutputOffset, item.OutputOffset));

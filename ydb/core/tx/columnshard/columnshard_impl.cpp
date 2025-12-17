@@ -8,7 +8,7 @@
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
 
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
 #include "blobs_action/tier/storage.h"
 #endif
 

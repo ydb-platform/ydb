@@ -1,6 +1,6 @@
 #pragma once
 
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
 
 #include "export_iface.h"
 
@@ -30,4 +30,4 @@ protected:
 } // NDataShard
 } // NKikimr
 
-#endif // KIKIMR_DISABLE_S3_OPS
+#endif // KIKIMR_DISABLE_EXPORT_OPS

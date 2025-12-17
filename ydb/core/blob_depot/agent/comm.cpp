@@ -97,7 +97,7 @@ namespace NKikimr::NBlobDepot {
             S3WrapperId = {};
         }
 
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
         InitS3(msg.GetName());
 #endif
 

@@ -5,7 +5,7 @@
 
 #include <util/generic/array_ref.h>
 
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
 
 namespace NKikimr::NDataShard {
 
@@ -109,4 +109,4 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
 
 } // namespace NKikimr::NDataShard
 
-#endif // KIKIMR_DISABLE_S3_OPS
+#endif // KIKIMR_DISABLE_EXPORT_OPS

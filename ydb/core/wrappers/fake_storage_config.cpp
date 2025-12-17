@@ -2,7 +2,7 @@
 #include "fake_storage_config.h"
 #include <ydb/library/actors/core/log.h>
 
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
 namespace NKikimr::NWrappers::NExternalStorage {
 
 TString TFakeExternalStorageConfig::DoGetStorageId() const {
@@ -15,4 +15,4 @@ IExternalStorageOperator::TPtr TFakeExternalStorageConfig::DoConstructStorageOpe
 }
 }
 
-#endif // KIKIMR_DISABLE_S3_OPS
+#endif // KIKIMR_DISABLE_EXPORT_OPS

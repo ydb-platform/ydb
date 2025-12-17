@@ -3,7 +3,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/local/storage.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
 #include <ydb/core/tx/columnshard/blobs_action/tier/storage.h>
 #endif
 #include <ydb/core/wrappers/fake_storage.h>
@@ -18,7 +18,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TStoragesManager::DoBuild
     } else if (storageId == TBase::LocalMetadataStorageId) {
         return std::make_shared<NOlap::NBlobOperations::NLocal::TOperator>(storageId, SharedBlobsManager->GetStorageManagerGuarantee(storageId));
     } else if (storageId == TBase::MemoryStorageId) {
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
         {
             static TMutex mutexLocal;
             TGuard<TMutex> g(mutexLocal);
@@ -34,7 +34,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TStoragesManager::DoBuild
     } else if (!Shard.Tiers) {
         return nullptr;
     } else {
-#ifndef KIKIMR_DISABLE_S3_OPS
+#ifndef KIKIMR_DISABLE_EXPORT_OPS
         return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(
             storageId, Shard, SharedBlobsManager->GetStorageManagerGuarantee(storageId));
 #else

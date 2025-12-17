@@ -37,7 +37,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
     INIT_DATA_VALUE_SIZE = 2 * 1024 * 1024
     INIT_DATA_PATTERN = '0123456789ABCDEF'
 
-    def __init__(self, endpoint, database, duration, path, partitions, storage_channels, kv_load_type, inflight):
+    def __init__(self, endpoint, database, duration, path, partitions, storage_channels, kv_load_type, inflight, version):
         super().__init__(None, '', 'kv_volume', None)
         fqdn, port = parse_endpoint(endpoint)
         self.fqdn = fqdn
@@ -51,6 +51,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         self.inflight = inflight
         self.begin_time = None
         self.end_time = None
+        self.version = version
         self.init_data_keys = set()
 
     def _volume_path(self):
@@ -63,7 +64,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         return client.drop_tablets(self._volume_path())
 
     def _write(self, client, partition_id, key, value, channel):
-        return client.kv_write(self._volume_path(), partition_id, key, value, channel=channel)
+        return client.kv_write(self._volume_path(), partition_id, key, value, channel=channel, version=self.version)
 
     def _get_init_pair_key(self, pair_id):
         return f'init_{pair_id}'
@@ -108,6 +109,13 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         client = KeyValueClient(self.fqdn, self.port)
         self._drop_volume(client)
         return True
+    
+    def get_status(self, response):
+        if response is None:
+            return None
+        if hasattr(response, 'operation'):
+            return response.operation.status
+        return response.status
 
     def run_worker(self, worker_id):
         t = type(self)
@@ -125,8 +133,9 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
                 offset = random.randint(0, t.INIT_DATA_VALUE_SIZE - size)
             else:
                 offset = 0
-            response = client.kv_read(self._volume_path(), partition_id, key, offset=offset, size=size)
-            if response is None or response.operation.status != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
+            response = client.kv_read(self._volume_path(), partition_id, key, offset=offset, size=size, version=self.version)
+            status = self.get_status(response)
+            if response is None or status != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
                 print('Read failed')
                 print('response:', response)
                 return

@@ -940,11 +940,12 @@ protected:
             TResultRecord result;
             CopyProtobuf(ev->Get()->Record, &result);
             this->ReplyWithResult(status, result, TActivationContext::AsActorContext());
-        } else {
-            TResultRecord* result = google::protobuf::Arena::CreateMessage<TResultRecord>(this->Request->GetArena());
-            CopyProtobuf(ev->Get()->Record, result);
-            result->set_status(status);
-            this->Request->Reply(result, status);
+        } else {      
+            TResultRecord result;//google::protobuf::Arena::CreateMessage<TResultRecord>(this->Request->GetArena());
+            CopyProtobuf(ev->Get()->Record, &result);
+            result.set_status(status);
+            this->Request->Reply(&result, status);
+            PassAway();
         }
     }
 
@@ -983,10 +984,12 @@ protected:
             if (const auto& userToken = this->Request_->GetSerializedToken()) {
                 return new NACLib::TUserToken(userToken);
             }
-            return nullptr;
         } else {
-            return new NACLib::TUserToken(*this->TBase::UserToken);
+            if (this->TBase::UserToken) {
+                return new NACLib::TUserToken(*this->TBase::UserToken);
+            }
         }
+        return nullptr;
     }
 
     TString GetDatabaseName() {

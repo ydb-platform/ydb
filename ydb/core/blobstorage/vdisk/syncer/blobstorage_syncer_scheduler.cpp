@@ -1,6 +1,7 @@
 #include "blobstorage_syncer_scheduler.h"
 #include "blobstorage_syncer_localwriter.h"
 #include "blobstorage_syncer_committer.h"
+#include "index_sst_writer.h"
 #include "syncer_job_task.h"
 #include "syncer_job_actor.h"
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
@@ -257,7 +258,11 @@ namespace NKikimr {
         void Handle(TEvSyncerJobDone::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             TEvSyncerJobDone *msg = ev->Get();
-
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+            if (msg->Task->SstWriterId) {
+                ActiveActors.Erase(msg->Task->SstWriterId);
+            }
+#endif
             if (msg->Task->NeedCommit()) {
                 auto proxy = std::make_unique<TSyncerCommitterProxy>(ctx.SelfID, CommitterId, std::move(msg->Task));
                 const TActorId aid = ctx.Register(proxy.release());
@@ -285,10 +290,25 @@ namespace NKikimr {
                 TVDiskInfoPtr tmp = SchedulerQueue.top();
                 SchedulerQueue.pop();
                 Y_DEBUG_ABORT_UNLESS(tmp->Get().PeerSyncState.LastSyncStatus != TSyncStatusVal::Running);
+
+                TActorId sstWriterId;
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+                auto sstWriterActor = std::make_unique<TIndexSstWriterActor>(
+                    SyncerContext->VCtx,
+                    SyncerContext->PDiskCtx,
+                    SyncerContext->LevelIndexLogoBlob,
+                    SyncerContext->LevelIndexBlock,
+                    SyncerContext->LevelIndexBarrier);
+                sstWriterId = ctx.Register(sstWriterActor.get());
+                ActiveActors.Insert(sstWriterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+#endif
                 auto task = std::make_unique<TSyncerJobTask>(TSyncerJobTask::EJustSync, GInfo->GetVDiskId(tmp->OrderNumber),
-                    GInfo->GetActorId(tmp->OrderNumber), tmp->Get().PeerSyncState, JobCtx);
+                    GInfo->GetActorId(tmp->OrderNumber), sstWriterId, tmp->Get().PeerSyncState, JobCtx);
                 const TActorId aid = ctx.Register(CreateSyncerJob(SyncerContext, std::move(task), ctx.SelfID));
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+                sstWriterActor->SetSyncerJobActorId(aid);
+#endif
             }
 
             if (!SchedulerQueue.empty() && !Scheduled) {

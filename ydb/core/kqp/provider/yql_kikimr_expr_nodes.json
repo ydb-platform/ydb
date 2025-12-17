@@ -26,6 +26,16 @@
             ]
         },
         {
+            "Name": "TKiTruncateTable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiTruncateTable!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "TablePath", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKiAlterDatabase",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiAlterDatabase!"},

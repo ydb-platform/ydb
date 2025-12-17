@@ -34,6 +34,7 @@ SRCS(
     change_exchange.proto
     channel_purpose.proto
     cms.proto
+    cluster_state_info.proto
     compaction.proto
     compile_service_config.proto
     config.proto
@@ -52,6 +53,7 @@ SRCS(
     counters_coordinator.proto
     counters_datashard.proto
     counters_hive.proto
+    counters_info.proto
     counters_kesus.proto
     counters_keyvalue.proto
     counters_mediator.proto
@@ -80,6 +82,7 @@ SRCS(
     flat_scheme_op.proto
     flat_tx_scheme.proto
     follower_group.proto
+    fs_settings.proto
     grpc.proto
     grpc_pq_old.proto
     grpc_status_proxy.proto
@@ -117,6 +120,7 @@ SRCS(
     pqconfig.proto
     profiler.proto
     query_stats.proto
+    recoveryshard_config.proto
     replication.proto
     resource_broker.proto
     s3_settings.proto

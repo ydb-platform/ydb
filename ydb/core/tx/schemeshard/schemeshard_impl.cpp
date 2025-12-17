@@ -389,10 +389,11 @@ THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal
 
 THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(
         const TPathId& pathId, const TOperationId& opId,
-        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const
+        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx,
+        NKikimrTxColumnShard::ETransactionKind kind) const
 {
     return MakeHolder<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_SCHEMA, TabletID(), ctx.SelfID,
+        kind, TabletID(), ctx.SelfID,
         ui64(opId.GetTxId()), body, seqNo,  SelectProcessingParams(pathId),
         0, 0
     );
@@ -1959,6 +1960,12 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
     }
 }
 
+void TSchemeShard::PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableIndexInfo::TPtr indexInfo) {
+    db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(indexInfo->AlterVersion)
+    );
+}
+
 void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) {
     Y_ABORT_UNLESS(PathsById.contains(pathId));
     auto path = PathsById.at(pathId);
@@ -2639,6 +2646,16 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
             Y_ABORT_UNLESS(serializeRes);
         }
     }  else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
+        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+        txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        bool serializeRes = proto.SerializeToString(&extraData);
+        Y_ABORT_UNLESS(serializeRes);
+    } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable ||
+               txState.TxType == TTxState::TxCreateCdcStreamAtTableWithInitialScan ||
+               txState.TxType == TTxState::TxAlterCdcStreamAtTable ||
+               txState.TxType == TTxState::TxAlterCdcStreamAtTableDropSnapshot ||
+               txState.TxType == TTxState::TxDropCdcStreamAtTable ||
+               txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
         bool serializeRes = proto.SerializeToString(&extraData);
@@ -4096,7 +4113,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
         storeInfo->ColumnTablesUnderOperation.erase(pathId);
         storeInfo->ColumnTables.erase(pathId);
     }
-    
+
     UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated, ctx);
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
@@ -4662,6 +4679,11 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                     result.SetSecurityStateVersion(subDomain->GetSecurityStateVersion());
                     generalVersion += result.GetSubDomainVersion();
                     generalVersion += result.GetSecurityStateVersion();
+
+                    if (ui64 version = subDomain->GetDomainStateVersion()) {
+                        result.SetSubDomainStateVersion(version);
+                        generalVersion += version;
+                    }
                 }
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
@@ -5374,11 +5396,13 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvRecomputeKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvFilterKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvValidateUniqueIndexResponse, Handle);
         HFuncTraced(TEvDataShard::TEvBuildFulltextIndexResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvBuildFulltextDictResponse, Handle);
         // } // NIndexBuilder
 
         //namespace NCdcStreamScan {
@@ -7623,6 +7647,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         newPartitioningSet.reserve(newPartitioning.size());
         const auto& oldPartitioning = tableInfo->GetPartitions();
 
+        TInstant now = AppData()->TimeProvider->Now();
         for (const auto& p: newPartitioning) {
             if (!oldPartitioning.empty())
                 newPartitioningSet.insert(p.ShardIdx);
@@ -7631,7 +7656,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
             auto it = partitionStats.find(p.ShardIdx);
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
-                UpdateShardMetrics(p.ShardIdx, it->second);
+                UpdateShardMetrics(p.ShardIdx, it->second, now);
             }
         }
 
@@ -8289,6 +8314,7 @@ void TSchemeShard::ResolveSA() {
 
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
         auto navigate = std::make_unique<TNavigate>();
+        navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(resourcesDomainId.OwnerId, resourcesDomainId.LocalPathId);
         entry.Operation = TNavigate::EOp::OpPath;

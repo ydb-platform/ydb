@@ -26,7 +26,17 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         TString srcTopicFullName = "rt3.dc1--" + srcTopic;
         TString dstTopicFullName = "rt3.dc1--" + dstTopic;
 
-        server.AnnoyingClient->CreateTopic(srcTopicFullName, partitionsCount);
+        server.AnnoyingClient->CreateTopic(
+            srcTopicFullName,
+            partitionsCount,
+            /*ui32 lowWatermark =*/ 8_MB,
+            /*ui64 lifetimeS =*/ 86400,
+            /*ui64 writeSpeed =*/ 20000000,
+            /*TString user =*/ "",
+            /*ui64 readSpeed =*/ 200000000,
+            /*TVector<TString> rr =*/ {"some_user", "user"},
+            /*TVector<TString> important =*/ {}
+        );
 
         NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
         mirrorFrom.SetEndpoint("localhost");
@@ -45,7 +55,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             /*ui64 writeSpeed =*/ 20000000,
             /*TString user =*/ "",
             /*ui64 readSpeed =*/ 200000000,
-            /*TVector<TString> rr =*/ {},
+            /*TVector<TString> rr =*/ {"user"},
             /*TVector<TString> important =*/ {},
             mirrorFrom
         );
@@ -113,7 +123,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         auto createTopicReader = [&](const TString& topic) {
             auto settings = NTopic::TReadSessionSettings()
                     .AppendTopics(NTopic::TTopicReadSettings(topic))
-                    .ConsumerName("shared/user")
+                    .ConsumerName("user")
                     .Decompress(false);
 
             return NTopic::TTopicClient(*driver).CreateReadSession(settings);

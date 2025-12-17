@@ -2,6 +2,8 @@ package NYql;
 option java_package = "ru.yandex.yql.proto";
 
 import "yql/essentials/protos/clickhouse.proto";
+import "yql/essentials/protos/fmr.proto";
+import "yql/essentials/utils/fetch/proto/fetch_config.proto";
 
 
 /////////////////////////////// common ///////////////////////////////
@@ -235,6 +237,7 @@ message TClickHouseClusterConfig {
     optional string Id = 13;
     repeated string GroupAllowed = 14;
     optional bool ForceUseBalancer = 15 [default = false];
+    optional bool JsonFormatHeader = 16 [default = false];
 }
 
 message TClickHouseGatewayConfig {
@@ -524,6 +527,8 @@ message TYqlCoreConfig {
     repeated TCoreAttr Flags = 1;
     optional TActivationPercentage QPlayerActivation = 2;
     optional uint32 QPlayerRobotPercentage = 3 [default = 0];
+    optional TActivationPercentage QPlayerFullCaptureActivation = 4;
+    optional bool AlwaysCommitQPlayer = 5;
 }
 
 /////////////////////////////// Sql Core ///////////////////////////////
@@ -539,6 +544,7 @@ message TSqlCoreConfig {
     repeated string NoV0SyntaxErrorForUsers = 3;
 
     repeated string TranslationFlags = 4;
+    repeated TCoreAttr ExtendedTranslationFlags = 5;
 }
 
 /////////////////////////////// Db Tool ///////////////////////////////
@@ -731,6 +737,17 @@ message TIcebergDataSourceOptions {
     optional TIcebergWarehouse warehouse = 2;
 }
 
+// TYdbDataSourceOptions represents settings specific for YDB data source
+message TYdbDataSourceOptions {
+    // EQueryDataFormat determines the format of the data returned by the YDB server
+    enum EQueryDataFormat {
+        QUERY_DATA_FORMAT_UNSPECIFIED = 0;
+        ARROW = 1;
+    }
+
+    optional EQueryDataFormat query_data_format = 1;
+}
+
 // TGenericDataSourceInstance helps to identify the instance of a data source to redirect request to.
 message TGenericDataSourceInstance {
     // Data source kind
@@ -757,6 +774,7 @@ message TGenericDataSourceInstance {
         TLoggingDataSourceOptions logging_options = 12;
         TMongoDbDataSourceOptions mongodb_options = 13;
         TIcebergDataSourceOptions iceberg_options = 14;
+        TYdbDataSourceOptions ydb_options = 15;
     }
 }
 
@@ -921,15 +939,24 @@ message TYtflowGatewayConfig {
 
 ///////////////////////////// Fmr /////////////////////////////
 
-message TFmrConfig {
+message TFmrInstance {
     optional string Name = 1;
     optional string CoordinatorUrl = 2;
     repeated string AllowedGroups = 3;
     optional bool EnableAuth = 4 [default = false];
+    optional string FileRemoteCacheName = 5;
 }
 
 message TFmrGatewayConfig {
-    repeated TFmrConfig FmrConfigurations = 1;
+    repeated TFmrInstance FmrConfigurations = 1;
+    repeated TFmrFileRemoteCache FileCacheConfigurations = 2;
+}
+
+/////////////////////////////// Layers ///////////////////////////////
+
+message TLayersConfig {
+    optional string FetchUrl = 1;
+    optional TFetchConfig FetchConfig = 2;
 }
 
 /////////////////////////////// Root ///////////////////////////////
@@ -960,4 +987,5 @@ message TGatewaysConfig {
     optional TDbResolverConfig DbResolver = 23;
     optional TYtflowGatewayConfig Ytflow = 24;
     optional TFmrGatewayConfig Fmr = 25;
+    optional TLayersConfig Layers = 26;
 }

@@ -1,4 +1,4 @@
-# KqpLoad
+# Query Processor Load
 
 Runs general performance testing for the {{ ydb-short-name }} cluster by loading all components via the Query Processor layer. The load is similar to that from the [workload](../reference/ydb-cli/commands/workload/index.md) {{ ydb-short-name }} CLI subcommand, but it is generated from within the cluster.
 

@@ -216,7 +216,7 @@ private:
 };
 
 TComputationPatternLRUCache::TComputationPatternLRUCache(
-    const TComputationPatternLRUCache::Config& configuration,
+    const TComputationPatternLRUCache::TConfig& configuration,
     NMonitoring::TDynamicCounterPtr counters)
     : Cache_(std::make_unique<TLRUPatternCacheImpl>(
           CacheMaxElementsSize, configuration.MaxSizeBytes, CacheMaxElementsSize, configuration.MaxCompiledSizeBytes))

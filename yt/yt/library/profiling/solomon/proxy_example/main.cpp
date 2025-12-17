@@ -19,7 +19,7 @@ class TStaticEndpointProvider
     : public IEndpointProvider
 {
 public:
-    TStaticEndpointProvider(std::vector<TString> addresses)
+    explicit TStaticEndpointProvider(std::vector<TString> addresses)
         : Addresses_(std::move(addresses))
     { }
 

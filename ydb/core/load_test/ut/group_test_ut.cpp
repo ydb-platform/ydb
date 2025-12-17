@@ -26,7 +26,26 @@ struct TTetsEnv {
         Env.Runtime->SetLogPriority(NKikimrServices::BS_LOAD_TEST, NLog::PRI_DEBUG);
     }
 
-    TString RunSingleLoadTest(const TString& command) {
+    TString RunSingleLoadTest(const TString& command, bool checkRdmaMemory = false) {
+        if (checkRdmaMemory) {
+            Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVPut::EventType) {
+                    auto* res = ev->Get<TEvBlobStorage::TEvVPut>();
+                    UNIT_ASSERT(res);
+                    auto payload = res->GetPayload();
+                    for (auto& rope : payload) {
+                        for (auto it = rope.Begin(); it != rope.End(); ++it) {
+                            const TRcBuf& chunk = it.GetChunk();
+                            auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
+                            UNIT_ASSERT_C(!memReg.Empty(), "unable to extract mem region from chunk");
+                            UNIT_ASSERT_C(memReg.GetAddr(), "got memory region with invalid address");
+                        }
+                    }
+                }
+                return true;
+            };
+        }
+
         const auto sender = Env.Runtime->AllocateEdgeActor(VDiskActorId.NodeId(), __FILE__, __LINE__);
         auto stream = TStringInput(command);
 
@@ -83,6 +102,28 @@ Y_UNIT_TEST_SUITE(GroupWriteTest) {
         );
 
         const auto html = env.RunSingleLoadTest(conf);
+        UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() >= 300U);
+        UNIT_ASSERT(GetOutputValue(html, "BadPutResults").front() == 0U);
+        UNIT_ASSERT(GetOutputValue(html, "TotalBytesWritten").front() >= 300000000U);
+        UNIT_ASSERT(GetOutputValue(html, "TotalBytesRead").front() == 0U);
+    }
+
+    Y_UNIT_TEST(SimpleRdma) {
+        TTetsEnv env;
+
+        const TString conf(R"(DurationSeconds: 30
+            Tablets: {
+                Tablets: { TabletId: 1 Channel: 0 GroupId: )" + ToString(env.GroupInfo->GroupID) + R"( Generation: 1 }
+                WriteSizes: { Weight: 1.0 Min: 1000000 Max: 4000000 }
+                WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 100000 MaxUs: 100000 } }
+                MaxInFlightWriteRequests: 10
+                FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 1000000 MaxUs: 1000000 } }
+                PutHandleClass: TabletLog
+                RdmaMode: 1
+            })"
+        );
+
+        const auto html = env.RunSingleLoadTest(conf, true);
         UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() >= 300U);
         UNIT_ASSERT(GetOutputValue(html, "BadPutResults").front() == 0U);
         UNIT_ASSERT(GetOutputValue(html, "TotalBytesWritten").front() >= 300000000U);

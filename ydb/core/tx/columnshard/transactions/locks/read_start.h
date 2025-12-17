@@ -13,9 +13,10 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, LockIdsForCheck);
 
     virtual bool DoCheckInteraction(
-        const ui64 selfTxId, TInteractionsContext& /*context*/, TTxConflicts& /*conflicts*/, TTxConflicts& notifications) const override {
-        for (auto&& i : LockIdsForCheck) {
-            notifications.Add(i, selfTxId);
+        const ui64 selfLockId, TInteractionsContext& /*context*/, TTxConflicts& /*conflicts*/, TTxConflicts& notifications) const override {
+        for (auto& lockIdToCommit : LockIdsForCheck) {
+            // when lockIdToCommit commits, selfLockId will be notified
+            notifications.Add(lockIdToCommit, selfLockId);
         }
         return true;
     }
@@ -49,8 +50,8 @@ private:
 
     virtual bool DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto) override;
     virtual void DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) const override;
-    virtual void DoAddToInteraction(const ui64 txId, TInteractionsContext& context) const override;
-    virtual void DoRemoveFromInteraction(const ui64 txId, TInteractionsContext& context) const override;
+    virtual void DoAddToInteraction(const ui64 lockId, TInteractionsContext& context) const override;
+    virtual void DoRemoveFromInteraction(const ui64 lockId, TInteractionsContext& context) const override;
     static inline const TFactory::TRegistrator<TEvReadStart> Registrator = TFactory::TRegistrator<TEvReadStart>(GetClassNameStatic());
 
 public:

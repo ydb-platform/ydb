@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
         NWilson::TTraceId traceId(0);
         NKikimr::NKqp::TCPULimits cpuLimits;
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        auto scanFetcher = runtime.Register(CreateKqpScanFetcher(snapshot, { compute }, meta, settings,
+        auto scanFetcher = runtime.Register(CreateKqpScanFetcher(snapshot, { compute }, meta, settings, "/Root",
             0, TMaybe<ui64>(), 0, TMaybe<NKikimrDataEvents::ELockMode>(), shardsScanningPolicy,
             MakeIntrusive<NKikimr::NKqp::TKqpCounters>(counters), 0, cpuLimits)
         );

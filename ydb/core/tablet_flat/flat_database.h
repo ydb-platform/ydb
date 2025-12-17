@@ -135,7 +135,7 @@ public:
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const;
 
-    bool Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
+    TPrechargeResult Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,
                         EDirection direction = EDirection::Forward,
                         TRowVersion snapshot = TRowVersion::Max());
@@ -292,8 +292,8 @@ public:
 
     /**
      * Adds a callback, which is called when database changes are rolled back
-     * 
-     * @param callback 
+     *
+     * @param callback
      */
     template<class TCallback>
     void OnRollback(TCallback&& callback) {

@@ -4,6 +4,7 @@ SRCS(
     aws.cpp
     cert_format_converter.cpp
     client_command_options.cpp
+    colors.cpp
     command.cpp
     command_utils.cpp
     common.cpp
@@ -44,8 +45,9 @@ PEERDIR(
     contrib/libs/openssl
     library/cpp/getopt
     library/cpp/json/writer
-    library/cpp/yaml/as
+    library/cpp/regex/pcre
     library/cpp/string_utils/csv
+    library/cpp/yaml/as
     ydb/public/lib/json_value
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/lib/yson_value

@@ -1,63 +1,102 @@
 Metadata-Version: 2.1
 Name: PyHamcrest
-Version: 1.10.1
+Version: 2.1.0
 Summary: Hamcrest framework for matcher objects
-Home-page: https://github.com/hamcrest/PyHamcrest
-Author: Chris Rose
-Author-email: offline@offby1.net
-License: New BSD
-Download-URL: http://pypi.python.org/packages/source/P/PyHamcrest/PyHamcrest-1.10.1.tar.gz
-Keywords: hamcrest matchers pyunit unit test testing unittest unittesting
-Platform: All
+Project-URL: History, https://github.com/hamcrest/PyHamcrest/blob/main/CHANGELOG.rst
+Project-URL: Source, https://github.com/hamcrest/PyHamcrest/
+Project-URL: Issues, https://github.com/hamcrest/PyHamcrest/issues
+Author: Simon Brunning, Jon Reid
+Author-email: Chris Rose <offline@offby1.net>
+License: BSD License
+        
+        Copyright 2020 hamcrest.org
+        All rights reserved.
+        
+        Redistribution and use in source and binary forms, with or without
+        modification, are permitted provided that the following conditions are met:
+        
+        Redistributions of source code must retain the above copyright notice, this list of
+        conditions and the following disclaimer. Redistributions in binary form must reproduce
+        the above copyright notice, this list of conditions and the following disclaimer in
+        the documentation and/or other materials provided with the distribution.
+        
+        Neither the name of Hamcrest nor the names of its contributors may be used to endorse
+        or promote products derived from this software without specific prior written
+        permission.
+        
+        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+        EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+        OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+        SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+        INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+        TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+        BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+        CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY
+        WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+        DAMAGE.
+License-File: LICENSE.txt
+Keywords: hamcrest,matchers,pyunit,test,testing,unit,unittest,unittesting
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Environment :: Console
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: BSD License
 Classifier: Natural Language :: English
 Classifier: Operating System :: OS Independent
-Classifier: Programming Language :: Python :: 2
-Classifier: Programming Language :: Python :: 2.7
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.5
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: Jython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Software Development
 Classifier: Topic :: Software Development :: Quality Assurance
 Classifier: Topic :: Software Development :: Testing
-Provides: hamcrest
-Requires-Python: >=2.6, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, <4
-Requires-Dist: six
+Requires-Python: >=3.6
+Provides-Extra: dev
+Requires-Dist: black; extra == 'dev'
+Requires-Dist: doc2dash; extra == 'dev'
+Requires-Dist: flake8; extra == 'dev'
+Requires-Dist: pyhamcrest[docs,tests]; extra == 'dev'
+Requires-Dist: pytest-mypy; extra == 'dev'
+Requires-Dist: towncrier; extra == 'dev'
+Requires-Dist: tox; extra == 'dev'
+Requires-Dist: tox-asdf; extra == 'dev'
+Requires-Dist: twine; extra == 'dev'
+Provides-Extra: docs
+Requires-Dist: alabaster~=0.7; extra == 'docs'
+Requires-Dist: sphinx~=4.0; extra == 'docs'
+Provides-Extra: tests
+Requires-Dist: coverage[toml]; extra == 'tests'
+Requires-Dist: dataclasses; python_version < '3.7' and extra == 'tests'
+Requires-Dist: mypy!=0.940; platform_python_implementation != 'PyPy' and extra == 'tests'
+Requires-Dist: pytest-mypy-plugins; platform_python_implementation != 'PyPy' and extra == 'tests'
+Requires-Dist: pytest-sugar; extra == 'tests'
+Requires-Dist: pytest-xdist; extra == 'tests'
+Requires-Dist: pytest>=5.0; extra == 'tests'
+Requires-Dist: pyyaml; extra == 'tests'
+Requires-Dist: types-dataclasses; python_version < '3.7' and extra == 'tests'
+Requires-Dist: types-mock; extra == 'tests'
+Provides-Extra: tests-numpy
+Requires-Dist: numpy; extra == 'tests-numpy'
+Requires-Dist: pyhamcrest[tests]; extra == 'tests-numpy'
+Description-Content-Type: text/x-rst
 
 PyHamcrest
 ==========
 
-| |docs| |travis| |coveralls| |landscape| |scrutinizer|
-| |version| |downloads| |wheel| |supported-versions| |supported-implementations|
-| |GitHub forks| |GitHub stars| |GitHub watchers| |GitHub contributors| |Lines of Code|
-| |GitHub issues| |GitHub issues-closed| |GitHub pull-requests| |GitHub pull-requests closed|
+| |docs| |status| |version| |downloads|
 
-.. |docs| image:: https://readthedocs.org/projects/pyhamcrest/badge/
-    :target: https://pyhamcrest.readthedocs.org/
+.. |docs| image:: https://readthedocs.org/projects/pyhamcrest/badge/?version=latest
+    :target: https://pyhamcrest.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-.. |travis| image:: http://img.shields.io/travis/hamcrest/PyHamcrest/master.svg
-    :alt: Travis-CI Build Status
-    :target: https://travis-ci.org/hamcrest/PyHamcrest
-
-.. |appveyor| image:: https://ci.appveyor.com/api/projects/status/github/hamcrest/PyHamcrest?branch=master&svg=true
-    :alt: AppVeyor Build Status
-    :target: https://ci.appveyor.com/project/hamcrest/PyHamcrest
-
-.. |coveralls| image:: http://img.shields.io/coveralls/hamcrest/PyHamcrest/master.svg?style=flat
-    :alt: Coverage Status
-    :target: https://coveralls.io/r/hamcrest/PyHamcrest
-
-.. |landscape| image:: https://landscape.io/github/hamcrest/PyHamcrest/master/landscape.svg?style=flat
-    :target: https://landscape.io/github/hamcrest/PyHamcrest/master
-    :alt: Code Quality Status
+.. |status| image:: https://github.com/hamcrest/PyHamcrest/workflows/CI/badge.svg
+    :alt: CI Build Status
+    :target: https://github.com/hamcrest/PyHamcrest/actions?query=workflow%3ACI
 
 .. |version| image:: http://img.shields.io/pypi/v/PyHamcrest.svg?style=flat
     :alt: PyPI Package latest release
@@ -66,58 +105,6 @@ PyHamcrest
 .. |downloads| image:: http://img.shields.io/pypi/dm/PyHamcrest.svg?style=flat
     :alt: PyPI Package monthly downloads
     :target: https://pypi.python.org/pypi/PyHamcrest
-
-.. |wheel| image:: https://pypip.in/wheel/PyHamcrest/badge.svg?style=flat
-    :alt: PyPI Wheel
-    :target: https://pypi.python.org/pypi/PyHamcrest
-
-.. |supported-versions| image:: https://pypip.in/py_versions/PyHamcrest/badge.svg?style=flat
-    :alt: Supported versions
-    :target: https://pypi.python.org/pypi/PyHamcrest
-
-.. |GitHub forks| image:: https://img.shields.io/github/forks/hamcrest/PyHamcrest.svg?label=Fork&logo=github
-    :alt: GitHub forks
-    :target: https://github.com/hamcrest/PyHamcrest/network/members
-
-.. |GitHub stars| image:: https://img.shields.io/github/stars/hamcrest/PyHamcrest.svg?label=Star&logo=github
-    :alt: GitHub stars
-    :target: https://github.com/hamcrest/PyHamcrest/stargazers/
-
-.. |GitHub watchers| image:: https://img.shields.io/github/watchers/hamcrest/PyHamcrest.svg?label=Watch&logo=github
-    :alt: GitHub watchers
-    :target: https://github.com/hamcrest/PyHamcrest/watchers/
-
-.. |GitHub contributors| image:: https://img.shields.io/github/contributors/hamcrest/PyHamcrest.svg?logo=github
-    :alt: GitHub contributors
-    :target: https://github.com/hamcrest/PyHamcrest/graphs/contributors/
-
-.. |GitHub issues| image:: https://img.shields.io/github/issues/hamcrest/PyHamcrest.svg?logo=github
-    :alt: GitHub issues
-    :target: https://github.com/hamcrest/PyHamcrest/issues/
-
-.. |GitHub issues-closed| image:: https://img.shields.io/github/issues-closed/hamcrest/PyHamcrest.svg?logo=github
-    :alt: GitHub issues-closed
-    :target: https://github.com/hamcrest/PyHamcrest/issues?q=is%3Aissue+is%3Aclosed
-
-.. |GitHub pull-requests| image:: https://img.shields.io/github/issues-pr/hamcrest/PyHamcrest.svg?logo=github
-    :alt: GitHub pull-requests
-    :target: https://github.com/hamcrest/PyHamcrest/pulls
-
-.. |GitHub pull-requests closed| image:: https://img.shields.io/github/issues-pr-closed/hamcrest/PyHamcrest.svg?logo=github
-    :alt: GitHub pull-requests closed
-    :target: https://github.com/hamcrest/PyHamcrest/pulls?utf8=%E2%9C%93&q=is%3Apr+is%3Aclosed
-
-.. |Lines of Code| image:: https://tokei.rs/b1/github/hamcrest/PyHamcrest
-    :alt: Lines of Code
-    :target: https://github.com/hamcrest/PyHamcrest
-
-.. |supported-implementations| image:: https://pypip.in/implementation/PyHamcrest/badge.svg?style=flat
-    :alt: Supported implementations
-    :target: https://pypi.python.org/pypi/PyHamcrest
-
-.. |scrutinizer| image:: https://img.shields.io/scrutinizer/g/hamcrest/PyHamcrest/master.svg?style=flat
-    :alt: Scrtinizer Status
-    :target: https://scrutinizer-ci.com/g/hamcrest/PyHamcrest/
 
 
 Introduction
@@ -146,6 +133,12 @@ Hamcrest can be installed using the usual Python packaging tools. It depends on
 distribute, but as long as you have a network connection when you install, the
 installation process will take care of that for you.
 
+For example:
+
+.. code::
+
+ pip install PyHamcrest
+
 My first PyHamcrest test
 ========================
 
@@ -155,16 +148,18 @@ the standard set of matchers:
 
 .. code:: python
 
- from hamcrest import *
+ from hamcrest import assert_that, equal_to
  import unittest
+
 
  class BiscuitTest(unittest.TestCase):
      def testEquals(self):
-         theBiscuit = Biscuit('Ginger')
-         myBiscuit = Biscuit('Ginger')
+         theBiscuit = Biscuit("Ginger")
+         myBiscuit = Biscuit("Ginger")
          assert_that(theBiscuit, equal_to(myBiscuit))
 
- if __name__ == '__main__':
+
+ if __name__ == "__main__":
      unittest.main()
 
 The ``assert_that`` function is a stylized sentence for making a test
@@ -179,14 +174,14 @@ for the tested value in the assertion:
 
 .. code:: python
 
- assert_that(theBiscuit.getChocolateChipCount(), equal_to(10), 'chocolate chips')
- assert_that(theBiscuit.getHazelnutCount(), equal_to(3), 'hazelnuts')
+ assert_that(theBiscuit.getChocolateChipCount(), equal_to(10), "chocolate chips")
+ assert_that(theBiscuit.getHazelnutCount(), equal_to(3), "hazelnuts")
 
 As a convenience, assert_that can also be used to verify a boolean condition:
 
 .. code:: python
 
- assert_that(theBiscuit.isCooked(), 'cooked')
+ assert_that(theBiscuit.isCooked(), "cooked")
 
 This is equivalent to the ``assert_`` method of unittest.TestCase, but because
 it's a standalone function, it offers greater flexibility in test writing.
@@ -315,21 +310,30 @@ And here's the implementation:
  from hamcrest.core.base_matcher import BaseMatcher
  from hamcrest.core.helpers.hasmethod import hasmethod
 
- class IsGivenDayOfWeek(BaseMatcher):
 
+ class IsGivenDayOfWeek(BaseMatcher):
      def __init__(self, day):
          self.day = day  # Monday is 0, Sunday is 6
 
      def _matches(self, item):
-         if not hasmethod(item, 'weekday'):
+         if not hasmethod(item, "weekday"):
              return False
          return item.weekday() == self.day
 
      def describe_to(self, description):
-         day_as_string = ['Monday', 'Tuesday', 'Wednesday', 'Thursday',
-                          'Friday', 'Saturday', 'Sunday']
-         description.append_text('calendar date falling on ')    \
-                    .append_text(day_as_string[self.day])
+         day_as_string = [
+             "Monday",
+             "Tuesday",
+             "Wednesday",
+             "Thursday",
+             "Friday",
+             "Saturday",
+             "Sunday",
+         ]
+         description.append_text("calendar date falling on ").append_text(
+             day_as_string[self.day]
+         )
+
 
  def on_a_saturday():
      return IsGivenDayOfWeek(5)
@@ -355,16 +359,18 @@ could use it in our test by importing the factory function ``on_a_saturday``:
 
 .. code:: python
 
- from hamcrest import *
+ from hamcrest import assert_that, is_
  import unittest
  from isgivendayofweek import on_a_saturday
+
 
  class DateTest(unittest.TestCase):
      def testDateIsOnASaturday(self):
          d = datetime.date(2008, 4, 26)
          assert_that(d, is_(on_a_saturday()))
 
- if __name__ == '__main__':
+
+ if __name__ == "__main__":
      unittest.main()
 
 Even though the ``on_a_saturday`` function creates a new matcher each time it
@@ -385,5 +391,3 @@ More resources
 .. _Package: http://pypi.python.org/pypi/PyHamcrest
 .. _Sources: https://github.com/hamcrest/PyHamcrest
 .. _Hamcrest: http://hamcrest.org
-
-

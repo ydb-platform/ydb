@@ -77,10 +77,6 @@ typedef enum {
    unreceived data. */
 #define NGTCP2_MAX_REORDERED_CRYPTO_DATA 65536
 
-/* NGTCP2_MAX_RETRIES is the number of Retry packet which client can
-   accept. */
-#define NGTCP2_MAX_RETRIES 3
-
 /* NGTCP2_MAX_SCID_POOL_SIZE is the maximum number of source
    connection ID the local endpoint provides to the remote endpoint.
    The chosen value was described in old draft.  Now a remote endpoint

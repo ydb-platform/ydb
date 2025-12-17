@@ -6,6 +6,10 @@
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
+
+#include <ydb/core/protos/counters_pq.pb.h>
+#include <ydb/core/protos/msgbus.pb.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -13,14 +17,12 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/quoter/public/quoter.h>
-#include <ydb/core/persqueue/writer/source_id_encoding.h>
-#include <ydb/core/protos/counters_pq.pb.h>
-#include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
+
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
@@ -322,6 +324,8 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 }
             }
 
+            already = already || writeResponse.DeduplicatedByMessageId;
+
             if (!already) {
                 if (wrOffset) {
                     PQ_ENSURE(*wrOffset >= offset);
@@ -424,10 +428,6 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
     BlobEncoder.SyncHeadKeys();
-
-    // New blocks have been recorded. You can now delete the keys of the repackaged blocks.
-    DefferedKeysForDeletion.clear();
-
     BlobEncoder.SyncNewHeadKey();
 
     if (BlobEncoder.IsNothingWritten()) { //Nothing writed at all
@@ -479,6 +479,8 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();
+
+    MessageIdDeduplicator.Commit();
 
     if (DeletePartitionState == DELETION_IN_PROCESS) {
         DestroyActor(ctx);
@@ -535,10 +537,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     TxSourceIdForPostPersist.clear();
     TxInflightMaxSeqNoPerSourceId.clear();
 
-    TxAffectedSourcesIds.clear();
-    WriteAffectedSourcesIds.clear();
-    TxAffectedConsumers.clear();
-    SetOffsetAffectedConsumers.clear();
     if (UserActionAndTransactionEvents.empty()) {
         WriteInfosToTx.clear();
     }
@@ -590,6 +588,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
+    NotifyEndOffsetChanged();
 
     ChangeScaleStatusIfNeeded(AutopartitioningManager->GetScaleStatus(ScaleStatus));
 
@@ -896,7 +895,9 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
     StartProcessChangeOwnerRequests(ctx);
 }
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -911,7 +912,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMs
     if (TxAffectedSourcesIds.contains(msg.Body.SourceId)) {
         return EProcessResult::Blocked;
     }
-    WriteAffectedSourcesIds.insert(msg.Body.SourceId);
+    affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(msg.Body.SourceId);
     return EProcessResult::Continue;
 }
 
@@ -928,7 +929,9 @@ void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& p
     parameters.SourceIdBatch.RegisterSourceId(body.SourceId, body.SeqNo, parameters.CurOffset, CurrentTimestamp, std::move(keyRange));
 }
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -942,7 +945,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroup
     if (TxAffectedSourcesIds.contains(msg.Body.SourceId)) {
         return EProcessResult::Blocked;
     }
-    WriteAffectedSourcesIds.insert(msg.Body.SourceId);
+    affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(msg.Body.SourceId);
     return EProcessResult::Continue;
 }
 
@@ -951,7 +954,9 @@ void TPartition::ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters&
 }
 
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -967,16 +972,16 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& 
         if (TxAffectedSourcesIds.contains(body.SourceId)) {
             return EProcessResult::Blocked;
         }
-        WriteAffectedSourcesIds.insert(body.SourceId);
+        affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(body.SourceId);
     }
     for (auto& body : msg.Deregistrations) {
         if (TxAffectedSourcesIds.contains(body.SourceId)) {
             return EProcessResult::Blocked;
         }
-        WriteAffectedSourcesIds.insert(body.SourceId);
+        affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(body.SourceId);
     }
-    return EProcessResult::Continue;
 
+    return EProcessResult::Continue;
 }
 
 
@@ -996,7 +1001,9 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
     }
 }
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
     if (!CanWrite()) {
         WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
@@ -1022,7 +1029,8 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
             return EProcessResult::Blocked;
         }
     }
-    WriteAffectedSourcesIds.insert(p.Msg.SourceId);
+    affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(p.Msg.SourceId);
+
     return EProcessResult::Continue;
 }
 
@@ -1203,9 +1211,10 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
     ) {
         if (poffset >= curOffset) {
-            LOG_W("Already written message. Topic: '" << TopicName()
+            LOG_D("Already written message. Topic: '" << TopicName()
                     << "' Partition: " << Partition << " SourceId: '" << EscapeC(p.Msg.SourceId)
                     << "'. Message seqNo: " << p.Msg.SeqNo
+                    << ". InitialSeqNo: " << p.InitialSeqNo
                     << ". Committed seqNo: " << sourceId.CommittedSeqNo()
                     << ". Writing seqNo: " << sourceId.UpdatedSeqNo()
                     << ". EndOffset: " << BlobEncoder.EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
@@ -1281,6 +1290,20 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             return false;
         }
         curOffset = poffset;
+    }
+
+    auto deduplicationResult = DeduplicateByMessageId(p.Msg, curOffset);
+    if (deduplicationResult) {
+        LOG_D("Deduplicate message " << p.Msg.SeqNo << " by MessageDeduplicationId");
+        p.DeduplicatedByMessageId = true;
+        p.Offset = deduplicationResult.value();
+
+        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
+        MsgsDiscarded.Inc();
+        TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
+        BytesDiscarded.Inc(p.Msg.Data.size());
+
+        return true;
     }
 
     if (p.Msg.PartNo == 0) { //create new PartitionedBlob

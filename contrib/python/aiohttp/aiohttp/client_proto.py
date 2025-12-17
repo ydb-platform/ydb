@@ -7,7 +7,7 @@ from .client_exceptions import (
     ClientOSError,
     ClientPayloadError,
     ServerDisconnectedError,
-    ServerTimeoutError,
+    SocketTimeoutError,
 )
 from .helpers import (
     _EXC_SENTINEL,
@@ -50,15 +50,13 @@ class ResponseHandler(BaseProtocol, DataQueue[Tuple[RawResponseMessage, StreamRe
 
     @property
     def should_close(self) -> bool:
-        if self._payload is not None and not self._payload.is_eof() or self._upgraded:
-            return True
-
         return (
             self._should_close
+            or (self._payload is not None and not self._payload.is_eof())
             or self._upgraded
-            or self.exception() is not None
+            or self._exception is not None
             or self._payload_parser is not None
-            or len(self) > 0
+            or bool(self._buffer)
             or bool(self._tail)
         )
 
@@ -224,8 +222,16 @@ class ResponseHandler(BaseProtocol, DataQueue[Tuple[RawResponseMessage, StreamRe
     def start_timeout(self) -> None:
         self._reschedule_timeout()
 
+    @property
+    def read_timeout(self) -> Optional[float]:
+        return self._read_timeout
+
+    @read_timeout.setter
+    def read_timeout(self, read_timeout: Optional[float]) -> None:
+        self._read_timeout = read_timeout
+
     def _on_read_timeout(self) -> None:
-        exc = ServerTimeoutError("Timeout on reading data from socket")
+        exc = SocketTimeoutError("Timeout on reading data from socket")
         self.set_exception(exc)
         if self._payload is not None:
             set_exception(self._payload, exc)
@@ -261,7 +267,15 @@ class ResponseHandler(BaseProtocol, DataQueue[Tuple[RawResponseMessage, StreamRe
                         # closed in this case
                         self.transport.close()
                     # should_close is True after the call
-                    self.set_exception(HttpProcessingError(), underlying_exc)
+                    if isinstance(underlying_exc, HttpProcessingError):
+                        exc = HttpProcessingError(
+                            code=underlying_exc.code,
+                            message=underlying_exc.message,
+                            headers=underlying_exc.headers,
+                        )
+                    else:
+                        exc = HttpProcessingError()
+                    self.set_exception(exc, underlying_exc)
                     return
 
                 self._upgraded = upgraded

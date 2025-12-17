@@ -5,7 +5,12 @@
 namespace NKikimrPQ {
 
 class TPQTabletConfig;
+class TPQTabletConfig_TConsumer;
 class TMirrorPartitionConfig;
+class TMLPStorageSnapshot;
+class TMLPStorageWAL;
+class TStatusResponse;
+class TStatusResponse_TPartResult;
 
 };
 

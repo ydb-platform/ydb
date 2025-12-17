@@ -101,10 +101,27 @@ namespace NKikimr {
 
         const ui64 syncLogMaxMemAmount = ui64(64) << ui64(20);
         const ui64 syncLogMaxDiskAmount = 0;
+        const ui32 maxResponseSize = 10 << 20;
 
-        State = std::make_unique<TSyncLogKeeperState>(vctx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
+        auto slCtx = MakeIntrusive<NSyncLog::TSyncLogCtx>(
+            vctx,
+            nullptr,
+            nullptr,
+            TActorId{},
+            TActorId{},
+            TActorId{},
+            syncLogMaxDiskAmount,
+            syncLogMaxEntryPointSize,
+            syncLogMaxMemAmount,
+            maxResponseSize,
+            nullptr,
+            false,
+            TControlWrapper(0, 0, 1),
+            TControlWrapper(20'000'000, 1, 100'000'000'000));
+
+        State = std::make_unique<TSyncLogKeeperState>(slCtx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
                 syncLogMaxEntryPointSize);
-        State->Init(nullptr, std::make_shared<TFakeLoggerCtx>());
+        State->Init(nullptr, std::make_shared<TFakeLoggerCtx>(), TActorId{});
 
         STR << "CREATE STATE entryPointLsn# " << ep.EntryPointLsn <<
             " entryPoint# " << (ep.EntryPoint.empty() ? "<empty>" : "<exists>") << "\n";

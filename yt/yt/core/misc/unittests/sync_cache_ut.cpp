@@ -48,7 +48,7 @@ TSharedRef CreateRandomReference(TFastRng64& rnd, i64 size)
     return output;
 }
 
-TEST(TSyncSlruCache, DownsizeSegfault)
+TEST(TSyncSlruCacheTest, DownsizeSegfault)
 {
     auto config = New<TSlruCacheConfig>();
     config->Capacity = 100;
@@ -71,7 +71,7 @@ TEST(TSyncSlruCache, DownsizeSegfault)
     }
 }
 
-TEST(TSyncSlruCache, EntryWeightUpdate)
+TEST(TSyncSlruCacheTest, EntryWeightUpdate)
 {
     TFastRng64 rng(27);
     auto config = New<TSlruCacheConfig>();

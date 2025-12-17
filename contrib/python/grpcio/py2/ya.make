@@ -14,7 +14,7 @@ VERSION(1.50.0)
 ORIGINAL_SOURCE(mirror://pypi/g/grpcio/grpcio-1.50.0.tar.gz)
 
 PEERDIR(
-    contrib/libs/grpc
+    contrib/restricted/grpc_py2
     contrib/python/six
 )
 
@@ -24,9 +24,9 @@ PEERDIR(
 )
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
-    contrib/libs/grpc
-    contrib/libs/grpc/include
+    ${ARCADIA_BUILD_ROOT}/contrib/restricted/grpc_py2
+    contrib/restricted/grpc_py2
+    contrib/restricted/grpc_py2/include
     FOR
     cython
     contrib/python/grpcio/py2

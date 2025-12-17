@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     kqp_opt_phy_delete_index.cpp
     kqp_opt_phy_effects.cpp
+    kqp_opt_phy_fulltext_index.cpp
     kqp_opt_phy_indexes.cpp
     kqp_opt_phy_insert_index.cpp
     kqp_opt_phy_insert.cpp

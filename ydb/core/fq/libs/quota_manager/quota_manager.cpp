@@ -540,7 +540,6 @@ private:
     }
 
     void SyncQuota(const TString& subjectType, const TString& subjectId, const TString& metricName, TQuotaCachedUsage& cached) {
-
         if (cached.SyncInProgress) {
             cached.ChangedAfterSync = true;
             return;
@@ -556,7 +555,6 @@ private:
 
         cached.ChangedAfterSync = false;
         cached.SyncInProgress = true;
-
 
         executer.Read(
             [](TSyncQuotaExecuter& executer, TSqlQueryBuilder& builder) {
@@ -660,8 +658,6 @@ private:
                     }
                 }
             }));
-
-
         });
     }
 
@@ -703,7 +699,7 @@ private:
         auto itQ = cache.UsageMap.find(metricName);
         if (itQ != cache.UsageMap.end()) {
             // if metric is not defined - ignore usage update
-            itQ->second.Usage.Usage = ev->Get()->Usage;
+            itQ->second.Usage.Usage = TTimedValue(ev->Get()->Usage, TInstant::Now());
             LOG_T(itQ->second.Usage.ToString(subjectType, subjectId, metricName) << " REFRESHED");
             SyncQuota(subjectType, subjectId, metricName, itQ->second);
         }

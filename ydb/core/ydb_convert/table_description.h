@@ -128,6 +128,8 @@ void FillPartitioningSettings(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
+void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
 
 // in
 bool CopyExplicitPartitions(NKikimrSchemeOp::TTableDescription& out,

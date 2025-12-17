@@ -49,6 +49,11 @@
             "uri": "file://test.test_FormatMicroseconds_/results.txt"
         }
     ],
+    "test.test[FormatWriteOffsetWithColon]": [
+        {
+            "uri": "file://test.test_FormatWriteOffsetWithColon_/results.txt"
+        }
+    ],
     "test.test[Format]": [
         {
             "uri": "file://test.test_Format_/results.txt"

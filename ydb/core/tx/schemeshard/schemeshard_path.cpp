@@ -3,6 +3,7 @@
 #include "schemeshard_system_names.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/sys_view/common/path.h>
 
@@ -966,6 +967,7 @@ const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) con
     // which does not support the YQL export process. Otherwise, they will be considered as tables,
     // and we might cause the process to be aborted.
     if (Path.Base()->IsTable()
+        || (Path.Base()->IsColumnTable() && AppData()->FeatureFlags.GetEnableColumnTablesBackup())
         || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
         || Path.Base()->IsPQGroup()
     )  {
@@ -1200,6 +1202,28 @@ const TPath::TChecker& TPath::TChecker::IsStreamingQuery(EStatus status) const {
 
     return Fail(status, TStringBuilder() << "path is not a streaming query"
         << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerMethodPtr rightFunc, EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+    
+    TChecker left(*this);
+    (left.*leftFunc)(status);
+    
+    if (!left.Failed) {
+        return *this;
+    }
+    
+    TChecker right(*this);
+    (right.*rightFunc)(status);
+    
+    if (right.Failed) {
+        return Fail(left.Status, TStringBuilder() << left.Error << " and " << right.Error);
+    }
+
+    return *this;
 }
 
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
@@ -1680,6 +1704,12 @@ bool TPath::IsCommonSensePath() const {
     return true;
 }
 
+bool TPath::ShouldSkipCommonPathCheckForIndexImplTable() const {
+    const bool featureFlagEnabled = AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
+    const bool isInsideIndexPath = IsInsideTableIndexPath(false);
+    return featureFlagEnabled && isInsideIndexPath;
+}
+
 bool TPath::AtLocalSchemeShardPath() const {
     if (Elements.empty()) {
         return true;
@@ -1720,13 +1750,6 @@ bool TPath::IsInsideTableIndexPath(bool failOnUnresolved) const {
     ++item;
     if (!(*item)->IsTable()) {
         return false;
-    }
-
-    ++item;
-    for (; item != Elements.rend(); ++item) {
-        if (!(*item)->IsDirectory() && !(*item)->IsSubDomainRoot()) {
-            return false;
-        }
     }
 
     return true;
@@ -1870,7 +1893,22 @@ bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explai
     }
 
     if (AppData()->FeatureFlags.GetEnableSystemNamesProtection()) {
-        if (!CheckReservedName(leaf, AppData(), userToken, explain)) {
+        TPathCreationContext context;
+        context.IsSystemUser = NSchemeShard::IsSystemUser(userToken);
+        context.IsAdministrator = NKikimr::IsAdministrator(AppData(), userToken);
+
+        if (IsBackupServiceReservedName(leaf)) {
+            TPath parentPath = Parent();
+            while (parentPath.IsResolved() && !parentPath.Base()->IsRoot()) {
+                if (parentPath.Base()->IsBackupCollection()) {
+                    context.IsInsideBackupCollection = true;
+                    break;
+                }
+                parentPath = parentPath.Parent();
+            }
+        }
+
+        if (!CheckReservedName(leaf, context, explain)) {
             return false;
         }
     } else if (leaf == NSysView::SysPathName) {

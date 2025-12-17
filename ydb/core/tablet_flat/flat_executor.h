@@ -500,6 +500,7 @@ class TExecutor
 
     TControlWrapper LogFlushDelayOverrideUsec;
     TControlWrapper MaxCommitRedoMB;
+    TControlWrapper MaxTxInFly;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
@@ -547,7 +548,7 @@ class TExecutor
     void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection);
     void DropPartStorePageCollections(const NTable::TPart &part);
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
-    void StartBackup();
+    void StartNewBackup();
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);

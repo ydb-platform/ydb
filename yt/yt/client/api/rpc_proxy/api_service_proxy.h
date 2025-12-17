@@ -64,6 +64,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetTablePivotKeys);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CreateTableBackup);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RestoreTableBackup);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, TransferBundleResources);
 
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, LookupRows);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, VersionedLookupRows);
@@ -117,14 +118,19 @@ public:
 
     // Jobs
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobs);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobTraces);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJob);
+
+    // Operations
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckOperationPermission);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, DumpJobContext);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobInput,
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobInputPaths);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobStderr);
-    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobTrace);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobTrace,
+        .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobFailContext);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AbandonJob);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PollJobShell);
@@ -218,6 +224,13 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingDistributedWriteSession);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteSession);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteTableFragment,
+        .SetStreamingEnabled(true));
+
+    // Distributed file client
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteFileFragment,
         .SetStreamingEnabled(true));
 
     // Shuffle service

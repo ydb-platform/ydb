@@ -461,6 +461,7 @@ public:
         const TCheckPermissionByAclOptions& options),
         (user, permission, acl, options))
 
+    // Accounting
     DELEGATE_METHOD(TFuture<void>, TransferAccountResources, (
         const std::string& srcAccount,
         const std::string& dstAccount,
@@ -468,15 +469,22 @@ public:
         const TTransferAccountResourcesOptions& options),
         (srcAccount, dstAccount, resourceDelta, options))
 
-    // Scheduler
     DELEGATE_METHOD(TFuture<void>, TransferPoolResources, (
-        const TString& srcPool,
-        const TString& dstPool,
-        const TString& poolTree,
+        const std::string& srcPool,
+        const std::string& dstPool,
+        const std::string& poolTree,
         NYTree::INodePtr resourceDelta,
         const TTransferPoolResourcesOptions& options),
         (srcPool, dstPool, poolTree, resourceDelta, options))
 
+    DELEGATE_METHOD(TFuture<void>, TransferBundleResources, (
+        const std::string& srcBundle,
+        const std::string& dstBundle,
+        NYTree::INodePtr resourceDelta,
+        const TTransferBundleResourcesOptions& options),
+        (srcBundle, dstBundle, resourceDelta, options))
+
+    // Scheduler
     DELEGATE_METHOD(TFuture<NScheduler::TOperationId>, StartOperation, (
         NScheduler::EOperationType type,
         const NYson::TYsonString& spec,
@@ -547,10 +555,11 @@ public:
         const TGetJobStderrOptions& options),
         (operationIdOrAlias, jobId, options))
 
-    DELEGATE_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (
+    DELEGATE_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobTrace, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
         const TGetJobTraceOptions& options),
-        (operationIdOrAlias, options))
+        (operationIdOrAlias, jobId, options))
 
     DELEGATE_METHOD(TFuture<TSharedRef>, GetJobFailContext, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -571,6 +580,19 @@ public:
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const TListJobsOptions& options),
         (operationIdOrAlias, options))
+
+    DELEGATE_METHOD(TFuture<std::vector<TJobTraceMeta>>, ListJobTraces, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
+        const TListJobTracesOptions& options),
+        (operationIdOrAlias, jobId, options))
+
+    DELEGATE_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (
+        const std::string& user,
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NYTree::EPermission permission,
+        const TCheckOperationPermissionOptions& options),
+        (user, operationIdOrAlias, permission, options))
 
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetJob, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -920,6 +942,27 @@ public:
     DELEGATE_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (
         const TSignedWriteFragmentCookiePtr& cookie,
         const TTableFragmentWriterOptions& options),
+        (cookie, options))
+
+    // Distributed file client
+    DELEGATE_METHOD(TFuture<TDistributedWriteFileSessionWithCookies>, StartDistributedWriteFileSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteFileSessionStartOptions& options),
+        (path, options))
+
+    DELEGATE_METHOD(TFuture<void>, PingDistributedWriteFileSession, (
+        const TSignedDistributedWriteFileSessionPtr& session,
+        const TDistributedWriteFileSessionPingOptions& options),
+        (session, options))
+
+    DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteFileSession, (
+        const TDistributedWriteFileSessionWithResults& sessionWithResults,
+        const TDistributedWriteFileSessionFinishOptions& options),
+        (sessionWithResults, options))
+
+    DELEGATE_METHOD(IFileFragmentWriterPtr, CreateFileFragmentWriter, (
+        const TSignedWriteFileFragmentCookiePtr& cookie,
+        const TFileFragmentWriterOptions& options),
         (cookie, options))
 
     // Shuffle Service

@@ -1,5 +1,6 @@
 #include "kqp_executer_stats.h"
 
+#include <ydb/core/protos/kqp_stats.pb.h>
 
 namespace NKikimr::NKqp {
 
@@ -372,6 +373,8 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     for (auto& [_, f] : Filters) f.Resize(taskCount);
     for (auto& [_, a] : Aggregations) a.Resize(taskCount);
 
+    for (auto& [_, m] : Mkql) m.resize(taskCount);
+
     MaxMemoryUsage.Resize(taskCount);
     Finished.resize(taskCount);
 }
@@ -666,6 +669,24 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
                 default:
                     break;
             }
+        }
+    }
+
+    for (const auto& mkqlStat : taskStats.GetMkqlStats()) {
+        if (const auto& name = mkqlStat.GetName()) {
+            std::vector<ui64>* stats = nullptr;
+            const auto value = mkqlStat.GetValue();
+            if (value) {
+                stats = &Mkql.emplace(name, TaskCount).first->second;
+            } else if (auto it = Mkql.find(name); it != Mkql.end()) {
+                stats = &it->second;
+            } else {
+                continue;
+            }
+
+            AFL_ENSURE(stats);
+            AFL_ENSURE(index < stats->size());
+            (*stats)[index] = value;
         }
     }
 
@@ -1056,6 +1077,9 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
         UpdateAggr(tableStats.MutableReadRows(), tableStat.GetReadRows());
         UpdateAggr(tableStats.MutableReadBytes(), tableStat.GetReadBytes());
     }
+    for (const auto& mkqlStat : task.GetMkqlStats()) {
+        UpdateAggr(&(*stageStats->MutableMkql())[mkqlStat.GetName()], mkqlStat.GetValue());
+    }
 }
 
 void TQueryExecutionStats::AddComputeActorProfileStatsByTask(
@@ -1155,6 +1179,9 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
 void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
 //    Cerr << (TStringBuilder() << "::AddDatashardPrepareStats " << txStats.DebugString() << Endl);
 
+    LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+    LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+
     ui64 cpuUs = txStats.GetComputeCpuTimeUsec();
     for (const auto& perShard : txStats.GetPerShardStats()) {
         AffectedShards.emplace(perShard.GetShardId());
@@ -1233,6 +1260,9 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
 {
 //    Cerr << (TStringBuilder() << "::AddDatashardStats " << stats.DebugString() << ", " << txStats.DebugString() << Endl);
 
+    LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+    LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+
     ui64 datashardCpuTimeUs = 0;
     for (const auto& perShard : txStats.GetPerShardStats()) {
         AffectedShards.emplace(perShard.GetShardId());
@@ -1307,6 +1337,9 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
 }
 
 void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats) {
+    LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
+    LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
+
     ui64 datashardCpuTimeUs = 0;
     for (const auto& perShard : txStats.GetPerShardStats()) {
         AffectedShards.emplace(perShard.GetShardId());
@@ -1323,6 +1356,12 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
 }
 
 void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats) {
+    NKqpProto::TKqpTaskExtraStats extraStats;
+    if (taskStats.GetExtra().UnpackTo(&extraStats)) {
+        LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
+        LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
+    }
+
     for (auto& table : taskStats.GetTables()) {
         NYql::NDqProto::TDqTableStats* tableAggr = nullptr;
         if (auto it = TableStats.find(table.GetTablePath()); it != TableStats.end()) {
@@ -1673,6 +1712,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 aggrStat.SetOperatorId(id);
                 ExportAggStats(a.Bytes, *aggrStat.MutableBytes());
                 ExportAggStats(a.Rows, *aggrStat.MutableRows());
+            }
+            for (auto& [id, m] : stageStat.Mkql) {
+                ExportAggStats(m, (*stageStats.MutableMkql())[id]);
             }
         }
     }

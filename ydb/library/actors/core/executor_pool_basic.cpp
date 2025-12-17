@@ -286,17 +286,11 @@ namespace NActors {
 
         while (!StopFlag.load(std::memory_order_acquire)) {
             {
-                bool needToCheckSleep = false;
-                while (true) {
-                    ui64 checkToSleepWorkers = CheckToSleepWorkers.load(std::memory_order_acquire);
-                    if (checkToSleepWorkers == 0) {
-                        break;
-                    }
-                    needToCheckSleep = true;
+                ui64 checkToSleepWorkers = CheckToSleepWorkers.load(std::memory_order_acquire);
+                bool needToCheckSleep = checkToSleepWorkers != 0;
+                if (needToCheckSleep) {
                     CheckToSleepWorkers.compare_exchange_weak(checkToSleepWorkers, checkToSleepWorkers - 1, std::memory_order_release, std::memory_order_relaxed);
-                }
-
-                if (!needToCheckSleep) {
+                } else { // otherwise we ready to get activation
                     TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
                     if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
                         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation found");

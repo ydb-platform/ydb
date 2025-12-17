@@ -4,9 +4,11 @@ from devtools.yamaker.modules import GLOBAL, Library, Linkable, Switch
 
 def post_install(self):
     with self.yamakes["."] as m:
-        m.CFLAGS.remove("-DOPENTELEMETRY_STL_VERSION=2023")
         m.CFLAGS.remove("-DPROTOBUF_USE_DLLS")
+        m.CFLAGS.remove("-DOPENTELEMETRY_STL_VERSION=2023")
         m.CFLAGS.append(GLOBAL("-DOPENTELEMETRY_STL_VERSION=2023"))
+        m.CFLAGS.remove("-DOPENTELEMETRY_ABI_VERSION_NO=2")
+        m.CFLAGS.append(GLOBAL("-DOPENTELEMETRY_ABI_VERSION_NO=2"))
 
         self.yamakes["api"] = self.module(
             Library,
@@ -76,6 +78,16 @@ opentelemetry_cpp = CMakeNinjaNixProject(
         "protoc-24.4.0",
     ],
     ignore_targets=[
+        "opentelemetry_exporter_ostream_logs_builder",
+        "opentelemetry_exporter_ostream_metrics_builder",
+        "opentelemetry_exporter_ostream_span_builder",
+        "opentelemetry_exporter_otlp_builder_utils",
+        "opentelemetry_exporter_otlp_grpc_builder",
+        "opentelemetry_exporter_otlp_grpc_log_builder",
+        "opentelemetry_exporter_otlp_grpc_metric_builder",
+        "opentelemetry_exporter_otlp_http_builder",
+        "opentelemetry_exporter_otlp_http_log_builder",
+        "opentelemetry_exporter_otlp_http_metric_builder",
         "opentelemetry_proto",
         "opentelemetry_proto_grpc",
         "func_otlp_grpc",

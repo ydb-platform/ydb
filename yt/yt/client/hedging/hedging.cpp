@@ -118,6 +118,10 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, PingDistributedWriteSession, (const TSignedDistributedWriteSessionPtr, const TDistributedWriteSessionPingOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (const TDistributedWriteSessionWithResults&, const TDistributedWriteSessionFinishOptions&));
     UNSUPPORTED_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (const TSignedWriteFragmentCookiePtr&, const TTableFragmentWriterOptions&));
+    UNSUPPORTED_METHOD(TFuture<TDistributedWriteFileSessionWithCookies>, StartDistributedWriteFileSession, (const NYPath::TRichYPath&, const TDistributedWriteFileSessionStartOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, PingDistributedWriteFileSession, (const NFileClient::TSignedDistributedWriteFileSessionPtr&, const TDistributedWriteFileSessionPingOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, FinishDistributedWriteFileSession, (const TDistributedWriteFileSessionWithResults&, const TDistributedWriteFileSessionFinishOptions&));
+    UNSUPPORTED_METHOD(IFileFragmentWriterPtr, CreateFileFragmentWriter, (const NFileClient::TSignedWriteFileFragmentCookiePtr&, const TFileFragmentWriterOptions&));
 
     // IClient methods.
     // Unsupported methods.
@@ -163,7 +167,8 @@ public:
     UNSUPPORTED_METHOD(TFuture<TCheckPermissionResponse>, CheckPermission, (const std::string&, const TYPath&, NYTree::EPermission, const TCheckPermissionOptions&));
     UNSUPPORTED_METHOD(TFuture<TCheckPermissionByAclResult>, CheckPermissionByAcl, (const std::optional<std::string>&, NYTree::EPermission, NYTree::INodePtr, const TCheckPermissionByAclOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, TransferAccountResources, (const std::string&, const std::string&, NYTree::INodePtr, const TTransferAccountResourcesOptions&));
-    UNSUPPORTED_METHOD(TFuture<void>, TransferPoolResources, (const TString&, const TString&, const TString&, NYTree::INodePtr, const TTransferPoolResourcesOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, TransferPoolResources, (const std::string&, const std::string&, const std::string&, NYTree::INodePtr, const TTransferPoolResourcesOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, TransferBundleResources, (const std::string&, const std::string&, NYTree::INodePtr, const TTransferBundleResourcesOptions&));
     UNSUPPORTED_METHOD(TFuture<NScheduler::TOperationId>, StartOperation, (NScheduler::EOperationType, const NYson::TYsonString&, const TStartOperationOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortOperation, (const NScheduler::TOperationIdOrAlias&, const TAbortOperationOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SuspendOperation, (const NScheduler::TOperationIdOrAlias&, const TSuspendOperationOptions&));
@@ -177,11 +182,13 @@ public:
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetJobInputPaths, (NJobTrackerClient::TJobId, const TGetJobInputPathsOptions&));
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetJobSpec, (NJobTrackerClient::TJobId, const TGetJobSpecOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobStderrOptions&));
-    UNSUPPORTED_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (const NScheduler::TOperationIdOrAlias&, const TGetJobTraceOptions&));
+    UNSUPPORTED_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobTrace, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobTraceOptions&));
     UNSUPPORTED_METHOD(TFuture<TSharedRef>, GetJobFailContext, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobFailContextOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (const NScheduler::TOperationIdOrAlias&, const TListOperationEventsOptions&));
     UNSUPPORTED_METHOD(TFuture<TListOperationsResult>, ListOperations, (const TListOperationsOptions&));
     UNSUPPORTED_METHOD(TFuture<TListJobsResult>, ListJobs, (const NScheduler::TOperationIdOrAlias&, const TListJobsOptions&));
+    UNSUPPORTED_METHOD(TFuture<std::vector<TJobTraceMeta>>, ListJobTraces, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TListJobTracesOptions&));
+    UNSUPPORTED_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (const std::string&, const NScheduler::TOperationIdOrAlias&, NYTree::EPermission, const TCheckOperationPermissionOptions&));
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetJob, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbandonJob, (NJobTrackerClient::TJobId, const TAbandonJobOptions&));
     UNSUPPORTED_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (NJobTrackerClient::TJobId, const std::optional<TString>&, const NYson::TYsonString&, const TPollJobShellOptions&));
@@ -291,14 +298,22 @@ NApi::IClientPtr CreateHedgingClient(const THedgingExecutorPtr& hedgingExecutor)
 
 NApi::IClientPtr CreateHedgingClient(
     const THedgingClientOptionsPtr& config,
-    const IPenaltyProviderPtr& penaltyProvider)
+    const IPenaltyProviderPtr& penaltyProvider,
+    const TClientOptions& clientOptions)
 {
     return DoCreateHedgingClient(
         config,
         penaltyProvider,
-        [] (const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig) {
-            return CreateClient(connectionConfig);
+        [=] (const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig) {
+            return CreateClient(connectionConfig, clientOptions);
         });
+}
+
+NApi::IClientPtr CreateHedgingClient(
+    const THedgingClientOptionsPtr& config,
+    const IPenaltyProviderPtr& penaltyProvider)
+{
+    return CreateHedgingClient(config, penaltyProvider, NApi::GetClientOptionsFromEnvStatic());
 }
 
 NApi::IClientPtr CreateHedgingClient(const THedgingClientOptionsPtr& config)

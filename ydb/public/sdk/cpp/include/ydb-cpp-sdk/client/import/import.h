@@ -2,7 +2,6 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
 
 namespace Ydb::Import {
@@ -25,6 +24,14 @@ enum class EImportProgress {
     Cancellation = 5,
     Cancelled = 6,
     CreateChangefeeds = 7,
+
+    Unknown = std::numeric_limits<int>::max(),
+};
+
+enum class EIndexFillingMode {
+    Build = 0,
+    Import = 1,
+    Auto = 2,
 
     Unknown = std::numeric_limits<int>::max(),
 };
@@ -64,6 +71,7 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
     FLUENT_SETTING_OPTIONAL(std::string, SourcePrefix);
     FLUENT_SETTING_OPTIONAL(std::string, DestinationPath);
     FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
+    FLUENT_SETTING_DEFAULT(EIndexFillingMode, IndexFillingMode, EIndexFillingMode::Build);
 };
 
 class TImportFromS3Response : public TOperation {
@@ -139,6 +147,48 @@ private:
 
 using TAsyncListObjectsInS3ExportResult = NThreading::TFuture<TListObjectsInS3ExportResult>;
 
+/// FS
+struct TImportFromFsSettings : public TOperationRequestSettings<TImportFromFsSettings> {
+    using TSelf = TImportFromFsSettings;
+
+    struct TItem {
+        // Source path.
+        // Path to the exported table/directory in FS (relative to base_path)
+        std::string Src;
+
+        // Destination path.
+        // database path where to import data
+        std::string Dst;
+    };
+
+    FLUENT_SETTING(std::string, BasePath);
+    FLUENT_SETTING_VECTOR(TItem, Item);
+    FLUENT_SETTING_OPTIONAL(std::string, Description);
+    FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
+    FLUENT_SETTING_OPTIONAL(bool, NoACL);
+    FLUENT_SETTING_OPTIONAL(bool, SkipChecksumValidation);
+};
+
+class TImportFromFsResponse : public TOperation {
+public:
+    struct TMetadata {
+        TImportFromFsSettings Settings;
+        EImportProgress Progress;
+        std::vector<TImportItemProgress> ItemsProgress;
+    };
+
+public:
+    using TOperation::TOperation;
+    TImportFromFsResponse(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    const TMetadata& Metadata() const;
+
+private:
+    TMetadata Metadata_;
+};
+
+using TAsyncImportFromFsResponse = NThreading::TFuture<TImportFromFsResponse>;
+
 /// Data
 struct TImportYdbDumpDataSettings : public TOperationRequestSettings<TImportYdbDumpDataSettings> {
     using TSelf = TImportYdbDumpDataSettings;
@@ -162,6 +212,7 @@ public:
     TImportClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
     TAsyncImportFromS3Response ImportFromS3(const TImportFromS3Settings& settings);
+    TAsyncImportFromFsResponse ImportFromFs(const TImportFromFsSettings& settings);
 
     TAsyncListObjectsInS3ExportResult ListObjectsInS3Export(const TListObjectsInS3ExportSettings& settings, std::int64_t pageSize = 0, const std::string& pageToken = {});
 

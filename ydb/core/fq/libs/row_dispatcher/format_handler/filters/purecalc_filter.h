@@ -14,16 +14,11 @@ public:
     using TPtr = TIntrusivePtr<IProgramCompileHandler>;
 
 public:
-    inline IProgramCompileHandler(TString name, IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder, ui64 cookie)
-        : Name_(std::move(name))
-        , Consumer_(std::move(consumer))
+    inline IProgramCompileHandler( IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder, ui64 cookie)
+        : Consumer_(std::move(consumer))
         , ProgramHolder_(std::move(programHolder))
         , Cookie_(cookie)
     {}
-
-    [[nodiscard]] inline const TString& GetName() const {
-        return Name_;
-    }
 
     [[nodiscard]] inline IProcessedDataConsumer::TPtr GetConsumer() const {
         return Consumer_;
@@ -44,7 +39,6 @@ public:
     virtual void OnCompileError(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) = 0;
 
 protected:
-    TString Name_;
     IProcessedDataConsumer::TPtr Consumer_;
     IProgramHolder::TPtr ProgramHolder_;
     ui64 Cookie_;
@@ -55,15 +49,10 @@ public:
     using TPtr = TIntrusivePtr<IProgramRunHandler>;
 
 public:
-    inline IProgramRunHandler(TString name, IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder)
-        : Name_(std::move(name))
-        , Consumer_(std::move(consumer))
+    inline IProgramRunHandler(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder)
+        : Consumer_(std::move(consumer))
         , ProgramHolder_(std::move(programHolder))
     {}
-
-    [[nodiscard]] inline const TString& GetName() const {
-        return Name_;
-    }
 
     [[nodiscard]] inline IProcessedDataConsumer::TPtr GetConsumer() const {
         return Consumer_;
@@ -76,17 +65,13 @@ public:
     virtual void ProcessData(const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) const = 0;
 
 protected:
-    TString Name_;
     IProcessedDataConsumer::TPtr Consumer_;
     IProgramHolder::TPtr ProgramHolder_;
 };
 
-IProgramHolder::TPtr CreateFilterProgramHolder(IProcessedDataConsumer::TPtr consumer);
-
-IProgramHolder::TPtr CreateWatermarkProgramHolder(IProcessedDataConsumer::TPtr consumer);
+IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer);
 
 IProgramCompileHandler::TPtr CreateProgramCompileHandler(
-    TString name,
     IProcessedDataConsumer::TPtr consumer,
     IProgramHolder::TPtr programHolder,
     ui64 cookie,
@@ -96,7 +81,6 @@ IProgramCompileHandler::TPtr CreateProgramCompileHandler(
 );
 
 IProgramRunHandler::TPtr CreateProgramRunHandler(
-    TString name,
     IProcessedDataConsumer::TPtr consumer,
     IProgramHolder::TPtr programHolder,
     NMonitoring::TDynamicCounterPtr counters

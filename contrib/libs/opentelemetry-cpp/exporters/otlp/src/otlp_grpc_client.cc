@@ -22,6 +22,9 @@
 
 // clang-format off
 #include "opentelemetry/exporters/otlp/protobuf_include_prefix.h" // IWYU pragma: keep
+#ifdef ENABLE_ASYNC_EXPORT
+#  include "google/protobuf/arena.h"
+#endif /* ENABLE_ASYNC_EXPORT */
 #include "opentelemetry/proto/collector/logs/v1/logs_service.pb.h"
 #include "opentelemetry/proto/collector/metrics/v1/metrics_service.pb.h"
 #include "opentelemetry/proto/collector/trace/v1/trace_service.pb.h"
@@ -29,7 +32,6 @@
 // clang-format on
 
 #ifdef ENABLE_ASYNC_EXPORT
-#  include <google/protobuf/arena.h>
 #  include <algorithm>
 #  include <condition_variable>
 #  include <cstdio>
@@ -764,7 +766,7 @@ bool OtlpGrpcClient::Shutdown(OtlpGrpcClientReferenceGuard &guard,
   }
 
   bool last_reference_removed = RemoveReference(guard);
-  bool force_flush_result;
+  bool force_flush_result{};
   if (last_reference_removed && false == is_shutdown_.exchange(true, std::memory_order_acq_rel))
   {
     OTEL_INTERNAL_LOG_DEBUG("[OTLP GRPC Client] DEBUG: OtlpGrpcClient start to shutdown");

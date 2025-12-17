@@ -79,6 +79,7 @@ private:
     std::vector<ui32> ColumnIdxSortedByName;
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
+    std::vector<TNameTypeInfo> Columns;
 
     std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
@@ -110,7 +111,6 @@ private:
             AFL_VERIFY(result.ok());
             arrowType = result.ValueUnsafe();
         }
-
         auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull);
         if (cache) {
             return cache->GetOrInsertField(f);
@@ -415,6 +415,10 @@ public:
     /// Traditional Primary Key (includes uniqueness, search and sorting logic)
     const std::vector<TNameTypeInfo>& GetPrimaryKeyColumns() const {
         return PKColumns;
+    }
+    
+    const std::vector<TNameTypeInfo>& GetColumns() const {
+        return Columns;
     }
 
     /// Returns id of the first column of the primary key.

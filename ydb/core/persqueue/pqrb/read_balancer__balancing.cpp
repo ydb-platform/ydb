@@ -1,6 +1,8 @@
 #include "read_balancer__balancing.h"
 #include "read_balancer_log.h"
 
+#include <ydb/core/persqueue/public/utils.h>
+
 #define DEBUG(message)
 
 
@@ -1252,7 +1254,7 @@ size_t GetMaxFamilySize(const std::unordered_map<size_t, const std::unique_ptr<T
 
 void TConsumer::Balance(const TActorContext& ctx) {
     PQ_LOG_D("balancing. Sessions=" << Sessions.size() << ", Families=" << Families.size()
-            << ", UnradableFamilies=" << UnreadableFamilies.size() << " [" << DebugStr(UnreadableFamilies)
+            << ", UnreadableFamilies=" << UnreadableFamilies.size() << " [" << DebugStr(UnreadableFamilies)
             << "], RequireBalancing=" << FamiliesRequireBalancing.size() << " [" << DebugStr(FamiliesRequireBalancing) << "]");
 
     if (Sessions.empty()) {
@@ -1357,6 +1359,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
             if (!family->SpecialSessions.contains(family->Session->Pipe)) {
                 family->Release(ctx);
+                it = FamiliesRequireBalancing.erase(it);
                 continue;
             }
 
@@ -1725,15 +1728,24 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
         return;
     }
 
+    auto* consumerConfig = ::NKikimr::NPQ::GetConsumer(TopicActor.TabletConfig, consumerName);
+    if (consumerConfig && consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING) {
+        auto response = std::make_unique<TEvPersQueue::TEvError>();
+        response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
+        response->Record.SetDescription(TStringBuilder() << "consumer \"" << consumerName << "\" is not streaming");
+        ctx.Send(ev->Sender, std::move(response));
+        return;
+    }
+
     std::vector<ui32> partitions;
     partitions.reserve(r.GroupsSize());
     for (auto& group : r.GetGroups()) {
         auto partitionId = group - 1;
         if (group == 0 || !GetPartitionInfo(partitionId)) {
-            THolder<TEvPersQueue::TEvError> response(new TEvPersQueue::TEvError);
+            auto response = std::make_unique<TEvPersQueue::TEvError>();
             response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
             response->Record.SetDescription(TStringBuilder() << "no group " << group << " in topic " << Topic());
-            ctx.Send(ev->Sender, response.Release());
+            ctx.Send(ev->Sender, std::move(response));
             return;
         }
         partitions.push_back(partitionId);

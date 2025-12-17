@@ -120,7 +120,7 @@ public:
 private:
     TString CollectStatsMode;
     TMaybe<TString> FlameGraphPath;
-    TString TxMode;
+    TString TxMode = "serializable-rw";
     TString QueryType;
     bool BasicStats = false;
     TString DiagnosticsFile;

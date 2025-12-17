@@ -702,9 +702,12 @@ def get_mount_config_file(content=None):
 
 
 def run_command(program, cmd, tmpdir_module=None, stdin=None,
-                check_exit_code=True, env=None, stdout=None):
+                check_exit_code=True, env=None, stdout=None,
+                cwd=None):
     if tmpdir_module is None:
         tmpdir_module = tempfile.mkdtemp()
+    if cwd is None:
+        cwd = tmpdir_module
 
     stdin_stream = None
     if isinstance(stdin, six.string_types):
@@ -735,7 +738,7 @@ def run_command(program, cmd, tmpdir_module=None, stdin=None,
 
     res = yatest.common.execute(
         cmd,
-        cwd=tmpdir_module,
+        cwd=cwd,
         stdin=stdin_stream,
         stdout=stdout_stream,
         stderr=stderr_stream,

@@ -16,7 +16,7 @@ struct TKeyLess;
 template <>
 struct TKeyLess<true>
 {
-    template<typename T>
+    template <typename T>
     bool operator()(const T& lhs, const T& rhs) const
     {
         return lhs < rhs;
@@ -26,7 +26,7 @@ struct TKeyLess<true>
 template <>
 struct TKeyLess<false>
 {
-    template<typename T>
+    template <typename T>
     bool operator()(const T& lhs, const T& rhs) const
     {
         return lhs.first < rhs.first;
@@ -199,14 +199,6 @@ template <class TContainer, class... TArgs>
 auto EmplaceOrCrash(TContainer&& container, TArgs&&... args)
 {
     auto [it, emplaced] = std::forward<TContainer>(container).emplace(std::forward<TArgs>(args)...);
-    YT_VERIFY(emplaced);
-    return it;
-}
-
-template <class TContainer, class... TArgs>
-auto TryEmplaceOrCrash(TContainer&& container, TArgs&&... args)
-{
-    auto [it, emplaced] = container.try_emplace(std::forward<TArgs>(args)...);
     YT_VERIFY(emplaced);
     return it;
 }

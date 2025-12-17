@@ -2,6 +2,9 @@ UNITTEST()
 
 SRCS(
     yql_yt_util_helpers_ut.cpp
+    yql_yt_parser_fragment_list_index_ut.cpp
+    yql_yt_binary_yson_comparator_ut.cpp
+    yql_yt_index_serialisation_ut.cpp
 )
 
 PEERDIR(

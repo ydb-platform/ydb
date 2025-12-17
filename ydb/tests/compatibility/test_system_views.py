@@ -10,10 +10,10 @@ pg_sysviews = {'pg_tables', 'tables', 'pg_class'}
 
 
 class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
-    @pytest.fixture(autouse=True, scope="function")
+    @pytest.fixture(autouse=True, scope='function')
     def setup(self):
         if self.versions[0] >= self.versions[1]:
-            pytest.skip("Only check forward compatibility")
+            pytest.skip('Only check forward compatibility')
 
         yield from self.setup_cluster()
 
@@ -21,11 +21,11 @@ class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
         sysviews = dict()
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
-                for sysview in self.driver.scheme_client.list_directory("/Root/.sys").children:
+                for sysview in self.driver.scheme_client.list_directory('/Root/.sys').children:
                     sysview_descr = dict()
 
                     try:
-                        response = session.describe_table(f"/Root/.sys/{sysview.name}")
+                        response = session.describe_table(f'/Root/.sys/{sysview.name}')
                     except TypeError:
                         if sysview.name in pg_sysviews:
                             continue
@@ -45,7 +45,7 @@ class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
 
     def compare_sysviews_dicts(self, dict_before, dict_after):
         for sysview_name, sysview_descr in dict_before.items():
-            if min(self.versions) < (25, 1, 4) and sysview_name in ["resource_pools", "resource_pool_classifiers"]:
+            if min(self.versions) < (25, 1, 4) and sysview_name in ['resource_pools', 'resource_pool_classifiers']:
                 continue
             if sysview_name not in dict_after:
                 return False, f"sysview '{sysview_name}' was deleted"
@@ -79,7 +79,7 @@ class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
 
 
 class TestSystemViewsRollingUpgrade(RollingUpgradeAndDowngradeFixture):
-    @pytest.fixture(autouse=True, scope="function")
+    @pytest.fixture(autouse=True, scope='function')
     def setup(self):
         yield from self.setup_cluster()
 
@@ -107,13 +107,93 @@ class TestSystemViewsRollingUpgrade(RollingUpgradeAndDowngradeFixture):
 
             assert len(result_sets) == 1
             assert len(result_sets[0].rows) == 1
-            assert result_sets[0].rows[0]["Path"] == f'/Root/{table_name}'
-            assert result_sets[0].rows[0]["PartIdx"] == 0
-            assert result_sets[0].rows[0]["PathId"] > 1
+            assert result_sets[0].rows[0]['Path'] == f'/Root/{table_name}'
+            assert result_sets[0].rows[0]['PartIdx'] == 0
+            assert result_sets[0].rows[0]['PathId'] > 1
 
     def test_path_resolving(self):
-        table_name = "table"
+        table_name = 'table'
         self.create_table(table_name)
 
         for _ in self.roll():
             self.read_partition_stats(table_name)
+
+
+class TestSystemViewsSetPermissions(RestartToAnotherVersionFixture):
+    @pytest.fixture(autouse=True, scope='function')
+    def setup(self):
+        if min(self.versions) < (25, 3):
+            pytest.skip('Only available since 25-3')
+
+        yield from self.setup_cluster(
+            extra_feature_flags={
+                'enable_real_system_view_paths': True,
+            }
+        )
+
+    def permissions_to_dict(self, permissions):
+        permissions_dict = dict()
+        for permission in permissions:
+            if permission.subject not in permissions_dict:
+                permissions_dict[permission.subject] = list(permission.permission_names)
+            else:
+                permissions_dict[permission.subject].extend(list(permission.permission_names))
+
+        return permissions_dict
+
+    def sort_permissions(self, permissions_dict):
+        for subject in permissions_dict:
+            permissions_dict[subject] = sorted(permissions_dict[subject])
+
+    def compare_permissions_dicts(self, permissions_before, permissions_after):
+        for subject in permissions_before:
+            if subject not in permissions_after:
+                return False, f"Subject '{subject}' is missing in permissions after version change"
+
+            if permissions_before[subject] != permissions_after[subject]:
+                return (
+                    False,
+                    f"Permissions for subject '{subject}' changed: "
+                    f"was {permissions_before[subject]}, became {permissions_after[subject]}"
+                )
+
+        for subject in permissions_after:
+            if subject not in permissions_before:
+                return (
+                    False,
+                    f"New subject '{subject}' appeared with permissions {permissions_after[subject]}"
+                )
+
+        return True, ''
+
+    def set_permissions(self, permissions):
+        permissions_settings = ydb.ModifyPermissionsSettings()
+        for user, permissions in permissions.items():
+            permissions_settings.grant_permissions(user, permissions)
+
+        self.driver.scheme_client.modify_permissions('/Root/.sys', permissions_settings)
+        self.driver.scheme_client.modify_permissions('/Root/.sys/partition_stats', permissions_settings)
+
+    def check_permissions(self, permissions):
+        self.sort_permissions(permissions)
+
+        sys_dir_desc = self.driver.scheme_client.describe_path('/Root/.sys')
+        sys_dir_permissions = self.permissions_to_dict(sys_dir_desc.permissions)
+        self.sort_permissions(sys_dir_permissions)
+        result, debug_compare_string = self.compare_permissions_dicts(permissions, sys_dir_permissions)
+        assert result, debug_compare_string
+
+        partition_stats_desc = self.driver.scheme_client.describe_path('/Root/.sys/partition_stats')
+        partition_stats_permissions = self.permissions_to_dict(partition_stats_desc.permissions)
+        self.sort_permissions(partition_stats_permissions)
+        result, debug_compare_string = self.compare_permissions_dicts(permissions, partition_stats_permissions)
+        assert result, debug_compare_string
+
+    def test_persistence(self):
+        permissions = {
+            'user': ('ydb.generic.list',)
+        }
+
+        self.set_permissions(permissions)
+        self.change_cluster_version()
+        self.check_permissions(permissions)

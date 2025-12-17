@@ -1,4 +1,5 @@
-# coding: utf-8
+
+from __future__ import annotations
 
 from ruamel.yaml.error import *  # NOQA
 from ruamel.yaml.nodes import *  # NOQA
@@ -35,7 +36,8 @@ import types
 import copyreg
 import base64
 
-from typing import Dict, List, Any, Union, Text, Optional  # NOQA
+if False:  # MYPY
+    from typing import Dict, List, Any, Union, Text, Optional  # NOQA
 
 # fmt: off
 __all__ = ['BaseRepresenter', 'SafeRepresenter', 'Representer',
@@ -823,13 +825,18 @@ class RoundTripRepresenter(SafeRepresenter):
                 pass
         except AttributeError:
             item_comments = {}
-        merge_list = [m[1] for m in getattr(mapping, merge_attrib, [])]
+        merge_value = getattr(mapping, merge_attrib, [])
+        # merge_list = [m[1] for m in merge_value]
+        # merge_list = [m for m in merge_value]
         try:
-            merge_pos = getattr(mapping, merge_attrib, [[0]])[0][0]
-        except IndexError:
+            # merge_pos = getattr(mapping, merge_attrib, [[0]])[0][0]
+            # print('merge_pos', merge_pos, merge_value.merge_pos)
+            merge_pos = merge_value.merge_pos  # type: ignore
+        except (AttributeError, IndexError):
             merge_pos = 0
         item_count = 0
-        if bool(merge_list):
+        # if bool(merge_list):
+        if len(merge_value) > 0:
             items = mapping.non_merged_items()
         else:
             items = mapping.items()
@@ -855,18 +862,20 @@ class RoundTripRepresenter(SafeRepresenter):
                 best_style = False
             value.append((node_key, node_value))
         if flow_style is None:
-            if ((item_count != 0) or bool(merge_list)) and self.default_flow_style is not None:
+            if ((item_count != 0) or (len(merge_value) > 0)) and self.default_flow_style is not None:  # NOQA
                 node.flow_style = self.default_flow_style
             else:
                 node.flow_style = best_style
-        if bool(merge_list):
+        if len(merge_value) > 0:
             # because of the call to represent_data here, the anchors
             # are marked as being used and thereby created
-            if len(merge_list) == 1:
-                arg = self.represent_data(merge_list[0])
+            # if len(merge_list) == 1:
+            if merge_value.sequence is None:  # type: ignore
+                arg = self.represent_data(merge_value[0])
             else:
-                arg = self.represent_data(merge_list)
-                arg.flow_style = True
+                # arg = self.represent_data(merge_list)
+                # arg.flow_style = True
+                arg = self.represent_data(merge_value.sequence)  # type: ignore
             value.insert(
                 merge_pos, (ScalarNode(Tag(suffix='tag:yaml.org,2002:merge'), '<<'), arg),
             )
@@ -1024,13 +1033,16 @@ class RoundTripRepresenter(SafeRepresenter):
     def represent_datetime(self, data: Any) -> ScalarNode:
         inter = 'T' if data._yaml['t'] else ' '
         _yaml = data._yaml
-        if _yaml['delta']:
+        if False and _yaml['delta']:
             data += _yaml['delta']
             value = data.isoformat(inter)
         else:
-            value = data.isoformat(inter)
-        if _yaml['tz']:
+            value = data.isoformat(inter).strip()
+        if False and _yaml['tz']:
             value += _yaml['tz']
+        if data.tzinfo and str(data.tzinfo):
+            if value[-6] in '+-':
+                value = value[:-6] + str(data.tzinfo)
         return self.represent_scalar('tag:yaml.org,2002:timestamp', value)
 
     def represent_tagged_scalar(self, data: Any) -> ScalarNode:

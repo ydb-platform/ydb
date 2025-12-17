@@ -1,42 +1,72 @@
+--- contrib/python/typeguard/tests/mypy/test_type_annotations.py	(index)
++++ contrib/python/typeguard/tests/mypy/test_type_annotations.py	(working tree)
+@@ -75,6 +75,8 @@ def chdir_local() -> None:
+     os.chdir(os.path.dirname(__file__))
+ 
+ 
++# Этот тест ожидает "mypy" в PATH
++@pytest.mark.skip
+ @pytest.mark.usefixtures("chdir_local")
+ def test_positive() -> None:
+     """
+@@ -83,6 +85,8 @@ def test_positive() -> None:
+     subprocess.check_call(get_mypy_cmd(POSITIVE_FILE))
+ 
+ 
++# Этот тест ожидает "mypy" в PATH
++@pytest.mark.skip
+ @pytest.mark.usefixtures("chdir_local")
+ def test_negative() -> None:
+     """
+--- contrib/python/typeguard/tests/test_checkers.py	(index)
++++ contrib/python/typeguard/tests/test_checkers.py	(working tree)
+@@ -771,7 +771,7 @@ class TestNamedTuple:
+ 
+     def test_type_mismatch(self):
+         pytest.raises(TypeCheckError, check_type, ("bob", 1), Employee).match(
+-            r"tuple is not a named tuple of type tests.Employee"
++            r"tuple is not a named tuple of type __tests__.Employee"
+         )
+ 
+     def test_wrong_field_type(self):
+@@ -913,7 +913,7 @@ class TestTypevar:
+         check_type(Child(), TParent)
+ 
+     def test_bound_fail(self):
+-        with pytest.raises(TypeCheckError, match="is not an instance of tests.Child"):
++        with pytest.raises(TypeCheckError, match="is not an instance of __tests__.Child"):
+             check_type(Parent(), TChild)
+ 
+     @pytest.mark.parametrize(
 --- contrib/python/typeguard/tests/test_importhook.py	(index)
 +++ contrib/python/typeguard/tests/test_importhook.py	(working tree)
-@@ -8,7 +8,9 @@ import pytest
+@@ -65,5 +65,6 @@ def test_debug_instrumentation(monkeypatch, capsys):
+     import_dummymodule()
+     out, err = capsys.readouterr()
+     path_str = str(dummy_module_path)
+-    assert f"Source code of {path_str!r} after instrumentation:" in err
++    # в ya make "path_str" разрешается в подкаталог ~/.ya/build/build_root/...
++    assert f"{path_str!r} after instrumentation:"[1:] in err
+     assert "class DummyClass" in err
+--- contrib/python/typeguard/tests/test_typechecked.py	(index)
++++ contrib/python/typeguard/tests/test_typechecked.py	(working tree)
+@@ -613,6 +613,8 @@ def test_existing_method_decorator():
+         assert value == 7
  
- from typeguard.importhook import TypeguardFinder, install_import_hook
  
--this_dir = Path(__file__).parent
-+import yatest.common as yc
-+
-+this_dir = Path(yc.test_source_path())
- dummy_module_path = this_dir / 'dummymodule.py'
- cached_module_path = Path(cache_from_source(str(dummy_module_path), optimization='typeguard'))
- 
-@@ -29,6 +31,7 @@ def dummymodule():
-         sys.path.remove(str(this_dir))
- 
- 
++# Этот тест не укладывается в 300s
 +@pytest.mark.skip
- def test_cached_module(dummymodule):
-     assert cached_module_path.is_file()
- 
---- contrib/python/typeguard/tests/test_typeguard.py	(index)
-+++ contrib/python/typeguard/tests/test_typeguard.py	(working tree)
-@@ -84,1 +84,1 @@ def mock_class(request):
--    (Child(), 'test_typeguard.Child'),
-+    (Child(), '__tests__.test_typeguard.Child'),
-@@ -467,1 +467,1 @@ class TestCheckArgumentTypes:
--                  r'(test_typeguard\.)?Employee; got tuple instead')
-+                  r'(__tests__\.test_typeguard\.)?Employee; got tuple instead')
-@@ -547,2 +547,2 @@ class TestCheckArgumentTypes:
--        assert str(exc.value) == ('type of argument "a" must be test_typeguard.Child or one of '
--                                  'its subclasses; got test_typeguard.Parent instead')
-+        assert str(exc.value) == ('type of argument "a" must be __tests__.test_typeguard.Child or one of '
-+                                  'its subclasses; got __tests__.test_typeguard.Parent instead')
-@@ -556,1 +556,1 @@ class TestCheckArgumentTypes:
--            '"a" must be a subclass of test_typeguard.Child; got test_typeguard.Parent instead')
-+            '"a" must be a subclass of __tests__.test_typeguard.Child; got __tests__.test_typeguard.Parent instead')
-@@ -585,2 +585,2 @@ class TestCheckArgumentTypes:
--        assert str(exc.value) == ('type of argument "a" must be test_typeguard.Child; '
--                                  'got test_typeguard.Parent instead')
-+        assert str(exc.value) == ('type of argument "a" must be __tests__.test_typeguard.Child; '
-+                                  'got __tests__.test_typeguard.Parent instead')
+ @pytest.mark.parametrize(
+     "flags, expected_return_code",
+     [
+--- contrib/python/typeguard/tests/test_utils.py	(index)
++++ contrib/python/typeguard/tests/test_utils.py	(working tree)
+@@ -9,7 +9,7 @@ from . import Child
+     "inputval, add_class_prefix, expected",
+     [
+         pytest.param(qualified_name, False, "function", id="func"),
+-        pytest.param(Child(), False, "tests.Child", id="instance"),
++        pytest.param(Child(), False, "__tests__.Child", id="instance"),
+         pytest.param(int, False, "int", id="builtintype"),
+         pytest.param(int, True, "class int", id="builtintype_classprefix"),
+     ],

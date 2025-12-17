@@ -50,7 +50,7 @@ void THandlerSessionCreateYandex::ProcessSessionToken(const NJson::TJsonValue& j
     }
     NYdbGrpc::TCallMeta meta;
     SetHeader(meta, "authorization", token);
-    meta.Timeout = TDuration::Seconds(10);
+    meta.Timeout = std::chrono::seconds(10);
 
     NActors::TActorSystem* actorSystem = TActivationContext::ActorSystem();
     NActors::TActorId actorId = SelfId();

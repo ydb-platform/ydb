@@ -1,4 +1,5 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
 
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
@@ -33,6 +34,7 @@ message TPartitionMeta {
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;
     optional uint64 FirstUncompactedOffset = 6; //deprecated
+    optional uint64 NextMessageIdDeduplicatorWAL = 7 [default = 1];
 }
 
 message TPartitionTxMeta {
@@ -365,6 +367,17 @@ message TPQTabletConfig {
     repeated uint64 ReadRuleVersions_Deprecated = 22; // Deprecated. Use Consumers.Version
     repeated uint64 ReadRuleGenerations_Deprecated = 32; // Deprecated. Use Consumers.Generation
 
+    enum EConsumerType {
+        CONSUMER_TYPE_STREAMING = 0;
+        CONSUMER_TYPE_MLP = 1;
+    }
+
+    enum EDeadLetterPolicy {
+        DEAD_LETTER_POLICY_UNSPECIFIED = 0;
+        DEAD_LETTER_POLICY_DELETE = 1;
+        DEAD_LETTER_POLICY_MOVE = 2;
+    }
+
     message TConsumer {
         optional string Name = 1;
         optional uint64 ReadFromTimestampsMs = 2 [default = 0];
@@ -376,6 +389,13 @@ message TPQTabletConfig {
         optional uint64 Generation = 8 [default = 0];
         optional bool Important = 9 [default = false];
         optional uint64 AvailabilityPeriodMs = 10 [default = 0];
+        optional EConsumerType Type = 11 [default = CONSUMER_TYPE_STREAMING];
+        optional bool KeepMessageOrder = 12 [default = false]; // For MLP consumers
+        optional bool DeadLetterPolicyEnabled = 13 [default = false]; // For MLP consumers
+        optional EDeadLetterPolicy DeadLetterPolicy = 14 [default = DEAD_LETTER_POLICY_UNSPECIFIED]; // For MLP consumers
+        optional uint32 MaxProcessingAttempts = 15 [default = 1000]; // For MLP consumers
+        optional uint32 DefaultProcessingTimeoutSeconds = 16 [default = 30]; // For MLP consumers
+        optional string DeadLetterQueue = 17; // For MLP consumers
     }
 
     repeated TConsumer Consumers = 37;
@@ -742,8 +762,11 @@ message TClientInfo {
 
 message TAggregatedCounters {
     repeated uint64 Values = 1;
+
     repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
     optional TCompactionCounters CompactionCounters = 3;
+    optional TExtendedCounters ExtendedCounters = 4;
+    repeated TMLPConsumerCounters MLPConsumerCounters = 5;
 
     message TConsumerAggregatedCounters {
         optional string Consumer = 1;
@@ -751,6 +774,17 @@ message TAggregatedCounters {
     }
     message TCompactionCounters {
         repeated uint64 Values = 1;
+    }
+
+    message TExtendedCounters {
+        repeated uint64 Values = 1;
+    }
+
+    message TMLPConsumerCounters {
+        optional string Consumer = 1;
+
+        repeated uint64 CountersValues = 2;
+        repeated uint64 MessageLocksValues = 3;
     }
 }
 
@@ -1245,3 +1279,161 @@ message TEvBalancingSubscribeNotify {
     optional string Consumer = 4;
     optional EStatus Status = 5;
 }
+
+message TMLPMessageId {
+    optional uint32 PartitionId = 1;
+    optional uint64 Offset = 2;
+}
+
+message TMLPMessageMeta {
+    optional string MessageGroupId = 1;
+    optional uint64 SentTimestampMilliseconds = 2;
+};
+
+message TMLPMessage {
+    optional TMLPMessageId Id = 1;
+    optional bytes Data = 2;
+    optional TMLPMessageMeta MessageMeta = 3;
+}
+
+message TEvMLPGetPartitionRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+}
+
+// From PQRB
+message TEvMLPGetPartitionResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    optional uint32 PartitionId = 2;
+    optional uint64 TabletId = 3;
+}
+
+// From PQTablet
+message TEvMLPErrorResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    optional string ErrorMessage = 2;
+}
+
+// To PQTablet
+message TEvMLPReadRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional uint64 WaitDeadlineMilliseconds = 4;
+    optional uint64 VisibilityDeadlineMilliseconds = 5; // Если к указанному времени не произойдет подтверждения обработки сообщения, то сообщение вернется в очередь (может указывать в настройках консьюмера?)
+    // The maximum number of messages to return.
+    optional uint32 MaxNumberOfMessages = 6;
+}
+
+// From PQTablet
+message TEvMLPReadResponse {
+    repeated TMLPMessage Message = 1;
+}
+
+// To PQTablet
+// Подтверждает что сообщение было обработано
+message TEvMLPCommitRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    repeated uint64 Offset = 4;
+}
+
+// From PQTablet
+message TEvMLPCommitResponse {
+}
+
+// To PQTablet
+// освобождает сообщение до истечения таймаута. Может быть полезно для протоколов, которые держат постоянное соединение с клиентом, и могут обрабатывать обрыв соединения
+message TEvMLPUnlockRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    repeated uint64 Offset = 4;
+}
+
+// From PQTablet
+message TEvMLPUnlockResponse {
+}
+
+// To PQTablet
+// Изменяет дедлайн сообщения
+message TEvMLPChangeMessageDeadlineRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional uint64 DeadlineTimestampSeconds = 4;
+    repeated uint64 Offset = 5;
+}
+
+// From PQTablet
+message TEvMLPChangeMessageDeadlineResponse {
+}
+
+message TMLPMetrics {
+    optional uint64 TotalCommittedMessageCount = 2;
+    optional uint64 TotalMovedToDLQMessageCount = 3;
+    optional uint64 TotalScheduledToDLQMessageCount = 1;
+    optional uint64 TotalPurgedMessageCount = 4;
+    optional uint64 TotalDeletedByDeadlinePolicyMessageCount = 5;
+    optional uint64 TotalDeletedByRetentionMessageCount = 6;
+}
+
+message TMLPStorageSnapshot {
+    message TConfiguration {
+        optional string ConsumerName = 1;
+        optional uint64 Generation = 2;
+    }
+    optional TConfiguration Configuration = 1;
+
+    optional uint64 FormatVersion = 2;
+
+    optional uint64 WALIndex = 3;
+
+    message TMeta {
+        optional uint64 FirstOffset = 1;
+        optional uint64 FirstUncommittedOffset = 2;
+        optional uint64 BaseDeadlineSeconds = 3;
+        optional uint64 BaseWriteTimestampSeconds = 4;
+    }
+    optional TMeta Meta = 4;
+
+
+    optional TMLPMetrics Metrics = 5;
+
+    optional bytes Messages = 6;
+    optional bytes SlowMessages = 7;
+    optional bytes DLQMessages = 8;
+}
+
+message TMLPStorageWAL {
+    optional uint64 Generation = 1;
+    optional uint64 FormatVersion = 2;
+    optional uint64 WALIndex = 3;
+
+    optional TMLPMetrics Metrics = 4;
+
+    optional uint64 BaseDeadlineSeconds = 5;
+    optional uint64 BaseWriteTimestampSeconds = 6;
+
+    optional uint64 FirstOffset = 7;
+    optional bytes ChangedMessages = 8;
+    optional uint64 FirstAddedOffset = 9;
+    optional bytes AddedMessages = 10;
+
+    optional uint64 SlowFirstOffset = 11;
+    repeated uint64 MovedToSlowZone = 12;
+    repeated uint64 DeletedFromSlowZone = 13;
+
+    optional bytes AddedToDLQMessages = 14;
+    optional uint64 FirstDLQSeqNo = 15;
+}
+
+message TMessageDeduplicationIdWAL {
+    message TMessage {
+        optional string DeduplicationId = 1;
+        optional uint64 OffsetDelta = 2;
+        optional uint64 ExpirationTimestampMillisecondsDelta = 3;
+    }
+    repeated TMessage Message = 1;
+};

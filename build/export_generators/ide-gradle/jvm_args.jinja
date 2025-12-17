@@ -68,28 +68,19 @@ tasks.withType<JavaExec> {
 tasks.withType<Test> {
 {#- glue -#}
 {{ JvmArgs(test_jvm_args) }}
-{%- if target.enable_preview -%}
+{%-     if target.enable_preview -%}
     environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
-{%  endif -%}
-{%- if test_cwds|length -%}
-{%-     if test_cwds|length > 1 %}
+{%      endif -%}
+{%-     if test_cwds|length -%}
+{%-         if test_cwds|length > 1 %}
 // Use first of found TEST_CWDs: {%- for tcwd in test_cwds -%}{{ tcwd }}{%- if not loop.last -%}, {%- endif -%}{%- endfor -%}
-{%-     endif -%}
-{%-     set test_cwd = test_cwds|first -%}
-{%-     if test_cwd[0] != '/' -%}
-{%-         set test_cwd = '$arcadia_root/' + test_cwd -%}
-{%-     endif %}
-    workingDir({{ PatchRoots(test_cwd) }})
-{%  endif -%}
-{%- if test_envs|length -%}
-{%-     for test_env in test_envs -%}
-{%-         set key_and_value = split(test_env, '=', 2) -%}
-{%-         if not(key_and_value[1] is defined) %}
-    environment("{{ key_and_value[0] }}", true)
-{%-         else %}
-    environment("{{ key_and_value[0] }}", "{{ key_and_value[1] }}")
 {%-         endif -%}
-{%-     endfor %}
-{%  endif -%}
+{%-         set test_cwd = test_cwds|first -%}
+{%-         if test_cwd[0] != '/' -%}
+{%-             set test_cwd = '$arcadia_root/' + test_cwd -%}
+{%-         endif %}
+    workingDir({{ PatchRoots(test_cwd) }})
+{%-     endif -%}
+{{ Env(test_envs) }}
 }
 {%- endif -%}

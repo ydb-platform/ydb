@@ -102,7 +102,7 @@ class TConsumerReadQuota {
 };
 
 
-class TPartitionQuoterBase : public TBaseActor<TPartitionQuoterBase>, private TConstantLogPrefix {
+class TPartitionQuoterBase : public TBaseTabletActor<TPartitionQuoterBase>, private TConstantLogPrefix {
 
 const TDuration WAKE_UP_TIMEOUT = TDuration::Seconds(1);
 
@@ -117,7 +117,7 @@ public:
         const std::shared_ptr<TTabletCountersBase>& counters,
         ui64 maxRequestsInflight
     )
-        : TBaseActor(tabletId, tabletActor, NKikimrServices::PERSQUEUE)
+        : TBaseTabletActor(tabletId, tabletActor, NKikimrServices::PERSQUEUE)
         , Partition(partition)
         , InflightLimitSlidingWindow(1000, TDuration::Minutes(1))
         , RequestsInflight(0)

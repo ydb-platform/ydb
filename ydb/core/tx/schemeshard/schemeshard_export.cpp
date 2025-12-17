@@ -140,6 +140,10 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
         exprt.MutableExportToS3Settings()->clear_access_key();
         exprt.MutableExportToS3Settings()->clear_secret_key();
         break;
+
+    case TExportInfo::EKind::FS:
+        Y_ABORT_UNLESS(exprt.MutableExportToFsSettings()->ParseFromString(exportInfo.Settings));
+        break;
     }
 }
 
@@ -153,6 +157,7 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& e
         NIceDb::TUpdate<Schema::Exports::Items>(exportInfo.Items.size()),
         NIceDb::TUpdate<Schema::Exports::EnableChecksums>(exportInfo.EnableChecksums),
         NIceDb::TUpdate<Schema::Exports::EnablePermissions>(exportInfo.EnablePermissions),
+        NIceDb::TUpdate<Schema::Exports::MaterializeIndexes>(exportInfo.MaterializeIndexes),
         NIceDb::TUpdate<Schema::Exports::PeerName>(exportInfo.PeerName),
         NIceDb::TUpdate<Schema::Exports::SanitizedToken>(exportInfo.SanitizedToken)
     );
@@ -171,7 +176,8 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& e
             NIceDb::TUpdate<Schema::ExportItems::SourceOwnerPathId>(item.SourcePathId.OwnerId),
             NIceDb::TUpdate<Schema::ExportItems::SourcePathId>(item.SourcePathId.LocalPathId),
             NIceDb::TUpdate<Schema::ExportItems::State>(static_cast<ui8>(item.State)),
-            NIceDb::TUpdate<Schema::ExportItems::SourcePathType>(item.SourcePathType)
+            NIceDb::TUpdate<Schema::ExportItems::SourcePathType>(item.SourcePathType),
+            NIceDb::TUpdate<Schema::ExportItems::ParentIndex>(item.ParentIdx)
         );
     }
 }

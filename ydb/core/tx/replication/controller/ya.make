@@ -60,6 +60,7 @@ SRCS(
     tx_heartbeat.cpp
     tx_init.cpp
     tx_init_schema.cpp
+    tx_resolve_database_result.cpp
     tx_resolve_resource_id_result.cpp
     tx_resolve_secret_result.cpp
     tx_worker_error.cpp

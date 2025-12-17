@@ -1160,11 +1160,11 @@ private:
         }
         else if (inputMulti && lambdaVarIndex) { // Many to one
             const auto range = lambdaVarIndex->GetIndexMapping().equal_range(0);
-            static const TConstraintSet defConstr;
+            static const TConstraintSet DefConstr;
             std::vector<const TConstraintSet*> nonEmpty;
             for (auto i = range.first; i != range.second; ++i) {
                 if (i->second == Max<ui32>()) {
-                    nonEmpty.push_back(&defConstr);
+                    nonEmpty.push_back(&DefConstr);
                 } else if (auto origConstr = inputMulti->GetItem(i->second)) {
                     nonEmpty.push_back(origConstr);
                 }
@@ -3126,6 +3126,11 @@ private:
         std::transform(keys.begin(), keys.end(), columns.begin(), [](const TPartOfConstraintBase::TPathType& path) -> std::string_view {
             return path.front();
         });
+        if (const auto hoppingColumn = input->Child(TCoMultiHoppingCore::idx_HoppingColumn)->Content();
+            "_yql_time" != hoppingColumn) {
+            columns.push_back(hoppingColumn);
+        }
+
         if (!columns.empty()) {
             input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
             input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));

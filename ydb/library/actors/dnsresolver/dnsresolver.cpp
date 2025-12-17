@@ -130,13 +130,20 @@ namespace NDnsResolver {
         std::atomic<size_t> Activations{ 0 };
     };
 
-    class TSimpleDnsResolver
-        : public TActor<TSimpleDnsResolver>
+    static TString AddTrailingDot(TString&& name, bool addTrailingDot) noexcept {
+        if (addTrailingDot && !name.empty() && name.back() != '.') {
+            name += ".";
+        }
+        return name;
+    }
+
+    class TAresDnsResolver
+        : public TActor<TAresDnsResolver>
         , private TAresLibraryInitBase
         , private TCallbackQueueBase
     {
     public:
-        TSimpleDnsResolver(TSimpleDnsResolverOptions options) noexcept
+        TAresDnsResolver(TSimpleDnsResolverOptions options) noexcept
             : TActor(&TThis::StateWork)
             , Options(std::move(options))
             , WorkerThread(&TThis::WorkerThreadStart, this)
@@ -146,7 +153,7 @@ namespace NDnsResolver {
             WorkerThread.Start();
         }
 
-        ~TSimpleDnsResolver() noexcept override {
+        ~TAresDnsResolver() noexcept override {
             if (!Stopped) {
                 PushCallback([this] {
                     // Mark as stopped first
@@ -290,6 +297,7 @@ namespace NDnsResolver {
             memset(&hints, 0, sizeof(hints));
             hints.ai_flags = ARES_AI_NOSORT;
             hints.ai_family = family;
+            name = AddTrailingDot(std::move(name), reqCtx->Self->Options.AddTrailingDot);
             ares_getaddrinfo(AresChannel, name.c_str(), nullptr, &hints, &TThis::GetAddrInfoAresCallback, reqCtx.Get());
         }
 
@@ -384,7 +392,7 @@ namespace NDnsResolver {
 
     private:
         static void* WorkerThreadStart(void* arg) noexcept {
-            static_cast<TSimpleDnsResolver*>(arg)->WorkerThreadLoop();
+            static_cast<TAresDnsResolver*>(arg)->WorkerThreadLoop();
             return nullptr;
         }
 
@@ -483,9 +491,177 @@ namespace NDnsResolver {
         bool Stopped = false;
     };
 
+
+#if not defined(_win32_)
+    class TLibcDnsResolver
+        : public TActor<TLibcDnsResolver>
+        , private TCallbackQueueBase
+    {
+    public:
+    TLibcDnsResolver(TSimpleDnsResolverOptions options) noexcept
+            : TActor(&TThis::StateWork)
+            , WorkerThread(&TThis::WorkerThreadStart, this)
+            , Options(options)
+        {
+            WorkerThread.Start();
+        }
+
+        ~TLibcDnsResolver() noexcept override {
+            if (!Stopped) {
+                PushCallback([this] {
+                    Stopped = true;
+                });
+
+                WorkerThread.Join();
+            }
+        }
+
+        static constexpr EActivityType ActorActivityType() {
+            return EActivityType::DNS_RESOLVER;
+        }
+
+    private:
+        STRICT_STFUNC(StateWork, {
+            hFunc(TEvents::TEvPoison, Handle);
+            hFunc(TEvDns::TEvGetHostByName, Handle);
+            hFunc(TEvDns::TEvGetAddr, Handle);
+        })
+
+        void Handle(TEvents::TEvPoison::TPtr&) {
+            Y_ABORT_UNLESS(!Stopped);
+
+            PushCallback([this] {
+                // Mark as stopped last
+                Stopped = true;
+            });
+
+            WorkerThread.Join();
+            PassAway();
+        }
+
+    private:
+        std::unique_ptr<TEvDns::TEvGetHostByNameResult> GetHostByName(TString name, int family) {
+            name = AddTrailingDot(std::move(name), Options.AddTrailingDot);
+            auto result = std::make_unique<TEvDns::TEvGetHostByNameResult>();
+
+            struct addrinfo hints, *res;
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_family = family;
+            hints.ai_socktype = Options.ForceTcp ? SOCK_STREAM : SOCK_DGRAM;
+
+            result->Status = getaddrinfo(name.c_str(), nullptr, &hints, &res);
+            if (result->Status != 0) {
+                result->ErrorText = gai_strerror(result->Status);
+                return result;
+            }
+            Y_DEFER { freeaddrinfo(res); };
+
+            for (auto *node = res; node; node = node->ai_next) {
+                switch (node->ai_family) {
+                    case AF_INET: {
+                        result->AddrsV4.emplace_back(((sockaddr_in*)node->ai_addr)->sin_addr);
+                        break;
+                    }
+                    case AF_INET6: {
+                        result->AddrsV6.emplace_back(((sockaddr_in6*)node->ai_addr)->sin6_addr);
+                        break;
+                    }
+                    default:
+                        Y_ABORT("unknown address family in getaddrinfo callback");
+                }
+            }
+
+            return result;
+        }
+
+        std::unique_ptr<TEvDns::TEvGetAddrResult> GetAddr(TString name, int family) {
+            auto result = std::make_unique<TEvDns::TEvGetAddrResult>();
+            auto res = GetHostByName(name, family);
+
+            result->Status = res->Status;
+            result->ErrorText = res->ErrorText;
+            if (res->AddrsV4.empty() && res->AddrsV6.empty()) {
+                result->Status = EAI_NODATA;
+                result->ErrorText = gai_strerror(result->Status);
+                return result;
+            }
+            if (res->AddrsV4.size() > 0) {
+                result->Addr = res->AddrsV4[0];
+            }
+            if (res->AddrsV6.size() > 0) {
+                result->Addr = res->AddrsV6[0];
+            }
+            return result;
+
+        }
+
+    private:
+        void Handle(TEvDns::TEvGetHostByName::TPtr& ev) {
+            auto* msg = ev->Get();
+            PushCallback([this, as = TActivationContext::ActorSystem(), name = std::move(msg->Name), family = msg->Family, sender = ev->Sender, cookie = ev->Cookie] () mutable {
+                auto result = GetHostByName(name, family);
+                as->Send(new IEventHandle(sender, SelfId(), result.release(), 0, cookie));
+            });
+        }
+
+        void Handle(TEvDns::TEvGetAddr::TPtr& ev) {
+            auto* msg = ev->Get();
+            PushCallback([this, as = TActivationContext::ActorSystem(), name = std::move(msg->Name), family = msg->Family, sender = ev->Sender, cookie = ev->Cookie] () mutable {
+                auto result = GetAddr(name, family);
+                as->Send(new IEventHandle(sender, SelfId(), result.release(), 0, cookie));
+            });
+        }
+
+    private:
+        static void* WorkerThreadStart(void* arg) noexcept {
+            static_cast<TLibcDnsResolver*>(arg)->WorkerThreadLoop();
+            return nullptr;
+        }
+
+        void WorkerThreadLoop() noexcept {
+            TThread::SetCurrentThreadName("DnsResolver");
+
+            std::array<struct pollfd, 1> fds;
+            while (!Stopped) {
+                {
+                    auto& entry = fds[0];
+                    entry.fd = WaitSock();
+                    entry.events = POLLRDNORM | POLLIN;
+                    entry.revents = 0;
+                }
+
+                int ret = poll(fds.data(), fds.size(), 1000);
+                if (ret == -1) {
+                    if (errno == EINTR) {
+                        continue;
+                    }
+                }
+                // Actualy should be something like "if (ret > 0 && fds[0].revents & (POLLRDNORM | POLLIN))"
+                // but we have only one socket and use poll just to wait
+                RunCallbacks();
+            }
+        }
+    private:
+        TThread WorkerThread;
+        bool Stopped = false;
+        TSimpleDnsResolverOptions Options;
+    };
+
     IActor* CreateSimpleDnsResolver(TSimpleDnsResolverOptions options) {
-        return new TSimpleDnsResolver(std::move(options));
+        switch (options.Type) {
+            case EDnsResolverType::Ares:
+                return new TAresDnsResolver(std::move(options));
+            case EDnsResolverType::Libc:
+                return new TLibcDnsResolver(std::move(options));
+            default:
+                Y_ABORT_UNLESS(false, "Invalid dns resolver type: %" PRIu32, options.Type);
+        }
     }
+#else
+    IActor* CreateSimpleDnsResolver(TSimpleDnsResolverOptions options) {
+        return new TAresDnsResolver(std::move(options));
+    }
+#endif
 
 } // namespace NDnsResolver
 } // namespace NActors

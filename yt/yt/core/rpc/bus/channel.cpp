@@ -371,7 +371,7 @@ private:
             {
                 // NB: Requests without timeout are rare but may occur.
                 // For these requests we still need to register a timeout cookie with TDelayedExecutor
-                // since this also provides proper cleanup and cancelation when global shutdown happens.
+                // since this also provides proper cleanup and cancellation when global shutdown happens.
                 if (TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
                     YT_LOG_ALERT("Request without timeout (RequestId: %v, Method: %v.%v, Endpoint: %v)",
                         requestControl->GetRequestId(),

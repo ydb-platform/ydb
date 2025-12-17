@@ -173,6 +173,7 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
         return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, inputExpr.Ptr()));
     };
 
+
     if (auto maybeList = returning.Update().Maybe<TExprList>()) {
         for (auto item : maybeList.Cast()) {
             if (auto upsert = item.Maybe<TKqlUpsertRows>()) {
@@ -224,7 +225,7 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
         return node;
     }
 
-    if (upsert.Input().Maybe<TDqPrecompute>() || upsert.Input().Maybe<TDqPhyPrecompute>()) {
+    if (upsert.Input().Maybe<TDqPrecompute>() || upsert.Input().Maybe<TDqPhyPrecompute>() || upsert.Input().Maybe<TCoParameter>()) {
         return node;
     }
 
@@ -247,7 +248,7 @@ TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKq
         return node;
     }
 
-    if (del.Input().Maybe<TDqPrecompute>() || del.Input().Maybe<TDqPhyPrecompute>()) {
+    if (del.Input().Maybe<TDqPrecompute>() || del.Input().Maybe<TDqPhyPrecompute>() || del.Input().Maybe<TCoParameter>()) {
         return node;
     }
 

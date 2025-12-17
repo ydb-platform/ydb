@@ -12,6 +12,7 @@
 #include <util/stream/file.h>
 #include <util/stream/format.h>
 #include <util/system/hostname.h>
+#include <util/folder/path.h>
 #include <util/string/printf.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
@@ -265,7 +266,8 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
     opts.AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&RunOpts.ProxyBindToProxy);
     opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&RunOpts.MonitoringPort);
     opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&RunOpts.MonitoringAddress);
-    opts.AddLongOption("mon-cert", "Monitoring certificate (https)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringCertificateFile);
+    opts.AddLongOption("mon-cert", "Path to monitoring certificate file (https)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringCertificateFile);
+    opts.AddLongOption("mon-key", "Path to monitoring private key file (https)").OptionalArgument("PATH").StoreResult(&RunOpts.MonitoringPrivateKeyFile);
     opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&RunOpts.MonitoringThreads);
 
     SetupLastGetOptForConfigFiles(opts);
@@ -304,6 +306,20 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
 }
 
 void TRunCommandConfigParser::ApplyParsedOptions() {
+    auto ensureFileExists = [](const TString& path, TStringBuf optName) {
+        if (path.empty()) {
+            return;
+        }
+        TFsPath fspath(path);
+        TFileStat filestat;
+        if (!fspath.Stat(filestat) || !filestat.IsFile()) {
+            ythrow yexception() << "File passed to --" << optName << " does not exist: " << path;
+        }
+    };
+
+    ensureFileExists(RunOpts.MonitoringCertificateFile, "mon-cert");
+    ensureFileExists(RunOpts.MonitoringPrivateKeyFile, "mon-key");
+
     // apply global options
     Config.AppConfig.MutableInterconnectConfig()->SetStartTcp(GlobalOpts.StartTcp);
     auto logConfig = Config.AppConfig.MutableLogConfig();
@@ -371,7 +387,8 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(RunOpts.MonitoringThreads);
     Config.AppConfig.MutableMonitoringConfig()->SetMaxRequestsPerSecond(RunOpts.MonitoringMaxRequestsPerSecond);
     Config.AppConfig.MutableMonitoringConfig()->SetInactivityTimeout(ToString(RunOpts.MonitoringInactivityTimeout.Seconds()));
-    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCertificate(TUnbufferedFileInput(RunOpts.MonitoringCertificateFile).ReadAll());
+    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringCertificateFile(RunOpts.MonitoringCertificateFile);
+    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringPrivateKeyFile(RunOpts.MonitoringPrivateKeyFile);
     Config.AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RunOpts.RestartsCountFile);
 }
 

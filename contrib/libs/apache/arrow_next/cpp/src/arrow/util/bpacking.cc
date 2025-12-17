@@ -15,13 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/bpacking.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bpacking.h"
 
-#include "arrow/util/bpacking64_default.h"
-#include "arrow/util/bpacking_default.h"
-#include "arrow/util/cpu_info.h"
-#include "arrow/util/dispatch.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bpacking64_default.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bpacking_default.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cpu_info.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/dispatch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 #if defined(ARROW_HAVE_RUNTIME_AVX2)
 #  error #include "arrow/util/bpacking_avx2.h"

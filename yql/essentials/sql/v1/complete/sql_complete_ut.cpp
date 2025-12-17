@@ -63,8 +63,7 @@ TLexerSupplier MakePureLexerSupplier() {
     lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
     return [lexers = std::move(lexers)](bool ansi) {
         return NSQLTranslationV1::MakeLexer(
-            lexers, ansi, /* antlr4 = */ true,
-            NSQLTranslationV1::ELexerFlavor::Pure);
+            lexers, ansi, NSQLTranslationV1::ELexerFlavor::Pure);
     };
 }
 
@@ -216,6 +215,7 @@ Y_UNIT_TEST(Beginning) {
         {Keyword, "ROLLBACK"},
         {Keyword, "SELECT"},
         {Keyword, "SHOW CREATE"},
+        {Keyword, "TRUNCATE TABLE"},
         {Keyword, "UPDATE"},
         {Keyword, "UPSERT"},
         {Keyword, "USE"},
@@ -438,6 +438,7 @@ Y_UNIT_TEST(Explain) {
         {Keyword, "ROLLBACK"},
         {Keyword, "SELECT"},
         {Keyword, "SHOW CREATE"},
+        {Keyword, "TRUNCATE TABLE"},
         {Keyword, "UPDATE"},
         {Keyword, "UPSERT"},
         {Keyword, "USE"},
@@ -556,6 +557,7 @@ Y_UNIT_TEST(Select) {
         {FunctionName, "DateTime::Split()", 1},
         {TypeName, "Decimal()", 1},
         {TypeName, "Dict<>", 1},
+        {TypeName, "DynamicLinear<>", 1},
         {Keyword, "EMPTY_ACTION"},
         {Keyword, "EXISTS()", 1},
         {TypeName, "Enum<>", 1},
@@ -564,6 +566,7 @@ Y_UNIT_TEST(Select) {
         {Keyword, "JSON_EXISTS()", 1},
         {Keyword, "JSON_QUERY()", 1},
         {Keyword, "JSON_VALUE()", 1},
+        {TypeName, "Linear<>", 1},
         {TypeName, "List<>", 1},
         {Keyword, "NOT"},
         {Keyword, "NULL"},
@@ -820,6 +823,7 @@ Y_UNIT_TEST(SelectWhere) {
         {FunctionName, "DateTime::Split()", 1},
         {TypeName, "Decimal()", 1},
         {TypeName, "Dict<>", 1},
+        {TypeName, "DynamicLinear<>", 1},
         {Keyword, "EMPTY_ACTION"},
         {Keyword, "EXISTS()", 1},
         {TypeName, "Enum<>", 1},
@@ -828,6 +832,7 @@ Y_UNIT_TEST(SelectWhere) {
         {Keyword, "JSON_EXISTS()", 1},
         {Keyword, "JSON_QUERY()", 1},
         {Keyword, "JSON_VALUE()", 1},
+        {TypeName, "Linear<>", 1},
         {TypeName, "List<>", 1},
         {Keyword, "NOT"},
         {Keyword, "NULL"},
@@ -915,8 +920,10 @@ Y_UNIT_TEST(TypeName) {
         {TypeName, "Callable<>", 1},
         {TypeName, "Decimal()", 1},
         {TypeName, "Dict<>", 1},
+        {TypeName, "DynamicLinear<>", 1},
         {TypeName, "Enum<>", 1},
         {TypeName, "Flow<>", 1},
+        {TypeName, "Linear<>", 1},
         {TypeName, "List<>", 1},
         {TypeName, "Optional<>", 1},
         {TypeName, "Resource<>", 1},
@@ -999,7 +1006,7 @@ Y_UNIT_TEST(SelectTableHintName) {
         TVector<TCandidate> expected = {
             {Keyword, "COLUMNS"},
             {Keyword, "SCHEMA"},
-            {Keyword, "WATERMARK AS()", 1},
+            {Keyword, "WATERMARK"},
             {HintName, "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "REDUCE my_table WITH "), expected);
@@ -1008,7 +1015,7 @@ Y_UNIT_TEST(SelectTableHintName) {
         TVector<TCandidate> expected = {
             {Keyword, "COLUMNS"},
             {Keyword, "SCHEMA"},
-            {Keyword, "WATERMARK AS()", 1},
+            {Keyword, "WATERMARK"},
             {HintName, "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT key FROM my_table WITH "), expected);
@@ -1020,7 +1027,7 @@ Y_UNIT_TEST(InsertTableHintName) {
         {Keyword, "COLUMNS"},
         {HintName, "EXPIRATION"},
         {Keyword, "SCHEMA"},
-        {Keyword, "WATERMARK AS()", 1},
+        {Keyword, "WATERMARK"},
     };
 
     auto engine = MakeSqlCompletionEngineUT();

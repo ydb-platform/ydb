@@ -392,6 +392,8 @@ void TServiceMethod::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("method", &TThis::Method)
         .Default();
+    registrar.Parameter("max_window", &TThis::MaxWindow)
+        .Default(1'024);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

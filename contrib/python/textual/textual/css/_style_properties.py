@@ -299,7 +299,7 @@ class BoxProperty:
 
         Returns:
             A ``tuple[EdgeType, Style]`` containing the string type of the box and
-                its style. Example types are "rounded", "solid", and "dashed".
+                its style. Example types are "round", "solid", and "dashed".
         """
         return obj.get_rule(self.name) or ("", self._default_color)  # type: ignore[return-value]
 
@@ -745,10 +745,10 @@ class OffsetProperty:
         _rich_traceback_omit = True
         if offset is None:
             if obj.clear_rule(self.name):
-                obj.refresh(layout=True)
+                obj.refresh(layout=True, repaint=False)
         elif isinstance(offset, ScalarOffset):
             if obj.set_rule(self.name, offset):
-                obj.refresh(layout=True)
+                obj.refresh(layout=True, repaint=False)
         else:
             x, y = offset
 
@@ -771,7 +771,7 @@ class OffsetProperty:
             _offset = ScalarOffset(scalar_x, scalar_y)
 
             if obj.set_rule(self.name, _offset):
-                obj.refresh(layout=True)
+                obj.refresh(layout=True, repaint=False)
 
 
 class StringEnumProperty(Generic[EnumType]):
@@ -988,7 +988,7 @@ class ColorProperty:
                     raise StyleValueError(
                         f"Invalid color value '{token}'",
                         help_text=color_property_help_text(
-                            self.name, context="inline", error=error
+                            self.name, context="inline", error=error, value=token
                         ),
                     )
             parsed_color = parsed_color.with_alpha(alpha)
@@ -1172,7 +1172,7 @@ class FractionalProperty:
 
 
 class AlignProperty:
-    """Combines the horizontal and vertical alignment properties in to a single property."""
+    """Combines the horizontal and vertical alignment properties into a single property."""
 
     def __set_name__(self, owner: StylesBase, name: str) -> None:
         self.horizontal = f"{name}_horizontal"

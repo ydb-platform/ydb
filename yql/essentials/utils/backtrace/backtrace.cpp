@@ -16,6 +16,7 @@
 #include <util/system/execpath.h>
 #include <util/system/platform.h>
 #include <util/system/mlock.h>
+#include <util/system/mutex.h>
 
 #ifdef _linux_
     #include <signal.h>
@@ -77,7 +78,9 @@ void SetFatalSignalAction(void (*sigaction)(int, siginfo_t*, void*))
 
 namespace {
 std::vector<std::function<void(int)>> Before, After;
+TMutex FatalCallbackMutex;
 bool KikimrSymbolize = false;
+bool DoNotUnwind = false;
 NYql::NBacktrace::TCollectedFrame Frames[NYql::NBacktrace::Limit];
 
 void CallCallbacks(decltype(Before)& where, int signum) {
@@ -103,7 +106,7 @@ void DoBacktrace(IOutputStream* out, void** stack, size_t cnt) {
 void SignalHandler(int signum) {
     CallCallbacks(Before, signum);
 
-    if (!NMalloc::IsAllocatorCorrupted) {
+    if (!NMalloc::IsAllocatorCorrupted && !DoNotUnwind) {
         if (!AtomicTryLock(&BacktraceStarted)) {
             return;
         }
@@ -121,7 +124,7 @@ void SignalAction(int signum, siginfo_t*, void* context) {
     Y_UNUSED(SignalHandler);
     CallCallbacks(Before, signum);
 
-    if (!NMalloc::IsAllocatorCorrupted) {
+    if (!NMalloc::IsAllocatorCorrupted && !DoNotUnwind) {
         if (!AtomicTryLock(&BacktraceStarted)) {
             return;
         }
@@ -145,11 +148,15 @@ void SetModulesMapping(const THashMap<TString, TString>& mapping) {
 }
 
 void AddBeforeFatalCallback(const std::function<void(int)>& before) {
-    Before.push_back(before);
+    with_lock (FatalCallbackMutex) {
+        Before.push_back(before);
+    }
 }
 
 void AddAfterFatalCallback(const std::function<void(int)>& after) {
-    After.push_back(after);
+    with_lock (FatalCallbackMutex) {
+        After.push_back(after);
+    }
 }
 
 void RegisterKikimrFatalActions() {
@@ -166,6 +173,10 @@ void EnableKikimrSymbolize() {
 
 void KikimrBackTrace() {
     FormatBackTrace(&Cerr);
+}
+
+void DisableBacktraceUnwinding() {
+    DoNotUnwind = true;
 }
 
 void KikimrBackTraceFormatImpl(IOutputStream* out) {

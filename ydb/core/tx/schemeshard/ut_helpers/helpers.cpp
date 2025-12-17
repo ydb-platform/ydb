@@ -1944,6 +1944,8 @@ namespace NSchemeShardUT_Private {
                 }
             }
         } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+        } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
         }
@@ -1989,7 +1991,7 @@ namespace NSchemeShardUT_Private {
                        const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, dataColumns
+            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, dataColumns, {}
         });
     }
 
@@ -1997,7 +1999,7 @@ namespace NSchemeShardUT_Private {
                        const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, dataColumns
+            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, dataColumns, {}
         });
     }
 
@@ -2005,7 +2007,7 @@ namespace NSchemeShardUT_Private {
                               const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, std::move(dataColumns)
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, std::move(dataColumns), {}
         });
     }
 
@@ -2065,7 +2067,7 @@ namespace NSchemeShardUT_Private {
                        Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}, {}
         }, expectedStatus);
     }
 
@@ -2074,7 +2076,7 @@ namespace NSchemeShardUT_Private {
                            Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, {}, {}
         }, expectedStatus);
     }
 
@@ -2083,7 +2085,7 @@ namespace NSchemeShardUT_Private {
                               Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, {}, {}
         }, expectedStatus);
     }
 
@@ -2871,7 +2873,7 @@ namespace NSchemeShardUT_Private {
         return WaitNextValResult(runtime, sender, expectedStatus);
     }
 
-    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
+    NKikimrMiniKQL::TResult ReadSystemTable(TTestActorRuntime& runtime, ui64 tabletId,
             const TString& table, const TVector<TString>& pk, const TVector<TString>& columns,
             const TString& rangeFlags)
     {
@@ -2886,13 +2888,20 @@ namespace NSchemeShardUT_Private {
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"((
             (let range '(%s%s))
             (let columns '(%s))
-            (let result (SelectRange '__user__%s range columns '()))
+            (let result (SelectRange '%s range columns '()))
             (return (AsList (SetResult 'Result result) ))
         ))", rangeFlags.data(), keyFmt.data(), columnsFmt.data(), table.data()), result, error);
         UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         return result;
+    }
+
+    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
+            const TString& table, const TVector<TString>& pk, const TVector<TString>& columns,
+            const TString& rangeFlags)
+    {
+        return ReadSystemTable(runtime, tabletId, "__user__"+table, pk, columns, rangeFlags);
     }
 
     TVector<TString> ReadShards(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table) {

@@ -22,10 +22,10 @@
 #include <memory>
 #include <utility>
 
-#include "arrow/result.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/type_fwd.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 namespace csv {

@@ -1,10 +1,19 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/size_literals.h>
+
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/persqueue/pqtablet/metering_sink.h>
-
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+#include <util/generic/size_literals.h>
+#include <fmt/format.h>
 
 namespace NKikimr::NPQ {
+
+static TString ReformatJson(TStringBuf json) {
+    TMemoryInput in(json);
+    const auto value = NJson::ReadJsonTree(&in, true);
+    return WriteJson(value, true, true, true);
+}
 
 Y_UNIT_TEST_SUITE(TMeteringSink) {
 
@@ -37,18 +46,39 @@ Y_UNIT_TEST(FlushPutEventsV1) {
     meteringSink.IncreaseQuantity(EMeteringJson::PutEventsV1, quantity);
     meteringSink.MayFlushForcibly(TInstant::FromValue(flushTs));
 
-    const TString referencePutUnitsJson = TStringBuilder() <<
-        "\n{\"cloud_id\":\"cloudId\",\"folder_id\":\"folderId\",\"resource_id\":\"streamPath\"" <<
-        ",\"id\":\"put_units-databaseId-tabletId-" << emptyFlushTs / 1'000 << "-" <<
-        meteringSink.GetMeteringCounter() << "\"," <<
-        "\"schema\":\"yds.events.puts.v1\",\"tags\":{},\"usage\":{\"quantity\":" << quantity <<
-        ",\"unit\":\"put_events\"," <<
-        "\"start\":" << emptyFlushTs / 1'000'000 << ",\"finish\":" << flushTs / 1'000'000 <<
-        "},\"labels\":{\"datastreams_stream_name\":\"streamName\"," <<
-        "\"ydb_database\":\"databaseId\",\"Category\":\"Topic\"},\"version\":\"v1\",\"source_id\":\"tabletId\"," <<
-        "\"source_wt\":" << flushTs / 1'000'000 << "}\n";
+    const TString referencePutUnitsJson = fmt::format(
+        R"(
+    {{
+        "cloud_id": "cloudId",
+        "folder_id": "folderId",
+        "resource_id": "streamPath",
+        "id": "put_units-databaseId-tabletId-{timestamp}-{counter}",
+        "schema": "yds.events.puts.v1",
+        "tags": {{
+        }},
+        "usage": {{
+            "quantity": {quantity},
+            "unit": "put_events",
+            "start": {start},
+            "finish": {finish}
+        }},
+        "labels": {{
+            "datastreams_stream_name": "streamName",
+            "ydb_database": "databaseId",
+            "Category": "Topic"
+        }},
+        "version": "v1",
+        "source_id": "tabletId",
+        "source_wt": {finish}
+    }})",
+        fmt::arg("timestamp", emptyFlushTs / 1'000),
+        fmt::arg("counter", meteringSink.GetMeteringCounter()),
+        fmt::arg("quantity", quantity),
+        fmt::arg("start", emptyFlushTs / 1'000'000),
+        fmt::arg("finish", flushTs / 1'000'000)
+    );
 
-    UNIT_ASSERT_VALUES_EQUAL(fullMetering, referencePutUnitsJson);
+    UNIT_ASSERT_VALUES_EQUAL(ReformatJson(fullMetering), ReformatJson(referencePutUnitsJson));
 }
 
 Y_UNIT_TEST(FlushResourcesReservedV1) {
@@ -79,20 +109,45 @@ Y_UNIT_TEST(FlushResourcesReservedV1) {
     meteringSink.MayFlushForcibly(TInstant::FromValue(flushTs));
     UNIT_ASSERT_VALUES_UNEQUAL(fullMetering.size(), 0);
 
-    const TString referenceResourcesReservedJson = TStringBuilder() <<
-        "\n{\"cloud_id\":\"cloudId\",\"folder_id\":\"folderId\",\"resource_id\":\"streamPath\"" <<
-        ",\"id\":\"reserved_resources-databaseId-tabletId-" << creationTs / 1'000 << "-" <<
-        meteringSink.GetMeteringCounter() << "\"" <<
-        ",\"schema\":\"yds.resources.reserved.v1\",\"tags\":{\"reserved_throughput_bps\":" <<
-        writeQuota << ",\"reserved_consumers_count\":" << consumersCount <<
-        ",\"reserved_storage_bytes\":" << reservedSpace << "},\"usage\":{\"quantity\":" <<
-        partitions * (flushTs - creationTs) / 1'000'000 << ",\"unit\":\"second\"," <<
-        "\"start\":" << creationTs / 1'000'000 << ",\"finish\":" << flushTs / 1'000'000 <<
-        "},\"labels\":{\"datastreams_stream_name\":\"streamName\"," <<
-        "\"ydb_database\":\"databaseId\",\"Category\":\"Topic\"},\"version\":\"v1\",\"source_id\":\"tabletId\"," <<
-        "\"source_wt\":" << flushTs / 1'000'000 << "}\n";
+    const TString referenceResourcesReservedJson = fmt::format(
+        R"(
+    {{
+        "cloud_id": "cloudId",
+        "folder_id": "folderId",
+        "resource_id": "streamPath",
+        "id": "reserved_resources-databaseId-tabletId-{timestamp}-{counter}",
+        "schema": "yds.resources.reserved.v1",
+        "tags": {{
+            "reserved_throughput_bps": {write_quota},
+            "reserved_consumers_count": {consumers_count},
+            "reserved_storage_bytes": {reserved_space}
+        }},
+        "usage": {{
+            "quantity": {quantity},
+            "unit": "second",
+            "start": {start},
+            "finish": {finish}
+        }},
+        "labels": {{
+            "datastreams_stream_name": "streamName",
+            "ydb_database": "databaseId",
+            "Category": "Topic"
+        }},
+        "version": "v1",
+        "source_id": "tabletId",
+        "source_wt": {finish}
+    }})",
+        fmt::arg("timestamp", creationTs / 1'000),
+        fmt::arg("counter", meteringSink.GetMeteringCounter()),
+        fmt::arg("write_quota", writeQuota),
+        fmt::arg("consumers_count", consumersCount),
+        fmt::arg("reserved_space", reservedSpace),
+        fmt::arg("quantity", partitions * (flushTs - creationTs) / 1'000'000),
+        fmt::arg("start", creationTs / 1'000'000),
+        fmt::arg("finish", flushTs / 1'000'000)
+    );
 
-    UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceResourcesReservedJson);
+    UNIT_ASSERT_VALUES_EQUAL(ReformatJson(fullMetering), ReformatJson(referenceResourcesReservedJson));
 }
 
 Y_UNIT_TEST(FlushThroughputV1) {
@@ -117,18 +172,41 @@ Y_UNIT_TEST(FlushThroughputV1) {
         });
 
     meteringSink.MayFlushForcibly(TInstant::FromValue(flushTs));
-    const TString referenceThrougputJson = TStringBuilder() <<
-        "\n{\"cloud_id\":\"cloudId\",\"folder_id\":\"folderId\",\"resource_id\":\"streamPath\"," <<
-        "\"id\":\"yds.reserved_resources-databaseId-tabletId-" << creationTs / 1'000 << "-" <<
-        meteringSink.GetMeteringCounter() << "\"" <<
-        ",\"schema\":\"yds.throughput.reserved.v1\",\"tags\":" <<
-        "{\"reserved_throughput_bps\":" << writeQuota << ",\"reserved_consumers_count\":" << 0 << "}," << "\"usage\":{\"quantity\":" <<
-        partitions * (flushTs - creationTs) / 1'000'000 << ",\"unit\":\"second\"" <<
-        ",\"start\":" << creationTs / 1'000'000 << ",\"finish\":" << flushTs / 1'000'000 <<
-        "},\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\",\"Category\":\"Topic\"}," <<
-        "\"version\":\"v1\",\"source_id\":\"tabletId\"," <<
-        "\"source_wt\":" << flushTs / 1'000'000 << "}\n";
-    UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceThrougputJson);
+    const TString referenceThrougputJson = fmt::format(
+        R"(
+    {{
+        "cloud_id": "cloudId",
+        "folder_id": "folderId",
+        "resource_id": "streamPath",
+        "id": "yds.reserved_resources-databaseId-tabletId-{timestamp}-{counter}",
+        "schema": "yds.throughput.reserved.v1",
+        "tags": {{
+            "reserved_throughput_bps": {write_quota},
+            "reserved_consumers_count": 0
+        }},
+        "usage": {{
+            "quantity": {quantity},
+            "unit": "second",
+            "start": {start},
+            "finish": {finish}
+        }},
+        "labels": {{
+            "datastreams_stream_name": "streamName",
+            "ydb_database": "databaseId",
+            "Category": "Topic"
+        }},
+        "version": "v1",
+        "source_id": "tabletId",
+        "source_wt": {finish}
+    }})",
+        fmt::arg("timestamp", creationTs / 1'000),
+        fmt::arg("counter", meteringSink.GetMeteringCounter()),
+        fmt::arg("write_quota", writeQuota),
+        fmt::arg("quantity", partitions * (flushTs - creationTs) / 1'000'000),
+        fmt::arg("start", creationTs / 1'000'000),
+        fmt::arg("finish", flushTs / 1'000'000)
+    );
+    UNIT_ASSERT_VALUES_EQUAL(ReformatJson(fullMetering), ReformatJson(referenceThrougputJson));
 }
 
 Y_UNIT_TEST(FlushStorageV1) {
@@ -153,18 +231,38 @@ Y_UNIT_TEST(FlushStorageV1) {
         });
 
     meteringSink.MayFlushForcibly(TInstant::FromValue(flushTs));
-    const TString referenceStorageJson = TStringBuilder() <<
-        "\n{\"cloud_id\":\"cloudId\",\"folder_id\":\"folderId\",\"resource_id\":\"streamPath\"," <<
-        "\"id\":\"yds.reserved_resources-databaseId-tabletId-" << creationTs / 1'000 << "-" <<
-        meteringSink.GetMeteringCounter() << "\"" <<
-        ",\"schema\":\"yds.storage.reserved.v1\",\"tags\":{},\"usage\":{\"quantity\":" <<
-        ((flushTs - creationTs) / 1'000'000) * partitions * (reservedSpace / 1_MB) <<
-        ",\"unit\":\"mbyte*second\"" <<
-        ",\"start\":" << creationTs / 1'000'000 << ",\"finish\":" << flushTs / 1'000'000 <<
-        "},\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\",\"Category\":\"Topic\"}," <<
-        "\"version\":\"v1\",\"source_id\":\"tabletId\"," <<
-        "\"source_wt\":" << flushTs / 1'000'000 << "}\n";
-    UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceStorageJson);
+    const TString referenceStorageJson = fmt::format(
+        R"(
+    {{
+        "cloud_id": "cloudId",
+        "folder_id": "folderId",
+        "resource_id": "streamPath",
+        "id": "yds.reserved_resources-databaseId-tabletId-{timestamp}-{counter}",
+        "schema": "yds.storage.reserved.v1",
+        "tags": {{
+        }},
+        "usage": {{
+            "quantity": {quantity},
+            "unit": "mbyte*second",
+            "start": {start},
+            "finish": {finish}
+        }},
+        "labels": {{
+            "datastreams_stream_name": "streamName",
+            "ydb_database": "databaseId",
+            "Category": "Topic"
+        }},
+        "version": "v1",
+        "source_id": "tabletId",
+        "source_wt": {finish}
+    }})",
+        fmt::arg("timestamp", creationTs / 1'000),
+        fmt::arg("counter", meteringSink.GetMeteringCounter()),
+        fmt::arg("quantity", ((flushTs - creationTs) / 1'000'000) * partitions * (reservedSpace / 1_MB)),
+        fmt::arg("start", creationTs / 1'000'000),
+        fmt::arg("finish", flushTs / 1'000'000)
+    );
+    UNIT_ASSERT_VALUES_EQUAL(ReformatJson(fullMetering), ReformatJson(referenceStorageJson));
 }
 
 Y_UNIT_TEST(UsedStorageV1) {
@@ -194,12 +292,35 @@ Y_UNIT_TEST(UsedStorageV1) {
     meteringSink.IncreaseQuantity(EMeteringJson::UsedStorageV1, quantity);
     meteringSink.MayFlushForcibly(TInstant::FromValue(flushTs));
 
-    const TString referenceStorageJson = TStringBuilder() <<
-        "\n{\"cloud_id\":\"cloudId\",\"folder_id\":\"folderId\",\"resource_id\":\"streamPath\","
-        << "\"id\":\"used_storage-databaseId-tabletId-1651752943168-" << meteringSink.GetMeteringCounter() << "\","
-        << "\"schema\":\"ydb.serverless.v1\",\"tags\":{\"ydb_size\":6815},\"usage\":{\"quantity\":2000,\"unit\":\"byte*second\",\"start\":1651752943,\"finish\":1651754943},"
-        << "\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\",\"Category\":\"Topic\"},\"version\":\"1.0.0\",\"source_id\":\"tabletId\",\"source_wt\":1651754943}\n";
-    UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceStorageJson);
+    const TString referenceStorageJson = fmt::format(
+        R"(
+    {{
+        "cloud_id": "cloudId",
+        "folder_id": "folderId",
+        "resource_id": "streamPath",
+        "id": "used_storage-databaseId-tabletId-1651752943168-{counter}",
+        "schema": "ydb.serverless.v1",
+        "tags": {{
+            "ydb_size": 6815
+        }},
+        "usage": {{
+            "quantity": 2000,
+            "unit": "byte*second",
+            "start": 1651752943,
+            "finish": 1651754943
+        }},
+        "labels": {{
+            "datastreams_stream_name": "streamName",
+            "ydb_database": "databaseId",
+            "Category": "Topic"
+        }},
+        "version": "1.0.0",
+        "source_id": "tabletId",
+        "source_wt": 1651754943
+    }})",
+        fmt::arg("counter", meteringSink.GetMeteringCounter())
+    );
+    UNIT_ASSERT_VALUES_EQUAL(ReformatJson(fullMetering), ReformatJson(referenceStorageJson));
 }
 
 Y_UNIT_TEST(UnusedStorageV1) {

@@ -5,29 +5,29 @@
 #include "leader_election.h"
 #include "probes.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
+
+#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/metrics/sanitize_label.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
+#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
+
 #include <yql/essentials/public/purecalc/common/interface.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/metrics/sanitize_label.h>
-#include <ydb/core/mon/mon.h>
-
-#include <ydb/core/protos/config.pb.h>
-
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
-#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/generic/queue.h>
 #include <util/stream/format.h>
-
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 namespace NFq {
 
@@ -120,14 +120,17 @@ struct TQueryStatKeyHash {
 
 struct TAggQueryStat {
     TAggQueryStat() = default;
-    TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams)
+    TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
         : QueryId(queryId)
         , SubGroup(counters) {
-        for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
-            SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+        auto topicGroup = SubGroup;
+        if (enableStreamingQueriesCounters) {
+            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
+            SubGroup = SubGroup->GetSubgroup("query_id", queryId);
+            topicGroup = SubGroup->GetSubgroup("read_group", SanitizeLabel(sourceParams.GetReadGroup()));
         }
-        auto queryGroup = SubGroup->GetSubgroup("query_id", queryId);
-        auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(sourceParams.GetReadGroup()));
         MaxQueuedBytesCounter = topicGroup->GetCounter("MaxQueuedBytes");
         AvgQueuedBytesCounter = topicGroup->GetCounter("AvgQueuedBytes");
         MaxReadLagCounter = topicGroup->GetCounter("MaxReadLag");
@@ -324,7 +327,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TDuration LastUpdateMetricsPeriod;
     };
 
-    const NKikimrConfig::TSharedReadingConfig Config;
+    const TRowDispatcherSettings Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TActorId CompileServiceActorId;
     TMaybe<TActorId> CoordinatorActorId;
@@ -414,10 +417,11 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TMap<ui64, TAtomicSharedPtr<TConsumerInfo>> ConsumersByEventQueueId;
     THashMap<TTopicSessionKey, TTopicSessionInfo, TTopicSessionKeyHash> TopicSessions;
     TMap<TActorId, TReadActorInfo> ReadActorsInternalState;
+    bool EnableStreamingQueriesCounters = false;
 
 public:
     explicit TRowDispatcher(
-        const NKikimrConfig::TSharedReadingConfig& config,
+        const TRowDispatcherSettings& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& tenant,
@@ -428,7 +432,8 @@ public:
         const NYql::IPqGateway::TPtr& pqGateway,
         NYdb::TDriver driver,
         NActors::TMon* monitoring = nullptr,
-        NActors::TActorId nodesManagerId = {}
+        NActors::TActorId nodesManagerId = {},
+        bool enableStreamingQueriesCounters = false
     );
 
     void Bootstrap();
@@ -501,7 +506,7 @@ public:
 };
 
 TRowDispatcher::TRowDispatcher(
-    const NKikimrConfig::TSharedReadingConfig& config,
+    const TRowDispatcherSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
@@ -512,7 +517,8 @@ TRowDispatcher::TRowDispatcher(
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
-    NActors::TActorId nodesManagerId)
+    NActors::TActorId nodesManagerId,
+    bool enableStreamingQueriesCounters)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , CredentialsFactory(credentialsFactory)
@@ -528,6 +534,7 @@ TRowDispatcher::TRowDispatcher(
     , Driver(driver)
     , Monitoring(monitoring)
     , NodesManagerId(nodesManagerId)
+    , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {
     Y_ENSURE(!Tenant.empty());
 }
@@ -545,8 +552,8 @@ void TRowDispatcher::Bootstrap() {
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     // Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());  // Logs (InternalState) is too big
-    Y_ENSURE(Config.GetSendStatusPeriodSec() > 0);
-    Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatistic());
+    Y_ENSURE(Config.GetSendStatusPeriod() > TDuration::Zero());
+    Schedule(Config.GetSendStatusPeriod(), new NFq::TEvPrivate::TEvSendStatistic());
 
     if (Monitoring) {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(FQ_ROW_DISPATCHER_PROVIDER));
@@ -668,7 +675,7 @@ void TRowDispatcher::UpdateMetrics() {
                 TQueryStatKey statKey{consumer->QueryId, key.ReadGroup};
                 auto& stats = AggrStats.LastQueryStats.emplace(
                     statKey,
-                    TAggQueryStat(consumer->QueryId, Metrics.Counters, consumer->SourceParams)).first->second;
+                    TAggQueryStat(consumer->QueryId, Metrics.Counters, consumer->SourceParams, EnableStreamingQueriesCounters)).first->second;
                 stats.Add(partition.Stat, partition.FilteredBytes);
                 partition.FilteredBytes = 0;
             }
@@ -844,9 +851,11 @@ void TRowDispatcher::UpdateReadActorsInternalState() {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", read group " << ev->Get()->Record.GetSource().GetReadGroup() << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " part id " << JoinSeq(',', ev->Get()->Record.GetPartitionIds()) << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
-    auto queryGroup = Metrics.Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
-    auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(ev->Get()->Record.GetSource().GetReadGroup()));
-    topicGroup->GetCounter("StartSession", true)->Inc();
+    if (EnableStreamingQueriesCounters) {
+        auto queryGroup = Metrics.Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
+        auto topicGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(ev->Get()->Record.GetSource().GetReadGroup()));
+        topicGroup->GetCounter("StartSession", true)->Inc();
+    }
 
     LWPROBE(StartSession, ev->Sender.ToString(), ev->Get()->Record.GetQueryId(), ev->Get()->Record.ByteSizeLong());
 
@@ -899,7 +908,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 Counters,
                 CountersRoot,
                 PqGateway,
-                MaxSessionBufferSizeBytes
+                MaxSessionBufferSizeBytes,
+                EnableStreamingQueriesCounters
                 );
             TSessionInfo& sessionInfo = topicSessionInfo.Sessions[sessionActorId];
             sessionInfo.Consumers[ev->Sender] = consumerInfo;
@@ -1164,7 +1174,7 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
     LOG_ROW_DISPATCHER_TRACE("TEvPrivate::TEvSendStatistic");
 
     UpdateCpuTime();
-    Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatistic());
+    Schedule(Config.GetSendStatusPeriod(), new NFq::TEvPrivate::TEvSendStatistic());
     for (auto& [actorId, consumer] : Consumers) {
         if (!NodesTracker.GetNodeConnected(actorId.NodeId())) {
             continue;       // Wait Connected to prevent retry_queue increases.
@@ -1295,7 +1305,7 @@ void TRowDispatcher::UpdateCpuTime() {
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewRowDispatcher(
-    const NKikimrConfig::TSharedReadingConfig& config,
+    const TRowDispatcherSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
@@ -1306,7 +1316,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NYql::IPqGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
-    NActors::TActorId nodesManagerId)
+    NActors::TActorId nodesManagerId,
+    bool enableStreamingQueriesCounters)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
@@ -1320,7 +1331,8 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
         pqGateway,
         driver,
         monitoring,
-        nodesManagerId));
+        nodesManagerId,
+        enableStreamingQueriesCounters));
 }
 
 } // namespace NFq

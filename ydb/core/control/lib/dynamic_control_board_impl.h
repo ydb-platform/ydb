@@ -1,11 +1,12 @@
 #pragma once
 
 #include "immediate_control_board_wrapper.h"
-#include "immediate_control_board_html_renderer.h"
 
 #include <ydb/core/util/concurrent_rw_hash.h>
 
 namespace NKikimr {
+
+class TControlBoardTableHtmlRenderer;
 
 class TDynamicControlBoard : public TThrRefBase {
 private:

@@ -198,77 +198,7 @@ public:
             return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
         }
 
-        auto addLocks = [this](const ui64 taskId, const auto& data) {
-            if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
-                NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
-                YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
-                NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
-                for (auto& lock : info.GetLocks()) {
-                    if (!TxManager) {
-                        Locks.push_back(lock);
-                    }
-
-                    const auto& task = TasksGraph.GetTask(taskId);
-                    const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-                    ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-
-                    if (TxManager) {
-                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
-                        TxManager->AddLock(lock.GetDataShard(), lock);
-                    }
-                }
-
-                if (!BatchOperationSettings.Empty() && info.HasBatchOperationMaxKey()) {
-                    if (ResponseEv->BatchOperationMaxKeys.empty()) {
-                        for (auto keyId : info.GetBatchOperationKeyIds()) {
-                            ResponseEv->BatchOperationKeyIds.push_back(keyId);
-                        }
-                    }
-
-                    ResponseEv->BatchOperationMaxKeys.emplace_back(info.GetBatchOperationMaxKey());
-                }
-            } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
-                NKikimrKqp::TEvKqpOutputActorResultInfo info;
-                YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
-                NDataIntegrity::LogIntegrityTrails("OutputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
-                for (auto& lock : info.GetLocks()) {
-                    if (!TxManager) {
-                        Locks.push_back(lock);
-                    }
-
-                    const auto& task = TasksGraph.GetTask(taskId);
-                    const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
-                    ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                    if (TxManager) {
-                        YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
-                        IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
-                        if (info.GetHasRead()) {
-                            flags |= IKqpTransactionManager::EAction::READ;
-                        }
-
-                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                        TxManager->AddAction(lock.GetDataShard(), flags);
-                        TxManager->AddLock(lock.GetDataShard(), lock);
-                    }
-                }
-            }
-        };
-
-        for (auto& [_, extraData] : ExtraData) {
-            for (const auto& source : extraData.Data.GetSourcesExtraData()) {
-                addLocks(extraData.TaskId, source);
-            }
-            for (const auto& transform : extraData.Data.GetInputTransformsData()) {
-                addLocks(extraData.TaskId, transform);
-            }
-            for (const auto& sink : extraData.Data.GetSinksExtraData()) {
-                addLocks(extraData.TaskId, sink);
-            }
-            if (extraData.Data.HasComputeExtraData()) {
-                addLocks(extraData.TaskId, extraData.Data.GetComputeExtraData());
-            }
-        }
+        FillLocksFromExtraData();
 
         if (TxManager) {
             TxManager->SetHasSnapshot(GetSnapshot().IsValid());
@@ -304,7 +234,6 @@ public:
                 IEventHandle::FlagTrackDelivery,
                 0,
                 ExecuterSpan.GetTraceId());
-            MakeResponseAndPassAway();
             return;
         } else if (Request.UseImmediateEffects) {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -368,17 +297,15 @@ public:
     }
 
     void HandleFinalize(TEvKqpBuffer::TEvResult::TPtr& ev) {
-        if (ev->Get()->Stats) {
-            if (Stats) {
-                Stats->AddBufferStats(std::move(*ev->Get()->Stats));
-            }
+        if (ev->Get()->Stats && Stats) {
+            Stats->AddBufferStats(std::move(*ev->Get()->Stats));
         }
         MakeResponseAndPassAway();
     }
 
-    void HandleFinalize(TEvents::TEvUndelivered::TPtr&) {
-        auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, "Buffer actor isn't available.");
-        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
+    void HandleFinalize(TEvents::TEvUndelivered::TPtr& ev) {
+        AFL_ENSURE(ev->Sender == BufferActorId);
+        LOG_W("Got Undelivered from BufferActor: " << ev->Sender);
     }
 
     void MakeResponseAndPassAway() {
@@ -387,13 +314,15 @@ public:
 
         ResponseEv->Snapshot = GetSnapshot();
 
-        if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
+        if (TxManager && LockHandle) {
+            // Keep LockHandle even if locks are empty.
+            ResponseEv->LockHandle = std::move(LockHandle);
+        }
+        if (!TxManager && !Locks.empty()) {
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-            if (!TxManager) {
-                BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
-            }
+            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
         }
 
         if (TxManager) {
@@ -664,7 +593,7 @@ private:
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
                 return;
             }
-            case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE:
+            case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
             case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
                 if (res->Record.HasOverloadSubscribed()) {
                     LOG_D("Shard " << shardId << " is overloaded. Waiting.");
@@ -974,9 +903,9 @@ private:
                         case NKikimrTxDataShard::TError::SCHEME_ERROR:
                             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, YqlIssue({},
                                 TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
-                        //TODO Split OUT_OF_SPACE and DISK_SPACE_EXHAUSTED cases. The first one is temporary, the second one is permanent.
-                        case NKikimrTxDataShard::TError::OUT_OF_SPACE:
-                        case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED: {
+                        //TODO Split DISK_GROUP_OUT_OF_SPACE and DATABASE_DISK_SPACE_QUOTA_EXCEEDED cases. The first one is temporary, the second one is permanent.
+                        case NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE:
+                        case NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED: {
                             auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
                             AddDataShardErrors(result, issue);
                             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
@@ -1213,6 +1142,7 @@ private:
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
+                hFunc(NActors::NMon::TEvHttpInfo, HandleHttpInfo);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
@@ -1271,6 +1201,9 @@ private:
 
     void Handle(TEvKqpBuffer::TEvError::TPtr& ev) {
         auto& msg = *ev->Get();
+        if (msg.Stats && Stats) {
+            Stats->AddBufferStats(std::move(*msg.Stats));
+        }
         TBase::HandleAbortExecution(msg.StatusCode, msg.Issues, false);
     }
 
@@ -1925,15 +1858,9 @@ private:
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];
-            AFL_ENSURE(tx.Body->StagesSize() < (static_cast<ui64>(1) << TKqpTasksGraph::PriorityTxShift));
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 const auto& stage = tx.Body->GetStages(stageIdx);
                 const auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
-
-                if (graphRestored && (stageInfo.Meta.ShardOperations || stageInfo.Meta.ShardKind != NSchemeCache::ETableKind::KindUnknown)) {
-                    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, YqlIssue({}, NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Restore is not supported for table operations"));
-                    return;
-                }
 
                 if (stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
                     TMaybe<TString> error;
@@ -1955,7 +1882,8 @@ private:
                 }
 
                 if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))) {
-                    auto error = TStringBuilder() << "Data manipulation queries do not support column shard tables.";
+                    auto error = TStringBuilder()
+                        << "Data manipulation queries with column-oriented tables are supported only by API QueryService.";
                     LOG_E(error);
                     ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                         YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, error));
@@ -1964,7 +1892,12 @@ private:
             }
         }
 
-        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
+        size_t sourceScanPartitionsCount = 0;
+
+        if (!graphRestored) {
+            sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
+        }
+
         OnEmptyResult();
 
         TIssue validateIssue;
@@ -2147,6 +2080,11 @@ private:
                 }
                 const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
+                    HasDatashardSourceScan = true;
+                }
+
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
                     YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
                     HasDatashardSourceScan = true;
                 }
@@ -2816,6 +2754,7 @@ private:
         }
 
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            FillLocksFromExtraData();
             PassAway();
         }
     }
@@ -2825,6 +2764,7 @@ private:
         LOG_I("Timed out on waiting for Compute Actors to finish - forcing shutdown. Sender: " << ev->Sender);
 
         if (ev->Sender == SelfId()) {
+            FillLocksFromExtraData();
             PassAway();
         }
     }
@@ -2836,6 +2776,7 @@ private:
 
         // In case of external timeout the response is already sent to the client - no need to wait for stats.
         if (statusCode == Ydb::StatusIds::TIMEOUT) {
+            FillLocksFromExtraData();
             LOG_I("External timeout while waiting for Compute Actors to finish - forcing shutdown. Sender: " << ev->Sender);
             PassAway();
         }
@@ -2856,10 +2797,11 @@ private:
 
     void StartCheckpointCoordinator() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
-        bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig()
-            && QueryServiceConfig.GetCheckpointsConfig().GetEnabled()
+        bool disableCheckpoints = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetDisableCheckpoints();
+
+        bool enableCheckpointCoordinator = AppData()->FeatureFlags.GetEnableStreamingQueries()
             && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
-            && context && context->CheckpointId;
+            && context && context->CheckpointId && !disableCheckpoints;
         if (!enableCheckpointCoordinator) {
             return;
         }
@@ -2878,13 +2820,17 @@ private:
             }
         }
 
+        auto counters = Counters->Counters->GetKqpCounters();
+        if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
+            counters = counters->GetSubgroup("path", context->StreamingQueryPath);
+        }
         const auto& checkpointId = context->CheckpointId;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
             ::NFq::TCoordinatorId(checkpointId, Generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
-            QueryServiceConfig.GetCheckpointsConfig(),
-            Counters->Counters->GetKqpCounters(),
+            {},
+            counters,
             graphParams,
             stateLoadMode,
             streamingDisposition).Release());
@@ -2938,6 +2884,80 @@ private:
             case TShardState::EState::Prepared:  return "Prepared"sv;
             case TShardState::EState::Executing: return "Executing"sv;
             case TShardState::EState::Finished:  return "Finished"sv;
+        }
+    }
+
+    void FillLocksFromExtraData() {
+        auto addLocks = [this](const ui64 taskId, const auto& data) {
+            if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
+                NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
+                YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
+                NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
+                for (auto& lock : info.GetLocks()) {
+                    if (!TxManager) {
+                        Locks.push_back(lock);
+                    }
+
+                    const auto& task = TasksGraph.GetTask(taskId);
+                    const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+                    ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+
+                    if (TxManager) {
+                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+                        TxManager->AddLock(lock.GetDataShard(), lock);
+                    }
+                }
+
+                if (!BatchOperationSettings.Empty() && info.HasBatchOperationMaxKey()) {
+                    if (ResponseEv->BatchOperationMaxKeys.empty()) {
+                        for (auto keyId : info.GetBatchOperationKeyIds()) {
+                            ResponseEv->BatchOperationKeyIds.push_back(keyId);
+                        }
+                    }
+
+                    ResponseEv->BatchOperationMaxKeys.emplace_back(info.GetBatchOperationMaxKey());
+                }
+            } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
+                NKikimrKqp::TEvKqpOutputActorResultInfo info;
+                YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
+                NDataIntegrity::LogIntegrityTrails("OutputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
+                for (auto& lock : info.GetLocks()) {
+                    if (!TxManager) {
+                        Locks.push_back(lock);
+                    }
+
+                    const auto& task = TasksGraph.GetTask(taskId);
+                    const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+                    ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                    if (TxManager) {
+                        YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
+                        IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
+                        if (info.GetHasRead()) {
+                            flags |= IKqpTransactionManager::EAction::READ;
+                        }
+
+                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                        TxManager->AddAction(lock.GetDataShard(), flags);
+                        TxManager->AddLock(lock.GetDataShard(), lock);
+                    }
+                }
+            }
+        };
+
+        for (auto& [_, extraData] : ExtraData) {
+            for (const auto& source : extraData.Data.GetSourcesExtraData()) {
+                addLocks(extraData.TaskId, source);
+            }
+            for (const auto& transform : extraData.Data.GetInputTransformsData()) {
+                addLocks(extraData.TaskId, transform);
+            }
+            for (const auto& sink : extraData.Data.GetSinksExtraData()) {
+                addLocks(extraData.TaskId, sink);
+            }
+            if (extraData.Data.HasComputeExtraData()) {
+                addLocks(extraData.TaskId, extraData.Data.GetComputeExtraData());
+            }
         }
     }
 

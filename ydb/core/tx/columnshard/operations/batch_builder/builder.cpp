@@ -47,22 +47,37 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         return;
     }
     auto batch = preparedConclusion.DetachResult();
+
     std::shared_ptr<IMerger> merger;
+    bool readOnlyConflicts = false;
+    auto handleReplace = [&]() -> bool {
+        if (Context.GetNoTxWrite()) {
+            NActors::TActivationContext::ActorSystem()->Send(Context.GetBufferizationPortionsActorId(),
+                new NWritingPortions::TEvAddInsertedDataToBuffer(
+                    std::make_shared<NEvWrite::TWriteData>(WriteData), batch, std::make_shared<TWritingContext>(Context)));
+            return false;
+        } else if (Context.IsSnapshotIsolated()) {
+            merger = std::make_shared<TInsertMerger>(batch, Context.GetActualSchema());
+            readOnlyConflicts = true;
+            return true;
+        } else {
+            std::shared_ptr<NConveyor::ITask> task =
+                std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batch.GetContainer(), Context);
+            NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
+            return false;
+        }
+    };
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Upsert: {
             const std::vector<std::shared_ptr<arrow::Field>> defaultFields =
                 Context.GetActualSchema()->GetAbsentFields(batch.GetContainer()->schema());
             if (defaultFields.empty()) {
-                if (!Context.GetNoTxWrite()) {
-                    std::shared_ptr<NConveyor::ITask> task =
-                        std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batch.GetContainer(), Context);
-                    NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
+                auto proceed = handleReplace();
+                if (proceed) {
+                    break;
                 } else {
-                    NActors::TActivationContext::ActorSystem()->Send(Context.GetBufferizationPortionsActorId(),
-                        new NWritingPortions::TEvAddInsertedDataToBuffer(
-                            std::make_shared<NEvWrite::TWriteData>(WriteData), batch, std::make_shared<TWritingContext>(Context)));
+                    return;
                 }
-                return;
             } else {
                 auto insertionConclusion = Context.GetActualSchema()->CheckColumnsDefault(defaultFields);
                 auto conclusion = Context.GetActualSchema()->BuildDefaultBatch(Context.GetActualSchema()->GetIndexInfo().ArrowSchema(), 1, true);
@@ -89,20 +104,16 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         }
         case NEvWrite::EModificationType::Replace:
         case NEvWrite::EModificationType::Delete: {
-            if (!Context.GetNoTxWrite()) {
-                std::shared_ptr<NConveyor::ITask> task =
-                    std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batch.GetContainer(), Context);
-                NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
+            auto proceed = handleReplace();
+            if (proceed) {
+                break;
             } else {
-                NActors::TActivationContext::ActorSystem()->Send(Context.GetBufferizationPortionsActorId(),
-                    new NWritingPortions::TEvAddInsertedDataToBuffer(
-                        std::make_shared<NEvWrite::TWriteData>(WriteData), batch, std::make_shared<TWritingContext>(Context)));
+                return;
             }
-            return;
         }
     }
     std::shared_ptr<NDataReader::IRestoreTask> task =
-        std::make_shared<NOlap::TModificationRestoreTask>(std::move(WriteData), merger, batch, Context);
+        std::make_shared<NOlap::TModificationRestoreTask>(std::move(WriteData), merger, batch, Context, readOnlyConflicts);
     NActors::TActivationContext::AsActorContext().Register(new NDataReader::TActor(task));
 }
 

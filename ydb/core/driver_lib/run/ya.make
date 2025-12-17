@@ -55,6 +55,7 @@ PEERDIR(
     ydb/core/cms
     ydb/core/cms/console
     ydb/core/control
+    ydb/core/counters_info
     ydb/core/driver_lib/base_utils
     ydb/core/driver_lib/cli_config_base
     ydb/core/driver_lib/cli_utils
@@ -176,6 +177,7 @@ PEERDIR(
     ydb/services/rate_limiter
     ydb/services/replication
     ydb/services/tablet
+    ydb/services/test_shard
     ydb/services/view
     ydb/services/ydb
     yql/essentials/minikql/comp_nodes/llvm16

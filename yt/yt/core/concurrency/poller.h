@@ -106,6 +106,14 @@ struct IPoller
     //! Returns the invoker capable of executing arbitrary callbacks
     //! in the poller's context.
     virtual IInvokerPtr GetInvoker() const = 0;
+
+    // Extension methods
+
+    //! Returns internal thread pool.
+    virtual ITwoLevelFairShareThreadPoolPtr GetFairShareThreadPool() const
+    {
+        YT_UNIMPLEMENTED();
+    }
 };
 
 DEFINE_REFCOUNTED_TYPE(IPoller)

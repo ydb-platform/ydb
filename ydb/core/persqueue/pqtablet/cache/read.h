@@ -15,14 +15,14 @@ namespace NPQ {
     }
 
     /// Intablet cache proxy: Partition <-> CacheProxy <-> KV
-    class TPQCacheProxy : public TBaseActor<TPQCacheProxy> {
+    class TPQCacheProxy : public TBaseTabletActor<TPQCacheProxy> {
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::PERSQUEUE_CACHE_ACTOR;
         }
 
         TPQCacheProxy(const TActorId& tablet, ui64 tabletId)
-        : TBaseActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
+        : TBaseTabletActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
         , Cookie(0)
         , Cache(tabletId)
         , CountersUpdateTime(TAppData::TimeProvider->Now())
@@ -368,8 +368,7 @@ namespace NPQ {
                 Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix), blob.Value);
 
             if (resp->Overload) {
-                LOG_N("Have to remove new data from cache. Topic " << TopicName << ", tablet id" << TabletId
-                                                                 << ", cookie " << resp->Cookie);
+                LOG_D("Have to remove new data from cache. Topic " << TopicName << ", cookie " << resp->Cookie);
             }
 
             UpdateCounters(ctx);

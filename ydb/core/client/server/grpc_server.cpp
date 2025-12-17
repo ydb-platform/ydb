@@ -9,6 +9,7 @@
 #include <ydb/library/grpc/server/grpc_request.h>
 #include <ydb/library/grpc/server/grpc_counters.h>
 #include <ydb/library/grpc/server/grpc_async_ctx_base.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 #include <ydb/core/protos/node_broker.pb.h>
 
 #include <ydb/core/protos/cms.pb.h>
@@ -45,13 +46,13 @@ namespace NKikimr {
 namespace NGRpcProxy {
 
 TGRpcService::TGRpcService(NActors::TActorId grpcRequestProxyId)
-    : ActorSystem(nullptr)
-    , GRpcRequestProxyId(grpcRequestProxyId)
+    : ActorSystem_(nullptr)
+    , GRpcRequestProxyId_(grpcRequestProxyId)
 {}
 
 void TGRpcService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
-    CQ = cq;
-    Logger = std::move(logger);
+    CQ_ = cq;
+    Logger_ = std::move(logger);
     Y_ASSERT(InitCb_);
     InitCb_();
 }
@@ -61,10 +62,10 @@ TFuture<void> TGRpcService::Prepare(TActorSystem* system, const TActorId& pqMeta
     auto promise = NewPromise<void>();
     InitCb_ = [=, this]() mutable {
         try {
-            ActorSystem = system;
-            PQMeta = pqMeta;
-            MsgBusProxy = msgBusProxy;
-            Counters = counters;
+            ActorSystem_ = system;
+            PQMeta_ = pqMeta;
+            MsgBusProxy_ = msgBusProxy;
+            Counters_ = counters;
 
             promise.SetValue();
         } catch (...) {
@@ -92,71 +93,65 @@ i64 TGRpcService::GetCurrentInFlight() const {
 }
 
 void TGRpcService::Start() {
-    Y_ABORT_UNLESS(ActorSystem);
-    ui32 nodeId = ActorSystem->NodeId;
-    ActorSystem->Send(MakeGRpcProxyStatusID(nodeId), new TEvGRpcProxyStatus::TEvSetup(true, PersQueueWriteSessionsMaxCount,
-                                        PersQueueReadSessionsMaxCount));
-    SetupIncomingRequests(Logger);
+    Y_ABORT_UNLESS(ActorSystem_);
+    ui32 nodeId = ActorSystem_->NodeId;
+    ActorSystem_->Send(MakeGRpcProxyStatusID(nodeId), new TEvGRpcProxyStatus::TEvSetup(true, PersQueueWriteSessionsMaxCount_,
+                                        PersQueueReadSessionsMaxCount_));
+    SetupIncomingRequests(Logger_);
 }
 
 void TGRpcService::RegisterRequestActor(NActors::IActor* req) {
-    ActorSystem->Register(req, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+    ActorSystem_->Register(req, TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
 }
 
+template <typename TReq, typename TResp, NKikimr::NGRpcService::NRuntimeEvents::EType RuntimeEventType = NKikimr::NGRpcService::NRuntimeEvents::EType::COMMON>
+using TGrpcRequestLegacyCall = NKikimr::NGRpcService::TGrpcRequestNoOperationCall<TReq, TResp, RuntimeEventType, NKikimr::NGRpcService::NLegacyGrpcService::TLegacyGrpcMethodAccessorTraits<TReq, TResp>>;
+
 void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
-
     using namespace ::NKikimr::NGRpcService;
     using namespace ::NKikimr::NGRpcService::NLegacyGrpcService;
+    using namespace NKikimrClient;
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#define SETUP_SERVER_METHOD(methodName, In, Out, createActorCb, rlMode, requestType, counterName, auditMode) \
-    MakeIntrusive<NGRpcService::TGRpcRequest<                                                                \
-        NKikimrClient::In,                                                                                   \
-        NKikimrClient::Out,                                                                                  \
-        TGRpcService>>                                                                                       \
-    (                                                                                                        \
-        this,                                                                                                \
-        &Service_,                                                                                           \
-        CQ,                                                                                                  \
-        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                      \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                               \
-            ActorSystem->Send(GRpcRequestProxyId, new TGrpcRequestNoOperationCall<                           \
-                NKikimrClient::In,                                                                           \
-                NKikimrClient::Out,                                                                          \
-                NRuntimeEvents::EType::COMMON,                                                               \
-                NLegacyGrpcService::TLegacyGrpcMethodAccessorTraits<NKikimrClient::In, NKikimrClient::Out>>( \
-                    reqCtx, createActorCb,                                                                   \
-                    TRequestAuxSettings {                                                                    \
-                        .RlMode = TRateLimiterMode::rlMode,                                                  \
-                        .AuditMode = auditMode,                                                              \
-                        .RequestType = NJaegerTracing::ERequestType::requestType,                            \
-                    }));                                                                                     \
-        },                                                                                                   \
-        &NKikimrClient::TGRpcServer::AsyncService::Y_CAT(Request, methodName),                               \
-        "Legacy/" Y_STRINGIZE(methodName),                                                                   \
-        logger,                                                                                              \
-        getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                                   \
-    )->Run()                                                                                                 \
-    /**/
+#ifdef SETUP_SERVER_METHOD
+#error SETUP_SERVER_METHOD macro already defined
+#endif
 
-    SETUP_SERVER_METHOD(SchemeOperation, TSchemeOperation, TResponse, DoSchemeOperation(MsgBusProxy, ActorSystem), Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_SERVER_METHOD(SchemeOperationStatus, TSchemeOperationStatus, TResponse, DoSchemeOperationStatus, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
-    SETUP_SERVER_METHOD(SchemeDescribe, TSchemeDescribe, TResponse, DoSchemeDescribe(MsgBusProxy, ActorSystem), Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
-    SETUP_SERVER_METHOD(ChooseProxy, TChooseProxyRequest, TResponse, DoChooseProxy, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
-    SETUP_SERVER_METHOD(PersQueueRequest, TPersQueueRequest, TResponse, DoPersQueueRequest(MsgBusProxy, ActorSystem), Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
-    SETUP_SERVER_METHOD(SchemeInitRoot, TSchemeInitRoot, TResponse, DoSchemeInitRoot(MsgBusProxy, ActorSystem), Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_SERVER_METHOD(ResolveNode, TResolveNodeRequest, TResponse, DoResolveNode, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
-    SETUP_SERVER_METHOD(FillNode, TFillNodeRequest, TResponse, DoFillNode, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_SERVER_METHOD(DrainNode, TDrainNodeRequest, TResponse, DoDrainNode, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_SERVER_METHOD(BlobStorageConfig, TBlobStorageConfigRequest, TResponse, DoBlobStorageConfig, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_SERVER_METHOD(HiveCreateTablet, THiveCreateTablet, TResponse, DoHiveCreateTablet, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_SERVER_METHOD(TestShardControl, TTestShardControlRequest, TResponse, DoTestShardControl, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_SERVER_METHOD(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, DoRegisterNode, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::NodeRegistration));
-    SETUP_SERVER_METHOD(CmsRequest, TCmsRequest, TCmsResponse, DoCmsRequest, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_SERVER_METHOD(ConsoleRequest, TConsoleRequest, TConsoleResponse, DoConsoleRequest, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_SERVER_METHOD(InterconnectDebug, TInterconnectDebug, TResponse, DoInterconnectDebug, Off, UNSPECIFIED, legacy, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_SERVER_METHOD(TabletStateRequest, TTabletStateRequest, TResponse, DoTabletStateRequest, Off, UNSPECIFIED, legacy, TAuditMode::NonModifying());
+#define SETUP_SERVER_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_RUNTIME_EVENT_METHOD(methodName,                 \
+        inputType,                                         \
+        outputType,                                        \
+        methodCallback,                                    \
+        rlMode,                                            \
+        requestType,                                       \
+        YDB_API_DEFAULT_COUNTER_BLOCK(legacy, methodName), \
+        auditMode,                                         \
+        COMMON,                                            \
+        TGrpcRequestLegacyCall,                            \
+        GRpcRequestProxyId_,                               \
+        CQ_,                                               \
+        nullptr,                                           \
+        nullptr)
+
+    SETUP_SERVER_METHOD(SchemeOperation, TSchemeOperation, TResponse, DoSchemeOperation(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(SchemeOperationStatus, TSchemeOperationStatus, TResponse, DoSchemeOperationStatus, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_SERVER_METHOD(SchemeDescribe, TSchemeDescribe, TResponse, DoSchemeDescribe(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_SERVER_METHOD(ChooseProxy, TChooseProxyRequest, TResponse, DoChooseProxy, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_SERVER_METHOD(PersQueueRequest, TPersQueueRequest, TResponse, DoPersQueueRequest(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_SERVER_METHOD(SchemeInitRoot, TSchemeInitRoot, TResponse, DoSchemeInitRoot(MsgBusProxy_, ActorSystem_), RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(ResolveNode, TResolveNodeRequest, TResponse, DoResolveNode, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_SERVER_METHOD(FillNode, TFillNodeRequest, TResponse, DoFillNode, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(DrainNode, TDrainNodeRequest, TResponse, DoDrainNode, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(BlobStorageConfig, TBlobStorageConfigRequest, TResponse, DoBlobStorageConfig, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(HiveCreateTablet, THiveCreateTablet, TResponse, DoHiveCreateTablet, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(TestShardControl, TTestShardControlRequest, TResponse, DoTestShardControl, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, DoRegisterNode, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::NodeRegistration));
+    SETUP_SERVER_METHOD(CmsRequest, TCmsRequest, TCmsResponse, DoCmsRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(ConsoleRequest, TConsoleRequest, TConsoleResponse, DoConsoleRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(InterconnectDebug, TInterconnectDebug, TResponse, DoInterconnectDebug, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_SERVER_METHOD(TabletStateRequest, TTabletStateRequest, TResponse, DoTabletStateRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
+
+#undef SETUP_SERVER_METHOD
 }
 
 }

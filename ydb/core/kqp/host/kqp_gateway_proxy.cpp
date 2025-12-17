@@ -766,6 +766,24 @@ public:
         }
     }
 
+    TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) override {
+        CHECK_PREPARED_DDL(TruncateTable);
+
+        Y_UNUSED(settings);
+        if (cluster != SessionCtx->GetCluster()) {
+            return InvalidCluster<TGenericResult>(cluster);
+        }
+
+        auto tablePromise = NewPromise<TGenericResult>();
+        auto code = Ydb::StatusIds::BAD_REQUEST;
+        auto error = TStringBuilder() << "Truncate table not supported yet";
+        IKqpGateway::TGenericResult errResult;
+        errResult.AddIssue(NYql::TIssue(error));
+        errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+        tablePromise.SetValue(errResult);
+        return tablePromise.GetFuture();
+    }
+
     TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
         Y_UNUSED(replaceIfExists);
         CHECK_PREPARED_DDL(CreateTable);
@@ -1368,7 +1386,8 @@ public:
             op.SetPrefix(settings.Prefix);
 
             if (settings.Settings.IncrementalBackupEnabled) {
-                op.MutableIncrementalBackupConfig();
+                auto* config = op.MutableIncrementalBackupConfig();
+                config->SetOmitIndexes(settings.Settings.OmitIndexes);
             }
 
             auto errOpt = std::visit(

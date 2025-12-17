@@ -1,6 +1,7 @@
 #include "pretty_table.h"
 
 #include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 #include <util/stream/format.h>
@@ -83,7 +84,7 @@ public:
     }
 
     void Print() {
-        NColorizer::TColors colors = NColorizer::AutoColors(Output_);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Output_);
         
         Output_ << colors.Default();
         Output_ << "│ ";

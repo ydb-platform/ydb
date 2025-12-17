@@ -290,6 +290,11 @@ public:
         return AuxInvoker_;
     }
 
+    ITwoLevelFairShareThreadPoolPtr GetFairShareThreadPool() const override
+    {
+        return FairShareThreadPool_;
+    }
+
     void Shutdown() override
     {
         TThread::Stop();
@@ -575,6 +580,11 @@ public:
     IInvokerPtr GetInvoker() const override
     {
         return Poller_->GetInvoker();
+    }
+
+    ITwoLevelFairShareThreadPoolPtr GetFairShareThreadPool() const override
+    {
+        return Poller_->GetFairShareThreadPool();
     }
 
 private:

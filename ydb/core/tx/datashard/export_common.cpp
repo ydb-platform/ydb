@@ -24,8 +24,7 @@ static void ResortColumns(
         return it->second;
     });
 }
-
-TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
+static TMaybe<Ydb::Table::CreateTableRequest> GenRowTableScheme(
         const TMap<ui32, TUserTable::TUserColumn>& columns,
         const NKikimrSchemeOp::TPathDescription& pathDesc)
 {
@@ -69,6 +68,47 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     }
 
     return scheme;
+}
+
+static TMaybe<Ydb::Table::CreateTableRequest> GenColumnTableScheme(
+        const TMap<ui32, TUserTable::TUserColumn>& columns,
+        const NKikimrSchemeOp::TPathDescription& pathDesc)
+{
+    if (!pathDesc.HasColumnTableDescription()) {
+        return Nothing();
+    }
+
+    Ydb::Table::CreateTableRequest scheme;
+
+    const auto& tableDesc = pathDesc.GetColumnTableDescription();
+    NKikimrMiniKQL::TType mkqlKeyType;
+
+    try {
+        FillColumnDescription(scheme, tableDesc);
+    } catch (const yexception&) {
+        return Nothing();
+    }
+
+    ResortColumns(*scheme.mutable_columns(), columns);
+
+    FillColumnFamilies(scheme, tableDesc);
+    FillAttributes(scheme, pathDesc);
+    FillPartitioningSettings(scheme, tableDesc);
+
+    return scheme;
+}
+
+TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
+        const TMap<ui32, TUserTable::TUserColumn>& columns,
+        const NKikimrSchemeOp::TPathDescription& pathDesc)
+{
+    if (pathDesc.HasTable()) {
+        return GenRowTableScheme(columns, pathDesc);
+    }
+    if (pathDesc.HasColumnTableDescription()) {
+        return GenColumnTableScheme(columns, pathDesc);
+    }
+    return Nothing();
 }
 
 TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(const NKikimrSchemeOp::TPathDescription& pathDesc) {

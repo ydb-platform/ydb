@@ -7,7 +7,9 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -17,13 +19,13 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
-    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view path) const {
-        auto idx = Stats.GetKeyIndexOptional(path);
-        if (!idx) {
-            return nullptr;
-        } else {
-            return Records->GetColumnVerified(*idx);
+    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path) const {
+        auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
+        for (ui32 i = 0; i < Stats.GetColumnsCount(); ++i) {
+            auto insertResult = jsonPathAccessorTrie->Insert(ToSubcolumnName(Stats.GetColumnName(i)), Records->GetColumnVerified(i));
+            AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
         }
+        return jsonPathAccessorTrie->GetAccessor(path);
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -49,7 +51,7 @@ public:
     private:
         ui32 KeyIndex;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        const arrow::StringArray* CurrentArrayData;
+        const arrow::BinaryArray* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
@@ -71,10 +73,12 @@ public:
             return KeyIndex;
         }
 
-        std::string_view GetValue() const {
+        std::string_view GetRawValue() const {
             auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
             return std::string_view(view.data(), view.size());
         }
+
+        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
 
         bool HasValue() const {
             return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
@@ -129,7 +133,7 @@ public:
         , Records(data) {
         AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
         for (auto&& i : Records->GetColumns()) {
-            AFL_VERIFY(i->GetDataType()->id() == arrow::utf8()->id());
+            AFL_VERIFY(i->GetDataType()->id() == arrow::binary()->id());
         }
     }
 };

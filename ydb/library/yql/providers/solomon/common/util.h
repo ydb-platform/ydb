@@ -30,6 +30,13 @@ struct TTimeseries {
     std::vector<double> Values;
 };
 
+struct TLabelValues {
+    TString Name;
+    bool Absent;
+    bool Truncated;
+    std::vector<TString> Values;
+};
+
 struct TMetricTimeRange {
     TSelectors Selectors;
     TString Program;

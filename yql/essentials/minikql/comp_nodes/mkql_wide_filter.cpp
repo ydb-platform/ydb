@@ -30,7 +30,7 @@ protected:
         auto** fields = GetFields(ctx);
 
         for (auto i = 0U; i < Items.size(); ++i) {
-            if (Predicate == Items[i] || Items[i]->GetDependencesCount() > 0U) {
+            if (Predicate == Items[i] || Items[i]->GetDependentsCount() > 0U) {
                 fields[i] = &Items[i]->RefValue(ctx);
             } else {
                 fields[i] = output[i];
@@ -43,7 +43,7 @@ protected:
 
         for (auto i = 0U; i < Items.size(); ++i) {
             if (const auto out = output[i]) {
-                if (Predicate == Items[i] || Items[i]->GetDependencesCount() > 0U) {
+                if (Predicate == Items[i] || Items[i]->GetDependentsCount() > 0U) {
                     *out = *fields[i];
                 }
             }
@@ -59,7 +59,7 @@ protected:
         }
 
         for (auto i = 0U; i < Items.size(); ++i) {
-            if (Predicate == Items[i] || Items[i]->GetDependencesCount() > 0U) {
+            if (Predicate == Items[i] || Items[i]->GetDependentsCount() > 0U) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getters[i](ctx, block));
                 if constexpr (ReplaceOriginalGetter) {
                     getters[i] = [node = Items[i]](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); };

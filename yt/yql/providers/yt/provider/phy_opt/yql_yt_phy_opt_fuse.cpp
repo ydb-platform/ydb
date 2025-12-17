@@ -84,6 +84,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduce(TExprBase no
     if (!path.Ranges().Maybe<TCoVoid>()) {
         return node;
     }
+    if (!path.QLFilter().Maybe<TCoVoid>()) {
+        return node;
+    }
     auto maybeInnerReduce = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtReduce>();
     if (!maybeInnerReduce) {
         return node;
@@ -348,6 +351,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
         newPaths.reserve(section.Paths().Size());
         for (const auto& path : section.Paths()) {
             if (fusedMap.Defined() || !path.Ranges().Maybe<TCoVoid>()) {
+                newPaths.push_back(path);
+                continue;
+            }
+
+            if (fusedMap.Defined() || !path.QLFilter().Maybe<TCoVoid>()) {
                 newPaths.push_back(path);
                 continue;
             }
@@ -657,10 +665,13 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseInnerMap(TExprBase 
     if (NYql::HasSetting(innerMap.Settings().Ref(), EYtSettingType::Flow) != NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)) {
         return node;
     }
-    if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::QLFilter)) {
+    if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)) {
         return node;
     }
     if (!path.Ranges().Maybe<TCoVoid>()) {
+        return node;
+    }
+    if (!path.QLFilter().Maybe<TCoVoid>()) {
         return node;
     }
 
@@ -795,7 +806,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
     if (NYql::HasAnySetting(inner.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::JobCount)) {
         return node;
     }
-    if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputApplied | EYtSettingType::QLFilter)) {
+    if (NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputApplied)) {
         return node;
     }
     if (outerMap.Input().Item(0).Settings().Size() != 0) {
@@ -805,6 +816,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
         return node;
     }
     if (!path.Ranges().Maybe<TCoVoid>()) {
+        return node;
+    }
+    if (!path.QLFilter().Maybe<TCoVoid>()) {
         return node;
     }
     if (inner.Maybe<TYtMapReduce>()) {
@@ -969,6 +983,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExp
             continue;
         }
         if (!path.Ranges().Maybe<TCoVoid>()) {
+            continue;
+        }
+        if (!path.QLFilter().Maybe<TCoVoid>()) {
             continue;
         }
 

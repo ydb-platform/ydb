@@ -26,6 +26,33 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+TComputationUpvalues::TComputationUpvalues(TComputationContext& ctx, IComputationNode* lambdaNode,
+                                           const TComputationExternalNodePtrVector& argNodes) {
+    std::set<const IComputationNode*> argSet(argNodes.cbegin(), argNodes.cend());
+    for (const auto uv : lambdaNode->GetUpvalues()) {
+        if (!argSet.contains(uv)) {
+            UpvalueNodes_.push_back(uv);
+        }
+    }
+    for (const auto uv : UpvalueNodes_) {
+        ClosedUpvalues_.push_back(uv->GetValue(ctx));
+    }
+    PreservedUpvalues_.resize(ClosedUpvalues_.size());
+}
+
+void TComputationUpvalues::SetUpvalues(TComputationContext& ctx) const {
+    for (size_t i = 0; i < UpvalueNodes_.size(); i++) {
+        PreservedUpvalues_[i] = UpvalueNodes_[i]->GetValue(ctx);
+        UpvalueNodes_[i]->SetValue(ctx, NUdf::TUnboxedValue(ClosedUpvalues_[i]));
+    }
+}
+
+void TComputationUpvalues::RestoreUpvalues(TComputationContext& ctx) const {
+    for (size_t i = 0; i < UpvalueNodes_.size(); i++) {
+        UpvalueNodes_[i]->SetValue(ctx, std::move(PreservedUpvalues_[i]));
+    }
+}
+
 std::unique_ptr<IArrowKernelComputationNode> IComputationNode::PrepareArrowKernelComputationNode(TComputationContext& ctx) const {
     Y_UNUSED(ctx);
     return {};

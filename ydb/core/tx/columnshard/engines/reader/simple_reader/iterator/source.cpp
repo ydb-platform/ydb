@@ -41,7 +41,8 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
     if (!ProcessingStarted) {
         AFL_VERIFY(FetchingPlan);
         InitStageData(std::make_unique<TFetchedData>(
-            GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
+            GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
+                GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
         if (HasPortionAccessor()) {
             InitUsedRawBytes();
         }
@@ -55,9 +56,9 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
 }
 
 void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
-    AFL_VERIFY(!!ScriptCursor)("source_id", GetSourceId());
+    AFL_VERIFY(!!ScriptCursor)("source_idx", GetSourceIdx());
     if (ScriptCursor->Next()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "ContinueCursor");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())("event", "ContinueCursor");
         auto cursor = std::move(*ScriptCursor);
         ScriptCursor.reset();
         const auto& commonContext = *GetContext()->GetCommonContext();
@@ -65,7 +66,7 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
         auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "CannotContinueCursor");
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())("event", "CannotContinueCursor");
     }
 }
 
@@ -203,7 +204,7 @@ TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
 
 TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDataSource::DoStartFetchIndex(
     const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& indexContext) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx());
     THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> indexInfo;
     for (auto&& i : indexContext.GetOperationsBySubColumn().GetData()) {
         NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), i.first);
@@ -285,7 +286,7 @@ void TPortionDataSource::DoAbort() {
 
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchHeader(
     const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx());
     if (context.GetResources().GetAccessorOptional(fetchContext.GetColumnId())) {
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
@@ -342,7 +343,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
 
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchData(
     const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx());
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     if (addr.HasSubColumns() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
@@ -379,7 +380,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
 
     auto batch = GetPortionAccessor()
                      .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
-                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
+                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>(), Portion->GetPathId().DebugString())
                      .DetachResult();
 
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
@@ -400,18 +401,21 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
 
 TPortionDataSource::TPortionDataSource(
     const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
-    : TBase(EType::SimplePortion, portion->GetPortionId(), sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
+    : TBase(EType::SimplePortion, sourceIdx, context, portion->RecordSnapshotMin(TSnapshot::Zero()),
           portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
           portion->GetMeta().GetDeletionsCount())
     , Portion(portion)
     , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
     , Start(TReplaceKeyAdapter::BuildStart(*portion, *context->GetReadMetadata()))
-    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata())) {
+    , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata()))
+{
     AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
     if (context->GetReadMetadata()->IsDescSorted()) {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Finish.GetValue(), Start.GetValue());
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
+            Finish.GetValue().BuildSortablePosition(), Start.GetValue().BuildSortablePosition());
     } else {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Start.GetValue(), Finish.GetValue());
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
+            Start.GetValue().BuildSortablePosition(), Finish.GetValue().BuildSortablePosition());
     }
     AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())("finish", Finish.DebugString());
@@ -465,11 +469,11 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
 bool TPortionDataSource::DoAddTxConflict() {
     auto state = GetContext()->GetPortionStateAtScanStart(this->GetPortionInfo());
     if (state.Committed) {
-        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+        GetContext()->GetReadMetadata()->SetBreakLockOnReadFinished();
         return true;
     } else if (!state.IsMyUncommitted()) {
         const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        GetContext()->GetReadMetadata()->SetConflictedWriteId(wPortion->GetInsertWriteId());
+        GetContext()->GetReadMetadata()->SetWriteConflicting(wPortion->GetInsertWriteId());
         return true;
     }
     return false;

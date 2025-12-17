@@ -284,6 +284,8 @@ TParts ExportKindSpecificParts(const Proto& proto) {
             return ExportKindSpecificParts(proto.GetExportToYtSettings());
         case Proto::kExportToS3Settings:
             return ExportKindSpecificParts(proto.GetExportToS3Settings());
+        case Proto::kExportToFsSettings:
+            return ExportKindSpecificParts(proto.GetExportToFsSettings());
         case Proto::SETTINGS_NOT_SET:
             return {};
     }
@@ -305,6 +307,13 @@ template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToS3Settings
         {"export_s3_prefix", ((proto.items().size() > 0) ? proto.items(0).destination_prefix() : "")},
     };
 }
+template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToFsSettings& proto) {
+    return {
+        {"export_type", "fs"},
+        {"export_item_count", ToString(proto.items().size())},
+        {"export_fs_base_path", proto.base_path()},
+    };
+}
 
 template <class Proto>
 TParts ImportKindSpecificParts(const Proto& proto) {
@@ -313,6 +322,8 @@ TParts ImportKindSpecificParts(const Proto& proto) {
     switch  (proto.GetSettingsCase()) {
         case Proto::kImportFromS3Settings:
             return ImportKindSpecificParts(proto.GetImportFromS3Settings());
+        case Proto::kImportFromFsSettings:
+            return ImportKindSpecificParts(proto.GetImportFromFsSettings());
         case Proto::SETTINGS_NOT_SET:
             return {};
     }
@@ -326,6 +337,23 @@ template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromS3Settin
         // (each item has its own source_prefix, but in practice they are all the same)
         {"import_s3_prefix", ((proto.items().size() > 0) ? proto.items(0).source_prefix() : "")},
     };
+}
+template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromFsSettings& proto) {
+    return {
+        {"import_type", "fs"},
+        {"import_item_count", ToString(proto.items().size())},
+        {"import_fs_base_path", proto.base_path()},
+    };
+}
+
+TParts ImportKindSpecificParts(const TImportInfo& info) {
+    switch (info.Kind) {
+    case TImportInfo::EKind::S3:
+        return ImportKindSpecificParts(info.GetS3Settings());
+    case TImportInfo::EKind::FS:
+        return ImportKindSpecificParts(info.GetFsSettings());
+    }
+    return {};
 }
 
 }  // anonymous namespace
@@ -419,11 +447,14 @@ void AuditLogExportEnd(const TExportInfo& info, TSchemeShard* SS) {
             proto.MutableExportToS3Settings()->clear_access_key();
             proto.MutableExportToS3Settings()->clear_secret_key();
             break;
+        case TExportInfo::EKind::FS:
+            Y_ABORT_UNLESS(proto.MutableExportToFsSettings()->ParseFromString(info.Settings));
+            break;
     }
     _AuditLogXxportEnd(info, "EXPORT END", ExportKindSpecificParts(proto), SS);
 }
 void AuditLogImportEnd(const TImportInfo& info, TSchemeShard* SS) {
-    _AuditLogXxportEnd(info, "IMPORT END", ImportKindSpecificParts(info.Settings), SS);
+    _AuditLogXxportEnd(info, "IMPORT END", ImportKindSpecificParts(info), SS);
 }
 
 }

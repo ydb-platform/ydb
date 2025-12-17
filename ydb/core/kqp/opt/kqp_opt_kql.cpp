@@ -202,19 +202,27 @@ TExprNode::TPtr GetPgNotNullColumns(
     return pgNotNullColumns.Done().Ptr();
 }
 
-TExprNode::TPtr IsUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
-    return Build<TCoNameValueTupleList>(ctx, pos)
+TExprNode::TPtr IsUpdateSetting(const bool isStreamIndexWrite, TExprContext& ctx, const TPositionHandle& pos) {
+    auto settings = Build<TCoNameValueTupleList>(ctx, pos);
+    if (isStreamIndexWrite) {
+        settings
+            .Add()
+                .Name().Build("Mode")
+                .Value<TCoAtom>().Build("update")
+            .Build();
+    }
+    return settings
         .Add()
             .Name().Build("IsUpdate")
         .Build()
     .Done().Ptr();
 }
 
-TExprNode::TPtr IsConditionalUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
+TExprNode::TPtr IsConditionalUpdateSetting(const bool isStreamIndexWrite, TExprContext& ctx, const TPositionHandle& pos) {
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add()
             .Name().Build("Mode")
-            .Value<TCoAtom>().Build("upsert") // Rows were read from table, so we are sure that they exist.
+            .Value<TCoAtom>().Build(isStreamIndexWrite ? "update" : "upsert") // Rows were read from table, so we are sure that they exist.
         .Build()
         .Add()
             .Name().Build("IsUpdate")
@@ -318,7 +326,7 @@ TExprBase BuildFillTable(const TKiWriteTable& write, TExprContext& ctx)
 
 TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TCoAtomList& autoincrement, const bool isSink,
-    const TKikimrTableDescription& table, TExprContext& ctx)
+    const TKikimrTableDescription& table, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
     auto generateColumnsIfInsertNode = GetSetting(write.Settings().Ref(), "generate_columns_if_insert");
     YQL_ENSURE(generateColumnsIfInsertNode);
@@ -328,6 +336,11 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
     generateColumnsIfInsert = ExtendGenerateOnInsertColumnsList(write, generateColumnsIfInsert, inputColumns, autoincrement, ctx);
 
     settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("upsert").Done().Ptr(), ctx);
+
+    if (const auto requestContext = kqpCtx.UserRequestContext; requestContext && requestContext->IsStreamingQuery) {
+        settings = AddSetting(*settings, write.Pos(), "AllowInconsistentWrites", nullptr, ctx);
+    }
+
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, isSink, write.Pos(), ctx);
     if (generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
         return Build<TKqlInsertOnConflictUpdateRows>(ctx, write.Pos())
@@ -470,10 +483,10 @@ TExprBase BuildUpdateOnTable(const TKiWriteTable& write, const TCoAtomList& inpu
 
 
 TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomList& inputColumns,
-    const bool isSink, const TKikimrTableDescription& tableData, TExprContext& ctx)
+    const bool isSink, const bool isStreamIndexWrite, const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
     if (isSink) {
-        auto indexes = BuildSecondaryIndexVector(tableData, write.Pos(), ctx, nullptr,
+        auto indexes = BuildAffectedIndexTables(tableData, write.Pos(), ctx, nullptr,
             [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
                 return BuildTableMeta(meta, pos, ctx);
             });
@@ -515,7 +528,7 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
         .Build()
         .Columns(inputColumns)
         .ReturningColumns(write.ReturningColumns())
-        .Settings(IsUpdateSetting(ctx, write.Pos()))
+        .Settings(IsUpdateSetting(isStreamIndexWrite, ctx, write.Pos()))
         .Done();
 }
 
@@ -673,13 +686,13 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
             .Add(updateColumnsList)
             .Build()
         .IsBatch(update.IsBatch())
-        .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
+        .Settings(IsConditionalUpdateSetting(false, ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
 }
 
 TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrTableDescription& tableData,
-    bool withSystemColumns, TExprContext& ctx)
+    bool withSystemColumns, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
     auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.IsBatch(), update.Pos(), ctx);
 
@@ -695,20 +708,31 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         updateColumnsList.push_back(TCoAtom(ctx.NewAtom(update.Pos(), column)));
     }
 
-    auto indexes = BuildSecondaryIndexVector(tableData, update.Pos(), ctx, nullptr,
+    auto indexes = BuildAffectedIndexTables(tableData, update.Pos(), ctx, nullptr,
         [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
             return BuildTableMeta(meta, pos, ctx);
         });
 
+    // Rewrite UPDATE to UPDATE ON for complex indexes
     auto idxNeedsKqpEffect = [](std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
-        return x.second->Type == TIndexDescription::EType::GlobalSyncUnique ||
-            x.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+        switch (x.second->Type) {
+            case TIndexDescription::EType::GlobalSync:
+            case TIndexDescription::EType::GlobalAsync:
+                return false;
+            case TIndexDescription::EType::GlobalSyncUnique:
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+            case TIndexDescription::EType::GlobalFulltext:
+                return true;
+        }
     };
-
     const bool needsKqpEffect = std::find_if(indexes.begin(), indexes.end(), idxNeedsKqpEffect) != indexes.end();
 
+    const bool isSink = NeedSinks(tableData, kqpCtx);
+
+    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+
     // For unique or vector index rewrite UPDATE to UPDATE ON
-    if (needsKqpEffect) {
+    if (needsKqpEffect || useStreamIndex) {
         return Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))
             .Input<TKqpWriteConstraint>()
@@ -719,7 +743,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Columns<TCoAtomList>()
                 .Add(updateColumnsList)
                 .Build()
-            .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
+            .Settings(IsConditionalUpdateSetting(useStreamIndex, ctx, update.Pos()))
             .Done();
     }
 
@@ -735,7 +759,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Add(updateColumnsList)
             .Build()
         .IsBatch(update.IsBatch())
-        .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
+        .Settings(IsConditionalUpdateSetting(false, ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
 
@@ -853,13 +877,13 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
 
 TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TCoAtomList& autoincrement,
-    const TKikimrTableDescription& tableData, TExprContext& ctx, const bool isSink)
+    const TKikimrTableDescription& tableData, TExprContext& ctx, TKqpOptimizeContext& kqpCtx, const bool isSink)
 {
     Y_UNUSED(isSink);
     auto op = GetTableOp(write);
     switch (op) {
         case TYdbOperation::Upsert:
-            return BuildUpsertTable(write, inputColumns, autoincrement, isSink, tableData, ctx);
+            return BuildUpsertTable(write, inputColumns, autoincrement, isSink, tableData, ctx, kqpCtx);
         case TYdbOperation::Replace:
             return BuildReplaceTable(write, inputColumns, autoincrement, isSink, tableData, ctx);
         case TYdbOperation::InsertAbort:
@@ -878,7 +902,7 @@ TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputC
 
 TExprBase WriteTableWithIndexUpdate(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TCoAtomList& autoincrement,
-    const TKikimrTableDescription& tableData, TExprContext& ctx, const bool isSink)
+    const TKikimrTableDescription& tableData, TExprContext& ctx, const bool isSink, const bool isStreamIndexWrite)
 {
     Y_UNUSED(isSink);
     auto op = GetTableOp(write);
@@ -891,7 +915,7 @@ TExprBase WriteTableWithIndexUpdate(const TKiWriteTable& write, const TCoAtomLis
         case TYdbOperation::InsertRevert:
             return BuildInsertTableWithIndex(write, op == TYdbOperation::InsertAbort, inputColumns, autoincrement, isSink, tableData, ctx);
         case TYdbOperation::UpdateOn:
-            return BuildUpdateOnTableWithIndex(write, inputColumns, isSink, tableData, ctx);
+            return BuildUpdateOnTableWithIndex(write, inputColumns, isSink, isStreamIndexWrite, tableData, ctx);
         case TYdbOperation::DeleteOn:
             return BuildDeleteTableWithIndex(write, tableData, ctx);
         default:
@@ -950,23 +974,30 @@ TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, 
     }
 
     if (HasIndexesToWrite(tableData)) {
-        return WriteTableWithIndexUpdate(write, inputColumns, defaultConstraintColumns, tableData, ctx, isSink).Ptr();
+        const bool isStreamIndexWrite = kqpCtx.Config->EnableIndexStreamWrite;
+        return WriteTableWithIndexUpdate(write, inputColumns, defaultConstraintColumns, tableData, ctx, isSink, isStreamIndexWrite).Ptr();
     } else {
-        return WriteTableSimple(write, inputColumns, defaultConstraintColumns, tableData, ctx, isSink).Ptr();
+        return WriteTableSimple(write, inputColumns, defaultConstraintColumns, tableData, ctx, kqpCtx, isSink).Ptr();
     }
 }
 
 TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ctx, TKqpOptimizeContext& kqpCtx,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    Y_UNUSED(kqpCtx);
     const auto& tableData = GetTableData(tablesData, update.DataSink().Cluster(), update.Table().Value());
     if (!CheckWriteToIndex(update, tableData, ctx) || !CheckDisabledWriteToUniqIndex(update, tableData, ctx)) {
         return nullptr;
     }
 
+    const bool allowBatchUpdates = kqpCtx.Config->EnableBatchUpdates && kqpCtx.Config->EnableOltpSink;
+    if (!allowBatchUpdates && update.IsBatch() == "true") {
+        const TString err = "BATCH operations are not supported at the current time.";
+        ctx.AddError(YqlIssue(ctx.GetPosition(update.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
+        return nullptr;
+    }
+
     if (HasIndexesToWrite(tableData)) {
-        return BuildUpdateTableWithIndex(update, tableData, withSystemColumns, ctx).Ptr();
+        return BuildUpdateTableWithIndex(update, tableData, withSystemColumns, ctx, kqpCtx).Ptr();
     } else {
         return BuildUpdateTable(update, tableData, withSystemColumns, ctx).Ptr();
     }
@@ -975,9 +1006,15 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
 TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, TKqpOptimizeContext& kqpCtx,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    Y_UNUSED(kqpCtx);
     auto& tableData = GetTableData(tablesData, del.DataSink().Cluster(), del.Table().Value());
     if (!CheckWriteToIndex(del, tableData, ctx) || !CheckDisabledWriteToUniqIndex(del, tableData, ctx)) {
+        return nullptr;
+    }
+
+    const bool allowBatchUpdates = kqpCtx.Config->EnableBatchUpdates && kqpCtx.Config->EnableOltpSink;
+    if (!allowBatchUpdates && del.IsBatch() == "true") {
+        const TString err = "BATCH operations are not supported at the current time.";
+        ctx.AddError(YqlIssue(ctx.GetPosition(del.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
         return nullptr;
     }
 
@@ -1161,7 +1198,16 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                         auto dataSource = typesCtx.DataSourceMap.FindPtr(dataSourceName);
                         YQL_ENSURE(dataSource);
                         if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
-                            auto newRead = dqIntegration->WrapRead(input.Cast().Ptr(), ctx, {});
+                            IDqIntegration::TWrapReadSettings wrSettings;
+                            if (kqpCtx->Config->EnableWatermarks) {
+                                wrSettings = {
+                                    .WatermarksMode = "default",
+                                    .WatermarksGranularityMs = 1000,
+                                    .WatermarksLateArrivalDelayMs = 5000,
+                                    .WatermarksEnableIdlePartitions = false,
+                                };
+                            }
+                            auto newRead = dqIntegration->WrapRead(input.Cast().Ptr(), ctx, wrSettings);
                             if (newRead.Get() != input.Raw()) {
                                 return newRead;
                             }

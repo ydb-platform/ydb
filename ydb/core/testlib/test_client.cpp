@@ -537,11 +537,49 @@ namespace Tests {
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
 
-            appData.AuthConfig.MergeFrom(Settings->AuthConfig);
-            appData.PQConfig.MergeFrom(Settings->PQConfig);
-            appData.PQClusterDiscoveryConfig.MergeFrom(Settings->PQClusterDiscoveryConfig);
-            appData.NetClassifierConfig.MergeFrom(Settings->NetClassifierConfig);
-            appData.StreamingConfig.MergeFrom(Settings->AppConfig->GetGRpcConfig().GetStreamingConfig());
+#define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
+#define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())
+#define MERGE_CFG_FROM_SETTINGS(cfg) MERGE_APP_CFG_FROM(cfg, Settings->cfg)
+            MERGE_CFG_FROM_SETTINGS(AuthConfig);
+            MERGE_APP_CFG_FROM(StreamingConfig, Settings->AppConfig->GetGRpcConfig().GetStreamingConfig());
+            MERGE_CFG_FROM_APP_CFG(PQConfig);
+            MERGE_CFG_FROM_SETTINGS(PQConfig);
+            MERGE_CFG_FROM_APP_CFG(PQClusterDiscoveryConfig);
+            MERGE_CFG_FROM_SETTINGS(PQClusterDiscoveryConfig);
+            MERGE_CFG_FROM_APP_CFG(KafkaProxyConfig);
+            MERGE_CFG_FROM_APP_CFG(NetClassifierConfig);
+            MERGE_CFG_FROM_SETTINGS(NetClassifierConfig);
+            MERGE_CFG_FROM_APP_CFG(NetClassifierDistributableConfig);
+            MERGE_CFG_FROM_APP_CFG(SqsConfig);
+            MERGE_CFG_FROM_APP_CFG(AuthConfig);
+            MERGE_CFG_FROM_APP_CFG(KeyConfig);
+            MERGE_CFG_FROM_APP_CFG(PDiskKeyConfig);
+            MERGE_CFG_FROM_APP_CFG(FeatureFlags);
+            MERGE_CFG_FROM_APP_CFG(HiveConfig);
+            MERGE_CFG_FROM_APP_CFG(DataShardConfig);
+            MERGE_CFG_FROM_APP_CFG(ColumnShardConfig);
+            MERGE_CFG_FROM_APP_CFG(SchemeShardConfig);
+            MERGE_CFG_FROM_APP_CFG(MeteringConfig);
+            MERGE_CFG_FROM_APP_CFG(CompactionConfig);
+            MERGE_CFG_FROM_APP_CFG(DomainsConfig);
+            MERGE_CFG_FROM_APP_CFG(AwsCompatibilityConfig);
+            MERGE_CFG_FROM_APP_CFG(S3ProxyResolverConfig);
+            MERGE_CFG_FROM_APP_CFG(BackgroundCleaningConfig);
+            MERGE_CFG_FROM_APP_CFG(GraphConfig);
+            MERGE_CFG_FROM_APP_CFG(SharedCacheConfig);
+            MERGE_CFG_FROM_APP_CFG(MetadataCacheConfig);
+            MERGE_CFG_FROM_APP_CFG(MemoryControllerConfig);
+            MERGE_CFG_FROM_APP_CFG(HealthCheckConfig);
+            MERGE_CFG_FROM_APP_CFG(WorkloadManagerConfig);
+            MERGE_CFG_FROM_APP_CFG(QueryServiceConfig);
+            MERGE_CFG_FROM_APP_CFG(BridgeConfig);
+            MERGE_CFG_FROM_SETTINGS(BridgeConfig);
+            MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
+            MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
+#undef MERGE_CFG_FROM_SETTINGS
+#undef MERGE_APP_CFG_FROM
+#undef MERGE_CFG_FROM_APP_CFG
+
             auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
@@ -549,24 +587,13 @@ namespace Tests {
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
             TVector<TString> registerDynamicNodeAllowedSIDs(securityConfig.GetRegisterDynamicNodeAllowedSIDs().cbegin(), securityConfig.GetRegisterDynamicNodeAllowedSIDs().cend());
             appData.RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
-            appData.DomainsConfig.MergeFrom(Settings->AppConfig->GetDomainsConfig());
-            appData.ColumnShardConfig.MergeFrom(Settings->AppConfig->GetColumnShardConfig());
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
-            appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
-            appData.DataShardConfig.MergeFrom(Settings->AppConfig->GetDataShardConfig());
-            appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
-            appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
-            appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
-            appData.WorkloadManagerConfig.MergeFrom(Settings->AppConfig->GetWorkloadManagerConfig());
-            appData.QueryServiceConfig.MergeFrom(Settings->AppConfig->GetQueryServiceConfig());
-            appData.BridgeConfig.MergeFrom(Settings->BridgeConfig);
             if (appData.BridgeConfig.PilesSize() > 0) {
                 appData.BridgeModeEnabled = true;
             }
-            appData.StatisticsConfig.MergeFrom(Settings->AppConfig->GetStatisticsConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -638,7 +665,7 @@ namespace Tests {
         auto actorSystemConfig = Settings->AppConfig->GetActorSystemConfig();
         const bool useAutoConfig = actorSystemConfig.GetUseAutoConfig();
         if (useAutoConfig) {
-            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false);
+            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false, false);
         }
 
         TCpuManagerConfig cpuManager;
@@ -936,19 +963,66 @@ namespace Tests {
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = Runtime->GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
-        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-
-        NKikimrBlobStorage::TDefineBox boxConfig;
-        boxConfig.SetBoxId(Settings->BOX_ID);
-        boxConfig.SetItemConfigGeneration(Settings->StorageGeneration);
-
         ui32 nodeId = Runtime->GetNodeId(0);
         Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
         auto& nodeInfo = nodesInfo->Nodes[0];
 
+        ui64 boxConfigGeneration = Settings->StorageGeneration;
+        ui64 hostConfigGeneration = Settings->StorageGeneration;
+        std::unordered_map<TString, ui64> poolsConfigGenerations;
+        if (Settings->FetchActualGeneration) {
+            auto bsDescribeRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+
+            auto& request = *bsDescribeRequest->Record.MutableRequest();
+            request.AddCommand()->MutableReadBox();
+            request.AddCommand()->MutableReadHostConfig();
+            auto& describePoolCommand = *request.AddCommand()->MutableReadStoragePool();
+            describePoolCommand.SetBoxId(Settings->BOX_ID);
+            for (const auto& [_, storagePool] : Settings->StoragePoolTypes) {
+                describePoolCommand.AddName(storagePool.GetName());
+            }
+
+            Runtime->SendToPipe(MakeBSControllerID(), sender, bsDescribeRequest.Release(), 0, pipeConfig);
+            TAutoPtr<IEventHandle> handleDescResponse;
+            const auto descResponse = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handleDescResponse);
+
+            const auto& response = descResponse->Record.GetResponse();
+            if (!response.GetSuccess()) {
+                Cerr << "\n\n descResponse is #" << descResponse->Record.DebugString() << "\n\n";
+            }
+            UNIT_ASSERT(descResponse->Record.GetResponse().GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 3);
+
+            for (const auto& boxInfo : response.GetStatus(0).GetBox()) {
+                if (boxInfo.GetBoxId() == Settings->BOX_ID) {
+                    boxConfigGeneration = boxInfo.GetItemConfigGeneration();
+                    break;
+                }
+            }
+
+            for (const auto& hostInfo : response.GetStatus(1).GetHostConfig()) {
+                if (hostInfo.GetHostConfigId() == nodeId) {
+                    hostConfigGeneration = hostInfo.GetItemConfigGeneration();
+                    break;
+                }
+            }
+
+            const auto& poolsInfo = response.GetStatus(2).GetStoragePool();
+            poolsConfigGenerations.reserve(poolsInfo.size());
+            for (const auto& storagePool : poolsInfo) {
+                UNIT_ASSERT(poolsConfigGenerations.emplace(storagePool.GetName(), storagePool.GetItemConfigGeneration()).second);
+            }
+        }
+
+        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+
+        NKikimrBlobStorage::TDefineBox boxConfig;
+        boxConfig.SetBoxId(Settings->BOX_ID);
+        boxConfig.SetItemConfigGeneration(boxConfigGeneration);
+
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
         hostConfig.SetHostConfigId(nodeId);
-        hostConfig.SetItemConfigGeneration(Settings->StorageGeneration);
+        hostConfig.SetItemConfigGeneration(hostConfigGeneration);
         TString path;
         if (Settings->UseSectorMap) {
             path ="SectorMap:test-client[:2000]";
@@ -967,33 +1041,6 @@ namespace Tests {
         host.MutableKey()->SetIcPort(nodeInfo.Port);
         host.SetHostConfigId(hostConfig.GetHostConfigId());
         bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
-
-        std::unordered_map<TString, ui64> poolsConfigGenerations;
-        if (Settings->FetchPoolsGeneration) {
-            auto bsDescribeRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-            auto& describeCommand = *bsDescribeRequest->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
-            describeCommand.SetBoxId(Settings->BOX_ID);
-            for (const auto& [_, storagePool] : Settings->StoragePoolTypes) {
-                describeCommand.AddName(storagePool.GetName());
-            }
-
-            Runtime->SendToPipe(MakeBSControllerID(), sender, bsDescribeRequest.Release(), 0, pipeConfig);
-            TAutoPtr<IEventHandle> handleDescResponse;
-            const auto descResponse = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handleDescResponse);
-
-            const auto& response = descResponse->Record.GetResponse();
-            if (!response.GetSuccess()) {
-                Cerr << "\n\n descResponse is #" << descResponse->Record.DebugString() << "\n\n";
-            }
-            UNIT_ASSERT(descResponse->Record.GetResponse().GetSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
-            const auto& status = response.GetStatus(0);
-
-            poolsConfigGenerations.reserve(status.StoragePoolSize());
-            for (const auto& storagePool : status.GetStoragePool()) {
-                UNIT_ASSERT(poolsConfigGenerations.emplace(storagePool.GetName(), storagePool.GetItemConfigGeneration()).second);
-            }
-        }
 
         for (const auto& [poolKind, storagePool] : Settings->StoragePoolTypes) {
             if (storagePool.GetNumGroups() > 0) {
@@ -1347,8 +1394,9 @@ namespace Tests {
 
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
-                auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig()
-                    .SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK)));
+
+                auto driver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
+                auto pqGateway = NKqp::MakePqGateway(driver);
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1365,7 +1413,7 @@ namespace Tests {
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
-                    Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+                    Settings->PqGateway ? Settings->PqGateway : pqGateway,
                     actorSystemPtr,
                     driver);
             }
@@ -1390,7 +1438,8 @@ namespace Tests {
                 Settings->AppConfig->GetQueryServiceConfig(),
                 federatedQuerySetupFactory,
                 Settings->S3ActorsFactory,
-                Settings->EnableScriptExecutionBackgroundChecks
+                Settings->EnableScriptExecutionBackgroundChecks,
+                TDuration::Zero()
             );
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
@@ -3072,9 +3121,10 @@ namespace Tests {
         return FlatQuery(runtime, mkql, opts, result);
     }
 
-    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) {
+    template <typename... TArgs>
+    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs&&... args) {
         TActorId sender = runtime->AllocateEdgeActor(0);
-        ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(query), 0);
+        ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(args...), 0);
         TAutoPtr<IEventHandle> handle;
         // Timeout for DEBUG purposes only
         runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle);
@@ -3088,7 +3138,7 @@ namespace Tests {
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
         TInstant deadline = TInstant::Now() + TIMEOUT;
         while (TInstant::Now() <= deadline) {
-            TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"));
+            TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"), HTTP_METHOD_POST);
             if (!res.empty() && !res.Contains("Error"))
                 return res;
 
@@ -3100,7 +3150,7 @@ namespace Tests {
     TString TClient::KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx) {
         ui32 nodeId = runtime->GetNodeId(nodeIdx);
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
-        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId));
+        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId), HTTP_METHOD_POST);
     }
 
     bool TClient::WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {

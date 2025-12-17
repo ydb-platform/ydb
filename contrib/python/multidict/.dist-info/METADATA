@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: multidict
-Version: 6.6.4
+Version: 6.7.0
 Summary: multidict implementation
 Home-page: https://github.com/aio-libs/multidict
 Author: Andrew Svetlov
@@ -24,6 +24,7 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE

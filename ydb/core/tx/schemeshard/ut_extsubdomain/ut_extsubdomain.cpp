@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/testlib/actors/wait_events.h>  // for TWaitForFirstEvent
 
 #include <ydb/public/lib/value/value.h>
 
@@ -1519,8 +1520,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                 NLs::IsExternalSubDomain("USER_0"),
                 NLs::ExtractDomainHive(&tenantHiveId),
             });
-            TSubDomainKey subdomainKey(describe.GetPathDescription().GetDomainDescription().GetDomainKey());
-            subdomainPathId = TPathId(subdomainKey.GetSchemeShard(), subdomainKey.GetPathId());
+            const auto& domainKey = describe.GetPathDescription().GetDomainDescription().GetDomainKey();
+            subdomainPathId = TPathId::FromDomainKey(domainKey);
         }
 
         // check that there is a new path in the root schemeshard
@@ -2089,5 +2090,230 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             Columns { Name: "Value"      Type: "Utf8"}
                             KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusQuotaExceeded});
+    }
+
+    Y_UNIT_TEST(AlterSchemeLimits_EnableAlterDatabase) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableRealSystemViewPaths(false)
+                .EnableAlterDatabase(true)
+        );
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                StoragePools {
+                    Name: "/dc-1/users/tenant-1:hdd"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        // test what the parent knows about the subdomain
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+            NLs::ShardsInsideDomain(3),
+            NLs::PathsInsideDomain(0)
+        });
+
+        NSchemeShard::TSchemeLimits defaultLimits;
+        NSchemeShard::TSchemeLimits directlySetLimits;
+        directlySetLimits.MaxShards = 10;
+        directlySetLimits.MaxShardsInPath = 10;
+        directlySetLimits.MaxPaths = 10;
+        directlySetLimits.MaxChildrenInDir = 10;
+        NSchemeShard::TSchemeLimits alteredLimits;
+        alteredLimits.MaxShards = 7;
+        alteredLimits.MaxShardsInPath = 3;
+        alteredLimits.MaxPaths = 5;
+        alteredLimits.MaxChildrenInDir = 3;
+
+        // test that subdomain scheme limits are default
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::SchemeLimits(defaultLimits.AsProto()),
+        });
+
+        // change subdomain scheme limits the prehistoric way
+        SetSchemeshardSchemaLimits(runtime, directlySetLimits, tenantSchemeShard);
+
+        {
+            // test that the root knows about the subdomain
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(defaultLimits.AsProto()),
+            });
+
+            // test that the subdomain scheme limits are changed to prehistoric
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(directlySetLimits.AsProto())
+            });
+        }
+
+        TWaitForFirstEvent<TEvSchemeShard::TEvUpdateTenantSchemeShard> syncWaiter(runtime, [](const TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev) {
+            return ev.Get()->Get()->Record.HasSchemeLimits();
+        });
+
+        // change subdomain scheme limits with alter-extsubdomain
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                Name: "USER_0"
+                SchemeLimits {
+                    MaxShards: %lu
+                    MaxShardsInPath: %lu
+                    MaxPaths: %lu
+                    MaxChildrenInDir: %lu
+                }
+            )", alteredLimits.MaxShards, alteredLimits.MaxShardsInPath, alteredLimits.MaxPaths, alteredLimits.MaxChildrenInDir
+        ));
+        env.TestWaitNotification(runtime, txId);
+
+        syncWaiter.Wait();
+        syncWaiter.Stop();
+
+        {
+            // test that the root knows about the subdomain
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(alteredLimits.AsProto()),
+            });
+
+            // test that the subdomain scheme limits are changed to altered limits
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(alteredLimits.AsProto())
+            });
+        }
+    }
+
+    Y_UNIT_TEST(AlterSchemeLimits_NoEnableAlterDatabase) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableRealSystemViewPaths(false)
+                .EnableAlterDatabase(false)
+        );
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                StoragePools {
+                    Name: "/dc-1/users/tenant-1:hdd"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        // test what the parent knows about the subdomain
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+            NLs::ShardsInsideDomain(3),
+            NLs::PathsInsideDomain(0)
+        });
+
+        NSchemeShard::TSchemeLimits defaultLimits;
+        NSchemeShard::TSchemeLimits directlySetLimits;
+        directlySetLimits.MaxShards = 10;
+        directlySetLimits.MaxShardsInPath = 10;
+        directlySetLimits.MaxPaths = 10;
+        directlySetLimits.MaxChildrenInDir = 10;
+        NSchemeShard::TSchemeLimits alteredLimits;
+        alteredLimits.MaxShards = 7;
+        alteredLimits.MaxShardsInPath = 3;
+        alteredLimits.MaxPaths = 5;
+        alteredLimits.MaxChildrenInDir = 3;
+
+        // test that subdomain scheme limits are default
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::SchemeLimits(defaultLimits.AsProto()),
+        });
+
+        // change subdomain scheme limits the prehistoric way
+        SetSchemeshardSchemaLimits(runtime, directlySetLimits, tenantSchemeShard);
+
+        {
+            // test that the root knows about the subdomain
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(defaultLimits.AsProto()),
+            });
+
+            // test that the subdomain scheme limits are changed to prehistoric
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(directlySetLimits.AsProto())
+            });
+        }
+
+        TWaitForFirstEvent<TEvSchemeShard::TEvUpdateTenantSchemeShard> syncWaiter(runtime, [](const TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev) {
+            return (ev.Get()->Get()->Record.HasSchemeLimits() == false);
+        });
+
+        // try to change subdomain scheme limits with alter-extsubdomain
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                Name: "USER_0"
+                SchemeLimits {
+                    MaxShards: %lu
+                    MaxShardsInPath: %lu
+                    MaxPaths: %lu
+                    MaxChildrenInDir: %lu
+                }
+            )", alteredLimits.MaxShards, alteredLimits.MaxShardsInPath, alteredLimits.MaxPaths, alteredLimits.MaxChildrenInDir
+        ));
+        env.TestWaitNotification(runtime, txId);
+
+        syncWaiter.Wait();
+        syncWaiter.Stop();
+
+        // ...and that should not work.
+        // With EnableAlterDatabase=false, alter-extsubdomain will not overwrite limits directly set on the subdomain
+
+        {
+            // test that the root knows about the subdomain
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(alteredLimits.AsProto()),
+            });
+
+            // test that the subdomain scheme limits remain unchanged (directly set limits)
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(directlySetLimits.AsProto())
+            });
+        }
     }
 }

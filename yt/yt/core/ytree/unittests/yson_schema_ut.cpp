@@ -5,13 +5,17 @@
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/tree_builder.h>
 #include <yt/yt/core/ytree/yson_struct.h>
+#include <yt/yt/core/ytree/yson_schema.h>
 
 #include <yt/yt/core/ytree/unittests/proto/test.pb.h>
+
+#include <yt/yt/client/table_client/logical_type.h>
 
 namespace NYT::NYTree {
 namespace {
 
 using namespace NYson;
+using NTableClient::TTypeV3LogicalTypeWrapper;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -280,6 +284,32 @@ struct TTestStructWithArray
     }
 };
 
+YT_DEFINE_STRONG_TYPEDEF(TStringTypedef, TString);
+YT_DEFINE_STRONG_TYPEDEF(TIntTypedef, i64);
+
+struct TTestStructWithStrongTypedef
+    : public TYsonStruct
+{
+    TStringTypedef StringTypedef;
+    TString String;
+    TIntTypedef IntTypedef;
+    i64 Int;
+
+    REGISTER_YSON_STRUCT(TTestStructWithStrongTypedef)
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("string_typedef", &TThis::StringTypedef)
+            .Default();
+        registrar.Parameter("string", &TThis::String)
+            .Default();
+        registrar.Parameter("int_typedef", &TThis::IntTypedef)
+            .Default();
+        registrar.Parameter("int", &TThis::Int)
+            .Default();
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 IMapNodePtr GetSchema(const TYsonStructPtr& ysonStruct, const TYsonStructWriteSchemaOptions& options = {})
@@ -297,6 +327,8 @@ void CheckSchema(const TYsonStructPtr& ysonStruct, TStringBuf expected, const TY
     EXPECT_TRUE(AreNodesEqual(expectedNode, actualNode))
         << "Expected: " << ConvertToYsonString(expectedNode, EYsonFormat::Text, 4).AsStringBuf() << "\n\n"
         << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Text, 4).AsStringBuf() << "\n\n";
+
+    EXPECT_NO_THROW(ConvertTo<TTypeV3LogicalTypeWrapper>(actualNode));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -401,30 +433,6 @@ TEST(TYsonStructSchemaTest, TestYsonStructWithCustomType)
         R"({type_name="struct";
             members=[
                 {name="my_type";type="int64";};
-            ]})");
-}
-
-TEST(TYsonStructSchemaTest, TestYsonStructWithUndefinedType)
-{
-    auto ysonStruct = New<TTestStructWithUndefinedType>();
-    CheckSchema(
-        ysonStruct,
-        R"({type_name="struct";
-            members=[
-                {
-                    name="undefined_type_field";
-                    type={type_name="optional";item={type_name="struct";members=[];};};
-                };
-            ]})");
-    ysonStruct->UndefinedTypeField = New<TTestSubStruct>();
-    CheckSchema(
-        ysonStruct,
-        R"({type_name="struct";
-            members=[
-                {
-                    name="undefined_type_field";
-                    type={type_name="optional";item={type_name="struct";members=[{name="my_uint";type="uint32";}]}};
-                };
             ]})");
 }
 
@@ -622,5 +630,54 @@ TEST(TYsonStructSchemaTest, CppTypeName)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TYsonStructSchemaTest, StrongTypedef)
+{
+    CheckSchema(
+        New<TTestStructWithStrongTypedef>(),
+        R"({
+            type_name="struct";
+            members=[
+                {
+                    name="string_typedef";
+                    type="string";
+                };
+                {
+                    name="string";
+                    type="string";
+                };
+                {
+                    name="int_typedef";
+                    type="int64";
+                };
+                {
+                    name="int";
+                    type="int64";
+                };
+            ];})");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+void WriteSchema<TRefCountedEntity>(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& /*options*/)
+{
+    BuildYsonFluently(consumer)
+        .Value("null");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+void WriteSchema<TCustomType>(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& /*options*/)
+{
+    BuildYsonFluently(consumer)
+        .Value("int64");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NYTree

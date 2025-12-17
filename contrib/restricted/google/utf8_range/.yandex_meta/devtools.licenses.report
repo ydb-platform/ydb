@@ -1,0 +1,100 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     CC-BY-4.0            0ec92fc648504d1069b11b64e44bfdc4
+BELONGS ya.make
+    License text:
+        Markus Kuhn [ˈmaʳkʊs kuːn] <http://www.cl.cam.ac.uk/~mgk25/> — 2002-07-25 CC BY
+    Scancode info:
+        Original SPDX id: CC-BY-4.0
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
+    Files with this license:
+        UTF-8-demo.txt [5:5]
+
+KEEP     MIT                  4b22d8fd72d8f6c6211edffd2b6983d7
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: utf8_range.c at line 4, utf8_validity.h at line 4
+    License text:
+        // Use of this source code is governed by an MIT-style
+        // license that can be found in the LICENSE file or at
+        // https://opensource.org/licenses/MIT.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        utf8_range.c [3:5]
+        utf8_validity.h [3:5]
+
+KEEP     Protobuf-License     77b55cb8215e726b6ae7c1cf484bc45f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-protobuf
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://protobuf.googlecode.com/svn/trunk/COPYING.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/protobuf.LICENSE
+    Files with this license:
+        LICENSE [3:32]
+
+SKIP     LicenseRef-scancode-generic-cla beb3339ebeb4487c0ec15f216cc26cb2
+BELONGS ya.make
+    # Not a license
+    License text:
+        \### Contributor License Agreements
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 80.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [35:35]
+
+SKIP     LicenseRef-scancode-generic-cla d72fcd21b18e44b666a94e6225ed43eb
+BELONGS ya.make
+    # Not a license
+    License text:
+        Contributions to this project must be accompanied by a Contributor License
+        Agreement. You (or your employer) retain the copyright to your contribution,
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [37:38]

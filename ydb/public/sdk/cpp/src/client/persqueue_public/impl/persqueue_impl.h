@@ -37,6 +37,10 @@ public:
     static void ConvertToProtoReadRule(const TReadRule& readRule, Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps) {
         rrProps.set_consumer_name(TStringType{readRule.ConsumerName_});
         rrProps.set_important(readRule.Important_);
+        if (readRule.AvailabilityPeriod_ != TDuration::Zero()) {
+            rrProps.mutable_availability_period()->set_seconds(readRule.AvailabilityPeriod_.Seconds());
+            rrProps.mutable_availability_period()->set_nanos(readRule.AvailabilityPeriod_.NanoSecondsOfSecond());
+        }
         rrProps.set_starting_message_timestamp_ms(readRule.StartingMessageTimestamp_.MilliSeconds());
         rrProps.set_version(readRule.Version_);
         rrProps.set_supported_format(static_cast<Ydb::PersQueue::V1::TopicSettings::Format>(readRule.SupportedFormat_));
@@ -96,6 +100,7 @@ public:
         if (settings.AbcId_) (*props.mutable_attributes())["_abc_id"] = ToString(*settings.AbcId_);
         if (settings.AbcSlug_) (*props.mutable_attributes())["_abc_slug"] = *settings.AbcSlug_;
         if (settings.FederationAccount_) (*props.mutable_attributes())["_federation_account"] = ToString(*settings.FederationAccount_);
+        if (settings.MetricsLevel_.has_value()) { props.set_metrics_level(*settings.MetricsLevel_); }
 
         for (const auto& readRule : settings.ReadRules_) {
             Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps = *props.add_read_rules();

@@ -1,7 +1,6 @@
 #include "interactive_cli.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/ai_session_runner.h>
@@ -9,13 +8,14 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sql.h>
+#include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+
+#include <library/cpp/resource/resource.h>
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
-
-#include <library/cpp/resource/resource.h>
 
 namespace NYdb::NConsoleClient {
 

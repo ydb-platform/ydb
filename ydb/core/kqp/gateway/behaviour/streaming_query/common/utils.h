@@ -31,6 +31,10 @@ public:
         // Internal query info
         static inline constexpr char QueryTextRevision[] = "__query_text_revision";
     };
+
+    static inline constexpr char InternalTablesPath[] = "streaming/queries";
+
+    static TString GetTablesPath();
 };
 
 // Used for properties parsing after describing streaming query

@@ -147,6 +147,8 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
+    NJobTrackerClient::TJobId JobId;
+
     void DoExecute(ICommandContextPtr context) override;
 };
 
@@ -209,6 +211,40 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TListJobTracesCommand
+    : public TSimpleOperationCommandBase<NApi::TListJobTracesOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TListJobTracesCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NJobTrackerClient::TJobId JobId;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TCheckOperationPermissionCommand
+    : public TSimpleOperationCommandBase<NApi::TCheckOperationPermissionOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TCheckOperationPermissionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NJobTrackerClient::TJobId JobId;
+    std::string User;
+    NYTree::EPermission Permission;
+
     void DoExecute(ICommandContextPtr context) override;
 };
 

@@ -28,6 +28,8 @@ def mode_expander(lst):
         res.append((suite, case, cfg, 'Debug'))
         res.append((suite, case, cfg, 'RunOnOpt'))
         res.append((suite, case, cfg, 'LLVM'))
+        # TODO(YQL-20436): Enable when it is working well
+        # res.append((suite, case, cfg, 'AutoYqlSelect'))
         if suite == 'blocks':
             res.append((suite, case, cfg, 'Blocks'))
             res.append((suite, case, cfg, 'Peephole'))
@@ -96,10 +98,11 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if what == 'Debug':
         to_canonize = [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]
 
-    if what == 'RunOnOpt' or what == 'LLVM' or what == 'Blocks':
+    if what == 'RunOnOpt' or what == 'LLVM' or what == 'Blocks' or what == 'AutoYqlSelect':
         is_on_opt = (what == 'RunOnOpt')
         is_llvm = (what == 'LLVM')
         is_blocks = (what == 'Blocks')
+        is_yql_select = (what == 'AutoYqlSelect')
         files = get_files(suite, config, DATA_PATH)
         http_files = get_http_files(suite, config, DATA_PATH)
         http_files_urls = yql_http_file_server.register_files({}, http_files)
@@ -109,7 +112,13 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         yqlrun = YQLRun(
             prov='pure',
             keep_temp=False,
-            gateway_config=get_gateways_config(http_files, yql_http_file_server, allow_llvm=is_llvm, force_blocks=is_blocks),
+            gateway_config=get_gateways_config(
+                http_files,
+                yql_http_file_server,
+                allow_llvm=is_llvm,
+                force_blocks=is_blocks,
+                is_yql_select=is_yql_select,
+            ),
             udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
             binary=MINIRUN_PATH,
             langver=langver

@@ -1,8 +1,10 @@
 #include "node.h"
-#include "context.h"
 
+#include "aggregation.h"
+#include "context.h"
 #include "list_builtin.h"
 #include "match_recognize.h"
+#include "select_yql_aggregation.h"
 
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -1276,8 +1278,10 @@ public:
                     MakeAtomFromExpression(Pos_, ctx, Args_[i]->GetTupleElement(0)).Build(),
                     Args_[i]->GetTupleElement(1)));
             } else {
-                ctx.Error(Pos_) << OpName_ << " requires arguments to be tuples of size 2: prefix and struct";
-                return false;
+                auto tuple = Y("EnsureTupleSize", Args_[i], Q("2"));
+                Args_[i] = Q(Y(
+                    MakeAtomFromExpression(Pos_, ctx, Y("Nth", tuple, Q("0"))).Build(),
+                    Y("Nth", tuple, Q("1"))));
             }
         }
         return TCallNode::DoInit(ctx, src);
@@ -1308,9 +1312,9 @@ static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Ui
                                                  "Date32", "Datetime64", "Timestamp64", "Interval64", "TzDate32", "TzDatetime64", "TzTimestamp64"};
 TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, TString* outTypeStrPtr = nullptr) {
     auto errMsgFunc = [&node, argNum]() {
-        static std::array<TString, 2> numToName = {{"first", "second"}};
+        static std::array<TString, 2> NumToName = {{"first", "second"}};
         TStringBuilder sb;
-        sb << "At " << numToName.at(argNum) << " argument of " << node.GetOpName() << " expected type string, available one of: "
+        sb << "At " << NumToName.at(argNum) << " argument of " << node.GetOpName() << " expected type string, available one of: "
            << JoinRange(", ", AvailableDataTypes.begin(), AvailableDataTypes.end()) << ";";
         return TString(sb);
     };
@@ -2811,32 +2815,18 @@ private:
     TString Info_;
 };
 
-enum EAggrFuncTypeCallback {
-    NORMAL,
-    KEY_PAYLOAD,
-    PAYLOAD_PREDICATE,
-    TWO_ARGS,
-    COUNT,
-    HISTOGRAM,
-    LINEAR_HISTOGRAM,
-    PERCENTILE,
-    TOPFREQ,
-    TOP,
-    TOP_BY,
-    COUNT_DISTINCT_ESTIMATE,
-    LIST,
-    UDAF,
-    PG,
-    NTH_VALUE
-};
-
 struct TCoreFuncInfo {
     std::string_view Name;
     ui32 MinArgs;
     ui32 MaxArgs;
 };
 
-using TAggrFuncFactoryCallback = std::function<INode::TPtr(TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory)>;
+using TAggrFuncFactoryCallback = std::function<TNodeResult(
+    TPosition pos,
+    const TVector<TNodePtr>& args,
+    EAggregateMode aggMode,
+    bool isFactory,
+    bool isYqlSelect)>;
 
 struct TAggrFuncFactoryInfo {
     std::string_view CanonicalSqlName;
@@ -2853,87 +2843,63 @@ struct TBuiltinFuncInfo {
     TBuiltinFactoryCallback Callback;
 };
 
+struct TSimplePgFuncInfo {
+    std::string_view NativeFuncName;
+};
+
+struct TMissingFuncInfo {
+    std::string_view Suggestion;
+};
+
 using TBuiltinFactoryCallbackMap = std::unordered_map<TString, TBuiltinFuncInfo, THash<TString>>;
 using TCoreFuncMap = std::unordered_map<TString, TCoreFuncInfo, THash<TString>>;
+using TSimplePgFuncMap = std::unordered_map<TString, TSimplePgFuncInfo, THash<TString>>;
+using TMissingFuncMap = std::unordered_map<TString, TMissingFuncInfo, THash<TString>>;
 
 TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
     const TString& functionName,
     const TString& factoryName,
-    EAggrFuncTypeCallback type = NORMAL,
+    EAggregationType type = NORMAL,
     const TString& functionNameOverride = TString(),
-    const TVector<EAggregateMode>& validModes = {}) {
+    const TVector<EAggregateMode>& validModes = {})
+{
     const TString realFunctionName = functionNameOverride.empty() ? functionName : functionNameOverride;
-    return [functionName, realFunctionName, factoryName, type, validModes](TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory) -> INode::TPtr {
-        if (!validModes.empty()) {
-            if (!IsIn(validModes, aggMode)) {
-                TString errorText;
-                if (TVector{EAggregateMode::OverWindow} == validModes) {
-                    errorText = TStringBuilder()
-                                << "Can't use window function " << functionName << " without window specification (OVER keyword is missing)";
-                } else {
-                    errorText = TStringBuilder()
-                                << "Can't use " << functionName << " in " << ToString(aggMode) << " aggregation mode";
-                }
-                return INode::TPtr(new TInvalidBuiltin(pos, errorText));
+    return [functionName, realFunctionName, factoryName, type, validModes](
+               TPosition pos,
+               const TVector<TNodePtr>& args,
+               EAggregateMode aggMode,
+               bool isFactory,
+               bool isYqlSelect) -> TNodeResult {
+        if (!validModes.empty() && !IsIn(validModes, aggMode)) {
+            TString errorText;
+            if (TVector{EAggregateMode::OverWindow} == validModes) {
+                errorText = TStringBuilder()
+                            << "Can't use window function " << functionName << " without window specification (OVER keyword is missing)";
+            } else {
+                errorText = TStringBuilder()
+                            << "Can't use " << functionName << " in " << ToString(aggMode) << " aggregation mode";
             }
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, errorText)));
         }
-        TAggregationPtr factory = nullptr;
-        switch (type) {
-            case NORMAL:
-                factory = BuildFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case KEY_PAYLOAD:
-                factory = BuildKeyPayloadFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case PAYLOAD_PREDICATE:
-                factory = BuildPayloadPredicateFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case TWO_ARGS:
-                factory = BuildTwoArgsFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case COUNT:
-                factory = BuildCountAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case HISTOGRAM:
-                factory = BuildHistogramFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case LINEAR_HISTOGRAM:
-                factory = BuildLinearHistogramFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case PERCENTILE:
-                factory = BuildPercentileFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case TOPFREQ:
-                factory = BuildTopFreqFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case TOP:
-                factory = BuildTopFactoryAggregation<false>(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case TOP_BY:
-                factory = BuildTopFactoryAggregation<true>(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case COUNT_DISTINCT_ESTIMATE:
-                factory = BuildCountDistinctEstimateFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case LIST:
-                factory = BuildListFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case UDAF:
-                factory = BuildUserDefinedFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
-            case PG:
-                factory = BuildPGFactoryAggregation(pos, realFunctionName, aggMode);
-                break;
-            case NTH_VALUE:
-                factory = BuildNthFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
-                break;
+
+        if (isYqlSelect) {
+            TYqlAggregationArgs aggregation = {
+                .FunctionName = std::move(realFunctionName),
+                .FactoryName = std::move(factoryName),
+                .Type = type,
+                .Mode = aggMode,
+                .Args = args,
+            };
+            return BuildYqlAggregation(std::move(pos), std::move(aggregation));
         }
+
+        TAggregationPtr factory = BuildAggregationByType(type, pos, realFunctionName, factoryName, aggMode);
         if (isFactory) {
             auto realArgs = args;
             realArgs.erase(realArgs.begin()); // skip function name
-            return new TBasicAggrFactory(pos, functionName, factory, realArgs);
+            return TNonNull(TNodePtr(new TBasicAggrFactory(pos, functionName, factory, realArgs)));
         } else {
-            return new TBasicAggrFunc(pos, functionName, factory, args);
+            return TNonNull(TNodePtr(new TBasicAggrFunc(pos, functionName, factory, args)));
         }
     };
 }
@@ -2942,7 +2908,7 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
     const TString& functionName,
     const TString& factoryName,
     const TVector<EAggregateMode>& validModes,
-    EAggrFuncTypeCallback type = NORMAL,
+    EAggregationType type = NORMAL,
     const TString& functionNameOverride = TString()) {
     return BuildAggrFuncFactoryCallback(functionName, factoryName, type, functionNameOverride, validModes);
 }
@@ -3008,6 +2974,8 @@ struct TBuiltinFuncData {
     const TBuiltinFactoryCallbackMap BuiltinFuncs;
     const TAggrFuncFactoryCallbackMap AggrFuncs;
     const TCoreFuncMap CoreFuncs;
+    const TSimplePgFuncMap SimplePgFuncs;
+    const TMissingFuncMap MissingFuncs;
 
     TBuiltinFuncData()
         : BuiltinFuncs(MakeBuiltinFuncs())
@@ -3015,6 +2983,10 @@ struct TBuiltinFuncData {
         AggrFuncs(MakeAggrFuncs())
         ,
         CoreFuncs(MakeCoreFuncs())
+        ,
+        SimplePgFuncs(MakeSimplePgFuncs())
+        ,
+        MissingFuncs(MakeMissingFuncs())
     {
     }
 
@@ -3035,6 +3007,7 @@ struct TBuiltinFuncData {
             {"byteat", {"ByteAt", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ByteAt", 2, 2)}},
             {"startswith", {"StartsWith", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StartsWith", 2, 2)}},
             {"endswith", {"EndsWith", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EndsWith", 2, 2)}},
+            {"concat", {"Concat", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SqlConcat", 1, -1)}},
 
             // Numeric builtins
             {"abs", {"Abs", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Abs", 1, 1)}},
@@ -3205,6 +3178,9 @@ struct TBuiltinFuncData {
             {"generictype", {"GenericType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("GenericType", 0, 0)}},
             {"unittype", {"UnitType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("UnitType", 0, 0)}},
             {"voidtype", {"VoidType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VoidType", 0, 0)}},
+            {"nulltype", {"NullType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("NullType", 0, 0)}},
+            {"emptylisttype", {"EmptyListType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyListType", 0, 0)}},
+            {"emptydicttype", {"EmptyDictType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDictType", 0, 0)}},
             {"resourcetype", {"ResourceType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlResourceType>()}},
             {"taggedtype", {"TaggedType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlTaggedType>()}},
             {"varianttype", {"VariantType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantType", 1, 1)}},
@@ -3323,6 +3299,7 @@ struct TBuiltinFuncData {
             {"coalesce", {"Coalesce", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Coalesce", 1, -1)}},
             {"nvl", {"Nvl", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Coalesce", 1, -1)}},
             {"nanvl", {"Nanvl", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Nanvl", 2, 2)}},
+            {"nullif", {"NullIf", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("NullIf", 2, 2)}},
             {"likely", {"Likely", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Likely", 1, -1)}},
             {"assumestrict", {"AssumeStrict", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AssumeStrict", 1, 1)}},
             {"assumenonstrict", {"AssumeNonStrict", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AssumeNonStrict", 1, 1)}},
@@ -3481,7 +3458,10 @@ struct TBuiltinFuncData {
 
             // MatchRecognize navigation functions
             {"first", {"First", "MatchRec", BuildAggrFuncFactoryCallback("First", "first_traits_factory")}},
-            {"last", {"Last", "MatchRec", BuildAggrFuncFactoryCallback("Last", "last_traits_factory")}}};
+            {"last", {"Last", "MatchRec", BuildAggrFuncFactoryCallback("Last", "last_traits_factory")}},
+
+            {"randomsample", {"RandomSample", "Agg", BuildAggrFuncFactoryCallback("RandomSample", "random_sample_factory", RANDOM_SAMPLE)}},
+            {"randomvalue", {"RandomValue", "Agg", BuildAggrFuncFactoryCallback("RandomValue", "random_value_factory", RANDOM_VALUE)}}};
         return aggrFuncs;
     }
 
@@ -3519,18 +3499,224 @@ struct TBuiltinFuncData {
         };
         return coreFuncs;
     }
+
+    TSimplePgFuncMap MakeSimplePgFuncs() {
+        TSimplePgFuncMap simplePgFuncs = {
+            {"now", {"CurrentUtcTimestamp"}},
+            {"to_date", {"DateTime::Parse"}},
+            {"round", {"Math::Round"}},
+            {"floor", {"Math::Floor"}},
+            {"ceil", {"Math::Ceil"}},
+            {"date_trunc", {"DateTime::StartOf"}},
+            {"date_part", {"DateTime::Get*"}},
+            {"to_char", {"DateTime::Format/String::LeftPad/String::RightPad/String::Prec"}},
+        };
+        return simplePgFuncs;
+    }
+
+    TMissingFuncMap MakeMissingFuncs() {
+        TMissingFuncMap missingFuncs = {
+            {"lower", {"String::AsciiToLower or Unicode::ToLower"}},
+            {"tolower", {"String::AsciiToLower or Unicode::ToLower"}},
+            {"upper", {"String::AsciiToUpper or Unicode::ToUpper"}},
+            {"toupper", {"String::AsciiToUpper or Unicode::ToUpper"}},
+            {"replace", {"String::ReplaceAll"}},
+            {"todate", {"CAST(_ as Date)"}},
+            {"todatetime", {"CAST(_ as DateTime)"}},
+            {"today", {"CurrentUtcDate()"}},
+            {"curdate", {"CurrentUtcDate()"}},
+            {"tolist", {"AsList or DictKeys/DictItems/DictPayloads"}},
+            {"tostring", {"CAST(_ as String)"}},
+            {"listdistinct", {"ListUniq or ListUniqStable"}},
+            {"ypathstring", {"Yson::YPathString"}},
+            {"ypathint64", {"Yson::YPathInt64"}},
+            {"ypathuint64", {"Yson::YPathUint64"}},
+            {"substr", {"Substring or Unicode::Substring"}},
+            {"type", {"FormatType(TypeOf(_))"}},
+            {"splittolist", {"String::SplitToList or Unicode::SplitToList"}},
+            {"listlenght", {"ListLength"}},
+            {"listsize", {"ListLength"}},
+            {"converttostring", {"Yson::ConvertToString"}},
+            {"lookupstring", {"Yson::LookupString"}},
+            {"uniq", {"HLL"}},
+            {"cnt", {"Count"}},
+            {"as_table", {"FROM AS_TABLE(_)"}},
+            {"astable", {"FROM AS_TABLE(_)"}},
+            {"range", {"FROM RANGE(_)"}},
+            {"rand", {"Random(_)"}},
+            {"regexp", {"regexp operator or Re2::Match"}},
+            {"left", {"Substring or Unicode::Substring"}},
+            {"str", {"CAST(_ as String)"}},
+            {"values", {"FROM (VALUES _)"}},
+            {"has", {"ListHas/DictContains"}},
+            {"hasitems", {"ListHasItems/DictHasItems or ListHas/DictContains"}},
+            {"mean", {"Avg"}},
+            {"average", {"Avg"}},
+            {"currentdate", {"CurrentUtcDate"}},
+            {"currenttimestamp", {"CurrentUtcTimestamp"}},
+            {"regexp_extract", {"Re2::Capture"}},
+            {"lenght", {"Length"}},
+            {"convert", {"CAST"}},
+            {"indexof", {"Find"}},
+            {"convertyson", {"Yson::Serialize/Yson::SerializeText/Yson::SerializePretty"}},
+            {"each", {"FROM EACH(_)"}},
+            {"listcontains", {"ListHas"}},
+            {"ifnull", {"operator '\?\?' or Coalesce/NVL"}},
+            {"date_format", {"DateTime::Format"}},
+            {"str_to_date", {"DateTime::Format"}},
+            {"asstring", {"CAST(_ as String)"}},
+            {"flatten", {"FROM FLATTEN LIST BY or ListFlatten"}},
+            {"jsonextractstring", {"Yson::ParseJson + Yson::LookupString"}},
+            {"ysonextractstring", {"Yson::Parse + Yson::LookupString"}},
+            {"dateadd", {"DateTime::Update"}},
+            {"date_add", {"DateTime::Update"}},
+            {"like", {"FROM LIKE(_)"}},
+            {"isnull", {"_ IS NULL"}},
+            {"is_null", {"_ IS NULL"}},
+            {"from_unixtime", {"DateTime::FromSeconds"}},
+            {"position", {"Find or Unicode::Find"}},
+            {"strpos", {"Find or Unicode::Find"}},
+            {"regexp_replace", {"Re2::Replace"}},
+            {"toint64", {"CAST(_ as Int64)"}},
+            {"touint64", {"CAST(_ as Uint64)"}},
+            {"toint32", {"CAST(_ as Int32)"}},
+            {"touint32", {"CAST(_ as Uint32)"}},
+            {"tofloat32", {"CAST(_ as Float)"}},
+            {"tofloat64", {"CAST(_ as Double)"}},
+            {"datediff", {"operator '-' + DateTime::To*"}},
+            {"date_diff", {"operator '-' + DateTime::To*"}},
+            {"timestampdiff", {"operator '-' + DateTime::To*"}},
+            {"todate", {"CAST(_ as Date)"}},
+            {"todate32", {"CAST(_ as Date32)"}},
+            {"trim", {"String::Strip or Unicode::Strip"}},
+            {"converttolist", {"Yson::ConvertToList"}},
+            {"converttodict", {"Yson::ConvertToDict"}},
+            {"multiif", {"CASE WHEN"}},
+            {"decode", {"CASE WHEN"}},
+            {"hash", {"Digest::*"}},
+            {"getlength", {"Length"}},
+            {"group_concat", {"AGG_LIST + String::JoinFromList or Unicode::JoinFromList"}},
+            {"intervalfromdays", {"DateTime::IntervalFromDays"}},
+            {"argmax", {"MaxBy"}},
+            {"argmin", {"MinBy"}},
+            {"tostartofmonth", {"DateTime::StartOfMonth"}},
+            {"startofmonth", {"DateTime::StartOfMonth"}},
+            {"tostartofhour", {"DateTime::StartOf"}},
+            {"tounixtimestamp", {"DateTime::ToSeconds"}},
+            {"unixtimestamp", {"DateTime::ToSeconds"}},
+            {"toseconds", {"DateTime::ToSeconds"}},
+            {"split", {"String::SplitToList or Unicode::SplitToList"}},
+            {"match", {"Re2::Match"}},
+            {"regexp_like", {"Re2::Match"}},
+            {"contains", {"Find(_) IS NOT NULL or ListHas/DictContains"}},
+            {"quantile", {"PERCENTILE"}},
+            {"grouparray", {"AGG_LIST"}},
+            {"groupuniqarray", {"AGG_LIST_DISTINCT"}},
+            {"listagg", {"AGG_LIST"}},
+            {"list_agg", {"AGG_LIST"}},
+            {"folder", {"FROM FOLDER(_)"}},
+            {"tablerecord", {"TableRecordIndex"}},
+            {"substring_index", {"Find"}},
+            {"month", {"DateTime::GetMonth"}},
+            {"year", {"DateTime::GetYear"}},
+            {"day", {"DateTime::GetDayOfMonth"}},
+            {"listrange", {"ListFromRange"}},
+            {"array_agg", {"AGG_LIST"}},
+            {"listunique", {"ListUniq or ListUniqStable"}},
+            {"charindex", {"Find"}},
+            {"size", {"Length/Unicode::GetLength or ListLength/DictLength"}},
+            {"string_agg", {"AGG_LIST + String::JoinFromList or Unicode::JoinFromList"}},
+            {"listcount", {"ListLength"}},
+            {"tablerowindex", {"TableRecordIndex"}},
+            {"unnest", {"FROM FLATTEN LIST BY"}},
+            {"ypathextract", {"Yson::YPath"}},
+            {"arrayjoin", {"FROM FLATTEN LIST BY"}},
+            {"yson_value", {"Yson::YPath"}},
+            {"countd", {"COUNT (DISTINCT _)"}},
+            {"listlen", {"ListLength"}},
+            {"unix_timestamp", {"DateTime::ToSeconds + CurrentUtcDatetime"}},
+            {"trunc", {"DateTime::StartOf"}},
+            {"farm_hash", {"Digest::FarmHash"}},
+            {"makedate", {"DateTime::MakeDate"}},
+            {"makedatetime", {"DateTime::MakeDatetime"}},
+            {"any_value", {"Some"}},
+            {"substing", {"Substring"}},
+            {"listfirst", {"ListHead"}},
+            {"listtail", {"ListLast"}},
+            {"filter", {"FROM FILTER(_)"}},
+            {"json_extract", {"JSON_QUERY"}},
+            {"to_timestamp", {"CAST(_ AS Timestamp)"}},
+            {"right", {"Substring/Unicode::Substring + Length/Unicode::GetLength"}},
+            {"dictvalues", {"DictPayloads"}},
+            {"isnotnull", {"_ IS NOT NULL"}},
+            {"instr", {"Find"}},
+            {"currentdatetime", {"CurrentUtcDatetime"}},
+            {"parsejson", {"Yson::ParseJson"}},
+            {"splitbychar", {"String::SplitToList or Unicode::SplitToList"}},
+            {"splitbystring", {"String::SplitToList or Unicode::SplitToList"}},
+            {"converttostringlist", {"Yson::ConvertToStringList"}},
+            {"converttoint64", {"Yson::ConvertToInt64"}},
+            {"asoptional", {"Just"}},
+            {"getdate", {"CurrentUtcDate"}},
+            {"datetrunc", {"DateTime::StartOf"}},
+            {"regexp_substr", {"Re2::Capture"}},
+            {"sqrt", {"Math::Sqrt"}},
+            {"pow", {"Math::Pow"}},
+            {"power", {"Math::Pow"}},
+            {"path", {"TablePath"}},
+            {"log", {"Math::Log"}},
+            {"regiontoname", {"Geo::RegionById(_).Name"}},
+            {"regiontocountry", {"Geo::RoundRegionById(_,'country').name"}},
+            {"formatdatetime", {"DateTime::Format"}},
+            {"yesterday", {"CurrentUtcDate() - Interval('P1D')"}},
+            {"date_format", {"DateTime::Format"}},
+            {"string_split", {"String::SplitToList or Unicode::SplitToList"}},
+            {"joinfromlist", {"String::JoinFromList or Unicode::JoinFromList"}},
+            {"listjoin", {"String::JoinFromList or Unicode::JoinFromList"}},
+            {"array_length", {"ListLength"}},
+            {"split_part", {"String::SplitToList or Unicode::SplitToList + operator '[]'"}},
+            {"createlist", {"ListCreate"}},
+            {"setlength", {"DictLength"}},
+            {"lookup", {"DictLookup"}},
+            {"arrayelement", {"operator '[]'"}},
+            {"hist", {"HISTOGRAM"}},
+            {"min_if", {"MIN(IF(_))"}},
+            {"minif", {"MIN(IF(_))"}},
+            {"max_if", {"MAX(IF(_))"}},
+            {"maxif", {"MAX(IF(_))"}},
+            {"totuple", {"ListToTuple(_,N)"}},
+            {"map", {"ListMap"}},
+            {"startofweek", {"DateTime::StartOfWeek"}},
+            {"dayofweek", {"DateTime::GetDayOfWeek"}},
+            {"nth", {"operator '.'"}},
+            {"member", {"operator '.'"}},
+        };
+
+        return missingFuncs;
+    }
 };
 
-TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVector<TNodePtr>& args,
-                          const TString& originalNameSpace, EAggregateMode aggMode, bool* mustUseNamed, bool warnOnYqlNameSpace) {
+TNodeResult BuildBuiltinFunc(
+    TContext& ctx,
+    TPosition pos,
+    TString name,
+    const TVector<TNodePtr>& args,
+    bool isYqlSelect,
+    const TString& originalNameSpace,
+    EAggregateMode aggMode,
+    bool* mustUseNamed,
+    bool warnOnYqlNameSpace)
+{
     const TBuiltinFuncData* funcData = Singleton<TBuiltinFuncData>();
     const TBuiltinFactoryCallbackMap& builtinFuncs = funcData->BuiltinFuncs;
     const TAggrFuncFactoryCallbackMap& aggrFuncs = funcData->AggrFuncs;
     const TCoreFuncMap& coreFuncs = funcData->CoreFuncs;
+    const TSimplePgFuncMap& simplePgFuncs = funcData->SimplePgFuncs;
+    const TMissingFuncMap& missingFuncs = funcData->MissingFuncs;
 
     for (auto& arg : args) {
         if (!arg) {
-            return nullptr;
+            return std::unexpected(ESQLError::Basic);
         }
     }
 
@@ -3540,7 +3726,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     if (ns.empty()) {
         TMaybe<TIssue> error = NormalizeName(pos, normalizedName);
         if (!error.Empty()) {
-            return new TInvalidBuiltin(pos, error->GetMessage());
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, error->GetMessage())));
         }
 
         auto coreFunc = coreFuncs.find(normalizedName);
@@ -3548,8 +3734,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             ns = "core";
             name = coreFunc->second.Name;
             if (args.size() < coreFunc->second.MinArgs || args.size() > coreFunc->second.MaxArgs) {
-                return new TInvalidBuiltin(pos, TStringBuilder() << name << " expected from "
-                                                                 << coreFunc->second.MinArgs << " to " << coreFunc->second.MaxArgs << " arguments, but got: " << args.size());
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << name << " expected from "
+                                                                                   << coreFunc->second.MinArgs << " to " << coreFunc->second.MaxArgs << " arguments, but got: " << args.size())));
             }
 
             if (coreFunc->second.MinArgs != coreFunc->second.MaxArgs) {
@@ -3575,13 +3761,20 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 out << "DateTime2:: is a temporary alias for DateTime:: which will be "
                     << "removed in the future, use DateTime:: instead";
             })) {
-            return nullptr;
+            return std::unexpected(ESQLError::Basic);
         }
     }
 
     if (ns == "datetime") {
         ns = "datetime2";
         nameSpace = "DateTime2";
+    }
+
+    // SimplePg shadows builtins
+    if (ctx.Scoped->SimplePgByDefault) {
+        if (simplePgFuncs.contains(lowerName)) {
+            ns = "simplepg";
+        }
     }
 
     auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(ns);
@@ -3601,25 +3794,26 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             break;
     }
 
+    bool checkFilter = true;
     if (ns == "yql" || ns == "@yql") {
         if (warnOnYqlNameSpace && GetEnv("YQL_DETERMINISTIC_MODE").empty()) {
             if (!ctx.Warning(pos, TIssuesIds::YQL_S_EXPRESSIONS_CALL, [](auto& out) {
                     out << "It is not recommended to directly access s-expressions functions via YQL::" << Endl
                         << "This mechanism is mostly intended for temporary workarounds or internal testing purposes";
                 })) {
-                return nullptr;
+                return std::unexpected(ESQLError::Basic);
             }
         }
 
         if (ns == "yql") {
-            return new TCallNodeImpl(pos, name, -1, -1, args);
+            return TNonNull(TNodePtr(new TCallNodeImpl(pos, name, -1, -1, args)));
         }
     } else if (moduleResource) {
         auto exportName = ns == "core" ? name : "$" + name;
         TVector<TNodePtr> applyArgs = {
             new TCallNodeImpl(pos, "bind", {BuildAtom(pos, ns + "_module", 0), BuildQuotedAtom(pos, exportName)})};
         applyArgs.insert(applyArgs.end(), args.begin(), args.end());
-        return new TCallNodeImpl(pos, "Apply", applyArgs);
+        return TNonNull(TNodePtr(new TCallNodeImpl(pos, "Apply", applyArgs)));
     } else if (ns == "hyperscan" || ns == "pcre" || ns == "pire" || ns.StartsWith("re2")) {
         TString moduleName(nameSpace);
         moduleName.to_title();
@@ -3629,7 +3823,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 new TCallNodeImpl(pos, "Void", 0, 0, {}),
                 args[0]};
             auto fullName = moduleName + "." + name;
-            return new TYqlTypeConfigUdf(pos, fullName, multiArgs, multiArgs.size() + 1);
+            return TNonNull(TNodePtr(new TYqlTypeConfigUdf(pos, fullName, multiArgs, multiArgs.size() + 1)));
         } else if (!(ns.StartsWith("re2") && (lowerName == "options" || lowerName == "isvalidregexp"))) {
             auto newArgs = args;
             if (ns.StartsWith("re2")) {
@@ -3640,22 +3834,22 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                         newArgs.pop_back();
                     }
                 } else {
-                    return new TInvalidBuiltin(pos, TStringBuilder() << ns << "." << name << " expected one or two arguments.");
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << ns << "." << name << " expected one or two arguments.")));
                 }
             }
 
-            return BuildUdf(ctx, pos, moduleName, name, newArgs);
+            return Wrap(BuildUdf(ctx, pos, moduleName, name, newArgs));
         }
     } else if (ns == "pg" || ns == "pgagg" || ns == "pgproc") {
         bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
         bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);
         if (!isAggregateFunc && !isNormalFunc) {
-            return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown function: " << name);
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown function: " << name)));
         }
 
         if (isAggregateFunc && isNormalFunc) {
             if (ns == "pg") {
-                return new TInvalidBuiltin(pos, TStringBuilder() << "Ambigious function: " << name << ", use either PgAgg:: or PgProc:: namespace");
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Ambigious function: " << name << ", use either PgAgg:: or PgProc:: namespace")));
             } else if (ns == "pgagg") {
                 isNormalFunc = false;
             } else {
@@ -3664,29 +3858,29 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         }
 
         if (isAggregateFunc && ns == "pgproc") {
-            return new TInvalidBuiltin(pos, TStringBuilder() << "Invalid namespace for aggregation function: " << name << ", use either Pg:: or PgAgg:: namespace");
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Invalid namespace for aggregation function: " << name << ", use either Pg:: or PgAgg:: namespace")));
         }
 
         if (isNormalFunc && ns == "pgagg") {
-            return new TInvalidBuiltin(pos, TStringBuilder() << "Invalid namespace for normal function: " << name << ", use either Pg:: or PgProc:: namespace");
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Invalid namespace for normal function: " << name << ", use either Pg:: or PgProc:: namespace")));
         }
 
         if (isAggregateFunc) {
             if (aggMode == EAggregateMode::Distinct) {
-                return new TInvalidBuiltin(pos, "Distinct is not supported yet for PG aggregation ");
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "Distinct is not supported yet for PG aggregation ")));
             }
 
-            return BuildAggrFuncFactoryCallback(name, "", EAggrFuncTypeCallback::PG)(pos, args, aggMode, false);
+            return BuildAggrFuncFactoryCallback(name, "", EAggregationType::PG)(pos, args, aggMode, false, /*isYqlSelect=*/isYqlSelect);
         } else {
             YQL_ENSURE(isNormalFunc);
             TVector<TNodePtr> pgCallArgs;
             pgCallArgs.push_back(BuildLiteralRawString(pos, name));
             pgCallArgs.insert(pgCallArgs.end(), args.begin(), args.end());
-            return new TYqlPgCall<false>(pos, pgCallArgs);
+            return TNonNull(TNodePtr(new TYqlPgCall<false>(pos, pgCallArgs)));
         }
     } else if (name == "MakeLibraPreprocessor") {
         if (args.size() != 1) {
-            return new TInvalidBuiltin(pos, TStringBuilder() << name << " requires exactly one argument");
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << name << " requires exactly one argument")));
         }
 
         auto settings = NYT::TNode::CreateMap();
@@ -3702,11 +3896,11 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         if (!structNode) {
             if (auto callNode = args[0]->GetCallNode()) {
                 if (callNode->GetOpName() == "AsStruct") {
-                    return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs());
+                    return Wrap(BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs()));
                 }
             }
 
-            return new TInvalidBuiltin(pos, TStringBuilder() << name << " requires struct as argument");
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << name << " requires struct as argument")));
         }
 
         for (const auto& item : structNode->GetExprs()) {
@@ -3714,13 +3908,13 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (label == "Entities") {
                 auto callNode = item->GetCallNode();
                 if (!callNode || callNode->GetOpName() != "AsListMayWarn") {
-                    return new TInvalidBuiltin(pos, TStringBuilder() << name << " entities must be list of strings");
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << name << " entities must be list of strings")));
                 }
 
                 auto entities = NYT::TNode::CreateList();
                 for (const auto& entity : callNode->GetArgs()) {
                     if (!entity->IsLiteral() || entity->GetLiteralType() != "String") {
-                        return new TInvalidBuiltin(pos, TStringBuilder() << name << " entity must be string literal");
+                        return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << name << " entity must be string literal")));
                     }
                     entities.Add(entity->GetLiteralValue());
                 }
@@ -3728,45 +3922,45 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 settings(label, std::move(entities));
             } else if (label == "EntitiesStrategy") {
                 if (!item->IsLiteral() || item->GetLiteralType() != "String") {
-                    return new TInvalidBuiltin(
-                        pos, TStringBuilder() << name << " entities strategy must be string literal");
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(
+                        pos, TStringBuilder() << name << " entities strategy must be string literal")));
                 }
 
                 if (!EqualToOneOf(item->GetLiteralValue(), "whitelist", "blacklist")) {
-                    return new TInvalidBuiltin(
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(
                         pos,
-                        TStringBuilder() << name << " got invalid entities strategy: expected 'whitelist' or 'blacklist'");
+                        TStringBuilder() << name << " got invalid entities strategy: expected 'whitelist' or 'blacklist'")));
                 }
 
                 settings(label, item->GetLiteralValue());
             } else if (label == "Mode") {
                 if (!item->IsLiteral() || item->GetLiteralType() != "String") {
-                    return new TInvalidBuiltin(
-                        pos, TStringBuilder() << name << " mode must be string literal");
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(
+                        pos, TStringBuilder() << name << " mode must be string literal")));
                 }
 
                 settings(label, item->GetLiteralValue());
             } else if (EqualToOneOf(label, "BlockstatDict", "ParseWithFat")) {
                 continue;
             } else {
-                return new TInvalidBuiltin(
+                return TNonNull(TNodePtr(new TInvalidBuiltin(
                     pos,
                     TStringBuilder()
                         << name << " got unsupported setting: " << label
-                        << "; supported: Entities, EntitiesStrategy, BlockstatDict, ParseWithFat");
+                        << "; supported: Entities, EntitiesStrategy, BlockstatDict, ParseWithFat")));
             }
         }
 
-        return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs());
+        return Wrap(BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs()));
     } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) {
         auto scriptName = NKikimr::NMiniKQL::IsCustomPython(scriptType) ? nameSpace : TString(NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType));
-        return BuildScriptUdf(pos, scriptName, name, args, nullptr);
+        return Wrap(BuildScriptUdf(pos, scriptName, name, args, nullptr));
     } else if (ns.empty()) {
         if (auto simpleType = LookupSimpleType(normalizedName, ctx.FlexibleTypes, /* isPgType = */ false)) {
             const auto type = *simpleType;
             if (NUdf::FindDataSlot(type)) {
                 YQL_ENSURE(type != "Decimal");
-                return new TYqlData(pos, type, args);
+                return TNonNull(TNodePtr(new TYqlData(pos, type, args)));
             }
 
             if (type.StartsWith("pg") || type.StartsWith("_pg")) {
@@ -3777,11 +3971,11 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                                                                                             TString(type.StartsWith("pg") ? "" : "_") + type.substr(type.StartsWith("pg") ? 2 : 3), TNodeFlags::Default)}));
                     pgConstArgs.insert(pgConstArgs.end(), args.begin() + 1, args.end());
                 }
-                return new TYqlPgConst(pos, pgConstArgs);
+                return TNonNull(TNodePtr(new TYqlPgConst(pos, pgConstArgs)));
             } else if (type == "Void" || type == "EmptyList" || type == "EmptyDict") {
-                return new TCallNodeImpl(pos, type, 0, 0, args);
+                return TNonNull(TNodePtr(new TCallNodeImpl(pos, type, 0, 0, args)));
             } else {
-                return new TInvalidBuiltin(pos, TStringBuilder() << "Can not create objects of type " << type);
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Can not create objects of type " << type)));
             }
         }
 
@@ -3795,112 +3989,122 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                         dataTypeArgs.push_back(MakeAtomFromExpression(ctx.Pos(), ctx, arg).Build());
                     }
                 }
-                return new TCallNodeImpl(pos, "DataType", dataTypeArgs);
+                return TNonNull(TNodePtr(new TCallNodeImpl(pos, "DataType", dataTypeArgs)));
             }
-            return new TYqlData(pos, "Decimal", args);
+            return TNonNull(TNodePtr(new TYqlData(pos, "Decimal", args)));
         }
 
         if (normalizedName == "tablename") {
-            return new TTableName(pos, args, ctx.Scoped->CurrService);
+            return TNonNull(TNodePtr(new TTableName(pos, args, ctx.Scoped->CurrService)));
         }
 
         if (normalizedName == "aggregationfactory") {
             if (args.size() < 1 || !args[0]->GetLiteral("String")) {
-                return new TInvalidBuiltin(pos, "AGGREGATION_FACTORY requries a function name");
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "AGGREGATION_FACTORY requries a function name")));
             }
 
             auto aggNormalizedName = *args[0]->GetLiteral("String");
             auto error = NormalizeName(pos, aggNormalizedName);
             if (!error.Empty()) {
-                return new TInvalidBuiltin(pos, error->GetMessage());
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, error->GetMessage())));
             }
 
             if (aggNormalizedName == "aggregateby") {
-                return new TInvalidBuiltin(pos, "AGGREGATE_BY is not allowed to use with AGGREGATION_FACTORY");
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "AGGREGATE_BY is not allowed to use with AGGREGATION_FACTORY")));
             }
 
             if (aggNormalizedName == "multiaggregateby") {
-                return new TInvalidBuiltin(pos, "MULTI_AGGREGATE_BY is not allowed to use with AGGREGATION_FACTORY");
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "MULTI_AGGREGATE_BY is not allowed to use with AGGREGATION_FACTORY")));
             }
 
             if (aggMode == EAggregateMode::Distinct || aggMode == EAggregateMode::OverWindowDistinct) {
-                return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions")));
             }
 
             if (to_lower(*args[0]->GetLiteral("String")).StartsWith("pg::")) {
                 auto name = args[0]->GetLiteral("String")->substr(4);
                 const bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
                 if (!isAggregateFunc) {
-                    return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"))));
                 }
 
-                return BuildAggrFuncFactoryCallback(name, "", EAggrFuncTypeCallback::PG)(pos, args, aggMode, true);
+                return BuildAggrFuncFactoryCallback(name, "", EAggregationType::PG)(pos, args, aggMode, true, /*isYqlSelect=*/isYqlSelect);
             }
 
             AdjustCheckedAggFuncName(aggNormalizedName, ctx);
 
             auto aggrCallback = aggrFuncs.find(aggNormalizedName);
             if (aggrCallback == aggrFuncs.end()) {
-                return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"))));
             }
 
             switch (ctx.GetColumnReferenceState()) {
                 case EColumnRefState::MatchRecognizeMeasures:
                     [[fallthrough]];
                 case EColumnRefState::MatchRecognizeDefine:
-                    return new TInvalidBuiltin(pos, "Cannot use aggregation factory inside the MATCH_RECOGNIZE context");
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "Cannot use aggregation factory inside the MATCH_RECOGNIZE context")));
                 default:
                     if ("first" == aggNormalizedName || "last" == aggNormalizedName) {
-                        return new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context");
+                        return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context")));
                     }
-                    return (*aggrCallback).second.Callback(pos, args, aggMode, true);
+                    return (*aggrCallback).second.Callback(pos, args, aggMode, true, /*isYqlSelect=*/isYqlSelect);
             }
         }
 
         if (normalizedName == "aggregateby" || normalizedName == "multiaggregateby") {
             const bool multi = (normalizedName == "multiaggregateby");
             if (args.size() != 2) {
-                return new TInvalidBuiltin(pos, TStringBuilder() << (multi ? "MULTI_AGGREGATE_BY" : "AGGREGATE_BY") << " requries two arguments");
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << (multi ? "MULTI_AGGREGATE_BY" : "AGGREGATE_BY") << " requries two arguments")));
             }
 
             auto name = multi ? "MultiAggregateBy" : "AggregateBy";
             auto aggr = BuildFactoryAggregation(pos, name, "", aggMode, multi);
-            return new TBasicAggrFunc(pos, name, aggr, args);
+            return TNonNull(TNodePtr(new TBasicAggrFunc(pos, name, aggr, args)));
         }
 
         AdjustCheckedAggFuncName(normalizedName, ctx);
 
         auto aggrCallback = aggrFuncs.find(normalizedName);
         if (aggrCallback != aggrFuncs.end()) {
+            TNodeResult result = (*aggrCallback).second.Callback(pos, args, aggMode, false, /*isYqlSelect=*/isYqlSelect);
+            if (!result && result.error() == ESQLError::UnsupportedYqlSelect) {
+                return UnsupportedYqlSelect(
+                    ctx, TStringBuilder() << "Aggregation '"
+                                          << (originalNameSpace.empty() ? "" : originalNameSpace)
+                                          << (originalNameSpace.empty() ? "" : "::")
+                                          << name << "'");
+            }
+            if (!result) {
+                return std::unexpected(result.error());
+            }
+
             switch (ctx.GetColumnReferenceState()) {
-                case EColumnRefState::MatchRecognizeMeasures: {
-                    auto result = (*aggrCallback).second.Callback(pos, args, aggMode, false);
-                    return BuildMatchRecognizeVarAccess(pos, std::move(result));
-                }
+                case EColumnRefState::MatchRecognizeMeasures:
+                    return Wrap(BuildMatchRecognizeVarAccess(pos, std::move(*result)));
                 case EColumnRefState::MatchRecognizeDefine:
-                    return BuildMatchRecognizeDefineAggregate(ctx.Pos(), normalizedName, args);
+                    return Wrap(BuildMatchRecognizeDefineAggregate(ctx.Pos(), normalizedName, args));
                 default:
                     if ("first" == normalizedName || "last" == normalizedName) {
-                        return new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context");
+                        return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "Cannot use FIRST and LAST outside the MATCH_RECOGNIZE context")));
                     }
-                    return (*aggrCallback).second.Callback(pos, args, aggMode, false);
+                    return result;
             }
         }
         if (aggMode == EAggregateMode::Distinct || aggMode == EAggregateMode::OverWindowDistinct) {
-            return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions")));
         }
 
         auto builtinCallback = builtinFuncs.find(normalizedName);
         if (builtinCallback != builtinFuncs.end()) {
-            return (*builtinCallback).second.Callback(pos, args);
+            return Wrap((*builtinCallback).second.Callback(pos, args));
         } else if (normalizedName == "udf") {
             if (mustUseNamed && *mustUseNamed) {
                 *mustUseNamed = false;
             }
-            return new TUdfNode(pos, args);
+            return TNonNull(TNodePtr(new TUdfNode(pos, args)));
         } else if (normalizedName == "asstruct" || normalizedName == "structtype") {
             if (args.empty()) {
-                return new TCallNodeImpl(pos, normalizedName == "asstruct" ? "AsStruct" : "StructType", 0, 0, args);
+                return TNonNull(TNodePtr(new TCallNodeImpl(pos, normalizedName == "asstruct" ? "AsStruct" : "StructType", 0, 0, args)));
             }
 
             if (mustUseNamed && *mustUseNamed) {
@@ -3910,19 +4114,19 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 auto posArgs = args[0]->GetTupleNode();
                 if (posArgs->IsEmpty()) {
                     if (normalizedName == "asstruct") {
-                        return args[1];
+                        return Wrap(args[1]);
                     } else {
                         Y_DEBUG_ABORT_UNLESS(args[1]->GetStructNode());
                         auto namedArgs = args[1]->GetStructNode();
-                        return new TStructTypeNode(pos, namedArgs->GetExprs());
+                        return TNonNull(TNodePtr(new TStructTypeNode(pos, namedArgs->GetExprs())));
                     }
                 }
             }
-            return new TInvalidBuiltin(pos, TStringBuilder() << (normalizedName == "asstruct" ? "AsStruct" : "StructType") << " requires all argument to be named");
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << (normalizedName == "asstruct" ? "AsStruct" : "StructType") << " requires all argument to be named")));
         } else if (normalizedName == "expandstruct") {
             if (mustUseNamed) {
                 if (!*mustUseNamed) {
-                    return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires at least one named argument");
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires at least one named argument")));
                 }
                 *mustUseNamed = false;
             }
@@ -3931,14 +4135,14 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             Y_DEBUG_ABORT_UNLESS(args[1]->GetStructNode());
             auto posArgs = args[0]->GetTupleNode();
             if (posArgs->GetTupleSize() != 1) {
-                return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires all arguments except first to be named");
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires all arguments except first to be named")));
             }
 
             TVector<TNodePtr> flattenMembersArgs = {
                 BuildTuple(pos, {BuildQuotedAtom(pos, ""), posArgs->GetTupleElement(0)}),
                 BuildTuple(pos, {BuildQuotedAtom(pos, ""), args[1]}),
             };
-            return new TCallNodeImpl(pos, "FlattenMembers", 2, 2, flattenMembersArgs);
+            return TNonNull(TNodePtr(new TCallNodeImpl(pos, "FlattenMembers", 2, 2, flattenMembersArgs)));
         } else if (normalizedName == "visit" || normalizedName == "visitordefault") {
             bool withDefault = normalizedName == "visitordefault";
             TNodePtr variant;
@@ -3948,8 +4152,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 *mustUseNamed = false;
                 auto& positional = *args[0]->GetTupleNode();
                 if (positional.GetTupleSize() != (withDefault ? 2 : 1)) {
-                    return new TInvalidBuiltin(pos, TStringBuilder() << name
-                                                                     << " requires exactly " << (withDefault ? 2 : 1) << " positional arguments when named args are used");
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << name
+                                                                                       << " requires exactly " << (withDefault ? 2 : 1) << " positional arguments when named args are used")));
                 }
                 auto& named = *args[1]->GetStructNode();
                 variant = positional.GetTupleElement(0);
@@ -3966,8 +4170,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             } else {
                 size_t minArgs = withDefault ? 2 : 1;
                 if (args.size() < minArgs) {
-                    return new TInvalidBuiltin(pos, TStringBuilder() << name
-                                                                     << " requires at least " << minArgs << " positional arguments");
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << name
+                                                                                       << " requires at least " << minArgs << " positional arguments")));
                 }
                 variant = args[0];
                 labels.reserve(args.size() - minArgs);
@@ -3990,11 +4194,29 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (dflt.Defined()) {
                 resultArgs.emplace_back(std::move(dflt->Get()));
             }
-            return new TCallNodeImpl(pos, "SqlVisit", 1, -1, resultArgs);
+            return TNonNull(TNodePtr(new TCallNodeImpl(pos, "SqlVisit", 1, -1, resultArgs)));
         } else if (normalizedName == "sqlexternalfunction") {
-            return new TCallNodeImpl(pos, "SqlExternalFunction", args);
+            return TNonNull(TNodePtr(new TCallNodeImpl(pos, "SqlExternalFunction", args)));
         } else {
-            return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown builtin: " << name);
+            TStringBuilder b;
+            b << "Unknown builtin: " << name;
+            auto simplePgFunc = simplePgFuncs.find(lowerName);
+            if (simplePgFunc != simplePgFuncs.end()) {
+                b << ", consider using " << simplePgFunc->second.NativeFuncName << " function instead.";
+                b << " It's possible to use SimplePg::" << lowerName << " function as well but with some performance overhead.";
+            } else if (auto it = missingFuncs.find(lowerName); it != missingFuncs.end()) {
+                b << ", consider using " << it->second.Suggestion << " function(s) instead.";
+            } else {
+                bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
+                bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);
+                if (isAggregateFunc) {
+                    b << ", consider using PgAgg::" << name;
+                } else if (isNormalFunc) {
+                    b << ", consider using Pg::" << name;
+                }
+            }
+
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, b)));
         }
     }
 
@@ -4014,7 +4236,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         if (!ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_JSON_UDF, [](auto& out) {
                 out << "Json UDF is deprecated. Please use JSON API instead";
             })) {
-            return nullptr;
+            return std::unexpected(ESQLError::Basic);
         }
 
         ns = "yson";
@@ -4086,9 +4308,38 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         };
     }
 
+    if (ns == "simplepg") {
+        checkFilter = false;
+        auto simplePgFunc = simplePgFuncs.find(lowerName);
+        if (simplePgFunc == simplePgFuncs.end()) {
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown function: SimplePg::" << name)));
+        }
+
+        nameSpace = "SimplePg";
+        name = lowerName;
+        if (!ctx.Warning(pos, TIssuesIds::CORE_SIMPLE_PG, [&](auto& out) {
+                out << "Consider using function " << simplePgFunc->second.NativeFuncName << " instead to avoid performance overhead";
+            })) {
+            return std::unexpected(ESQLError::Basic);
+        }
+    }
+
+    if (checkFilter && ctx.Settings.UdfFilter) {
+        if (ns == "yson2") {
+            ns = "yson";
+        } else if (ns == "datetime2") {
+            ns = "datetime";
+        }
+
+        auto ptr = ctx.Settings.UdfFilter->FindPtr(ns);
+        if (ptr && !ptr->contains(lowerName)) {
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown function: " << originalNameSpace << "::" << name)));
+        }
+    }
+
     TNodePtr typeConfig = MakeTypeConfig(pos, ns, usedArgs);
-    return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, externalTypes,
-                        TDeferredAtom(typeConfig, ctx), nullptr, nullptr, {});
+    return Wrap(BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, externalTypes,
+                             TDeferredAtom(typeConfig, ctx), nullptr, nullptr, {}));
 }
 
 void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind)>& callback) {
@@ -4096,8 +4347,9 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
     const TBuiltinFactoryCallbackMap& builtinFuncs = funcData->BuiltinFuncs;
     const TAggrFuncFactoryCallbackMap& aggrFuncs = funcData->AggrFuncs;
     const TCoreFuncMap& coreFuncs = funcData->CoreFuncs;
+    const TSimplePgFuncMap& simplePgFuncs = funcData->SimplePgFuncs;
 
-    std::map<std::string_view, std::string_view> map;
+    std::map<TString, TString> map;
     for (const auto& x : builtinFuncs) {
         if (!x.second.CanonicalSqlName.empty()) {
             map.emplace(x.second.CanonicalSqlName, x.second.Kind);
@@ -4112,6 +4364,10 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
 
     for (const auto& x : coreFuncs) {
         map.emplace(x.second.Name, "Normal");
+    }
+
+    for (const auto& x : simplePgFuncs) {
+        map.emplace(TString("SimplePg::") + x.first, "Normal");
     }
 
     for (const auto& x : map) {

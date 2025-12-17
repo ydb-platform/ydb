@@ -1,6 +1,6 @@
 """
 
-The compositor handles combining widgets in to a single screen (i.e. compositing).
+The compositor handles combining widgets into a single screen (i.e. compositing).
 
 It also stores the results of that process, so that Textual knows the widgets on
 the screen and their locations. The compositor uses this information to answer
@@ -598,6 +598,7 @@ class Compositor:
                 if widget.is_container:
                     # Arrange the layout
                     arrange_result = widget._arrange(child_region.size)
+
                     arranged_widgets = arrange_result.widgets
                     widgets.update(arranged_widgets)
 
@@ -615,6 +616,11 @@ class Compositor:
                     # An offset added to all placements
                     placement_offset = container_region.offset
                     placement_scroll_offset = placement_offset - widget.scroll_offset
+
+                    placements = [
+                        placement.process_offset(size.region, placement_scroll_offset)
+                        for placement in placements
+                    ]
 
                     layers_to_index = {
                         layer_name: index
@@ -643,6 +649,7 @@ class Compositor:
                         z,
                         fixed,
                         overlay,
+                        absolute,
                     ) in reversed(placements):
                         layer_index = get_layer_index(sub_widget.layer, 0)
                         # Combine regions with children to calculate the "virtual size"
@@ -656,17 +663,6 @@ class Compositor:
                             )
 
                         widget_order = order + ((layer_index, z, layer_order),)
-
-                        if overlay:
-                            styles = sub_widget.styles
-                            has_rule = styles.has_rule
-                            if has_rule("constrain_x") or has_rule("constrain_y"):
-                                widget_region = widget_region.constrain(
-                                    styles.constrain_x,
-                                    styles.constrain_y,
-                                    styles.margin,
-                                    no_clip,
-                                )
 
                         if widget._cover_widget is None:
                             add_widget(
@@ -712,22 +708,6 @@ class Compositor:
 
             elif visible:
                 # Add the widget to the map
-
-                if widget.absolute_offset is not None:
-                    margin = styles.margin
-                    region = region.at_offset(widget.absolute_offset + margin.top_left)
-                    region = region.translate(
-                        styles.offset.resolve(region.grow(margin).size, size)
-                    )
-                has_rule = styles.has_rule
-                if has_rule("constrain_x") or has_rule("constrain_y"):
-                    region = region.constrain(
-                        styles.constrain_x,
-                        styles.constrain_y,
-                        styles.margin,
-                        size.region,
-                    )
-
                 map[widget._render_widget] = _MapGeometry(
                     region,
                     order,
@@ -840,7 +820,7 @@ class Compositor:
 
         contains = Region.contains
         if len(self.layers_visible) > y >= 0:
-            for widget, cropped_region, region in self.layers_visible[y]:
+            for widget, cropped_region, region in self.layers_visible[int(y)]:
                 if contains(cropped_region, x, y) and widget.visible:
                     return widget, region
         raise errors.NoWidget(f"No widget under screen coordinate ({x}, {y})")
@@ -864,11 +844,11 @@ class Compositor:
         """Get the Style at the given cell or Style.null()
 
         Args:
-            x: X position within the Layout
-            y: Y position within the Layout
+            x: X position within the Layout.
+            y: Y position within the Layout.
 
         Returns:
-            The Style at the cell (x, y) within the Layout
+            The Style at the cell (x, y) within the Layout.
         """
         try:
             widget, region = self.get_widget_at(x, y)
@@ -886,11 +866,72 @@ class Compositor:
         if not lines:
             return Style.null()
         end = 0
+
         for segment in lines[0]:
             end += segment.cell_length
             if x < end:
                 return segment.style or Style.null()
+
         return Style.null()
+
+    def get_widget_and_offset_at(
+        self, x: int, y: int
+    ) -> tuple[Widget | None, Offset | None]:
+        """Get the Style at the given cell, the offset within the content.
+
+        Args:
+            x: X position within the Layout.
+            y: Y position within the Layout.
+
+        Returns:
+            A tuple of the widget at (x, y) and the offset within the widget.
+        """
+        try:
+            widget, region = self.get_widget_at(x, y)
+        except errors.NoWidget:
+            return None, None
+        if widget not in self.visible_widgets:
+            return None, None
+
+        if y >= widget.content_region.bottom:
+            x, y = widget.content_region.bottom_right_inclusive
+
+        gutter_left, gutter_right = widget.gutter.top_left
+        x -= region.x + gutter_left
+        y -= region.y + gutter_right
+
+        visible_screen_stack.set(widget.app._background_screens)
+        line = widget.render_line(y)
+
+        end = 0
+        start = 0
+        offset_y: int | None = None
+        offset_x = 0
+        offset_x2 = 0
+
+        for segment in line:
+            end += len(segment.text)
+            style = segment.style
+            if style is not None and style._meta is not None:
+                meta = style.meta
+                if "offset" in meta:
+                    offset_x, offset_y = style.meta["offset"]
+                    offset_x2 = offset_x + len(segment.text)
+
+                    if x < end and x >= start:
+                        if x == end - 1:
+                            segment_offset = len(segment.text)
+                        else:
+                            first, _ = segment.split_cells(x - start)
+                            segment_offset = len(first.text)
+                        return widget, (
+                            None
+                            if offset_y is None
+                            else Offset(offset_x + segment_offset, offset_y)
+                        )
+            start = end
+
+        return widget, (None if offset_y is None else Offset(offset_x2, offset_y))
 
     def find_widget(self, widget: Widget) -> MapGeometry:
         """Get information regarding the relative position of a widget in the Compositor.
@@ -1076,7 +1117,9 @@ class Compositor:
         crop = screen_region
         chops = self._render_chops(crop, lambda y: True)
         if simplify:
-            render_strips = [Strip.join(chop.values()).simplify() for chop in chops]
+            render_strips = [
+                Strip.join(chop.values()).simplify().discard_meta() for chop in chops
+            ]
         else:
             render_strips = [Strip.join(chop.values()) for chop in chops]
 
@@ -1144,19 +1187,16 @@ class Compositor:
 
         for region, clip, strips in renders:
             render_region = intersection(region, clip)
+            render_x = render_region.x
+            first_cut, last_cut = render_region.column_span
 
             for y, strip in zip(render_region.line_range, strips):
                 if not is_rendered_line(y):
                     continue
 
                 chops_line = chops[y]
-
-                first_cut, last_cut = render_region.column_span
                 final_cuts = [cut for cut in cuts[y] if (last_cut >= cut >= first_cut)]
-
-                render_x = render_region.x
-                relative_cuts = [cut - render_x for cut in final_cuts[1:]]
-                cut_strips = strip.divide(relative_cuts)
+                cut_strips = strip.divide([cut - render_x for cut in final_cuts[1:]])
 
                 # Since we are painting front to back, the first segments for a cut "wins"
                 get_chops_line = chops_line.get

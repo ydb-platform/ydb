@@ -277,11 +277,11 @@ public:
     }
 
     inline const TIssue* begin() const {
-        return Issues_.begin();
+        return Issues_.data();
     }
 
     inline const TIssue* end() const {
-        return Issues_.end();
+        return Issues_.data() + Issues_.size();
     }
 
     inline TIssue& back() {

@@ -189,6 +189,11 @@ public:
                     }
 
                     cluster = TString(node.Child(1)->Content());
+                    const bool validate = State_->Configuration->ValidateClusters.Get().GetOrElse(DEFAULT_VALIDATE_CLUSTERS);
+                    if (validate && *cluster != "$all" && *cluster != YtUnspecifiedCluster && !State_->Gateway->GetClusterServer(*cluster)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unknown cluster: " << *cluster));
+                        return false;
+                    }
                 }
 
                 return true;
@@ -510,7 +515,7 @@ public:
                 TStringBuf intent;
                 if (tableDesc.Intents & TYtTableIntent::Drop) {
                     intent = "drop";
-                } else if (tableDesc.Intents & (TYtTableIntent::Override | TYtTableIntent::Append)) {
+                } else if (tableDesc.Intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Replace)) {
                     intent = "modify";
                 } else if (tableDesc.Intents & TYtTableIntent::Flush) {
                     intent = "flush";

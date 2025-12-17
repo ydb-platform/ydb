@@ -55,6 +55,7 @@ SRCS(
 
     phy_opt/yql_yt_phy_opt.cpp
     phy_opt/yql_yt_phy_opt_content.cpp
+    phy_opt/yql_yt_phy_opt_create.cpp
     phy_opt/yql_yt_phy_opt_fuse.cpp
     phy_opt/yql_yt_phy_opt_helper.h
     phy_opt/yql_yt_phy_opt_lambda.cpp
@@ -122,6 +123,7 @@ PEERDIR(
     yt/yql/providers/yt/common
     yt/yql/providers/yt/expr_nodes
     yt/yql/providers/yt/lib/expr_traits
+    yt/yql/providers/yt/lib/full_capture
     yt/yql/providers/yt/lib/graph_reorder
     yt/yql/providers/yt/lib/hash
     yt/yql/providers/yt/lib/key_filter
@@ -130,6 +132,7 @@ PEERDIR(
     yt/yql/providers/yt/lib/row_spec
     yt/yql/providers/yt/lib/schema
     yt/yql/providers/yt/lib/skiff
+    yt/yql/providers/yt/lib/temp_files
     yt/yql/providers/yt/lib/yson_helpers
     yt/yql/providers/yt/opt
     yt/yql/providers/yt/gateway/qplayer

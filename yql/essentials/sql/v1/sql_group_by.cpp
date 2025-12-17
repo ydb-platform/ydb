@@ -275,7 +275,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             break;
         }
         case TRule_grouping_element::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -295,7 +295,7 @@ bool TGroupByClause::OrdinaryGroupingSet(const TRule_ordinary_grouping_set& node
     TNodePtr namedExprNode;
     {
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-        namedExprNode = NamedExpr(node.GetRule_named_expr1(), EExpr::GroupBy);
+        namedExprNode = Unwrap(NamedExpr(node.GetRule_named_expr1(), EExpr::GroupBy));
     }
     if (!namedExprNode) {
         return false;
@@ -370,14 +370,14 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
     {
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         TSqlExpression expr(Ctx_, Mode_);
-        LegacyHoppingWindowSpec_->TimeExtractor = expr.Build(node.GetRule_expr3());
+        LegacyHoppingWindowSpec_->TimeExtractor = Unwrap(expr.Build(node.GetRule_expr3()));
         if (!LegacyHoppingWindowSpec_->TimeExtractor) {
             return false;
         }
     }
     auto processIntervalParam = [&](const TRule_expr& rule) -> TNodePtr {
         TSqlExpression expr(Ctx_, Mode_);
-        auto node = expr.Build(rule);
+        auto node = Unwrap(expr.Build(rule));
         if (!node) {
             return nullptr;
         }
@@ -435,8 +435,11 @@ bool TGroupByClause::AllowUnnamed(TPosition pos, EGroupByFeatures featureContext
         case EGroupByFeatures::GroupingSet:
             feature = "GROUPING SETS";
             break;
-        default:
+        case EGroupByFeatures::Expression:
+        case EGroupByFeatures::Empty:
+        case EGroupByFeatures::End:
             YQL_ENSURE(false, "Unknown feature");
+            break;
     }
 
     Ctx_.Error(pos) << "Unnamed expressions are not supported in " << feature << ". Please use '<expr> AS <name>'.";

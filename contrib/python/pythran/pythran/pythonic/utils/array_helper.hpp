@@ -24,8 +24,7 @@ template <class A, size_t M>
 auto nget<L>::fast(A &&self, types::array_tuple<long, M> const &indices)
     -> decltype(nget<L - 1>().fast(std::forward<A>(self).fast(0), indices))
 {
-  return nget<L - 1>().fast(std::forward<A>(self).fast(indices[M - L - 1]),
-                            indices);
+  return nget<L - 1>().fast(std::forward<A>(self).fast(indices[M - L - 1]), indices);
 }
 
 template <class A, size_t M>

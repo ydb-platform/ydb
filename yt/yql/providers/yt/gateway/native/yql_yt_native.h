@@ -14,10 +14,9 @@ namespace NYql {
 
 struct TYtNativeServices: public TYtBaseServices {
     using TPtr = TIntrusivePtr<TYtNativeServices>;
-
-    TFileStoragePtr FileStorage;
     // allow anonymous access for tests
     bool DisableAnonymousClusterAccess = false;
+
     IMetricsRegistryPtr Metrics;
     ISecretMasker::TPtr SecretMasker;
 };

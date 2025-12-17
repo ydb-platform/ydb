@@ -893,14 +893,18 @@ void TTable::AddSafe(TPartView partView)
     }
 }
 
-EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
+TPrechargeResult TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
                          IPages* env, ui64 flg,
                          ui64 items, ui64 bytes,
                          EDirection direction,
                          TRowVersion snapshot,
                          TSelectStats& stats) const
 {
-    bool ready = true;
+    TPrechargeResult result = {
+        .Ready = true,
+        .ItemsPrecharged = 0,
+        .BytesPrecharged = 0,
+    };
     bool includeHistory = !snapshot.IsMax();
 
     if (items == Max<ui64>()) {
@@ -924,9 +928,13 @@ EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
                 {
                     TRowId row1 = pos->Slice.BeginRowId();
                     TRowId row2 = pos->Slice.EndRowId() - 1;
-                    ready &= CreateCharge(env, *pos->Part, tags, includeHistory)
-                        ->Do(key, key, row1, row2, *Scheme->Keys, items, bytes)
-                        .Ready;
+                    auto const chargeResult = CreateCharge(env, *pos->Part, tags, includeHistory)
+                        ->Do(key, key, row1, row2, *Scheme->Keys, items, bytes);
+
+                    result.Ready &= chargeResult.Ready;
+                    result.ItemsPrecharged += chargeResult.ItemsPrecharged;
+                    result.BytesPrecharged += chargeResult.BytesPrecharged;
+
                     ++stats.Sieved;
                 } else {
                     ++stats.Weeded;
@@ -938,18 +946,24 @@ EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
         const TCelled maxKey(maxKey_, *Scheme->Keys, false);
 
         for (const auto& run : GetLevels()) {
+            TPrechargeResult chargeResult;
+
             switch (direction) {
                 case EDirection::Forward:
-                    ready &= ChargeRange(env, minKey, maxKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
+                    chargeResult = ChargeRange(env, minKey, maxKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
                     break;
                 case EDirection::Reverse:
-                    ready &= ChargeRangeReverse(env, maxKey, minKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
+                    chargeResult = ChargeRangeReverse(env, maxKey, minKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
                     break;
             }
+
+            result.Ready &= chargeResult.Ready;
+            result.ItemsPrecharged += chargeResult.ItemsPrecharged;
+            result.BytesPrecharged += chargeResult.BytesPrecharged;
         }
     }
 
-    return ready ? EReady::Data : EReady::Page;
+    return result;
 }
 
 void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemGlob> apart, TRowVersion rowVersion)
@@ -1526,8 +1540,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         lastEpoch = Mutable->Epoch;
         if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
-                if (auto rowVersion = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
-                    return augment(*rowVersion);
+                if (auto info = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                    return augment(info);
                 }
             }
         }
@@ -1541,8 +1555,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             lastEpoch = MutableBackup->Epoch;
             if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
                 if (it->IsValid()) {
-                    if (auto rowVersion = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
-                        return augment(*rowVersion);
+                    if (auto info = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                        return augment(info);
                     }
                 }
             }
@@ -1555,8 +1569,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             lastEpoch = memTable->Epoch;
             if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
                 if (it->IsValid()) {
-                    if (auto rowVersion = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
-                        return augment(*rowVersion);
+                    if (auto info = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                        return augment(info);
                     }
                 }
             }
@@ -1576,8 +1590,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
                     if (res == EReady::Data && ready) {
                         Y_ENSURE(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
                         lastEpoch = part->Epoch;
-                        if (auto rowVersion = it.SkipToCommitted(committed, observer, lockMode, lockTxId)) {
-                            return augment(*rowVersion);
+                        if (auto info = it.SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                            return augment(info);
                         }
                     }
                     ready = ready && bool(res);

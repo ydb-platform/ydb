@@ -1,7 +1,7 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
+#include "schemeshard_index_utils.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -40,20 +40,21 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     auto indexedTable = tx.GetCreateIndexedTable();
     const NKikimrSchemeOp::TTableDescription& baseTableDescription = indexedTable.GetTableDescription();
 
-    ui32 indexesCount = indexedTable.IndexDescriptionSize();
-    ui32 indexedTableShards = 0;
-    for (const auto& desc : indexedTable.GetIndexDescription()) {
-        if (desc.IndexImplTableDescriptionsSize()) {
-            indexedTableShards += TTableInfo::ShardsToCreate(desc.GetIndexImplTableDescriptions(0));
-        } else {
-            indexedTableShards += 1;
-        }
+    ui32 indexCount = indexedTable.IndexDescriptionSize();
+    ui32 totalIndexTables = 0;
+    ui32 totalSequences = indexedTable.SequenceDescriptionSize();
+    ui32 totalIndexShards = 0;
+    for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
+        ui32 indexTableCount = 0, indexSequenceCount = 0, indexTableShards = 0;
+        TTableInfo::GetIndexObjectCount(indexDesc, indexTableCount, indexSequenceCount, indexTableShards);
+        totalIndexTables += indexTableCount;
+        totalSequences += indexSequenceCount;
+        totalIndexShards += indexTableShards;
     }
 
-    ui32 sequencesCount = indexedTable.SequenceDescriptionSize();
     ui32 baseShards = TTableInfo::ShardsToCreate(baseTableDescription);
-    ui32 shardsToCreate = baseShards + indexedTableShards;
-    ui32 pathToCreate = 1 + indexesCount * 2 + sequencesCount;
+    ui32 shardsToCreate = baseShards + totalIndexShards;
+    ui32 pathToCreate = 1 + indexCount + totalIndexTables + totalSequences;
 
     TPath workingDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     if (workingDir.IsEmpty()) {
@@ -86,7 +87,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
     TSubDomainInfo::TPtr domainInfo = baseTablePath.DomainInfo();
 
-    if (sequencesCount > 0 && domainInfo->GetSequenceShards().empty()) {
+    if (totalSequences > 0 && domainInfo->GetSequenceShards().empty()) {
         ++shardsToCreate;
     }
 
@@ -99,10 +100,10 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     << " GetShardsInside: " << domainInfo->GetShardsInside()
                     << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);
 
-    if (indexesCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
+    if (indexCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
         auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"
                                     << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
-                                    << ", intention to create new children: " << indexesCount;
+                                    << ", intention to create new children: " << indexCount;
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 
@@ -352,13 +353,26 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-                NKikimrSchemeOp::TTableDescription userIndexDesc;
-                if (indexDescription.IndexImplTableDescriptionsSize()) {
-                    // This description provided by user to override partition policy
+                bool withRelevance = indexDescription.GetFulltextIndexDescription().GetSettings()
+                    .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                NKikimrSchemeOp::TTableDescription userIndexDesc, docsTableDesc, dictTableDesc, statsTableDesc;
+                // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+                if (indexDescription.IndexImplTableDescriptionsSize() == (withRelevance ? 4 : 1)) {
+                    // Descriptions provided by user to override partition policy
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
+                    if (withRelevance) {
+                        docsTableDesc = indexDescription.GetIndexImplTableDescriptions(1);
+                        dictTableDesc = indexDescription.GetIndexImplTableDescriptions(2);
+                        statsTableDesc = indexDescription.GetIndexImplTableDescriptions(3);
+                    }
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc)));
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), withRelevance)));
+                if (withRelevance) {
+                    result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc)));
+                    result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
+                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
+                }
                 break;
             }
             default:

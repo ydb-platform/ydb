@@ -52,12 +52,14 @@ inline ui32 CalculateCRC32(const ui8 * data, ui32 size, ui32 hash = 0 ) {
 
 }
 
+#ifdef USE_X86_SIMD
 template
 __attribute__((target("avx2")))
 ui32 CalculateCRC32<NSimd::TSimdAVX2Traits>(const ui8 * data, ui32 size, ui32 hash = 0 );
 template
 __attribute__((target("sse4.2")))
 ui32 CalculateCRC32<NSimd::TSimdSSE42Traits>(const ui8 * data, ui32 size, ui32 hash = 0 );
+#endif
 
 }
 }

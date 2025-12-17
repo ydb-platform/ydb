@@ -12,7 +12,7 @@ namespace NKikimr::NPQ {
 
 using namespace NActors;
 
-class TReadProxy : public TBaseActor<TReadProxy>, private TConstantLogPrefix {
+class TReadProxy : public TBaseTabletActor<TReadProxy>, private TConstantLogPrefix {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
@@ -20,7 +20,7 @@ public:
 
     TReadProxy(const TActorId& sender, const ui64 tabletId, const TActorId& tablet, ui64 tabletGeneration,
                const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request)
-        : TBaseActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
+        : TBaseTabletActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
         , Sender(sender)
         , TabletGeneration(tabletGeneration)
         , Request(request)

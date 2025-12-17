@@ -24,6 +24,11 @@ namespace NKqp {
             kikimrSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         }
 
+        if (!kikimrSettings.AppConfig.GetColumnShardConfig().HasStatistics()) {
+            kikimrSettings.AppConfig.MutableColumnShardConfig()->MutableStatistics()->SetReportBaseStatisticsPeriodMs(1000);
+            kikimrSettings.AppConfig.MutableColumnShardConfig()->MutableStatistics()->SetReportExecutorStatisticsPeriodMs(1000);
+        }
+
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
         TableClient =
             std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));
@@ -101,6 +106,15 @@ namespace NKqp {
         auto it = TableClient->StreamExecuteScanQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
         TString result = StreamResultToYson(it, false, opStatus);
+        if (opStatus == EStatus::SUCCESS) {
+            UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
+        }
+    }
+
+    void TTestHelper::ReadDataExecQuery(const TString& query, const TString& expected, const EStatus opStatus /*= EStatus::SUCCESS*/) const {
+        auto it = QueryClient->StreamExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        TString result = StreamResultToYson(it, false, opStatus, "");
         if (opStatus == EStatus::SUCCESS) {
             UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
         }

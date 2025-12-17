@@ -8,7 +8,7 @@ using namespace NYdb::NTable;
 
 
 TGenerateInitialContentJob::TGenerateInitialContentJob(const TCreateOptions& createOpts, std::uint32_t maxId)
-    : TThreadJob(createOpts.CommonOptions)
+    : TThreadJob(createOpts.CommonOptions, "generate")
     , Executor(createOpts.CommonOptions, Stats, TExecutor::ModeBlocking)
     , PackGenerator(
         createOpts.CommonOptions
@@ -81,5 +81,4 @@ UPSERT INTO `%s` SELECT * FROM AS_TABLE($items);
 void TGenerateInitialContentJob::OnFinish() {
     Executor.Finish();
     Executor.Wait();
-    Stats.Flush();
 }

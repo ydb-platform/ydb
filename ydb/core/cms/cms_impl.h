@@ -106,6 +106,7 @@ private:
     class TTxStoreWalleTask;
     class TTxUpdateConfig;
     class TTxUpdateDowntimes;
+    class TTxStoreFirstBootTimestamp;
 
     struct TActionOptions {
         TDuration PermissionDuration;
@@ -150,6 +151,7 @@ private:
     ITransaction *CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateDowntimes();
+    ITransaction *CreateTxStoreFirstBootTimestamp();
 
     static void AuditLog(const TActorContext &ctx, const TString &message) {
         NCms::AuditLog("CMS tablet", message, ctx);
@@ -223,6 +225,17 @@ private:
         }
     }
 
+    #define HFuncChecked(TEvType, HandleFunc) \
+        case TEvType::EventType: { \
+            typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
+            if (State->Config.Enable) { \
+                HandleFunc(*x, this->ActorContext()); \
+            } else { \
+                ReplyWithError<TEvCms::TEvPermissionResponse>(*x, NKikimrCms::TStatus::ERROR_TEMP, "CMS is disabled", this->ActorContext()); \
+            } \
+            break; \
+        } Y_SEMICOLON_GUARD
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvClusterInfo, Handle);
@@ -234,9 +247,9 @@ private:
             cFunc(TEvPrivate::EvStartCollecting, StartCollecting);
             cFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
-            HFunc(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
+            HFuncChecked(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
-            HFunc(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
+            HFuncChecked(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManagePermissionRequest, Handle);
             HFunc(TEvCms::TEvConditionalPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvNotification, CheckAndEnqueueRequest);

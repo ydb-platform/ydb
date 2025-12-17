@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <yt/yt/client/transaction_client/config.h>
+
 #include <yt/yt/core/misc/config.h>
 
 namespace NYT::NApi {
@@ -37,6 +39,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
 void TConnectionDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("table_mount_cache", &TThis::TableMountCache)
+        .DefaultNew();
+    registrar.Parameter("timestamp_provider", &TThis::TimestampProvider)
         .DefaultNew();
     registrar.Parameter("tablet_write_backoff", &TThis::TabletWriteBackoff)
         .Default({

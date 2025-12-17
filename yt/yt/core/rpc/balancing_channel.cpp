@@ -11,8 +11,6 @@
 
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
-#include <yt/yt/core/misc/hedging_manager.h>
-
 #include <yt/yt/core/net/address.h>
 
 #include <yt/yt/core/ytree/fluent.h>
@@ -77,7 +75,7 @@ public:
         auto hedgingOptions = Config_->HedgingDelay
             ? std::make_optional(
                 THedgingChannelOptions{
-                    .HedgingManager = CreateSimpleHedgingManager(*Config_->HedgingDelay),
+                    .HedgingDelay = *Config_->HedgingDelay,
                     .CancelPrimaryOnHedging = Config_->CancelPrimaryRequestOnHedging,
                 })
             : std::nullopt;

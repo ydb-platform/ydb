@@ -44,6 +44,7 @@ message TDeleteOperationResponse {
 
 message TGetFmrTableInfoRequest {
     string TableId = 1;
+    string SessionId = 2;
 }
 
 message TGetFmrTableInfoResponse {
@@ -58,6 +59,36 @@ message TClearSessionRequest {
 message TClearSessionResponse {
     EOperationStatus Status = 1;
 };
+
+message TDropTablesRequest {
+    repeated string TableIds = 1;
+    string SessionId = 2;
+}
+
+message TDropTablesResponse {
+}
+
+message TOpenSessionRequest {
+    string SessionId = 1;
+}
+
+message TOpenSessionResponse {
+}
+
+message TPingSessionRequest {
+    string SessionId = 1;
+}
+
+message TPingSessionResponse {
+    bool Success = 1;
+}
+
+message TListSessionsRequest {
+}
+
+message TListSessionsResponse {
+    repeated string SessionIds = 1;
+}
 
 message TErrorResponse {
     string ErrorMessage = 1;

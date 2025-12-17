@@ -4,7 +4,6 @@ SRCS(
     sql_format.cpp
 )
 
-RESOURCE(DONT_PARSE yql/essentials/sql/v1/SQLv1.g.in SQLv1.g.in)
 RESOURCE(DONT_PARSE yql/essentials/sql/v1/SQLv1Antlr4.g.in SQLv1Antlr4.g.in)
 
 PEERDIR(
@@ -12,7 +11,7 @@ PEERDIR(
     yql/essentials/sql/settings
     yql/essentials/sql/v1/lexer
     yql/essentials/sql/v1/proto_parser
-    yql/essentials/parser/proto_ast/gen/v1_proto_split
+    yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4
     yql/essentials/core/sql_types
     library/cpp/protobuf/util
     library/cpp/resource
@@ -25,6 +24,5 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
-    ut
     ut_antlr4
 )

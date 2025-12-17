@@ -193,7 +193,7 @@ class NumPyConverter {
       mask_ = reinterpret_cast<PyArrayObject*>(mo);
     }
     length_ = static_cast<int64_t>(PyArray_SIZE(arr_));
-    itemsize_ = static_cast<int>(PyArray_DESCR(arr_)->elsize);
+    itemsize_ = static_cast<int64_t>(PyArray_ITEMSIZE(arr_));
     stride_ = static_cast<int64_t>(PyArray_STRIDES(arr_)[0]);
   }
 
@@ -470,7 +470,8 @@ inline Status NumPyConverter::ConvertData<Date32Type>(std::shared_ptr<Buffer>* d
 
   RETURN_NOT_OK(PrepareInputData<Date32Type>(data));
 
-  auto date_dtype = reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(dtype_->c_metadata);
+  auto date_dtype =
+      reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(PyDataType_C_METADATA(dtype_));
   if (dtype_->type_num == NPY_DATETIME) {
     // If we have inbound datetime64[D] data, this needs to be downcasted
     // separately here from int64_t to int32_t, because this data is not
@@ -506,7 +507,8 @@ inline Status NumPyConverter::ConvertData<Date64Type>(std::shared_ptr<Buffer>* d
 
   RETURN_NOT_OK(PrepareInputData<Date64Type>(data));
 
-  auto date_dtype = reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(dtype_->c_metadata);
+  auto date_dtype =
+      reinterpret_cast<PyArray_DatetimeDTypeMetaData*>(PyDataType_C_METADATA(dtype_));
   if (dtype_->type_num == NPY_DATETIME) {
     // If we have inbound datetime64[D] data, this needs to be downcasted
     // separately here from int64_t to int32_t, because this data is not
@@ -736,12 +738,13 @@ Status NumPyConverter::Visit(const StructType& type) {
     PyAcquireGIL gil_lock;
 
     // Create converters for each struct type field
-    if (dtype_->fields == NULL || !PyDict_Check(dtype_->fields)) {
+    if (PyDataType_FIELDS(dtype_) == NULL || !PyDict_Check(PyDataType_FIELDS(dtype_))) {
       return Status::TypeError("Expected struct array");
     }
 
     for (auto field : type.fields()) {
-      PyObject* tup = PyDict_GetItemString(dtype_->fields, field->name().c_str());
+      PyObject* tup =
+          PyDict_GetItemString(PyDataType_FIELDS(dtype_), field->name().c_str());
       if (tup == NULL) {
         return Status::Invalid("Missing field '", field->name(), "' in struct array");
       }

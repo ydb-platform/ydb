@@ -4,23 +4,15 @@
 namespace NYdb::inline Dev {
 
 TBalancingPolicy::TImpl TBalancingPolicy::TImpl::UseAllNodes() {
-    TBalancingPolicy::TImpl impl;
-    impl.PolicyType = EPolicyType::UseAllNodes;
-    return impl;
+    return {EPolicyType::UseAllNodes, std::nullopt, EPileState::UNSPECIFIED};
 }
 
 TBalancingPolicy::TImpl TBalancingPolicy::TImpl::UsePreferableLocation(const std::optional<std::string>& location) {
-    TBalancingPolicy::TImpl impl;
-    impl.PolicyType = EPolicyType::UsePreferableLocation;
-    impl.Location = location;
-    return impl;
+    return {EPolicyType::UsePreferableLocation, location, EPileState::UNSPECIFIED};
 }
 
 TBalancingPolicy::TImpl TBalancingPolicy::TImpl::UsePreferablePileState(EPileState pileState) {
-    TBalancingPolicy::TImpl impl;
-    impl.PolicyType = EPolicyType::UsePreferablePileState;
-    impl.PileState = pileState;
-    return impl;
+    return {EPolicyType::UsePreferablePileState, std::nullopt, pileState};
 }
 
 }

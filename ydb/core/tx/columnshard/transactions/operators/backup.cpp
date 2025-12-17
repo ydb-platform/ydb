@@ -1,7 +1,7 @@
 #include "backup.h"
-#include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
-#include <ydb/core/formats/arrow/serializer/native.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/tablet_id.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -18,18 +18,9 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_id")("problem", id.GetErrorMessage());
         return false;
     }
-    TConclusion<NOlap::NExport::TSelectorContainer> selector = NOlap::NExport::TSelectorContainer::BuildFromProto(txBody);
-    if (!selector) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_selector")("problem", selector.GetErrorMessage());
-        return false;
-    }
-    TConclusion<NOlap::NExport::TStorageInitializerContainer> storeInitializer = NOlap::NExport::TStorageInitializerContainer::BuildFromProto(txBody);
-    if (!storeInitializer) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_selector")("problem", storeInitializer.GetErrorMessage());
-        return false;
-    }
-    NArrow::NSerialization::TSerializerContainer serializer(std::make_shared<NArrow::NSerialization::TNativeSerializer>());
-    ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), selector.DetachResult(), storeInitializer.DetachResult(), serializer, GetTxId());
+    auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(NKikimr::NOlap::TSnapshot{txBody.GetBackupTask().GetSnapshotStep(), txBody.GetBackupTask().GetSnapshotTxId()});
+    auto columns = schema->GetIndexInfo().GetColumns();
+    ExportTask = std::make_shared<NOlap::NExport::TExportTask>(id.DetachResult(), columns, txBody.GetBackupTask(), GetTxId());
     NOlap::NBackground::TTask task(::ToString(ExportTask->GetIdentifier().GetPathId()), std::make_shared<NOlap::NBackground::TFakeStatusChannel>(), ExportTask);
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
         TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
@@ -64,7 +55,11 @@ bool TBackupTransactionOperator::ProgressOnExecute(
     return true;
 }
 
-bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
+bool TBackupTransactionOperator::ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) {
+    for (TActorId subscriber : NotifySubscribers) {
+        auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
+        ctx.Send(subscriber, event.Release(), 0, 0);
+    }
     return true;
 }
 
@@ -76,4 +71,29 @@ bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlat
     return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
+bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard & /*owner*/, const TActorContext & /*ctx*/) {
+    return true;
 }
+void TBackupTransactionOperator::RegisterSubscriber(const TActorId &actorId) {
+    NotifySubscribers.insert(actorId);
+}
+
+TString TBackupTransactionOperator::DoDebugString() const { 
+    return "BACKUP"; 
+}
+
+bool TBackupTransactionOperator::DoIsAsync() const { 
+    return true; 
+}
+
+TString TBackupTransactionOperator::DoGetOpType() const { 
+    return "Backup"; 
+}
+
+void TBackupTransactionOperator::DoFinishProposeOnComplete(TColumnShard & /*owner*/, const TActorContext & /*ctx*/) {
+}
+
+void TBackupTransactionOperator::DoFinishProposeOnExecute(TColumnShard & /*owner*/, NTabletFlatExecutor::TTransactionContext & /*txc*/) {
+}
+
+} // namespace NKikimr::NColumnShard

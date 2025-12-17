@@ -22,6 +22,8 @@ namespace NYT::NApi::NRpcProxy {
 
 namespace NProto {
 
+////////////////////////////////////////////////////////////////////////////////
+
 void ToProto(
     NProto::TTransactionalOptions* proto,
     const NApi::TTransactionalOptions& options);
@@ -121,6 +123,22 @@ void ToProto(
 void FromProto(
     NApi::TOperationEvent* result,
     const NProto::TOperationEvent& proto);
+
+void ToProto(
+    NProto::TJobTrace* proto,
+    const NApi::TJobTraceMeta& result);
+
+void FromProto(
+    NApi::TJobTraceMeta* result,
+    const NProto::TJobTrace& proto);
+
+void ToProto(
+    NProto::TCheckOperationPermissionResult* proto,
+    const NApi::TCheckOperationPermissionResult& result);
+
+void FromProto(
+    NApi::TCheckOperationPermissionResult* result,
+    const NProto::TCheckOperationPermissionResult& proto);
 
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema);
 void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
@@ -314,6 +332,24 @@ NApi::EJobStderrType ConvertJobStderrTypeFromProto(
 NProto::EJobStderrType ConvertJobStderrTypeToProto(
     NApi::EJobStderrType jobStderrType);
 
+NProto::EJobTraceProgress ConvertJobTraceProgressToProto(
+    NApi::EJobTraceProgress progress);
+
+NApi::EJobTraceProgress ConvertJobTraceProgressFromProto(
+    NProto::EJobTraceProgress proto);
+
+NProto::EJobTraceHealth ConvertJobTraceHealthToProto(
+    NApi::EJobTraceHealth health);
+
+NApi::EJobTraceHealth ConvertJobTraceHealthFromProto(
+    NProto::EJobTraceHealth proto);
+
+NProto::EJobTraceState ConvertJobTraceStateToProto(
+    NJobTrackerClient::EJobTraceState state);
+
+NJobTrackerClient::EJobTraceState ConvertJobTraceStateFromProto(
+    NProto::EJobTraceState proto);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
@@ -330,7 +366,7 @@ void ParseRequest(
 
 void FillRequest(
     TReqPingDistributedWriteSession* req,
-    const TSignedDistributedWriteSessionPtr session,
+    const TSignedDistributedWriteSessionPtr& session,
     const TDistributedWriteSessionPingOptions& options);
 
 void ParseRequest(
@@ -361,6 +397,56 @@ void ParseRequest(
     TSignedWriteFragmentCookiePtr* mutableCookie,
     TTableFragmentWriterOptions* mutableOptions,
     const TReqWriteTableFragment& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqStartDistributedWriteFileSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteFileSessionStartOptions& options);
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    TDistributedWriteFileSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteFileSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqPingDistributedWriteFileSession* req,
+    const TSignedDistributedWriteFileSessionPtr& session,
+    const TDistributedWriteFileSessionPingOptions& options);
+
+void ParseRequest(
+    TSignedDistributedWriteFileSessionPtr* mutableSession,
+    TDistributedWriteFileSessionPingOptions* mutableOptions,
+    const TReqPingDistributedWriteFileSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteFileSession* req,
+    const TDistributedWriteFileSessionWithResults& sessionWithResults,
+    const TDistributedWriteFileSessionFinishOptions& options);
+
+void ParseRequest(
+    TDistributedWriteFileSessionWithResults* mutableSessionWithResults,
+    TDistributedWriteFileSessionFinishOptions* mutableOptions,
+    const TReqFinishDistributedWriteFileSession& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqWriteFileFragment* req,
+    const TSignedWriteFileFragmentCookiePtr& cookie,
+    const TFileFragmentWriterOptions& options);
+
+void ParseRequest(
+    TSignedWriteFileFragmentCookiePtr* mutableCookie,
+    TFileFragmentWriterOptions* mutableOptions,
+    const TReqWriteFileFragment& req);
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NProto
 

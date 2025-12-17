@@ -15,10 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/row/row_encoder_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/row_encoder_internal.h"
 
-#include "arrow/util/bitmap_writer.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 #include <memory>
 

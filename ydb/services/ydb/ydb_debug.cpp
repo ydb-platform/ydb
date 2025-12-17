@@ -4,6 +4,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -29,53 +30,57 @@ TGRpcYdbDebugService::TGRpcYdbDebugService(NActors::TActorSystem *system,
 
 void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace Ydb::Debug;
-
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
     size_t proxyCounter = 0;
 
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {
         for (auto* cq: CQS) {
             MakeIntrusive<TGRpcRequest<PlainGrpcRequest, PlainGrpcResponse, TGRpcYdbDebugService>>(this, &Service_, cq,
-                [this](NYdbGrpc::IRequestContextBase* ctx) {
-                    NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());
+                [this](NYdbGrpc::IRequestContextBase* reqCtx) {
+                    NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer());
                     PlainGrpcResponse response;
                     auto ts = TInstant::Now();
                     response.SetCallBackTs(ts.MicroSeconds());
-                    ctx->Reply(&response, 0);
-                }, &Ydb::Debug::V1::DebugService::AsyncService::RequestPingPlainGrpc,
-                "PingPlainGrpc", logger, getCounterBlock("ping", "PingPlainGrpc"))->Run();
+                    reqCtx->Reply(&response, 0);
+                }, &TGrpcAsyncService::RequestPingPlainGrpc,
+                "PingPlainGrpc", logger, YDB_API_DEFAULT_COUNTER_BLOCK(ping, PingPlainGrpc))->Run();
         }
     }
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_DEBUG_METHOD
+#error SETUP_DEBUG_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, CB, REQUEST_TYPE, AUDIT_MODE) \
-    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {  \
-        for (auto* cq: CQS) { \
-            MakeIntrusive<TGRpcRequest<IN, OUT, TGRpcYdbDebugService>>(this, &Service_, cq, \
-                [this, proxyCounter](NYdbGrpc::IRequestContextBase* ctx) { \
-                    NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-                    ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()], \
-                        new TGrpcRequestNoOperationCall<IN, OUT> \
-                            (ctx, &CB, TRequestAuxSettings { \
-                                .RlMode = RLSWITCH(TRateLimiterMode::Rps), \
-                                .AuditMode = AUDIT_MODE, \
-                                .RequestType = NJaegerTracing::ERequestType::PING_##REQUEST_TYPE, \
-                            })); \
-                }, &Ydb::Debug::V1::DebugService::AsyncService::Request ## NAME, \
-                #NAME, logger, getCounterBlock("query", #NAME))->Run(); \
-            ++proxyCounter; \
-        }  \
+
+#define SETUP_DEBUG_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode) \
+    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                          \
+        for (auto* cq: CQS) {                                                          \
+            SETUP_RUNTIME_EVENT_METHOD(                                                \
+                methodName,                                                            \
+                inputType,                                                             \
+                outputType,                                                            \
+                methodCallback,                                                        \
+                rlMode,                                                                \
+                requestType,                                                           \
+                YDB_API_DEFAULT_COUNTER_BLOCK(ping, methodName),                       \
+                auditMode,                                                             \
+                COMMON,                                                                \
+                ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,                  \
+                GRpcProxies_[proxyCounter % GRpcProxies_.size()],                      \
+                cq,                                                                    \
+                nullptr,                                                               \
+                nullptr                                                                \
+            );                                                                         \
+            ++proxyCounter;                                                            \
+        }                                                                              \
     }
 
-    ADD_REQUEST(PingGrpcProxy, GrpcProxyRequest, GrpcProxyResponse, DoGrpcProxyPing, PROXY, TAuditMode::NonModifying());
-    ADD_REQUEST(PingKqpProxy, KqpProxyRequest, KqpProxyResponse, DoKqpPing, KQP, TAuditMode::NonModifying());
-    ADD_REQUEST(PingSchemeCache, SchemeCacheRequest, SchemeCacheResponse, DoSchemeCachePing, SCHEME_CACHE, TAuditMode::NonModifying());
-    ADD_REQUEST(PingTxProxy, TxProxyRequest, TxProxyResponse, DoTxProxyPing, TX_PROXY, TAuditMode::NonModifying());
-    ADD_REQUEST(PingActorChain, ActorChainRequest, ActorChainResponse, DoActorChainPing, ACTOR_CHAIN, TAuditMode::NonModifying());
+    SETUP_DEBUG_METHOD(PingGrpcProxy, GrpcProxyRequest, GrpcProxyResponse, DoGrpcProxyPing, RLSWITCH(Rps), PING_PROXY, TAuditMode::NonModifying());
+    SETUP_DEBUG_METHOD(PingKqpProxy, KqpProxyRequest, KqpProxyResponse, DoKqpPing, RLSWITCH(Rps), PING_KQP, TAuditMode::NonModifying());
+    SETUP_DEBUG_METHOD(PingSchemeCache, SchemeCacheRequest, SchemeCacheResponse, DoSchemeCachePing, RLSWITCH(Rps), PING_SCHEME_CACHE, TAuditMode::NonModifying());
+    SETUP_DEBUG_METHOD(PingTxProxy, TxProxyRequest, TxProxyResponse, DoTxProxyPing, RLSWITCH(Rps), PING_TX_PROXY, TAuditMode::NonModifying());
+    SETUP_DEBUG_METHOD(PingActorChain, ActorChainRequest, ActorChainResponse, DoActorChainPing, RLSWITCH(Rps), PING_ACTOR_CHAIN, TAuditMode::NonModifying());
 
-#undef ADD_REQUEST
+#undef SETUP_DEBUG_METHOD
 
 }
 

@@ -65,7 +65,7 @@ void THandlerSessionServiceCheckYandex::StartOidcProcess(const NActors::TActorCo
     }
     NYdbGrpc::TCallMeta meta;
     SetHeader(meta, "authorization", token);
-    meta.Timeout = TDuration::Seconds(10);
+    meta.Timeout = std::chrono::seconds(10);
     connection->DoRequest(request, std::move(responseCb), &yandex::cloud::priv::oauth::v1::SessionService::Stub::AsyncCheck, meta);
 }
 

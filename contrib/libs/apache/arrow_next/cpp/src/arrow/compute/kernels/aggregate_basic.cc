@@ -15,17 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/api_aggregate.h"
-#include "arrow/compute/kernels/aggregate_basic_internal.h"
-#include "arrow/compute/kernels/aggregate_internal.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/util_internal.h"
-#include "arrow/util/cpu_info.h"
-#include "arrow/util/hashing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/aggregate_basic_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/aggregate_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cpu_info.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/hashing.h"
 
 // Include templated definitions for aggregate kernels that must compiled here
 // with the SIMD level configured for this compilation unit in the build.
-#include "arrow/compute/kernels/aggregate_basic.inc.cc"  // NOLINT(build/include)
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/aggregate_basic.inc.cc"  // NOLINT(build/include)
 
 namespace arrow20 {
 namespace compute {

@@ -1,7 +1,9 @@
 #include "link_manager.h"
 #include "ctx.h"
+#include "ctx_impl.h"
+#include <mutex>
 
-#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
+#include <ydb/library/actors/interconnect/address/interconnect_address.h>
 
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
@@ -15,16 +17,26 @@
 
 #include <util/network/address.h>
 
+#if defined(__APPLE__) || defined(_darwin_)
+/* OSX seems not to define these. */
+#ifndef s6_addr16
+#define s6_addr16 __u6_addr.__u6_addr16
+#endif
+#ifndef s6_addr32
+#define s6_addr32 __u6_addr.__u6_addr32
+#endif
+#endif
+
 template <>
 struct std::less<ibv_gid> {
-    std::size_t operator()(const ibv_gid& a, const ibv_gid& b) const {
+    bool operator()(const ibv_gid& a, const ibv_gid& b) const noexcept {
         return std::tie(a.global.subnet_prefix, a.global.interface_id) <
                std::tie(b.global.subnet_prefix, b.global.interface_id);
     }
 };
 template <>
 struct std::equal_to<ibv_gid> {
-    bool operator()(const ibv_gid& a, const ibv_gid& b) const {
+    bool operator()(const ibv_gid& a, const ibv_gid& b) const noexcept {
         return a.global.interface_id == b.global.interface_id
             && a.global.subnet_prefix == b.global.subnet_prefix;
     }
@@ -36,6 +48,10 @@ static class TRdmaLinkManager {
 public:
     const TCtxsMap& GetAllCtxs() {
         return CtxMap;
+    }
+
+    bool IsLoadFail() const noexcept {
+        return LoadFail;
     }
 
     TRdmaCtx* GetCtx(const ibv_gid& gid) {
@@ -58,15 +74,16 @@ public:
         try {
             IbvDlOpen();
         } catch (std::exception& ex) {
-            Cerr << "Unalbe to load ibverbs library: " << ex.what() << Endl;
+            LoadFail = true;
             return;
         }
-        ScanDevices();
     }
-private:
-    TCtxsMap CtxMap;
 
     void ScanDevices() {
+        std::lock_guard<std::mutex> lock(Mtx);
+        if (Inited) {
+            return;
+        }
         int numDevices = 0;
         int err;
         ibv_device** deviceList = ibv_get_device_list(&numDevices);
@@ -101,10 +118,19 @@ private:
                 continue;
             }
 
+            /*
+             * TODO: Add ibv_query_gid_table support into arcadia ibv wrapper (contrib/libs/ibdrv) 
+             * This extension allows to get type of GID index to skip unsupported RoCEv1 
+             */
+
             for (uint8_t portNum = 1; portNum <= devAttrs.phys_port_cnt; portNum++) {
                 ibv_port_attr portAttrs;
                 err = ibv_query_port(ctx, portNum, &portAttrs);
                 if (err == 0) {
+                    if (portAttrs.state != IBV_PORT_ACTIVE) {
+                        continue; //Skip non active ports
+                    }
+
                     for (int gidIndex = 0; gidIndex < portAttrs.gid_tbl_len; gidIndex++ ) {
                         auto ctx = TRdmaCtx::Create(deviceCtx, portNum, gidIndex);
                         if (!ctx) {
@@ -118,13 +144,17 @@ private:
         }
         std::sort(CtxMap.begin(), CtxMap.end(),
             [](const auto& a, const auto& b) {
+                if (std::equal_to<ibv_gid>()(a.first, b.first)) {
+                    // Hack: Most implementations have RoCEv2 after RoCEv1, but we prefer RoCEv2 gid index 
+                    return a.second->GetGidIndex() > b.second->GetGidIndex();
+                }
                 return std::less<ibv_gid>()(a.first, b.first);
             });
 
         // check for duplicates
         for (size_t i = 0; i < CtxMap.size(); ++i) {
             auto ctx = CtxMap[i].second;
-            ctx->DeviceIndex = i;
+            ctx->Impl->DeviceIndex = i;
 
             if (i > 0) {
                 auto prevCtx = CtxMap[i - 1].second;
@@ -133,10 +163,16 @@ private:
                 }
             }
         }
+        Inited = true;
     }
 
+private:
+    TCtxsMap CtxMap;
     int ErrNo = 0;
     TString Err;
+    std::mutex Mtx;
+    bool Inited = false;
+    bool LoadFail = false;
 
 } RdmaLinkManager;
 
@@ -162,4 +198,48 @@ const TCtxsMap& GetAllCtxs() {
     return RdmaLinkManager.GetAllCtxs();
 }
 
+bool Init() {
+    if (RdmaLinkManager.IsLoadFail()) {
+        return false;
+    }
+    RdmaLinkManager.ScanDevices();
+    return true;
+}
+
+#if not defined(_win32_)
+in6_addr GetV6CompatAddr(const NInterconnect::TAddress& a) noexcept {
+    switch (a.GetFamily()) {
+        case AF_INET: {
+            TAddress::TV6Addr addr;
+            addr.s6_addr16[0] = 0;
+            addr.s6_addr16[1] = 0;
+            addr.s6_addr16[2] = 0;
+            addr.s6_addr16[3] = 0;
+            addr.s6_addr16[4] = 0;
+            addr.s6_addr16[5] = Max<ui16>();
+            addr.s6_addr16[6] = Max<ui16>();
+            addr.s6_addr32[3] = a.Addr.Ipv4.sin_addr.s_addr;
+            return addr;
+        }
+        case AF_INET6:
+            return a.Addr.Ipv6.sin6_addr;
+        default: {
+            TAddress::TV6Addr addr;
+            memset(&addr, 0, sizeof(addr));
+            return addr;
+        }
+        break;
+    }
+}
+#endif
+
+TRdmaCtx* GetCtx(const NInterconnect::TAddress& addr) {
+#if not defined(_win32_)
+    return GetCtx(GetV6CompatAddr(addr));
+#else
+    return nullptr;
+#endif
+
 } 
+
+}

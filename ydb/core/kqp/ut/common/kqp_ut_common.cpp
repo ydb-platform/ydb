@@ -1,18 +1,19 @@
 #include "kqp_ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
-#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/testing/common/env.h>
@@ -105,6 +106,7 @@ NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateMathModule();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateUnicodeModule();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDigestModule();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateFullTextModule();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
@@ -117,6 +119,7 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     funcRegistry->AddModule("", "Math", CreateMathModule());
     funcRegistry->AddModule("", "Unicode", CreateUnicodeModule());
     funcRegistry->AddModule("", "Digest", CreateDigestModule());
+    funcRegistry->AddModule("", "FullText", CreateFullTextModule());
 
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
@@ -130,7 +133,10 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
 }
 
 TTestLogSettings& TTestLogSettings::AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority) {
-    LogPriorities.emplace(service, priority);
+    if (!Freeze) {
+        LogPriorities.emplace(service, priority);
+    }
+
     return *this;
 }
 
@@ -170,13 +176,14 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     if (settings.EnableStorageProxy) {
-        auto& checkpoints = *appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig();
-        checkpoints.SetEnabled(true);
-        checkpoints.SetCheckpointingPeriodMillis(settings.CheckpointPeriod.MilliSeconds());
-        checkpoints.SetMaxInflight(1);
-        checkpoints.MutableExternalStorage()->SetEndpoint(GetEnv("YDB_ENDPOINT"));
-        checkpoints.MutableExternalStorage()->SetDatabase(GetEnv("YDB_DATABASE"));
-        checkpoints.MutableCheckpointGarbageConfig()->SetEnabled(true);
+        NFq::TCheckpointCoordinatorSettings::DefaultCheckpointingPeriod = settings.CheckpointPeriod;
+
+        auto* streamingQueries = appConfig.MutableQueryServiceConfig()->MutableStreamingQueries();
+        if (!settings.UseLocalCheckpointsInStreamingQueries) {
+            auto& checkpoints = *streamingQueries->MutableExternalStorage()->MutableDatabaseConnection();
+            checkpoints.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+            checkpoints.SetDatabase(GetEnv("YDB_DATABASE"));
+        }
     }
     if (!appConfig.GetQueryServiceConfig().HasAllExternalDataSourcesAreAvailable()) {
         appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
@@ -197,7 +204,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
     ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
-    ServerSettings->SetEnableStorageProxy(settings.EnableStorageProxy);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
@@ -1543,6 +1549,16 @@ void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const 
         permissions, path, user
     );
     auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+};
+
+void Revoke(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user) {
+    auto revokeQuery = Sprintf(R"(
+            REVOKE %s ON `%s` FROM `%s`;
+        )",
+        permissions, path, user
+    );
+    auto result = adminSession.ExecuteSchemeQuery(revokeQuery).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 };
 

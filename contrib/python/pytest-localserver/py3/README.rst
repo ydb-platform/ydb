@@ -29,15 +29,48 @@ no further!
 Quickstart
 ==========
 
+`myproject.py`
+
+.. code:: python
+
+  import requests
+
+
+  def make_request(url):
+      """A function that makes a web request."""
+      rsp = requests.get(url)
+      return rsp.text
+
+`test_myproject.py`
+
+.. code:: python
+
+  from myproject import request
+
+
+  def test_make_request(httpserver):
+      httpserver.serve_content(
+          content="success",
+          code=200,
+      )
+
+      assert make_request(httpserver.url) == "success"
+
+How-To
+======
+
 Let's say you have a function to scrape HTML which only required to be pointed
-at a URL ::
+at a URL :
+
+.. code:: python
 
     import requests
+
     def scrape(url):
-        html = requests.get(url).text
-        # some parsing happens here
-        # ...
-        return result
+      html = requests.get(url).text
+      # some parsing happens here
+      # ...
+      return result
 
 You want to test this function in its entirety without having to rely on a
 remote server whose content you cannot control, neither do you want to waste
@@ -45,30 +78,40 @@ time setting up a complex mechanism to mock or patch the underlying Python
 modules dealing with the actual HTTP request (of which there are more than one
 BTW). So what do you do?
 
-You simply use pytest's `funcargs feature`_ and simulate an entire server
-locally! ::
+You simply use pytest's `fixture feature`_ and simulate an entire server
+locally!
+
+.. code:: python
 
     def test_retrieve_some_content(httpserver):
-        httpserver.serve_content(open('cached-content.html').read())
-        assert scrape(httpserver.url) == 'Found it!'
+        httpserver.serve_content(open("cached-content.html").read())
+        assert scrape(httpserver.url) == "Found it!"
 
 What happened here is that for the duration of your tests an HTTP server is
 started on a random port on localhost which will serve the content you tell it
 to and behaves just like the real thing.
 
 The added bonus is that you can test whether your code behaves gracefully if
-there is a network problem::
+there is a network problem:
 
-    def test_content_retrieval_fails_graciously(httpserver):
-        httpserver.serve_content('File not found!', 404)
-        pytest.raises(ContentNotFoundException, scrape, httpserver.url)
+.. code:: python
 
-The same thing works for SMTP servers, too::
+  def test_content_retrieval_fails_graciously(httpserver):
+    httpserver.serve_content("File not found!", 404)
+    pytest.raises(ContentNotFoundException, scrape, httpserver.url)
+
+The same thing works for SMTP servers, too:
+
+.. code:: python
 
     def test_sending_some_message(smtpserver):
         mailer = MyMailer(host=smtpserver.addr[0], port=smtpserver.addr[1])
-        mailer.send(to='bob@example.com', from_='alice@example.com',
-            subject='MyMailer v1.0', body='Check out my mailer!')
+        mailer.send(
+            to="bob@example.com",
+            from_="alice@example.com",
+            subject="MyMailer v1.0",
+            body="Check out my mailer!"
+        )
         assert len(smtpserver.outbox)==1
 
 Here an SMTP server is started which accepts e-mails being sent to it. The
@@ -77,11 +120,12 @@ and what was sent by looking into the smtpserver's ``outbox``.
 
 It is really that easy!
 
-Available funcargs
-==================
+Fixtures
+========
 
-Here is a short overview of the available funcargs. For more details I suggest
-poking around in the code itself.
+Here is a short overview of the available pytest fixtures and their usage. This
+information is also available via `pytest --fixtures`. For more details I
+suggest poking around in the code itself.
 
 ``httpserver``
     provides a threaded HTTP server instance running on localhost. It has the
@@ -95,9 +139,17 @@ poking around in the code itself.
 
     Once these attributes are set, all subsequent requests will be answered with
     these values until they are changed or the server is stopped. A more
-    convenient way to change these is ::
+    convenient way to change these is :
 
-        httpserver.serve_content(content=None, code=200, headers=None, chunked=pytest_localserver.http.Chunked.NO, store_request_data=True)
+    .. code:: python
+
+      httpserver.serve_content(
+          content=None,
+          code=200,
+          headers=None,
+          chunked=pytest_localserver.http.Chunked.NO,
+          store_request_data=True
+      )
 
     The ``chunked`` attribute or parameter can be set to
 
@@ -149,27 +201,37 @@ Using your a WSGI application as test server
 ============================================
 
 As of version 0.3 you can now use a `WSGI application`_ to run on the test
-server ::
+server :
 
-    from pytest_localserver.http import WSGIServer
+.. code:: python
 
-    def simple_app(environ, start_response):
-        """Simplest possible WSGI application"""
-        status = '200 OK'
-        response_headers = [('Content-type', 'text/plain')]
-        start_response(status, response_headers)
-        return ['Hello world!\n']
+  import pytest
+  from pytest_localserver.http import WSGIServer
 
-    @pytest.fixture
-    def testserver(request):
-        """Defines the testserver funcarg"""
-        server = WSGIServer(application=simple_app)
-        server.start()
-        request.addfinalizer(server.stop)
-        return server
+  from myproject import make_request
 
-    def test_retrieve_some_content(testserver):
-        assert scrape(testserver.url) == 'Hello world!\n'
+
+  def simple_app(environ, start_response):
+      """Respond with success."""
+      status = "200 OK"
+      response_headers = [("Content-type", "text/plain")]
+      start_response(status, response_headers)
+      return ["success".encode("utf-8")]
+
+
+  @pytest.fixture
+  def testserver():
+      """Server for simple_app."""
+      server = WSGIServer(application=simple_app)
+      server.start()
+      yield server
+      server.stop()
+
+
+  def test_make_request(testserver):
+      """make_request() should return "success"."""
+      assert make_request(testserver.url) == "success"
+
 
 Have a look at the following page for more information on WSGI:
 http://wsgi.readthedocs.org/en/latest/learn.html
@@ -253,9 +315,9 @@ For package maintainers, here is how we release a new version:
        Having unsuccessfully tried to mock a server, I stumbled across
        `linkchecker`_ which uses a the same idea to test its internals.
 
-.. _monkeypatching: http://pytest.org/latest/monkeypatch.html
+.. _monkeypatching: https://docs.pytest.org/en/stable/how-to/monkeypatch.html
 .. _pytest: http://pytest.org/
-.. _funcargs feature: http://pytest.org/latest/funcargs.html
+.. _fixture feature: https://pytest.org/en/stable/explanation/fixtures.html
 .. _linkchecker: http://linkchecker.sourceforge.net/
 .. _WSGI application: http://www.python.org/dev/peps/pep-0333/
 .. _PyPI: http://pypi.python.org/pypi/pytest-localserver/

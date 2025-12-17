@@ -232,6 +232,18 @@ public:
 };
 
 /**
+ * Rarely used options for program factory.
+ */
+struct TInternalProgramSettings {
+    /// Nodes allocation limit
+    TMaybe<ui64> NodesAllocationLimit;
+    /// String allocation limit
+    TMaybe<ui64> StringsAllocationLimit;
+    /// Repeat transform limit
+    TMaybe<ui64> RepeatTransformLimit;
+};
+
+/**
  * General options for program factory.
  */
 struct TProgramFactoryOptions final {
@@ -268,11 +280,11 @@ public:
     /// Reuse allocated workers
     bool UseWorkerPool;
 
-    /// Use Antlr4 parser (for migration)
-    bool UseAntlr4;
-
     /// Language version
     TLangVersion LangVer;
+
+    /// Tweaks
+    TInternalProgramSettings InternalSettings;
 
 public:
     TProgramFactoryOptions();
@@ -388,6 +400,13 @@ public:
      * @return reference to self, to allow method chaining.
      */
     TProgramFactoryOptions& SetUseWorkerPool(bool useWorkerPool);
+
+    /**
+     * Set internal program settings.
+     *
+     * @return reference to self, to allow method chaining.
+     */
+    TProgramFactoryOptions& SetInternalSettings(const TInternalProgramSettings& settings);
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

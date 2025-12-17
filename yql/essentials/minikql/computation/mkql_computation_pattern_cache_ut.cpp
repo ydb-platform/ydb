@@ -389,6 +389,15 @@ TRuntimeNode CreateMapJoin(TProgramBuilder& pb, size_t vecSize, TCallable* list 
 Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
 template <class T>
 void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'000) {
+#if defined(_ubsan_enabled_)
+    if (useLLVM) {
+        // There is an issue with UBSan and codegen that occurs in various tests, including this one.
+        // The problem is likely caused by calling LLVM-generated functions.
+        // Moreover, the test fails in CI but does not fail locally, so it was decided to disable it
+        // and treat the failure as a false positive.
+        return;
+    }
+#endif
     TTimer t("total: ");
     const ui32 cacheSizeInBytes = 104857600; // 100 MiB
     const ui32 inFlight = 7;
@@ -822,10 +831,10 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
 
     {
         auto data = genData();
-        static auto predicate = [](ui64 a) {
+        static auto Predicate = [](ui64 a) {
             return a % 128 == 0;
         };
-        Y_DO_NOT_OPTIMIZE_AWAY(predicate);
+        Y_DO_NOT_OPTIMIZE_AWAY(Predicate);
 
         TDuration total;
         for (ui64 i = 0; i < kIter; ++i) {
@@ -833,7 +842,7 @@ Y_UNIT_TEST_TWIN(FilterPerf, Wide) {
             ui64 acc = 0;
             ui64 count = 0;
             for (ui64 j = 0; j < data.size(); ++j) {
-                if (predicate(data[j])) {
+                if (Predicate(data[j])) {
                     acc += data[j];
                     ++count;
                 }

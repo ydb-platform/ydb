@@ -10,7 +10,7 @@ namespace NSQLTranslationV1 {
 using namespace NSQLv1Generated;
 
 TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
-    static const TMap<TString, ESQLWriteColumnMode> str2Mode = {
+    static const TMap<TString, ESQLWriteColumnMode> Str2Mode = {
         {"InsertInto", ESQLWriteColumnMode::InsertInto},
         {"InsertOrAbortInto", ESQLWriteColumnMode::InsertOrAbortInto},
         {"InsertOrIgnoreInto", ESQLWriteColumnMode::InsertOrIgnoreInto},
@@ -51,7 +51,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             modeTokens = {modeBlock.GetAlt6().GetToken1()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     TVector<TString> modeStrings;
@@ -140,7 +140,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             break;
         }
         case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     bool withTruncate = false;
@@ -179,8 +179,8 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         SqlIntoModeStr_ += "WithTruncate";
         SqlIntoUserModeStr_ += " ... WITH TRUNCATE";
     }
-    const auto iterMode = str2Mode.find(SqlIntoModeStr_);
-    YQL_ENSURE(iterMode != str2Mode.end(), "Invalid sql write mode string: " << SqlIntoModeStr_);
+    const auto iterMode = Str2Mode.find(SqlIntoModeStr_);
+    YQL_ENSURE(iterMode != Str2Mode.end(), "Invalid sql write mode string: " << SqlIntoModeStr_);
     const auto SqlIntoMode = iterMode->second;
 
     TPosition pos(Ctx_.Pos());
@@ -245,9 +245,11 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
 
     if (isMapReduce) {
         if (mode == ESQLWriteColumnMode::ReplaceInto) {
-            Ctx_.Error(pos) << "Meaning of REPLACE INTO has been changed, now you should use INSERT INTO <table> WITH TRUNCATE ... for " << serviceName;
-            Ctx_.IncrementMonCounter("sql_errors", "ReplaceIntoConflictUsage");
-            return false;
+            auto requiredLangVer = MakeLangVersion(2025, 4);
+            if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
+                Ctx_.Error(pos) << "REPLACE is not available before language version " << FormatLangVersion(requiredLangVer);
+                return false;
+            }
         }
     } else if (isKikimr) {
         if (mode == ESQLWriteColumnMode::InsertIntoWithTruncate) {

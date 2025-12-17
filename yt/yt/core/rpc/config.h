@@ -483,6 +483,8 @@ struct TServiceMethod
     std::string Service;
     std::string Method;
 
+    int MaxWindow;
+
     REGISTER_YSON_STRUCT_LITE(TServiceMethod);
 
     static void Register(TRegistrar registrar);
@@ -554,7 +556,7 @@ DEFINE_ENUM(EOverloadTrackerConfigType,
     (BacklogQueueFillFraction)
 );
 
-DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(OverloadTrackerConfig, EOverloadTrackerConfigType, MeanWaitTime,
+DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(OverloadTrackerConfig, EOverloadTrackerConfigType, MeanWaitTime, TOverloadTrackerConfigBase,
     ((Base)                     (TOverloadTrackerConfigBase))
     ((MeanWaitTime)             (TOverloadTrackerMeanWaitTimeConfig))
     ((BacklogQueueFillFraction) (TOverloadTrackerBacklogQueueFillFractionConfig))

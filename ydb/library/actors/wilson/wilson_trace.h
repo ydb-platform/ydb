@@ -2,8 +2,6 @@
 
 #include <ydb/library/actors/core/monotonic.h>
 
-#include <util/random/random.h>
-#include <util/random/fast.h>
 #include <util/stream/output.h>
 
 #include <array>
@@ -44,30 +42,8 @@ namespace NWilson {
             TimeToLive = timeToLive;
         }
 
-        static TTrace GenerateTraceId() {
-            for (;;) {
-                TTrace res;
-                ui32 *p = reinterpret_cast<ui32*>(res.data());
-
-                TReallyFastRng32 rng(RandomNumber<ui64>());
-                p[0] = rng();
-                p[1] = rng();
-                p[2] = rng();
-                p[3] = rng();
-
-                if (res[0] || res[1]) {
-                    return res;
-                }
-            }
-        }
-
-        static ui64 GenerateSpanId() {
-            for (;;) {
-                if (const ui64 res = RandomNumber<ui64>(); res) { // SpanId can't be zero
-                    return res;
-                }
-            }
-        }
+        static TTrace GenerateTraceId();
+        static ui64 GenerateSpanId();
 
     public:
         using TSerializedTraceId = char[sizeof(TTrace) + sizeof(ui64) + sizeof(ui32)];
@@ -157,17 +133,7 @@ namespace NWilson {
         }
 
         static TTraceId NewTraceIdThrottled(ui8 verbosity, ui32 timeToLive, std::atomic<NActors::TMonotonic>& counter,
-                NActors::TMonotonic now, TDuration periodBetweenSamples) {
-            static_assert(std::atomic<NActors::TMonotonic>::is_always_lock_free);
-            for (;;) {
-                NActors::TMonotonic ts = counter.load();
-                if (now < ts) {
-                    return {};
-                } else if (counter.compare_exchange_strong(ts, now + periodBetweenSamples)) {
-                    return NewTraceId(verbosity, timeToLive);
-                }
-            }
-        }
+                NActors::TMonotonic now, TDuration periodBetweenSamples);
 
         static TTraceId NewTraceId() { // NBS stub
             return TTraceId();

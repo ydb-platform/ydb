@@ -296,7 +296,7 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: KIKIMR_DISK_SPACE_EXHAUSTED
+  code: KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED
   severity: S_ERROR
 }
 ids {
@@ -305,6 +305,10 @@ ids {
 }
 ids {
   code: KIKIMR_INTERNAL_ERROR
+  severity: S_ERROR
+}
+ids {
+  code: KIKIMR_DISK_GROUP_OUT_OF_SPACE
   severity: S_ERROR
 }
 ids {
@@ -676,6 +680,10 @@ ids {
     severity: S_WARNING
 }
 ids {
+    code: YQL_DISCARD_IN_INVALID_PLACE
+    severity: S_WARNING
+}
+ids {
   code: YQL_SYNTAX_AMBIGUITY
   severity: S_WARNING
 }
@@ -693,6 +701,10 @@ ids {
 }
 ids {
   code: CORE_SINGULAR_TYPE_ENSURE
+  severity: S_WARNING
+}
+ids {
+  code: CORE_SIMPLE_PG
   severity: S_WARNING
 }
 ids {

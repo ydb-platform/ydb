@@ -241,7 +241,7 @@ def _format_chunk(chunk):
     if len(r) <= 40:
         return r
     else:
-        return r[:13] + "..." + r[-14:] + " (length {})".format(len(chunk))
+        return r[:13] + "..." + r[-14:] + f" (length {len(chunk)})"
 
 
 def _compare_chunks(expected, actual):
@@ -252,7 +252,7 @@ def _compare_chunks(expected, actual):
             for i, (e, a) in enumerate(itertools.zip_longest(expected, actual, fillvalue="<end>")):
                 if e != a:
                     message += [
-                        "  Chunks differ at index {}:".format(i),
+                        f"  Chunks differ at index {i}:",
                         "    Expected: " + (repr(expected[i : i + 5]) + "..." if e != "<end>" else "<end>"),
                         "    Found:    " + (repr(actual[i : i + 5]) + "..." if a != "<end>" else "<end>"),
                     ]

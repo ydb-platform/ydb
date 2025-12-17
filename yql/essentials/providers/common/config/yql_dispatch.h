@@ -125,6 +125,7 @@ public:
         virtual bool IsRuntime() const = 0;
         virtual bool IsPerCluster() const = 0;
         virtual bool IsDeprecated() const = 0;
+        virtual bool IgnoreInFullReplay() const = 0;
 
     protected:
         TString Name_;
@@ -205,6 +206,10 @@ public:
 
         bool IsDeprecated() const override {
             return Deprecated_;
+        }
+
+        bool IgnoreInFullReplay() const override {
+            return IgnoreInFullReplay_;
         }
 
         TSettingHandlerImpl& Lower(TType lower) {
@@ -325,6 +330,11 @@ public:
             return *this;
         }
 
+        TSettingHandlerImpl& IgnoreInFullReplay() {
+            IgnoreInFullReplay_ = true;
+            return *this;
+        }
+
     private:
         TConfSetting<TType, SettingType>& Setting_;
         TMaybe<TConfSetting<TType, SettingType>> Default_;
@@ -333,9 +343,14 @@ public:
         TVector<TValueCallback> Validators_;
         TString Warning_;
         bool Deprecated_ = false;
+        bool IgnoreInFullReplay_ = false;
     };
 
-    TSettingDispatcher() = default;
+    TSettingDispatcher(const TQContext& qContext = {})
+        : QContext_(qContext)
+    {
+    }
+
     TSettingDispatcher(const TSettingDispatcher&) = delete;
 
     template <class TContainer>
@@ -413,6 +428,8 @@ protected:
     THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
     THashMap<TString, TSettingHandler::TPtr> Handlers_;
     TSet<TString> Names_;
+
+    const TQContext QContext_;
 };
 
 } // namespace NCommon

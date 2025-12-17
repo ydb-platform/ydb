@@ -2,11 +2,9 @@
 
 #include <util/generic/fwd.h>
 
-namespace google {
-namespace protobuf {
+namespace google::protobuf { // NOLINT(readability-identifier-naming)
 class Message;
-} // namespace protobuf
-} // namespace google
+} // namespace google::protobuf
 
 namespace NYql {
 

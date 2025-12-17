@@ -10,11 +10,26 @@ namespace NTest {
     // TLogoBlobsCmd
     //////////////////////////////////////////////////////////////////////////////////////////////
     struct TLogoBlobsCmd {
+    private:
         TKeyLogoBlob Key;
         TMemRecLogoBlob MemRec;
 
+    public:
+        TLogoBlobsCmd(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec)
+            : Key(key)
+            , MemRec(memRec)
+        {}
+
+        TKeyLogoBlob GetKey() const {
+            return ReadUnaligned<TKeyLogoBlob>(&Key);
+        }
+
+        TMemRecLogoBlob GetMemRec() const {
+            return ReadUnaligned<TMemRecLogoBlob>(&MemRec);
+        }
+
         bool operator <(const TLogoBlobsCmd &cmd) const {
-            return Key < cmd.Key;
+            return GetKey() < cmd.GetKey();
         }
     };
 
@@ -22,11 +37,26 @@ namespace NTest {
     // TBarriersCmd
     //////////////////////////////////////////////////////////////////////////////////////////////
     struct TBarriersCmd {
+    private:
         TKeyBarrier Key;
         TMemRecBarrier MemRec;
 
+    public:
+        TBarriersCmd(const TKeyBarrier& key, const TMemRecBarrier& memRec)
+            : Key(key)
+            , MemRec(memRec)
+        {}
+
+        TKeyBarrier GetKey() const {
+            return ReadUnaligned<TKeyBarrier>(&Key);
+        }
+
+        TMemRecBarrier GetMemRec() const {
+            return ReadUnaligned<TMemRecBarrier>(&MemRec);
+        }
+
         bool operator <(const TBarriersCmd &cmd) const {
-            return Key < cmd.Key;
+            return GetKey() < cmd.GetKey();
         }
     };
 
@@ -65,4 +95,3 @@ namespace NTest {
 
 } // NTest
 } // NKikimr
-

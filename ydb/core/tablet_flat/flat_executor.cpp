@@ -2,6 +2,7 @@
 #include "flat_executor_bootlogic.h"
 #include "flat_executor_txloglogic.h"
 #include "flat_executor_borrowlogic.h"
+#include "flat_backup.h"
 #include "flat_bio_actor.h"
 #include "flat_executor_snapshot.h"
 #include "flat_scan_actor.h"
@@ -31,6 +32,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -45,10 +47,10 @@
 #include <util/generic/xrange.h>
 #include <util/generic/ymath.h>
 
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-static constexpr ui64 MaxTxInFly = 10000;
 
 LWTRACE_USING(TABLET_FLAT_PROVIDER)
 
@@ -137,10 +139,10 @@ TExecutor::TExecutor(
     , Stats(new TExecutorStatsImpl())
     , LogFlushDelayOverrideUsec(-1, -1, 60*1000*1000)
     , MaxCommitRedoMB(256, 1, 4096)
+    , MaxTxInFly(10000, 0, 1000000)
 {}
 
 TExecutor::~TExecutor() {
-
 }
 
 bool TExecutor::OnUnhandledException(const std::exception& e) {
@@ -182,6 +184,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
         TControlBoard::RegisterSharedControl(LogFlushDelayOverrideUsec, icb.LogFlushDelayOverrideUsec[static_cast<size_t>(Owner->TabletType())]);
     }
     TControlBoard::RegisterSharedControl(MaxCommitRedoMB, icb.TabletControls.MaxCommitRedoMB);
+    TControlBoard::RegisterSharedControl(MaxTxInFly, icb.TabletControls.MaxTxInFly);
 
     // instantiate alert counters so even never reported alerts are created
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
@@ -539,7 +542,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     PlanTransactionActivation();
 
-    StartBackup();
+    StartNewBackup();
 
     Owner->ActivateExecutor(OwnerCtx());
 
@@ -4075,8 +4078,7 @@ void TExecutor::ForceSendCounters() {
 
 float TExecutor::GetRejectProbability() const {
     // Limit number of in-flight TXs
-    // TODO: make configurable
-    if (Stats->TxInFly > MaxTxInFly) {
+    if (Stats->TxInFly > ui64(MaxTxInFly)) {
         HadRejectProbabilityByTxInFly = true;
         return 1.0;
     }
@@ -4112,7 +4114,7 @@ float TExecutor::GetRejectProbability() const {
 }
 
 void TExecutor::MaybeRelaxRejectProbability() {
-    if (HadRejectProbabilityByTxInFly && Stats->TxInFly <= MaxTxInFly ||
+    if (HadRejectProbabilityByTxInFly && Stats->TxInFly <= ui64(MaxTxInFly) ||
         HadRejectProbabilityByOverload)
     {
         HadRejectProbabilityByTxInFly = false;
@@ -4356,6 +4358,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
         hFunc(NBackup::TEvSnapshotCompleted, Handle);
         hFunc(NBackup::TEvChangelogFailed, Handle);
+        cFunc(NBackup::TEvStartNewBackup::EventType, StartNewBackup);
     default:
         break;
     }
@@ -5120,40 +5123,57 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 }
 
 
-void TExecutor::StartBackup() {
+void TExecutor::StartNewBackup() {
     if (!Owner->NeedBackup()) {
         return;
     }
 
-    if (!CommitManager) {
+    if (!CommitManager || !LogicRedo) {
         return;
     }
 
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
-    TTabletTypes::EType tabletType = Owner->TabletType();
+    const auto& excludeTabletIds = backupConfig.GetExcludeTabletIds();
     ui64 tabletId = Owner->TabletID();
+
+    if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
+        return;
+    }
+
+    // Ensure that pending commits are flushed to the old backup changelog
+    LogicRedo->FlushBatchedLog();
+
+    TTabletTypes::EType tabletType = Owner->TabletType();
     const auto& scheme = Database->GetScheme();
     const auto& tables = scheme.Tables;
+    auto exclusion = Owner->BackupExclusion();
 
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
-        tabletId, Generation0, scheme.GetSnapshot());
+        tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);
     auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
-        tabletId, Generation0, scheme);
+        tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
-        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
-
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
-           auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
-           QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns), 0, opts);
+            if (exclusion && exclusion->HasTable(tableId)) {
+                continue;
+            }
+
+            auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
+            QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
         }
+        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
     }
 }
 
 void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
     Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
     Owner->BackupSnapshotComplete(OwnerCtx());
+
+    if (CommitManager) {
+        Forward(ev, CommitManager->GetBackupWriter());
+    }
 }
 
 void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {

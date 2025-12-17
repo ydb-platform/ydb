@@ -16,6 +16,8 @@ struct TIOperatorSharedPtrHash {
 
 class PlanConverter {
   public:
+    PlanConverter(TTypeAnnotationContext &typeCtx, TExprContext &ctx) : TypeCtx(typeCtx), Ctx(ctx) {}
+
     TOpRoot ConvertRoot(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ExprNodeToOperator(TExprNode::TPtr node);
 
@@ -26,9 +28,15 @@ class PlanConverter {
     std::shared_ptr<IOperator> ConvertTKqpOpProject(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ConvertTKqpOpUnionAll(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
+    std::shared_ptr<IOperator> ConvertTKqpOpAggregate(TExprNode::TPtr node);
 
-    THashMap<TExprNode *, std::shared_ptr<IOperator>> Converted;
+    TExprNode::TPtr RemoveScalarSubplans(TExprNode::TPtr lambda);
+
+    TTypeAnnotationContext &TypeCtx;
+    TExprContext &Ctx;
+    THashMap<TExprNode*, std::shared_ptr<IOperator>> Converted;
     TPlanProps PlanProps;
+
 };
 
 } // namespace NKqp

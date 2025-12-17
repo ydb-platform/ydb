@@ -1,0 +1,1 @@
+select SimplePg::ceil(1.2345)

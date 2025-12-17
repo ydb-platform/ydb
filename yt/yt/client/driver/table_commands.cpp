@@ -30,7 +30,9 @@
 
 #include <yt/yt/client/ypath/public.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
+
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/ytree/convert.h>
@@ -516,6 +518,8 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_cookies", &TThis::EnableCookies)
         .Default(false);
+    registrar.Parameter("omit_inaccessible_rows", &TThis::OmitInaccessibleRows)
+        .Default(false);
 }
 
 void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
@@ -530,6 +534,7 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     Options.EnableKeyGuarantee = EnableKeyGuarantee;
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
     Options.EnableCookies = EnableCookies;
+    Options.OmitInaccessibleRows = OmitInaccessibleRows;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
         .ValueOrThrow();
@@ -770,6 +775,20 @@ void TAlterTableCommand::Register(TRegistrar registrar)
         "schema_id",
         [] (TThis* command) -> auto& {
             return command->Options.SchemaId;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TConstrainedTableSchema>>(
+        "constrained_schema",
+        [] (TThis* command) -> auto& {
+            return command->Options.ConstrainedSchema;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TColumnNameToConstraintMap>>(
+        "constraints",
+        [] (TThis* command) -> auto& {
+            return command->Options.Constraints;
         })
         .Optional(/*init*/ false);
 

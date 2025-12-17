@@ -51,6 +51,14 @@ STFUNC(TController::StateInit) {
     StateInitImpl(ev, SelfId());
 }
 
+STFUNC(TController::StateDatabaseResolve) {
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvPrivate::TEvResolveTenantResult, HandleDatabaseResolve);
+    default:
+        HandleDefaultEvents(ev, SelfId());
+    }
+}
+
 STFUNC(TController::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvController::TEvCreateReplication, Handle);
@@ -110,6 +118,12 @@ void TController::Cleanup(const TActorContext& ctx) {
     NodesManager.Shutdown(ctx);
 }
 
+void TController::SwitchToDatabaseResolve(const TActorContext& ctx) {
+    CLOG_T(ctx, "SwitchToDatabaseResolve");
+
+    Become(&TThis::StateDatabaseResolve);
+}
+
 void TController::SwitchToWork(const TActorContext& ctx) {
     CLOG_T(ctx, "SwitchToWork");
 
@@ -124,15 +138,29 @@ void TController::SwitchToWork(const TActorContext& ctx) {
         TxAllocatorClient = ctx.RegisterWithSameMailbox(CreateTxAllocatorClient(AppData(ctx)));
     }
 
+    uint64_t unresolvedDatabaseReplications = 0;
     for (auto& [_, replication] : Replications) {
+        const auto& tenant = replication->GetDatabase();
+        if (tenant) {
+            if (!NodesManager.HasTenant(tenant)) {
+                CLOG_I(ctx, "Discover tenant nodes: tenant# " << tenant);
+                NodesManager.DiscoverNodes(tenant, DiscoveryCache, ctx);
+            }
+        } else {
+            ++unresolvedDatabaseReplications;
+        }
+
         replication->Progress(ctx);
     }
+
+    TabletCounters->Simple()[COUNTER_UNRESOLVED_DATABASE_REPLICATIONS] = unresolvedDatabaseReplications;
 }
 
 void TController::Reset() {
     SysParams.Reset();
     Replications.clear();
     ReplicationsByPathId.clear();
+    UnresolvedDatabaseReplications.clear();
     AssignedTxIds.clear();
     Workers.clear();
     WorkersWithHeartbeat.clear();
@@ -254,6 +282,11 @@ void TController::Handle(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const
     RunTxResolveResourceIdResult(ev, ctx);
 }
 
+void TController::HandleDatabaseResolve(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx) {
+    CLOG_T(ctx, "Handle " << ev->Get()->ToString());
+    RunTxResolveDatabaseResult(ev, ctx);
+}
+
 void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx) {
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
 
@@ -268,9 +301,9 @@ void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TAc
     }
 
     if (ev->Get()->IsSuccess()) {
-        CLOG_N(ctx, "Tenant resolved"
+        CLOG_N(ctx, "Database resolved"
             << ": rid# " << rid
-            << ", tenant# " << tenant);
+            << ", database# " << tenant);
 
         if (!NodesManager.HasTenant(tenant)) {
             CLOG_I(ctx, "Discover tenant nodes"
@@ -278,12 +311,12 @@ void TController::Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TAc
             NodesManager.DiscoverNodes(tenant, DiscoveryCache, ctx);
         }
     } else {
-        CLOG_E(ctx, "Resolve tenant error"
+        CLOG_E(ctx, "Resolve database error"
             << ": rid# " << rid);
         Y_ABORT_UNLESS(!tenant);
     }
 
-    replication->SetTenant(tenant);
+    replication->SetDatabase(tenant);
     replication->Progress(ctx);
 }
 
@@ -624,7 +657,7 @@ void TController::ProcessBootQueue(const TActorContext&) {
         auto replication = Find(id.ReplicationId());
         Y_ABORT_UNLESS(replication);
 
-        const auto& tenant = replication->GetTenant();
+        const auto& tenant = replication->GetDatabase();
         if (!tenant || !NodesManager.HasTenant(tenant) || !NodesManager.HasNodes(tenant)) {
             ++iter;
             continue;

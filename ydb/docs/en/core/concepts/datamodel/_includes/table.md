@@ -71,6 +71,8 @@ Automatic partitioning by partition size. If a partition size exceeds the value 
 
 Automatic partitioning by load. If a shard consumes more than 50% of the CPU for a few dozens of seconds, it is enqueued for splitting. If the total load on two or more adjacent shards uses less than 35% of a single CPU core within an hour, they are enqueued for merging.
 
+When making a decision to split a partition based on load or to merge several partitions based on load, {{ ydb-short-name }} considers the CPU load both on the leader of the given partition and all its replicas.
+
 Performing split or merge operations uses the CPU and takes time. Therefore, when dealing with a variable load, we recommend both enabling this mode and setting [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count) to a value other than 1. This ensures that a decreased load does not cause the number of partitions to drop below the required value, resulting in a need to split them again when the load increases.
 
 When choosing the minimum number of partitions, it makes sense to consider that one table partition can only be hosted on one server and use no more than 1 CPU core for data update operations. Hence, you can set the minimum number of partitions for a table on which a high load is expected to at least the number of nodes (servers) or, preferably, to the number of CPU cores allocated to the database.

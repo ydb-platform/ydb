@@ -714,6 +714,17 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         return true;
     }
 
+    if (auto maybeTruncateTable = node.Maybe<TKiTruncateTable>()) {
+        auto truncateTable = maybeTruncateTable.Cast();
+        if (!checkDataSink(truncateTable.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::TruncateTable, truncateTable.Pos(), ctx));
+        return true;
+    }
+
     if (node.Maybe<TCoCommit>()) {
         return true;
     }

@@ -39,13 +39,10 @@ RUN ./ya make -r -T \
 
 FROM ubuntu:22.04
 RUN apt-get update  \
-    && apt-get install --no-install-recommends -y libidn12 libaio1 \
+    && apt-get install --no-install-recommends -y libidn12 libaio1 jq \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /root/ydb/bin/ \
-    && mkdir -p /ydb_data \
-    && mkdir -p ydb_certs \
-    && echo '{"check_version":false}' > root/ydb/bin/config.json
+RUN mkdir -p /ydb_data && mkdir -p /ydb_certs
 
 COPY main/.github/docker/files/ /
 COPY --from=builder \
@@ -60,6 +57,6 @@ EXPOSE ${GRPC_PORT:-2136}
 EXPOSE ${MON_PORT:-8765}
 EXPOSE ${YDB_KAFKA_PROXY_PORT:-9092}
 
-HEALTHCHECK --start-period=60s --interval=1s CMD sh /health_check
+HEALTHCHECK --start-period=60s --interval=60s CMD sh /health_check
 
-CMD ["sh", "/initialize_local_ydb"]
+ENTRYPOINT ["bash", "/initialize_local_ydb"]

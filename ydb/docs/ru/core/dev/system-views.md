@@ -47,6 +47,7 @@
 | `CoordinatedTxCompleted` | Количество завершившихся [распределенных транзакций](../concepts/glossary.md#transactions). | `Uint64` | Кумулятивная |
 | `TxRejectedByOverload` | Количество транзакций, отменённых по причине [высокой нагрузки](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Кумулятивная |
 | `TxRejectedByOutOfStorage` | Количество транзакций, отменённых из-за нехватки места в хранилище. | `Uint64` | Кумулятивная |
+| `TxCompleteLag` | Задержка выполнения транзакций (насколько транзакции отстают от запланированного времени). | `Interval` | Моментальная |
 | `LastTtlRunTime` | Последний момент запуска очистки партиции по TTL | `Timestamp` | Моментальная |
 | `LastTtlRowsProcessed` | Количество проверенных строк партиции при последней очистке по TTL | `Uint64` | Моментальная |
 | `LastTtlRowsErased` | Количество удалённых строк партиции при последней очистке по TTL | `Uint64` | Моментальная |

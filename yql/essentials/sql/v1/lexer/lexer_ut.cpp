@@ -4,8 +4,6 @@
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 
-#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
@@ -27,8 +25,6 @@ using namespace NSQLTranslation;
 using namespace NSQLTranslationV1;
 
 TLexers Lexers = {
-    .Antlr3 = MakeAntlr3LexerFactory(),
-    .Antlr3Ansi = MakeAntlr3AnsiLexerFactory(),
     .Antlr4 = MakeAntlr4LexerFactory(),
     .Antlr4Ansi = MakeAntlr4AnsiLexerFactory(),
     .Antlr4Pure = MakeAntlr4PureLexerFactory(),
@@ -119,10 +115,8 @@ Y_UNIT_TEST(UnsupportedIssues) {
 
     TVector<ILexer::TPtr> lexers;
     for (auto ansi : {false, true}) {
-        for (auto antlr4 : {false, true}) {
-            for (auto flavor : {ELexerFlavor::Default, ELexerFlavor::Pure, ELexerFlavor::Regex}) {
-                lexers.emplace_back(MakeLexer(factories, ansi, antlr4, flavor));
-            }
+        for (auto flavor : {ELexerFlavor::Default, ELexerFlavor::Pure, ELexerFlavor::Regex}) {
+            lexers.emplace_back(MakeLexer(factories, ansi, flavor));
         }
     }
 
@@ -133,25 +127,19 @@ Y_UNIT_TEST(UnsupportedIssues) {
     }
 
     TVector<TString> expected = {
-        "<main>: Error: Lexer antlr3 is not supported",
-        "<main>: Error: Lexer antlr3_pure is not supported",
-        "<main>: Error: Lexer regex is not supported",
         "<main>: Error: Lexer antlr4 is not supported",
         "<main>: Error: Lexer antlr4_pure is not supported",
-        "<main>: Error: Lexer antlr4_regex is not supported",
-        "<main>: Error: Lexer antlr3_ansi is not supported",
-        "<main>: Error: Lexer antlr3_pure_ansi is not supported",
-        "<main>: Error: Lexer regex_ansi is not supported",
+        "<main>: Error: Lexer regex is not supported",
         "<main>: Error: Lexer antlr4_ansi is not supported",
         "<main>: Error: Lexer antlr4_pure_ansi is not supported",
-        "<main>: Error: Lexer antlr4_regex_ansi is not supported",
+        "<main>: Error: Lexer regex_ansi is not supported",
     };
 
     UNIT_ASSERT_VALUES_EQUAL(actual, expected);
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(AntlrAndFlavorIndependent) {
-    static const TVector<TString> queries = {
+    static const TVector<TString> Queries = {
         "",
         "   ",
         "SELECT",
@@ -169,17 +157,17 @@ Y_UNIT_TEST_ON_EACH_LEXER(AntlrAndFlavorIndependent) {
         "\"select\"select",
     };
 
-    static TVector<TString> expectations(queries.size());
+    static TVector<TString> Expectations(Queries.size());
 
     if (ANSI) {
         return;
     }
 
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
 
-    for (size_t i = 0; i < queries.size(); ++i) {
-        const auto& query = queries[i];
-        auto& expected = expectations[i];
+    for (size_t i = 0; i < Queries.size(); ++i) {
+        const auto& query = Queries[i];
+        auto& expected = Expectations[i];
 
         if (expected.empty()) {
             expected = Tokenized(lexer, query);
@@ -192,8 +180,8 @@ Y_UNIT_TEST_ON_EACH_LEXER(AntlrAndFlavorIndependent) {
 
 TVector<TString> InvalidQueries();
 
-void TestInvalidTokensSkipped(bool antlr4, const TVector<TVector<TString>>& expected) {
-    auto lexer = MakeLexer(Lexers, /* ansi = */ false, antlr4);
+void TestInvalidTokensSkipped(const TVector<TVector<TString>>& expected) {
+    auto lexer = MakeLexer(Lexers, /* ansi = */ false);
 
     auto input = InvalidQueries();
     UNIT_ASSERT_VALUES_EQUAL(input.size(), expected.size());
@@ -217,21 +205,6 @@ TVector<TString> InvalidQueries() {
     };
 }
 
-Y_UNIT_TEST(ErrorRecoveryAntlr3) {
-    TVector<TVector<TString>> actual = {
-        /* 0: */ {"EOF"},
-        /* 1: */ {"SELECT", "WS", "EOF"},
-        /* 2: */ {"EOF"},
-        /* 3: */ {"WS", "SELECT", "WS", "ASTERISK", "WS", "ID_PLAIN (FR)", "EOF"},
-        /* 4: */ {"ID_PLAIN (ELECT)", "WS", "ASTERISK", "WS", "WS", "FROM", "EOF"},
-        /* 5: */ {"SELECT", "WS", "ID_PLAIN (rom)", "EOF"},
-        /* 6: */ {"EOF"},
-        /* 7: */ {"ID_PLAIN (lect)", "EOF"},
-        /* 8: */ {"SELECT", "WS", "EOF"},
-    };
-    TestInvalidTokensSkipped(/* antlr4 = */ false, actual);
-}
-
 Y_UNIT_TEST(ErrorRecoveryAntlr4) {
     TVector<TVector<TString>> actual = {
         /* 0: */ {"EOF"},
@@ -244,14 +217,14 @@ Y_UNIT_TEST(ErrorRecoveryAntlr4) {
         /* 7: */ {"ID_PLAIN (elect)", "EOF"},
         /* 8: */ {"SELECT", "WS", "EOF"},
     };
-    TestInvalidTokensSkipped(/* antlr4 = */ true, actual);
+    TestInvalidTokensSkipped(actual);
 }
 
 Y_UNIT_TEST(IssuesCollected) {
-    auto lexer3 = MakeLexer(Lexers, /* ansi = */ false, /* antlr4 = */ false);
-    auto lexer4 = MakeLexer(Lexers, /* ansi = */ false, /* antlr4 = */ true);
-    auto lexer4p = MakeLexer(Lexers, /* ansi = */ false, /* antlr4 = */ true, ELexerFlavor::Pure);
-    auto lexerR = MakeLexer(Lexers, /* ansi = */ false, /* antlr4 = */ false, ELexerFlavor::Regex);
+    auto lexer3 = MakeLexer(Lexers, /* ansi = */ false);
+    auto lexer4 = MakeLexer(Lexers, /* ansi = */ false);
+    auto lexer4p = MakeLexer(Lexers, /* ansi = */ false, ELexerFlavor::Pure);
+    auto lexerR = MakeLexer(Lexers, /* ansi = */ false, ELexerFlavor::Regex);
 
     for (const auto& query : InvalidQueries()) {
         auto issues3 = GetIssueMessages(lexer3, query);
@@ -266,23 +239,8 @@ Y_UNIT_TEST(IssuesCollected) {
     }
 }
 
-Y_UNIT_TEST(IssueMessagesAntlr3) {
-    auto lexer3 = MakeLexer(Lexers, /* ansi = */ false, /* antlr4 = */ false);
-
-    auto actual = GetIssueMessages(lexer3, "\xF0\x9F\x98\x8A SELECT * FR");
-
-    TVector<TString> expected = {
-        "<main>:1:0: Error: Unexpected character '\xF0\x9F\x98\x8A' (Unicode character <128522>) : cannot match to any predicted input...",
-        "<main>:1:1: Error: Unexpected character : cannot match to any predicted input...",
-        "<main>:1:2: Error: Unexpected character : cannot match to any predicted input...",
-        "<main>:1:3: Error: Unexpected character : cannot match to any predicted input...",
-    };
-
-    UNIT_ASSERT_VALUES_EQUAL(actual, expected);
-}
-
 Y_UNIT_TEST(IssueMessagesAntlr4) {
-    auto lexer4 = MakeLexer(Lexers, /* ansi = */ false, /* antlr4 = */ true);
+    auto lexer4 = MakeLexer(Lexers, /* ansi = */ false);
 
     auto actual = GetIssueMessages(lexer4, "\xF0\x9F\x98\x8A SELECT * FR");
 
@@ -294,7 +252,7 @@ Y_UNIT_TEST(IssueMessagesAntlr4) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(Whitespace) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "", "EOF");
     UNIT_ASSERT_TOKENIZED(lexer, " ", "WS( ) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "  ", "WS( ) WS( ) EOF");
@@ -302,7 +260,7 @@ Y_UNIT_TEST_ON_EACH_LEXER(Whitespace) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(Keyword) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "SELECT", "SELECT EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "INSERT", "INSERT EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "FROM", "FROM EOF");
@@ -312,20 +270,14 @@ Y_UNIT_TEST_ON_EACH_LEXER(Keyword) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(KeywordSkip) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
-    if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
-        UNIT_ASSERT_TOKENIZED(lexer, "sKip", "TSKIP(sKip) EOF");
-        UNIT_ASSERT_TOKENIZED(lexer, "SKIP", "TSKIP(SKIP) EOF");
-        UNIT_ASSERT_TOKENIZED(lexer, " SKIP ", "WS( ) TSKIP(SKIP) WS( ) EOF");
-    } else {
-        UNIT_ASSERT_TOKENIZED(lexer, "sKip", "SKIP(sKip) EOF");
-        UNIT_ASSERT_TOKENIZED(lexer, "SKIP", "SKIP EOF");
-        UNIT_ASSERT_TOKENIZED(lexer, " SKIP ", "WS( ) SKIP WS( ) EOF");
-    }
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
+    UNIT_ASSERT_TOKENIZED(lexer, "sKip", "TSKIP(sKip) EOF");
+    UNIT_ASSERT_TOKENIZED(lexer, "SKIP", "TSKIP(SKIP) EOF");
+    UNIT_ASSERT_TOKENIZED(lexer, " SKIP ", "WS( ) TSKIP(SKIP) WS( ) EOF");
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(Punctuation) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(
         lexer,
         "* / + - <|",
@@ -335,19 +287,19 @@ Y_UNIT_TEST_ON_EACH_LEXER(Punctuation) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(IdPlain) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "variable my_table", "ID_PLAIN(variable) WS( ) ID_PLAIN(my_table) EOF");
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(IdQuoted) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "``", "ID_QUOTED(``) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "` `", "ID_QUOTED(` `) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "`local/table`", "ID_QUOTED(`local/table`) EOF");
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(Number) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "1", "DIGITS(1) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "123", "DIGITS(123) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "123u", "INTEGER_VALUE(123u) EOF");
@@ -366,7 +318,7 @@ Y_UNIT_TEST_ON_EACH_LEXER(Number) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(SingleLineString) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "\"\"", "STRING_VALUE(\"\") EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "\' \'", "STRING_VALUE(\' \') EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "\" \"", "STRING_VALUE(\" \") EOF");
@@ -375,14 +327,14 @@ Y_UNIT_TEST_ON_EACH_LEXER(SingleLineString) {
     if (!ANSI) {
         UNIT_ASSERT_TOKENIZED(lexer, "\"\\\"\"", "STRING_VALUE(\"\\\"\") EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "\"\"\"\"", "STRING_VALUE(\"\") STRING_VALUE(\"\") EOF");
-    } else if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
+    } else {
         UNIT_ASSERT_TOKENIZED(lexer, "\"\\\"\"", "[INVALID] STRING_VALUE(\"\\\") EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "\"\"\"\"", "STRING_VALUE(\"\"\"\") EOF");
     }
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(MultiLineString) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "@@@@", "STRING_VALUE(@@@@) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "@@ @@@", "STRING_VALUE(@@ @@@) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "@@test@@", "STRING_VALUE(@@test@@) EOF");
@@ -391,7 +343,7 @@ Y_UNIT_TEST_ON_EACH_LEXER(MultiLineString) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(SingleLineComment) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "--yql", "COMMENT(--yql) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "--  yql ", "COMMENT(--  yql ) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "-- yql\nSELECT", "COMMENT(-- yql\n) SELECT EOF");
@@ -399,18 +351,18 @@ Y_UNIT_TEST_ON_EACH_LEXER(SingleLineComment) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(MultiLineComment) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "/* yql */", "COMMENT(/* yql */) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "/* yql */ */", "COMMENT(/* yql */) WS( ) ASTERISK(*) SLASH(/) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "/* yql\n * yql\n */", "COMMENT(/* yql\n * yql\n */) EOF");
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(RecursiveMultiLineComment) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     if (!ANSI) {
         UNIT_ASSERT_TOKENIZED(lexer, "/* /* yql */", "COMMENT(/* /* yql */) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "/* /* yql */ */", "COMMENT(/* /* yql */) WS( ) ASTERISK(*) SLASH(/) EOF");
-    } else if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
+    } else {
         UNIT_ASSERT_TOKENIZED(lexer, "/* /* yql */", "COMMENT(/* /* yql */) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "/* yql */ */", "COMMENT(/* yql */) WS( ) ASTERISK(*) SLASH(/) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "/* /* /* yql */ */", "COMMENT(/* /* /* yql */ */) EOF");
@@ -423,12 +375,12 @@ Y_UNIT_TEST_ON_EACH_LEXER(RecursiveMultiLineComment) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(RandomRecursiveMultiLineComment) {
-    if (!ANTLR4 && FLAVOR != ELexerFlavor::Regex || FLAVOR != ELexerFlavor::Pure) {
+    if (FLAVOR != ELexerFlavor::Pure) {
         return;
     }
 
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
-    auto reference = MakeLexer(Lexers, ANSI, /* antlr4 = */ true, ELexerFlavor::Pure);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
+    auto reference = MakeLexer(Lexers, ANSI, ELexerFlavor::Pure);
 
     SetRandomSeed(100);
     for (size_t i = 0; i < 128; ++i) {
@@ -441,13 +393,13 @@ Y_UNIT_TEST_ON_EACH_LEXER(RandomRecursiveMultiLineComment) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(SimpleQuery) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "select 1", "SELECT(select) WS( ) DIGITS(1) EOF");
     UNIT_ASSERT_TOKENIZED(lexer, "SELect 1", "SELECT(SELect) WS( ) DIGITS(1) EOF");
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(ComplexQuery) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
 
     TString query =
         "SELECT\n"
@@ -477,7 +429,7 @@ Y_UNIT_TEST_ON_EACH_LEXER(ComplexQuery) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(Examples) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(
         lexer,
         R"(
@@ -492,7 +444,7 @@ SELECT
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscape) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
     UNIT_ASSERT_TOKENIZED(lexer, "\0", "EOF");           // Null character
     UNIT_ASSERT_TOKENIZED(lexer, "\t", "WS(\t) EOF");    // Horizontal Tab
     UNIT_ASSERT_TOKENIZED(lexer, "\n", "WS(\n) EOF");    // Line Feed
@@ -503,15 +455,15 @@ Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscape) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscapeCanon) {
-    static THashMap<char, TString> canon;
+    static THashMap<char, TString> Canon;
 
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
 
     for (char c = 0; c < std::numeric_limits<char>::max(); ++c) {
         TString input;
         input += c;
 
-        TString& expected = canon[c];
+        TString& expected = Canon[c];
         if (expected.empty()) {
             expected = Tokenized(lexer, input);
         }
@@ -521,13 +473,9 @@ Y_UNIT_TEST_ON_EACH_LEXER(AsciiEscapeCanon) {
 }
 
 Y_UNIT_TEST_ON_EACH_LEXER(Utf8BOM) {
-    auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
-    if (ANTLR4 || FLAVOR == ELexerFlavor::Regex) {
-        UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF 1", "WS( ) DIGITS(1) EOF");
-        UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF \xEF\xBB\xBF", "[INVALID] WS( ) EOF");
-    } else {
-        UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF 1", "[INVALID] WS( ) DIGITS(1) EOF");
-    }
+    auto lexer = MakeLexer(Lexers, ANSI, FLAVOR);
+    UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF 1", "WS( ) DIGITS(1) EOF");
+    UNIT_ASSERT_TOKENIZED(lexer, "\xEF\xBB\xBF \xEF\xBB\xBF", "[INVALID] WS( ) EOF");
 }
 
 } // Y_UNIT_TEST_SUITE(SQLv1Lexer)

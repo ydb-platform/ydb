@@ -1,6 +1,24 @@
 #include "mem_pool.h"
 #include "link_manager.h"
+
+#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
 #include "ctx.h"
+#else
+extern "C" {
+
+struct ibv_mr {
+    struct ibv_context     *context;
+    struct ibv_pd	       *pd;
+    void		       *addr;
+    size_t			length;
+    ui32		handle;
+    ui32		lkey;
+    ui32		rkey;
+};
+
+}
+
+#endif
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -12,18 +30,30 @@
 #include <vector>
 #include <list>
 
-#include <unistd.h>
-#include <sys/syscall.h>
 #include <mutex>
 #include <thread>
 
-#include <sys/mman.h>
+#include <cstdlib>
+#include <cstring>
+#include <cerrno>
+
+#if defined(_win_)
+#include <malloc.h> // _aligned_malloc, _aligned_free
+#else
+#include <sys/mman.h>   // madvise
+#include <unistd.h>
+#include <sys/syscall.h>
+#endif
 
 static constexpr size_t HPageSz = (1 << 21);
 
 using ::NMonitoring::TDynamicCounters;
 
 namespace NInterconnect::NRdma {
+
+    // Cross-platform memory management
+    static void* allocateMemory(size_t size, size_t alignment, bool hp);
+    static void freeMemory(void* ptr) noexcept;
 
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
     public:
@@ -35,16 +65,7 @@ namespace NInterconnect::NRdma {
     }
 
     ~TChunk() {
-        MemPool->NotifyDealocated();
-        if (Empty()) {
-            return;
-        }
-        auto addr = MRs.front()->addr;
-        for (auto& m: MRs) {
-            ibv_dereg_mr(m);
-        }
-        std::free(addr);
-        MRs.clear();
+        MemPool->DealocateMr(MRs);
     }
 
     ibv_mr* GetMr(size_t deviceIndex) noexcept {
@@ -60,6 +81,10 @@ namespace NInterconnect::NRdma {
 
     bool Empty() const noexcept {
         return MRs.empty();
+    }
+
+    TMemRegionPtr AllocMr(int size, ui32 flags) noexcept {
+        return MemPool->Alloc(size, flags);
     }
 
     private:
@@ -115,14 +140,26 @@ namespace NInterconnect::NRdma {
     TContiguousSpan TMemRegion::GetData() const {
         return TContiguousSpan(static_cast<const char*>(GetAddr()), GetSize());
     }
-    TMutableContiguousSpan TMemRegion::GetDataMut() {
+
+    TMutableContiguousSpan TMemRegion::UnsafeGetDataMut() {
         return TMutableContiguousSpan(static_cast<char*>(GetAddr()), GetSize());
     }
+
     size_t TMemRegion::GetOccupiedMemorySize() const {
         return GetSize();
     }
+
     IContiguousChunk::EInnerType TMemRegion::GetInnerType() const noexcept {
         return EInnerType::RDMA_MEM_REG;
+    }
+
+    IContiguousChunk::TPtr TMemRegion::Clone() noexcept {
+        static const ui64 pageAlign = NSystemInfo::GetPageSize() - 1;
+        const IMemPool::Flags flag = (((ui64)GetAddr() & pageAlign) == 0) ? IMemPool::PAGE_ALIGNED : IMemPool::EMPTY;
+        TMemRegionPtr newRegion = Chunk->AllocMr(GetSize(), flag);
+        auto span = newRegion->UnsafeGetDataMut();
+        ::memcpy(span.GetData(), GetAddr(), GetSize());
+        return newRegion;
     }
 
     TMemRegionSlice::TMemRegionSlice(TIntrusivePtr<TMemRegion> memRegion, uint32_t offset, uint32_t size) noexcept
@@ -164,39 +201,86 @@ namespace NInterconnect::NRdma {
         );
     }
 
-    void* allocateMemory(size_t size, size_t alignment, bool hp) {
+    static void* allocateMemory(size_t size, size_t alignment, bool hp) {
         if (size % alignment != 0) {
             return nullptr;
         }
-        void* buf = std::aligned_alloc(alignment, size);
+
+        void* buf = nullptr;
+
+#if defined(_win_)
+        // Windows: use _aligned_malloc
+        buf = _aligned_malloc(size, alignment);
+        if (!buf) {
+            fprintf(stderr, "Failed to allocate aligned memory on Windows\n");
+            return nullptr;
+        }
+#else
+        // POSIX/C++: std::aligned_alloc (C++17)
+        buf = std::aligned_alloc(alignment, size);
+        if (!buf) {
+            fprintf(stderr, "Failed to allocate aligned memory on Unix\n");
+            return nullptr;
+        }
+#endif
+
         if (hp) {
+#if defined(_linux_)
             if (madvise(buf, size, MADV_HUGEPAGE) < 0) {
                 fprintf(stderr, "Unable to madvice to use THP, %d (%d)",
                     strerror(errno), errno);
             }
+#endif
             for (size_t i = 0; i < size; i += HPageSz) {
                 // We use THP right now. We need to touch each page to promote it to HUGE.
-                ((char*)buf)[i] = 0;
+                static_cast<char*>(buf)[i] = 0;
             }
         }
         return buf;
     }
 
+    static void freeMemory(void* ptr) noexcept {
+        if (!ptr) {
+            return;
+        }
+#if defined(_win_)
+        _aligned_free(ptr);
+#else
+        std::free(ptr);
+#endif
+    }
+
     std::vector<ibv_mr*> registerMemory(void* addr, size_t size, const NInterconnect::NRdma::NLinkMgr::TCtxsMap& ctxs) {
         std::vector<ibv_mr*> res;
-        res.reserve(ctxs.size());
-        for (const auto& [_, ctx]: ctxs) {
-            ibv_mr* mr = ibv_reg_mr(
-                ctx->GetProtDomain(), addr, size,
-                IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
-            );
-            if (!mr) {
-                for (ibv_mr* tmp : res) {
-                    ibv_dereg_mr(tmp);
+
+// In case of windows windows we can't use ibv_dereg_mr - compile error
+// In case of linux but absent librray we can't register memory, but we need mem pool for tests - emulate registration
+#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
+        if (!ctxs.empty()) {
+            res.reserve(ctxs.size());
+            for (const auto& [_, ctx]: ctxs) {
+                ibv_mr* mr = ibv_reg_mr(
+                    ctx->GetProtDomain(), addr, size,
+                    IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+                );
+                if (!mr) {
+                    for (ibv_mr* tmp : res) {
+                        ibv_dereg_mr(tmp);
+                    }
+                    return {};
                 }
-                return {};
+                res.push_back(mr);
             }
-            res.push_back(mr);
+        } else
+#endif
+        {
+#ifdef MEM_POOL_DISABLE_RDMA_SUPPORT
+        Y_UNUSED(ctxs);
+#endif
+            struct ibv_mr* dummy = (struct ibv_mr*)calloc(1, sizeof(struct ibv_mr));
+            dummy->addr = addr;
+            dummy->length = size;
+            res.push_back(dummy);
         }
         return res;
     }
@@ -225,15 +309,21 @@ namespace NInterconnect::NRdma {
         return counters;
     }
 
+    static const NInterconnect::NRdma::NLinkMgr::TCtxsMap& GetAllCtxs() {
+        NInterconnect::NRdma::NLinkMgr::Init();
+        return NInterconnect::NRdma::NLinkMgr::GetAllCtxs();
+    }
+
     class TMemPoolBase: public IMemPool {
     public:
         TMemPoolBase(size_t maxChunk, NMonitoring::TDynamicCounterPtr counter)
-            : Ctxs(NInterconnect::NRdma::NLinkMgr::GetAllCtxs())
+            : Ctxs(GetAllCtxs())
             , MaxChunk(maxChunk)
             , Alignment(NSystemInfo::GetPageSize())
         {
             AllocatedCounter = counter->GetCounter("RdmaPoolAllocatedUserBytes", false);
             AllocatedChunksCounter = counter->GetCounter("RdmaPoolAllocatedChunks", false);
+            MaxAllocated.Counter = counter->GetCounter("RdmaPoolAllocatedUserMaxBytes", false);
 
             Y_ABORT_UNLESS((Alignment & Alignment - 1) == 0, "Alignment must be a power of two %zu", Alignment);
         }
@@ -255,7 +345,7 @@ namespace NInterconnect::NRdma {
 
             auto mrs = registerMemory(ptr, size, Ctxs);
             if (mrs.empty()) {
-                std::free(ptr);
+                freeMemory(ptr);
                 return nullptr;
             }
 
@@ -265,10 +355,38 @@ namespace NInterconnect::NRdma {
             return MakeIntrusive<TChunk>(std::move(mrs), this);
         }
 
-        void NotifyDealocated() noexcept override {
-            const std::lock_guard<std::mutex> lock(Mutex);
-            AllocatedChunks--;
-            AllocatedChunksCounter->Dec();
+        void DealocateMr(std::vector<ibv_mr*>& mrs) noexcept override {
+            {
+                const std::lock_guard<std::mutex> lock(Mutex);
+                AllocatedChunks--;
+                AllocatedChunksCounter->Dec();
+            }
+            if (mrs.empty()) {
+                return;
+            }
+            auto addr = mrs.front()->addr;
+#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
+            if (!Ctxs.empty()) {
+                for (auto& m: mrs) {
+                    ibv_dereg_mr(m);
+                }
+            } else
+#endif
+            {
+                free(mrs.front());
+            }
+            freeMemory(addr);
+            mrs.clear();
+        }
+
+        void TrackPeakAlloc(i64 newVal) noexcept {
+            i64 curVal = MaxAllocated.Val.load(std::memory_order_relaxed);
+            while (newVal > curVal) {
+                if (MaxAllocated.Val.compare_exchange_weak(curVal, newVal,
+                    std::memory_order_release, std::memory_order_relaxed)) {
+                    break;
+                }
+            }
         }
 
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
@@ -276,8 +394,24 @@ namespace NInterconnect::NRdma {
         const size_t Alignment;
         ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunksCounter;
+        struct {
+           NMonotonic::TMonotonic Time;
+           std::atomic<i64> Val = 0;
+           ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
+        } MaxAllocated;
         size_t AllocatedChunks = 0;
+    private:
         std::mutex Mutex;
+
+        void Tick(NMonotonic::TMonotonic time) noexcept override {
+            constexpr TDuration holdTime = TDuration::Seconds(15);
+
+            if (time - MaxAllocated.Time > holdTime) {
+                MaxAllocated.Counter->Set(MaxAllocated.Val.load());
+                MaxAllocated.Val.store(AllocatedCounter->Val());
+                MaxAllocated.Time = time;
+            }
+        }
     };
 
     class TDummyMemPool: public TMemPoolBase {
@@ -351,7 +485,7 @@ namespace NInterconnect::NRdma {
 
         struct TLockFreeChain {
             TLockFreeChain() = default;
-            void Init(ui32 slotSize) {
+            void Init(ui32 slotSize) noexcept {
                 SlotSize = slotSize;
                 SlotsInBatch = GetSlotsInBatch(slotSize);
             }
@@ -471,9 +605,18 @@ namespace NInterconnect::NRdma {
         };
         friend struct TSlotMemPoolCache;
 
+        static size_t CalcChunksLimit(const std::optional<TMemPoolSettings>& settings) noexcept {
+            if (!settings.has_value())
+                return 128; //default
+
+            if (settings->SizeLimitMb * 1024 * 1024 < BatchSizeBytes)
+                return 1; //Do not allow zerro limit
+
+            return settings->SizeLimitMb * 1024 * 1024 / BatchSizeBytes;
+        }
     public:
-        TSlotMemPool(NMonitoring::TDynamicCounterPtr counter)
-            : TMemPoolBase(128, counter)
+        TSlotMemPool(NMonitoring::TDynamicCounterPtr counter, const std::optional<TMemPoolSettings>& settings)
+            : TMemPoolBase(CalcChunksLimit(settings), counter)
         {
             for (ui32 i = GetPowerOfTwo(MinAllocSz); i <= GetPowerOfTwo(MaxAllocSz); ++i) {
                 Chains[GetChainIndex(1 << i)].Init(1 << i);
@@ -492,7 +635,10 @@ namespace NInterconnect::NRdma {
         TMemRegion* AllocImpl(int size, ui32 flags) noexcept override {
             if (auto memReg = LocalCache.AllocImpl(size, flags, *this)) {
                 memReg->Resize(size);
-                AllocatedCounter->Add(size);
+                i64 newVal = AllocatedCounter->Add(size);
+
+                TrackPeakAlloc(newVal);
+
                 return memReg;
             }
             return nullptr;
@@ -516,9 +662,8 @@ namespace NInterconnect::NRdma {
         return std::shared_ptr<TDummyMemPool>(pool, [](TDummyMemPool*) {});
     }
 
-    std::shared_ptr<IMemPool> CreateSlotMemPool(TDynamicCounters* counters) noexcept {
-        //auto* pool = HugeSingleton<TSlotMemPool>(MakeCounters(counters));
-        static TSlotMemPool pool(MakeCounters(counters));
+    std::shared_ptr<IMemPool> CreateSlotMemPool(TDynamicCounters* counters, std::optional<TMemPoolSettings> settings) noexcept {
+        static TSlotMemPool pool(MakeCounters(counters), settings);
         return std::shared_ptr<TSlotMemPool>(&pool, [](TSlotMemPool*) {});
     }
 }

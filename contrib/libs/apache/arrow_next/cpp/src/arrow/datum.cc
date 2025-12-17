@@ -15,23 +15,23 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/datum.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/datum.h"
 
 #include <cstddef>
 #include <memory>
 #include <sstream>
 #include <vector>
 
-#include "arrow/array/array_base.h"
-#include "arrow/array/util.h"
-#include "arrow/chunked_array.h"
-#include "arrow/device_allocation_type_set.h"
-#include "arrow/record_batch.h"
-#include "arrow/scalar.h"
-#include "arrow/table.h"
-#include "arrow/util/byte_size.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/device_allocation_type_set.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/byte_size.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/memory.h"
 
 namespace arrow20 {
 

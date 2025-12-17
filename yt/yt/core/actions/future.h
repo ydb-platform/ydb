@@ -159,6 +159,8 @@ private:
     template <class U>
     friend struct ::THash;
     friend class NDetail::TFutureState<void>;
+    template <class U>
+    friend class TFutureBase;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -185,12 +187,8 @@ struct TFutureTimeoutOptions
 /*!
  *  The resulting value can be accessed by either subscribing (#Subscribe)
  *  for it or retrieving it explicitly (#Get, #TryGet). Also it is possible
- *  to move the value out of the future state (#SubscribeUnique, #GetUnique, #TryGetUnique).
- *  In the latter case, however, at most one extraction is possible;
- *  further attempts to access the value will result in UB.
- *  In particular, at most one call to #SubscribeUnique, #GetUnique, and #TryGetUnique (expect
- *  for calls returning null) must happen to any future state (possibly shared by multiple
- *  TFuture instances).
+ *  to move the value out of the future state
+ *  (by converting to TUniqueFuture via #AsUnique and invoking #Subscribe, #Get, #TryGet).
  */
 template <class T>
 class TFutureBase
@@ -216,13 +214,6 @@ public:
      */
     const TErrorOr<T>& Get() const;
 
-    //! Extracts the value by moving it out of the future state.
-    /*!
-     *  This call will block until the value is set.
-     */
-    // TODO(babenko): deprecated, see YT-26319
-    TErrorOr<T> GetUnique() const;
-
     //! Waits for the value to become set.
     /*!
      *  This call blocks until either the value is set or #timeout (if given) expires.
@@ -240,13 +231,6 @@ public:
      *  This call does not block.
      */
     std::optional<TErrorOr<T>> TryGet() const;
-
-    //! Extracts the value by moving it out of the future state; returns null if the value is not set yet.
-    /*!
-     *  This call does not block.
-     */
-    // TODO(babenko): deprecated, see YT-26319
-    std::optional<TErrorOr<T>> TryGetUnique() const;
 
     //! Attaches a result handler.
     /*!
@@ -274,13 +258,6 @@ public:
      */
     void Unsubscribe(TFutureCallbackCookie cookie) const;
 
-    //! Similar to #Subscribe but enables moving the value to the handler.
-    /*!
-     *  Normally at most one such handler could be attached.
-     */
-    // TODO(babenko): deprecated, see YT-26319
-    void SubscribeUnique(TCallback<void(TErrorOr<T>&&)> handler) const;
-
     //! Notifies the producer that the promised value is no longer needed.
     //! Returns |true| if succeeded, |false| is the promise was already set or canceled.
     bool Cancel(const TError& error) const;
@@ -289,8 +266,9 @@ public:
     TFuture<T> ToUncancelable() const;
 
     //! Returns a wrapper that handles cancellation requests by immediately becoming set
-    //! with NYT::EErrorCode::Canceled code.
-    TFuture<T> ToImmediatelyCancelable() const;
+    //! with NYT::EErrorCode::Canceled code;
+    //! propagates cancelation to original future if `propagateCancelation` is true.
+    TFuture<T> ToImmediatelyCancelable(bool propagateCancelation = true) const;
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case the deadline is reached).
@@ -315,26 +293,20 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>(const TErrorOr<T>&)> callback) const;
 
-    //! Same as #Apply but assumes that this chaining will be the only subscriber.
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<R(TErrorOr<T>&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
-
     //! Converts (successful) result to |U|; propagates errors as is.
     template <class U>
     TFuture<U> As() const;
 
     //! Converts to TFuture<void> by discarding the value; propagates errors as is.
-    TFuture<void> AsVoid() const;
+    TFuture<void> AsVoid() const&;
+    TFuture<void> AsVoid() &&;
 
     //! Converts to TCancelable interface.
     TCancelable AsCancelable() const;
+
+    //! Converts to TUniqueFuture interface.
+    TUniqueFuture<T> AsUnique() const&;
+    TUniqueFuture<T> AsUnique() &&;
 
 protected:
     explicit TFutureBase(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
@@ -373,19 +345,8 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>(T)> callback) const;
 
-    //! Same as #Apply but assumes that this chaining will be the only subscriber.
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<R(T&&)> callback) const;
-    // TODO(babenko): deprecated, see YT-26319
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TFuture<R>(T&&)> callback) const;
-
-    //! Converts to TUniqueFuture interface.
-    TUniqueFuture<T> AsUnique() const;
 
     using TFutureBase<T>::Apply;
-    using TFutureBase<T>::ApplyUnique;
 
 private:
     explicit TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
@@ -439,13 +400,19 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Provides the unique-value semantics interface.
+/*!
+ *  Note that at most one value extraction is ever possible;
+ *  further attempts to access the value will result in UB.
+ *  In particular, at most one call to #Subscribe, #Get, and #TryGet (expect
+ *  for calls returning null) must happen to any future state
+ *  (possibly shared by multiple future references).
+ */
 template <class T>
-class [[nodiscard]] TUniqueFuture
+class TUniqueFutureBase
     : public TFutureBase<T>
 {
 public:
-    TUniqueFuture() = default;
-    TUniqueFuture(std::nullopt_t);
+    using TFutureBase<T>::TFutureBase;
 
     //! Similar to #TFuture::Get but extracts the value by moving it out of the future state.
     /*!
@@ -475,6 +442,22 @@ public:
     TFuture<R> Apply(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>(TErrorOr<T>&&)> callback) const;
+
+private:
+    template <class U>
+    friend class TFutureBase;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+class [[nodiscard]] TUniqueFuture
+    : public TUniqueFutureBase<T>
+{
+public:
+    using TUniqueFutureBase<T>::TUniqueFutureBase;
+
+    //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
     template <class R>
     TFuture<R> Apply(TCallback<R(T&&)> callback) const;
     template <class R>
@@ -482,11 +465,27 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>(T&&)> callback) const;
 
-private:
-    explicit TUniqueFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
+    using TUniqueFutureBase<T>::Apply;
+};
 
-    template <class U>
-    friend class TFuture;
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+class [[nodiscard]] TUniqueFuture<void>
+    : public TUniqueFutureBase<void>
+{
+public:
+    using TUniqueFutureBase<void>::TUniqueFutureBase;
+
+    //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
+    template <class R>
+    TFuture<R> Apply(TCallback<R()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>()> callback) const;
+
+    using TUniqueFutureBase<void>::Apply;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -816,7 +815,7 @@ TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Enables runtime checks ensuring that no fiber context switch can happen
-//! during excution of a future handler.
+//! during execution of a future handler.
 //! See YT-25879 for more details.
 void ForbidContextSwitchInFutureHandler();
 bool IsContextSwitchInFutureHandlerForbidden();

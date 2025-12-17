@@ -1,6 +1,8 @@
 #pragma once
 #include "type_utils.h"
 #include <util/string/printf.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/block_layout_converter.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/neumann_hash_table.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
 namespace NKikimr::NMiniKQL::NJoinTable {
@@ -28,7 +30,8 @@ class TStdJoinTable {
 
     void Add(TSizedTuple tuple) {
         MKQL_ENSURE(BuiltTable.empty(), "JoinTable is built already");
-        MKQL_ENSURE(std::ssize(tuple) == TupleSize, Sprintf("tuple size promise(%i) vs actual(%i) mismatch", TupleSize, std::ssize(tuple)));
+        MKQL_ENSURE(std::ssize(tuple) == TupleSize,
+                    Sprintf("tuple size promise(%i) vs actual(%i) mismatch", TupleSize, std::ssize(tuple)));
         for (int idx = 0; idx < TupleSize; ++idx) {
             Tuples.push_back(tuple[idx]);
         }
@@ -79,6 +82,45 @@ class TStdJoinTable {
     std::unordered_map<TTuple, TuplesWithSameJoinKey, NKikimr::NMiniKQL::TWideUnboxedHasher,
                        NKikimr::NMiniKQL::TWideUnboxedEqual>
         BuiltTable;
+};
+
+class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
+  public:
+
+    TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout)
+        : Table_(layout)
+    {}
+
+    void BuildWith(IBlockLayoutConverter::TPackResult data) {
+        BuildData_ = std::move(data);
+        Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(), BuildData_.NTuples);
+        Built_ = true;
+    }
+
+    bool Built() const {
+        return Built_;
+    }
+
+    bool Empty() const {
+        return Table_.Empty();
+    }
+
+    i64 RequiredMemoryForBuild(i64 nTuples) {
+        return Table_.RequiredMemoryForBuild(nTuples);
+    }
+
+    void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) const {
+        MKQL_ENSURE(Built_, "table must be built before lookup");
+        MKQL_ENSURE(!Table_.Empty(), "make sure to not lookup in empty table");
+        Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
+            consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
+        });
+    }
+
+  private:
+    bool Built_ = false;
+    IBlockLayoutConverter::TPackResult BuildData_;
+    NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
 };
 
 } // namespace NKikimr::NMiniKQL::NJoinTable

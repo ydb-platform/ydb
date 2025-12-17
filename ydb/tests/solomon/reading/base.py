@@ -16,7 +16,9 @@ class SolomonReadingTestBase(object):
         cls.basic_reading_timestamps = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
         cls.basic_reading_values = [0, 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11]
 
-        cls.listing_paging_metrics_size = 1000
+        cls.listing_paging_metrics_size = 2500
+
+        cls.listing_batching_metrics_sizes = [1100, 600]
 
         cls.data_paging_timeseries_size = 25000
         cls.data_paging_timestamps, cls.data_paging_values = cls._generate_data_paging_timeseries(cls.data_paging_timeseries_size)
@@ -45,6 +47,10 @@ class SolomonReadingTestBase(object):
             *cls._generate_listing_paging_test_metrics(cls.listing_paging_metrics_size)
         ]})
 
+        add_solomon_metrics("listing_batching", "listing_batching", "my_service", {"metrics": [
+            *cls._generate_listing_batching_test_metrics(*cls.listing_batching_metrics_sizes)
+        ]})
+
         add_solomon_metrics("data_paging", "data_paging", "my_service", {"metrics": [
             {
                 "labels"        : {"test_type": "data_paging_test"},
@@ -71,6 +77,18 @@ class SolomonReadingTestBase(object):
                 {
                     "name": "_EnableRuntimeListing",
                     "value": "true"
+                },
+                {
+                    "name": "_EnableSolomonClientPostApi",
+                    "value": "true"
+                },
+                {
+                    "name": "_MaxListingPageSize",
+                    "value": 1000
+                },
+                {
+                    "name": "MaxApiInflight",
+                    "value": 2500
                 }
             ]
         }
@@ -123,6 +141,27 @@ class SolomonReadingTestBase(object):
         })
 
         return listing_paging_metrics
+
+    @staticmethod
+    def _generate_listing_batching_test_metrics(totalSize, firstLabelSize):
+        listing_batching_metrics = [
+            {
+                "labels"        : {"test_type": "listing_batching_test", "test_label": str(i)},
+                "type"          : "DGAUGE",
+                "timestamps"    : [0],
+                "values"        : [0]
+            }
+            for i in range(firstLabelSize)
+        ]
+        for i in range(totalSize - firstLabelSize):
+            listing_batching_metrics.append({
+                "labels"        : {"test_type": "listing_batching_test", "test_label": "0", "test_label_2": str(i)},
+                "type"          : "DGAUGE",
+                "timestamps"    : [0],
+                "values"        : [0]
+            })
+
+        return listing_batching_metrics
 
     @staticmethod
     def _generate_data_paging_timeseries(size):

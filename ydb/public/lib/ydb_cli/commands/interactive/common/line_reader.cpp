@@ -232,6 +232,10 @@ private:
         }
 
         Rx->enable_bracketed_paste();
+
+        if (TryGetEnv("NO_COLOR").Defined()) {
+            Rx->set_no_color(true);
+        }
     }
 
     void UpdateHistoryPath(const std::optional<TString>& path) {

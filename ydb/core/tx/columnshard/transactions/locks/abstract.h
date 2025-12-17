@@ -22,8 +22,8 @@ public:
     using TProto = NKikimrColumnShardTxProto::TEvent;
 
 protected:
-    virtual void DoAddToInteraction(const ui64 txId, TInteractionsContext& context) const = 0;
-    virtual void DoRemoveFromInteraction(const ui64 txId, TInteractionsContext& context) const = 0;
+    virtual void DoAddToInteraction(const ui64 lockId, TInteractionsContext& context) const = 0;
+    virtual void DoRemoveFromInteraction(const ui64 lockId, TInteractionsContext& context) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) const = 0;
 
@@ -43,57 +43,57 @@ public:
         DoSerializeToProto(proto);
     }
 
-    void AddToInteraction(const ui64 txId, TInteractionsContext& context) const {
-        return DoAddToInteraction(txId, context);
+    void AddToInteraction(const ui64 lockId, TInteractionsContext& context) const {
+        return DoAddToInteraction(lockId, context);
     }
 
-    void RemoveFromInteraction(const ui64 txId, TInteractionsContext& context) const {
-        return DoRemoveFromInteraction(txId, context);
+    void RemoveFromInteraction(const ui64 lockId, TInteractionsContext& context) const {
+        return DoRemoveFromInteraction(lockId, context);
     }
 };
 
 class TTxEventContainer: public NBackgroundTasks::TInterfaceProtoContainer<ITxEvent> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<ITxEvent>;
-    YDB_READONLY(ui64, TxId, 0);
+    YDB_READONLY(ui64, LockId, 0);
 
 public:
     void AddToInteraction(TInteractionsContext& context) const {
-        return GetObjectVerified().AddToInteraction(TxId, context);
+        return GetObjectVerified().AddToInteraction(LockId, context);
     }
 
     void RemoveFromInteraction(TInteractionsContext& context) const {
-        return GetObjectVerified().RemoveFromInteraction(TxId, context);
+        return GetObjectVerified().RemoveFromInteraction(LockId, context);
     }
 
-    TTxEventContainer(const ui64 txId, const std::shared_ptr<ITxEvent>& txEvent)
+    TTxEventContainer(const ui64 lockId, const std::shared_ptr<ITxEvent>& txEvent)
         : TBase(txEvent)
-        , TxId(txId) {
+        , LockId(lockId) {
     }
 
-    TTxEventContainer(const ui64 txId)
-        : TxId(txId) {
+    TTxEventContainer(const ui64 lockId)
+        : LockId(lockId) {
     }
 
     bool operator<(const TTxEventContainer& item) const {
-        return TxId < item.TxId;
+        return LockId < item.LockId;
     }
 };
 
 class ITxEventWriter {
 protected:
     virtual bool DoCheckInteraction(
-        const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& notifications) const = 0;
+        const ui64 selfLockId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& notifications) const = 0;
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() = 0;
 
 public:
     ITxEventWriter() = default;
     virtual ~ITxEventWriter() = default;
 
-    bool CheckInteraction(const ui64 selfTxId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& notifications) const {
+    bool CheckInteraction(const ui64 selfLockId, TInteractionsContext& context, TTxConflicts& conflicts, TTxConflicts& notifications) const {
         TTxConflicts conflictsResult;
         TTxConflicts notificationsResult;
-        const bool result = DoCheckInteraction(selfTxId, context, conflictsResult, notificationsResult);
+        const bool result = DoCheckInteraction(selfLockId, context, conflictsResult, notificationsResult);
         std::swap(conflictsResult, conflicts);
         std::swap(notificationsResult, notifications);
         return result;

@@ -33,7 +33,11 @@ struct TKeeperParams {
     // Number of chunks actually used by the common log at the moment
     i64 CommonLogSize = 0;
 
-    i64 MaxCommonLogChunks = 200;
+    // Maximum number of chunks in common log
+    i64 MaxCommonLogChunks = (i64)NPDisk::MaxCommonLogChunks;
+
+    // Special reserve of log chunks for disks with static groups
+    i64 CommonStaticLogChunks = (i64)NPDisk::CommonStaticLogChunks;
 
     // Should be true for disks that have one or more static group
     bool HasStaticGroups = false;
@@ -52,4 +56,3 @@ struct TKeeperParams {
 
 } // NPDisk
 } // NKikimr
-

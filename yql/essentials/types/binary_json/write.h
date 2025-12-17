@@ -1,6 +1,7 @@
 #pragma once
 
 #include "format.h"
+#include "read.h"
 
 #include <util/generic/maybe.h>
 
@@ -21,4 +22,10 @@ std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, 
  * @brief Translates DOM layout from `yql/library/dom` library into BinaryJson
  */
 TBinaryJson SerializeToBinaryJson(const NYql::NUdf::TUnboxedValue& value);
+
+/**
+ * @brief Translates read cursor into a separate BinaryJson
+ */
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const NBinaryJson::TEntryCursor& value);
+
 } // namespace NKikimr::NBinaryJson

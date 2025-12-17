@@ -27,8 +27,7 @@ namespace types
   }
 
   /// const_sliced_str_iterator implementation
-  inline const_sliced_str_iterator::const_sliced_str_iterator(char const *data,
-                                                              long step)
+  inline const_sliced_str_iterator::const_sliced_str_iterator(char const *data, long step)
       : data(data), step(step)
   {
   }
@@ -39,20 +38,17 @@ namespace types
     return *this;
   }
 
-  inline bool const_sliced_str_iterator::operator<(
-      const_sliced_str_iterator const &other) const
+  inline bool const_sliced_str_iterator::operator<(const_sliced_str_iterator const &other) const
   {
     return (step > 0) ? (data < other.data) : (data > other.data);
   }
 
-  inline bool const_sliced_str_iterator::operator==(
-      const_sliced_str_iterator const &other) const
+  inline bool const_sliced_str_iterator::operator==(const_sliced_str_iterator const &other) const
   {
     return data == other.data;
   }
 
-  inline bool const_sliced_str_iterator::operator!=(
-      const_sliced_str_iterator const &other) const
+  inline bool const_sliced_str_iterator::operator!=(const_sliced_str_iterator const &other) const
   {
     return data != other.data;
   }
@@ -62,16 +58,14 @@ namespace types
     return (*data);
   }
 
-  inline const_sliced_str_iterator
-  const_sliced_str_iterator::operator-(long n) const
+  inline const_sliced_str_iterator const_sliced_str_iterator::operator-(long n) const
   {
     const_sliced_str_iterator other(*this);
     other.data -= step * n;
     return other;
   }
 
-  inline long const_sliced_str_iterator::operator-(
-      const_sliced_str_iterator const &other) const
+  inline long const_sliced_str_iterator::operator-(const_sliced_str_iterator const &other) const
   {
     return (data - other.data) / step;
   }
@@ -84,21 +78,18 @@ namespace types
   }
 
   template <class S>
-  sliced_str<S>::sliced_str(sliced_str const &s)
-      : data(s.data), slicing(s.slicing)
+  sliced_str<S>::sliced_str(sliced_str const &s) : data(s.data), slicing(s.slicing)
   {
   }
 
   template <class S>
-  sliced_str<S>::sliced_str(sliced_str const &s,
-                            typename S::normalized_type const &sl)
+  sliced_str<S>::sliced_str(sliced_str const &s, typename S::normalized_type const &sl)
       : data(s.data), slicing(s.slicing * sl)
   {
   }
 
   template <class S>
-  sliced_str<S>::sliced_str(str const &other,
-                            typename S::normalized_type const &s)
+  sliced_str<S>::sliced_str(str const &other, typename S::normalized_type const &s)
       : data(other.data), slicing(s)
   {
   }
@@ -120,15 +111,13 @@ namespace types
   template <class S>
   typename sliced_str<S>::const_iterator sliced_str<S>::begin() const
   {
-    return typename sliced_str<S>::const_iterator(data->c_str() + slicing.lower,
-                                                  slicing.step);
+    return typename sliced_str<S>::const_iterator(data->c_str() + slicing.lower, slicing.step);
   }
 
   template <class S>
   typename sliced_str<S>::const_iterator sliced_str<S>::end() const
   {
-    return typename sliced_str<S>::const_iterator(data->c_str() + slicing.upper,
-                                                  slicing.step);
+    return typename sliced_str<S>::const_iterator(data->c_str() + slicing.upper, slicing.step);
   }
 
   // size
@@ -156,8 +145,7 @@ namespace types
 
   template <class S>
   template <class Sp>
-  typename std::enable_if<is_slice<Sp>::value, sliced_str<Sp>>::type
-  sliced_str<S>::operator[](Sp const &s) const
+  std::enable_if_t<is_slice<Sp>::value, sliced_str<Sp>> sliced_str<S>::operator[](Sp const &s) const
   {
     return {*this, s.normalize(size())};
   }
@@ -206,8 +194,7 @@ namespace types
   {
     if (size() != v.size())
       return false;
-    for (char const *iter = data->c_str() + slicing.lower,
-                    *end = data->c_str() + slicing.upper,
+    for (char const *iter = data->c_str() + slicing.lower, *end = data->c_str() + slicing.upper,
                     *oter = v.data->c_str();
          iter < end; iter += slicing.step, ++oter)
       if (*iter != *oter)
@@ -369,8 +356,7 @@ namespace types
 
     if (other_size > size())
       resize(other_size);
-    for (long i = other_slice.lower; i < other_slice.upper;
-         i = i + other_slice.step, j++)
+    for (long i = other_slice.lower; i < other_slice.upper; i = i + other_slice.step, j++)
       my_data[j] = other_data[i];
     if (j < size())
       resize(j);
@@ -525,8 +511,7 @@ namespace types
   {
     if (size() != other.size())
       return false;
-    for (long i = other.get_slice().lower, j = 0L; j < size();
-         i = i + other.get_slice().step, j++)
+    for (long i = other.get_slice().lower, j = 0L; j < size(); i = i + other.get_slice().step, j++)
       if (other.get_data()[i] != chars()[j])
         return false;
     return true;
@@ -537,8 +522,7 @@ namespace types
   }
 
   template <class S>
-  typename std::enable_if<is_slice<S>::value, sliced_str<S>>::type
-  str::operator()(S const &s) const
+  std::enable_if_t<is_slice<S>::value, sliced_str<S>> str::operator()(S const &s) const
   {
     return operator[](s);
   }
@@ -556,8 +540,7 @@ namespace types
   }
 
   template <class S>
-  typename std::enable_if<is_slice<S>::value, sliced_str<S>>::type
-  str::operator[](S const &s) const
+  std::enable_if_t<is_slice<S>::value, sliced_str<S>> str::operator[](S const &s) const
   {
     return {*this, s.normalize(size())};
   }
@@ -689,8 +672,7 @@ namespace operator_
 {
 
   template <size_t N, class Arg>
-  auto mod(const char (&fmt)[N],
-           Arg &&arg) -> decltype(types::str(fmt) % std::forward<Arg>(arg))
+  auto mod(const char (&fmt)[N], Arg &&arg) -> decltype(types::str(fmt) % std::forward<Arg>(arg))
   {
     return types::str(fmt) % std::forward<Arg>(arg);
   }
@@ -717,14 +699,12 @@ PYTHONIC_NS_END
 namespace std
 {
 
-  inline size_t
-  hash<pythonic::types::str>::operator()(const pythonic::types::str &x) const
+  inline size_t hash<pythonic::types::str>::operator()(const pythonic::types::str &x) const
   {
     return hash<std::string>()(x.chars());
   }
 
-  inline size_t
-  hash<pythonic::types::chr>::operator()(const pythonic::types::chr &x) const
+  inline size_t hash<pythonic::types::chr>::operator()(const pythonic::types::chr &x) const
   {
     return x.c;
   }
@@ -739,13 +719,26 @@ namespace std
 
 #ifndef PyString_FromStringAndSize
 #define PyString_FromStringAndSize PyUnicode_FromStringAndSize
+#endif
 
+#ifdef Py_LIMITED_API
+#define PyString_Check(x)                                                                          \
+  (PyUnicode_Check(x) && [x]() {                                                                   \
+    PyObject *tmp = PyUnicode_AsASCIIString(x);                                                    \
+    bool res = tmp != nullptr;                                                                     \
+    Py_DECREF(tmp);                                                                                \
+    PyErr_Clear();                                                                                 \
+    return res;                                                                                    \
+  }())
+#else
 #ifndef PyString_Check
-#define PyString_Check(x) PyUnicode_Check(x) && PyUnicode_IS_COMPACT_ASCII(x)
+#define PyString_Check(x) (PyUnicode_Check(x) && PyUnicode_IS_COMPACT_ASCII(x))
 #endif
-#ifndef PyString_AS_STRING
-#define PyString_AS_STRING (char *)_PyUnicode_COMPACT_DATA
 #endif
+
+#ifdef Py_LIMITED_API
+#define PyString_GET_SIZE PyUnicode_GetLength
+#else
 #ifndef PyString_GET_SIZE
 #define PyString_GET_SIZE PyUnicode_GET_LENGTH
 #endif
@@ -764,8 +757,7 @@ inline PyObject *to_python<types::chr>::convert(types::chr const &v)
 }
 
 template <class S>
-PyObject *
-to_python<types::sliced_str<S>>::convert(types::sliced_str<S> const &v)
+PyObject *to_python<types::sliced_str<S>>::convert(types::sliced_str<S> const &v)
 {
   return ::to_python(types::str(v));
 }

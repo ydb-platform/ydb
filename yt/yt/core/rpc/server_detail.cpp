@@ -702,7 +702,9 @@ bool TServiceContextWrapper::IsCanceled() const
 }
 
 void TServiceContextWrapper::Cancel()
-{ }
+{
+    UnderlyingContext_->Cancel();
+}
 
 TFuture<TSharedRefArray> TServiceContextWrapper::GetAsyncResponseMessage() const
 {

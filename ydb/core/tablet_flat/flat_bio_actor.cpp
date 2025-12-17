@@ -122,7 +122,7 @@ void TBlockIO::Dispatch()
 
         auto *ev = new TEvGet(query, +more, TInstant::Max(), klass, false);
 
-        SendToBSProxy(ctx, group, ev, more.From /* cookie, request offset */, std::move(TraceId));
+        SendToBSProxy(ctx, group, ev, more.From /* cookie, request offset */, NWilson::TTraceId(TraceId));
     }
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {

@@ -32,6 +32,7 @@ public:
     void BeginTree() override
     {
         YT_VERIFY(NodeStack_.size() == 0);
+        TreeSize_ = 0;
     }
 
     INodePtr EndTree() override
@@ -88,7 +89,6 @@ public:
         AddNode(Factory_->CreateEntity(), false);
     }
 
-
     void OnMyBeginList() override
     {
         AddNode(Factory_->CreateList(), true);
@@ -103,7 +103,6 @@ public:
     {
         NodeStack_.pop();
     }
-
 
     void OnMyBeginMap() override
     {

@@ -264,6 +264,7 @@ TYtJoinNodeLeaf::TPtr ConvertYtEquiJoinToLeaf(const TYtJoinNodeOp& op, TPosition
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
             .Build()
         .Build()
         .Settings()
@@ -1066,6 +1067,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
                     .Columns<TCoVoid>().Build()
                     .Ranges<TCoVoid>().Build()
                     .Stat<TCoVoid>().Build()
+                    .QLFilter<TCoVoid>().Build()
                 .Build()
             .Build()
             .Settings().Build()
@@ -1109,6 +1111,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
             .Build()
         .Build()
         .Settings().Build()
@@ -2332,6 +2335,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
                 .Done()
             );
         }
@@ -3005,6 +3009,7 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
                 .Columns<TCoVoid>().Build()
                 .Ranges(ranges)
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
                 .Done()
             );
         }
@@ -3017,6 +3022,7 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
             .Columns<TCoVoid>().Build()
             .Ranges<TCoVoid>().Build()
             .Stat<TCoVoid>().Build()
+            .QLFilter<TCoVoid>().Build()
             .Done()
         );
 

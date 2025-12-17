@@ -3,6 +3,7 @@
 #include "blobstorage_syncer_committer.h"
 #include "blobstorage_syncer_data.h"
 #include "blobstorage_syncquorum.h"
+#include "index_sst_writer.h"
 #include "syncer_job_actor.h"
 #include "syncer_job_task.h"
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.h>
@@ -80,12 +81,31 @@ namespace NKikimr {
         )
 
         void CreateAndRunTask(const TActorContext &ctx) {
+            TActorId sstWriterId;
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+            auto sstWriterActor = std::make_unique<TIndexSstWriterActor>(
+                SyncerCtx->VCtx,
+                SyncerCtx->PDiskCtx,
+                SyncerCtx->LevelIndexLogoBlob,
+                SyncerCtx->LevelIndexBlock,
+                SyncerCtx->LevelIndexBarrier);
+            sstWriterId = ctx.Register(sstWriterActor.get());
+            ActiveActors.Insert(sstWriterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+#endif
             // create task
-            auto task = std::make_unique<TSyncerJobTask>(TSyncerJobTask::EFullRecover, TargetVDiskId, TargetActorId,
-                PeerSyncState, JobCtx);
+            auto task = std::make_unique<TSyncerJobTask>(
+                TSyncerJobTask::EFullRecover,
+                TargetVDiskId,
+                TargetActorId,
+                sstWriterId,
+                PeerSyncState,
+                JobCtx);
             // run task
-            const TActorId aid = ctx.Register(CreateSyncerJob(SyncerCtx, std::move(task), ctx.SelfID));
-            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            const TActorId jobActorId = ctx.Register(CreateSyncerJob(SyncerCtx, std::move(task), ctx.SelfID));
+            ActiveActors.Insert(jobActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+            sstWriterActor->SetSyncerJobActorId(jobActorId);
+#endif
             // state func
             Become(&TThis::WaitForSyncStateFunc);
         }
@@ -97,7 +117,13 @@ namespace NKikimr {
                         "TSyncerRLDFullSyncProxyActor(%s): TEvSyncerJobDone; Task# %s",
                             TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data()));
             ActiveActors.Erase(ev->Sender);
-            std::unique_ptr<TSyncerJobTask> task = std::move(ev->Get()->Task);
+            auto* msg = ev->Get();
+#ifdef USE_NEW_FULL_SYNC_SCHEME
+            if (msg->Task->SstWriterId) {
+                ActiveActors.Erase(msg->Task->SstWriterId);
+            }
+#endif
+            std::unique_ptr<TSyncerJobTask> task = std::move(msg->Task);
             auto syncStatus = task->GetCurrent().LastSyncStatus;
             if (!TPeerSyncState::Good(syncStatus)) {
                 RerunTaskAfterTimeout(ctx);

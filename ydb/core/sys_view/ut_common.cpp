@@ -104,6 +104,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableSparsedColumns(settings.EnableSparsedColumns);
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
     featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
+    featureFlags.SetEnableFulltextIndex(settings.EnableFulltextIndex);
     if (settings.EnableRealSystemViewPaths) {
         featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
     }

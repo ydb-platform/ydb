@@ -1,11 +1,14 @@
+#include <fmt/format.h>
 #include <openssl/sha.h>
 
 #include "ydb_service_topic.h"
+#include <util/generic/serialized_enum.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -139,7 +142,7 @@ namespace NYdb::NConsoleClient {
     TString PrepareAllowedCodecsDescription(const TString& descriptionPrefix, const TVector<NTopic::ECodec>& codecs) {
         TStringStream description;
         description << descriptionPrefix << ". Available codecs: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& codec : codecs) {
             auto findResult = CodecsDescriptions.find(codec);
             Y_ABORT_UNLESS(findResult != CodecsDescriptions.end(),
@@ -178,14 +181,6 @@ namespace NYdb::NConsoleClient {
             }
             return TDuration::Seconds(hours * 3600); // using floating-point ctor with saturation
         }
-
-        TDuration ParseDuration(TStringBuf str) {
-            StripInPlace(str);
-            if (!str.empty() && !IsAsciiAlpha(str.back())) {
-                throw TMisuseException() << "Duration must ends with a unit name (ex. 'h' for hours, 's' for seconds)";
-            }
-            return TDuration::Parse(str);
-        }
     }
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {
@@ -199,7 +194,7 @@ namespace NYdb::NConsoleClient {
     void TCommandWithMetricsLevel::AddMetricsLevels(TClientCommand::TConfig& config) {
         TStringStream description;
         description << "Available metrics levels: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& level: ExistingMetricsLevels) {
             auto findResult = MetricsLevelsDescriptions.find(level);
             Y_ABORT_UNLESS(findResult != MetricsLevelsDescriptions.end(),
@@ -234,7 +229,7 @@ namespace NYdb::NConsoleClient {
     void TCommandWithMeteringMode::AddAllowedMeteringModes(TClientCommand::TConfig& config) {
         TStringStream description;
         description << "Topic metering for serverless databases pricing. Available metering modes: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& mode: ExistingMeteringModes) {
             auto findResult = MeteringModesDescriptions.find(mode.second);
             Y_ABORT_UNLESS(findResult != MeteringModesDescriptions.end(),
@@ -275,7 +270,7 @@ namespace NYdb::NConsoleClient {
     void TCommandWithAutoPartitioning::AddAutoPartitioning(TClientCommand::TConfig& config, bool isAlter) {
         TStringStream description;
         description << "A strategy to automatically change the number of partitions depending on the load. Available strategies: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& strategy: AutoPartitioningStrategies) {
             auto findResult = AutoscaleStrategiesDescriptions.find(strategy.second);
             Y_ABORT_UNLESS(findResult != AutoscaleStrategiesDescriptions.end(),
@@ -559,8 +554,8 @@ namespace NYdb::NConsoleClient {
             settings.SetRetentionStorageMb(*RetentionStorageMb_);
         }
 
-        if (MetricsLevel_.Defined()) {
-            settings.SetMetricsLevel(*MetricsLevel_);
+        if (auto level = GetMetricsLevel(); level.Defined()) {
+            settings.SetMetricsLevel(*level);
         }
 
         return settings;
@@ -644,6 +639,21 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("availability-period", "Duration for which uncommited data in topic is retained (ex. '72h', '1440m')")
             .Optional()
             .StoreMappedResult(&AvailabilityPeriod_, ParseDuration);
+        config.Opts->AddLongOption("type", "Consumer type. Available options: streaming, shared")
+            .DefaultValue("streaming")
+            .StoreResult(&ConsumerType_);
+        config.Opts->AddLongOption("keep-messages-order", "Keep messages order for shared consumer")
+            .Optional()
+            .StoreResult(&KeepMessagesOrder_);
+        config.Opts->AddLongOption("default-processing-timeout", "Default processing timeout for shared consumer (ex. '1h', '1m', '1s)")
+            .Optional()
+            .StoreMappedResult(&DefaultProcessingTimeout_, ParseDuration);
+        config.Opts->AddLongOption("max-processing-attempts", "Max processing attempts for DLQ for shared consumer")
+            .Optional()
+            .StoreResult(&MaxProcessingAttempts_);
+        config.Opts->AddLongOption("dlq-queue-name", "DLQ queue name for shared consumer")
+            .Optional()
+            .StoreResult(&DlqQueueName_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -653,6 +663,26 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Parse(config);
         ParseCodecs();
         ParseTopicName(config, 0);
+    }
+
+    void TCommandTopicConsumerAdd::ValidateConsumerOptions(const TMaybe<NTopic::EConsumerType>& consumerType) {
+        if (consumerType.Defined() && *consumerType != NTopic::EConsumerType::Shared) {
+            if (MaxProcessingAttempts_.Defined()) {
+                throw TMisuseException() << "Invalid option: max-processing-attempts. This option is available only for shared consumer";
+            }
+
+            if (DlqQueueName_.Defined()) {
+                throw TMisuseException() << "Invalid option: dlq-queue-name. This option is available only for shared consumer";
+            }
+
+            if (DefaultProcessingTimeout_.Defined()) {
+                throw TMisuseException() << "Invalid option: default-processing-timeout. This option is available only for shared consumer";
+            }
+
+            if (KeepMessagesOrder_.Defined()) {
+                throw TMisuseException() << "Invalid option: keep-messages-order. This option is available only for shared consumer";
+            }
+        }
     }
 
     int TCommandTopicConsumerAdd::Run(TConfig& config) {
@@ -676,6 +706,40 @@ namespace NYdb::NConsoleClient {
         consumerSettings.SetImportant(IsImportant_);
         if (AvailabilityPeriod_.Defined()) {
             consumerSettings.AvailabilityPeriod(*AvailabilityPeriod_);
+        }
+
+        auto consumerType = TryFromString<NTopic::EConsumerType>(to_title(ConsumerType_));
+        if (!consumerType.Defined()) {
+            throw TMisuseException() << "Invalid consumer type: " << to_title(ConsumerType_) << ". Valid types: " << GetEnumAllNames<NTopic::EConsumerType>();
+        }
+
+        ValidateConsumerOptions(consumerType);
+
+        consumerSettings.ConsumerType(*consumerType);
+        consumerSettings.KeepMessagesOrder(KeepMessagesOrder_.GetOrElse(false));
+        if (DefaultProcessingTimeout_.Defined()) {
+            consumerSettings.DefaultProcessingTimeout(*DefaultProcessingTimeout_);
+        }
+
+        if (MaxProcessingAttempts_.Defined() || DlqQueueName_.Defined()) {
+            NYdb::NTopic::TDeadLetterPolicySettings dlqSettings;
+            dlqSettings.Enabled(true);
+            
+            NYdb::NTopic::TDeadLetterPolicyConditionSettings conditionSettings;
+            if (MaxProcessingAttempts_.Defined()) {
+                conditionSettings.MaxProcessingAttempts(*MaxProcessingAttempts_);
+            }
+        
+            dlqSettings.Condition(conditionSettings);
+            
+            if (DlqQueueName_.Defined()) {
+                dlqSettings.Action(NTopic::EDeadLetterAction::Move);
+                dlqSettings.DeadLetterQueue(*DlqQueueName_);
+            } else {
+                dlqSettings.Action(NTopic::EDeadLetterAction::Delete);
+            }
+                        
+            consumerSettings.DeadLetterPolicy(dlqSettings);
         }
 
         readRuleSettings.AppendAddConsumers(consumerSettings);
@@ -810,7 +874,7 @@ namespace NYdb::NConsoleClient {
     void TCommandWithTransformBody::AddTransform(TClientCommand::TConfig& config) {
         TStringStream description;
         description << "Conversion between a message data in the topic and the client filesystem/terminal. Available options: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& iter : TransformBodyDescriptions) {
             description << "\n  " << colors.BoldColor() << iter.first << colors.OldColor() << "\n    " << iter.second;
         }
@@ -849,7 +913,7 @@ namespace NYdb::NConsoleClient {
     void TCommandTopicRead::AddAllowedMetadataFields(TConfig& config) {
         TStringStream description;
         description << "Comma-separated list of message fields to print in Pretty format. If not specified, all fields are printed. Available fields: ";
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         for (const auto& iter : TopicMetadataFieldsDescriptions) {
             description << "\n  " << colors.BoldColor() << iter.first << colors.OldColor() << "\n    " << iter.second;
         }
@@ -879,7 +943,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
-        config.Opts->AddLongOption("idle-timeout", "Max wait duration for new messages. Topic is considered empty if no new messages arrive within this period.")
+        config.Opts->AddLongOption("idle-timeout", "Max wait duration for the first message. Topic is considered empty if no new messages arrive within this period.")
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
             .StoreResult(&IdleTimeout_);
@@ -1102,6 +1166,11 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("message-group-id", "Message group identifier. If not set, all messages from input will get the same identifier based on hex string\nrepresentation of 3 random bytes")
             .Optional()
             .StoreResult(&MessageGroupId_);
+        config.Opts->AddLongOption("partition-id", "Write to an exact partition. If not set, server assigns partition automatically by message-group-id")
+            .Hidden()
+            .Optional()
+            .RequiredArgument("INDEX")
+            .StoreResult(&PartitionId_);
         config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno")
             .Optional()
             .Hidden()
@@ -1130,6 +1199,9 @@ namespace NYdb::NConsoleClient {
         }
         settings.Path(TopicName);
 
+        if (PartitionId_.Defined()) {
+            settings.PartitionId(*PartitionId_);
+        }
         if (!MessageGroupId_.Defined()) {
             const TString rnd = ToString(TInstant::Now().NanoSeconds());
             SHA_CTX ctx;

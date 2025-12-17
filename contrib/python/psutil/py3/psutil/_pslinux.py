@@ -24,7 +24,6 @@ from collections import namedtuple
 from . import _common
 from . import _psposix
 from . import _psutil_linux as cext
-from . import _psutil_posix as cext_posix
 from ._common import ENCODING
 from ._common import NIC_DUPLEX_FULL
 from ._common import NIC_DUPLEX_HALF
@@ -47,7 +46,6 @@ from ._common import path_exists_strict
 from ._common import supports_ipv6
 from ._common import usage_percent
 
-
 # fmt: off
 __extra__all__ = [
     'PROCFS_PATH',
@@ -59,11 +57,6 @@ __extra__all__ = [
     "CONN_FIN_WAIT2", "CONN_TIME_WAIT", "CONN_CLOSE", "CONN_CLOSE_WAIT",
     "CONN_LAST_ACK", "CONN_LISTEN", "CONN_CLOSING",
 ]
-
-if hasattr(resource, "prlimit"):
-    __extra__all__.extend(
-        [x for x in dir(cext) if x.startswith('RLIM') and x.isupper()]
-    )
 # fmt: on
 
 
@@ -80,9 +73,9 @@ HAS_CPU_AFFINITY = hasattr(cext, "proc_cpu_affinity_get")
 
 # Number of clock ticks per second
 CLOCK_TICKS = os.sysconf("SC_CLK_TCK")
-PAGESIZE = cext_posix.getpagesize()
-BOOT_TIME = None  # set later
+PAGESIZE = cext.getpagesize()
 LITTLE_ENDIAN = sys.byteorder == 'little'
+UNSET = object()
 
 # "man iostat" states that sectors are equivalent with blocks and have
 # a size of 512 bytes. Despite this value can be queried at runtime
@@ -421,12 +414,6 @@ def virtual_memory():
     except KeyError:
         slab = 0
 
-    used = total - free - cached - buffers
-    if used < 0:
-        # May be symptomatic of running within a LCX container where such
-        # values will be dramatically distorted over those of the host.
-        used = total - free
-
     # - starting from 4.4.0 we match free's "available" column.
     #   Before 4.4.0 we calculated it as (free + buffers + cached)
     #   which matched htop.
@@ -456,6 +443,8 @@ def virtual_memory():
         # https://gitlab.com/procps-ng/procps/blob/
         #     24fd2605c51fccc375ab0287cec33aa767f06718/proc/sysinfo.c#L764
         avail = free
+
+    used = total - avail
 
     percent = usage_percent((total - avail), total, round_=1)
 
@@ -739,7 +728,7 @@ else:
 # =====================================================================
 
 
-net_if_addrs = cext_posix.net_if_addrs
+net_if_addrs = cext.net_if_addrs
 
 
 class _Ipv6UnsupportedError(Exception):
@@ -1050,8 +1039,8 @@ def net_if_stats():
     ret = {}
     for name in names:
         try:
-            mtu = cext_posix.net_if_mtu(name)
-            flags = cext_posix.net_if_flags(name)
+            mtu = cext.net_if_mtu(name)
+            flags = cext.net_if_flags(name)
             duplex, speed = cext.net_if_duplex_speed(name)
         except OSError as err:
             # https://github.com/giampaolo/psutil/issues/1279
@@ -1525,7 +1514,7 @@ def sensors_battery():
         secsleft = _common.POWER_TIME_UNLIMITED
     elif energy_now is not None and power_now is not None:
         try:
-            secsleft = int(energy_now / power_now * 3600)
+            secsleft = int(energy_now / abs(power_now) * 3600)
         except ZeroDivisionError:
             secsleft = _common.POWER_TIME_UNKNOWN
     elif time_to_empty is not None:
@@ -1556,14 +1545,11 @@ def users():
 
 def boot_time():
     """Return the system boot time expressed in seconds since the epoch."""
-    global BOOT_TIME
     path = f"{get_procfs_path()}/stat"
     with open_binary(path) as f:
         for line in f:
             if line.startswith(b'btime'):
-                ret = float(line.strip().split()[1])
-                BOOT_TIME = ret
-                return ret
+                return float(line.strip().split()[1])
         msg = f"line 'btime' not found in {path}"
         raise RuntimeError(msg)
 
@@ -1623,9 +1609,9 @@ def ppid_map():
             with open_binary(f"{procfs_path}/{pid}/stat") as f:
                 data = f.read()
         except (FileNotFoundError, ProcessLookupError):
-            # Note: we should be able to access /stat for all processes
-            # aka it's unlikely we'll bump into EPERM, which is good.
             pass
+        except PermissionError as err:
+            raise AccessDenied(pid) from err
         else:
             rpar = data.rfind(b')')
             dset = data[rpar + 2 :].split()
@@ -1664,12 +1650,20 @@ def wrap_exceptions(fun):
 class Process:
     """Linux process implementation."""
 
-    __slots__ = ["_cache", "_name", "_ppid", "_procfs_path", "pid"]
+    __slots__ = [
+        "_cache",
+        "_ctime",
+        "_name",
+        "_ppid",
+        "_procfs_path",
+        "pid",
+    ]
 
     def __init__(self, pid):
         self.pid = pid
         self._name = None
         self._ppid = None
+        self._ctime = None
         self._procfs_path = get_procfs_path()
 
     def _is_zombie(self):
@@ -1697,6 +1691,22 @@ class Process:
         # For those C function who do not raise NSP, possibly returning
         # incorrect or incomplete result.
         os.stat(f"{self._procfs_path}/{self.pid}")
+
+    def _readlink(self, path, fallback=UNSET):
+        # * https://github.com/giampaolo/psutil/issues/503
+        #   os.readlink('/proc/pid/exe') may raise ESRCH (ProcessLookupError)
+        #   instead of ENOENT (FileNotFoundError) when it races.
+        # * ENOENT may occur also if the path actually exists if PID is
+        #   a low PID (~0-20 range).
+        # * https://github.com/giampaolo/psutil/issues/2514
+        try:
+            return readlink(path)
+        except (FileNotFoundError, ProcessLookupError):
+            if os.path.lexists(f"{self._procfs_path}/{self.pid}"):
+                self._raise_if_zombie()
+                if fallback is not UNSET:
+                    return fallback
+            raise
 
     @wrap_exceptions
     @memoize_when_activated
@@ -1770,16 +1780,9 @@ class Process:
 
     @wrap_exceptions
     def exe(self):
-        try:
-            return readlink(f"{self._procfs_path}/{self.pid}/exe")
-        except (FileNotFoundError, ProcessLookupError):
-            self._raise_if_zombie()
-            # no such file error; might be raised also if the
-            # path actually exists for system processes with
-            # low pids (about 0-20)
-            if os.path.lexists(f"{self._procfs_path}/{self.pid}"):
-                return ""
-            raise
+        return self._readlink(
+            f"{self._procfs_path}/{self.pid}/exe", fallback=""
+        )
 
     @wrap_exceptions
     def cmdline(self):
@@ -1880,15 +1883,21 @@ class Process:
         return _psposix.wait_pid(self.pid, timeout, self._name)
 
     @wrap_exceptions
-    def create_time(self):
-        ctime = float(self._parse_stat_file()['create_time'])
-        # According to documentation, starttime is in field 21 and the
-        # unit is jiffies (clock ticks).
-        # We first divide it for clock ticks and then add uptime returning
-        # seconds since the epoch.
-        # Also use cached value if available.
-        bt = BOOT_TIME or boot_time()
-        return (ctime / CLOCK_TICKS) + bt
+    def create_time(self, monotonic=False):
+        # The 'starttime' field in /proc/[pid]/stat is expressed in
+        # jiffies (clock ticks per second), a relative value which
+        # represents the number of clock ticks that have passed since
+        # the system booted until the process was created. It never
+        # changes and is unaffected by system clock updates.
+        if self._ctime is None:
+            self._ctime = (
+                float(self._parse_stat_file()['create_time']) / CLOCK_TICKS
+            )
+        if monotonic:
+            return self._ctime
+        # Add the boot time, returning time expressed in seconds since
+        # the epoch. This is subject to system clock updates.
+        return self._ctime + boot_time()
 
     @wrap_exceptions
     def memory_info(self):
@@ -2001,7 +2010,7 @@ class Process:
                     else:
                         try:
                             data[fields[0]] = int(fields[1]) * 1024
-                        except ValueError:
+                        except (ValueError, IndexError):
                             if fields[0].startswith(b'VmFlags:'):
                                 # see issue #369
                                 continue
@@ -2054,7 +2063,9 @@ class Process:
 
     @wrap_exceptions
     def cwd(self):
-        return readlink(f"{self._procfs_path}/{self.pid}/cwd")
+        return self._readlink(
+            f"{self._procfs_path}/{self.pid}/cwd", fallback=""
+        )
 
     @wrap_exceptions
     def num_ctx_switches(
@@ -2112,11 +2123,11 @@ class Process:
         #   return int(data.split()[18])
 
         # Use C implementation
-        return cext_posix.getpriority(self.pid)
+        return cext.proc_priority_get(self.pid)
 
     @wrap_exceptions
     def nice_set(self, value):
-        return cext_posix.setpriority(self.pid, value)
+        return cext.proc_priority_set(self.pid, value)
 
     # starting from CentOS 6.
     if HAS_CPU_AFFINITY:

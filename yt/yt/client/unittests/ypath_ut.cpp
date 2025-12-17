@@ -49,7 +49,7 @@ public:
         return ConvertToYsonString(data, NYson::EYsonFormat::Text);
     }
 
-    void Set(const TYPath& path, const TString& value)
+    void Set(const TYPath& path, const std::string& value)
     {
         SyncYPathSet(RootService, path, TYsonString(value));
     }
@@ -69,7 +69,7 @@ public:
         return SyncYPathList(RootService, path);
     }
 
-    void Check(const TYPath& path, const TString& expected)
+    void Check(const TYPath& path, const std::string& expected)
     {
         TYsonString output = Get(path);
         EXPECT_TRUE(
@@ -878,11 +878,45 @@ TEST_F(TYPathTest, RangesTypeHintsUint64)
         smallYpath.GetNewRanges(comparator, {NTableClient::EValueType::Int64, NTableClient::EValueType::Double}));
 }
 
+TEST_F(TYPathTest, RowIndexInRanges)
+{
+    auto hasRowIndex = [] (const auto& path) {
+        return TRichYPath::Parse(path).HasRowIndexInRanges();
+    };
+
+    EXPECT_TRUE(hasRowIndex("<ranges=[{exact={row_index=1}}]>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<ranges=[{lower_limit={row_index=0}}]>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<ranges=[{upper_limit={row_index=2}}]>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<ranges=[{lower_limit={row_index=0};upper_limit={row_index=2}}]>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<upper_limit={row_index=2}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0};upper_limit={row_index=2}>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0;key=[42;43]};upper_limit={row_index=2;key=[45;47]}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0};upper_limit={row_index=2}>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0};upper_limit={key=abc}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<lower_limit={key=abc};upper_limit={row_index=2}>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1:#2]"));
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1]"));
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1,a:b]"));
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1:b]"));
+
+    EXPECT_FALSE(hasRowIndex("//path/to/table"));
+    EXPECT_FALSE(hasRowIndex("//path/to/table[a:b]"));
+    EXPECT_FALSE(hasRowIndex("//path/to/table[\"#1\"]"));
+    EXPECT_FALSE(hasRowIndex("<lower_limit={key=[0]};upper_limit={key=[2]}>//path/to/table"));
+    EXPECT_FALSE(hasRowIndex("<ranges=[{lower_limit={key=[0]};upper_limit={key=[2]}}]>//path/to/table"));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRichYPathToStringTest
     : public ::testing::Test
-    , public ::testing::WithParamInterface<TString>
+    , public ::testing::WithParamInterface<std::string>
 { };
 
 TEST_P(TRichYPathToStringTest, TestRichYPathToString)
@@ -913,12 +947,12 @@ class TEmbeddedYPathOpsTest
     : public ::testing::Test
 {
 public:
-    static INodePtr ParseNode(const TString& data)
+    static INodePtr ParseNode(const std::string& data)
     {
         return ConvertToNode(TYsonString(data));
     }
 
-    static void ExpectEqual(INodePtr node, const TString& ysonString)
+    static void ExpectEqual(INodePtr node, const std::string& ysonString)
     {
         EXPECT_EQ(ConvertToYsonString(node, EYsonFormat::Text).AsStringBuf(), ysonString);
     }

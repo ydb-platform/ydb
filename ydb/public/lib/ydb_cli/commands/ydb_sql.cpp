@@ -1,5 +1,6 @@
 #include "ydb_sql.h"
 
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 
@@ -31,7 +32,7 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TStringStream description;
     description << "Print progress of query execution. Requires non-none statistics collection mode. Available options: ";
     description << "\n  " << colors.BoldColor() << "tty" << colors.OldColor()

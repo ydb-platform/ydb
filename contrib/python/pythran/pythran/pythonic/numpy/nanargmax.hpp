@@ -15,8 +15,7 @@ namespace numpy
   namespace
   {
     template <class E, class F>
-    void _nanargmax(E begin, E end, F &max, long &index, long &where,
-                    utils::int_<1>)
+    void _nanargmax(E begin, E end, F &max, long &index, long &where, utils::int_<1>)
     {
       for (; begin != end; ++begin, ++index) {
         auto curr = *begin;
@@ -28,12 +27,10 @@ namespace numpy
     }
 
     template <class E, class F, size_t N>
-    void _nanargmax(E begin, E end, F &max, long &index, long &where,
-                    utils::int_<N>)
+    void _nanargmax(E begin, E end, F &max, long &index, long &where, utils::int_<N>)
     {
       for (; begin != end; ++begin)
-        _nanargmax((*begin).begin(), (*begin).end(), max, index, where,
-                   utils::int_<N - 1>());
+        _nanargmax((*begin).begin(), (*begin).end(), max, index, where, utils::int_<N - 1>());
     }
   } // namespace
 
@@ -43,8 +40,7 @@ namespace numpy
     typename E::dtype max = -std::numeric_limits<typename E::dtype>::infinity();
     long where = -1;
     long index = 0;
-    _nanargmax(expr.begin(), expr.end(), max, index, where,
-               utils::int_<E::value>());
+    _nanargmax(expr.begin(), expr.end(), max, index, where, utils::int_<E::value>());
     if (where >= 0)
       return where;
     else

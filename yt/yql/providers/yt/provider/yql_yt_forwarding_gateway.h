@@ -31,7 +31,7 @@ public:
 
     TFuture<TRunResult> Run(const TExprNode::TPtr& node, TExprContext& ctx, TRunOptions&& options) override;
 
-    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const override;
+    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) override;
 
     TFuture<TCalcResult> Calc(const TExprNode::TListType& nodes, TExprContext& ctx, TCalcOptions&& options) override;
 
@@ -76,6 +76,10 @@ public:
     TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override;
 
     NThreading::TFuture<TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&& options) override;
+
+    NThreading::TFuture<TDumpResult> Dump(TDumpOptions&& options) override;
+
+    NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) override;
 
 protected:
     IYtGateway::TPtr Slave_;

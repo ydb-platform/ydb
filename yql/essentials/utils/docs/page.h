@@ -13,4 +13,6 @@ TPages Resolved(TPages pages, TStringBuf baseURL);
 
 TPages ExtendedSyntaxRemoved(TPages pages);
 
+TPages CodeListingsTagRemoved(TPages pages);
+
 } // namespace NYql::NDocs

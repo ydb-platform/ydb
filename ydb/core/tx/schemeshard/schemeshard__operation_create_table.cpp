@@ -2,7 +2,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for IsAllowedKeyType
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -159,6 +158,10 @@ void ApplyPartitioning(TTxId txId,
 }
 
 std::optional<TString> InferDefaultPoolKind(const TStoragePools& storagePools, const NKikimrSchemeOp::TPartitionConfig& changes) {
+    if (changes.HasChannelProfileId()) {
+        return std::nullopt;
+    }
+
     // Refuse to infer the default pool kind if any column family in the requested changes has a legacy Storage parameter
     for (const auto& changesFamily : changes.GetColumnFamilies()) {
         if (changesFamily.HasStorage()) {
@@ -578,9 +581,11 @@ public:
             return result;
         }
 
+        const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+
         std::optional<TString> defaultPoolKind = InferDefaultPoolKind(domainInfo->EffectiveStoragePools(), schema.GetPartitionConfig());
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), AppData(), errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), AppData(), isServerless, errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;

@@ -19,12 +19,10 @@ namespace numpy
   {
 
     template <class pS>
-    types::ndarray<double, pS> logistic(double loc, double scale,
-                                        pS const &shape)
+    types::ndarray<double, pS> logistic(double loc, double scale, pS const &shape)
     {
       types::ndarray<double, pS> result{shape, types::none_type()};
-      std::generate(result.fbegin(), result.fend(),
-                    [&]() { return logistic(loc, scale); });
+      std::generate(result.fbegin(), result.fend(), [&]() { return logistic(loc, scale); });
       return result;
     }
 
@@ -36,8 +34,7 @@ namespace numpy
 
     inline double logistic(double loc, double scale, types::none_type d)
     {
-      double U =
-          std::uniform_real_distribution<double>{0., 1.}(details::generator);
+      double U = std::uniform_real_distribution<double>{0., 1.}(details::generator);
       if (U > 0.0) {
         return loc + scale * xsimd::log(U / (1 - U));
       }

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
 
 #include <algorithm>
 #include <memory>
@@ -23,12 +23,12 @@
 #include <unordered_map>
 #include <utility>
 
-#include "arrow/compute/function.h"
-#include "arrow/compute/function_internal.h"
-#include "arrow/compute/registry_internal.h"
-#include "arrow/status.h"
-#include "arrow/util/config.h"  // For ARROW_COMPUTE
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"  // For ARROW_COMPUTE
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace compute {

@@ -17,6 +17,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/gc_service/impl
     yt/yql/providers/yt/fmr/utils
     yql/essentials/utils
+    yql/essentials/utils/failure_injector
     yql/essentials/utils/log
 )
 

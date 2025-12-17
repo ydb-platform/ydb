@@ -159,6 +159,7 @@ TMaybeNode<TYtSection> UpdateSectionWithRange(TExprBase world, TYtSection sectio
                             .Ranges<TExprList>()
                             .Build()
                             .Stat<TCoVoid>().Build()
+                            .QLFilter<TCoVoid>().Build()
                             .Done();
                         updatedPaths.push_back(path);
                     }
@@ -173,6 +174,7 @@ TMaybeNode<TYtSection> UpdateSectionWithRange(TExprBase world, TYtSection sectio
                 .Ranges<TExprList>()
                 .Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
                 .Done());
         }
     }
@@ -393,6 +395,7 @@ TYtSection MakeEmptySection(TYtSection section, NNodes::TYtDSink dataSink, bool 
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
             .Build()
         .Build()
         .Settings(NYql::RemoveSettings(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample, ctx))

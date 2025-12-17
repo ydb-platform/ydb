@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package Ydb.SqsTopic.Receipt;
+
+
+message TReceipt {
+    optional uint32 Partition = 1;
+    optional uint64 Offset = 2;
+}

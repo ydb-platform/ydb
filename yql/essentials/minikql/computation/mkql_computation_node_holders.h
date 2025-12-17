@@ -35,6 +35,8 @@ using TMKQLVector = std::vector<Type, TMKQLAllocator<Type, MemoryPool>>;
 template <typename Key, typename T, typename Hash = std::hash<Key>,
           typename KeyEqual = std::equal_to<Key>, EMemorySubPool MemoryPool = EMemorySubPool::Default>
 using TMKQLHashMap = std::unordered_map<Key, T, Hash, KeyEqual, TMKQLAllocator<std::pair<const Key, T>, MemoryPool>>;
+template <typename Key, typename T, typename TComp = std::less<Key>, EMemorySubPool MemoryPool = EMemorySubPool::Default>
+using TMKQLMap = std::map<Key, T, TComp, TMKQLAllocator<std::pair<const Key, T>, MemoryPool>>;
 
 using TKeyTypes = std::vector<std::pair<NUdf::EDataSlot, bool>>;
 using TUnboxedValueVector = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue>>;
@@ -653,7 +655,7 @@ private:
     mutable THashMap<TString, TValuePtr> Registry_;
 };
 
-class TDirectArrayHolderInplace: public TComputationValue<TDirectArrayHolderInplace> {
+class TDirectArrayHolderInplace final: public TComputationValue<TDirectArrayHolderInplace> {
 public:
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;

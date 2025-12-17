@@ -54,8 +54,8 @@ SRCS(
     concurrency/async_looper.cpp
     concurrency/async_rw_lock.cpp
     concurrency/async_semaphore.cpp
+    concurrency/async_stream_helpers.cpp
     concurrency/async_stream_pipe.cpp
-    concurrency/async_stream.cpp
     concurrency/config.cpp
     GLOBAL concurrency/configure_fiber_manager.cpp
     concurrency/coroutine.cpp
@@ -99,7 +99,7 @@ SRCS(
     crypto/crypto.cpp
     crypto/tls.cpp
 
-    logging/compression.cpp
+    logging/appendable_compressed_file.cpp
     logging/config.cpp
     GLOBAL logging/configure_log_manager.cpp
     logging/formatter.cpp
@@ -114,7 +114,7 @@ SRCS(
     logging/stream_log_writer.cpp
     logging/system_log_event_provider.cpp
     logging/random_access_gzip.cpp
-    logging/zstd_compression.cpp
+    logging/zstd_log_codec.cpp
 
     misc/arithmetic_formula.cpp
     misc/backtrace.cpp
@@ -136,7 +136,7 @@ SRCS(
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.
     GLOBAL misc/guid.cpp
     misc/hazard_ptr.cpp
-    misc/hedging_manager.cpp
+    misc/adaptive_hedging_manager.cpp
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
     misc/id_generator.cpp
@@ -242,10 +242,11 @@ SRCS(
 
     utilex/random.cpp
 
+    ypath/helpers.cpp
     ypath/stack.cpp
     ypath/token.cpp
     ypath/tokenizer.cpp
-    ypath/helpers.cpp
+    ypath/trie.cpp
 
     yson/async_consumer.cpp
     yson/async_writer.cpp
@@ -410,6 +411,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         benchmarks
         bus/benchmarks
+        ypath/benchmarks
         yson/benchmark
         ytree/benchmarks
     )

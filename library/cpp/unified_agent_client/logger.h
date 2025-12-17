@@ -2,6 +2,7 @@
 
 #include <library/cpp/unified_agent_client/f_maybe.h>
 #include <library/cpp/unified_agent_client/throttling.h>
+#include <library/cpp/unified_agent_client/formatters.h>
 
 #include <library/cpp/logger/log.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -53,6 +54,8 @@ namespace NUnifiedAgent {
     class TLogger {
     public:
         TLogger(TLog& log, TFMaybe<size_t> rateLimitBytes);
+
+        void AddLog(TLog& log);
 
         void StartTracing(ELogPriority logPriority) noexcept;
 
@@ -119,6 +122,7 @@ namespace NUnifiedAgent {
         NMonitoring::TDeprecatedCounter* DroppedBytes;
         const THolder<TThrottlerWithLock> Throttler;
         TAdaptiveLock Lock;
+        TVector<TLog> AdditionalLogs;
     };
 
     class TScopeLogger {

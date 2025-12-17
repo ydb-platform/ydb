@@ -14,7 +14,7 @@ public:
 public:
     virtual const TVector<TSchemaColumn>& GetColumns() const = 0;
     virtual const TString& GetWatermarkExpr() const = 0;
-    virtual const TString& GetWhereFilter() const = 0;
+    virtual const TString& GetFilterExpr() const = 0;
     virtual TPurecalcCompileSettings GetPurecalcSettings() const = 0;
     virtual bool IsStarted() const = 0;
 
@@ -26,7 +26,6 @@ public:
 
     virtual void OnStart() = 0;
     virtual void OnError(TStatus status) = 0;
-    virtual void OnBatchFinish() = 0;
 };
 
 }  // namespace NFq::NRowDispatcher

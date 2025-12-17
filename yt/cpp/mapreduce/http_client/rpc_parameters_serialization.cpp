@@ -534,10 +534,18 @@ TNode SerializeParamsForGetJob(
 
 TNode SerializeParamsForGetJobTrace(
     const TOperationId& operationId,
-    const TGetJobTraceOptions& /* options */)
+    const TJobId& jobId,
+    const TGetJobTraceOptions& options)
 {
     TNode result;
     SetOperationIdParam(&result, operationId);
+    result["job_id"] = GetGuidAsString(jobId);
+    if (options.FromTime_) {
+        result["from_time"] = ToString(options.FromTime_);
+    }
+    if (options.ToTime_) {
+        result["to_time"] = ToString(options.ToTime_);
+    }
     return result;
 }
 
@@ -830,6 +838,50 @@ TNode SerializeParamsForAlterTable(
     if (options.UpstreamReplicaId_) {
         result["upstream_replica_id"] = GetGuidAsString(*options.UpstreamReplicaId_);
     }
+    return result;
+}
+
+void SetBasicDistributedStartParams(
+    TNode& result,
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount)
+{
+    SetTransactionIdParam(&result, transactionId);
+
+    result["path"] = PathToNode(richPath);
+    result["cookie_count"] = cookieCount;
+}
+
+TNode SerializeParamsForStartDistributedFileSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    TNode result;
+    SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
+
+    if (options.Timeout_) {
+        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    }
+
+    return result;
+}
+
+TNode SerializeParamsForStartDistributedTableSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    TNode result;
+    SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
+
+    if (options.Timeout_) {
+        result["timeout"] = static_cast<i64>(options.Timeout_->MilliSeconds());
+    }
+
     return result;
 }
 

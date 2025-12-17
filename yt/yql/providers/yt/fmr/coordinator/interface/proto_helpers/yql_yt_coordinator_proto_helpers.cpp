@@ -165,11 +165,15 @@ TDeleteOperationResponse DeleteOperationResponseFromProto(const NProto::TDeleteO
 NProto::TGetFmrTableInfoRequest GetFmrTableInfoRequestToProto(const TGetFmrTableInfoRequest& getFmrTableInfoRequest) {
     NProto::TGetFmrTableInfoRequest protoRequest;
     protoRequest.SetTableId(getFmrTableInfoRequest.TableId);
+    protoRequest.SetSessionId(getFmrTableInfoRequest.SessionId);
     return protoRequest;
 }
 
 TGetFmrTableInfoRequest GetFmrTableInfoRequestFromProto(const NProto::TGetFmrTableInfoRequest& protoGetFmrTableInfoRequest) {
-    return TGetFmrTableInfoRequest{.TableId = protoGetFmrTableInfoRequest.GetTableId()};
+    return TGetFmrTableInfoRequest{
+        .TableId = protoGetFmrTableInfoRequest.GetTableId(),
+        .SessionId = protoGetFmrTableInfoRequest.GetSessionId()
+    };
 }
 
 NProto::TGetFmrTableInfoResponse GetFmrTableInfoResponseToProto(const TGetFmrTableInfoResponse& getFmrTableInfoResponse) {
@@ -204,6 +208,100 @@ NProto::TClearSessionRequest ClearSessionRequestToProto(const TClearSessionReque
 
 TClearSessionRequest ClearSessionRequestFromProto(const NProto::TClearSessionRequest& protoRequest) {
     return TClearSessionRequest{.SessionId = protoRequest.GetSessionId()};
+}
+
+NProto::TDropTablesRequest DropTablesRequestToProto(const TDropTablesRequest& request) {
+    NProto::TDropTablesRequest protoRequest;
+    for (const auto& tableId : request.TableIds) {
+        protoRequest.AddTableIds(tableId);
+    }
+    protoRequest.SetSessionId(request.SessionId);
+    return protoRequest;
+}
+
+TDropTablesRequest DropTablesRequestFromProto(const NProto::TDropTablesRequest& protoRequest) {
+    TDropTablesRequest request;
+    request.SessionId = protoRequest.GetSessionId();
+    for (const auto& tableId : protoRequest.GetTableIds()) {
+        request.TableIds.push_back(tableId);
+    }
+    return request;
+}
+
+NProto::TDropTablesResponse DropTablesResponseToProto(const TDropTablesResponse& response) {
+    Y_UNUSED(response);
+    return NProto::TDropTablesResponse();
+}
+
+TDropTablesResponse DropTablesResponseFromProto(const NProto::TDropTablesResponse& protoResponse) {
+    Y_UNUSED(protoResponse);
+    return TDropTablesResponse{};
+}
+
+NProto::TOpenSessionRequest OpenSessionRequestToProto(const TOpenSessionRequest& request) {
+    NProto::TOpenSessionRequest protoRequest;
+    protoRequest.SetSessionId(request.SessionId);
+    return protoRequest;
+}
+
+TOpenSessionRequest OpenSessionRequestFromProto(const NProto::TOpenSessionRequest& protoRequest) {
+    return TOpenSessionRequest{.SessionId = protoRequest.GetSessionId()};
+}
+
+NProto::TOpenSessionResponse OpenSessionResponseToProto(const TOpenSessionResponse& response) {
+    Y_UNUSED(response);
+    NProto::TOpenSessionResponse protoResponse;
+    return protoResponse;
+}
+
+TOpenSessionResponse OpenSessionResponseFromProto(const NProto::TOpenSessionResponse& protoResponse) {
+    Y_UNUSED(protoResponse);
+    return TOpenSessionResponse{};
+}
+
+NProto::TPingSessionRequest PingSessionRequestToProto(const TPingSessionRequest& request) {
+    NProto::TPingSessionRequest protoRequest;
+    protoRequest.SetSessionId(request.SessionId);
+    return protoRequest;
+}
+
+TPingSessionRequest PingSessionRequestFromProto(const NProto::TPingSessionRequest& protoRequest) {
+    return TPingSessionRequest{.SessionId = protoRequest.GetSessionId()};
+}
+
+NProto::TPingSessionResponse PingSessionResponseToProto(const TPingSessionResponse& response) {
+    NProto::TPingSessionResponse protoResponse;
+    protoResponse.SetSuccess(response.Success);
+    return protoResponse;
+}
+
+TPingSessionResponse PingSessionResponseFromProto(const NProto::TPingSessionResponse& protoResponse) {
+    return TPingSessionResponse{.Success = protoResponse.GetSuccess()};
+}
+
+NProto::TListSessionsRequest ListSessionsRequestToProto(const TListSessionsRequest&) {
+    NProto::TListSessionsRequest protoRequest;
+    return protoRequest;
+}
+
+TListSessionsRequest ListSessionsRequestFromProto(const NProto::TListSessionsRequest&) {
+    return TListSessionsRequest{};
+}
+
+NProto::TListSessionsResponse ListSessionsResponseToProto(const TListSessionsResponse& response) {
+    NProto::TListSessionsResponse protoResponse;
+    for (const auto& sessionId : response.SessionIds) {
+        protoResponse.AddSessionIds(sessionId);
+    }
+    return protoResponse;
+}
+
+TListSessionsResponse ListSessionsResponseFromProto(const NProto::TListSessionsResponse& protoResponse) {
+    TListSessionsResponse response;
+    for (ui64 i = 0; i < protoResponse.SessionIdsSize(); ++i) {
+        response.SessionIds.push_back(protoResponse.GetSessionIds(i));
+    }
+    return response;
 }
 
 } // namespace NYql::NFmr

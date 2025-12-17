@@ -19,10 +19,14 @@ void TSectorMap::LoadFromFile(const TString& path) {
 
 void TSectorMap::StoreToFile(const TString& path) {
     NKikimrPDisk::TSectorMapSnapshot snap;
-    for (auto& [offset, data] : Map) {
+    for (auto& [offset, dataVar] : Map) {
         NKikimrPDisk::TSectorData *sd = snap.AddSectors();
         sd->SetOffset(offset);
-        sd->SetData(data);
+        if (std::holds_alternative<TString>(dataVar)) {
+            sd->SetData(std::get<TString>(dataVar));
+        } else {
+            sd->SetData(std::get<std::pair<TString, TString>>(dataVar).second);
+        }
         sd->SetCompressionType(NKikimrPDisk::ECompression::LZ4);
     }
 

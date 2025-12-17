@@ -1129,7 +1129,7 @@ struct TSerializer
     static void Load(C& context, TIntrusivePtr<T>& ptr)
     {
         T* rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ std::is_final_v<T>>(context, rawPtr);
         ptr.Reset(rawPtr);
     }
 
@@ -1137,14 +1137,14 @@ struct TSerializer
     static void InplaceLoad(C& context, const TIntrusivePtr<T>& ptr)
     {
         T* rawPtr = ptr.Get();
-        LoadImpl</*Inplace*/ true>(context, rawPtr);
+        LoadImpl</*Inplace*/ true, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void Load(C& context, std::unique_ptr<T>& ptr)
     {
         T* rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ false>(context, rawPtr);
         ptr.reset(rawPtr);
     }
 
@@ -1152,31 +1152,31 @@ struct TSerializer
     static void InplaceLoad(C& context, const std::unique_ptr<T>& ptr)
     {
         T* rawPtr = ptr.get();
-        LoadImpl</*Inplace*/ true>(context, rawPtr);
+        LoadImpl</*Inplace*/ true, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void Load(C& context, T*& rawPtr)
     {
         rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void InplaceLoad(C& context, T* rawPtr)
     {
-        LoadImpl</*Inplace*/ true>(context, rawPtr);
+        LoadImpl</*Inplace*/ true, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void Load(C& context, TWeakPtr<T>& ptr)
     {
         T* rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ std::is_final_v<T>>(context, rawPtr);
         ptr.Reset(rawPtr);
     }
 
-    template <bool Inplace, class T, class C>
+    template <bool Inplace, bool UseRefCountedConstructor, class T, class C>
     static void LoadImpl(C& context, T*& rawPtr)
     {
         using TBase = typename TPolymorphicTraits<T>::TBase;
@@ -1204,12 +1204,16 @@ struct TSerializer
                     auto tag = LoadSuspended<TTypeTag>(context);
                     const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(tag);
                     rawPtr = descriptor.template ConstructOrThrow<T>();
+                } else if constexpr (UseRefCountedConstructor) {
+                    rawPtr = static_cast<T*>(TRefCountedFactory<T>::ConcreteConstructor());
                 } else {
                     using TFactory = typename TFactoryTraits<T>::TFactory;
                     static_assert(TFactory::ConcreteConstructor);
                     rawPtr = static_cast<T*>(TFactory::ConcreteConstructor());
                 }
-                context.RegisterConstructedObject(rawPtr);
+                if constexpr (std::derived_from<T, TRefCounted> || UseRefCountedConstructor) {
+                    context.Deleters_.push_back([=] { Unref(rawPtr); });
+                }
             }
 
             TBase* basePtr = rawPtr;

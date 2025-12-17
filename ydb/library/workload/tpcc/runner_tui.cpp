@@ -41,6 +41,9 @@ ftxui::Element TRunnerTui::BuildPreviewPart() {
         << data->StatusData.Efficiency << "%   "
         << "tpmC: " << std::fixed << std::setprecision(0) << data->StatusData.Tpmc;
 
+    std::stringstream warehousesSs;
+    warehousesSs << data->WarehouseCount << (data->WarehouseCount > 1 ? " warehouses" : " warehouse");
+
     std::stringstream timingSs;
     timingSs << data->StatusData.ElapsedMinutesTotal << ":"
              << std::setfill('0') << std::setw(2) << data->StatusData.ElapsedSecondsTotal << " elapsed"
@@ -53,6 +56,7 @@ ftxui::Element TRunnerTui::BuildPreviewPart() {
     constexpr int progressBarWidth = 15;
 
     auto topLeftMainInfo = vbox({
+        text(warehousesSs.str()),
         text(metricsSs.str()) | bold,
         text(timingSs.str()),
         hbox({

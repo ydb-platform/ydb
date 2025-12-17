@@ -58,6 +58,8 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UseWorkerPool_(options.UseWorkerPool)
     , LangVer_(options.LangVer)
 {
+    HandleInternalSettings(options.InternalSettings);
+
     // Prepare input struct types and extract all column names from inputs
     auto typeCtx = PrepareTypeContext(options.ModuleResolver);
 
@@ -114,7 +116,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     } else {
         ExprRoot_ = Compile(options.Query, options.TranslationMode,
                             options.SyntaxVersion, options.Modules,
-                            options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode, typeCtx.Get());
+                            options.InputSpec, options.OutputSpec, processorMode, typeCtx.Get());
 
         RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
 
@@ -133,6 +135,21 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
         if (!OutputType_) {
             ythrow TCompileError("", GetIssues().ToString()) << "cannot deduce output schema";
         }
+    }
+}
+
+template <typename TBase>
+void TWorkerFactory<TBase>::HandleInternalSettings(const TInternalProgramSettings& settings) {
+    if (settings.NodesAllocationLimit) {
+        ExprContext_.NodesAllocationLimit = *settings.NodesAllocationLimit;
+    }
+
+    if (settings.StringsAllocationLimit) {
+        ExprContext_.StringsAllocationLimit = *settings.StringsAllocationLimit;
+    }
+
+    if (settings.RepeatTransformLimit) {
+        ExprContext_.RepeatTransformLimit = *settings.RepeatTransformLimit;
     }
 }
 
@@ -158,6 +175,7 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
 
     if (auto modules = dynamic_cast<TModuleResolver*>(moduleResolver.get())) {
         modules->AttachUserData(typeContext->UserDataStorage);
+        modules->SetUseCanonicalLibrarySuffix(true);
     }
 
     return typeContext;
@@ -171,10 +189,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     const THashMap<TString, TString>& modules,
     const TInputSpecBase& inputSpec,
     const TOutputSpecBase& outputSpec,
-    bool useAntlr4,
     EProcessorMode processorMode,
     TTypeAnnotationContext* typeContext) {
-    Y_ENSURE(useAntlr4, "Antlr3 support is dropped");
     if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
         ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
     }
@@ -202,7 +218,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         settings.EmitReadsForExists = true;
-        settings.Antlr4Parser = useAntlr4;
+        settings.Antlr4Parser = true;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;
         settings.ClusterMapping[settings.DefaultCluster] = PurecalcDefaultService;
@@ -241,7 +257,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
         astRes = SqlToYql(translators, TString(query), settings);
     } else {
-        astRes = ParseAst(TString(query));
+        astRes = ParseAst(query);
     }
 
     if (verIssue) {

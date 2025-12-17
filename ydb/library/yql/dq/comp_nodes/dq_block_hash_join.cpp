@@ -171,7 +171,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
   private:
     class TStreamValue : public TComputationValue<TStreamValue> {
         using TBase = TComputationValue<TStreamValue>;
-        using JoinType = NJoinPackedTuples::TInMemoryHashJoin<TBlockPackedTupleSource>;
+        using JoinType = NJoinPackedTuples::THybridHashJoin<TBlockPackedTupleSource, TestStorageSettings>;
 
       public:
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationNode*> streams,

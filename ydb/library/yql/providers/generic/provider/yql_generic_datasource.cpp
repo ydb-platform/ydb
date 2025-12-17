@@ -8,9 +8,10 @@
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -140,6 +141,28 @@ namespace NYql {
             }
 
             void AddCluster(const TString& clusterName, const THashMap<TString, TString>& properties) override {
+                auto authMethod = properties.Value("authMethod", "");
+
+                TString structuredToken = "";
+                if (authMethod == "BASIC" || authMethod == "MDB_BASIC") {
+                    const TString& login = properties.Value("login", "");
+                    const TString& passwordReference = properties.Value("passwordReference", "");
+                    const TString& password = properties.Value("password", "");
+                    structuredToken = ComposeStructuredTokenJsonForBasicAuthWithSecret(login, passwordReference, password);
+                } else if (authMethod == "SERVICE_ACCOUNT") {
+                    const TString& serviceAccountId = properties.Value("serviceAccountId", "");
+                    const TString& serviceAccountIdSignature = properties.Value("serviceAccountIdSignature", "");
+                    const TString& serviceAccountIdSignatureReference = properties.Value("serviceAccountIdSignatureReference", "");
+                    structuredToken = ComposeStructuredTokenJsonForServiceAccountWithSecret(serviceAccountId, serviceAccountIdSignatureReference, serviceAccountIdSignature);
+                } else if (authMethod == "TOKEN") {
+                    const TString& token = properties.Value("token", "");
+                    const TString& tokenReference = properties.Value("tokenReference", "");
+                    structuredToken = ComposeStructuredTokenJsonForTokenAuthWithSecret(tokenReference, token);
+                } else {
+                    ythrow yexception() << "Unknown auth method: " << authMethod;
+                }
+
+                State_->Configuration->Tokens[clusterName] = structuredToken;
                 State_->Configuration->AddCluster(
                     GenericClusterConfigFromProperties(clusterName, properties),
                     State_->DatabaseResolver,

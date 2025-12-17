@@ -157,6 +157,23 @@ Y_UNIT_TEST_SUITE(TokenBuilderTest) {
         UNIT_ASSERT_VALUES_EQUAL(token, "my_token");
 
     }
-}
 
+    Y_UNIT_TEST(ComposeForBasicAuth) {
+        // Test with both login and password
+        TString json1 = ComposeStructuredTokenJsonForBasicAuth("user1", "pass1");
+        UNIT_ASSERT_VALUES_EQUAL(json1, R"({"basic_login":"user1","basic_password":"pass1"})");
+
+        // Test with login but empty password
+        TString json2 = ComposeStructuredTokenJsonForBasicAuth("user2", "");
+        UNIT_ASSERT_VALUES_EQUAL(json2, R"({"basic_login":"user2","basic_password":""})");
+
+        // Test with empty login (should return no_auth)
+        TString json3 = ComposeStructuredTokenJsonForBasicAuth("", "pass3");
+        UNIT_ASSERT_VALUES_EQUAL(json3, R"({"no_auth":""})");
+
+        // Test with both empty (should return no_auth)
+        TString json4 = ComposeStructuredTokenJsonForBasicAuth("", "");
+        UNIT_ASSERT_VALUES_EQUAL(json4, R"({"no_auth":""})");
+    }
+}
 }

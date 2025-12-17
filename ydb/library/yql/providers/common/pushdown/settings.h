@@ -46,6 +46,7 @@ struct TSettings {
         MinMax = 1 << 27,
         NonDeterministic = 1 << 28,
         DecimalCtor = 1 << 29, 
+        DateCtor = 1 << 30,
     };
 
     explicit TSettings(NLog::EComponent logComponent)

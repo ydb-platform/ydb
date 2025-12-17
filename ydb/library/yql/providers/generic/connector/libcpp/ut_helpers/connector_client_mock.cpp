@@ -29,6 +29,12 @@ namespace NYql::NConnector::NTest {
     DEFINE_SIMPLE_TYPE_SETTER(i64, INT64, int64_value);
     DEFINE_SIMPLE_TYPE_SETTER(ui64, UINT64, uint64_value);
 
+    template <>
+    void SetValue(const ui32& value, Ydb::TypedValue* proto, const ::Ydb::Type::PrimitiveTypeId& typeId, bool optional) {
+        *proto->mutable_type() = MakeYdbType(typeId, optional);
+        proto->mutable_value()->Y_CAT(set_, uint32_value)(value);
+    }
+
     void CreatePostgreSQLExternalDataSource(
         const std::shared_ptr<NKikimr::NKqp::TKikimrRunner>& kikimr,
         const TString& dataSourceName,

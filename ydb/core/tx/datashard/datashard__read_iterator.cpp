@@ -52,6 +52,10 @@ struct TReadIteratorVectorTop {
     ui64 TotalReadBytes = 0;
 
     void AddRow(TConstArrayRef<TCell> cells) {
+        const auto embedding = cells.at(Column).AsBuf();
+        if (!KMeans->IsExpectedFormat(embedding)) {
+            return;
+        }
         TotalReadRows++;
         TotalReadBytes += EstimateSize(cells);
         TString serializedKey;

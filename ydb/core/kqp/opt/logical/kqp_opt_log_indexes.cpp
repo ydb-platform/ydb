@@ -613,8 +613,7 @@ void VectorReadMain(
 
     const auto& targetTable = isCovered ? postingTable : mainTable;
 
-    const bool needPkColumns = pushdownSettings.VectorTopDistinct || withOverlap;
-    if (needPkColumns) {
+    if (withOverlap) {
         // mainColumns must contain primary key columns for DistinctColumns pushdown
         THashSet<TStringBuf> cols;
         for (const auto& col: mainColumns) {
@@ -754,7 +753,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    settings.VectorTopDistinct = true;
+    settings.VectorTopDistinct = withOverlap;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (flatMap) {
@@ -891,7 +890,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    settings.VectorTopDistinct = true;
+    settings.VectorTopDistinct = withOverlap;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (mainLambda) {

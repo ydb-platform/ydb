@@ -91,6 +91,9 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
         }
         virtual void DoOnReceiveData(const TSourceId sourceId, THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
             THashMap<TAddress, TString>&& errors) const override {
+            if (NActors::TActorSystem::IsStopped()) {
+                return;
+            }
             NActors::TActivationContext::Send(
                 ServiceActorId, std::make_unique<NKikimr::NGeneralCache::NSource::TEvents<TPortionsMetadataCachePolicy>::TEvObjectsInfo>(
                                     sourceId, std::move(objectAddresses), std::move(removedAddresses), std::move(errors)));

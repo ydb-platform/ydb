@@ -123,7 +123,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             TDuration::Seconds(10)
         ));
 
-        TBase::Become(&TThis::StateResolveProxy);
+        this->Become(&TThis::StateResolveProxy);
     }
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {

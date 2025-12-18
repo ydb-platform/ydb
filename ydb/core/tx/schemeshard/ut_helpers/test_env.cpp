@@ -1194,8 +1194,8 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::functio
         },
         Max<ui32>(),
         Max<ui64>(),
-        0,
-        0,
+        Bucket,
+        TotalBuckets,
         KillOnCommit
     );
 }

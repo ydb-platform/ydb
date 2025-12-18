@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             settings.PQConfig.MutableCompactionConfig()->SetBlobsSize(8_MB);
             auto setup = TTopicSdkTestSetup("TopicReadTimestamp", settings, false);
 
-            setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            //setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
             setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
             setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, NActors::NLog::PRI_TRACE);
             setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_TRACE);

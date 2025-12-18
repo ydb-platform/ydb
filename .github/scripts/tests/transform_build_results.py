@@ -174,10 +174,10 @@ def strip_rich_markup(text):
 
 
 def mute_test_result(result):
-    """Mute a test result - set muted flag and change status to SKIPPED"""
+    """Mute a test result - set muted flag and change status to MUTE"""
     if result.get("status") in ("FAILED", "ERROR"):
         result["muted"] = True
-        result["status"] = "SKIPPED"
+        result["status"] = "MUTE"
         return True
     return False
 
@@ -242,9 +242,31 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             else:
                 test_name_for_mute = name
 
-            if result.get("status") == "ERROR":
+            original_status = result.get("status", "")
+            
+            # Normalize OK to PASSED
+            if original_status == "OK":
+                result["status"] = "PASSED"
+            
+            # Convert ERROR to FAILED
+            elif original_status == "ERROR":
                 result["status"] = "FAILED"
                 log_print(f"Converted ERROR to FAILED for {suite_name}/{test_name_for_mute}")
+            
+            # Convert NOT_LAUNCHED to SKIPPED, but preserve original status in error_type
+            elif original_status == "NOT_LAUNCHED":
+                result["status"] = "SKIPPED"
+                result["error_type"] = "NOT_LAUNCHED"
+                log_print(f"Converted NOT_LAUNCHED to SKIPPED for {suite_name}/{test_name_for_mute}")
+            
+            # Check for unknown statuses - convert to ERROR and preserve original in error_type
+            # This check happens after all known conversions
+            else:
+                known_statuses = ("OK", "PASSED", "FAILED", "SKIPPED", "ERROR", "NOT_LAUNCHED", "MUTE")
+                if original_status and original_status not in known_statuses:
+                    result["status"] = "ERROR"
+                    result["error_type"] = original_status
+                    log_print(f"WARNING: Unknown status '{original_status}' converted to ERROR for {suite_name}/{test_name_for_mute}")
 
             status = result.get("status", "")
             is_fail = status in ("FAILED", "ERROR")

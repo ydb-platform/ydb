@@ -87,6 +87,7 @@ class TestResult:
     error_type: str = ""
     is_sanitizer_issue: bool = False
     is_timeout_issue: bool = False
+    is_not_launched: bool = False
 
     @property
     def status_display(self):
@@ -141,7 +142,6 @@ class TestResult:
         status_description = result.get("rich-snippet")
         properties = result.get("properties")
         metrics = result.get("metrics")
-        is_muted = bool(result.get("muted"))
         
         classname = path_str
         if subtest_name and subtest_name.strip():
@@ -152,11 +152,9 @@ class TestResult:
         else:
             name = name_part or ""
         
-        if status_str == "OK":
-            status_str = "PASSED"
-        
+        # Status normalization (OK->PASSED, NOT_LAUNCHED->SKIPPED, mute->MUTE) is done by transform_build_results.py
         # Map status to TestStatus enum
-        if is_muted:
+        if status_str == "MUTE":
             status = TestStatus.MUTE
         elif status_str == "FAILED":
             status = TestStatus.FAIL
@@ -203,7 +201,8 @@ class TestResult:
             status_description=status_description or '',
             error_type=error_type or '',
             is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
-            is_timeout_issue=(error_type or '').lower() == 'timeout'
+            is_timeout_issue=(error_type or '').upper() == 'TIMEOUT',
+            is_not_launched=(error_type or '').upper() == 'NOT_LAUNCHED' and status == TestStatus.SKIP
         )
 
 

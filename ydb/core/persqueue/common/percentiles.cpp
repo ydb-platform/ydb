@@ -38,6 +38,9 @@ const TVector<std::pair<ui64, TString>> FAST_LATENCY_MS_INTERVALS = {
 };
 
 const TVector<std::pair<ui64, TString>> SLOW_LATENCY_INTERVALS = {
+    {10, "10"},
+    {20, "20"},
+    {50, "50"},
     {100, "100"},
     {200, "200"},
     {500, "500"},
@@ -52,6 +55,9 @@ const TVector<std::pair<ui64, TString>> SLOW_LATENCY_INTERVALS = {
 };
 
 const TVector<std::pair<ui64, TString>> SLOW_LATENCY_MS_INTERVALS = {
+    {10, "10ms"},
+    {20, "20ms"},
+    {50, "50ms"},
     {100, "100ms"},
     {200, "200ms"},
     {500, "500ms"},
@@ -65,7 +71,10 @@ const TVector<std::pair<ui64, TString>> SLOW_LATENCY_MS_INTERVALS = {
     {9'999'999, "9999999ms"}
 };
 
-const TTabletPercentileCounter::TRangeDef SLOW_LATENCY_RANGES[11] = {
+const TTabletPercentileCounter::TRangeDef SLOW_LATENCY_RANGES[14] = {
+    {10, "10"},
+    {20, "20"},
+    {50, "50"},
     {100, "100"},
     {200, "200"},
     {500, "500"},
@@ -80,6 +89,9 @@ const TTabletPercentileCounter::TRangeDef SLOW_LATENCY_RANGES[11] = {
 };
 
 const NMonitoring::TBucketBounds SLOW_LATENCY_BOUNDS = NMonitoring::TBucketBounds{
+    10,
+    20,
+    50,
     100,
     200,
     500,

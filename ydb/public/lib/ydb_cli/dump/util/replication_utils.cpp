@@ -9,9 +9,11 @@
 #include <util/string/join.h>
 #include <util/string/printf.h>
 
+#include <format>
+
 namespace NYdb::NDump {
 
-namespace  {
+namespace {
 
 TString BuildConnectionString(const NReplication::TConnectionParams& params) {
     return TStringBuilder()

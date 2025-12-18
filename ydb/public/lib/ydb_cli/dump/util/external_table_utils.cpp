@@ -10,6 +10,9 @@
 
 #include <util/string/join.h>
 
+#include <format>
+#include <ranges>
+
 namespace NYdb::NDump {
 
 namespace {
@@ -19,9 +22,9 @@ std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>
     const auto items = NJson::ReadJsonFastTree(json).GetArray();
     Y_ENSURE(!items.empty(), "Empty items for an external table property: " << key);
     if (items.size() == 1) {
-        return NDump::KeyValueToString(key, items.front().GetString());
+        return KeyValueToString(key, items.front().GetString());
     } else {
-        return NDump::KeyValueToString(key, std::format("[{}]", JoinSeq(", ", items).c_str()));
+        return KeyValueToString(key, std::format("[{}]", JoinSeq(", ", items).c_str()));
     }
 }
 
@@ -43,8 +46,8 @@ TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableRes
         "CREATE EXTERNAL TABLE IF NOT EXISTS `{}` (\n{}\n) WITH (\n{},\n{}{}\n);",
         description.self().name().c_str(),
         JoinSeq(",\n", std::views::transform(description.columns(), ColumnToString)).c_str(),
-        NDump::KeyValueToString("DATA_SOURCE", description.data_source_path()),
-        NDump::KeyValueToString("LOCATION", description.location()),
+        KeyValueToString("DATA_SOURCE", description.data_source_path()),
+        KeyValueToString("LOCATION", description.location()),
         description.content().empty()
             ? ""
             : std::string(",\n") +

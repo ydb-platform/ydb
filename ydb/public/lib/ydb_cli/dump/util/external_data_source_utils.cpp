@@ -7,6 +7,9 @@
 
 #include <util/string/join.h>
 
+#include <format>
+#include <ranges>
+
 namespace NYdb::NDump {
 
 namespace {

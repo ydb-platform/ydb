@@ -490,7 +490,7 @@ def iter_build_results_files(path):
             
             for result in report.get("results") or []:
                 # Only include results that have a status field (indicates it's a test/check)
-                # Filtering (suite, build, import/configure) is done by transform_build_results.py
+                # Filtering (suite, build, configure) is done by transform_build_results.py
                 status = result.get("status")
                 if not status:
                     continue

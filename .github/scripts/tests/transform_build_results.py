@@ -205,8 +205,8 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
         if result_type == "build":
             continue  # Skip build results completely
         
-        # For import, configure types: include only non-passing results
-        if result_type in ("import", "configure"):
+        # For configure type: include only non-passing results
+        if result_type == "configure":
             if status.upper() == "OK":
                 continue  # Skip this result - don't add to suites or filtered_results
         

@@ -20,7 +20,7 @@ def check_for_fail(paths: List[str], output_path: str):
                 report = json.load(f)
             
             for result in report.get("results", []):
-                # Filtering (suite, build, import/configure) is done by transform_build_results.py
+                # Filtering (suite, build, configure) is done by transform_build_results.py
                 status = result.get("status")
                 if not status:
                     continue

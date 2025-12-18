@@ -1227,20 +1227,34 @@
                     const sampleTest = Object.keys(testSuccessRates)[0];
                     console.log('Sample success rate:', sampleTest, '->', testSuccessRates[sampleTest]);
                 }
-                // Update success rate buttons after loading data
-                updateSuccessRateButtons();
             }
             return testSuccessRates;
         }
         
+        // Flag to prevent multiple simultaneous updates
+        let isUpdatingButtons = false;
+        
         // Update success rate buttons with loaded data
         async function updateSuccessRateButtons() {
-            const branch = "{{ branch }}";
-            const buttons = document.querySelectorAll('.success-rate-button');
-            // If no data yet, load it once and then proceed
-            if (Object.keys(testSuccessRates).length === 0) {
-                await getTestSuccessRates().catch(() => {});
+            // Prevent multiple simultaneous calls
+            if (isUpdatingButtons) {
+                return;
             }
+            
+            isUpdatingButtons = true;
+            try {
+                const branch = "{{ branch }}";
+                const buttons = document.querySelectorAll('.success-rate-button');
+                
+                // If no buttons, nothing to update
+                if (buttons.length === 0) {
+                    return;
+                }
+                
+                // If no data yet, load it once and then proceed
+                if (Object.keys(testSuccessRates).length === 0) {
+                    await getTestSuccessRates().catch(() => {});
+                }
             
             let updatedCount = 0;
             buttons.forEach(button => {
@@ -1280,7 +1294,13 @@
                     console.warn('Empty text for test:', testFullName, 'rates:', rates);
                 }
             });
-            console.log('Updated', updatedCount, 'success rate buttons');
+            // Only log if we actually updated something
+            if (updatedCount > 0) {
+                console.log('Updated', updatedCount, 'success rate buttons');
+            }
+            } finally {
+                isUpdatingButtons = false;
+            }
         }
         
         function parseJsonScript(id) {

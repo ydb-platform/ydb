@@ -1,7 +1,7 @@
 #include "schemeshard__operation_common.h"
-#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_part.h" // for TransactionTemplate
+
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
@@ -85,6 +85,12 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxTruncateTable);
+
+        if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " UpdatePartitioningForTableModification");
+            NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
+        }
 
         txState->ClearShardsInProgress();
 

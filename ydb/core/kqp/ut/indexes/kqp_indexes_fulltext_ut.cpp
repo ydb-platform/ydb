@@ -2279,7 +2279,6 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto resultSet = result.GetResultSet(0);
-        // Should return rows 1-10 (all contain "машинное обучение"), but not 11-12
         UNIT_ASSERT_C(resultSet.RowsCount() == expectedKeys.size(), "Expected " + std::to_string(expectedKeys.size()) + " rows with " + term + " content");
 
         // Verify that all returned rows actually contain the search term
@@ -2288,6 +2287,30 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
             auto bodyValue = parser.ColumnParser("body").GetOptionalString();
             ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
             UNIT_ASSERT_C(bodyValue, "Body should not be null");
+            Cerr << "Key: " << key << Endl;
+            UNIT_ASSERT_C(
+                IsIn(expectedKeys, key),
+                "All returned rows should contain machine learning related text"
+            );
+        }
+    }
+
+    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+        TString query = Sprintf(R"sql(
+            SELECT Key FROM `/Root/table` VIEW `index_fulltext`
+            WHERE FullText::FulltextContains(body, "%s")
+            ORDER BY Key
+        )sql", term.c_str());
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_C(resultSet.RowsCount() == expectedKeys.size(), "Expected " + std::to_string(expectedKeys.size()) + " rows with " + term + " content");
+
+        // Verify that all returned rows actually contain the search term
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
             Cerr << "Key: " << key << Endl;
             UNIT_ASSERT_C(
                 IsIn(expectedKeys, key),

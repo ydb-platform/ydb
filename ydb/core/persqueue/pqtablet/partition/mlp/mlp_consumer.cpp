@@ -842,9 +842,6 @@ void TConsumerActor::UpdateMetrics() {
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_UNLOCKED_COUNT, metrics.UnprocessedMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT, metrics.TotalScheduledToDLQMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_COMMITTED_COUNT, metrics.TotalCommittedMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_MOVED_TO_DLQ_COUNT, metrics.TotalMovedToDLQMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_DELETED_BY_RETENTION_COUNT, metrics.TotalDeletedByRetentionMessageCount);
-    values->Set(EMLPConsumerLabeledCounters::METRIC_DELETED_BY_DEADLINE_POLICY_COUNT, metrics.TotalDeletedByDeadlinePolicyMessageCount);
     values->Set(EMLPConsumerLabeledCounters::METRIC_PURGED_COUNT, metrics.TotalPurgedMessageCount);
 
     for (size_t i = 0; i < metrics.MessageLocks.GetRangeCount(); ++i) {
@@ -854,6 +851,10 @@ void TConsumerActor::UpdateMetrics() {
     for (size_t i = 0; i < metrics.MessageLockingDuration.GetRangeCount(); ++i) {
         counters.AddMessageLockingDurationValues(metrics.MessageLockingDuration.GetRangeValue(i));
     }
+
+    counters.SetDeletedByRetentionPolicy(metrics.TotalDeletedByRetentionMessageCount);
+    counters.SetDeletedByDeadlinePolicy(metrics.TotalDeletedByDeadlinePolicyMessageCount);
+    counters.SetDeletedByMovedToDLQ(metrics.TotalMovedToDLQMessageCount);
 
     Send(PartitionActorId, new TEvPQ::TEvMLPConsumerState(std::move(counters)));
 }

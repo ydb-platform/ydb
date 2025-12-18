@@ -281,8 +281,5 @@ enum EMLPConsumerLabeledCounters {
     METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT = 4                    [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.scheduled_to_dlq_messages"}]; // TODO name
 
     METRIC_COMMITTED_COUNT = 5                                    [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.committed_messages"}];
-    METRIC_MOVED_TO_DLQ_COUNT = 6                                 [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.moved_to_dlq_messages"}]; // TODO name
-    METRIC_DELETED_BY_RETENTION_COUNT = 7                         [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.deleted_by_retention_messages"}]; // TODO name
-    METRIC_DELETED_BY_DEADLINE_POLICY_COUNT = 8                   [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.deleted_by_deadline_policy_messages"}]; // TODO name
-    METRIC_PURGED_COUNT = 9                                       [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.purged_messages"}];
+    METRIC_PURGED_COUNT = 6                                       [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.purged_messages"}];
 }

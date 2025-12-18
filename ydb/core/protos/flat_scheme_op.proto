@@ -348,6 +348,7 @@ message TTableDescription {
     optional EPathState PathState = 46;
     // Skip automatic index/impl table copying - indexes will be handled separately
     optional bool OmitIndexes = 47 [default = false];
+    optional TDropCdcStream DropSrcCdcStream = 48;
 }
 
 message TDictionaryEncodingSettings {
@@ -1282,6 +1283,8 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     // Key: index name (e.g., "age_index", "name_index")
     // Value: CDC stream configuration to create on that index's impl table
     map<string, TCreateCdcStream> IndexImplTableCdcStreams = 9;
+    // additionally dropes cdc stream on src table consistently with taking snapshot
+    optional TDropCdcStream DropSrcCdcStream = 10;
 }
 
 message TConsistentTableCopyingConfig {

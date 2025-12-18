@@ -262,9 +262,8 @@
         }
         .test-name {
             font-weight: 500;
-            flex: 1;
-            min-width: 150px;
-            max-width: calc(100% - 320px); /* Leave space for other elements and owner */
+            flex: 1 1 0;
+            min-width: 200px;
             display: flex;
             align-items: flex-start;
             gap: 6px;
@@ -381,18 +380,68 @@
         .test-meta > * {
             flex-shrink: 0;
         }
-        .test-meta > .test-owner {
-            margin-left: auto;
+        /* Badges column (SANITIZER/TIMEOUT) - fixed width container */
+        .test-meta-badges {
+            width: 90px;
+            min-width: 90px;
+            display: flex;
+            gap: 4px;
+            align-items: center;
         }
-        .test-badges {
+        .test-meta-badges:empty {
+            display: block;
+            width: 90px;
+            min-width: 90px;
+        }
+        /* Status column - fixed width */
+        .test-meta > .test-status {
+            width: 60px;
+            min-width: 60px;
+        }
+        /* Duration column - fixed width */
+        .test-meta > .test-duration {
+            width: 80px;
+            min-width: 80px;
+        }
+        /* Issue + success buttons column - fixed width */
+        .test-meta > .test-badges {
+            width: 210px;
+            min-width: 210px;
+            max-width: 210px;
             display: inline-flex;
             gap: 6px;
             align-items: center;
             flex-wrap: nowrap;
-            flex-shrink: 0;
+            overflow: hidden;
         }
         .test-badges:empty {
-            display: none;
+            display: block;
+            width: 210px;
+            min-width: 210px;
+            max-width: 210px;
+        }
+        /* Log links column - fixed width */
+        .test-meta > .log-links {
+            width: 120px;
+            min-width: 120px;
+        }
+        .log-links:empty {
+            display: block;
+            width: 120px;
+            min-width: 120px;
+        }
+        /* Action buttons column - fixed width */
+        .test-meta > .test-actions {
+            width: 130px;
+            min-width: 130px;
+            margin-left: 20px;
+        }
+        /* Owner column - fixed width, left-aligned */
+        .test-meta > .test-owner {
+            width: 170px;
+            min-width: 170px;
+            margin-left: 50px;
+            text-align: left;
         }
         .test-owner {
             font-size: 11px;
@@ -402,9 +451,9 @@
             flex-shrink: 0;
             white-space: nowrap;
             min-width: 90px;
-            max-width: 130px;
-            text-align: right;
-            padding-right: 8px;
+            max-width: 170px;
+            text-align: left;
+            padding-right: 0;
             overflow: hidden;
             text-overflow: ellipsis;
         }
@@ -451,6 +500,8 @@
             font-size: 11px;
             font-weight: 500;
             white-space: nowrap;
+            flex-shrink: 1;
+            min-width: 0;
         }
         .success-rate-button:hover {
             background-color: #0256cc;
@@ -491,10 +542,18 @@
         }
         .error-section {
             flex-basis: 100%;
-            margin-top: 8px;
+            margin-top: 4px;
+            margin-bottom: 0;
             min-width: 0;
             width: 100%;
             overflow: hidden;
+        }
+        .test-item.error-hidden .error-section {
+            display: none;
+        }
+        .error-content.hidden {
+            margin-top: 0;
+            margin-bottom: 0;
         }
         .error-button {
             background-color: #fff4e6;
@@ -519,7 +578,8 @@
             font-size: 12px;
         }
         .error-content {
-            margin-top: 8px;
+            margin-top: 4px;
+            margin-bottom: 0;
             padding: 8px;
             background-color: #f6f8fa;
             border-radius: 4px;
@@ -543,7 +603,7 @@
         }
         .test-actions {
             display: inline-flex;
-            gap: 3px;
+            gap: 2px;
             align-items: center;
             flex-shrink: 0;
         }
@@ -552,7 +612,7 @@
             border: none;
             cursor: pointer;
             white-space: nowrap;
-            padding: 2px 3px;
+            padding: 2px 2px;
             display: inline-flex;
             align-items: center;
             color: #0969da;
@@ -769,6 +829,22 @@
                 width: 100%;
                 flex-wrap: wrap;
                 gap: 6px;
+            }
+            /* Reset fixed widths on mobile */
+            .test-meta-badges,
+            .test-meta > .test-status,
+            .test-meta > .test-duration,
+            .test-meta > .test-badges,
+            .test-meta > .log-links,
+            .test-meta > .test-actions,
+            .test-meta > .test-owner {
+                width: auto;
+                min-width: auto;
+            }
+            .test-badges:empty,
+            .log-links:empty,
+            .test-meta-badges:empty {
+                display: none;
             }
             .test-owner {
                 width: 100%;
@@ -1015,15 +1091,20 @@
                     </span>
                     
                     <div class="test-meta">
-                        {% if test.is_sanitizer_issue %}
-                        <span class="sanitizer-badge">SANITIZER</span>
-                        {% endif %}
-                        {% if test.is_timeout_issue %}
-                        <span class="timeout-badge">TIMEOUT</span>
-                        {% endif %}
+                        <!-- Badges column (SANITIZER/TIMEOUT) - always present -->
+                        <div class="test-meta-badges">
+                            {% if test.is_sanitizer_issue %}
+                            <span class="sanitizer-badge">SANITIZER</span>
+                            {% endif %}
+                            {% if test.is_timeout_issue %}
+                            <span class="timeout-badge">TIMEOUT</span>
+                            {% endif %}
+                        </div>
+                        <!-- Status column - always present -->
                         <span class="test-status {% if test.status.value == 0 %}passed{% elif test.status.value == 1 %}failed{% elif test.status.value == 2 %}error{% elif test.status.value == 3 %}skipped{% elif test.status.value == 4 %}mute{% endif %}">{{ test.status_display }}</span>
+                        <!-- Duration column - always present -->
                         <span class="test-duration" title="{{ test.elapsed }}s">{{ test.elapsed_display }}</span>
-                        
+                        <!-- Issue + success buttons column - always present -->
                         <div class="test-badges">
                             {% if test.status.value == 1 or test.status.value == 2 %}
                             <button class="issue-button create_issue" onclick="createIssueForTest(this)" title="Create issue">+ ISSUE</button>
@@ -1034,23 +1115,29 @@
                             </button>
                             {% endif %}
                         </div>
-                            
+                        <!-- Log links column - always present -->
+                        <span class="log-links">
                             {% if test.log_urls %}
-                            <span class="log-links">
-                                {% for log_name, log_url in test.log_urls.items() %}
-                                <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
-                                {% endfor %}
-                            </span>
-                        {% else %}
-                        <span class="log-links"></span>
+                            {% for log_name, log_url in test.log_urls.items() %}
+                            <a href="{{ log_url }}" target="_blank" class="log-link">{{ log_name }}</a>
+                            {% endfor %}
                             {% endif %}
-                        
+                        </span>
+                        <!-- Action buttons column - always present -->
                         <div class="test-actions">
                             <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="copy-name" title="Copy full test name"><span class="emoji">&#128203;</span> Copy name</button>
                             <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="copy-cmd" title="Copy run command"><span class="emoji">&#128203;</span> Copy cmd</button>
                             <button class="test-action-btn" data-test-full-name="{{ test.full_name|e }}" data-action="open-history" title="Open history"><span class="emoji">&#128202;</span> History</button>
                         </div>
-                        </div>
+                        <!-- Owner column - always present -->
+                        {% if test.owners %}
+                        <span class="test-owner">
+                            Owner: <a href="https://github.com/orgs/ydb-platform/teams/{{ test.owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}" target="_blank">{{ test.owners.replace('TEAM:@ydb-platform/','').split(';;')[0].split(':')[0] }}</a>
+                        </span>
+                        {% else %}
+                        <span class="test-owner"></span>
+                        {% endif %}
+                    </div>
                         
                         {% if test.status_description %}
                         <div class="error-section">
@@ -1754,43 +1841,39 @@
                     nameElement.setAttribute('data-test-full-name', fullName);
                 }
                 
-                // Add owner information for flat view
+                // Update owner information for flat view (owner element always exists now)
                 const owner = clone.getAttribute('data-test-owner');
-                if (owner) {
-                    // Parse owner string (format: "TEAM:@ydb-platform/team-name;;...")
-                    const ownerParts = owner.split(';;');
-                    if (ownerParts.length > 0) {
-                        const firstOwner = ownerParts[0];
-                        // Extract team name (remove "TEAM:@ydb-platform/" prefix and ":owner" suffix)
-                        let teamName = firstOwner.replace('TEAM:@ydb-platform/', '');
-                        const colonIndex = teamName.indexOf(':');
-                        if (colonIndex !== -1) {
-                            teamName = teamName.substring(0, colonIndex);
-                        }
-                        
-                        if (teamName) {
-                            // Check if owner element already exists (remove if exists)
-                            const existingOwner = clone.querySelector('.test-owner');
-                            if (existingOwner) {
-                                existingOwner.remove();
+                const existingOwner = clone.querySelector('.test-owner');
+                if (existingOwner) {
+                    if (owner) {
+                        // Parse owner string (format: "TEAM:@ydb-platform/team-name;;...")
+                        const ownerParts = owner.split(';;');
+                        if (ownerParts.length > 0) {
+                            const firstOwner = ownerParts[0];
+                            // Extract team name (remove "TEAM:@ydb-platform/" prefix and ":owner" suffix)
+                            let teamName = firstOwner.replace('TEAM:@ydb-platform/', '');
+                            const colonIndex = teamName.indexOf(':');
+                            if (colonIndex !== -1) {
+                                teamName = teamName.substring(0, colonIndex);
                             }
                             
-                            // Create owner element
-                            const ownerSpan = document.createElement('span');
-                            ownerSpan.className = 'test-owner';
-                            const ownerLink = document.createElement('a');
-                            ownerLink.href = `https://github.com/orgs/ydb-platform/teams/${teamName}`;
-                            ownerLink.target = '_blank';
-                            ownerLink.textContent = teamName;
-                            ownerSpan.appendChild(document.createTextNode('Owner: '));
-                            ownerSpan.appendChild(ownerLink);
-                            
-                            // Add to test-meta
-                            const testMeta = clone.querySelector('.test-meta');
-                            if (testMeta) {
-                                testMeta.appendChild(ownerSpan);
+                            if (teamName) {
+                                // Update existing owner element
+                                existingOwner.innerHTML = '';
+                                const ownerLink = document.createElement('a');
+                                ownerLink.href = `https://github.com/orgs/ydb-platform/teams/${teamName}`;
+                                ownerLink.target = '_blank';
+                                ownerLink.textContent = teamName;
+                                existingOwner.appendChild(document.createTextNode('Owner: '));
+                                existingOwner.appendChild(ownerLink);
+                            } else {
+                                existingOwner.innerHTML = '';
                             }
+                        } else {
+                            existingOwner.innerHTML = '';
                         }
+                    } else {
+                        existingOwner.innerHTML = '';
                     }
                 }
                 

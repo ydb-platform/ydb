@@ -48,7 +48,6 @@ namespace NYdb::NConsoleClient {
         }
 
         const auto& messages = outcome.GetResult().GetMessages();
-        
         Aws::Vector<Aws::SQS::Model::DeleteMessageBatchRequestEntry> deleteMessageBatchRequestEntries;
         for (size_t i = 0; i < messages.size(); ++i) {
             auto sendTimestamp = ExtractSendTimestamp(messages[i].GetBody());
@@ -135,7 +134,7 @@ namespace NYdb::NConsoleClient {
                               TStringBuilder() << "Message group already exists: " << messageGroupId->second << " with send timestamp: " << it->second << " and current send timestamp: " << sendTimestamp);
             return false;
         }
-        
+
         if (!newGroup && it->second > sendTimestamp) {
             return false;
         }

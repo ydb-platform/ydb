@@ -15,8 +15,9 @@ namespace NYdb::NConsoleClient {
                 std::shared_ptr<Aws::SQS::SQSClient> client,
                 std::shared_ptr<TSqsWorkloadStatsCollector> statsCollector,
                 bool fifoValidationEnabled);
+
             ~TSQSClientWrapper() = default;
-    
+
             Aws::SQS::Model::SendMessageBatchOutcome SendMessageBatch(
                 const Aws::SQS::Model::SendMessageBatchRequest& request) const override;
             Aws::SQS::Model::ReceiveMessageOutcome ReceiveMessage(

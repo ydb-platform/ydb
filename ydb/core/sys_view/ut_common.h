@@ -22,6 +22,7 @@ struct TTestEnvSettings {
     bool EnableSVP = false;
     bool EnableForceFollowers = false;
     TMaybe<ui32> DataShardStatsReportIntervalSeconds;
+    NKikimrConfig::TTableServiceConfig TableServiceConfig;
 };
 
 class TTestEnv {

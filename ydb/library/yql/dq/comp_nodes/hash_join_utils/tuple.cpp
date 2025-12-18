@@ -236,6 +236,10 @@ TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
 TTupleLayoutFallback::TTupleLayoutFallback(
     const std::vector<TColumnDesc> &columns)
     : TTupleLayout(columns) {
+    // NullsTuple.emplace();
+    //     for(const auto& column: columns){
+    //     // if (column)
+    // }
 
     for (ui32 i = 0, idx = 0; i < OrigColumns.size(); ++i) {
         auto &col = OrigColumns[i];
@@ -1826,6 +1830,10 @@ std::string TTupleLayout::Stringify(TSingleTuple tuple) const {
     
     result += "}";
     return result;
+}
+
+TSingleTuple TTupleLayout::NullsTuple() const {
+    // TSingleTuple
 }
 
 } // namespace NPackedTuple

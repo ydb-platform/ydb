@@ -222,6 +222,16 @@ template <typename T> [[nodiscard]] T ExtractReadyFuture(NThreading::TFuture<T>&
     return future.ExtractValueSync();
 }
 
+namespace detail{
+template<typename T, EJoinKind Kind>
+constexpr bool isJoinMatchFn = SemiOrOnlyJoin(Kind) ? std::is_invocable<T, TSingleTuple>::value : std::is_invocable<T, TSides<TSingleTuple>>::value;
+}
+
+
+
+template<typename T, EJoinKind Kind>
+concept JoinMatchFn = detail::isJoinMatchFn<T, Kind>;
+
 TPackResult GetPage(TFuturePage&& future);
 
 using ProbeSpillingPage = std::optional<TPackResult>;
@@ -316,7 +326,7 @@ template <typename Source> class TInMemoryHashJoin {
     TMKQLVector<IBlockLayoutConverter::TPackResult> BuildChunks_;
 };
 
-template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
+template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THybridHashJoin {
     struct Logger {
         Logger(TComputationContext& ctx, TString name)
         : Logger_(ctx.MakeLogger())
@@ -330,7 +340,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
         }
     };
 
-    using Self = THybridHashJoin<Source, Settings>;
+    using Self = THybridHashJoin<Source, Settings, Kind>;
 
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
@@ -451,6 +461,8 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
         , Spiller_(ctx.SpillerFactory->CreateSpiller())
         , Sources_(std::move(sources))
     {
+        using enum EJoinKind;
+        MKQL_ENSURE(Kind == Inner || Kind == LeftOnly || Kind == LeftSemi || Kind == Left , "unsupported join kind");
     }
 
     struct Finish {};
@@ -471,7 +483,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
 
 
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
-                           std::invocable<TSides<TSingleTuple>> auto consumePairOfTuples) {
+                           JoinMatchFn<Kind> auto consume) {
         auto notEnoughMemory = [] {
             return TlsAllocState->IsMemoryYellowZoneEnabled();
         };
@@ -618,9 +630,14 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                     } else {
                         TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
                         MKQL_ENSURE(thisTable, "sanity check");
+                        bool found = false;
                         thisTable->Lookup(tuple, [&](TSingleTuple tableMatch) {
-                            consumePairOfTuples(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                            found = true;
+                            if constexpr (Kind == EJoinKind::Inner) {
+                                consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                            }
                         });
+                        
                     }
                 });
                 state.FetchedPack = std::nullopt;
@@ -684,7 +701,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                             TPackResult pack = GetPage(*GetFrontOrNull(table->Futures), ESide::Probe);
                             pack.ForEachTuple([&](TSingleTuple probeTuple) {
                                 table->Table.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                                    consumePairOfTuples({.Build = buildTuple, .Probe = probeTuple});
+                                    consume({.Build = buildTuple, .Probe = probeTuple});
                                 });
                             });
                         } else {

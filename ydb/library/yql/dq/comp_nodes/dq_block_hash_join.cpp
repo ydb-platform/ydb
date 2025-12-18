@@ -98,6 +98,10 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         return Output_.Build.NTuples;
     }
 
+    i64 SizeBytes() const {
+        
+    }
+
 
     using TuplePairs = TSides<TPackResult>;
 
@@ -235,6 +239,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput Output_;
         const int Threshold_ = 10000;
+        const int ThresholdBytes_ = 1<<20;
         bool Finished_ = false;
     };
 

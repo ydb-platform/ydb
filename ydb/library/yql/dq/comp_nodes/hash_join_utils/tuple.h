@@ -168,6 +168,7 @@ struct TTupleLayout {
     ui32 PayloadOffset; // Offset of payload values. = BitmaskEnd.
     ui32 PayloadEnd;    // First byte after payload
     ui32 TotalRowSize;  // Total size of bytes for packed row
+    std::optional<std::vector<ui8, TMKQLAllocator<ui8>>> NullsTuple; // std::nullopt *this contains non-nullable column
 
     // Creates new tuple layout based on provided columns description.
     static THolder<TTupleLayout>
@@ -227,6 +228,8 @@ struct TTupleLayout {
     // Pretty prints a single packed tuple for debugging purposes.
     // Fixed-size fields are printed as integers, variable-length fields as strings.
     std::string Stringify(TSingleTuple tuple) const;
+
+    TSingleTuple NullsTuple() const;
 };
 
 struct TTupleLayoutFallback : public TTupleLayout {

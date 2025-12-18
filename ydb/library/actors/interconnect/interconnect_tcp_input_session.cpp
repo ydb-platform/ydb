@@ -42,11 +42,14 @@ namespace NActors {
         }
     }
 
-    void TReceiveContext::TPerChannelContext::FetchBuffers(ui16 channel, size_t numBytes,
+    int TReceiveContext::TPerChannelContext::FetchBuffers(ui16 channel, size_t numBytes,
             std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ) {
         Y_DEBUG_ABORT_UNLESS(numBytes);
         auto it = XdcBuffers.begin() + FetchIndex;
         for (;;) {
+            if (it == XdcBuffers.end()) {
+                return -1;
+            }
             Y_DEBUG_ABORT_UNLESS(it != XdcBuffers.end());
             const TMutableContiguousSpan span = it->SubSpan(FetchOffset, numBytes);
             outQ.emplace_back(channel, span);
@@ -61,6 +64,7 @@ namespace NActors {
                 break;
             }
         }
+        return 0;
     }
 
     static bool NeedReallocateRdma(const NInterconnect::NRdma::TMemRegionSlice& region) {
@@ -577,6 +581,11 @@ namespace NActors {
 #endif
                 };
 
+                DeclareSectionSizes.clear();
+                DeclareSectionRdmaSizes.clear();
+                PushDataSizes.clear();
+                RdmaReadSizes.clear();
+
                 Metrics->IncInputChannelsIncomingEvents(channel);
                 // In case of rdma we call ProcessEvents from rdma io callback handler
                 // and we need to process packet queue from ProcessEvents to make sure ack will be sent.
@@ -697,6 +706,7 @@ namespace NActors {
                                 throw TExDestroySession{TDisconnectReason::FormatError()};
                             }
                             if (isRdma) {
+                                DeclareSectionRdmaSizes.push_back(size);
                                 if (size) {
                                     pendingEvent.RdmaBuffers.push_back(NInterconnect::NRdma::TryExtractFromRcBuf(buffer));
                                 }
@@ -707,6 +717,7 @@ namespace NActors {
                                 pendingEvent.RdmaReadContext->SizeLeft += size;
                                 pendingEvent.RdmaSize += size;
                             } else {
+                                DeclareSectionSizes.push_back(size);
                                 if (size) {
                                     context.XdcBuffers.push_back(buffer.GetContiguousSpanMut());
                                 }
@@ -741,6 +752,8 @@ namespace NActors {
                     auto& packet = InboundPacketQ.back();
                     packet.XdcUnreadBytes += size;
 
+                    PushDataSizes.push_back(size);
+
                     if (IgnorePayload) {
                         // this packet was already marked as 'processed', all commands had been executed, but we must
                         // parse XDC stream from this packet correctly
@@ -750,7 +763,28 @@ namespace NActors {
                         XdcCatchStream.Markup.emplace_back(channel, apply, size);
                     } else {
                         // find buffers and acquire data buffer pointers
-                        context.FetchBuffers(channel, size, XdcInputQ);
+                        int err = context.FetchBuffers(channel, size, XdcInputQ);
+                        if (err == -1) {
+                            TStringBuilder str;
+                            str << "DeclareSectionSizes: ";
+                            for (const auto& size : DeclareSectionSizes) {
+                                str << size << ", ";
+                            }
+                            str << "; DeclareSectionRdmaSizes: ";
+                            for (const auto& size : DeclareSectionRdmaSizes) {
+                                str << size << ", ";
+                            }
+                            str << "; PushDataSizes: ";
+                            for (const auto& size : PushDataSizes) {
+                                str << size << ", ";
+                            }
+                            str << "; RdmaReadSizes: ";
+                            for (const auto& size : RdmaReadSizes) {
+                                str << size << ", ";
+                            }
+                            LOG_ERROR_IC_SESSION("ICIS28", "FetchBuffers: end of buffers: %s", str.data());
+                            Y_ABORT_UNLESS(false);
+                        }
                     }
 
                     ptr += cmdLen;
@@ -807,6 +841,13 @@ namespace NActors {
                     } else {
                         context.PendingEvents.back().RdmaCumulativeCheckSum = 0;
                     }
+
+                    ui64 totalBytes = 0;
+                    for (const auto& cred : creds.GetCreds()) {
+                        totalBytes += cred.GetSize();
+                    }
+                    RdmaReadSizes.push_back(totalBytes);
+
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<ICq::TBusy>(err)) {

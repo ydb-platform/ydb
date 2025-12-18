@@ -168,7 +168,7 @@ namespace NActors {
 
             void PrepareCatchBuffer();
             void ApplyCatchBuffer();
-            void FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
+            int FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
             void DropFront(TRope *from, size_t numBytes);
 
             struct TRdmaReadReqOk {};
@@ -329,6 +329,8 @@ namespace NActors {
         ui64 RdmaWrReadScheduled = 0;
 
         ui64 StarvingInRow = 0;
+
+        TVector<ui32> DeclareSectionSizes, DeclareSectionRdmaSizes, PushDataSizes, RdmaReadSizes;
 
         bool CloseInputSessionRequested = false;
 

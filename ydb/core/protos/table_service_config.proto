@@ -430,9 +430,9 @@ message TTableServiceConfig {
 
     optional bool EnableDataShardCreateTableAs = 102 [default = true, (InvalidateCompileCache) = true];
 
-    optional uint64 ExtractPredicateParameterListSizeLimit = 103 [default = 9999, (InvalidateCompileCache) = true];
+    optional uint64 ExtractPredicateParameterListSizeLimit = 103 [default = 0, (InvalidateCompileCache) = true];
 
-    optional bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = 104 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = 104 [default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableDqHashCombineByDefault = 105 [default = true, (InvalidateCompileCache) = true];
 

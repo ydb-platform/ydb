@@ -46,6 +46,9 @@ struct TChangefeedExportDescriptions {
     TString Prefix;
 };
 
+template <typename T>
+struct TTypeTag {};
+
 class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
     using THttpResolverConfig = NKikimrConfig::TS3ProxyResolverConfig::THttpResolverConfig;
@@ -765,7 +768,7 @@ public:
             TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
             TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
-            TString&& metadata)
+            TString&& metadata, TTypeTag<TSettings>)
         : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(GetSettings<TSettings>(task)))
         , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
         , DataFormat(EDataFormat::Csv)
@@ -1028,9 +1031,9 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     };
     metadata.AddFullBackup(backup);
 
-    return new TS3Uploader(dataShard, txId, task,
+    return new TS3Uploader(dataShard, txId, Task,
         std::move(scheme), std::move(changefeeds),
-        std::move(permissions), std::move(metadata));
+        std::move(permissions), metadata.Serialize(), TTypeTag<NKikimrSchemeOp::TS3Settings>());
 }
 
 } // NDataShard

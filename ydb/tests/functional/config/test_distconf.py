@@ -372,7 +372,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         try:
             pdisk_info = self.swagger_client.pdisk_info(new_node.node_id)
 
-            pdisks_list = pdisk_info['PDiskStateInfo']
+            pdisks_list = pdisk_info.get('PDiskStateInfo', [])
 
             found_pdisk_in_viewer = False
             for pdisk_entry in pdisks_list:

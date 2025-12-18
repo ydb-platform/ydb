@@ -158,8 +158,7 @@ class IConfigurationResult {
 public:
     virtual ~IConfigurationResult() {}
     virtual const NKikimrConfig::TAppConfig& GetConfig() const = 0;
-    virtual bool HasMainYamlConfig() const = 0;
-    virtual const TString& GetMainYamlConfig() const = 0;
+    virtual const std::optional<TString>& GetMainYamlConfig() const = 0;
     virtual TMap<ui64, TString> GetVolatileYamlConfigs() const = 0;
     virtual bool HasDatabaseYamlConfig() const = 0;
     virtual const TString& GetDatabaseYamlConfig() const = 0;
@@ -181,9 +180,10 @@ public:
 class IStorageConfigResult {
 public:
     virtual ~IStorageConfigResult() {}
-    virtual const TString& GetMainYamlConfig() const = 0;
-    virtual const TString& GetStorageYamlConfig() const = 0;
+    virtual const std::optional<TString>& GetMainYamlConfig() const = 0;
+    virtual const std::optional<TString>& GetStorageYamlConfig() const = 0;
     virtual const TString& GetSourceAddress() const = 0;
+    virtual bool IsTransient() const = 0;
 };
 
 class IConfigClient {
@@ -193,7 +193,9 @@ public:
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const IEnv& env,
-        IInitLogger& logger) const = 0;
+        IInitLogger& logger,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort) const = 0;
 };
 
 // ===

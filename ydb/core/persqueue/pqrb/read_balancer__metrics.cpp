@@ -71,6 +71,20 @@ struct TConsumerMetricCollector {
     TMetricCollector<EMLPConsumerLabeledCounters_descriptor> MLPConsumerLabeledCounters;
     THistogramMetricCollector MLPMessageLockAttemptsCounter{MLP_LOCKS_BOUNDS};
     THistogramMetricCollector MLPMessageLockingDurationCounter{SLOW_LATENCY_BOUNDS};
+
+    size_t DeletedByRetentionPolicy = 0;
+    size_t DeletedByDeadlinePolicy = 0;
+    size_t DeletedByMovedToDLQ = 0;
+
+    void Collect(const NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters& metrics) {
+        MLPConsumerLabeledCounters.Collect(metrics.GetCountersValues());
+        MLPMessageLockAttemptsCounter.Collect(metrics.GetMessageLocksValues());
+        MLPMessageLockingDurationCounter.Collect(metrics.GetMessageLockingDurationValues());
+
+        DeletedByRetentionPolicy += metrics.GetDeletedByRetentionPolicy();
+        DeletedByDeadlinePolicy += metrics.GetDeletedByDeadlinePolicy();
+        DeletedByMovedToDLQ += metrics.GetDeletedByMovedToDLQ();
+    }
 };
 
 struct TTopicMetricCollector {
@@ -117,9 +131,7 @@ struct TTopicMetricCollector {
 
         for (const auto& consumer : counters.GetMLPConsumerCounters()) {
             auto& collector = Consumers[consumer.GetConsumer()];
-            collector.MLPConsumerLabeledCounters.Collect(consumer.GetCountersValues());
-            collector.MLPMessageLockAttemptsCounter.Collect(consumer.GetMessageLocksValues());
-            collector.MLPMessageLockingDurationCounter.Collect(consumer.GetMessageLockingDurationValues());
+            collector.Collect(consumer);
         }
     }
 
@@ -160,6 +172,10 @@ TCounters InitializeCounters(
         .Types = config->GetTypes(),
         .Counters = std::move(result)
     };
+}
+
+NMonitoring::TDynamicCounters::TCounterPtr InitializeDeleteCounter(NMonitoring::TDynamicCounterPtr root, const auto& reason) {
+    return root->GetSubgroup("name", "topic.deleted_messages")->GetExpiringNamedCounter("reason", reason, false);
 }
 
 void SetCounters(TCounters& counters, const auto& metrics) {
@@ -243,8 +259,14 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTablet
             counters.MLPClientLabeledCounters = InitializeCounters<EMLPConsumerLabeledCounters_descriptor>(DynamicCounters, {{"consumer", metricsConsumerName}});
 
             auto consumerGroup = DynamicCounters->GetSubgroup("consumer", metricsConsumerName);
-            counters.MLPMessageLockAttemptsCounter = consumerGroup->GetExpiringNamedHistogram("name", "topic.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
-            counters.MLPMessageLockingDurationCounter = consumerGroup->GetExpiringNamedHistogram("name", "topic.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
+            counters.MLPMessageLockAttemptsCounter = consumerGroup->GetExpiringNamedHistogram(
+                "name", "topic.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
+            counters.MLPMessageLockingDurationCounter = consumerGroup->GetExpiringNamedHistogram(
+                "name", "topic.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
+
+            counters.DeletedByRetentionPolicyCounter = InitializeDeleteCounter(consumerGroup, "retention");
+            counters.DeletedByDeadlinePolicyCounter = InitializeDeleteCounter(consumerGroup, "delete_policy");
+            counters.DeletedByMovedToDLQCounter = InitializeDeleteCounter(consumerGroup, "move_policy");
         }
     }
 
@@ -334,6 +356,10 @@ void TTopicMetricsHandler::UpdateMetrics() {
             SetCounters(consumerCounters.MLPClientLabeledCounters, consumerMetrics.MLPConsumerLabeledCounters);
             SetCounters(consumerCounters.MLPMessageLockAttemptsCounter, consumerMetrics.MLPMessageLockAttemptsCounter, MLP_LOCKS_BOUNDS);
             SetCounters(consumerCounters.MLPMessageLockingDurationCounter, consumerMetrics.MLPMessageLockingDurationCounter, SLOW_LATENCY_BOUNDS);
+
+            consumerCounters.DeletedByRetentionPolicyCounter->Set(consumerMetrics.DeletedByRetentionPolicy);
+            consumerCounters.DeletedByDeadlinePolicyCounter->Set(consumerMetrics.DeletedByDeadlinePolicy);
+            consumerCounters.DeletedByMovedToDLQCounter->Set(consumerMetrics.DeletedByMovedToDLQ);
         }
     }
 }

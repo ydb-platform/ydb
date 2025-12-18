@@ -81,11 +81,9 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        if (!fifoValidationEnabled) {
-            return response;
+        if (fifoValidationEnabled) {
+            ReceiverMessageGroupsLocker.Lock(messageGroups);
         }
-
-        ReceiverMessageGroupsLocker.Lock(messageGroups);
 
         std::unique_lock lock(MessageGroupsMutex);
         for (auto& message : response.GetResult().GetMessages()) {
@@ -99,6 +97,10 @@ namespace NYdb::NConsoleClient {
             };
             StatsCollector->AddGotMessageEvent(event);
 
+            if (!fifoValidationEnabled) {
+                continue;
+            }
+
             const auto& attributes = message.GetAttributes();
             auto messageGroupId = attributes.find(Aws::SQS::Model::MessageSystemAttributeName::MessageGroupId);
             if (messageGroupId != attributes.end()) {
@@ -111,7 +113,10 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        ReceiverMessageGroupsLocker.Unlock(messageGroups);
+        if (fifoValidationEnabled) {
+            ReceiverMessageGroupsLocker.Unlock(messageGroups);
+        }
+
         return response;
     }
 

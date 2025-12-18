@@ -31,7 +31,7 @@ class WorkloadVectorIndex(WorkloadBase):
         elif type == "bit":
             values = [random.randint(0, 1) for _ in range(size)]
         else:
-            ValueError(f"Unknown vector type: {type}")
+            raise ValueError(f"Unknown vector type: {type}")
 
         return ",".join(str(val) for val in values)
 

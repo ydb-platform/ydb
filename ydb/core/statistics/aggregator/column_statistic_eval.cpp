@@ -65,65 +65,10 @@ public:
 };
 
 struct TBorder {
-    std::variant<ui64, i64, double> Val;
+    std::variant<ui64, i64, float, double> Val;
 
     template<typename T>
     explicit TBorder(T val) : Val(val) {}
-
-    static std::pair<TBorder, TBorder> GetBucketRange(
-            EHistogramValueType type,
-            const Ydb::Value& minVal, const Ydb::Value& maxVal, ui32* numBuckets) {
-        switch (type) {
-        default:
-            Y_ENSURE(false, "Unexpected type: " << static_cast<ui8>(type));
-        case EHistogramValueType::Uint16:
-        case EHistogramValueType::Uint32:
-        case EHistogramValueType::Uint64: {
-            const ui64 min = (type == EHistogramValueType::Uint64 ?
-                minVal.uint64_value() : minVal.uint32_value());
-            const ui64 max = (type == EHistogramValueType::Uint64 ?
-                maxVal.uint64_value() : maxVal.uint32_value());
-            if (min >= max || *numBuckets <= 1) {
-                *numBuckets = 1;
-                return {TBorder(min), TBorder(min)};
-            }
-            const ui64 dist = max - min;
-            if (*numBuckets > dist) {
-                *numBuckets = dist + 1;
-            }
-            const ui64 bucketLen = dist / (*numBuckets - 1);
-            return {TBorder(min), TBorder(min + bucketLen)};
-        }
-        case EHistogramValueType::Int16:
-        case EHistogramValueType::Int32:
-        case EHistogramValueType::Int64: {
-            const i64 min = (type == EHistogramValueType::Int64 ?
-                minVal.int64_value() : minVal.int32_value());
-            const i64 max = (type == EHistogramValueType::Int64 ?
-                maxVal.int64_value() : maxVal.int32_value());
-            if (min >= max || *numBuckets <= 1) {
-                *numBuckets = 1;
-                return {TBorder(min), TBorder(min)};
-            }
-            const ui64 dist = -((ui64)(-max) + (ui64)min);
-            if (*numBuckets > dist) {
-                *numBuckets = dist + 1;
-            }
-            const ui64 bucketLen = dist / (*numBuckets - 1);
-            return {TBorder(min), TBorder((i64)(min + bucketLen))};
-        }
-        case EHistogramValueType::Double: {
-            const double min = minVal.double_value();
-            const double max = maxVal.double_value();
-            if (min >= max || *numBuckets <= 1) {
-                *numBuckets = 1;
-                return {TBorder(min), TBorder(min)};
-            }
-            const double bucketLen = (max - min) / (*numBuckets - 1);
-            return {TBorder(min), TBorder(min + bucketLen)};
-        }
-        }
-    }
 };
 
 class TEWHEval : public IColumnStatisticEval {
@@ -151,6 +96,61 @@ public:
 #undef MAKE_PRIMITIVE_VISITOR
         default:
             return std::nullopt;
+        }
+    }
+
+    static std::optional<std::pair<TBorder, TBorder>> GetDomainRange(
+            EHistogramValueType type,
+            const Ydb::Value& minVal, const Ydb::Value& maxVal, ui32* numBuckets) {
+        auto getIntDomainRange = [&](auto min, auto max)
+                -> std::optional<std::pair<TBorder, TBorder>> {
+            if (min >= max) {
+                return std::nullopt;
+            }
+            const ui64 dist = (ui64)max - (ui64)min;
+            if (*numBuckets > dist) {
+                *numBuckets = dist;
+            }
+            return { {TBorder(min), TBorder(max)} };
+        };
+
+        auto getFloatDomainRange = [&](auto min, auto max)
+                -> std::optional<std::pair<TBorder, TBorder>> {
+            if (!CmpLess(min, max)) {
+                return std::nullopt;
+            }
+            return { {TBorder(min), TBorder(max)} };
+        };
+
+        switch (type) {
+        default:
+            Y_ENSURE(false, "Unexpected type: " << static_cast<ui8>(type));
+        case EHistogramValueType::Uint8:
+        case EHistogramValueType::Uint16:
+        case EHistogramValueType::Uint32:
+        case EHistogramValueType::Uint64: {
+            const ui64 min = (type == EHistogramValueType::Uint64 ?
+                minVal.uint64_value() : minVal.uint32_value());
+            const ui64 max = (type == EHistogramValueType::Uint64 ?
+                maxVal.uint64_value() : maxVal.uint32_value());
+            return getIntDomainRange(min, max);
+        }
+        case EHistogramValueType::Int8:
+        case EHistogramValueType::Int16:
+        case EHistogramValueType::Int32:
+        case EHistogramValueType::Int64: {
+            const i64 min = (type == EHistogramValueType::Int64 ?
+                minVal.int64_value() : minVal.int32_value());
+            const i64 max = (type == EHistogramValueType::Int64 ?
+                maxVal.int64_value() : maxVal.int32_value());
+            return getIntDomainRange(min, max);
+        }
+        case EHistogramValueType::Float: {
+            return getFloatDomainRange(minVal.float_value(), maxVal.float_value());
+        }
+        case EHistogramValueType::Double: {
+            return getFloatDomainRange(minVal.double_value(), maxVal.double_value());
+        }
         }
     }
 
@@ -182,15 +182,22 @@ public:
         ui32 numBuckets = (numBucketsEstimate <= std::numeric_limits<ui32>::max()
             ? numBucketsEstimate
             : std::numeric_limits<ui32>::max());
+        if (numBuckets == 0) {
+            numBuckets = 1;
+        }
 
-        auto [rangeStart, rangeEnd] = TBorder::GetBucketRange(
+        auto domainRange = GetDomainRange(
             *histType, simpleStats.GetMin(), simpleStats.GetMax(), &numBuckets);
-        return std::make_unique<TEWHEval>(numBuckets, rangeStart, rangeEnd);
+        if (!domainRange) {
+            return TPtr{};
+        }
+        return std::make_unique<TEWHEval>(
+            numBuckets, domainRange->first, domainRange->second);
     }
 
     EStatType GetType() const final { return EStatType::EQ_WIDTH_HISTOGRAM; }
 
-    size_t EstimateSize() const final { return NumBuckets * sizeof(TEqWidthHistogram::TBucket); }
+    size_t EstimateSize() const final { return NumBuckets * sizeof(ui64); }
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregation(
@@ -239,7 +246,8 @@ void Out<NKikimr::NStat::TBorder>(IOutputStream& os, const NKikimr::NStat::TBord
         IOutputStream& Os;
         void operator()(ui64 val) { Os << val; }
         void operator()(i64 val) { Os << val; }
-        void operator()(double val) { Os << val; }
+        void operator()(float val) { Os << "CAST(" << val << " AS Float)"; }
+        void operator()(double val) { Os << "CAST(" << val << " AS Double)"; }
     };
     std::visit(TVisitor{os}, x.Val);
 }

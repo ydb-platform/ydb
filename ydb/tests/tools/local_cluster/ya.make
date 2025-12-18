@@ -6,6 +6,7 @@ PY_SRCS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/tools/nemesis/library
 )
 
 END()

@@ -617,6 +617,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
 
         THashSet<TString> processedInputs;
         auto joinOps = GetSetting(setItem->Tail(), "join_ops");
+        ui32 ansiCrossJoinCount = 0;
         if (joinOps) {
             for (ui32 i = 0; i < joinOps->Tail().ChildrenSize(); ++i) {
                 ui32 tableInputsCount = 0;
@@ -655,6 +656,13 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                     TExprNode::TPtr leftInput;
                     TExprNode::TPtr rightInput;
 
+                    if (joinKeys.empty()) {
+                        // Ansi cross join.
+                        ++ansiCrossJoinCount;
+                        continue;
+                    }
+
+                    Y_ENSURE(joinKeys.size() && !ansiCrossJoinCount, "Ansi cross joins mixed with other joins");
                     if (tableInputsCount == 2) {
                         joinAliases = GatherJoinAliasesTwoInputs(joinKeys);
                         const auto leftSideAlias = *joinAliases.LeftSideAliases.begin();
@@ -688,10 +696,11 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                 }
             }
 
-            // Build in order
+            // Ansi cross joins, processing inputs in the given order.
             if (!joinExpr) {
                 ui32 inputIndex = 0;
                 if (inputsInOrder.size() > 1) {
+                    Y_ENSURE(pgSyntax || (!pgSyntax && inputsInOrder.size() == ansiCrossJoinCount + 1), "Invalid input count for ansi cross joins.");
                     while (inputIndex < inputsInOrder.size()) {
                         auto leftTableInput = inputIndex == 0 ? inputsInOrder[inputIndex] : joinExpr;
                         auto rightTableInput = inputIndex == 0 ? inputsInOrder[inputIndex + 1] : inputsInOrder[inputIndex];

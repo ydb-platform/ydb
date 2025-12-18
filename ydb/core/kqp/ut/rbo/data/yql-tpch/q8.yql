@@ -1,0 +1,52 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: :49:5: Error: No such column: o_year */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    o_year,
+    Sum(
+        CASE
+            WHEN nation == 'BRAZIL' THEN volume
+            ELSE 0
+        END
+    ) / (Sum(volume) + 1e-12) AS mkt_share
+FROM (
+    SELECT
+        DateTime::GetYear(CAST(o_orderdate AS Timestamp)) AS o_year,
+        l_extendedprice * (1 - l_discount) AS volume,
+        n2.n_name AS nation
+    FROM
+        `/Root/part` as part
+    ,
+        `/Root/supplier` as supplier
+    ,
+        `/Root/lineitem` as supplier
+    ,
+        `/Root/orders` as orders
+    ,
+        `/Root/customer` as customer
+    ,
+        `/Root/nation` AS n1
+    ,
+        `/Root/nation` AS n2
+    ,
+        `/Root/region` as region
+    WHERE
+        p_partkey == l_partkey
+        AND s_suppkey == l_suppkey
+        AND l_orderkey == o_orderkey
+        AND o_custkey == c_custkey
+        AND c_nationkey == n1.n_nationkey
+        AND n1.n_regionkey == r_regionkey
+        AND r_name == 'AMERICA'
+        AND s_nationkey == n2.n_nationkey
+        AND o_orderdate BETWEEN Date('1995-01-01') AND Date('1996-12-31')
+        AND p_type == 'ECONOMY ANODIZED STEEL'
+) AS all_nations
+GROUP BY
+    o_year
+ORDER BY
+    o_year
+;

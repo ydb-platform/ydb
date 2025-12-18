@@ -16,7 +16,7 @@
 
 namespace NKikimr::NDataShard {
 
-class TS3Settings {
+class TStorageSettings {
 public:
     struct TEncryptionSettings {
         const bool EncryptedBackup;
@@ -85,34 +85,27 @@ public:
         }
     };
 public:
-    const TString Bucket;
     const TString ObjectKeyPattern;
     const ui32 Shard;
-    const Ydb::Export::ExportToS3Settings::StorageClass StorageClass;
     const TEncryptionSettings EncryptionSettings;
 
-    explicit TS3Settings(const NKikimrSchemeOp::TS3Settings& settings, ui32 shard, const TEncryptionSettings& encryptionSettings)
-        : Bucket(settings.GetBucket())
-        , ObjectKeyPattern(settings.GetObjectKeyPattern())
+    template <class TSettings>
+    static TStorageSettings FromBackupTask(const NKikimrSchemeOp::TBackupTask& task);
+
+    template <>
+    static TStorageSettings FromBackupTask<NKikimrSchemeOp::TS3Settings>(const NKikimrSchemeOp::TBackupTask& task) {
+        return TStorageSettings(task.GetS3Settings().GetObjectKeyPattern(), task.GetShardNum(), TEncryptionSettings::FromBackupTask(task));
+    }
+
+    explicit TStorageSettings(const TString& objectKeyPattern, ui32 shard, const TEncryptionSettings& encryptionSettings)
+        : ObjectKeyPattern(objectKeyPattern)
         , Shard(shard)
-        , StorageClass(settings.GetStorageClass())
         , EncryptionSettings(encryptionSettings)
     {
     }
 
 public:
-    static TS3Settings FromBackupTask(const NKikimrSchemeOp::TBackupTask& task) {
-        return TS3Settings(task.GetS3Settings(), task.GetShardNum(), TEncryptionSettings::FromBackupTask(task));
-    }
-
-    static TS3Settings FromRestoreTask(const NKikimrSchemeOp::TRestoreTask& task) {
-        return TS3Settings(task.GetS3Settings(), task.GetShardNum(), TEncryptionSettings::FromRestoreTask(task));
-    }
-
-    inline const TString& GetBucket() const { return Bucket; }
     inline const TString& GetObjectKeyPattern() const { return ObjectKeyPattern; }
-
-    Aws::S3::Model::StorageClass GetStorageClass() const;
 
     inline TString GetPermissionsKey() const {
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::PermissionsKeySuffix(EncryptionSettings.EncryptedBackup);
@@ -146,7 +139,33 @@ public:
         return NBackupRestoreTraits::DataKeySuffix(Shard, format, codec, EncryptionSettings.EncryptedBackup);
     }
 
-}; // TS3Settings
-}
+};
+
+class TS3Settings : public TStorageSettings {
+public:
+
+    explicit TS3Settings(const NKikimrSchemeOp::TS3Settings& settings, ui32 shard, const TEncryptionSettings& encryptionSettings)
+        : TStorageSettings(settings.GetObjectKeyPattern(), shard, encryptionSettings)
+        , Bucket(settings.GetBucket())
+        , StorageClass(settings.GetStorageClass())
+    {
+    }
+
+    const TString Bucket;
+    const Ydb::Export::ExportToS3Settings::StorageClass StorageClass;
+
+    inline const TString& GetBucket() const { return Bucket; }
+    Aws::S3::Model::StorageClass GetStorageClass() const;
+
+    static TS3Settings FromBackupTask(const NKikimrSchemeOp::TBackupTask& task) {
+        return TS3Settings(task.GetS3Settings(), task.GetShardNum(), TEncryptionSettings::FromBackupTask(task));
+    }
+
+    static TS3Settings FromRestoreTask(const NKikimrSchemeOp::TRestoreTask& task) {
+        return TS3Settings(task.GetS3Settings(), task.GetShardNum(), TEncryptionSettings::FromRestoreTask(task));
+    }
+};
+
+} // NKikimr::NDataShard
 
 #endif // KIKIMR_DISABLE_S3_OPS

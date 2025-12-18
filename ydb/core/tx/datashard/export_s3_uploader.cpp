@@ -750,6 +750,15 @@ public:
         return "s3"sv;
     }
 
+    template <typename TSettings>
+    static TSettings GetSettings(const NKikimrSchemeOp::TBackupTask& task);
+
+    template <>
+    static NKikimrSchemeOp::TS3Settings GetSettings(const NKikimrSchemeOp::TBackupTask& task) {
+        return task.GetS3Settings();
+    }
+
+    template <typename TSettings>
     explicit TS3Uploader(
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
@@ -757,8 +766,8 @@ public:
             TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
-        : ExternalStorageConfig(new TS3ExternalStorageConfig(task.GetS3Settings()))
-        , Settings(TS3Settings::FromBackupTask(task))
+        : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(GetSettings<TSettings>(task)))
+        , Settings(TStorageSettings::FromBackupTask<TSettings>(task))
         , DataFormat(EDataFormat::Csv)
         , CompressionCodec(CodecFromTask(task))
         , ShardNum(task.GetShardNum())
@@ -1012,7 +1021,6 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
-
     TFullBackupMetadata::TPtr backup = new TFullBackupMetadata{
         .SnapshotVts = TVirtualTimestamp(
             Task.GetSnapshotStep(),
@@ -1020,8 +1028,9 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     };
     metadata.AddFullBackup(backup);
 
-    return new TS3Uploader(
-        dataShard, txId, Task, std::move(scheme), std::move(changefeeds), std::move(permissions), metadata.Serialize());
+    return new TS3Uploader(dataShard, txId, task,
+        std::move(scheme), std::move(changefeeds),
+        std::move(permissions), std::move(metadata));
 }
 
 } // NDataShard

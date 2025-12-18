@@ -194,6 +194,7 @@ private:
             .HistoryFilePath = TFsPath(HomeDir) / ".ydb_history",
             .AdditionalCommands = {"/help"},
             .Placeholder = placeholder,
+            .EnableSwitchMode = settings.EnableAiInteractive,
         };
     }
 

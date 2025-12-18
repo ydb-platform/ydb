@@ -103,7 +103,6 @@ public:
             UpdateHistoryPath(settings.HistoryFilePath);
             if (History) {
                 if (const auto fileLockGuard = TFileHandlerLockGuard::Lock(History->GetHandle())) {
-                    Rx->set_unique_history(true);
                     if (!Rx->history_load(History->GetPath())) {
                         YDB_CLI_LOG(Error, "Loading history failed: " << strerror(errno));
                     }
@@ -216,6 +215,10 @@ private:
                 ClearScreen();
                 return replxx::Replxx::ACTION_RESULT::BAIL;
             });
+        } else {
+             Rx->bind_key(replxx::Replxx::KEY::control('T'), [&](char32_t) {
+                 return replxx::Replxx::ACTION_RESULT::CONTINUE;
+             });
         }
 
         for (const auto [lhs, rhs] : THashMap<char, char>{
@@ -233,6 +236,7 @@ private:
         }
 
         Rx->enable_bracketed_paste();
+        Rx->set_unique_history(true);
 
         if (TryGetEnv("NO_COLOR").Defined()) {
             Rx->set_no_color(true);

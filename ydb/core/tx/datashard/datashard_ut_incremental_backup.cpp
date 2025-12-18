@@ -370,6 +370,30 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return result;
     }
 
+    TString FindLatestBackupDir(TTestActorRuntime& runtime, const TActorId& sender, const TString& collectionPath) {
+        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        request->Record.MutableDescribePath()->SetPath(collectionPath);
+        request->Record.MutableDescribePath()->MutableOptions()->SetReturnChildren(true);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+        auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(sender);
+
+        UNIT_ASSERT_EQUAL(reply->Get()->GetRecord().GetStatus(), NKikimrScheme::EStatus::StatusSuccess);
+
+        const auto& pathDescription = reply->Get()->GetRecord().GetPathDescription();
+        UNIT_ASSERT_C(pathDescription.ChildrenSize() > 0, "No backups found in collection: " << collectionPath);
+
+        TString latestDir;
+        for (ui32 i = 0; i < pathDescription.ChildrenSize(); ++i) {
+            const auto& child = pathDescription.GetChildren(i);
+            if (child.GetName() > latestDir) {
+                latestDir = child.GetName();
+            }
+        }
+
+        UNIT_ASSERT_C(!latestDir.empty(), "Could not determine the latest backup directory");
+        return latestDir;
+    }
+
     Y_UNIT_TEST(SimpleBackup) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -3809,6 +3833,229 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         ExecSQL(server, edgeActor, R"(DROP TABLE `/Root/Table1`;)", false);
     }
 
+
+    Y_UNIT_TEST(ComplexBackupSequenceWithDataVerification) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "SequenceTable", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (1, 10), (2, 20), (3, 30);
+        )");
+
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `SequenceCollection`
+              ( TABLE `/Root/SequenceTable` )
+            WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
+        )", false);
+
+
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (2, 200), (4, 40);
+        )");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/SequenceTable` WHERE key = 1;)");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (3, 300), (5, 50);
+        )");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        ExecSQL(server, edgeActor, R"(
+            DELETE FROM `/Root/SequenceTable` WHERE key = 2;
+            UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (6, 60);
+        )");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        ExecSQL(server, edgeActor, R"(UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (4, 400);)");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/SequenceTable` WHERE key = 3;)");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (5, 500), (7, 70);
+        )");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        ExecSQL(server, edgeActor, R"(
+            DELETE FROM `/Root/SequenceTable` WHERE key = 4;
+            UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (8, 80);
+        )");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        ExecSQL(server, edgeActor, R"(UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (6, 600);)");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        ExecSQL(server, edgeActor, R"(
+            DELETE FROM `/Root/SequenceTable` WHERE key = 5;
+            UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (9, 90);
+        )");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        auto expectedState = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/SequenceTable` ORDER BY key
+        )");
+
+        ExecSQL(server, edgeActor, R"(DROP TABLE `/Root/SequenceTable`;)", false);
+
+        ExecSQL(server, edgeActor, R"(RESTORE `SequenceCollection`;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(15));
+
+        auto actualState = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/SequenceTable` ORDER BY key
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedState, actualState);
+
+        UNIT_ASSERT_VALUES_EQUAL(actualState,
+            "{ items { uint32_value: 6 } items { uint32_value: 600 } }, "
+            "{ items { uint32_value: 7 } items { uint32_value: 70 } }, "
+            "{ items { uint32_value: 8 } items { uint32_value: 80 } }, "
+            "{ items { uint32_value: 9 } items { uint32_value: 90 } }"
+        );
+    }
+
+
+    Y_UNIT_TEST(ComplexBackupSequenceWithIntermediateVerification) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "SequenceTable", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (1, 10), (2, 20), (3, 30);
+        )");
+
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `SequenceCollection`
+            ( TABLE `/Root/SequenceTable` )
+            WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
+        )", false);
+
+        TString backupDir;
+
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+        backupDir = FindLatestBackupDir(runtime, edgeActor, "/Root/.backups/collections/SequenceCollection");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, TStringBuilder() << "SELECT key, value FROM `/Root/.backups/collections/SequenceCollection/" << backupDir << "/SequenceTable` ORDER BY key"),
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 20 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 30 } }"
+        );
+
+        ExecSQL(server, edgeActor, R"(UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (2, 200), (4, 40);)");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+        backupDir = FindLatestBackupDir(runtime, edgeActor, "/Root/.backups/collections/SequenceCollection");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, TStringBuilder() << "SELECT key, value FROM `/Root/.backups/collections/SequenceCollection/" << backupDir << "/SequenceTable` ORDER BY key"),
+            "{ items { uint32_value: 2 } items { uint32_value: 200 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 40 } }"
+        );
+
+        ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/SequenceTable` WHERE key = 1;)");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+        backupDir = FindLatestBackupDir(runtime, edgeActor, "/Root/.backups/collections/SequenceCollection");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, TStringBuilder() << "SELECT key, value FROM `/Root/.backups/collections/SequenceCollection/" << backupDir << "/SequenceTable` ORDER BY key"),
+            "{ items { uint32_value: 2 } items { uint32_value: 200 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 30 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 40 } }"
+        );
+
+        ExecSQL(server, edgeActor, R"(
+            DELETE FROM `/Root/SequenceTable`;
+            UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (5, 500), (6, 60), (7, 70), (8, 80);
+        )");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+        backupDir = FindLatestBackupDir(runtime, edgeActor, "/Root/.backups/collections/SequenceCollection");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, TStringBuilder() << "SELECT key, value FROM `/Root/.backups/collections/SequenceCollection/" << backupDir << "/SequenceTable` ORDER BY key"),
+            "{ items { uint32_value: 5 } items { uint32_value: 500 } }, "
+            "{ items { uint32_value: 6 } items { uint32_value: 60 } }, "
+            "{ items { uint32_value: 7 } items { uint32_value: 70 } }, "
+            "{ items { uint32_value: 8 } items { uint32_value: 80 } }"
+        );
+
+        ExecSQL(server, edgeActor, R"(UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (6, 600);)");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+        backupDir = FindLatestBackupDir(runtime, edgeActor, "/Root/.backups/collections/SequenceCollection");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, TStringBuilder() << "SELECT key, value FROM `/Root/.backups/collections/SequenceCollection/" << backupDir << "/SequenceTable` ORDER BY key"),
+            "{ items { uint32_value: 6 } items { uint32_value: 600 } }"
+        );
+
+        ExecSQL(server, edgeActor, R"(
+            DELETE FROM `/Root/SequenceTable` WHERE key = 5;
+            UPSERT INTO `/Root/SequenceTable` (key, value) VALUES (9, 90);
+        )");
+        ExecSQL(server, edgeActor, R"(BACKUP `SequenceCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+        backupDir = FindLatestBackupDir(runtime, edgeActor, "/Root/.backups/collections/SequenceCollection");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, TStringBuilder() << "SELECT key, value FROM `/Root/.backups/collections/SequenceCollection/" << backupDir << "/SequenceTable` ORDER BY key"),
+            "{ items { uint32_value: 6 } items { uint32_value: 600 } }, "
+            "{ items { uint32_value: 7 } items { uint32_value: 70 } }, "
+            "{ items { uint32_value: 8 } items { uint32_value: 80 } }, "
+            "{ items { uint32_value: 9 } items { uint32_value: 90 } }"
+        );
+
+        auto expectedState = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/SequenceTable` ORDER BY key
+        )");
+
+        ExecSQL(server, edgeActor, R"(DROP TABLE `/Root/SequenceTable`;)", false);
+
+        ExecSQL(server, edgeActor, R"(RESTORE `SequenceCollection`;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(15));
+
+        auto actualState = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/SequenceTable` ORDER BY key
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedState, actualState);
+    }
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)
 
 } // NKikimr

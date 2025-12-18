@@ -103,6 +103,7 @@ static void compareJsons(ui16 port, const TString& query, const TString& referen
 
     auto count = std::min(input.size(), reference.size());
     for (ui32 i = 0; i < count; ++i) {
+        Cerr << "i: " << input[i] << " r: " << reference[i] << Endl;
         UNIT_ASSERT_VALUES_EQUAL(input[i], reference[i]);
     }
 

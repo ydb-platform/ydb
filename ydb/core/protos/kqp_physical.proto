@@ -388,6 +388,7 @@ message TKqpPhyCnDqSourceStreamLookup {
     uint64 CacheTtlSeconds = 13;
     uint64 MaxDelayedRows = 14;
     bool IsMultiGet = 15;
+    bool IsMultiMatches = 16;
 }
 
 message TKqpPhyConnection {

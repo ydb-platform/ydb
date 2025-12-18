@@ -209,6 +209,7 @@ message TDqInputTransformLookupSettings {
     uint64 CacheTtlSeconds = 10;
     uint64 MaxDelayedRows = 11;
     bool IsMultiget = 12;
+    bool IsMultiMatches = 13;
 }
 
 message TDqTask {

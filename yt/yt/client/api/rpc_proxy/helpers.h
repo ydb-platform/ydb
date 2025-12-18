@@ -278,6 +278,10 @@ void FromProto(
     NApi::TQuery* query,
     const NProto::TQuery& protoQuery);
 
+void FromProto(
+    NApi::TSuppressableAccessTrackingOptions* options,
+    const NApi::NRpcProxy::NProto::TSuppressableAccessTrackingOptions& proto);
+
 NProto::EOperationType ConvertOperationTypeToProto(
     NScheduler::EOperationType operationType);
 
@@ -349,6 +353,22 @@ NProto::EJobTraceState ConvertJobTraceStateToProto(
 
 NJobTrackerClient::EJobTraceState ConvertJobTraceStateFromProto(
     NProto::EJobTraceState proto);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqReadTable* req,
+    const NYPath::TRichYPath& path,
+    const std::optional<NYson::TYsonString>& format,
+    const TTableReaderOptions& options);
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    std::optional<NYson::TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TTableReaderOptions* mutableOptions,
+    const TReqReadTable& req);
 
 ////////////////////////////////////////////////////////////////////////////////
 

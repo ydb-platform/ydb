@@ -309,6 +309,7 @@ struct TGetColumnarStatisticsOptions
     NChunkClient::TFetcherConfigPtr FetcherConfig;
     NTableClient::EColumnarStatisticsFetcherMode FetcherMode = NTableClient::EColumnarStatisticsFetcherMode::FromNodes;
     bool EnableEarlyFinish = true;
+    bool EnableReadSizeEstimation = false;
 };
 
 struct TPartitionTablesOptions
@@ -502,6 +503,18 @@ struct ITableClient
      */
     virtual TFuture<ITablePartitionReaderPtr> CreateTablePartitionReader(
         const TTablePartitionCookiePtr& cookie,
+        const TReadTablePartitionOptions& options = {}) = 0;
+
+    /// Creates table reader with format serialization.
+    virtual TFuture<IFormattedTableReaderPtr> CreateFormattedTableReader(
+        const NYPath::TRichYPath& path,
+        const NYson::TYsonString& format,
+        const TTableReaderOptions& options = {}) = 0;
+
+    /// Creates partition table reader with format serialization.
+    virtual TFuture<IFormattedTableReaderPtr> CreateFormattedTablePartitionReader(
+        const TTablePartitionCookiePtr& cookie,
+        const NYson::TYsonString& format,
         const TReadTablePartitionOptions& options = {}) = 0;
 };
 

@@ -2339,6 +2339,60 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContains, UTF8) {
     }
 }
 
+Y_UNIT_TEST(SelectWithFulltextContainsEmpty) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    AddIndex(db);
+
+    const auto querySettings = NYdb::NQuery::TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(10));
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::FulltextContains(`Text`, "404 not found")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    UpsertSomeTexts(db);
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::FulltextContains(`Text`, "404 not found")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(SelectWithFulltextContainsWithoutTextField) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db);
+
+    TString query = R"sql(
+        SELECT `Key`
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FullText::FulltextContains(`Text`, "dogs")
+        ORDER BY `Key`;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
 Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
     // If UTF8 is true, the column order produced by full text source
     // is the "Text", "_yql_fulltext_relevance"

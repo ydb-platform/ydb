@@ -9,7 +9,7 @@ public:
     explicit TTestWithTabletReboots(bool killOnCommit = false)
         : TTestWithReboots(killOnCommit)
     {}
-    void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) {
+    void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) override {
         TDatashardLogBatchingSwitch logBatchingSwitch(false /* without batching */);
         RunWithTabletReboots(testScenario);
     }
@@ -20,7 +20,7 @@ public:
     explicit TTestWithPipeResets(bool killOnCommit = false)
         : TTestWithReboots(killOnCommit)
     {}
-    void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) {
+    void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario) override {
         TDatashardLogBatchingSwitch logBatchingSwitch(false /* without batching */);
         RunWithPipeResets(testScenario);
     }
@@ -51,25 +51,6 @@ public:
     };                                                      \
     static TTestRegistration##N testRegistration##N;        \
     template <typename T, bool OPT>                         \
-    void N(NUnitTest::TTestContext&)
-
-#define Y_UNIT_TEST_WITH_REBOOTS_QUAD(N, OPT, OPT2)         \
-    template <typename T, bool OPT, bool OPT2>              \
-    void N(NUnitTest::TTestContext&);                       \
-    struct TTestRegistration##N {                           \
-        TTestRegistration##N() {                            \
-            TCurrentTest::AddTest(#N "-" #OPT "-" #OPT2 "[TabletReboots]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithTabletReboots, false, false>), false); \
-            TCurrentTest::AddTest(#N "-" #OPT "-" #OPT2 "[PipeResets]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithPipeResets, false, false>), false); \
-            TCurrentTest::AddTest(#N "-" #OPT "+" #OPT2 "[TabletReboots]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithTabletReboots, false, true>), false); \
-            TCurrentTest::AddTest(#N "-" #OPT "+" #OPT2 "[PipeResets]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithPipeResets, false, true>), false); \
-            TCurrentTest::AddTest(#N "+" #OPT "-" #OPT2 "[TabletReboots]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithTabletReboots, true, false>), false); \
-            TCurrentTest::AddTest(#N "+" #OPT "-" #OPT2 "[PipeResets]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithPipeResets, true, false>), false); \
-            TCurrentTest::AddTest(#N "+" #OPT "+" #OPT2 "[TabletReboots]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithTabletReboots, true, true>), false); \
-            TCurrentTest::AddTest(#N "+" #OPT "+" #OPT2 "[PipeResets]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithPipeResets, true, true>), false); \
-        }                                                   \
-    };                                                      \
-    static TTestRegistration##N testRegistration##N;        \
-    template <typename T, bool OPT, bool OPT2>              \
     void N(NUnitTest::TTestContext&)
 
 }

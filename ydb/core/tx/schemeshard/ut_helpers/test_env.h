@@ -199,12 +199,14 @@ namespace NSchemeShardUT_Private {
         const ui64 CoordinatorTabletId;
         const ui64 TxAllocatorId;
         const bool KillOnCommit;
+        ui32 TotalBuckets = 0;
+        ui32 Bucket = 0;
 
         explicit TTestWithReboots(bool killOnCommit = false, TTestEnv::TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard);
         virtual ~TTestWithReboots() = default;
 
-        void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);
-        void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario, bool allowLogBatching);
+        virtual void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);
+        virtual void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario, bool allowLogBatching);
         void RunWithTabletReboots(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);
         void RunWithPipeResets(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);
         void RunWithDelays(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);

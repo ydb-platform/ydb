@@ -9,12 +9,6 @@
 
 #include <vector>
 
-namespace NKikimr::NAux {
-
-struct TLabeledCounterParsedOpts;
-
-}
-
 namespace NKikimr::NPQ {
 
 struct TDatabaseInfo;

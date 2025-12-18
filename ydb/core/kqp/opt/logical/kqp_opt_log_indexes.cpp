@@ -1248,12 +1248,29 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
 
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
-    return Build<TKqlStreamLookupTable>(ctx, read.Pos())
+    auto streamLookupResult = Build<TKqlStreamLookupTable>(ctx, read.Pos())
         .Table(read.Table())
         .LookupKeys(newInput.Ptr())
         .Columns(read.Columns())
         .Settings(settings.BuildNode(ctx, read.Pos()))
         .Done();
+
+    auto newLambdaBody = Build<TCoOptionalIf>(ctx, flatMap.Lambda().Pos())
+        .Predicate<TCoBool>()
+            .Literal().Build("true")
+            .Build()
+        .Value(optionalIf.Value().Ptr())
+        .Done();
+
+    TNodeOnNodeOwnedMap replaces;
+    auto newLambda = NewLambdaFrom(ctx, flatMap.Lambda().Pos(), replaces, flatMap.Lambda().Args().Ref(), newLambdaBody);
+
+    auto newFlatMap = Build<TCoFlatMap>(ctx, read.Pos())
+        .Input(streamLookupResult)
+        .Lambda(newLambda)
+        .Done();
+
+    return newFlatMap;
 }
 
 // The index and main table have same number of rows, so we can push a copy of TCoTopSort or TCoTake

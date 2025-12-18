@@ -59,11 +59,18 @@ protected:
 
     THolder<NTable::IScan> CreateScan(
         const ::NKikimrSchemeOp::TRestoreIncrementalBackup& incrBackup,
-        ui64 txId)
+        ui64 txId,
+        const TActorContext& ctx)
     {
         TPathId tablePathId = TPathId::FromProto(incrBackup.GetSrcPathId());
         TPathId dstTablePathId = TPathId::FromProto(incrBackup.GetDstPathId());
         const ui64 tableId = incrBackup.GetSrcPathId().GetLocalId();
+
+        auto* appData = AppData(ctx);
+        NStreamScan::TLimits limits;
+        limits.BatchMaxBytes = appData->DataShardConfig.GetIncrementalRestoreScanBatchMaxBytes();
+        limits.BatchMinRows = appData->DataShardConfig.GetIncrementalRestoreScanBatchMinRows();
+        limits.BatchMaxRows = appData->DataShardConfig.GetIncrementalRestoreScanBatchMaxRows();
 
         return CreateIncrementalRestoreScan(
                 DataShard.SelfId(),
@@ -83,7 +90,7 @@ protected:
                 DataShard.GetUserTables().at(tableId),
                 dstTablePathId,
                 txId,
-                {});
+                limits);
     }
 
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
@@ -111,7 +118,7 @@ protected:
 
         Y_ENSURE(restoreSrc.HasDstPathId());
 
-        THolder<NTable::IScan> scan{CreateScan(restoreSrc, op->GetTxId())};
+        THolder<NTable::IScan> scan{CreateScan(restoreSrc, op->GetTxId(), ctx)};
 
         auto* appData = AppData(ctx);
         const auto& taskName = appData->DataShardConfig.GetRestoreTaskName();

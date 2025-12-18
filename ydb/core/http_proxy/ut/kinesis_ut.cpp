@@ -90,7 +90,7 @@ static void compareJsons(ui16 port, const TString& query, const TString& referen
     }
     std::sort(input.begin(), input.end());
 
-    Cerr << "RESULT:\n" <<  NJson::WriteJson(inputJson, /*formatOutput*/ true, /*sortkeys*/ true, /*validateUtf8*/ true) << "\nRESULT\n";
+    Cerr << "RESULT BEGIN:\n" <<  NJson::WriteJson(inputJson, /*formatOutput*/ true, /*sortkeys*/ true, /*validateUtf8*/ true) << "\nRESULT END\n";
 
     TVector<TString> reference;
     for (auto &sensor : referenceJson["sensors"].GetArraySafe()) {
@@ -103,7 +103,7 @@ static void compareJsons(ui16 port, const TString& query, const TString& referen
 
     auto count = std::min(input.size(), reference.size());
     for (ui32 i = 0; i < count; ++i) {
-        Cerr << "i: " << input[i] << " r: " << reference[i] << Endl;
+        Cerr << "i: "  << i << "actual: " <<input[i] << " reference: " << reference[i] << Endl;
         UNIT_ASSERT_VALUES_EQUAL(input[i], reference[i]);
     }
 

@@ -52,7 +52,7 @@ public:
                 i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "move").CreateSubGroup("direction", "to")));
         }
         HistogramRepackPortionsCount = TBase::GetHistogram("RepackPortions/Count", NMonitoring::ExponentialHistogram(15, 2));
-        HistogramRepackPortionsRows = TBase::GetHistogram("RepackPortions/Rows", NMonitoring::ExponentialHistogram(20, 2));
+        HistogramRepackPortionsRows = TBase::GetHistogram("RepackPortions/Rows", NMonitoring::ExponentialHistogram(25, 2));
         HistogramBlobsWrittenCount = TBase::GetHistogram("BlobsWritten/Count", NMonitoring::ExponentialHistogram(15, 2));
         HistogramTaskGenerationCount = TBase::GetHistogram("TaskGeneration/Count", NMonitoring::LinearHistogram(20, 0, 1));
     }
@@ -102,8 +102,8 @@ public:
         Singleton<TGeneralCompactionCounters>()->HistogramCompactionDuration.Collect(durationMicroSeconds);
     }
 
-    static void OnTasksGeneratred(const ui64 timeMS, const ui64 count) {
-        Singleton<TGeneralCompactionCounters>()->HistogramTaskGenerationDuration.Collect(timeMS);
+    static void OnTasksGeneratred(const ui64 durationMicroSeconds, const ui64 count) {
+        Singleton<TGeneralCompactionCounters>()->HistogramTaskGenerationDuration.Collect(durationMicroSeconds);
         Singleton<TGeneralCompactionCounters>()->HistogramTaskGenerationCount->Collect(count);
     }
 };

@@ -284,7 +284,7 @@ TEST_F(XdcRdmaTest, SerializeToRope) {
         }
     }
 
-    auto serializationInfo = ev->CreateSerializationInfo();
+    auto serializationInfo = ev->CreateSerializationInfo(false);
     auto parsedEventHandle = std::make_unique<IEventHandle>(
         TActorId(),
         ev->Type(),

@@ -2356,8 +2356,18 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
             ORDER BY `Key`;
 
             SELECT `Key`, `Text`
+            FROM `/Root/Texts`
+            WHERE String::Contains(`Text`, "hallucination")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::FulltextContains(`Text`, "erasure coding")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts`
+            WHERE String::Contains(`Text`, "erasure coding")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2366,9 +2376,12 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
         CompareYson(R"([
             [[1u];["LLMs often hallucinate"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+
         CompareYson(R"([
             [[2u];["code with erasure"]]
-        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
     }
 }
 

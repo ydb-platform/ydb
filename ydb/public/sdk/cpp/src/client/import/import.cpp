@@ -270,6 +270,10 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
         settingsProto.set_destination_path(settings.DestinationPath_.value());
     }
 
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        settingsProto.add_exclude_regexps(excludeRegexp);
+    }
+
     return Impl_->ImportFromS3(std::move(request), settings);
 }
 
@@ -289,6 +293,10 @@ TAsyncListObjectsInS3ExportResult TImportClient::ListObjectsInS3Export(const TLi
         }
 
         settingsProto.add_items()->set_path(item.Path);
+    }
+
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        settingsProto.add_exclude_regexps(excludeRegexp);
     }
 
     // Paging

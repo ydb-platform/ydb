@@ -4,6 +4,7 @@ PY3TEST()
     ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
     TEST_SRCS(
+        compaction_config.py
         order_by_with_limit.py
         tablets_movement.py
         test_cs_many_updates.py

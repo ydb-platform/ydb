@@ -405,6 +405,15 @@ A stream of records that document security-relevant operations performed within 
 
 See [Audit log](../security/audit-log.md) for details.
 
+#### Audit events {#audit-events}
+
+An **audit event** is a record in the audit log that captures a single security-relevant action. Every event includes attributes that describe different aspects of the event. The common attributes are listed in the [Common attributes](../reference/audit-log-attributes.md#common-attributes) section.
+
+#### Audit event sources {#audit-event-sources}
+
+An **audit event source** is a {{ ydb-short-name }} service or subsystem that can emit audit events. Each source is identified by a unique identifier (UID) and may expose additional attributes specific to the component. Some sources require extra configuration, such as feature flags, before the source starts emitting events.
+
+
 ### Actors implementation {#actor-implementation}
 
 #### Actor system {#actor-system}

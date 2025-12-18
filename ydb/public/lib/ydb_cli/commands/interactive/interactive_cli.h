@@ -20,7 +20,7 @@ class TInteractiveCLI {
     };
 
 public:
-    TInteractiveCLI(const TString& profileName, const TString& ydbPath);
+    explicit TInteractiveCLI(const TString& profileName);
 
     int Run(TClientCommand::TConfig& config);
 
@@ -29,7 +29,6 @@ private:
 
 private:
     const TString Profile;
-    const TString YdbPath;
     TInteractiveLogger Log;
 };
 

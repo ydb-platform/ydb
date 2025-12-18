@@ -8,11 +8,90 @@
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
+#include <util/system/env.h>
+
 namespace NYdb::NConsoleClient {
 
 namespace NAi {
 
 namespace {
+
+// TODO: move it into common paths file
+constexpr int DIR_MODE_PRIVATE = S_IRUSR | S_IWUSR | S_IXUSR; // rwx------
+
+void EnsureDir(const TFsPath& path, int mode) {
+    if (path.Exists()) {
+        return;
+    }
+#if defined(_win32_)
+    Y_UNUSED(mode);
+    path.MkDirs();
+#else
+    if (mode > 0) {
+        path.MkDirs(mode);
+    } else {
+        path.MkDirs();
+    }
+#endif
+}
+
+TMaybe<TFsPath> GetEnvPath(const char* envName) {
+    if (auto value = TryGetEnv(envName)) {
+        if (!value->empty()) {
+            return TFsPath(*value).Fix();
+        }
+    }
+    return Nothing();
+}
+
+#if defined(_win32_)
+TFsPath ResolveWindowsDir(const char* overrideEnv, const char* envName, std::initializer_list<TString> fallbackSuffixes) {
+    if (auto overridePath = NAi::GetEnvPath(overrideEnv)) {
+        return *overridePath;
+    }
+    if (auto envPath = NAi::GetEnvPath(envName)) {
+        TFsPath path = *envPath;
+        for (const auto& suffix : fallbackSuffixes) {
+            path = path.Child(suffix);
+        }
+        return path.Fix();
+    }
+    TFsPath path = GetHomePath();
+    for (const auto& suffix : fallbackSuffixes) {
+        path = path.Child(suffix);
+    }
+    return path.Fix();
+}
+#else
+TFsPath ResolveUnixXdgDir(const char* overrideEnv, const char* xdgEnv, const TString& fallbackSuffix) {
+    if (auto overridePath = NAi::GetEnvPath(overrideEnv)) {
+        return *overridePath;
+    }
+    TString base;
+    if (auto xdgPath = NAi::GetEnvPath(xdgEnv)) {
+        base = xdgPath->GetPath();
+    } else {
+        base = TStringBuilder() << GetHomeDir() << fallbackSuffix;
+    }
+    return TFsPath(base).Child("ydb").Fix();
+}
+#endif
+
+TFsPath GetStateDir() {
+#if defined(_win32_)
+    TFsPath dir = NAi::ResolveWindowsDir("YDB_STATE_DIR", "LOCALAPPDATA", {"ydb", "State"});
+#else
+    TFsPath dir = NAi::ResolveUnixXdgDir("YDB_STATE_DIR", "XDG_STATE_HOME", "/.local/state");
+#endif
+    NAi::EnsureDir(dir, NAi::DIR_MODE_PRIVATE);
+    return dir;
+}
+
+TFsPath GetHistoryFile() {
+    TFsPath stateDir = NAi::GetStateDir();
+    TFsPath target = stateDir.Child("ai_history");
+    return target;
+}
 
 class TAiSessionRunner final : public TSessionRunnerBase {
     using TBase = TSessionRunnerBase;
@@ -132,7 +211,7 @@ private:
             .Driver = settings.Driver,
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::AI) << "> ",
-            .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_ai_history.txt",
+            .HistoryFilePath = NAi::GetHistoryFile(),
             .AdditionalCommands = {"/help", "/model", "/config"},
             .Placeholder = "Type message (Enter to send, Ctrl+J for newline, Ctrl+T for YQL mode, Ctrl+D to exit)",
             .EnableYqlCompletion = false,

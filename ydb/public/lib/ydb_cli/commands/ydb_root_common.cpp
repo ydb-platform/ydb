@@ -733,7 +733,7 @@ int TClientCommandRootCommon::Run(TConfig& config) {
         prompt = activeProfileName;
     }
 
-    TInteractiveCLI interactiveCLI(prompt, TStringBuilder() << HomeDir << '/' << Settings.YdbDir);
+    TInteractiveCLI interactiveCLI(prompt);
     return interactiveCLI.Run(config);
 }
 

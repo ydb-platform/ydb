@@ -8,7 +8,6 @@
 namespace NYdb::NConsoleClient {
 
 struct TSqlSessionSettings {
-    TString YdbPath;
     TDriver Driver;
     TString Database;
     bool EnableAiInteractive = false;

@@ -8,7 +8,6 @@
 namespace NYdb::NConsoleClient {
 
 struct TAiSessionSettings {
-    TString YdbPath;
     TInteractiveConfigurationManager::TPtr ConfigurationManager;
     TString Database;
     TDriver Driver;

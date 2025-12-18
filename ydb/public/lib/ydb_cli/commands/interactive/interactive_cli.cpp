@@ -25,9 +25,8 @@ constexpr char VersionResourceName[] = "version.txt";
 
 } // anonymous namespace
 
-TInteractiveCLI::TInteractiveCLI(const TString& profileName, const TString& ydbPath)
+TInteractiveCLI::TInteractiveCLI(const TString& profileName)
     : Profile(profileName)
-    , YdbPath(ydbPath)
 {}
 
 int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
@@ -99,7 +98,6 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     std::vector<ISessionRunner::TPtr> sessions;
     
     sessions.push_back(CreateSqlSessionRunner({
-        .YdbPath = YdbPath,
         .Driver = driver,
         .Database = config.Database,
         .EnableAiInteractive = config.EnableAiInteractive,
@@ -107,7 +105,6 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
 
     if (config.EnableAiInteractive) {
         sessions.push_back(CreateAiSessionRunner({
-            .YdbPath = YdbPath,
             .ConfigurationManager = configurationManager,
             .Database = config.Database,
             .Driver = driver,

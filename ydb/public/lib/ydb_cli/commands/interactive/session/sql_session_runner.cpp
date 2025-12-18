@@ -191,7 +191,7 @@ private:
             .Driver = settings.Driver,
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
-            .HistoryFilePath = TFsPath(settings.YdbPath) / "bin" / "interactive_cli_sql_history.txt",
+            .HistoryFilePath = TFsPath(HomeDir) / ".ydb_history",
             .AdditionalCommands = {"/help"},
             .Placeholder = placeholder,
         };

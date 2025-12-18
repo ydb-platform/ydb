@@ -25,6 +25,8 @@ class StressRunExecutor:
     def __init__(self, ignore_stderr_content, event_process_mode):
         self._ignore_stderr_content = ignore_stderr_content
         self.event_process_mode = event_process_mode
+        self.run_counter_lock = threading.Lock()
+        self.run_counter = 0
 
     def __substitute_variables_in_template(
         self,
@@ -70,6 +72,7 @@ class StressRunExecutor:
             "{run_id}": run_id,
             "{timestamp}": str(timestamp),
             "{uuid}": short_uuid,
+            "{global_run_id}": str(self.run_counter),
         }
 
         # Perform substitutions
@@ -167,7 +170,9 @@ class StressRunExecutor:
                         f"Execute workload {stress_name} on {node_host}"
                     ):
                         while time_module.time() < planned_end_time:
-
+                            with self.run_counter_lock:
+                                self.run_counter += 1
+                            
                             # Use iter_N format without adding iter_ prefix in _execute_single_workload_run
                             # since it will be added there
                             run_name = f"{stress_name}_{node_host}_iter_{current_iteration}"

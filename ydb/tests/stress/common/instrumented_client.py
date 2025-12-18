@@ -52,7 +52,7 @@ class InstrumentedYdbClient(YdbClient):
         finally:
             del caller_frame
 
-    def query(self, statement: str, is_ddl: bool, retry_settings=None,
+    def query(self, statement: str, is_ddl: bool, parameters=None, retry_settings=None, log_error=True,
               operation_name: Optional[str] = None):
         """
         Executes query with automatic metrics collection.

@@ -107,7 +107,7 @@ class StressUtilDeployer:
             deploy_futures = []
 
             processed_binaries = defaultdict(list)
-            with ThreadPoolExecutor(max_workers=30) as tpe:
+            with ThreadPoolExecutor(max_workers=10) as tpe:
                 for workload_name, workload_info in workload_params.items():
                     if workload_info['local_path'] in processed_binaries:
                         processed_binaries[workload_info['local_path']].append(workload_name)
@@ -648,7 +648,7 @@ class StressUtilDeployer:
             error_count = 0
             errors = []
 
-            with ThreadPoolExecutor(max_workers=min(len(unique_hosts), 20)) as executor:
+            with ThreadPoolExecutor(max_workers=min(len(unique_hosts), 10)) as executor:
                 future_to_host = {
                     executor.submit(execute_service_command, host): host
                     for host in unique_hosts

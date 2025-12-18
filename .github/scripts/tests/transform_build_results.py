@@ -190,10 +190,28 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
     user_properties = load_user_properties(test_dir)
 
     suites = {}
+    filtered_results = []  # Keep track of results that pass the filter
     for result in report.get("results", []):
-        if result.get("type") != "test":
+        # Skip suite-level entries (they are aggregates, not individual tests)
+        if result.get("suite") is True:
             continue
         
+        status = result.get("status")
+        if not status:
+            continue
+        
+        result_type = result.get("type")
+        # Exclude build type completely (regardless of status)
+        if result_type == "build":
+            continue  # Skip build results completely
+        
+        # For import, configure types: include only non-passing results
+        if result_type in ("import", "configure"):
+            if status.upper() in ("OK"):
+                continue  # Skip this result - don't add to suites or filtered_results
+        
+        # This result passed the filter, add it to both suites and filtered_results
+        filtered_results.append(result)
         suite_name = result.get("path", "")
         if suite_name not in suites:
             suites[suite_name] = []
@@ -307,9 +325,13 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                     processed_link_types.add("logsdir")
                     result["links"] = {k: v for k, v in result["links"].items() if k in processed_link_types}
 
-    for result in report.get("results", []):
+    # Process rich-snippet for filtered results only
+    for result in filtered_results:
         if "rich-snippet" in result and result["rich-snippet"]:
             result["rich-snippet"] = strip_rich_markup(result["rich-snippet"])
+
+    # Replace report results with filtered results only
+    report["results"] = filtered_results
 
     with open(report_file, 'w') as f:
         json.dump(report, f, indent=2)

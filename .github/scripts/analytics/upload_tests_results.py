@@ -84,7 +84,9 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
 
     results = []
     for result in report.get("results", []):
-        if result.get("type") != "test":
+        # Filtering (suite, build, import/configure) is done by transform_build_results.py
+        status = result.get("status")
+        if not status:
             continue
         
         suite_folder = result.get("path", "")

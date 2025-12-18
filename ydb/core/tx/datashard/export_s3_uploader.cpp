@@ -49,7 +49,6 @@ struct TChangefeedExportDescriptions {
 template <typename TSettings>
 class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     using TThis = TS3Uploader;
-    using TBase = TActorBootstrapped<TS3Uploader<TSettings>>;
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
     using THttpResolverConfig = NKikimrConfig::TS3ProxyResolverConfig::THttpResolverConfig;
     using TEvExternalStorage = NWrappers::TEvExternalStorage;
@@ -115,10 +114,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
     void ResolveProxy() {
         if (!HttpProxy) {
-            HttpProxy = TBase::Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
+            HttpProxy = this->Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
         }
 
-        TBase::Send(HttpProxy, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
+        this->Send(HttpProxy, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
             NHttp::THttpOutgoingRequest::CreateRequestGet(GetResolveProxyUrl(*GetS3StorageConfig())),
             TDuration::Seconds(10)
         ));
@@ -130,20 +129,20 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         const auto& msg = *ev->Get();
 
         EXPORT_LOG_D("Handle NHttp::TEvHttpProxy::TEvHttpIncomingResponse"
-            << ": self# " << TBase::SelfId()
+            << ": self# " << this->SelfId()
             << ", status# " << (msg.Response ? msg.Response->Status : "null")
             << ", body# " << (msg.Response ? msg.Response->Body : "null"));
 
         if (!msg.Response || !msg.Response->Status.StartsWith("200")) {
             EXPORT_LOG_E("Error at 'GetProxy'"
-                << ": self# " << TBase::SelfId()
+                << ": self# " << this->SelfId()
                 << ", error# " << msg.GetError());
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
         }
 
         if (msg.Response->Body.find('<') != TStringBuf::npos) {
             EXPORT_LOG_E("Error at 'GetProxy'"
-                << ": self# " << TBase::SelfId()
+                << ": self# " << this->SelfId()
                 << ", error# " << "invalid body"
                 << ", body# " << msg.Response->Body);
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
@@ -641,7 +640,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             Retry();
         } else {
             Error = error.GetMessage().c_str();
-            TBase::PassAway();
+            this->PassAway();
         }
     }
 
@@ -664,7 +663,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
                 << error.GetMessage();
-            TBase::PassAway();
+            this->PassAway();
         }
     }
 
@@ -717,7 +716,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
                 return;
             }
 
-            TBase::PassAway();
+            this->PassAway();
         } else {
             if (success) {
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
@@ -732,7 +731,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
     void PassAway() override {
         if (HttpProxy) {
-            TBase::Send(HttpProxy, new TEvents::TEvPoisonPill());
+            this->Send(HttpProxy, new TEvents::TEvPoisonPill());
         }
 
         if (Scanner) {

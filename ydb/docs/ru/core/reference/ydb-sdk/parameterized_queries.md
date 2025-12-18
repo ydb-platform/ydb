@@ -1,10 +1,146 @@
-## Параметризованные запросы и кэширование
+# Кэширование и параметризованные запросы
 
-{{ ydb-short-name }} поддерживает [параметризованные запросы](https://en.wikipedia.org/wiki/Prepared_statement) и кэширование. В таких запросах данные передаются отдельно от самого тела запроса, а в SQL-запросе используются специальные параметры для обозначения местоположения данных.
+{{ ydb-short-name }} поддерживает [серверное кэширование](#caching) и [параметризованные запросы](#parameterized-queries), что позволяет существенно повысить производительность и снизить нагрузку на {{ ydb-short-name }} за счёт повторного использования скомпилированных планов выполнения. Мы рекомендуем использовать серверное кэширование запросов для оптимизации работы с {{ ydb-short-name }}.
+
+## Использование серверного кэша {#caching}
+
+Для использования серверного кэширования достаточно выполнить параметризованный вызов метода `Execute` с установленным флагом `KeepInCache`. При первом обращении к узлу {{ ydb-short-name }} запрос компилируется, а результат компиляции сохраняется в кэше этого узла. 
+
+{% endnote %}
+
+### Сравнение подходов
+
+#|
+|| **С использованием `Prepare`** | **С флагом `KeepInCache`** ||
+|| `session := sessionPool.Get()`
+   `stmt := session.Prepare(query) stmt.Execute(`
+   `  query, args, WithKeepInCache(),`
+   `)`
+| `session := sessionPool.Get()`
+  `res, err = session.Execute(`
+  `  query, args, WithKeepInCache(),`
+  `)` ||
+|#              
+
+С помощью `<Execute+KeepInCache>` обеспечиваются преимущества клиентской балансировки: запросы равномерно распределяются по узлам {{ ydb-short-name }} и компилируются по первому `Execute` запросу на каждом новом узле, поэтому кэш запросов также дублируется на узлах {{ ydb-short-name }}.
+
+### Ограничения использования серверного кэша
+
+- При большом количестве уникальных запросов возможно частое вытеснение (инвалидация) запросов из [LRU-кэша](https://ru.wikipedia.org/wiki/Алгоритмы_кэширования#Least_recently_used_(Вытеснение_давно_неиспользуемых)) на сервере {{ ydb-short-name }}.
+- Интерполяция параметров непосредственно в текст запроса на стороне клиента приводит к созданию уникальных запросов и тем самым снижает эффективность кэширования.
+- При использовании метода `Prepare` запросы также кешируются в LRU-кэше, доступ осуществляется по `query_id`, возвращённому в ответ на `Prepare`.
+- `query_id` перестает быть валидным при завершении сессии.
+- Кэш на каждом сервере {{ ydb-short-name }} работает независимо, поэтому одинаковые запросы кэшируются отдельно на каждом узле.
+
+### Примеры управления
+
+- Во всех {{ ydb-short-name }} SDK кэширование параметризованных запросов включено по умолчанию через `KeepInCache = true`.
+- SDK предоставляют удобные интерфейсы для явного управления серверным кэшем скомпилированных запросов.
+
+Ниже приведены примеры явного управления серверным кэшем запросов в различных SDK:
+
+{% list tabs %}
+
+- Go
+
+  Флаг `KeepInCache` устанавливается автоматически (если передан хотя бы один аргумент запроса), чтобы явно отключить серверное кэширование запроса, можно передать опцию с `Keepincache(false)`
+
+  ```go
+  err = db.Table().Do(ctx, func(ctx context.Context, s table.Session) (err error) {
+    _, res, err = s.Execute(ctx, table.DefaultTxControl(), query,
+        table.NewQueryParameters(params...),
+        // uncomment if need to disable query caching
+        // options.WithKeepInCache(false), 
+    )
+    return err
+  })
+  ```
+
+- Java
+
+  Флаг `KeepInCache` по умолчанию установлен в значение `true` в объекте класса ExecuteDataQuerySettings. При необходимости флаг `KeepInCache` можно отключить:
+
+  ```java
+  CompletableFuture<Result<DataQueryResult>> result = session.executeDataQuery(
+    query,
+    txControl,
+    params,
+    new ExecuteDataQuerySettings()
+        // uncomment if need to disable query caching
+        // .disableQueryCache()
+  );
+  ```
+
+- JDBC-DRIVER
+
+  Cерверное кеширование задается через параметр строки подключения `&keepInQueryCache=true&alwaysPrepareDataQuery=false` параметрами строки подключения JDBC.
+
+- C++
+
+  Чтобы поместить запрос в кэш, используйте метод `KeepInQueryCache` объекта класса `TExecDataQuerySettings`.
+
+  ```cpp
+  NYdb::NTable::TExecDataQuerySettings execSettings;
+  // uncomment if need to enable query caching
+  // execSettings.KeepInQueryCache(true);
+  auto result = session.ExecuteDataQuery(
+  query, TTxControl::BeginTx().CommitTx(), execSettings
+  )
+  ```
+
+- Python
+
+  Флаг `KeepInCache` устанавливается автоматически, если передается хотя бы один аргумент запроса. Это поведение нельзя переопределить. Если кэш запросов на стороне сервера не требуется, рекомендуется использовать `Prepare` явно.
+
+- Dotnet
+
+  Флаг `KeepInQueryCache` по умолчанию установлен в значение `true` в объекте класса `ExecuteDataQuerySettings`. При необходимости флаг `KeepInQueryCache` можно отменить:
+
+  ```c#
+  varresponse = await tableClient.SessionExec(async session =>
+    await session.ExecuteDataQuery(
+        query: query,
+        txControl: txControl,
+        settings: new ExecuteDataQuerySettings { KeepInQueryCache = false }
+    ));
+  ``` 
+
+- Rust
+
+  На данный момент в Rust нет отдельного метода для компиляции запроса, серверный кэш также пока не используется.
+
+- PHP
+
+  Флаг `keepInCache` по умолчанию установлен в значение `true` в объекте класса `query`. При необходимости флаг `keepInCache` можно отменить:
+
+  ```php
+  $table->retryTransaction(function(Session $session){
+    $query = $session->newQuery($yql);
+    $query->parameters($params);
+    $query->keepInCache(false);
+    return $query->execute();
+  }, $idempotent);
+  ```
+
+- Node.JS
+
+  4-й аргумент метода `session.ExecuteQuery()` является необязательным объектом настроек типа `ExecuteQuerySettings`, он имеет флаг `keepInCache`, по умолчанию он имеет значение `false`. Можно установить для него значение `true` следующим образом:
+
+  ```javascript
+  const settings = new ExecuteQuerySettings();
+  settings.withKeepInCache(true);
+  await session.executeQuery(..., settings);
+  ```
+
+{% endlist %}  
+
+## Параметризованные запросы {#parameterized queries}
+
+{{ ydb-short-name }} поддерживает [параметризованные запросы](https://en.wikipedia.org/wiki/Prepared_statement). В таких запросах данные передаются отдельно от самого тела запроса, а в SQL-запросе используются специальные параметры для обозначения местоположения данных.
 
 Запрос с данными в теле запроса:
 
-```yql
+```sql
 SELECT sa.title AS season_title, sr.title AS series_title
 FROM seasons AS sa INNER JOIN series AS sr ON sa.series_id = sr.series_id
 WHERE sa.series_id = 15 AND sa.season_id = 3
@@ -12,7 +148,7 @@ WHERE sa.series_id = 15 AND sa.season_id = 3
 
 Соответствующий ему параметризованный запрос:
 
-```yql
+```sql
 DECLARE $seriesId AS Uint64;
 DECLARE $seasonId AS Uint64;
 
@@ -42,7 +178,7 @@ WHERE sa.series_id = $seriesId AND sa.season_id = $seasonId
 
 Опасно использовать параметризованные запросы, когда `statement` является внешней переменной относительно ретраера: 
 
-``` go
+```go
 func queryRetry(stmt, args) (res, err) {
    for i := 0; i < 10; i++ {
        // stmt может быть инвалидирован на одной из прошлых попыток, 
@@ -64,7 +200,7 @@ err := queryRetry(stmt, args)
 
 Если `Prepare` вызывается внутри ретраера, то риск сохранить `statement` для последующего использования устраняется, но требуется лишний запрос на сервер в каждой итерации ретраера.
 
-``` go 
+```go 
 // Какой-то ретраер (из sdk или свой)
 func queryRetry(sessionPool, query, args) (res, err) {
    for i := 0; i < 10; i++ {
@@ -80,134 +216,3 @@ func queryRetry(sessionPool, query, args) (res, err) {
    return nil, err
 }
 ```
-
-{% note tip %}
-
-В {{ ydb-short-name }} не рекомендуется использовать параметризованные запросы.
-
-В {{ ydb-short-name }} есть более эффективный способ заставить запрос скомпилироваться один раз и выполнить несколько последующих запросов с результатом компиляции.
-
-Выполнить параметризованный вызов `Execute` в сеансе с установленным флагом `KeepInCache`. 
-
-В этом случае первый запрос к узлу {{ ydb-short-name }} приводит к компиляции запроса, а результат компиляции кэшируется на узле {{ ydb-short-name }}.
-
-{% endnote %}
-
-Замена двух вызовов `<Prepare + Execute>` одним `Execute` с флагом `KeepInCache`.
-
-#|
-|| **С использованием `Prepare`** | **С флагом `KeepInCache`** ||
-|| `session := sessionPool.Get()`
-   `stmt := session.Prepare(query) stmt.Execute(`
-   `  query, args, WithKeepInCache(),`
-   `)`
-| `session := sessionPool.Get()`
-  `res, err = session.Execute(`
-  `  query, args, WithKeepInCache(),`
-  `)` ||
-|#              
-
-С помощью `<Execute+KeepInCache>` обеспечиваются преимущества клиентской балансировки: запросы равномерно распределяются по узлам {{ ydb-short-name }} и компилируются по первому `Execute` запросу на каждом новом узле, поэтому кэш запросов также дублируется на узлах {{ ydb-short-name }}.
-
-У этого подхода есть недостатки. Если у вас много уникальных запросов, то есть риск инвалидации конкретных запросов в [LRU-кэше](https://ru.wikipedia.org/wiki/Алгоритмы_кэширования#Least_recently_used_(Вытеснение_давно_неиспользуемых)) на узле {{ ydb-short-name }}. Например, это может происходить, когда клиентская программа автоматически интерполирует параметры запроса в текст запроса.
-
-Строго говоря, кэширование запросов с помощью вызова `Prepare` помещает запрос в тот же самый LRU-кэш на узле с единственной разницей: доступ к этому кэшу осуществляется через `query_id`, который приходит в ответ на `Prepare`. И этот `query_id` становится недействительным вместе с сеансом.
-
-{{ ydb-short-name }} SDK автоматически кэшируют планы параметризованных запросов по умолчанию, для этого обычно используется настройка `KeepInCache = true`.
-
-В SDK обеспечивается комфортное для пользователя и максимально ожидаемое поведение по умолчанию, в том числе касательно серверного кэша. Примеры явного управления серверным кэшем скомпилированных запросов из SDK:
-
-{% list tabs %}
-
-- Go
-
-  Флаг `KeepInCache` устанавливается автоматически (если передан хотя бы один аргумент запроса), чтобы явно отключить серверное кэширование запроса, можно передать опцию с `Keepincache(false)`
-
-  ``` go
-  err = db.Table().Do(ctx, func(ctx context.Context, s table.Session) (err error) {
-    _, res, err = s.Execute(ctx, table.DefaultTxControl(), query,
-        table.NewQueryParameters(params...),
-        // uncomment if need to disable query caching
-        // options.WithKeepInCache(false), 
-    )
-    return err
-  })
-  ```
-
-- Java
-
-  Флаг `KeepInCache` по умолчанию установлен в значение `true` в объекте класса ExecuteDataQuerySettings. При необходимости флаг `KeepInCache` можно отключить:
-
-  ``` java
-  CompletableFuture<Result<DataQueryResult>> result = session.executeDataQuery(
-    query,
-    txControl,
-    params,
-    new ExecuteDataQuerySettings()
-        // uncomment if need to disable query caching
-        // .disableQueryCache()
-  );
-  ```
-
-- JDBC-DRIVER
-
-  Cерверное кеширование задается через параметр строки подключения `&keepInQueryCache=true&alwaysPrepareDataQuery=false` параметрами строки подключения JDBC.
-
-- C++
-
-  Чтобы поместить запрос в кэш, используйте метод `KeepInQueryCache` объекта класса `TExecDataQuerySettings`.
-
-  ``` cpp
-  NYdb::NTable::TExecDataQuerySettings execSettings;
-  // uncomment if need to enable query caching
-  // execSettings.KeepInQueryCache(true);
-  auto result = session.ExecuteDataQuery(
-  query, TTxControl::BeginTx().CommitTx(), execSettings
-  )
-  ```
-
-- Python
-
-  Флаг `KeepInCache` устанавливается автоматически, если передается хотя бы один аргумент запроса. Это поведение нельзя переопределить. Если кэш запросов на стороне сервера не требуется, рекомендуется использовать `Prepare` явно.
-
-- Dotnet
-
-  Флаг `KeepInQueryCache` по умолчанию установлен в значение `true` в объекте класса `ExecuteDataQuerySettings`. При необходимости флаг `KeepInQueryCache` можно отменить:
-
-  ```
-  var response = await tableClient.SessionExec(async session =>
-    await session.ExecuteDataQuery(
-        query: query,
-        txControl: txControl,
-        settings: new ExecuteDataQuerySettings { KeepInQueryCache = false }
-    ));
-  ``` 
-
-- Rust
-
-  На данный момент в Rust нет отдельного метода для компиляции запроса, серверный кэш также пока не используется.
-
-- PHP
-
-  Флаг `keepInCache` по умолчанию установлен в значение `true` в объекте класса `query`. При необходимости флаг `keepInCache` можно отменить:
-
-  ``` php
-  $table->retryTransaction(function(Session $session){
-    $query = $session->newQuery($yql);
-    $query->parameters($params);
-    $query->keepInCache(false);
-    return $query->execute();
-  }, $idempotent);
-  ```
-
-- Node.JS
-
-  4-й аргумент метода `session.ExecuteQuery()` является необязательным объектом настроек типа `ExecuteQuerySettings`, он имеет флаг `keepInCache`, по умолчанию он имеет значение `false`. Можно установить для него значение `true` следующим образом:
-
-  ``` javascript
-  const settings = new ExecuteQuerySettings();
-  settings.withKeepInCache(true);
-  await session.executeQuery(..., settings);
-  ```
-
-{% endlist %}  

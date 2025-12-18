@@ -2190,16 +2190,11 @@ message TColumnShardConfig {
     optional bool EnableDiagnostics = 55 [default = true];
     optional bool EnableParallelCompaction = 56 [default = false];
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
-<<<<<<< HEAD
-=======
-    optional uint32 ProxyOverloadedDelayMs = 59 [default = 5000];
-    optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
-    
+
     oneof DefaultCompaction {
-        string DefaultCompactionPreset = 61 [default = "tiling"];
+        string DefaultCompactionPreset = 61 [default = "lc-buckets"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
->>>>>>> f244fbd0b9c (Default Compaction feature flag (#30597))
 }
 
 message TSchemeShardConfig {

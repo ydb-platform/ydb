@@ -229,7 +229,7 @@ message TTTLSettings {
         optional uint32 BatchMaxBytes = 3 [default = 512000];
         optional uint32 BatchMinKeys = 4 [default = 1];
         optional uint32 BatchMaxKeys = 5 [default = 256];
-        optional uint32 MaxShardsInFlight = 6 [default = 0]; // zero means no limit
+        optional uint32 MaxShardsInFlight = 6 [default = 1000]; // zero means no limit
     }
 
     message TEvictionToExternalStorageSettings {
@@ -1286,7 +1286,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional bool AllowUnderSameOperation = 7 [default = false];
 
     optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
-    
+
     // Map from index name to CDC stream config for incremental backups
     // Key: index name (e.g., "age_index", "name_index")
     // Value: CDC stream configuration to create on that index's impl table

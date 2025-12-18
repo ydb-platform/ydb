@@ -2330,6 +2330,24 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
     }
 }
 
+Y_UNIT_TEST(SelectWithFulltextContainsWithoutTextField) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db);
+
+    TString query = R"sql(
+        SELECT `Key`
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FullText::FulltextContains(`Text`, "dog")
+        ORDER BY `Key`;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
 }
 
 }

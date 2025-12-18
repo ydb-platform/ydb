@@ -430,19 +430,20 @@ class TestWorkloadManagerClickbenchComputeSchedulerP1T4(WorkloadManagerClickbenc
 class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     threads = 1
     tpcc_process: yatest.common.process._Execution = None
-    tpcc_warehouses: int = 2500
-    tpcc_threads: int = 4
+    tpcc_warehouses: int = 1000
+    tpcc_threads: int = 2
 
     @classmethod
     def get_tpcc_path(cls):
-        return YdbCluster.get_tables_path(get_external_param(f'table-path-{cls.suite()}', 'tpcc'))
+        root = get_external_param(f'table-path-{cls.suite()}', 'tpcc')
+        return f'{root}/w{cls.tpcc_warehouses}'
 
     @classmethod
     def run_tpcc(cls, time: float, user: str):
         cmd = YdbCliHelper.get_cli_command()
         if user:
             cmd += ['--user', user, '--no-password']
-        cmd += ['workload', 'tpcc', '-p', cls.get_tpcc_path(), 'run', '--no-tui', '--warmup', '0s', '--format', 'Json']
+        cmd += ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(cls.get_tpcc_path()), 'run', '--no-tui', '--warmup', '0s', '--format', 'Json']
         cmd += ['-t', f'{time}s', '-w', str(cls.tpcc_warehouses), '--threads', str(cls.tpcc_threads)]
         cls.tpcc_process = yatest.common.execute(command=cmd, wait=False)
 
@@ -471,13 +472,13 @@ class TestWorkloadManagerOltp100(WorkloadManagerOltp):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-           ResourcePool(f'test_pool_{cls.tpcc_pool_perc}', [f'testuser{cls.tpcc_pool_perc}'], total_cpu_limit_percent_per_node=cls.tpcc_pool_perc, resource_weight=4),
+            ResourcePool(f'test_pool_{cls.tpcc_pool_perc}', [f'testuser{cls.tpcc_pool_perc}'], total_cpu_limit_percent_per_node=cls.tpcc_pool_perc, resource_weight=4),
         ]
 
     @classmethod
     def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         super().before_workload(result)
-        cls.run_tpcc(cls.timeout, user='')
+        cls.run_tpcc(cls.timeout, user=f'testuser{cls.tpcc_pool_perc}')
 
     @classmethod
     def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
@@ -495,10 +496,6 @@ class TestWorkloadManagerOltp50(TestWorkloadManagerOltp100):
 
 
 class WorkloadManagerOltpTpch20Base(WorkloadManagerTpchBase, WorkloadManagerOltp):
-    @classmethod
-    def get_users(cls) -> list[str]:
-        return ['']
-
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
@@ -524,12 +521,7 @@ class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):
 
     @classmethod
     def get_query_list(cls) -> list[str]:
-        path = get_external_param(f'table-path-{cls.suite()}', 'tpcc')
-        return [f'SELECT MAX(O_ENTRY_D) FROM `{path}/oorder`']
-
-    @classmethod
-    def get_users(cls) -> list[str]:
-        return ['']
+        return [f'SELECT MAX(O_ENTRY_D) FROM `{cls.get_tpcc_path()}/oorder`']
 
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:

@@ -68,8 +68,8 @@ class TestWMOltp50(wm.TestWorkloadManagerOltp50, FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster()
-        cls.run_cli(['workload', 'tpcc', '-p', 'olap_yatests/tpcc', 'init', '--warehouses', str(cls.tpcc_warehouses)])
-        cls.run_cli(['workload', 'tpcc', '-p', 'olap_yatests/tpcc', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.tpcc_warehouses)])
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
         super().setup_class()
 
 
@@ -90,8 +90,8 @@ class TestWMOltpTpchS0_1(wm.WorkloadManagerOltpTpch20Base, FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster()
-        cls.run_cli(['workload', 'tpcc', '-p', 'olap_yatests/tpcc', 'init', '--warehouses', str(cls.tpcc_warehouses)])
-        cls.run_cli(['workload', 'tpcc', '-p', 'olap_yatests/tpcc', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.tpcc_warehouses)])
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'init', '--store=column', '--datetime-types=dt64'])
         cls.run_cli(['workload', 'tpch', '-p', f'olap_yatests/{cls.get_path()}', 'import', 'generator', f'--scale={cls.scale}'])
         super().setup_class()
@@ -110,6 +110,6 @@ class TestWMOltpAdHoc(wm.TestWorkloadManagerOltpAdHoc, FunctionalTestBase):
     @classmethod
     def setup_class(cls) -> None:
         cls.setup_cluster()
-        cls.run_cli(['workload', 'tpcc', '-p', 'olap_yatests/tpcc', 'init', '--warehouses', str(cls.tpcc_warehouses)])
-        cls.run_cli(['workload', 'tpcc', '-p', 'olap_yatests/tpcc', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'init', '--warehouses', str(cls.tpcc_warehouses)])
+        cls.run_cli(['workload', 'tpcc', '-p', f'olap_yatests/{cls.get_tpcc_path()}', 'import', '--warehouses', str(cls.tpcc_warehouses), '--no-tui'])
         super().setup_class()

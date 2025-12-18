@@ -321,7 +321,7 @@
 
 ### Функциональность
 
-* Добавлена возможность [задать приоритеты](./devops/concepts/maintenance-without-downtime.md#приоритет-priority) задачам обслуживания в [системе управления кластером](./concepts/glossary#cms).
+* Добавлена возможность [задать приоритеты](./devops/concepts/maintenance-without-downtime.md#priority) задачам обслуживания в [системе управления кластером](./concepts/glossary#cms).
 * Добавлена [настройка стабильных имён](reference/configuration/index.md#node-broker-config) для узлов кластера в рамках тенанта.
 * Добавлено получение вложенных групп от [LDAP-сервера](./security/authentication.md#ldap), в [LDAP-конфигурации](reference/configuration/index.md#ldap-auth-config) улучшен парсинг хостов и добавлена настройка для отключения встроенной аутентификацию по логину и паролю.
 * Добавлена возможность аутентификации [динамических узлов](./concepts/glossary#dynamic) по SSL-сертификату.

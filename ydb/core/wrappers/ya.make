@@ -6,7 +6,7 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
-        s3_wrapper.cpp
+        storage_wrapper.cpp
         s3_storage.cpp
         s3_storage_config.cpp
         abstract.cpp

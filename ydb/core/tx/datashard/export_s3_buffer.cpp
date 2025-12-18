@@ -436,7 +436,7 @@ void TZStdCompressionProcessor::Reset() {
 
 } // anonymous
 
-IExport::IBuffer* TS3Export::CreateBuffer() const {
+IExport::IBuffer* TExport::CreateBuffer() const {
     using namespace NBackupRestoreTraits;
 
     const auto& scanSettings = Task.GetScanSettings();

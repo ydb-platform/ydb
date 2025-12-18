@@ -40,7 +40,7 @@ namespace NKikimr {
                 const IExport::TTask& task, const IExport::TTableColumns& columns) const override
         {
         #ifndef KIKIMR_DISABLE_EXPORT_OPS
-            return new NDataShard::TS3Export(task, columns);
+            return new NDataShard::TExport(task, columns);
         #else
             Y_UNUSED(task);
             Y_UNUSED(columns);

@@ -31,6 +31,7 @@ enum EEv {
     EV_REQUEST_RESPONSE(ListObjects),
     EV_REQUEST_RESPONSE(CheckObjectExists),
     EV_REQUEST_RESPONSE(UploadPartCopy),
+    EV_REQUEST_RESPONSE(PutData),
 
     EvEnd,
 };

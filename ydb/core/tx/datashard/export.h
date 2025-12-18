@@ -7,9 +7,9 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TS3Export: public IExport {
+class TExport: public IExport {
 public:
-    explicit TS3Export(const TTask& task, const TTableColumns& columns)
+    explicit TExport(const TTask& task, const TTableColumns& columns)
         : Task(task)
         , Columns(columns)
     {

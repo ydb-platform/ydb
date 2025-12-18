@@ -1,6 +1,6 @@
 #include "s3.h"
 
-#include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/wrappers/storage_wrapper.h>
 
 namespace NKikimr::NBlobDepot {
 

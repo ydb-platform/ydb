@@ -157,6 +157,43 @@ public:
     }
 };
 
+struct TEvPutDataRequest: public NActors::TEventLocal<TEvPutDataRequest, EvPutDataRequest> {
+private:
+    TString Key;
+    TString Body;
+public:
+    explicit TEvPutDataRequest(const TString& key, TString&& body)
+        : Key(key)
+        , Body(std::move(body))
+    {
+    }
+
+    TString ToString() const override {
+        return TStringBuilder() << this->ToStringHeader() << " {" << " Key: " << Key << " Body size: " << Body.size() << " }";
+    }
+};
+
+struct TEvPutDataResponse: public NActors::TEventLocal<TEvPutDataResponse, EvPutDataResponse> {
+    private:
+        bool Success;
+        TString Error;
+    public:
+        explicit TEvPutDataResponse(bool success, TString&& error)
+            : Success(success)
+            , Error(std::move(error))
+        {
+        }
+        bool IsSuccess() const {
+            return Success;
+        }
+        const TString& GetError() const {
+            return Error;
+        }
+        TString ToString() const override {
+            return TStringBuilder() << this->ToStringHeader() << " {" << " Success: " << Success << " Error: " << Error << " }";
+        }
+    };
+
 #define DEFINE_REQUEST(name, base, type) \
     struct TEv##name##Request: public base<TEv##name##Request, Ev##name##Request, type> { \
         using TBase::TBase; \

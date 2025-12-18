@@ -20,7 +20,7 @@ def load_owner_area_mapping():
         script_dir = os.path.dirname(os.path.abspath(__file__))
         config_dir = os.path.join(script_dir, '..', '..', 'config')
         mapping_file = os.path.join(config_dir, 'owner_area_mapping.json')
-        with open(mapping_file, 'r') as f:
+        with open(mapping_file, 'r', encoding='utf-8') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Warning: Could not load owner area mapping: {e}")
@@ -141,6 +141,7 @@ class TestResult:
         status_description = result.get("rich-snippet")
         properties = result.get("properties")
         metrics = result.get("metrics")
+        links = result.get("links")
         is_muted = bool(result.get("muted"))
         
         classname = path_str
@@ -156,6 +157,7 @@ class TestResult:
             status_str = "PASSED"
         
         # Map status to TestStatus enum
+        # All ERROR statuses are treated as FAIL
         if is_muted:
             status = TestStatus.MUTE
         elif status_str == "FAILED":
@@ -170,12 +172,12 @@ class TestResult:
         # Extract log URLs from links (updated by transform_build_results.py with URLs)
         # Links format: {"log": ["https://..."], "stdout": ["https://..."], "logsdir": ["https://..."]}
         links = result.get("links", {})
-        
+
         def get_link_url(link_type):
             if link_type in links and isinstance(links[link_type], list) and len(links[link_type]) > 0:
                 return links[link_type][0]  # Take first URL from array
             return None
-        
+
         log_urls = {
             'Log': get_link_url("Log"),
             'log': get_link_url("log"),
@@ -184,14 +186,13 @@ class TestResult:
             'stderr': get_link_url("stderr"),
         }
         log_urls = {k: v for k, v in log_urls.items() if v}
-        
+
         # Get duration from result (same as upload_tests_results.py)
         duration = result.get("duration", 0)
         try:
             elapsed = float(duration)
         except (TypeError, ValueError):
             elapsed = 0.0
-        
         return cls(
             classname=classname,
             name=name,
@@ -295,11 +296,11 @@ class TestSummary:
                 row.append(line.title)
             row.extend([
                 render_pm(f"{line.test_count}" + (" (only retried tests)" if self.is_retry else ""), f"{report_url}", 0),
-                render_pm(line.passed, f"{report_url}#PASS", 0),
-                render_pm(line.errors, f"{report_url}#ERROR", 0),
-                render_pm(line.failed, f"{report_url}#FAIL", 0),
-                render_pm(line.skipped, f"{report_url}#SKIP", 0),
-                render_pm(line.muted, f"{report_url}#MUTE", 0),
+                render_pm(line.passed, f"{report_url}?status=Passed", 0),
+                render_pm(line.errors, f"{report_url}?status=Error", 0),
+                render_pm(line.failed, f"{report_url}?status=Failed", 0),
+                render_pm(line.skipped, f"{report_url}?status=Skipped", 0),
+                render_pm(line.muted, f"{report_url}?status=Mute", 0),
             ])
             result.append(self.render_line(row))
 
@@ -329,73 +330,168 @@ def render_pm(value, url, diff=None):
     return text
 
 
-def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None):
+def group_tests_by_suite(tests):
+    """Group tests by suite (classname)"""
+    suites = {}
+    for test in tests:
+        suite_name = test.classname
+        if suite_name not in suites:
+            suites[suite_name] = []
+        suites[suite_name].append(test)
+    
+    # Sort tests within each suite
+    for suite_name in suites:
+        suites[suite_name].sort(key=attrgetter("full_name"))
+    
+    return suites
+
+
+def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None, public_dir=None):
+    """Group tests by suite with filters"""
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
+    # Include all statuses including SKIP for display
+    visible_rows = [t for t in rows if t.status in [TestStatus.PASS, TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE, TestStatus.SKIP]]
+    
+    # Group tests by suite (only visible tests)
+    suites_dict = group_tests_by_suite(visible_rows)
+    
+    # Also group by status for status-based view
     status_test = {}
-    last_n_runs = 5
-    has_any_log = set()
-
     for t in rows:
         status_test.setdefault(t.status, []).append(t)
-        if any(t.log_urls.values()):
-            has_any_log.add(t.status)
-
-    for status in status_test.keys():
-        status_test[status].sort(key=attrgetter("full_name"))
-
-    status_order = [TestStatus.ERROR, TestStatus.FAIL, TestStatus.SKIP, TestStatus.MUTE, TestStatus.PASS]
-
-    # remove status group without tests
-    status_order = [s for s in status_order if s in status_test]
-
-    # get testowners
-    all_tests = [test for status in status_order for test in status_test.get(status)]
-        
+    
+    # Get testowners for all tests
     dir = os.path.dirname(__file__)
     git_root = f"{dir}/../../.."
     codeowners = f"{git_root}/.github/TESTOWNERS"
-    get_codeowners_for_tests(codeowners, all_tests)
+    get_codeowners_for_tests(codeowners, rows)
     
-    # statuses for history
-    status_for_history = [TestStatus.FAIL, TestStatus.MUTE]
+    # Get history for failed and muted tests
+    status_for_history = [TestStatus.FAIL, TestStatus.MUTE, TestStatus.ERROR]
     status_for_history = [s for s in status_for_history if s in status_test]
+    tests_in_statuses = [test for status in status_for_history for test in status_test.get(status, [])]
+    tests_names_for_history = [test.full_name for test in tests_in_statuses]
     
-    tests_names_for_history = []
-    history= {}
-    tests_in_statuses = [test for status in status_for_history for test in status_test.get(status)]
-    
-    # get tests for history
-    for test in tests_in_statuses:
-        tests_names_for_history.append(test.full_name)
-
+    history = {}
     try:
-        history = get_test_history(tests_names_for_history, last_n_runs, build_preset, branch)
+        # Get history for last 4 days instead of last N runs
+        history = get_test_history(tests_names_for_history, 4, build_preset, branch)
     except Exception:
         print(traceback.format_exc())
-   
-    #geting count of passed tests in history for sorting
+    
+    # Calculate success rate for each test
+    def calculate_success_rate(test_history):
+        """Calculate success rate separately for pr-check and other runs"""
+        pr_check_runs = []
+        other_runs = []
+        
+        for timestamp, run_data in test_history.items():
+            job_name = run_data.get("job_name", "").lower()
+            # Check if it's a pr-check run (common patterns: pr-check, pr_check, pr/check, etc.)
+            is_pr_check = "pr-check" in job_name or "pr_check" in job_name or "pr/check" in job_name
+            
+            if is_pr_check:
+                pr_check_runs.append(run_data)
+            else:
+                other_runs.append(run_data)
+        
+        def calc_rate(runs):
+            if not runs:
+                return None
+            passed = sum(1 for r in runs if r.get("status") == "passed")
+            total = len(runs)
+            return {
+                "rate": round(passed / total * 100, 1) if total > 0 else 0,
+                "passed": passed,
+                "total": total
+            }
+        
+        return {
+            "pr_check": calc_rate(pr_check_runs),
+            "other": calc_rate(other_runs)
+        }
+    
+    # Calculate success rates for all tests with history
+    test_success_rates = {}
+    
+    print(f"Processing history for {len(history)} tests with history data")
+    print(f"Total tests in statuses: {len(tests_in_statuses)}")
+    
     for test in tests_in_statuses:
         if test.full_name in history:
-            test.count_of_passed = len(
-                [
-                    history[test.full_name][x]
-                    for x in history[test.full_name]
-                    if history[test.full_name][x]["status"] == "passed"
-                ]
-            )
-    # sorted by test name
-    for current_status in status_for_history:
-        status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
-
+            test_history = history[test.full_name]
+            if test_history:  # Check that history is not empty
+                rates = calculate_success_rate(test_history)
+                test_success_rates[test.full_name] = rates
+    
+    print(f"Calculated success rates for {len(test_success_rates)} tests")
+    
+    # Group by status -> suite -> tests
+    # Convert to dict with status enum as key for template
+    status_suites = {}
+    for status in [TestStatus.ERROR, TestStatus.FAIL, TestStatus.SKIP, TestStatus.MUTE, TestStatus.PASS]:
+        if status in status_test:
+            status_suites[status] = group_tests_by_suite(status_test[status])
+    
+    # Calculate test counts for filters
+    # Include all statuses including SKIP
+    visible_tests = [
+        t for t in rows 
+        if t.status in [TestStatus.PASS, TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE, TestStatus.SKIP]
+    ]
+    
+    # Count sanitizer per status (for badge display)
+    sanitizer_failed = [t for t in status_test.get(TestStatus.FAIL, []) if t.is_sanitizer_issue]
+    sanitizer_error = [t for t in status_test.get(TestStatus.ERROR, []) if t.is_sanitizer_issue]
+    sanitizer_mute = [t for t in status_test.get(TestStatus.MUTE, []) if t.is_sanitizer_issue]
+    sanitizer_passed = [t for t in status_test.get(TestStatus.PASS, []) if t.is_sanitizer_issue]
+    sanitizer_skipped = [t for t in status_test.get(TestStatus.SKIP, []) if t.is_sanitizer_issue]
+    
+    # Count timeout per status (for badge display)
+    timeout_failed = [t for t in status_test.get(TestStatus.FAIL, []) if t.is_timeout_issue]
+    timeout_error = [t for t in status_test.get(TestStatus.ERROR, []) if t.is_timeout_issue]
+    timeout_mute = [t for t in status_test.get(TestStatus.MUTE, []) if t.is_timeout_issue]
+    timeout_passed = [t for t in status_test.get(TestStatus.PASS, []) if t.is_timeout_issue]
+    timeout_skipped = [t for t in status_test.get(TestStatus.SKIP, []) if t.is_timeout_issue]
+    
+    # Count all tests
+    test_counts = {
+        'all': len(visible_tests),
+        'passed': len(status_test.get(TestStatus.PASS, [])),
+        'failed': len(status_test.get(TestStatus.FAIL, [])),
+        'error': len(status_test.get(TestStatus.ERROR, [])),
+        'mute': len(status_test.get(TestStatus.MUTE, [])),
+        'skipped': len(status_test.get(TestStatus.SKIP, [])),
+        'sanitizer': len([t for t in rows if t.is_sanitizer_issue]),  # Total sanitizer count
+        'sanitizer_failed': len(sanitizer_failed),  # Count of sanitizer within failed
+        'sanitizer_error': len(sanitizer_error),    # Count of sanitizer within error
+        'sanitizer_mute': len(sanitizer_mute),     # Count of sanitizer within mute
+        'sanitizer_passed': len(sanitizer_passed),  # Count of sanitizer within passed
+        'sanitizer_skipped': len(sanitizer_skipped),  # Count of sanitizer within skipped
+        'sanitizer_all': len([t for t in visible_tests if t.is_sanitizer_issue]),  # Count of sanitizer in visible tests
+        'timeout': len([t for t in rows if t.is_timeout_issue]),  # Total timeout count
+        'timeout_failed': len(timeout_failed),  # Count of timeout within failed
+        'timeout_error': len(timeout_error),    # Count of timeout within error
+        'timeout_mute': len(timeout_mute),     # Count of timeout within mute
+        'timeout_passed': len(timeout_passed),  # Count of timeout within passed
+        'timeout_skipped': len(timeout_skipped),  # Count of timeout within skipped
+        'timeout_all': len([t for t in visible_tests if t.is_timeout_issue])  # Count of timeout in visible tests
+    }
+    
+    # Group sanitizer tests by suite
+    sanitizer_tests = [t for t in rows if t.is_sanitizer_issue]
+    sanitizer_suites = group_tests_by_suite(sanitizer_tests) if sanitizer_tests else {}
+    
+    # Build preset params
     buid_preset_params = '--build unknown_build_type'
-    if build_preset == 'release-asan' :
+    if build_preset == 'release-asan':
         buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'release-msan':
         buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'release-tsan':   
+    elif build_preset == 'release-tsan':
         buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'relwithdebinfo':
         buid_preset_params = '--build "relwithdebinfo"'
@@ -403,29 +499,87 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     # Get GitHub server URL and repository from environment
     github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     github_repository = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
-    
-    # For commit SHA, prioritize the actual head commit over merge commit
-    # In PR context, GITHUB_HEAD_SHA contains the actual commit being tested
     github_sha = os.environ.get("GITHUB_HEAD_SHA", "")
     
-    # Construct PR and workflow URLs if the information is available
     pr_url = None
     workflow_url = None
-    
     if pr_number:
         pr_url = f"{github_server_url}/{github_repository}/pull/{pr_number}"
-    
     if workflow_run_id:
         workflow_url = f"{github_server_url}/{github_repository}/actions/runs/{workflow_run_id}"
     
     # Load owner to area mapping
     owner_area_mapping = load_owner_area_mapping()
-        
+    
+    # Prepare history data for JavaScript (without status_description to reduce HTML size)
+    # Store status_description separately - only for failed/error/mute entries to save space
+    history_for_js = {}
+    history_descriptions = {}  # Separate object for status descriptions (only non-empty, failed/error/mute)
+    if history:
+        for test_name, test_history in history.items():
+            history_for_js[test_name] = {}
+            history_descriptions[test_name] = {}
+            for timestamp, hist_data in test_history.items():
+                timestamp_str = str(timestamp)
+                status = hist_data.get("status", "")
+                history_for_js[test_name][timestamp_str] = {
+                    "status": status,
+                    "date": hist_data["datetime"],
+                    "commit": hist_data["commit"],
+                    "job_name": hist_data["job_name"],
+                    "job_id": hist_data["job_id"],
+                    "branch": hist_data["branch"]
+                    # status_description removed to reduce HTML size - stored separately
+                }
+                # Store description separately (only for failed/error/mute and if not empty to save space)
+                desc = hist_data.get("status_description", "")
+                if desc and desc.strip() and status in ("failure", "error", "mute"):
+                    history_descriptions[test_name][timestamp_str] = desc
+    
+    # Prepare test descriptions for current tests (without embedding in HTML to reduce size)
+    # Store only for tests with errors (FAIL, ERROR, MUTE, SKIP) and if not empty
+    test_descriptions = {}
+    for test in rows:
+        if test.status in (TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE, TestStatus.SKIP):
+            desc = test.status_description
+            if desc and desc.strip():
+                test_descriptions[test.full_name] = desc
+    
+    # Prepare flat sorted list of all visible tests (for default "no grouping" view)
+    all_tests_sorted = sorted(visible_rows, key=attrgetter("full_name"))
+    
+    # Save data to separate JSON file to reduce HTML size
+    # fn is the full path to HTML file (e.g., /path/to/public_dir/try_1/ya-test.html)
+    data_file = fn.replace('.html', '_data.json')
+    data_to_save = {
+        'history_for_js': history_for_js,
+        'history_descriptions': history_descriptions,
+        'test_descriptions': test_descriptions,
+        'test_success_rates': test_success_rates
+    }
+    with open(data_file, "w", encoding="utf-8") as f:
+        json.dump(data_to_save, f, separators=(',', ':'))  # Minified JSON
+    
+    # Calculate data file URL (relative to HTML file location)
+    # JSON file is in the same directory as HTML file, so we use just the filename
+    # This way fetch() in browser will load JSON from the same directory as HTML
+    # Example: if HTML is at /path/to/try_1/ya-test.html,
+    #          JSON is at /path/to/try_1/ya-test_data.json,
+    #          and URL should be "ya-test_data.json" (relative to HTML location)
+    data_file_url = os.path.basename(data_file)
+    
     content = env.get_template("summary.html").render(
-        status_order=status_order,
-        tests=status_test,
-        has_any_log=has_any_log,
-        history=history,
+        suites=suites_dict,
+        all_tests_sorted=all_tests_sorted,  # Flat sorted list for default view
+        status_suites=status_suites,
+        sanitizer_suites=sanitizer_suites,
+        test_counts=test_counts,
+        history=history,  # Keep for template checks (test.full_name in history)
+        history_for_js={},  # Empty - will be loaded from JSON
+        history_descriptions={},  # Empty - will be loaded from JSON
+        test_descriptions={},  # Empty - will be loaded from JSON
+        test_success_rates={},  # Empty - will be loaded from JSON
+        data_file_url=data_file_url,  # URL to JSON data file
         build_preset=build_preset,
         buid_preset_params=buid_preset_params,
         branch=branch,
@@ -434,10 +588,11 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         workflow_run_id=workflow_run_id,
         workflow_url=workflow_url,
         owner_area_mapping=owner_area_mapping,
-        commit_sha=github_sha
+        commit_sha=github_sha,
+        all_tests=rows
     )
 
-    with open(fn, "w") as fp:
+    with open(fn, "w", encoding="utf-8") as fp:
         fp.write(content)
 
 
@@ -458,7 +613,7 @@ def write_summary(summary: TestSummary):
 
 
 def get_codeowners_for_tests(codeowners_file_path, tests_data):
-    with open(codeowners_file_path, 'r') as file:
+    with open(codeowners_file_path, 'r', encoding='utf-8') as file:
         data = file.read()
         owners_odj = CodeOwners(data)
 
@@ -485,14 +640,14 @@ def iter_build_results_files(path):
     
     for fn in files:
         try:
-            with open(fn, 'r') as f:
+            with open(fn, 'r', encoding='utf-8') as f:
                 report = json.load(f)
             
             for result in report.get("results") or []:
-                if result.get("type") == "test":
-                    # Skip suite-level entries (they are aggregates, not individual tests)
-                    if result.get("suite") is True:
-                        continue
+                # Filter: only tests without suite=true and chunk=true
+                if (result.get("type") == "test" and 
+                    not result.get("suite", False) and 
+                    not result.get("chunk", False)):
                     yield fn, result
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)
@@ -513,7 +668,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
             html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"
 
-        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id)
+        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id, public_dir)
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 
@@ -544,7 +699,7 @@ def get_comment_text(summary: TestSummary, summary_links: str, is_last_retry: bo
         body.append("<details>")
         body.append("")
 
-    with open(summary_links) as f:
+    with open(summary_links, encoding='utf-8') as f:
         links = f.readlines()
     
     links.sort()
@@ -609,14 +764,14 @@ def main():
 
     color, text = get_comment_text(summary, args.summary_links, is_last_retry=bool(args.is_last_retry), is_test_result_ignored=args.is_test_result_ignored)
 
-    with open(args.comment_color_file, "w") as f:
+    with open(args.comment_color_file, "w", encoding="utf-8") as f:
         f.write(color)
 
-    with open(args.comment_text_file, "w") as f:
+    with open(args.comment_text_file, "w", encoding="utf-8") as f:
         f.write('\n'.join(text))
         f.write('\n')
 
-    with open(args.status_report_file, "w") as f:
+    with open(args.status_report_file, "w", encoding="utf-8") as f:
         f.write(overall_status)
 
 

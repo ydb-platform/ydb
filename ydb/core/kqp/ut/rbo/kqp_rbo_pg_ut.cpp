@@ -895,13 +895,8 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         }
     }
 
-    // FIXME: Wrong results from column store for some reason
-    //Y_UNIT_TEST_TWIN(Aggregation, ColumnStore) {
-    //    TestAggregation(ColumnStore);
-    //}
-
-    Y_UNIT_TEST(Aggregation) {
-        TestAggregation(false);
+    Y_UNIT_TEST_TWIN(Aggregation, ColumnStore) {
+        TestAggregation(ColumnStore);
     }
 
     Y_UNIT_TEST(UnionAll) {

@@ -13,6 +13,9 @@ namespace NYdb::NConsoleClient {
         TString ErrorMessagesDestiny;
         ui64 VisibilityTimeoutMs;
         ui64 HandleMessageDelayMs;
+
+    private:
+        int RunScenario();
     };
 
 } // namespace NYdb::NConsoleClient

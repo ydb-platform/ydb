@@ -11,6 +11,12 @@ namespace NYdb::NConsoleClient {
 
     int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
         InitAwsSdk();
+        auto result = RunScenario();
+        DestroyAwsSdk();
+        return result;
+    }
+
+    int TSqsWorkloadReadScenario::RunScenario() {
         InitStatsCollector(0, Concurrency);
         InitMeasuringHttpClient(StatsCollector);
         InitSqsClient();
@@ -59,7 +65,6 @@ namespace NYdb::NConsoleClient {
         f.wait();
 
         DestroySqsClient();
-        DestroyAwsSdk();
 
         if (AnyErrors()) {
             return EXIT_FAILURE;

@@ -20,6 +20,8 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
             "Int8": "Knn::ToBinaryStringInt8",
             "Float": "Knn::ToBinaryStringFloat",
         }
+        if min(self.versions) >= (25, 4):
+            self.vector_types["Bit"] = "Knn::ToBinaryStringBit"
         self.targets = {
             "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
             "distance": {

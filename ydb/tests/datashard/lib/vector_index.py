@@ -38,6 +38,7 @@ to_binary_string_converters = {
         name="Knn::ToBinaryStringUint8", data_type="Uint8", vector_type="Uint8Vector"
     ),
     "int8": BinaryStringConverter(name="Knn::ToBinaryStringInt8", data_type="Int8", vector_type="Int8Vector"),
+    "bit": BinaryStringConverter(name="Knn::ToBinaryStringBit", data_type="Bit", vector_type="BitVector"),
 }
 
 

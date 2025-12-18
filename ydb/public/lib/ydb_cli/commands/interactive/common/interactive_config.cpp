@@ -293,7 +293,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint(const std::o
     auto defaultEndpointInfo = TStringBuilder() << "Use default endpoint for " << *apiType << ": ";
     const TString openAiEndpoint = "https://api.openai.com";
     const TString anthropicEndpoint = "https://api.anthropic.com";
-    switch (*apiType) { 
+    switch (*apiType) {
         case EAiApiType::OpenAI: {
             options.push_back({defaultEndpointInfo << openAiEndpoint, [&]() { endpoint = openAiEndpoint; }});
             break;
@@ -482,54 +482,111 @@ void TInteractiveConfigurationManager::EnsurePredefinedProfiles(const std::vecto
         tokenInfo = tokenGetter();
     }
 
+    if (!tokenInfo || tokenInfo->Token.empty()) {
+        return;
+    }
+
     if (!Config["ai_profiles"]) {
         Config["ai_profiles"] = YAML::Node(YAML::NodeType::Map);
     }
     auto aiProfiles = Config["ai_profiles"];
 
     bool updated = false;
-    if (tokenInfo && !tokenInfo->Token.empty()) {
-        for (const auto& profile : profiles) {
-            TString profileName = profile.Name;
-            bool exists = aiProfiles[profileName].IsDefined();
-            
-            if (!exists) {
-                // Create new profile
-                YAML::Node newProfile;
-                if (profile.ApiType == "OpenAI") {
-                    newProfile["api_type"] = static_cast<ui64>(EAiApiType::OpenAI);
-                } else if (profile.ApiType == "Anthropic") {
-                    newProfile["api_type"] = static_cast<ui64>(EAiApiType::Anthropic);
-                } else {
-                     YDB_CLI_LOG(Warning, "Unknown API type for predefined profile: " << profile.ApiType);
-                     continue;
-                }
-                newProfile["api_endpoint"] = profile.ApiEndpoint;
-                newProfile["model_name"] = profile.ModelName;
-                
-                newProfile["api_token"] = tokenInfo->Token;
 
-                aiProfiles[profileName] = newProfile;
-                YDB_CLI_LOG(Info, "Created predefined AI profile: " << profileName);
-                updated = true;
-            } else if (tokenInfo->WasUpdated) {
-                // Update token for existing predefined profile
-                aiProfiles[profileName]["api_token"] = tokenInfo->Token;
-                YDB_CLI_LOG(Info, "Updated token for predefined AI profile: " << profileName);
-                updated = true;
+    // 1. Create or Update existing predefined profiles
+    THashSet<TString> predefinedProfileNames;
+    for (const auto& profile : profiles) {
+        const TString& profileName = profile.Name;
+        predefinedProfileNames.insert(profileName);
+
+        if (!aiProfiles[profileName].IsDefined()) {
+            // Create new predefined profile
+            YAML::Node newProfile;
+            if (profile.ApiType == "OpenAI") {
+                newProfile["api_type"] = static_cast<ui64>(EAiApiType::OpenAI);
+            } else if (profile.ApiType == "Anthropic") {
+                newProfile["api_type"] = static_cast<ui64>(EAiApiType::Anthropic);
+            } else {
+                 YDB_CLI_LOG(Warning, "Unknown API type for predefined profile: " << profile.ApiType);
+                 continue;
+            }
+            newProfile["api_endpoint"] = profile.ApiEndpoint;
+            newProfile["model_name"] = profile.ModelName;
+            newProfile["api_token"] = tokenInfo->Token;
+            newProfile["type"] = "predefined";
+
+            aiProfiles[profileName] = newProfile;
+            YDB_CLI_LOG(Info, "Created predefined AI profile: " << profileName);
+            updated = true;
+        } else {
+            // Update existing if predefined
+            auto node = aiProfiles[profileName];
+            TString type = node["type"].IsDefined() ? node["type"].as<TString>() : "custom";
+
+            if (type == "predefined") {
+                bool changed = false;
+
+                // Check ApiType
+                ui64 targetApiType = static_cast<ui64>(EAiApiType::Invalid);
+                if (profile.ApiType == "OpenAI") targetApiType = static_cast<ui64>(EAiApiType::OpenAI);
+                else if (profile.ApiType == "Anthropic") targetApiType = static_cast<ui64>(EAiApiType::Anthropic);
+
+                if (!node["api_type"].IsDefined() || node["api_type"].as<ui64>() != targetApiType) {
+                    node["api_type"] = targetApiType;
+                    changed = true;
+                }
+
+                // Check Endpoint
+                if (!node["api_endpoint"].IsDefined() || node["api_endpoint"].as<TString>() != profile.ApiEndpoint) {
+                    node["api_endpoint"] = profile.ApiEndpoint;
+                    changed = true;
+                }
+
+                // Check ModelName
+                if (!node["model_name"].IsDefined() || node["model_name"].as<TString>() != profile.ModelName) {
+                    node["model_name"] = profile.ModelName;
+                    changed = true;
+                }
+
+                // Check Token
+                if (tokenInfo->WasUpdated || !node["api_token"].IsDefined() || node["api_token"].as<TString>() != tokenInfo->Token) {
+                    node["api_token"] = tokenInfo->Token;
+                    changed = true;
+                }
+
+                if (changed) {
+                    YDB_CLI_LOG(Info, "Updated predefined AI profile: " << profileName);
+                    updated = true;
+                }
             }
         }
     }
 
+    // 2. Remove obsolete predefined profiles
+    std::vector<TString> keysToRemove;
+    for (const auto& it : aiProfiles) {
+        TString name = it.first.as<TString>();
+        YAML::Node node = it.second;
+        TString type = node["type"].IsDefined() ? node["type"].as<TString>() : "custom";
+
+        if (type == "predefined") {
+            if (!predefinedProfileNames.contains(name)) {
+                keysToRemove.push_back(name);
+            }
+        }
+    }
+
+    for (const auto& name : keysToRemove) {
+        aiProfiles.remove(name);
+        YDB_CLI_LOG(Info, "Removed obsolete predefined AI profile: " << name);
+        updated = true;
+    }
+
+    // 3. Recommended profile logic
     if (!profiles.empty()) {
         const auto& recommendedProfile = profiles.front().Name;
-        if (const auto& currentRecommendedNode = Config["recommended_ai_profile"]) {
-            TString currentRecommended = currentRecommendedNode.as<TString>("");
-            if (currentRecommended != recommendedProfile) {
-                Config["recommended_ai_profile"] = recommendedProfile;
-                updated = true;
-            }
-        } else {
+        const auto& currentRecommendedNode = Config["recommended_ai_profile"];
+        if (!currentRecommendedNode || currentRecommendedNode.as<TString>("") != recommendedProfile) {
             Config["recommended_ai_profile"] = recommendedProfile;
             updated = true;
         }
@@ -705,6 +762,7 @@ TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationMana
     }
 
     aiProfile->SetName(profileName);
+    aiProfile->Config["type"] = "custom";
     Config["ai_profiles"][profileName] = aiProfile->Config;
     ConfigChanged = true;
 

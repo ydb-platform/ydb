@@ -222,7 +222,7 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCo
     granule->OnStartCompaction();
     TMonotonic startTime = TMonotonic::Now();
     auto changes = granule->GetOptimizationTasks(granule, dataLocksManager);
-    NChanges::TGeneralCompactionCounters::OnTasksGeneratred((TMonotonic::Now() - startTime).MilliSeconds(), changes.size());
+    NChanges::TGeneralCompactionCounters::OnTasksGeneratred((TMonotonic::Now() - startTime).MicroSeconds(), changes.size());
     if (changes.empty()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")(
             "weight", granule->GetCompactionPriority().DebugString());

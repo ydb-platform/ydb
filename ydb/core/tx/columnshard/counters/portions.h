@@ -9,6 +9,7 @@
 
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/builder.h>
+#include <ydb/core/tx/columnshard/counters/histogram_borders.h>
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
@@ -210,7 +211,7 @@ public:
         , Count(TBase::GetValueAutoAggregations("ByGranule/Portions/Count"))
         , BlobBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Blob/Bytes"))
         , RawBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Raw/Bytes"))
-        , BlobBytesHistogram("CompactionOptimizer", "ByLevel/BlobBytes", categoryName, NColumnShard::THistorgamBorders::PortionSizeBorders){
+        , BlobBytesHistogram(base.GetModuleId(), "ByLevel/BlobBytes", categoryName, NColumnShard::THistorgamBorders::BytesBorders){
     }
 };
 

@@ -3,6 +3,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/counters/histogram_borders.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/serialized_enum.h>
@@ -31,9 +32,9 @@ TEngineLogsCounters::TEngineLogsCounters()
         if (PortionSizeDistribution.size() <= (ui32)i.first) {
             PortionSizeDistribution.resize((ui32)i.first + 1);
         }
-        BlobSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>("EngineLogs", "BlobSizeDistribution", i.second, THistorgamBorders::BlobSizeBorders);
-        PortionSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>("EngineLogs", "PortionSizeDistribution", i.second, THistorgamBorders::PortionSizeBorders);
-        PortionRecordsDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>("EngineLogs", "PortionRecordsDistribution", i.second, THistorgamBorders::PortionRecordBorders);
+        BlobSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>("EngineLogs", "BlobSizeDistribution", i.second, NColumnShard::THistorgamBorders::BlobSizeBorders);
+        PortionSizeDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>("EngineLogs", "PortionSizeDistribution", i.second, NColumnShard::THistorgamBorders::BytesBorders);
+        PortionRecordsDistribution[(ui32)i.first] = std::make_shared<TIncrementalHistogram>("EngineLogs", "PortionRecordsDistribution", i.second, NColumnShard::THistorgamBorders::PortionRecordBorders);
     }
     for (auto&& i : BlobSizeDistribution) {
         Y_ABORT_UNLESS(i);

@@ -113,30 +113,4 @@ public:
     TDeriviativeHistogram(const TString& moduleId, const TString& signalName, const TString& category, const std::map<i64, TString>& values);
 
 };
-
-struct THistorgamBorders {
-    static inline const std::map<i64, TString> BlobSizeBorders = {{0, "0"}, {512 * 1024, "512kb"}, {1024 * 1024, "1Mb"},
-        {2 * 1024 * 1024, "2Mb"}, {4 * 1024 * 1024, "4Mb"},
-        {5 * 1024 * 1024, "5Mb"}, {6 * 1024 * 1024, "6Mb"},
-        {7 * 1024 * 1024, "7Mb"}, {8 * 1024 * 1024, "8Mb"}};
-
-    static inline const std::map<i64, TString> PortionSizeBorders = [] {
-        std::map<i64, TString> map;
-        map[0] = "0";
-        ui64 base = 1024;
-        for (auto i = 0; i < 20; i++, base *= 2) {
-            if (base >= 1024 * 1024) {
-                map[base] = ToString(base / 1024 * 1024) + "Mb";
-            }
-            else {
-                map[base] = ToString(base /  1024) + "Kb";
-            }
-        }
-        return map;
-    }();
-
-    static inline const std::set<i64> PortionRecordBorders = {0, 2500, 5000, 7500, 9000, 10000, 20000, 40000, 80000, 160000, 320000, 640000, 1024000};
-};
-
-
 }

@@ -148,8 +148,8 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
     if (self) {
         self->Counters.GetTabletCounters()->OnCompactionWriteIndexCompleted(
             context.FinishedSuccessfully, context.BlobsWritten, context.BytesWritten);
-        NChanges::TGeneralCompactionCounters::OnCompactionFinish(context.Duration.MilliSeconds(), context.BlobsWritten, context.BytesWritten);
     }
+    NChanges::TGeneralCompactionCounters::OnCompactionWriteIndexCompleted(context.BlobsWritten, context.BytesWritten);
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
@@ -160,7 +160,6 @@ void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& sel
     self.Counters.GetCSCounters().OnSplitCompactionInfo(
         g.GetAdditiveSummary().GetCompacted().GetTotalPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
 }
-
 NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {
     return isSuccess ? NColumnShard::COUNTER_COMPACTION_SUCCESS : NColumnShard::COUNTER_COMPACTION_FAIL;
 }

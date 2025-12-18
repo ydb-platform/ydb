@@ -443,7 +443,7 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
         cmd = YdbCliHelper.get_cli_command()
         if user:
             cmd += ['--user', user, '--no-password']
-        cmd += ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(cls.get_tpcc_path()), 'run', '--no-tui', '--warmup', '0s', '--format', 'Json']
+        cmd += ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(cls.get_tpcc_path()), 'run', '--no-tui', '--warmup', '1s', '--format', 'Json']
         cmd += ['-t', f'{time}s', '-w', str(cls.tpcc_warehouses), '--threads', str(cls.tpcc_threads)]
         cls.tpcc_process = yatest.common.execute(command=cmd, wait=False)
 

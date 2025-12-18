@@ -36,7 +36,7 @@ There are two directories for placing custom scripts:
 
 Scripts are executed in alphabetical order within each directory. Use numeric prefixes to control the execution sequence:
 
-```
+```text
 /init.d/
 ├── 01-create-tables.sh
 ├── 02-create-indexes.sql
@@ -70,6 +70,7 @@ echo "Setting up database..."
 ```
 
 Mount the script when starting the container:
+
 ```bash
 docker run -d \
     --name ydb-local \
@@ -99,6 +100,7 @@ CREATE TABLE orders (
 ```
 
 Mount the init directory:
+
 ```bash
 docker run -d \
     --name ydb-local \

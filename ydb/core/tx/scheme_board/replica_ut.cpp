@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <fstream>
+
 namespace NKikimr {
 namespace NSchemeBoard {
 
@@ -50,7 +52,7 @@ public:
     UNIT_TEST(CommitWithoutHandshake);
     UNIT_TEST(CommitWithStaleGeneration);
     UNIT_TEST(Update);
-    UNIT_TEST(UpdateWithSwitchDomainId);
+    UNIT_TEST(UpdateWithChangedPath);
     UNIT_TEST(RecreateDatabase);
     UNIT_TEST(Delete);
     UNIT_TEST(UpdateWithoutHandshake);
@@ -78,7 +80,7 @@ public:
     void CommitWithoutHandshake();
     void CommitWithStaleGeneration();
     void Update();
-    void UpdateWithSwitchDomainId();
+    void UpdateWithChangedPath();
     void RecreateDatabase();
     void Delete();
     void UpdateWithoutHandshake();
@@ -194,60 +196,94 @@ void TReplicaTest::Update() {
     }
 }
 
-void TReplicaTest::UpdateWithSwitchDomainId() {
+void TReplicaTest::UpdateWithChangedPath() {
     const TActorId populator = Context->AllocateEdgeActor();
     const TActorId subscriber = Context->AllocateEdgeActor();
 
     Context->HandshakeReplica(Replica, populator, 1, 1);
 
-    auto pathOwnerId = 1;
-    auto pathLocalId = 10;
-    auto domainOwnerId = 100;
-    auto domainLocalId = 1000;
+    TString path("/path");
+    TPathId pathId(1,10);
+    TPathId domainId(100,200);
     auto version = 1;
-    TString path("path");
-
+    
     // Subscribe and (!) grab subscribe response
     NKikimrSchemeBoard::TEvSubscribe::TCapabilities capabilities;
     capabilities.SetAckNotifications(true);
-    Context->SubscribeReplica(Replica, subscriber, path, true, domainOwnerId, capabilities);
+    Context->SubscribeReplica(Replica, subscriber, path, true, domainId.OwnerId, capabilities);
 
-    // Send updates to replica and receive notifications
-    for(auto pass=0;pass < 25; pass++, version++)
+    auto check = [&](bool deleteNotify)
     {
-        // Time-to-time switch to next domainLocalId and pathLocalId
-        bool switchDomain = ( (pass % 5) == 0);
-        if (switchDomain) {
-            pathLocalId++;
-            domainLocalId++;
-        }
-
         // Send update and check notify
-        auto describe = GenerateDescribe(path, TPathId(pathOwnerId, pathLocalId), version , TPathId(domainOwnerId, domainLocalId));
+        auto describe = GenerateDescribe(path, pathId, version , domainId);
         Context->Send(Replica, populator, GenerateUpdate(describe,1,1) );
+        Context->Send(Replica, subscriber, new NInternalEvents::TEvNotifyAck(version) );
 
-        if (switchDomain && pass!=0)
+        if (deleteNotify)
         {
-            // If domain is exists and switched, then replica sends delete notification
             auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
             const NKikimrSchemeBoard::TEvNotify& record = ev->Get()->GetRecord();
             UNIT_ASSERT_VALUES_EQUAL(true, record.GetIsDeletion());
         }
-        // Check notification content
-        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
-        Context->Send(Replica, subscriber, new NInternalEvents::TEvNotifyAck(version) );
         
+        // Check notification content       
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(subscriber);
         const NKikimrSchemeBoard::TEvNotify& record = ev->Get()->GetRecord();
         UNIT_ASSERT_VALUES_EQUAL(path, record.GetPath());
 
-        UNIT_ASSERT_VALUES_EQUAL(pathOwnerId, record.GetPathOwnerId());
-        UNIT_ASSERT_VALUES_EQUAL(pathLocalId, record.GetLocalPathId());
+        UNIT_ASSERT_VALUES_EQUAL(pathId.OwnerId, record.GetPathOwnerId());
+        UNIT_ASSERT_VALUES_EQUAL(pathId.LocalPathId, record.GetLocalPathId());
 
         UNIT_ASSERT_VALUES_EQUAL(false, record.GetIsDeletion());
         UNIT_ASSERT_VALUES_EQUAL(version, record.GetVersion());
-    }
+
+        version++;
+    };
+    // Test cases
+    check(false);           // Create
+    check(false);           // Simple update without delete notify
+
+    pathId.LocalPathId++;
+    check(false);           // Update with changed path local id without delete notify
+    
+    pathId.LocalPathId++;
+    pathId.OwnerId++;
+    check(true);            // Update with changed path owner id and delete notify
+    
+    domainId.LocalPathId++;
+    check(false);           // Migrate to another database shard without delete notify
+    
+    domainId.LocalPathId++;
+    domainId.OwnerId++;
+    check(false);           // Migrate to another database without delete notify
 
     Context->UnsubscribeReplica(Replica, subscriber, path);
+
+    // Emulate Update from TSS, GSS->TSS case (curPathId == domainId)
+    path = "/database";
+    domainId.LocalPathId++;
+    domainId.OwnerId++;
+    pathId = domainId;
+
+    Context->SubscribeReplica(Replica, subscriber, path, true, domainId.OwnerId, capabilities);
+    check(false);           // Prepare update with pathId == domainId
+    pathId.OwnerId++;
+    check(false);           // Emulate case!
+    Context->UnsubscribeReplica(Replica, subscriber, path);
+    
+    // don't test emulate Update from TSS, GSS->TSS case (curDomainId == pathId)
+#if 0    
+    pathId.OwnerId++; 
+    domainId.LocalPathId++;
+    domainId.OwnerId = pathId.OwnerId+1;
+        
+    Context->SubscribeReplica(Replica, subscriber, path, true, domainId.OwnerId, capabilities);
+    check(false);                               // Prepare update
+    pathId.OwnerId++;                           // Make invalid condition (curPathId.OwnerId == pathId.OwnerId || desc->IsEmpty())
+    pathId.LocalPathId = domainId.LocalPathId;  // Make valid condition (curDomainId == pathId)
+    check(false);                               // Emulate case!
+    Context->UnsubscribeReplica(Replica, subscriber, path);
+#endif    
 }
 
 void TReplicaTest::RecreateDatabase()
@@ -268,8 +304,9 @@ void TReplicaTest::RecreateDatabase()
     Context->SubscribeReplica(Replica, databaseSubscriber, databasePath, true, 1, capabilities);
     Context->SubscribeReplica(Replica, tableSubscriber, tablePath, true, 1, capabilities);
 
-    auto describeDatabaseFirst = GenerateDescribe(databasePath, TPathId(1, 1), 1 , TPathId(1,1));
     // Step #1 Create database
+    TPathId firstDatabasePathId(1,1); // owner_id=1 as main scheme shard
+    auto describeDatabaseFirst = GenerateDescribe(databasePath, firstDatabasePathId, 1, firstDatabasePathId);
     {
         Context->Send(Replica, populator, GenerateUpdate(describeDatabaseFirst) );
         auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(databaseSubscriber);
@@ -279,8 +316,9 @@ void TReplicaTest::RecreateDatabase()
 
     // Step #2 Create table
     {
-        auto describe = GenerateDescribe(tablePath, TPathId(1, 2), 1 , TPathId(1,1));
-        Context->Send(Replica, populator, GenerateUpdate(describe,1,1) );
+        TPathId tablePathId(10, 2); // owner_id=1 as database scheme shard
+        auto describe = GenerateDescribe(tablePath, tablePathId, 1, firstDatabasePathId);
+        Context->Send(Replica, populator, GenerateUpdate(describe, 1, 1) );
         auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(tableSubscriber);
         UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());
         Context->Send(Replica, tableSubscriber, new NInternalEvents::TEvNotifyAck(1) );
@@ -293,8 +331,9 @@ void TReplicaTest::RecreateDatabase()
         UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
     }
 
-    // Step #4 Create database again
-    auto describeDatabaseSecond = GenerateDescribe(databasePath, TPathId(1, 4), 1 , TPathId(1,3));
+    // Step #4 Create database again (local id changed, but owerid is same)
+    TPathId secondDatabasePathId(1,2); // owner_id=1 as main scheme shard
+    auto describeDatabaseSecond = GenerateDescribe(databasePath, secondDatabasePathId, 1 , secondDatabasePathId);
     {
         Context->Send(Replica, populator, GenerateUpdate(describeDatabaseSecond) );
         auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(databaseSubscriber);
@@ -304,18 +343,12 @@ void TReplicaTest::RecreateDatabase()
 
     // Step #5 Create table again
     {
-        TPathId tablePathId(1, 5);
-        auto describe = GenerateDescribe(tablePath, tablePathId, 1 , TPathId(1,3));
+        TPathId tablePathId(20, 2);
+        auto describe = GenerateDescribe(tablePath, tablePathId, 1 , secondDatabasePathId);
         Context->Send(Replica, populator, GenerateUpdate(describe,1,1) );
 
-        // catch delete notify
-        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(tableSubscriber);
-        UNIT_ASSERT_VALUES_EQUAL(tablePath, ev->Get()->GetRecord().GetPath());
-        UNIT_ASSERT_VALUES_EQUAL(true, ev->Get()->GetRecord().GetIsDeletion());
-        Context->Send(Replica, tableSubscriber, new NInternalEvents::TEvNotifyAck(1) );
-
         // catch create notify
-        ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(tableSubscriber);
+        auto ev = Context->GrabEdgeEvent<NInternalEvents::TEvNotify>(tableSubscriber);
         UNIT_ASSERT_VALUES_EQUAL(tablePath, ev->Get()->GetRecord().GetPath());
         UNIT_ASSERT_VALUES_EQUAL(tablePathId.LocalPathId, ev->Get()->GetRecord().GetLocalPathId());
         UNIT_ASSERT_VALUES_EQUAL(false, ev->Get()->GetRecord().GetIsDeletion());

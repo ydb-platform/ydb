@@ -207,7 +207,7 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
         
         # For import, configure types: include only non-passing results
         if result_type in ("import", "configure"):
-            if status.upper() in ("OK"):
+            if status.upper() == "OK":
                 continue  # Skip this result - don't add to suites or filtered_results
         
         # This result passed the filter, add it to both suites and filtered_results

@@ -25,11 +25,6 @@ def check_for_fail(paths: List[str], output_path: str):
                 if not status:
                     continue
                 
-                # Skip suite-level entries (they are aggregates, not individual tests)
-                if result.get("suite") is True:
-                    continue
-                
-                status = result.get("status", "")
                 error_type = result.get("error_type", "")
                 path_str = result.get("path", "")
                 name = result.get("name", "")

@@ -754,21 +754,7 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     auto req = proxy.ReadTable();
     InitStreamingRequest(*req);
 
-    ToProto(req->mutable_path(), path);
-
-    req->set_unordered(options.Unordered);
-    req->set_omit_inaccessible_columns(options.OmitInaccessibleColumns);
-    req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
-    req->set_enable_table_index(options.EnableTableIndex);
-    req->set_enable_row_index(options.EnableRowIndex);
-    req->set_enable_range_index(options.EnableRangeIndex);
-    req->set_enable_any_unpacking(options.EnableAnyUnpacking);
-    if (options.Config) {
-        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
-    }
-
-    ToProto(req->mutable_transactional_options(), options);
-    ToProto(req->mutable_suppressable_access_tracking_options(), options);
+    FillRequest(req.Get(), path, /*format*/ std::nullopt, options);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {

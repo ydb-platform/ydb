@@ -753,7 +753,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    settings.VectorTopDistinct = true;
+    settings.VectorTopDistinct = withOverlap;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (flatMap) {
@@ -890,7 +890,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    settings.VectorTopDistinct = true;
+    settings.VectorTopDistinct = withOverlap;
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (mainLambda) {
@@ -1154,6 +1154,49 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
         return node;
     }
 
+    if (apply.Args().Count() != 3) {
+        return node;
+    }
+
+    auto args = apply.Args();
+    TString searchQuery;
+    TString searchColumn;
+
+    for(const auto& arg : args) {
+        if (arg.Maybe<TCoAtom>()) {
+            if (!searchQuery.empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Multiple search queries are not supported"));
+                return node;
+            }
+
+            searchQuery = TString(arg.Cast<TCoAtom>().Value());
+        }
+
+        if (arg.Maybe<TCoString>()) {
+            if (!searchQuery.empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Multiple search queries are not supported"));
+                return node;
+            }
+
+            searchQuery = TString(arg.Cast<TCoString>().Literal().Value());
+        }
+
+        if (arg.Maybe<TCoMember>()) {
+            auto columnName = std::string(arg.Cast<TCoMember>().Name().StringValue());
+            if (!searchColumn.empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Multiple search columns are not supported"));
+                return node;
+            }
+
+            searchColumn = columnName;
+        }
+    }
+
+    if (searchQuery.empty() || searchColumn.empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Search query and column are required"));
+        return node;
+    }
+
     auto read = TReadMatch::Match(flatMap.Input());
     if (!read) {
         return node;
@@ -1172,13 +1215,15 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
         return node;
     }
 
-    auto searchQuery = Build<TCoAtom>(ctx, node.Pos())
-        .Value("машинное обучение")
+    auto searchQueryAtom = Build<TCoAtom>(ctx, node.Pos())
+        .Value(Build<TCoAtom>(ctx, node.Pos())
+            .Value(searchQuery)
+            .Done())
         .Done();
 
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
         .Add(Build<TCoAtom>(ctx, node.Pos())
-            .Value("body")
+            .Value(searchColumn)
             .Done())
         .Done();
 
@@ -1197,7 +1242,7 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
         .Table(read.Table())
         .Index(read.Index())
         .Columns(searchColumns.Ptr())
-        .Query(searchQuery.Ptr())
+        .Query(searchQueryAtom.Ptr())
         .ResultColumns(resultColumnsList.Ptr())
         .Done();
 

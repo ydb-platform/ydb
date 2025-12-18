@@ -76,6 +76,16 @@ class TPushFilterRule : public ISimplifiedRule {
 };
 
 /**
+ * Push down filter to olap read.
+ */
+class TPushOlapFilterRule : public ISimplifiedRule {
+  public:
+      TPushOlapFilterRule() : ISimplifiedRule("Push olap filter", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+
+      virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Create inital CBO Tree
  */
 class TBuildInitialCBOTreeRule : public ISimplifiedRule {
@@ -131,6 +141,7 @@ extern TRuleBasedStage RuleStage3;
 extern TRuleBasedStage RuleStage4;
 extern TRuleBasedStage RuleStage5;
 extern TRuleBasedStage RuleStage6;
+extern TRuleBasedStage RuleStage7;
 
 /**
  * Separate global stage to remove extra renames and project out unneeded columns

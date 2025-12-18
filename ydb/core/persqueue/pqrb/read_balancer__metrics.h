@@ -79,6 +79,7 @@ private:
         TCounters ClientLabeledCounters;
         TCounters MLPClientLabeledCounters;
         ::NMonitoring::THistogramPtr MLPMessageLockAttemptsCounter;
+        ::NMonitoring::THistogramPtr MLPMessageLockingDurationCounter;
     };
     absl::flat_hash_map<TString, TConsumerCounters> ConsumerCounters;
 

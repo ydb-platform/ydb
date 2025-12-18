@@ -316,6 +316,40 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    // Test that vector index queries work when selecting only non-PK columns
+    Y_UNIT_TEST_TWIN(VectorIndexSelectWithoutPkColumns, Overlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        const int flags = (Overlap ? F_OVERLAP : 0);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, flags);
+
+        // Query selecting only 'data' column (not PK columns)
+        {
+            const TString query1(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                $target = "\x67\x71\x02";
+                SELECT data FROM `/Root/TestTable` VIEW index1
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT 3;
+            )"));
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "Failed to execute: `" << query1 << "` with " << result.GetIssues().ToString());
+        }
+    }
+
     void DoTestOrderByCosine(ui32 indexLevels, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);

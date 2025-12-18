@@ -10299,6 +10299,83 @@ Y_UNIT_TEST(AlterWithSecretsWithTablePathPrefix) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["settings"]);
 }
 
+Y_UNIT_TEST(MetricsLevel) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $b($x); }
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+            METRICS_LEVEL = "DETAILED"
+         );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    UNIT_ASSERT_VALUES_EQUAL_C(res.Issues.Size(), 0, res.Issues.ToString());
+
+    const auto programm = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(
+        GetPrettyPrint(res),
+        R"('"metrics_level" (String '"DETAILED"))");
+}
+
+Y_UNIT_TEST(MetricsLevelCaseSensivity) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $b($x); }
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+            METRICS_LEVEL = "object"
+         );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+}
+
+Y_UNIT_TEST(MetricsLevelValueValidation) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        $b = ($x) -> { return "A" || $x; };
+
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $b($x); }
+        WITH (
+            CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+            METRICS_LEVEL = "BAD"
+         );
+    )sql");
+    UNIT_ASSERT_C(!res.IsOk(), "Should reject invalid metrics level");
+    UNIT_ASSERT_C(res.Issues.ToString().Contains("Invalid metrics_level value"), res.Issues.ToString());
+}
+Y_UNIT_TEST(MetricsLevelEmptyValue) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $x; }
+        WITH (METRICS_LEVEL = "");
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "metrics_level value must be a string literal");
+}
+Y_UNIT_TEST(MetricsLevelNonStringValue) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        CREATE TRANSFER `TransferName`
+        FROM `TopicName` TO `TableName`
+        USING ($x) -> { return $x; }
+        WITH (METRICS_LEVEL = 123);
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Invalid metrics_level value");
+}
 } // Y_UNIT_TEST_SUITE(Transfer)
 
 Y_UNIT_TEST_SUITE(MatchRecognizeMeasuresAggregation) {

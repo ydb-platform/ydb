@@ -71,6 +71,7 @@ struct TConsumerMetricCollector {
     TMetricCollector ClientLabeledCounters = TMetricCollector(CreateProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>());
     TMetricCollector MLPConsumerLabeledCounters = TMetricCollector(CreateProtobufTabletLabeledCounters<EMLPConsumerLabeledCounters_descriptor>());
     THistogramMetricCollector MLPMessageLockAttemptsCounter{MLP_LOCKS_BOUNDS};
+    THistogramMetricCollector MLPMessageLockingDurationCounter{SLOW_LATENCY_BOUNDS};
 };
 
 struct TTopicMetricCollector {
@@ -119,6 +120,7 @@ struct TTopicMetricCollector {
             auto& collector = Consumers[consumer.GetConsumer()];
             collector.MLPConsumerLabeledCounters.Collect(consumer.GetCountersValues());
             collector.MLPMessageLockAttemptsCounter.Collect(consumer.GetMessageLocksValues());
+            collector.MLPMessageLockingDurationCounter.Collect(consumer.GetMessageLockingDurationValues());
         }
     }
 
@@ -240,8 +242,10 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTablet
 
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
             counters.MLPClientLabeledCounters = InitializeCounters<EMLPConsumerLabeledCounters_descriptor>(DynamicCounters, {{"consumer", metricsConsumerName}});
-            counters.MLPMessageLockAttemptsCounter = DynamicCounters->GetSubgroup("consumer", metricsConsumerName)
-                ->GetExpiringNamedHistogram("name", "topic.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
+
+            auto consumerGroup = DynamicCounters->GetSubgroup("consumer", metricsConsumerName);
+            counters.MLPMessageLockAttemptsCounter = consumerGroup->GetExpiringNamedHistogram("name", "topic.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
+            counters.MLPMessageLockingDurationCounter = consumerGroup->GetExpiringNamedHistogram("name", "topic.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
         }
     }
 
@@ -330,6 +334,7 @@ void TTopicMetricsHandler::UpdateMetrics() {
         if (!consumerCounters.MLPClientLabeledCounters.Counters.empty()) {
             SetCounters(consumerCounters.MLPClientLabeledCounters, consumerMetrics.MLPConsumerLabeledCounters);
             SetCounters(consumerCounters.MLPMessageLockAttemptsCounter, consumerMetrics.MLPMessageLockAttemptsCounter, MLP_LOCKS_BOUNDS);
+            SetCounters(consumerCounters.MLPMessageLockingDurationCounter, consumerMetrics.MLPMessageLockingDurationCounter, SLOW_LATENCY_BOUNDS);
         }
     }
 }

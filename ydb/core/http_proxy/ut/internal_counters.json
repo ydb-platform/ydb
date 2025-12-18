@@ -209,7 +209,7 @@
         "name": "topic.write.partition_throttled_milliseconds",
         "topic": "test-counters-stream",
         "cloud_id": "cloud4",
-        "bin": "999999",
+        "bin": "9999999",
         "database_id": "database4",
         "folder_id": "folder4",
         "database": "/Root"
@@ -352,7 +352,7 @@
         "name": "topic.write.lag_milliseconds",
         "topic": "test-counters-stream",
         "cloud_id": "cloud4",
-        "bin": "999999",
+        "bin": "9999999",
         "database_id": "database4",
         "folder_id": "folder4",
         "database": "/Root"
@@ -570,7 +570,7 @@
         "name": "topic.write.message_size_bytes",
         "topic": "test-counters-stream",
         "cloud_id": "cloud4",
-        "bin": "99999999",
+        "bin": "999999999",
         "database_id": "database4",
         "folder_id": "folder4",
         "database": "/Root"
@@ -761,7 +761,7 @@
         "name": "topic.read.lag_milliseconds",
         "topic": "test-counters-stream",
         "cloud_id": "cloud4",
-        "bin": "999999",
+        "bin": "9999999",
         "database_id": "database4",
         "folder_id": "folder4",
         "database": "/Root"

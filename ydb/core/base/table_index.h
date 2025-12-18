@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -18,6 +19,7 @@ namespace NKikimrTxDataShard {
     class TEvRecomputeKMeansResponse;
     class TEvSampleKResponse;
     class TEvValidateUniqueIndexResponse;
+    class TEvFilterKMeansResponse;
 }
 
 namespace NKikimr {
@@ -64,12 +66,20 @@ inline constexpr const char* PostingTable = "indexImplPostingTable";
 
 inline constexpr const char* BuildSuffix0 = "0build";
 inline constexpr const char* BuildSuffix1 = "1build";
+inline constexpr auto IsForeignType = Ydb::Type::BOOL;
+inline constexpr auto IsForeignTypeName = "Bool";
+inline constexpr const char* IsForeignColumn = "__ydb_foreign";
+inline constexpr auto DistanceType = Ydb::Type::DOUBLE;
+inline constexpr auto DistanceTypeName = "Double";
+inline constexpr const char* DistanceColumn = "__ydb_distance";
 
 // Prefix table
 inline constexpr const char* PrefixTable = "indexImplPrefixTable";
 inline constexpr const char* IdColumnSequence = "__ydb_id_sequence";
 
 inline constexpr const int DefaultKMeansRounds = 3;
+inline constexpr const int DefaultOverlapClusters = 1;
+inline constexpr const double DefaultOverlapRatio = 0;
 
 inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
 
@@ -84,6 +94,7 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexResponse& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvFilterKMeansResponse& record);
 
 }
 }

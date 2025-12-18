@@ -2151,7 +2151,7 @@ message TColumnShardConfig {
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
     
     oneof DefaultCompaction {
-        string DefaultCompactionPreset = 61 [default = "tiling"];
+        string DefaultCompactionPreset = 61 [default = "lc-buckets"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
 }

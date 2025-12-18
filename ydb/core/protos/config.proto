@@ -1267,6 +1267,15 @@ message TQueryServiceConfig {
     reserved 25;
     reserved 26;
     optional TStreamingQueriesConfig StreamingQueries = 27;
+
+    enum ETxMode {
+        SerializableRW = 0;
+        SnapshotRW = 1;
+        SnapshotRO = 2;
+        StaleRO = 3;
+    }
+
+    optional ETxMode DefaultTxMode = 28 [default = SerializableRW];
 }
 
 // Config describes immediate controls and allows

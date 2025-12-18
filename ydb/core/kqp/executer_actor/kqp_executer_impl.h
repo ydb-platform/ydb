@@ -714,7 +714,7 @@ protected:
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
 
         switch (Request.IsolationLevel) {
-            case NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW:
+            case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
                 TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
                 break;
             default:

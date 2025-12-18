@@ -137,7 +137,9 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         std::exit(1);
     }
 
-    CheckPathForRun(connectionConfig, Config.Path, Config.WarehouseCount);
+    if (Config.SimulateTransactionMs == 0 && Config.SimulateTransactionSelect1Count == 0) {
+        CheckPathForRun(connectionConfig, Config.Path, Config.WarehouseCount);
+    }
 
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 

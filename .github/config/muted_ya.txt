@@ -252,4 +252,5 @@ ydb/tests/stress/show_create/view/tests ydb-tests-stress-show_create-view-tests.
 ydb/tests/stress/streaming/tests py3test.sole chunk
 ydb/tests/stress/streaming/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
+ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

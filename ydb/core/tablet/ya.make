@@ -23,6 +23,7 @@ SRCS(
     tablet_counters_aggregator.h
     tablet_counters_app.cpp
     tablet_counters_app.h
+    tablet_counters_protobuf.cpp
     tablet_counters_protobuf.h
     tablet_exception.h
     tablet_impl.h

@@ -266,7 +266,6 @@ const std::vector<TColumnDesc>& SimpleColumnList() {
     return ret;
 }
 
-
 void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
     ExecuteYqlScript(env, Sprintf(R"(
         CREATE TABLE `Root/%s/%s` (

@@ -31,10 +31,10 @@ const std::vector<TColumnDesc>& GetColumns() {
             },
         },
         {
-            .Name = "Double",
-            .TypeId = NScheme::NTypeIds::Double,
+            .Name = "Float",
+            .TypeId = NScheme::NTypeIds::Float,
             .AddValue = [](ui64 key, Ydb::Value& row) {
-                row.add_items()->set_double_value(key / 10);
+                row.add_items()->set_float_value(key / 10);
             },
         },
         {
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
                 GetTag("Key"),
                 GetTag("LowCardinalityString"),
                 GetTag("LowCardinalityInt"),
-                GetTag("Double"),
+                GetTag("Float"),
                 GetTag("Date"),
                 GetTag("NearNumericLimits"),
             });
@@ -203,15 +203,15 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         }
 
         {
-            // Double column
+            // Float column
             const auto& resp = responses[3];
             UNIT_ASSERT(resp.Success);
             const auto& histogram = resp.EqWidthHistogram.Data;
             UNIT_ASSERT(histogram);
-            UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Double);
+            UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Float);
             auto estimator = TEqWidthHistogramEstimator(histogram);
             const i64 expected = 500;
-            const i64 actual = estimator.EstimateLess<double>(50.0);
+            const i64 actual = estimator.EstimateLess<float>(50.0);
             UNIT_ASSERT_C(
                 std::abs(expected - actual) < 50,
                 "Expected: " << expected << ", actual: " << actual);

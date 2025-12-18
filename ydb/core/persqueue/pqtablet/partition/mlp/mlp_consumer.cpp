@@ -851,6 +851,10 @@ void TConsumerActor::UpdateMetrics() {
         counters.AddMessageLocksValues(metrics.MessageLocks.GetRangeValue(i));
     }
 
+    for (size_t i = 0; i < metrics.MessageLockingDuration.GetRangeCount(); ++i) {
+        counters.AddMessageLockingDurationValues(metrics.MessageLockingDuration.GetRangeValue(i));
+    }
+
     Send(PartitionActorId, new TEvPQ::TEvMLPConsumerState(std::move(counters)));
 }
 

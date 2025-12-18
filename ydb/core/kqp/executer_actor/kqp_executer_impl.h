@@ -356,6 +356,21 @@ protected:
         }
     }
 
+    void ReadResultFromTaskOutputs(const TTask& task)
+    {
+        for (auto& output : task.Outputs) {
+            for (auto channelId : output.Channels) {
+                auto& channel = TasksGraph.GetChannel(channelId);
+                if (!channel.DstTask && TasksGraph.GetMeta().UseFastChannels) {
+                    Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
+                    auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0));
+                    ReadResultFromInputBuffer(channelId, inputBuffer);
+                    ResultInputBuffers.emplace(channelId, inputBuffer);
+                }
+            }
+        }
+    }
+
     void ReadResultFromInputBuffer(ui32 channelId, const std::shared_ptr<NYql::NDq::IChannelBuffer>& buffer) {
         auto& channel = TasksGraph.GetChannel(channelId);
         YQL_ENSURE(channel.DstTask == 0);
@@ -615,17 +630,7 @@ protected:
                     THashMap<TActorId, THashSet<ui64>> updates;
                     Planner->CollectTaskChannelsUpdates(task, updates);
                     Planner->PropagateChannelsUpdates(updates);
-                    for (auto& output : task.Outputs) {
-                        for (auto channelId : output.Channels) {
-                            auto& channel = TasksGraph.GetChannel(channelId);
-                            if (!channel.DstTask && TasksGraph.GetMeta().UseFastChannels) {
-                                Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
-                                auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0));
-                                ReadResultFromInputBuffer(channelId, inputBuffer);
-                                ResultInputBuffers.emplace(channelId, inputBuffer);
-                            }
-                        }
-                    }
+                    ReadResultFromTaskOutputs(task);
                 }
                 break;
             }
@@ -986,17 +991,7 @@ protected:
             bool ack = Planner->AcknowledgeCA(taskId, computeActorId, nullptr);
             if (ack) {
                 Planner->CollectTaskChannelsUpdates(task, channelsUpdates);
-                for (auto& output : task.Outputs) {
-                    for (auto channelId : output.Channels) {
-                        auto& channel = TasksGraph.GetChannel(channelId);
-                        if (!channel.DstTask && TasksGraph.GetMeta().UseFastChannels) {
-                            Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
-                            auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0));
-                            ReadResultFromInputBuffer(channelId, inputBuffer);
-                            ResultInputBuffers.emplace(channelId, inputBuffer);
-                        }
-                    }
-                }
+                ReadResultFromTaskOutputs(task);
             }
 
         }

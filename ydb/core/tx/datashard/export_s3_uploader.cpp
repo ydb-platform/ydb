@@ -48,7 +48,7 @@ struct TChangefeedExportDescriptions {
 
 template <typename TSettings>
 class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
-    using TThis = TS3Uploader<TSettings>;
+    using TThis = TS3Uploader;
     using TBase = TActorBootstrapped<TS3Uploader<TSettings>>;
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
     using THttpResolverConfig = NKikimrConfig::TS3ProxyResolverConfig::THttpResolverConfig;
@@ -726,7 +726,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
                     TS3Upload::EStatus::Abort, *Error));
             }
-            Become(&TThis::StateUploadData);
+            this->Become(&TThis::StateUploadData);
         }
     }
 

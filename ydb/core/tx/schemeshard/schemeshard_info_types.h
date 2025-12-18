@@ -3682,7 +3682,9 @@ public:
         TSerializedTableRange bound{range};
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
             "AddShardStatus id# " << Id << " shard " << shardIdx);
-        if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex) {
+        if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
+            KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
+            KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders) {
             AddParent(bound, shardIdx);
         }
         Shards.emplace(

@@ -143,9 +143,9 @@ private:
         if (enableAiInteractive) {
             elements.emplace_back(
                 CreateListItem(hbox({
-                    CreateEntityName("Ctrl+T"), text(" or "), CreateEntityName("/switch"), 
-                    text(": switch to "), 
-                    text(ToString(TInteractiveConfigurationManager::EMode::AI)) | color(Color::Cyan), 
+                    CreateEntityName("Ctrl+T"), text(" or "), CreateEntityName("/switch"),
+                    text(": switch to "),
+                    text(ToString(TInteractiveConfigurationManager::EMode::AI)) | color(Color::Cyan),
                     text(" interactive mode.")
                 }))
             );
@@ -162,9 +162,9 @@ private:
 
         const auto keyword = [](const std::string& s) { return text(s) | color(Color::Green); };
         elements.emplace_back(CreateListItem(hbox({
-            keyword("SET stats = "), CreateEntityName("STATS_MODE"), 
+            keyword("SET stats = "), CreateEntityName("STATS_MODE"),
             text(": set statistics collection mode, allowed modes: "),
-            CreateEntityName("none"), text(", "), CreateEntityName("basic"), text(", "), 
+            CreateEntityName("none"), text(", "), CreateEntityName("basic"), text(", "),
             CreateEntityName("full"), text(", "), CreateEntityName("profile"), text(".")
         })));
 

@@ -14,7 +14,7 @@ public:
 
     bool Parse(const TString& value);
 
-    TString ToString() const; 
+    TString ToString() const;
 
     const NJson::TJsonValue& GetValue() const;
 

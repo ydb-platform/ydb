@@ -655,7 +655,7 @@ static int PrintDescription(TCommand* self, EDataFormat format, const TValue& va
             return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(value), self->GetOutputStream());
         default:
             // Should verify this earlier
-            return EXIT_FAILURE; 
+            return EXIT_FAILURE;
     }
 }
 
@@ -680,7 +680,7 @@ int TDescribeLogic::DescribePath(const TString& path, const TDescribeOptions& op
     if (!result.IsSuccess()) {
         return TryTopicConsumerDescribeOrFail(path, result, options, format);
     }
-    
+
     // NStatusHelpers::ThrowOnErrorOrPrintIssues(result); // We can just print issues inside
     if (!result.IsSuccess()) {
         Out << result.GetIssues().ToString() << Endl;
@@ -739,7 +739,7 @@ int TDescribeLogic::DescribeTable(const TString& path, const TDescribeOptions& o
         Out << sessionResult.GetIssues().ToString() << Endl;
         return EXIT_FAILURE;
     }
-    
+
     NTable::TDescribeTableResult result = sessionResult.GetSession().DescribeTable(
         path,
         NTable::TDescribeTableSettings()
@@ -747,7 +747,7 @@ int TDescribeLogic::DescribeTable(const TString& path, const TDescribeOptions& o
         .WithTableStatistics(options.ShowStats || options.ShowPartitionStats)
         .WithPartitionStatistics(options.ShowPartitionStats)
     ).GetValueSync();
-    
+
     if (!result.IsSuccess()) {
         Out << result.GetIssues().ToString() << Endl;
         return EXIT_FAILURE;
@@ -764,13 +764,13 @@ int TDescribeLogic::DescribeColumnTable(const TString& path, const TDescribeOpti
         Out << sessionResult.GetIssues().ToString() << Endl;
         return EXIT_FAILURE;
     }
-    
+
     NTable::TDescribeTableResult result = sessionResult.GetSession().DescribeTable(
         path,
         NTable::TDescribeTableSettings()
         .WithTableStatistics(options.ShowStats)
     ).GetValueSync();
-    
+
     if (!result.IsSuccess()) {
         Out << result.GetIssues().ToString() << Endl;
         return EXIT_FAILURE;
@@ -878,10 +878,10 @@ int TDescribeLogic::DescribeCoordinationNode(const TString& path, EDataFormat fo
     const auto& desc = result.GetResult();
     // Simplified printing for now as we don't have PrintCoordinationNodeResponsePretty moved fully or it is simple
     // Actually PrintCoordinationNodeResponsePretty is simple, let's include it
-    
+
     // Using lambda or similar to adapt to PrintDescription?
     // Let's implement PrintCoordinationNodeResponsePretty
-    
+
     if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
         return PrintCoordinationNodeResponsePretty(desc);
     } else {
@@ -912,7 +912,7 @@ int TDescribeLogic::DescribeReplication(const TString& path, const TDescribeOpti
         Out << result.GetIssues().ToString() << Endl;
         return EXIT_FAILURE;
     }
-    
+
     if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
         return PrintReplicationResponsePretty(result, options);
     } else {
@@ -952,10 +952,10 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
     // Wait, TDescribeOptions doesn't have Database.
     // SkipDatabasePrefix used srcDatabase and dstDatabase.
     // dstDatabase was TCommandDescribe::Database which was config.Database.
-    
+
     // I need to pass Database to TDescribeLogic constructor?
     // For now I'll just print paths as is or implement simplified version.
-    
+
     PrintConnectionParams(connParams, Out);
 
     Out << Endl << "Consistency level: " << desc.GetConsistencyLevel();
@@ -1002,7 +1002,7 @@ int TDescribeLogic::DescribeTransfer(const TString& path, EDataFormat format) {
         Out << result.GetIssues().ToString() << Endl;
         return EXIT_FAILURE;
     }
-    
+
     if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
         return PrintTransferResponsePretty(result);
     } else {

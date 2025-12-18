@@ -83,7 +83,7 @@ IMPORTANT:
 - NEVER guess data values for filtering. Do not assume specific values exist in the table.
   Instead, query the distinct values first (e.g., `SELECT DISTINCT column_name FROM my_table LIMIT 20`) to verify the actual values in the database.
 - To get the schema of a table (columns, types, etc.), use the `describe` tool instead of this one.
-- If path to table contains '/' or '@', wrap it into back ticks, for example `path/to/table`. Add back ticks only if they are really needed, for example table some_table do not need backticks. 
+- If path to table contains '/' or '@', wrap it into back ticks, for example `path/to/table`. Add back ticks only if they are really needed, for example table some_table do not need backticks.
 
 Returns list of result sets for query, each contains list of rows and column metadata.
 For example if there exists table 'my_table' with string column 'Data' and we execute query:
@@ -192,7 +192,7 @@ protected:
             IsSkipped = true;
             return true;
         }
-        
+
         if (action == EAction::Approve) {
             return true;
         }

@@ -107,7 +107,7 @@ protected:
         }
 
         Cout << Endl;
-        
+
         if (action == EAction::Approve) {
             return true;
         }
@@ -124,12 +124,12 @@ protected:
         }
 
         Cout << "Executing shell command..." << Endl;
-        
+
         // Combine stdout and stderr
         // Use subshell ( ... ) to capture stderr of the entire block, and ensure newline for heredoc safety
         TString cmdWithStderr = "(" + Command + "\n) 2>&1";
         FILE* pipe = popen(cmdWithStderr.c_str(), "r");
-        
+
         if (!pipe) {
             return TResponse::Error("Failed to start command execution (popen failed).");
         }
@@ -149,7 +149,7 @@ protected:
 #ifdef _unix_
         returnCode = WEXITSTATUS(exitCode);
 #else
-        returnCode = exitCode; 
+        returnCode = exitCode;
 #endif
 
         if (returnCode != 0) {
@@ -166,8 +166,8 @@ private:
         Cout << Endl;
 
         const auto lineReader = CreateLineReader({
-            .Driver = Driver, 
-            .Database = "",   
+            .Driver = Driver,
+            .Database = "",
             .Prompt = "shell> ",
             .EnableSwitchMode = false,
             .ContinueAfterCancel = false,

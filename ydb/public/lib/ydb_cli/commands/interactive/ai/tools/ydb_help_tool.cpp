@@ -87,7 +87,7 @@ protected:
         }
 
         TString fullCmd = cmdBuilder;
-        
+
         if (Log.IsVerbose()) {
             Cout << "Executing: " << fullCmd << Endl;
         }

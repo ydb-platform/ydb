@@ -138,7 +138,7 @@ private:
 private:
     const TString Database;
     TDriver Driver;
-    
+
     TString Path;
     TDescribeOptions Options;
 };

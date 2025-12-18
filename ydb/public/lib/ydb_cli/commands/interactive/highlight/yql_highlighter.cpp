@@ -157,7 +157,7 @@ namespace {
             if (c == ' ') {
                 flushSegment();
                 currentRow.push_back(ftxui::text(" ") | ftxui::color(ToFtxuiColor(lastColor)));
-                continue; 
+                continue;
             }
 
             currentSegment += c;

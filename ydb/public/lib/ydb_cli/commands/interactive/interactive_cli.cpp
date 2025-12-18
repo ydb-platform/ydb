@@ -35,7 +35,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     const TDriver driver(config.CreateDriverConfig());
     const auto versionInfo = ResolveVersionInfo(driver);
     const auto configurationManager = std::make_shared<TInteractiveConfigurationManager>(config.AiProfileFile, Log);
-    
+
     if (config.EnableAiInteractive) {
         configurationManager->EnsurePredefinedProfiles(config.AiPredefinedProfiles, config.AiTokenGetter);
     }
@@ -96,7 +96,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
     Y_VALIDATE(activeSession != static_cast<ui64>(TInteractiveConfigurationManager::EMode::Invalid), "Unexpected default mode: " << activeSession);
 
     std::vector<ISessionRunner::TPtr> sessions;
-    
+
     sessions.push_back(CreateSqlSessionRunner({
         .Driver = driver,
         .Database = config.Database,

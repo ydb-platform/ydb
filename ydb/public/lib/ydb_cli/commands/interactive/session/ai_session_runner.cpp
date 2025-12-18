@@ -183,9 +183,9 @@ private:
             text(""),
             CreateEntityName("Hotkeys:"),
             CreateListItem(hbox({
-                CreateEntityName("Ctrl+T"), text(" or "), CreateEntityName("/switch"), 
-                text(": switch to "), 
-                text(ToString(TInteractiveConfigurationManager::EMode::YQL)) | color(Color::Green), 
+                CreateEntityName("Ctrl+T"), text(" or "), CreateEntityName("/switch"),
+                text(": switch to "),
+                text(ToString(TInteractiveConfigurationManager::EMode::YQL)) | color(Color::Green),
                 text(" interactive mode.")
             })),
         };

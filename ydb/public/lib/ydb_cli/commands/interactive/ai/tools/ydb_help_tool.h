@@ -9,7 +9,7 @@
 namespace NYdb::NConsoleClient::NAi {
 
 struct TYdbHelpToolSettings {
-    TDriver Driver; 
+    TDriver Driver;
 };
 
 ITool::TPtr CreateYdbHelpTool(const TYdbHelpToolSettings& settings, const TInteractiveLogger& log);

@@ -44,7 +44,7 @@ namespace NActors {
         virtual ui32 CalculateSerializedSizeCached() const {
             return CalculateSerializedSize();
         }
-        virtual TEventSerializationInfo CreateSerializationInfo() const { return {}; }
+        virtual TEventSerializationInfo CreateSerializationInfo(bool /*allowExternalDataChannel*/) const { return {}; }
     };
 
     template <typename TEventType>

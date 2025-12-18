@@ -494,7 +494,7 @@ private:
         TAllocChunkSerializer serializer;
         const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_ABORT_UNLESS(success);
-        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo());
+        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo(false));
         return TPreSerializedMessage(message->Type(), data);
     }
 

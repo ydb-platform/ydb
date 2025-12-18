@@ -57,6 +57,7 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
 For users who are not experienced with Docker, it's important to understand how to properly mount a configuration file into the container. Below is a step-by-step example:
 
 1. Run the container without specifying a configuration file and without mounting the data directory, so that it generates a default configuration:
+
    ```bash
    docker run -d \
      --rm \
@@ -71,20 +72,23 @@ For users who are not experienced with Docker, it's important to understand how 
    ```
 
 2. Create a directory for your configuration files and copy the generated configuration file from the container directly to it:
+
   ```bash
   mkdir ydb_config
   docker cp ydb-local:/ydb_data/cluster/kikimr_configs/config.yaml ydb_config/my-ydb-config.yaml
   ```
 
-3. Stop the container if it's still running, and remove the created data directory:
+1. Stop the container if it's still running, and remove the created data directory:
+
   ```bash
   docker stop ydb-local
   rm -rf ydb_data
   ```
 
-4. Edit the copied configuration file `ydb_config/my-ydb-config.yaml` as needed.
+1. Edit the copied configuration file `ydb_config/my-ydb-config.yaml` as needed.
 
-6. When running the container, use the `-v` flag to mount the directory with your configuration file into the container:
+1. When running the container, use the `-v` flag to mount the directory with your configuration file into the container:
+
    ```bash
    docker_args=(
        -d

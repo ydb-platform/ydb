@@ -437,7 +437,7 @@ Y_UNIT_TEST(TestPartitionWriteQuota) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
 
-        tc.Runtime->SetScheduledLimit(1000);
+        tc.Runtime->SetScheduledLimit(10'000);
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
         PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
 

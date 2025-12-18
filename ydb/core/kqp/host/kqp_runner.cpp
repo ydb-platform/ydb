@@ -369,7 +369,7 @@ private:
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(),
                 *typesCtx, Config))
             //.Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
-            .AddPostTypeAnnotation(/* forSubgraph */ true)
+            //.AddPostTypeAnnotation(/* forSubgraph */ true)
             //.AddCommonOptimization()
 
             .Add(CreateKqpRewriteSelectTransformer(OptimizeCtx, *typesCtx), "RewriteSelect")

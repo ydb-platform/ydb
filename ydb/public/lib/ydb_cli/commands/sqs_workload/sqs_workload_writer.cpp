@@ -22,15 +22,10 @@ namespace NYdb::NConsoleClient {
         }
 
         Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry>
-        CreateSendMessageBatchRequestEntries(ui64 now, const TSqsWorkloadWriterParams& params) {
+        CreateSendMessageBatchRequestEntries(const TSqsWorkloadWriterParams& params) {
             Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry> entries;
             for (ui32 i = 0; i < params.BatchSize; ++i) {
-                auto messageBody =
-                    fmt::format("{}{}", now, SQS_MESSAGE_START_TIME_SEPARATOR);
-                while (messageBody.size() < params.MessageSize) {
-                    messageBody.push_back('a');
-                }
-
+                Aws::String messageBody(params.MessageSize, 'a');
                 Aws::SQS::Model::SendMessageBatchRequestEntry entry;
                 entry.WithMessageBody(messageBody).WithId(fmt::format("{}", i));
                 if (params.GroupsAmount > 0) {
@@ -76,12 +71,9 @@ namespace NYdb::NConsoleClient {
     void TSqsWorkloadWriter::RunLoop(const TSqsWorkloadWriterParams& params,
                                      TInstant endTime) {
         while (Now() < endTime && !params.ErrorFlag->load()) {
-            auto now = Now().MilliSeconds();
-
             Aws::SQS::Model::SendMessageBatchRequest sendMessageBatchRequest;
             sendMessageBatchRequest.SetQueueUrl(params.QueueUrl.c_str());
-            sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(
-                now, params));
+            sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(params));
             sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_SEND_MESSAGE_BATCH);
 

@@ -26,8 +26,8 @@ namespace NYdb::NConsoleClient {
         TString ErrorMessagesDestiny;
         TDuration HandleMessageDelay;
         TDuration VisibilityTimeout;
-        bool ValidateFifo;
         bool SetSubjectToken;
+        bool ValidateFifo;
         std::shared_ptr<std::mutex> HashMapMutex;
         std::shared_ptr<THashMap<TString, ui64>> LastReceivedMessageInGroup;
         std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;

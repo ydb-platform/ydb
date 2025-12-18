@@ -5,10 +5,15 @@
 namespace NYdb::NConsoleClient {
 
     int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig&) {
-        auto statsCollector = std::make_shared<TSqsWorkloadStatsCollector>(
-            Concurrency, 0, Quiet, PrintTimestamp, WindowSec.Seconds(),
-            TotalSec.Seconds(), 0, Percentile, ErrorFlag);
-        InitMeasuringHttpClient(statsCollector);
+        InitAwsSdk();
+        auto result = RunScenario();
+        DestroyAwsSdk();
+        return result;
+    }
+
+    int TSqsWorkloadWriteScenario::RunScenario() {
+        InitStatsCollector(Concurrency, 0);
+        InitMeasuringHttpClient(StatsCollector);
         InitSqsClient();
 
         auto finishedFlag = std::make_shared<std::atomic_bool>(false);
@@ -24,7 +29,7 @@ namespace NYdb::NConsoleClient {
             .StartedCount = StartedCount,
             .ErrorFlag = ErrorFlag,
             .SqsClient = SqsClient,
-            .StatsCollector = statsCollector,
+            .StatsCollector = StatsCollector,
             .MaxUniqueMessages = MaxUniqueMessages,
             .BatchSize = BatchSize,
             .Concurrency = Concurrency,

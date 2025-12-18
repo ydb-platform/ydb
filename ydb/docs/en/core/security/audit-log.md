@@ -113,12 +113,12 @@ The table below lists the common attributes.
 || `status`               | Operation completion status.<br/>Possible values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul> | Required ||
 || `reason`               | Error message.                                                                                                                                                | Optional ||
 || `request_id`           | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context. | Optional ||
-|| `remote_address`       | IP address (IPv4 or IPv6) of the client that delivered the request. Can be a comma-separated list of addresses, where the enumeration indicates the chain of addresses the request passed through. | Optional ||
-|| `detailed_status`      | A refined or specific status delivered by a {{ ydb-short-name }} *audit event source*. This field may be used by an audit source to record additional, more granular information about the operation's status. | Optional ||
+|| `remote_address`       | IP address (IPv4 or IPv6) of the client that delivered the request. Can be a comma-separated list of addresses, where the enumeration indicates the chain of addresses the request passed through. Port numbers and IP version prefix may be included after a colon (e.g., `ipv4:192.0.2.1:54321`) | Optional ||
+|| `detailed_status`      | A refined or specific status delivered by a {{ ydb-short-name }} *audit event source*. This field may be used by an audit source to record additional information about the operation's status. | Optional ||
 || `database`             | Database path (for example, `/Root/db`).                                                                                                                     | Required ||
-|| `cloud_id`             | Cloud identifier of the {{ ydb-short-name }} database. The value is taken from the user-attributes of the cluster root, usually set by the control plane. | Optional ||
-|| `folder_id`            | Folder identifier of the {{ ydb-short-name }} cluster or database. The value is taken from the user-attributes of the cluster root, usually set by the control plane. | Optional ||
-|| `resource_id`          | Resource identifier of the {{ ydb-short-name }} database. The value is taken from the user-attributes of the cluster root, usually set by the control plane. | Optional ||
+|| `cloud_id`             | Cloud identifier of the {{ ydb-short-name }} database. The value is taken from the user-attributes of the database, usually set by the control plane. | Optional ||
+|| `folder_id`            | Folder identifier of the {{ ydb-short-name }} cluster or database. The value is taken from the user-attributes of the database, usually set by the control plane. | Optional ||
+|| `resource_id`          | Resource identifier of the {{ ydb-short-name }} database. The value is taken from the user-attributes of the database, usually set by the control plane. | Optional ||
 |#
 
 ### Schemeshard {#schemeshard}
@@ -146,7 +146,7 @@ The table below lists additional attributes specific to the `Schemeshard` source
 || `login_group`                            | Group name is filled in for user group modification operations.                                                                                                    | Optional ||
 || `login_member`                           | User name, filled in when a user's group membership changes.                                                                            | Optional ||
 || `login_user_change`                      | Changes applied to user settings, such as password changes or user block/unblock actions. Filled if such changes are made. | Optional ||
-|| `login_user_level`                       | Indicates whether the user had full administrator privileges at the time of the event: the value is `admin` for such users; for all others, this attribute is empty string.                                  | Optional ||
+|| `login_user_level`                       | Indicates whether the user had full administrator privileges at the time of the event: the value is `admin` for such users; for all others, this attribute is not used.                                  | Optional ||
 || **Import/Export operation attributes**   | **>**                                                                                                                                                              |  ||
 || `id`                                     | Unique identifier for export or import operations.                                                                                                                 | Optional ||
 || `uid`                                    | User-defined label for operations.                                                                                                                                 | Optional ||
@@ -180,7 +180,7 @@ The table below lists additional attributes specific to the `Schemeshard` source
 || **Attribute**              | **Description**                                                                                         | **Optional/Required** ||
 || **Common gRPC attributes** | **>**                                                                                                  |  ||
 || `grpc_method`              | RPC method name.                                                                                       | Optional ||
-|| `request`                  | Sanitized representation of the incoming request (sanitization means removal of line breaks, extra spaces, and truncation of the string to a maximum of 1024 characters).                                                      | Optional ||
+|| `request`                  | Sanitized representation of the incoming protobuf request in single-line format. Sensitive fields are masked as ***..                                                      | Optional ||
 || `start_time`               | Operation start time in ISO 8601 format.                                                               | Required ||
 || `end_time`                 | Operation end time in ISO 8601 format.                                                                 | Optional ||
 || **Transaction attributes** | **>**                                                                                                  |  ||
@@ -188,7 +188,7 @@ The table below lists additional attributes specific to the `Schemeshard` source
 || `begin_tx`                 | Flag set to `1` when the request starts a new transaction.                                             | Optional ||
 || `commit_tx`                | Shows whether the request commits the transaction. Possible values: `true`, `false`.                   | Optional ||
 || **Request fields**         | **>**                                                                                                  |  ||
-|| `query_text`               | Sanitized [YQL](../yql/reference/index.md) query text.                                                 | Optional ||
+|| `query_text`               | [YQL](../yql/reference/index.md) query text formatted for logging (single-line, max 1024 characters).                                                 | Optional ||
 || `prepared_query_id`        | Identifier of a prepared query.                                                                        | Optional ||
 || `program_text`             | [MiniKQL program](../concepts/glossary.md#minikql) sent with the request.                              | Optional ||
 || `schema_changes`           | Description of schema modifications requested in the operation.  Example format `{"delta":[{"delta_type":"AddTable","table_id":5555,"table_name":"MyAwesomeTable"}]}`                                      | Optional ||
@@ -354,13 +354,15 @@ The `format` field specifies the serialization format for audit events. The supp
 #|
 || **Format**             | **Description** ||
 || `JSON`                 | Each audit event is serialized as a single-line JSON object preceded by an ISO 8601 timestamp.</br>Example: `<time>: {"k1": "v1", "k2": "v2", ...}` </br>*`k1`, `k2`, …, `kn` represent audit log attributes; `v1`, `v2`, …, `vn` represent their values.* ||
-|| `TXT`                  | Each audit event is serialized as a single-line text string in the `key=value` format, preceded by an ISO 8601 timestamp.</br>Example: `<time>: k1=v1, k2=v2, ...` </br>*`k1`, `k2`, …, `kn` represent audit log attributes; `v1`, `v2`, …, `vn` represent their values.* ||
+|| `TXT`                  | Each audit event is serialized as a single-line text string in the `key=value` format, separated by `, ` (no escaping is applied to separator inside values), preceded by an ISO 8601 timestamp.</br>Example: `<time>: k1=v1, k2=v2, ...` </br>*`k1`, `k2`, …, `kn` represent audit log attributes; `v1`, `v2`, …, `vn` represent their values.* ||
 || `JSON_LOG_COMPATIBLE`  | Each audit event is serialized as a single-line JSON object suitable for output to destinations shared with debug logs. The object contains the `@timestamp` field with the ISO 8601 timestamp and the `@log_type` field set to `audit`.</br>Example: `{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}` </br>*`@timestamp` stores the ISO 8601 timestamp; `k1`, `k2`, …, `kn` represent audit log attributes; `v1`, `v2`, …, `vn` represent their values.* ||
 |#
 
 #### Envelope format {#envelope-format}
 
 Backends can wrap audit events into a custom envelope before delivering them to the backend by specifying the `log_json_envelope` field. The template must contain the `%message%` placeholder, which is replaced with the serialized audit record in the selected format.
+
+For formats like `JSON`, `%message%` will be substituted with a value in the form `<timestamp>: <escaped_json>`, where `<timestamp>` is an ISO 8601 formatted timestamp and `<escaped_json>` is the serialized and escaped JSON representation of the audit record.
 
 For example, the following configuration outputs audit events to `stderr` in JSON format, wrapped in a custom envelope:
 
@@ -441,7 +443,6 @@ The following tabs show the same audit log event written using different [backen
     ```json
     2023-03-14T10:41:36.485788Z: {"paths":"[/my_dir/db1/some_dir]","tx_id":"281474976775658","database":"/my_dir/db1","remote_address":"ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx","status":"SUCCESS","subject":"{none}","sanitized_token":"{none}", "detailed_status":"StatusAccepted","operation":"MODIFY ACL","component":"schemeshard","acl_add":"[+(ConnDB):subject:-]"}
     2023-03-13T20:07:30.927210Z: {"reason":"Check failed: path: '/my_dir/db1/some_dir', error: path exist, request accepts it (id: [OwnerId: 72075186224037889, LocalPathId: 3], type: EPathTypeDir, state: EPathStateNoChanges)","paths":"[/my_dir/db1/some_dir]","tx_id":"844424930216970","database":"/my_dir/db1","remote_address":"ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]:xxxxx","status":"SUCCESS","subject":"{none}","sanitized_token":"{none}","detailed_status":"StatusAlreadyExists","operation":"CREATE DIRECTORY","component":"schemeshard"}
-    2025-11-03T18:07:39.056211Z: {"@log_type":"audit","begin_tx":1,"commit_tx":1,"component":"grpc-proxy","database":"/my_dir/db1","detailed_status":"SUCCESS","end_time":"2025-11-03T18:07:39.056204Z","grpc_method":"Ydb.Query.V1.QueryService/ExecuteQuery","operation":"ExecuteQueryRequest","query_text":"SELECT * FROM `my_row_table`;","remote_address":"ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]","sanitized_token":"xxxxxxxx.**","start_time":"2025-11-03T18:07:39.054863Z","status":"SUCCESS","subject":"serviceaccount@as"}
     2025-11-03T17:41:44.203214Z: {"component":"monitoring","remote_address":"ipv6:[xxxx:xxx:xxx:xxx:x:xxxx:xxx:xxxx]","operation":"HTTP REQUEST","method":"POST","url":"/viewer/query","params":"base64=false&schema=multipart","body":"{\"query\":\"SELECT * FROM `my_row_table`;\",\"database\":\"/local\",\"action\":\"execute-query\",\"syntax\":\"yql_v1\"}","status":"IN-PROCESS","reason":"Execute"}
     ```
 
@@ -480,7 +481,7 @@ The following tabs show the same audit log event written using different [backen
 
 - Pretty-JSON
 
-    The same audit log entry formatted for readability:
+    The pretty-JSON formatting shown below is for illustration purposes only; the audit log does not support pretty or indented JSON output.
 
     ```json
     {

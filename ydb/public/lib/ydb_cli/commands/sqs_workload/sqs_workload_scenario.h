@@ -39,6 +39,8 @@ namespace NYdb::NConsoleClient {
         bool SetSubjectToken;
         bool ValidateFifo;
 
+        void InitAwsSdk();
+        void DestroyAwsSdk();
         void InitStatsCollector(size_t writerCount, size_t readerCount);
         void InitSqsClient();
         void DestroySqsClient();

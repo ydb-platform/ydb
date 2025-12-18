@@ -30,11 +30,16 @@ namespace NYdb::NConsoleClient {
         StartedCount(std::make_shared<size_t>(0))
     {
         Log->SetFormatter(GetPrefixLogFormatter(""));
+    }
+
+    TSqsWorkloadScenario::~TSqsWorkloadScenario() {}
+
+    void TSqsWorkloadScenario::InitAwsSdk() {
         AwsOptions.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Debug;
         Aws::InitAPI(AwsOptions);
     }
 
-    TSqsWorkloadScenario::~TSqsWorkloadScenario() {
+    void TSqsWorkloadScenario::DestroyAwsSdk() {
         Aws::ShutdownAPI(AwsOptions);
     }
 

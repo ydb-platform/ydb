@@ -198,6 +198,24 @@ class BridgeKiKiMRTest(object):
         """
         self.logger.info(f"=== {step_name.upper()} ===")
 
+        # Сначала ждем, пока кластер станет доступным (обрабатываем Connection refused)
+        start_time = time.time()
+        cluster_available = False
+        while time.time() - start_time < timeout_seconds:
+            try:
+                current_state = self.get_cluster_state(self.bridge_client)
+                cluster_available = True
+                break
+            except Exception as e:
+                self.logger.debug(f"Cluster not available yet: {e}. Retrying...")
+                time.sleep(0.5)
+
+        if not cluster_available:
+            raise AssertionError(
+                f"[Step: {step_name}] Cluster did not become available within {timeout_seconds}s. "
+                f"Unable to determine cluster state."
+            )
+
         # Ждем стабильного состояния: один PRIMARY, один SYNCHRONIZED
         # Пробуем оба варианта (r1=PRIMARY или r2=PRIMARY)
         try:
@@ -208,11 +226,27 @@ class BridgeKiKiMRTest(object):
             )
         except AssertionError:
             # Если r1 не PRIMARY, пробуем r2
-            self.wait_for_cluster_state(
-                self.bridge_client,
-                {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY},
-                timeout_seconds=timeout_seconds
-            )
+            try:
+                self.wait_for_cluster_state(
+                    self.bridge_client,
+                    {"r1": PileState.SYNCHRONIZED, "r2": PileState.PRIMARY},
+                    timeout_seconds=timeout_seconds
+                )
+            except AssertionError as e:
+                # Если оба варианта не сработали, получаем текущее состояние для диагностики
+                try:
+                    current_state = self.get_cluster_state(self.bridge_client)
+                    current_states = {s.pile_name: s.state for s in current_state.pile_states}
+                    raise AssertionError(
+                        f"[Step: {step_name}] Failed to reach stable state (one PRIMARY, one SYNCHRONIZED). "
+                        f"Current state: {current_states}. "
+                        f"Original error: {e}"
+                    ) from e
+                except Exception as get_state_error:
+                    raise AssertionError(
+                        f"[Step: {step_name}] Failed to reach stable state and unable to get current state. "
+                        f"Original error: {e}, Get state error: {get_state_error}"
+                    ) from e
 
         # Получаем финальное состояние
         current_state = self.get_cluster_state(self.bridge_client)

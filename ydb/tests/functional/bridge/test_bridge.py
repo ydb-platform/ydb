@@ -885,8 +885,15 @@ class TestBridgeFailoverWithNodeStop(BridgeKiKiMRTest):
 
         # Шаг 7.5: Проверяем работоспособность через KV операции после failover
         # (ошибки связанные с нагрузкой должны пропасть, кластер работает)
-        # В этом сценарии primary_pile_name остается PRIMARY, поэтому используем существующий клиент
-        self._check_cluster_kv_operations(table_path, tablet_ids, step_name="after failover")
+        # В этом сценарии primary_pile_name остается PRIMARY, но создаем новый kv_client
+        # к ноде из primary pile для надежности
+        primary_kv_client = keyvalue_client_factory(
+            primary_pile_nodes[0].host,
+            primary_pile_nodes[0].grpc_port,
+            cluster=self.cluster,
+            retry_count=10
+        )
+        self._check_cluster_kv_operations(table_path, tablet_ids, step_name="after failover", kv_client=primary_kv_client)
 
         # Шаг 8: Восстанавливаем ноды synchronized pile (чиним что сломали)
         self.logger.info("=== RESTORING SYNCHRONIZED PILE NODES ===")

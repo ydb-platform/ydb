@@ -3985,7 +3985,16 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
     }
 
     Y_UNIT_TEST(LocksBrokenStats) {
-        auto [runtime, server, sender] = TestCreateServer();
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
         TShardedTableOptions opts;
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);

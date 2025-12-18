@@ -3924,13 +3924,7 @@ public:
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             actor->FillStats(&result);
         });
-<<<<<<< HEAD
-=======
-        ForEachLookupActor([&](IKqpBufferTableLookup* actor, const TActorId) {
-            actor->FillStats(&result);
-        });
         TKqpTableWriterStatistics::AddLockStats(&result, LocksBrokenAsBreaker, LocksBrokenAsVictim);
->>>>>>> 017c5855578 (Add lock statistics to KQP query metrics (#30268))
         return result;
     }
 

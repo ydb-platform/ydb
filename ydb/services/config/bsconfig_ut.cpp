@@ -23,7 +23,10 @@
 #include <grpcpp/create_channel.h>
 
 #include <util/string/builder.h>
+<<<<<<< HEAD
 #include <util/string/printf.h>
+=======
+>>>>>>> 6182d7e1faf (Add block for V1 API when V2 is enabled (#30863))
 #include <util/system/thread.h>
 
 #include <functional>
@@ -349,11 +352,16 @@ config:
     }
 
     Y_UNIT_TEST(CheckV1IsBlocked) {
+<<<<<<< HEAD
         NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
 
         TKikimrWithGrpcAndRootSchema server;
         TString pdiskPath = server.GetRuntime()->GetTempDir() + "pdisk_1.dat";
         TString yamlConfig = Sprintf(R"(
+=======
+        TKikimrWithGrpcAndRootSchema server;
+        TString yamlConfig = R"(
+>>>>>>> 6182d7e1faf (Add block for V1 API when V2 is enabled (#30863))
 metadata:
   kind: MainConfig
   cluster: ""
@@ -369,7 +377,11 @@ config:
       type: SSD
   - host_config_id: 2
     drive:
+<<<<<<< HEAD
     - path: %s
+=======
+    - path: SectorMap:3:64
+>>>>>>> 6182d7e1faf (Add block for V1 API when V2 is enabled (#30863))
       type: SSD
   hosts:
   - host: ::1
@@ -377,7 +389,11 @@ config:
     host_config_id: 2
   feature_flags:
     switch_to_config_v2: true
+<<<<<<< HEAD
 )", pdiskPath.c_str());
+=======
+)";
+>>>>>>> 6182d7e1faf (Add block for V1 API when V2 is enabled (#30863))
         ReplaceConfig(server.GetChannel(), yamlConfig, std::nullopt, std::nullopt, false,
             [](const auto& resp) {
                 UNIT_ASSERT_CHECK_STATUS(resp.operation(), Ydb::StatusIds::SUCCESS);

@@ -9,9 +9,9 @@
 namespace NKikimr::NPQ {
 
 extern const TTabletPercentileCounter::TRangeDef FAST_LATENCY_RANGES[13];
-extern const NMonitoring::TBucketBounds FAST_LATENCY_BOUNDS;
 extern const TVector<std::pair<ui64, TString>> FAST_LATENCY_INTERVALS;
 extern const TVector<std::pair<ui64, TString>> FAST_LATENCY_MS_INTERVALS;
+extern const NMonitoring::TBucketBounds FAST_LATENCY_BOUNDS;
 
 extern const TTabletPercentileCounter::TRangeDef SLOW_LATENCY_RANGES[14];
 extern const TVector<std::pair<ui64, TString>> SLOW_LATENCY_INTERVALS;

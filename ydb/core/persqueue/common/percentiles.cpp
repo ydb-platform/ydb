@@ -38,7 +38,7 @@ TVector<std::pair<ui64, TString>> ToIntervals(const TTabletPercentileCounter::TR
 
 }
 
-extern const TTabletPercentileCounter::TRangeDef FAST_LATENCY_RANGES[13] ={
+const TTabletPercentileCounter::TRangeDef FAST_LATENCY_RANGES[13] = {
     {0, "0"},
     {1, "1"},
     {5, "5"},
@@ -56,6 +56,8 @@ extern const TTabletPercentileCounter::TRangeDef FAST_LATENCY_RANGES[13] ={
 
 const TVector<std::pair<ui64, TString>> FAST_LATENCY_INTERVALS = ToIntervals(FAST_LATENCY_RANGES, std::size(FAST_LATENCY_RANGES));
 const TVector<std::pair<ui64, TString>> FAST_LATENCY_MS_INTERVALS = ToIntervals(FAST_LATENCY_RANGES, std::size(FAST_LATENCY_RANGES), "ms");
+const NMonitoring::TBucketBounds FAST_LATENCY_BOUNDS = ToBucketBounds(FAST_LATENCY_RANGES, std::size(FAST_LATENCY_RANGES));
+
 
 const TTabletPercentileCounter::TRangeDef SLOW_LATENCY_RANGES[14] = {
     {10, "10"},

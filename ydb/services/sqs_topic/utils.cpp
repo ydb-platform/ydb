@@ -76,6 +76,24 @@ namespace NKikimr::NSqsTopic {
         return labels;
     }
 
+    TVector<std::pair<TString, TString>> GetRequestMessageCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    ) {
+        TVector<std::pair<TString, TString>> labels{
+            {"name", "api.sqs.request.message_count"}
+        };
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            labels
+        );
+    }
+
     TVector<std::pair<TString, TString>> GetResponseMessageCountMetricsLabels(
         const TString& databasePath,
         const TString& topicPath,

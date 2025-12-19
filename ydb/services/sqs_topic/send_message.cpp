@@ -139,6 +139,16 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
+            this->Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(Items.size()), true, true,
+                    GetRequestMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method)
+                });
+
             NPQ::NMLP::TWriterSettings writerSettings{
                 .DatabasePath = QueueUrl_->Database,
                 .TopicName = FullTopicPath_,

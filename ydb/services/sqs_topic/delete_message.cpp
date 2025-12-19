@@ -112,6 +112,16 @@ namespace NKikimr::NSqsTopic::V1 {
                 return;
             }
 
+            ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(requestList.size()), true, true,
+                    GetRequestMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method)
+                });
+
             TString serializedToken = this->Request_->GetSerializedToken();
             NPQ::NMLP::TCommitterSettings committerSettings{
                 .DatabasePath = this->QueueUrl_->Database,

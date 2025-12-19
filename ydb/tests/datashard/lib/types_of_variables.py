@@ -157,7 +157,7 @@ index_second_sync = {
 }
 
 index_three_sync = {
-    "Bool": lambda i: bool(i),
+    "Bool": lambda i: i > 3,
     "Decimal(15,0)": lambda i: "{}".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
@@ -205,7 +205,7 @@ index_first = {
     "Uint16": lambda i: i,
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
-    "Bool": lambda i: bool(i),
+    "Bool": lambda i: i > 3,
     "Decimal(15,0)": lambda i: "{}".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
@@ -242,7 +242,7 @@ pk_types = {
     "Uint16": lambda i: i,
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
-    "Bool": lambda i: bool(i),
+    "Bool": lambda i: i > 3,
     "Decimal(15,0)": lambda i: "{}".format(i),
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
@@ -318,7 +318,7 @@ type_to_literal_lambda = {
     "Uint16": lambda i: i,
     "Int8": lambda i: i,
     "Uint8": lambda i: i,
-    "Bool": lambda i: bool(i),
+    "Bool": lambda i: i > 3,
     "Decimal(15,0)": lambda i: f"Decimal('{i}', 15, 0)",
     "Decimal(22,9)": lambda i: f"Decimal('{i}.123', 22, 9)",
     "Decimal(35,10)": lambda i: f"Decimal('{i}.123456', 35, 10)",
@@ -346,7 +346,7 @@ type_to_literal_lambda = {
 #
 
 pk_pg_types = {
-    "pgbool": lambda i: "t" if bool(i) else "f",
+    "pgbool": lambda i: "t" if i > 3 else "f",
     "pgint2": lambda i: i,
     "pgint4": lambda i: i,
     "pgint8": lambda i: i,
@@ -358,6 +358,10 @@ pk_pg_types = {
     "pgdate": generate_date_value,
     "pgtimestamp": lambda i: generate_datetime_value(i).strftime("%Y-%m-%d %H:%M:%S"),
     "pginterval": lambda i: f"{i:02}:21:01",
+    # add some native types to test type compatibility
+    "Uint32": lambda i: i,
+    "Decimal(15,0)": lambda i: "{}".format(i),
+    "Utf8": lambda i: f"Utf8 {i}",
 }
 
 pk_pg_types_no_bool = filter_dict(
@@ -373,6 +377,10 @@ pk_pg_types_no_bool = filter_dict(
     "pgdate",
     "pgtimestamp",
     "pginterval",
+    # add some native types to test type compatibility
+    "Uint32",
+    "Decimal(15,0)",
+    "Utf8",
 )
 
 non_pk_pg_types = {
@@ -380,4 +388,6 @@ non_pk_pg_types = {
     "pgfloat8": lambda i: i + 0.6,
     "pgjson": lambda i: '{{"another_key_pg": {}}}'.format(i),
     "pgjsonb": lambda i: '{{"another_doc_key_pg": {}}}'.format(i),
+    # add some native types to test type compatibility
+    "Double": lambda i: i + 0.2,
 }

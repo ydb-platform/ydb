@@ -202,7 +202,8 @@ class TestResult:
             error_type=error_type or '',
             is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
             is_timeout_issue=(error_type or '').upper() == 'TIMEOUT',
-            is_not_launched=(error_type or '').upper() == 'NOT_LAUNCHED' and status == TestStatus.SKIP
+            # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
+            is_not_launched=(error_type or '').upper() == 'NOT_LAUNCHED' and status in (TestStatus.SKIP, TestStatus.MUTE)
         )
 
 

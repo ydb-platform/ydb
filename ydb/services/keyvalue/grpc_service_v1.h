@@ -9,13 +9,13 @@
 
 namespace NKikimr::NGRpcService {
 
-class TKeyValueGRpcService
+class TKeyValueV1GRpcService
         : public NYdbGrpc::TGrpcServiceBase<Ydb::KeyValue::V1::KeyValueService>
 {
 public:
-    TKeyValueGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+    TKeyValueV1GRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
             NActors::TActorId grpcRequestProxyId);
-    ~TKeyValueGRpcService();
+    ~TKeyValueV1GRpcService();
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
 private:

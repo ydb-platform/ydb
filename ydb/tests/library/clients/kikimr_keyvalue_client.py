@@ -9,6 +9,7 @@ import six
 import logging
 
 from ydb.public.api.grpc import ydb_keyvalue_v1_pb2_grpc as grpc_server
+from ydb.public.api.grpc import ydb_keyvalue_v2_pb2_grpc as grpc_server_v2
 from ydb.public.api.protos import ydb_keyvalue_pb2 as keyvalue_api
 
 logger = logging.getLogger()
@@ -51,15 +52,18 @@ class KeyValueClient(object):
         ]
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.KeyValueServiceStub(self._channel)
+        self._stub_v2 = grpc_server_v2.KeyValueServiceStub(self._channel)
 
-    def _get_invoke_callee(self, method):
+    def _get_invoke_callee(self, method, version):
+        if version == 'v2':
+            return getattr(self._stub_v2, method)
         return getattr(self._stub, method)
 
-    def invoke(self, request, method):
+    def invoke(self, request, method, version):
         retry = self.__retry_count
         while True:
             try:
-                callee = self._get_invoke_callee(method)
+                callee = self._get_invoke_callee(method, version)
                 return callee(request)
             except (RuntimeError, grpc.RpcError):
                 retry -= 1

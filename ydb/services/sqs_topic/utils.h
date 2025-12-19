@@ -45,4 +45,11 @@ namespace NKikimr::NSqsTopic {
         const TString& method,
         const TString& status
     );
+
+    TVector<std::pair<TString, TString>> GetResponseEmptyCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    );
 } // namespace NKikimr::NSqsTopic

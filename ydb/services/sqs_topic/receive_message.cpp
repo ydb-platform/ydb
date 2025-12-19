@@ -223,6 +223,18 @@ namespace NKikimr::NSqsTopic::V1 {
                         "success")
                 });
 
+            if (response.Messages.empty()) {
+                ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                    new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                        1, true, true,
+                        GetResponseEmptyCountMetricsLabels(
+                            QueueUrl_->Database,
+                            FullTopicPath_,
+                            QueueUrl_->Consumer,
+                            "ReceiveMessage")
+                    });
+            }
+
             Ydb::Ymq::V1::ReceiveMessageResult result;
             for (auto& message : response.Messages) {
                 Ydb::Ymq::V1::Message m = ConvertMessage(std::move(message), ctx);

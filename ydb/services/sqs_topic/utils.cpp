@@ -96,4 +96,22 @@ namespace NKikimr::NSqsTopic {
         );
     }
 
+    TVector<std::pair<TString, TString>> GetResponseEmptyCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    ) {
+        TVector<std::pair<TString, TString>> labels{
+            {"name", "api.sqs.response.empty_count"}
+        };
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            labels
+        );
+    }
+
 } // namespace NKikimr::NSqsTopic

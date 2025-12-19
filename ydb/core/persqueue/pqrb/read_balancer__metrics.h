@@ -33,7 +33,7 @@ struct TPartitionMetrics {
 };
 
 struct TCounters {
-    std::vector<ui8> Types;
+    const ui8* Types;
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> Counters;
 };
 

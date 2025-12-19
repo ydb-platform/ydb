@@ -47,7 +47,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     worker.SetTargetId(targetId);
     worker.SetWorkerId(workerId);
 
-    auto* command = record.MutableCommand();
+    auto& command = *record.MutableCommand();
 
     command->SetDatabase(database);
     if (metricsLevel) {

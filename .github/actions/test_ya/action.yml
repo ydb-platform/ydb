@@ -339,6 +339,7 @@ runs:
           ".github/scripts/get_main_build_size.py"
           ".github/scripts/check_ydb_qa_config.py"
           ".github/scripts/tests/generate-summary.py"
+          ".github/scripts/tests/get_test_history.py"
           ".github/scripts/tests/fail-checker.py"
           ".github/scripts/tests/transform_build_results.py"
         )

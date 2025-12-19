@@ -2456,7 +2456,7 @@ bool TColumnFamiliesMerger::Has(ui32 familyId) const {
 NKikimrSchemeOp::TFamilyDescription *TColumnFamiliesMerger::Get(ui32 familyId, TString &errDescr) {
     if (!Has(familyId)) {
         errDescr = TStringBuilder()
-            << "Column family with id: " << familyId << " doesn't present"
+            << "Column family with id " << familyId << " is not present"
             << ", auto generation new column family is allowed only by name in column description";
         return nullptr;
     }
@@ -2482,7 +2482,7 @@ NKikimrSchemeOp::TFamilyDescription *TColumnFamiliesMerger::Get(const TString &f
         return Get(IdByName.at(canonicFamilyName), canonicFamilyName, errDescr);
     }
 
-    errDescr = TStringBuilder() << "Column family with name: " << familyName << " doesn't present";
+    errDescr = TStringBuilder() << "Column family with name " << familyName << " is not present";
 
     return nullptr;
 }

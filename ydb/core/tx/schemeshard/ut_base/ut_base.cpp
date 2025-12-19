@@ -12473,7 +12473,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
         ui64 txId = 100;
 
-        // StorageConfig won't be infered with multiple StoragePools
+        // StorageConfig won't be inferred with multiple StoragePools
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
                 Name: "MyRoot"
                 StoragePools {

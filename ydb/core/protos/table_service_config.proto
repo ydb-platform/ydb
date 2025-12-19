@@ -487,5 +487,9 @@ message TTableServiceConfig {
         optional uint32 MaxConcurrentCompilations = 5 [default = 5];
     }
 
+<<<<<<< HEAD
     optional TWarmupConfig WarmupConfig = 121;
+=======
+    optional TWarmupConfig WarmupConfig = 120 [default = false, (InvalidateCompileCache) = false];
+>>>>>>> f42f9e7c2a1 (seems to be working!)
 };

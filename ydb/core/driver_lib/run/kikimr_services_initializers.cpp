@@ -85,7 +85,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
-#include <ydb/core/kqp/compile_service/kqp_warmup_actor.h>
+#include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 
 #include <ydb/core/load_test/service_actor.h>
 
@@ -2304,7 +2304,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             TString database = appData->TenantName;
             TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
 
-            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, {}, database, cluster);
+            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, {});
             setup->LocalServices.push_back(std::make_pair(
                 NKqp::MakeKqpWarmupActorId(NodeId),
                 TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));

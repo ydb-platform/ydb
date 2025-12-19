@@ -3702,9 +3702,8 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
         }
     }
 
-    if (step > PlanStep) {
+    if ((step > PlanStep) && lastPlannedTxId.Defined()) {
         // если это план из будущего, то надо запомнить, последнюю запланированную транзакцию
-        PQ_ENSURE(lastPlannedTxId.Defined());
         PlanStep = step;
         PlanTxId = *lastPlannedTxId;
     }

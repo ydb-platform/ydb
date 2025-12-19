@@ -14,7 +14,8 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Request, request), (Cookie, cookie), (Origin, origin),
             (Binding, Binding), (Scepter, Scepter ? std::make_optional(Scepter->Id) : std::nullopt),
             (AddedNodes, addedNodes));
-        const auto [it, inserted] = ScatterTasks.try_emplace(cookie, std::move(origin), std::move(request), ScepterCounter);
+        const auto [it, inserted] = ScatterTasks.try_emplace(cookie, std::move(origin), std::move(request), ScepterCounter,
+            TActivationContext::Monotonic());
         Y_ABORT_UNLESS(inserted);
         TScatterTask& task = it->second;
         PrepareScatterTask(cookie, task);
@@ -23,23 +24,26 @@ namespace NKikimr::NStorage {
                 IssueScatterTaskForNode(nodeId, info, cookie, task);
             }
             for (const TNodeIdentifier& nodeId : addedNodes) {
-                auto ev = std::make_unique<TEvNodeConfigScatter>();
-                ev->Record.CopyFrom(task.Request);
-                ev->Record.SetCookie(cookie);
-                ev->Record.SetTargeted(true);
-                auto interconnectSessionId = SubscribeToPeerNode(nodeId.NodeId(), TActorId());
-                auto handle = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId.NodeId()), SelfId(),
-                    ev.release(), 0, 0);
-                if (interconnectSessionId) {
-                    handle->Rewrite(TEvInterconnect::EvForward, interconnectSessionId);
-                }
-                TActivationContext::Send(handle.release());
+                IssueAddedNodeScatterTask(nodeId.NodeId(), cookie, task);
                 const auto [it, inserted] = task.PendingNodes.insert(nodeId.NodeId());
                 Y_ABORT_UNLESS(inserted);
                 AddedNodesScatterTasks.emplace(nodeId.NodeId(), cookie);
             }
         }
         CheckCompleteScatterTask(it);
+    }
+
+    void TDistributedConfigKeeper::IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task) {
+        auto ev = std::make_unique<TEvNodeConfigScatter>();
+        ev->Record.CopyFrom(task.Request);
+        ev->Record.SetCookie(cookie);
+        ev->Record.SetTargeted(true);
+        auto interconnectSessionId = SubscribeToPeerNode(nodeId, TActorId());
+        auto handle = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), SelfId(), ev.release(), 0, 0);
+        if (interconnectSessionId) {
+            handle->Rewrite(TEvInterconnect::EvForward, interconnectSessionId);
+        }
+        TActivationContext::Send(handle.release());
     }
 
     void TDistributedConfigKeeper::CheckCompleteScatterTask(TScatterTasks::iterator it) {

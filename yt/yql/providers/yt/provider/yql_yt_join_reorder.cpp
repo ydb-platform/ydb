@@ -53,14 +53,29 @@ void DebugPrint(TYtJoinNode::TPtr node, TExprContext& ctx, int level) {
     }
 }
 
+TYtJoinNode::TPtr BuildYtJoinTreeWithReplacing(TYtJoinNodeOp* op, const THashMap<TYtJoinNodeOp*, std::shared_ptr<TJoinOptimizerNode>>& replaceMap, TExprContext& ctx, TPositionHandle pos) {
+    if (const auto p = replaceMap.FindPtr(op)) {
+        return BuildYtJoinTree(*p, ctx, pos);
+    }
+
+    auto ret = MakeIntrusive<TYtJoinNodeOp>(*op);
+    if (const auto leftOp = dynamic_cast<TYtJoinNodeOp*>(op->Left.Get())) {
+        ret->Left = BuildYtJoinTreeWithReplacing(leftOp, replaceMap, ctx, pos);
+    }
+    if (const auto rightOp = dynamic_cast<TYtJoinNodeOp*>(op->Right.Get())) {
+        ret->Right = BuildYtJoinTreeWithReplacing(rightOp, replaceMap, ctx, pos);
+    }
+    return ret;
+}
+
 class TJoinReorderer {
 public:
     TJoinReorderer(
-        TYtJoinNodeOp::TPtr op,
+        const TOrderJoinsParams& orderJoinsParams,
         const TYtState::TPtr& state,
         TExprContext& ctx,
         bool debug = false)
-        : Root(op)
+        : OrderJoinsParams(orderJoinsParams)
         , State(state)
         , Ctx(ctx)
         , Debug(debug)
@@ -68,65 +83,72 @@ public:
         Y_UNUSED(State);
 
         if (Debug) {
-            DebugPrint(Root, Ctx, 0);
+            DebugPrint(OrderJoinsParams.Root, Ctx, 0);
         }
     }
 
     TYtJoinNodeOp::TPtr Do() {
-        std::shared_ptr<IBaseOptimizerNode> tree;
-        TOptimizerLinkSettings linkSettings;
-        std::shared_ptr<IProviderContext> providerCtx;
-        BuildOptimizerJoinTree(State, tree, providerCtx, linkSettings, Root, Ctx);
-        auto ytCtx = std::static_pointer_cast<TYtProviderContext>(providerCtx);
+        THashMap<TYtJoinNodeOp*, std::shared_ptr<TJoinOptimizerNode>> resultMap;
+        for (const auto& opRaw : OrderJoinsParams.SuitableTrees) {
+            const TYtJoinNodeOp::TPtr op(opRaw);
 
-        std::function<void(const TString& str)> log;
+            std::shared_ptr<IBaseOptimizerNode> tree;
+            TOptimizerLinkSettings linkSettings;
+            std::shared_ptr<IProviderContext> providerCtx;
 
-        log = [](const TString& str) {
-            YQL_CLOG(INFO, ProviderYt) << str;
-        };
+            BuildOptimizerJoinTree(State, tree, providerCtx, linkSettings, op, Ctx);
+            auto ytCtx = std::static_pointer_cast<TYtProviderContext>(providerCtx);
 
-        IOptimizerNew::TPtr opt;
+            std::function<void(const TString& str)> log;
 
-        switch (State->Types->CostBasedOptimizer) {
-        case ECostBasedOptimizerType::PG:
-            if (linkSettings.HasForceSortedMerge || linkSettings.HasCBOUnsupportedHints) {
-                YQL_CLOG(ERROR, ProviderYt) << "PG CBO does not support link settings";
-                return Root;
+            log = [](const TString& str) {
+                YQL_CLOG(INFO, ProviderYt) << str;
+            };
+
+            IOptimizerNew::TPtr opt;
+
+            switch (State->Types->CostBasedOptimizer) {
+            case ECostBasedOptimizerType::PG:
+                if (linkSettings.HasForceSortedMerge || linkSettings.HasCBOUnsupportedHints) {
+                    YQL_CLOG(ERROR, ProviderYt) << "PG CBO does not support link settings";
+                    return OrderJoinsParams.Root;
+                }
+                opt = State->OptimizerFactory_->MakeJoinCostBasedOptimizerPG(*providerCtx, Ctx, {.Logger = log});
+                break;
+            case ECostBasedOptimizerType::Native:
+                if (linkSettings.HasCBOUnsupportedHints) {
+                    YQL_CLOG(ERROR, ProviderYt) << "Native CBO does not support link hints";
+                    return OrderJoinsParams.Root;
+                }
+                opt = State->OptimizerFactory_->MakeJoinCostBasedOptimizerNative(*providerCtx, Ctx, {.MaxDPhypDPTableSize = 100000});
+                break;
+            case ECostBasedOptimizerType::Disable:
+                YQL_CLOG(DEBUG, ProviderYt) << "CBO disabled";
+                return OrderJoinsParams.Root;
             }
-            opt = State->OptimizerFactory_->MakeJoinCostBasedOptimizerPG(*providerCtx, Ctx, {.Logger = log});
-            break;
-        case ECostBasedOptimizerType::Native:
-            if (linkSettings.HasCBOUnsupportedHints) {
-                YQL_CLOG(ERROR, ProviderYt) << "Native CBO does not support link hints";
-                return Root;
+
+            std::shared_ptr<TJoinOptimizerNode> result;
+
+            try {
+                result = opt->JoinSearch(std::dynamic_pointer_cast<TJoinOptimizerNode>(tree));
+                if (tree == result) { return OrderJoinsParams.Root; }
+            } catch (...) {
+                YQL_CLOG(ERROR, ProviderYt) << "Cannot do join search " << CurrentExceptionMessage();
+                return OrderJoinsParams.Root;
             }
-            opt = State->OptimizerFactory_->MakeJoinCostBasedOptimizerNative(*providerCtx, Ctx, {.MaxDPhypDPTableSize = 100000});
-            break;
-        case ECostBasedOptimizerType::Disable:
-            YQL_CLOG(DEBUG, ProviderYt) << "CBO disabled";
-            return Root;
+
+            std::stringstream ss;
+            result->Print(ss);
+            YQL_CLOG(INFO, ProviderYt) << "Result: " << ss.str();
+
+            resultMap[opRaw] = std::move(result);
         }
 
-        std::shared_ptr<TJoinOptimizerNode> result;
-
-        try {
-            result = opt->JoinSearch(std::dynamic_pointer_cast<TJoinOptimizerNode>(tree));
-            if (tree == result) { return Root; }
-        } catch (...) {
-            YQL_CLOG(ERROR, ProviderYt) << "Cannot do join search " << CurrentExceptionMessage();
-            return Root;
-        }
-
-        std::stringstream ss;
-        result->Print(ss);
-
-        YQL_CLOG(INFO, ProviderYt) << "Result: " << ss.str();
-
-        TVector<TString> scope;
-        TYtJoinNodeOp::TPtr res = dynamic_cast<TYtJoinNodeOp*>(BuildYtJoinTree(result, Ctx, {}).Get());
-        res->CostBasedOptPassed = true;
-
+        TYtJoinNodeOp::TPtr res = dynamic_cast<TYtJoinNodeOp*>(BuildYtJoinTreeWithReplacing(OrderJoinsParams.Root.Get(), resultMap, Ctx, {}).Get());
         YQL_ENSURE(res);
+
+        res->CostBasedOptPassed = !OrderJoinsParams.NotReadyLeaves;
+
         if (Debug) {
             DebugPrint(res, Ctx, 0);
         }
@@ -135,7 +157,7 @@ public:
     }
 
 private:
-    TYtJoinNodeOp::TPtr Root;
+    const TOrderJoinsParams& OrderJoinsParams;
     const TYtState::TPtr& State;
     TExprContext& Ctx;
     bool Debug;
@@ -571,17 +593,70 @@ TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TExp
     return BuildYtJoinTree(node, scope, ctx, pos);
 }
 
+
+TOrderJoinsParams::TOrderJoinsParams(const TYtJoinNodeOp::TPtr& op, size_t limit)
+    : Root(op)
+    , Limit(limit)
+{
+    YQL_ENSURE(Root);
+    YQL_ENSURE(Limit > 1);
+    const auto ready = InitRecursive(op.Get());
+    AddTree(ready);
+}
+
+void TOrderJoinsParams::AddTree(const TOrderJoinsParams::TReadyJoin& tree) {
+    if (tree.ReadyTree && tree.TotalLeaves >= Limit) {
+        const auto op = dynamic_cast<TYtJoinNodeOp*>(tree.ReadyTree);
+        YQL_ENSURE(op);
+        SuitableTrees.push_back(op);
+        MaxLeaves = Max(MaxLeaves, tree.TotalLeaves);
+    }
+}
+
+TOrderJoinsParams::TReadyJoin TOrderJoinsParams::InitRecursive(TYtJoinNode* node) {
+    if (const auto leaf = dynamic_cast<TYtJoinNodeLeaf*>(node)) {
+        if (AllOf(leaf->Section.Paths(), [](const auto& path) { return bool(TYtPathInfo(path).Table->Stat); })) {
+            return {.ReadyTree = node, .TotalLeaves = 1};
+        }
+        ++NotReadyLeaves;
+        return {.ReadyTree = nullptr, .TotalLeaves = 1};
+    }
+    const auto op = dynamic_cast<TYtJoinNodeOp*>(node);
+    YQL_ENSURE(op);
+    const auto left = InitRecursive(op->Left.Get());
+    const auto right = InitRecursive(op->Right.Get());
+    const size_t leaves = left.TotalLeaves + right.TotalLeaves;
+    if (left.ReadyTree && right.ReadyTree) {
+        return {.ReadyTree = node, .TotalLeaves = leaves};
+    }
+    AddTree(left);
+    AddTree(right);
+    return {.ReadyTree = nullptr, .TotalLeaves = leaves};
+}
+
+TYtJoinNodeOp::TPtr OrderJoins(const TOrderJoinsParams& orderJoinsParams, const TYtState::TPtr& state, TExprContext& ctx, bool debug)
+{
+    if (state->Types->CostBasedOptimizer == ECostBasedOptimizerType::Disable || orderJoinsParams.Root->CostBasedOptPassed) {
+        return orderJoinsParams.Root;
+    }
+
+    auto result = TJoinReorderer(orderJoinsParams, state, ctx, debug).Do();
+    if (!debug && AreSimilarTrees(result, orderJoinsParams.Root)) {
+        return orderJoinsParams.Root;
+    }
+    return result;
+}
+
 TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug)
 {
     if (state->Types->CostBasedOptimizer == ECostBasedOptimizerType::Disable || op->CostBasedOptPassed) {
         return op;
     }
-
-    auto result = TJoinReorderer(op, state, ctx, debug).Do();
-    if (!debug && AreSimilarTrees(result, op)) {
-        return op;
-    }
-    return result;
+    const TOrderJoinsParams orderJoinsParams(op);
+    // YT cbo needs all inputs to be ready.
+    YQL_ENSURE(!orderJoinsParams.NotReadyLeaves);
+    YQL_ENSURE(orderJoinsParams.SuitableTrees.size() == 1);
+    return OrderJoins(orderJoinsParams, state, ctx, debug);
 }
 
 } // namespace NYql

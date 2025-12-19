@@ -2410,7 +2410,7 @@ message TColumnShardConfig {
     }
 
     optional uint32 MaxInFlightIntervalsOnRequest = 16;
-    optional uint32 MaxReadStaleness_ms = 18 [default = 1800000];
+    optional uint32 MaxReadStaleness_ms = 18 [default = 300000];
     optional uint32 GCIntervalMs = 19 [default = 30000];
     optional uint32 CompactionActualizationLagMs = 20 [default = 1000];
     optional uint32 ActualizationTasksLagMs = 21 [default = 1000];
@@ -2457,6 +2457,13 @@ message TColumnShardConfig {
 
     optional TStatistics Statistics = 57;
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
+    optional uint32 ProxyOverloadedDelayMs = 59 [default = 5000];
+    optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
+    
+    oneof DefaultCompaction {
+        string DefaultCompactionPreset = 61 [default = "tiling"];
+        NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
+    }
 }
 
 message TSchemeShardConfig {

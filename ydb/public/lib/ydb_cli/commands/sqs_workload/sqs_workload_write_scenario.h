@@ -8,6 +8,9 @@ namespace NYdb::NConsoleClient {
     class TSqsWorkloadWriteScenario: public TSqsWorkloadScenario {
     public:
         int Run(const TClientCommand::TConfig&);
+
+    private:
+        int RunScenario();
     };
 
 } // namespace NYdb::NConsoleClient

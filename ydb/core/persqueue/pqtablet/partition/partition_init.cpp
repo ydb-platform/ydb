@@ -1105,17 +1105,22 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     if (!IsSupportive()) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
+            PartitionCountersLabeled = CreateProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>(
+                                                                         EscapeBadChars(TopicName()),
                                                                          Partition.InternalPartitionId,
-                                                                         Config.GetYdbDatabasePath()));
+                                                                         Config.GetYdbDatabasePath());
 
-            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(EscapeBadChars(TopicName()),
+            PartitionCountersExtended = CreateProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>(
+                                                                                  EscapeBadChars(TopicName()),
                                                                                   Partition.InternalPartitionId,
-                                                                                  Config.GetYdbDatabasePath()));
+                                                                                  Config.GetYdbDatabasePath());
         } else {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
-            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(TopicName(),
-                                                                                  Partition.InternalPartitionId));
+            PartitionCountersLabeled = CreateProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>(
+                                                                        TopicName(),
+                                                                        Partition.InternalPartitionId);
+            PartitionCountersExtended = CreateProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>(
+                                                                        TopicName(),
+                                                                        Partition.InternalPartitionId);
         }
     }
 
@@ -1389,7 +1394,7 @@ void TPartition::CreateCompacter() {
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         }
         Compacter.Reset();
-        PartitionCompactionCounters.Reset();
+        PartitionKeyCompactionCounters.reset();
         return;
     }
     if (Compacter) {
@@ -1402,12 +1407,16 @@ void TPartition::CreateCompacter() {
 
     //Init compacter counters
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        PartitionCompactionCounters.Reset(new TPartitionKeyCompactionCounters(EscapeBadChars(TopicName()),
-                                                                           Partition.OriginalPartitionId,
-                                                                           Config.GetYdbDatabasePath()));
+        PartitionKeyCompactionCounters = CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(
+                                            EscapeBadChars(TopicName()),
+                                            Partition.OriginalPartitionId,
+                                            Config.GetYdbDatabasePath()
+                                        );
     } else {
-        PartitionCompactionCounters.Reset(new TPartitionKeyCompactionCounters(TopicName(),
-                                                                           Partition.OriginalPartitionId));
+        PartitionKeyCompactionCounters = CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(
+                                            TopicName(),
+                                            Partition.OriginalPartitionId
+                                        );
     }
     Compacter->TryCompactionIfPossible();
 }

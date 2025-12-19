@@ -394,6 +394,16 @@ public:
         const TTablePartitionCookiePtr& tablePartitionDescriptor,
         const TReadTablePartitionOptions& options) override;
 
+    TFuture<IFormattedTableReaderPtr> CreateFormattedTableReader(
+        const NYPath::TRichYPath& path,
+        const NYson::TYsonString& format,
+        const TTableReaderOptions& options) override;
+
+    TFuture<IFormattedTableReaderPtr> CreateFormattedTablePartitionReader(
+        const TTablePartitionCookiePtr& cookie,
+        const NYson::TYsonString& format,
+        const TReadTablePartitionOptions& options) override;
+
     TFuture<void> TruncateJournal(
         const NYPath::TYPath& path,
         i64 rowCount,

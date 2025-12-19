@@ -151,7 +151,7 @@ void TExecContextBase::DumpFilesFromJob(const NYT::TNode& opSpec, const TYtSetti
         handlePaths(opSpec.At("reducer").At("file_paths"));
     }
 
-    IYtGateway::TDumpOptions dumpOptions(Session_->SessionId_);
+    auto dumpOptions = IYtGateway::TDumpOptions(Session_->SessionId_).Config(config);
     for (auto& [basename, dumpPath] : JobFilesDumpPaths) {
         YQL_ENSURE(snapshots.contains(basename), "file is not present in operation spec");
         auto& snapshotNodeId = snapshots.at(basename);

@@ -26,8 +26,13 @@ class WorkloadVectorIndex(WorkloadBase):
 
         if type == "uint8":
             values = [random.randint(0, 255) for _ in range(size)]
-        else:
+        elif type == "int8":
             values = [random.randint(-127, 127) for _ in range(size)]
+        elif type == "bit":
+            values = [random.randint(0, 1) for _ in range(size)]
+        else:
+            raise ValueError(f"Unknown vector type: {type}")
+
         return ",".join(str(val) for val in values)
 
     def _create_table(self, table_path):
@@ -340,7 +345,7 @@ class WorkloadVectorIndex(WorkloadBase):
         table_path = self.get_table_path(self.table_name)
         distance_data = ["cosine", "manhattan", "euclidean"]
         similarity_data = ["cosine", "inner_product"]
-        vector_type_data = ["float", "int8", "uint8"]
+        vector_type_data = ["float", "int8", "uint8", "bit"]
         prefixed_data = [False, True]
         levels_data = [1, 3]
         overlap_data = [0, 2]

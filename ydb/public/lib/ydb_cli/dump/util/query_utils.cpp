@@ -391,19 +391,4 @@ bool IsSchemaSecret(TStringBuf secretName) {
     return secretName.StartsWith('/');
 }
 
-bool RewriteSecretsNoCheck(TString& query, const TString& dbRestoreRoot, NYql::TIssues& issues) {
-    auto secretSettings = GetSecretSettings(query);
-    for (auto& secretSetting : secretSettings) {
-        if (IsSchemaSecret(secretSetting.Value)) {
-            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, GetDatabase(query), dbRestoreRoot);
-        }
-
-        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
-           return false;
-        }
-    }
-
-    return true;
-}
-
 } // NYdb::NDump

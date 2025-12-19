@@ -146,6 +146,9 @@ constexpr const ui32 EqWidthHistogramBucketStorageSize = 8;
 class TEqWidthHistogram {
 public:
 #pragma pack(push, 1)
+    struct THistValue {
+        ui8 value[EqWidthHistogramBucketStorageSize];
+    };
     struct TDomainRange {
         ui8 Start[EqWidthHistogramBucketStorageSize];
         ui8 End[EqWidthHistogramBucketStorageSize];
@@ -177,19 +180,19 @@ public:
         if (CmpLess<T>(domainEnd, val)) {
             return GetNumBuckets() - 1;
         }
-        T bucketWidth = GetBucketWidth<T>();
+        const THistValue bucketWidth = GetBucketWidth<T>();
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
             using UT = std::make_unsigned_t<T>;
             const UT start = static_cast<UT>(domainStart);
             const UT value = static_cast<UT>(val);
             const UT diff = value - start;
-            Y_ENSURE(diff < static_cast<UT>(std::numeric_limits<T>::max()));
-            UT bucketIndex = diff / static_cast<UT>(bucketWidth);
+            UT bucketIndex = diff / LoadFrom<UT>(bucketWidth.value);
             bucketIndex = std::floor<UT>(bucketIndex);
             bucketIndex = std::min<UT>(GetNumBuckets() - 1, bucketIndex);
             return static_cast<ui32>(bucketIndex);
         }
-        T bucketIndex = std::floor((val - domainStart) / bucketWidth);
+        T bucketIndex = std::floor((val - domainStart) / LoadFrom<T>(bucketWidth.value));
+        bucketIndex = std::min<T>(GetNumBuckets() - 1, bucketIndex);
         return static_cast<ui32>(bucketIndex);
     }
 
@@ -200,21 +203,21 @@ public:
 
     // Returns bucket width based on domain range and number of buckets.
     template <typename T>
-    T GetBucketWidth() const {
-        if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
-            using UT = std::make_unsigned_t<T>;
-            const UT start = static_cast<UT>(LoadFrom<T>(DomainRange_.Start));
-            const UT end = static_cast<UT>(LoadFrom<T>(DomainRange_.End));
-            const UT rangeLen = end - start;
-            Y_ENSURE(rangeLen < static_cast<UT>(std::numeric_limits<T>::max()));
-            const UT bucketWidth = rangeLen / static_cast<UT>(GetNumBuckets());
-            return static_cast<T>(bucketWidth);
-        }
+    THistValue GetBucketWidth() const {
+        THistValue returnValue;
         const T start = LoadFrom<T>(DomainRange_.Start);
         const T end = LoadFrom<T>(DomainRange_.End);
+        if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
+            using UT = std::make_unsigned_t<T>;
+            const UT rangeLen = static_cast<UT>(end) - static_cast<UT>(start);
+            const UT bucketWidth = rangeLen / static_cast<UT>(GetNumBuckets());
+            StoreTo<UT>(returnValue.value, bucketWidth);
+            return returnValue;
+        }
         const T rangeLen = end - start;
         T bucketWidth = rangeLen / static_cast<T>(GetNumBuckets());
-        return bucketWidth;
+        StoreTo<T>(returnValue.value, bucketWidth);
+        return returnValue;
     }
 
     // Returns histogram type.
@@ -240,8 +243,13 @@ public:
         DomainRange_ = {};
         StoreTo<T>(DomainRange_.Start, rangeStart);
         StoreTo<T>(DomainRange_.End, rangeEnd);
-        T bucketWidth = GetBucketWidth<T>(); // non-zero positive width of each bucket
-        Y_ENSURE(CmpLess<T>(0, bucketWidth), "Domain range is too close");
+        const THistValue bucketWidth = GetBucketWidth<T>(); // non-zero positive width of each bucket
+        if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
+            using UT = std::make_unsigned_t<T>;
+            Y_ENSURE(CmpLess<UT>(0, LoadFrom<UT>(bucketWidth.value)), "Domain range is too close");
+        } else {
+            Y_ENSURE(CmpLess<T>(0, LoadFrom<T>(bucketWidth.value)), "Domain range is too close");
+        }
     }
 
     // Seriailizes to a binary representation.
@@ -303,15 +311,16 @@ public:
     template <typename T>
     ui64 EstimateEqual(T val) const {
         const auto index = Histogram_->FindBucketIndex(val);
-        const auto count = Histogram_->GetNumElementsInBucket(index);
+        const ui64 count = Histogram_->GetNumElementsInBucket(index);
         const TEqWidthHistogram::THistValue bucketWidth = Histogram_->GetBucketWidth<T>();
         // Assuming uniform distribution.
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
-            const ui64 width = LoadFrom<ui64>(bucketWidth.Value);
-            return count / width;
+            using UT = std::make_unsigned_t<T>;
+            UT width = LoadFrom<UT>(bucketWidth.value);
+            return std::ceil<ui64>(static_cast<UT>(count) / width);
         }
-        const T width = LoadFrom<T>(bucketWidth.Value);
-        return static_cast<ui64>(count / width);
+        T width = LoadFrom<T>(bucketWidth.value);
+        return std::ceil<ui64>(static_cast<T>(count) / width);
     }
 
     // Returns the total number elements in histogram.

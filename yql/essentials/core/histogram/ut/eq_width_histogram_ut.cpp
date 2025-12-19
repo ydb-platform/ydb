@@ -32,16 +32,17 @@ void PopulateHistogram(std::shared_ptr<TEqWidthHistogram> histogram, const std::
                        EHistogramValueType valueType) {
     // NOTE: reconsider the loop on string, date, and bool due to i++
     if (valueType == EHistogramValueType::Float || valueType == EHistogramValueType::Double) {
-        T bucketWidth = histogram->template GetBucketWidth<T>();
-        T step = bucketWidth / 2;
+        TEqWidthHistogram::THistValue bucketWidth = histogram->template GetBucketWidth<T>();
+        T width = LoadFrom<T>(bucketWidth.value);
+        T step = width / 2;
         T rangeStart = LoadFrom<T>(histogram->GetDomainRange().Start);
         for (ui32 i = 0; i < histogram->GetNumBuckets(); ++i) {
-            T border = rangeStart + static_cast<T>(i) * bucketWidth;
+            T border = rangeStart + static_cast<T>(i) * width;
             histogram->AddElement(border - step);
             histogram->AddElement(border + step);
         }
     } else {
-        for (T i = range.first; i < range.second; ++i) {
+        for (T i = range.first; i < range.first + 25; ++i) {
             histogram->AddElement(i);
         }
     }
@@ -95,8 +96,8 @@ Y_UNIT_TEST(Basic) {
                              /*{value, result}=*/{25, 25},
                              /*{value, result}=*/{4, 25});
     TestHistogramBasic<i32>(1, /*values range=*/{-5, 25}, /*column range=*/{0, 20}, EHistogramValueType::Int32,
-                            /*{value, result}=*/{25, 30},
-                            /*{value, result}=*/{4, 30});
+                            /*{value, result}=*/{25, 25},
+                            /*{value, result}=*/{4, 25});
     TestHistogramBasic<double>(1, /*values range=*/{-5.0, 25.0}, /*column range=*/{0.0, 20.0}, EHistogramValueType::Double,
                                /*{value, result}=*/{25.0, 2},
                                /*{value, result}=*/{4.0, 2});
@@ -109,11 +110,11 @@ Y_UNIT_TEST(Basic) {
                              /*{value, result}=*/{4, 21});
 
     TestHistogramBasic<i32>(10, /*values range=*/{-5, 25}, /*column range=*/{0, 20}, EHistogramValueType::Int32,
-                            /*{value, result}=*/{25, 30},
-                            /*{value, result}=*/{4, 21});
+                            /*{value, result}=*/{25, 25},
+                            /*{value, result}=*/{4, 16});
     TestHistogramBasic<i64>(10, /*values range=*/{-5, 25}, /*column range=*/{0, 20}, EHistogramValueType::Int64,
-                            /*{value, result}=*/{25, 30},
-                            /*{value, result}=*/{4, 21});
+                            /*{value, result}=*/{25, 25},
+                            /*{value, result}=*/{4, 16});
 
     TestHistogramBasic<float>(10, /*values range=*/{-5.0, 25.0}, /*column range=*/{0.0, 20.0},
                               EHistogramValueType::Float,
@@ -149,18 +150,13 @@ Y_UNIT_TEST(Overload) {
                             /*{value, result}=*/{25, 25},
                             /*{value, result}=*/{4, 25});
 
-    UNIT_ASSERT_EXCEPTION(
-        TestHistogramBasic<i32>(1, /*values range=*/{0, 25}, /*column range=*/{-1, std::numeric_limits<i32>::max()}, EHistogramValueType::Int32,
-                                /*{value, result}=*/{25, 25},
-                                /*{value, result}=*/{4, 25}),
-        yexception);
-
-    UNIT_ASSERT_EXCEPTION(
-        TestHistogramBasic<i32>(1, /*values range=*/{std::numeric_limits<i32>::min(), std::numeric_limits<i32>::max()},
-                                /*column range=*/{std::numeric_limits<i32>::min(), std::numeric_limits<i32>::max()}, EHistogramValueType::Int32,
-                                /*{value, result}=*/{25, 25},
-                                /*{value, result}=*/{4, 25}),
-        yexception);
+    TestHistogramBasic<i32>(1, /*values range=*/{0, 25}, /*column range=*/{-1, std::numeric_limits<i32>::max()}, EHistogramValueType::Int32,
+                            /*{value, result}=*/{25, 25},
+                            /*{value, result}=*/{4, 25});
+    TestHistogramBasic<i32>(1, /*values range=*/{std::numeric_limits<i32>::min(), std::numeric_limits<i32>::max()},
+                            /*column range=*/{std::numeric_limits<i32>::min(), std::numeric_limits<i32>::max()}, EHistogramValueType::Int32,
+                            /*{value, result}=*/{25, 25},
+                            /*{value, result}=*/{4, 25});
 }
 
 Y_UNIT_TEST(Serialization) {
@@ -176,7 +172,7 @@ Y_UNIT_TEST(Serialization) {
 }
 
 Y_UNIT_TEST(AggregateHistogram) {
-    TVector<ui64> resultCountInt{20, 20, 20, 20, 20, 0, 0, 0, 0, 0};
+    TVector<ui64> resultCountInt{20, 20, 20, 20, 20, 20, 20, 20, 20, 70};
     TestHistogramAggregate<ui32>(10, /*values range=*/{0, 10}, /*column range=*/{0, 20}, EHistogramValueType::Uint32, 9,
                                  resultCountInt);
     TVector<ui64> resultCountFloat{30, 20, 20, 20, 20, 20, 20, 20, 20, 10};

@@ -2398,6 +2398,7 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
         error.FindMatching(NTabletClient::EErrorCode::HunkTabletStoreToggleConflict) ||
+        error.FindMatching(NTabletClient::EErrorCode::HunkStoreAllocationFailed) ||
         IsChaosRetriableError(error);
 }
 

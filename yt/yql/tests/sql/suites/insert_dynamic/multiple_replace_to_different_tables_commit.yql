@@ -2,13 +2,12 @@
 /* kikimr can not */
 /* dqfile can not - missing langver support */
 /* hybridfile can not - missing langver support */
-/* custom error: Multiple modification of dynamic table is not supported yet*/
 use plato;
 
 replace into Output
 select "x" as key;
 
-commit; 
+commit;
 
-replace into Output
+replace into Output1
 select "y" as key;

@@ -95,7 +95,7 @@ The table below lists additional attributes specific to the `Schemeshard` source
 || **Transaction attributes** | **>**                                                                                                  |  ||
 || `tx_id`                    | Transaction identifier.                                                                                | Optional ||
 || `begin_tx`                 | Flag set to `1` when the request starts a new transaction.                                             | Optional ||
-|| `commit_tx`                | Shows whether the request commits the transaction. Possible values: `true`, `false`.                   | Optional ||
+|| `commit_tx`                | Shows whether the request commits the transaction. Possible values: `1`, `0`.                   | Optional ||
 || **Request fields**         | **>**                                                                                                  |  ||
 || `query_text`               | [YQL](../yql/reference/index.md) query text formatted for logging (single-line, max 1024 characters).                                                 | Optional ||
 || `prepared_query_id`        | Identifier of a prepared query.                                                                        | Optional ||
@@ -109,7 +109,7 @@ The table below lists additional attributes specific to the `Schemeshard` source
 ### gRPC connection {#grpc-connection}
 
 **UID:** `grpc-conn`.
-**Logged operations:** Connection state changes (connect/disconnect).
+**Logged operations:** Only connection (connect) events are tracked.
 **How to enable:** Enable the `enable_grpc_audit` [feature flag](../reference/configuration/feature_flags.md).
 
 *This source uses only common attributes.*

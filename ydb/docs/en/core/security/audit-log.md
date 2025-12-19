@@ -4,8 +4,6 @@ _An audit_ log is a stream of records that document security-relevant operations
 
 Each record in the audit log is called an [audit event](../concepts/glossary.md#audit-events). An audit event captures a single security-relevant action.
 
-Every event includes a set of attributes that describe different aspects of the event. The specific set of attributes present in a given event depends on its event source: all audit events include the [common attributes](../reference/audit-log-attributes.md#common-attributes), and some sources add additional, source-specific attributes (see [Audit event sources overview](#audit-event-sources-overview)).
-
 Examples of typical audit log events:
 
 * Data access through DML requests.
@@ -13,9 +11,33 @@ Examples of typical audit log events:
 * Changes to permissions or access-control settings.
 * Administrative user actions.
 
-See the full list of possible log classes in the [Log classes](#log-classes) section.
+Every event includes a set of attributes that describe different aspects of the event. The specific set of attributes present in a given event depends on its event source: all audit events include the [common attributes](../reference/audit-log-attributes.md#common-attributes), and some sources add additional, source-specific attributes (see [Audit event sources overview](#audit-event-sources-overview)).
 
-The `audit_config` section in the [cluster configuration](../reference/configuration/index.md) defines which audit logs are collected, how they need to be serialized and where they are delivered. See the [audit log configuration](../reference/configuration/audit_config.md#audit-log-configuration) section for details.
+Audit logging in {{ ydb-short-name }} offers fine-grained control over what types of operations are tracked and at which points in their lifecycle. Audit events are grouped using [log classes](#log-classes), which define broad categories of operations. 
+
+Additionally, for greater flexibility, certain audit event sources support [log phases](#log-phases), allowing you to select whether events are logged when a request is first received, after it completes, or at both stages.
+
+## Configuration
+
+To configure audit logging, use the `audit_config` section in the [cluster configuration](../reference/configuration/index.md). This section allows you to specify which audit logs are captured, how events are serialized, and where audit data is sent. For more details on available configuration options, see [audit log configuration](../reference/configuration/audit_config.md#audit-log-configuration).
+
+## Audit event sources overview {#audit-event-sources-overview}
+
+The table below summarizes the built-in audit event sources. Use it to identify which source emits the events you need and how to enable those events.
+
+#|
+|| **Source / UID**                                     | **What it records** | **Source attributes** | **Configuration requirements** ||
+|| [Schemeshard](../concepts/glossary.md#scheme-shard) </br>`schemeshard`       | Schema operations, ACL modifications, and user management actions. | [Attributes](../reference/audit-log-attributes.md#schemeshard) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
+|| [gRPC services](../concepts/glossary.md#grpc-proxy) </br>`grpc-proxy`       | Non-internal requests handled by {{ ydb-short-name }} gRPC endpoints. | [Attributes](../reference/audit-log-attributes.md#grpc-proxy) | Enable the relevant [log classes](../reference/configuration/audit_config.md#log-class-config) and optional [log phases](#log-phases). ||
+|| [gRPC connection](../concepts/glossary.md#grpc-proxy) </br>`grpc-conn` | Client connection and disconnection events. | [Attributes](../reference/audit-log-attributes.md#grpc-connection) | Enable the [`enable_grpc_audit`](../reference/configuration/feature_flags.md) feature flag. ||
+|| [gRPC authentication](../concepts/glossary.md#grpc-proxy) </br>`grpc-login` | gRPC authentication attempts. | [Attributes](../reference/audit-log-attributes.md#grpc-authentication) | Enable the `Login` class in [`log_class_config`](../reference/configuration/audit_config.md#log-class-config). ||
+|| Monitoring service </br>`monitoring`  | HTTP requests handled by the [monitoring endpoint](../reference/configuration/tls.md#http). | [Attributes](../reference/audit-log-attributes.md#monitoring) | Enable the `ClusterAdmin` class in [`log_class_config`](../reference/configuration/audit_config.md#log-class-config). ||
+|| Heartbeat </br>`audit`                 | Synthetic heartbeat events proving that audit logging is alive. | [Attributes](../reference/audit-log-attributes.md#heartbeat) | Enable the `AuditHeartbeat` class in [`log_class_config`](../reference/configuration/audit_config.md#log-class-config) and optionally adjust [heartbeat settings](../reference/configuration/audit_config.md#heartbeat-settings). ||
+|| [BlobStorage Controller](../concepts/glossary.md#distributed-storage) </br>`bsc`            | Console-driven BlobStorage Controller configuration changes. | [Attributes](../reference/audit-log-attributes.md#bsc) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
+|| [Distconf](../concepts/glossary.md#distributed-configuration) </br>`distconf`                | Distributed configuration updates. | [Attributes](../reference/audit-log-attributes.md#distconf) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
+|| Web login </br>`web-login`             | Interactions with the web console authentication widget. | [Attributes](../reference/audit-log-attributes.md#web-login) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
+|| Console </br>`console`                   | Database lifecycle operations and dynamic configuration changes. | [Attributes](../reference/audit-log-attributes.md#console) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
+|#
 
 ## Log classes {#log-classes}
 
@@ -63,24 +85,6 @@ You can use any of the listed destinations or their combinations. See the [audit
 If you forward the stream to a file, file-system permissions control access to the audit log. Saving the audit log to a file is recommended for production installations.
 
 For test installations, forward the audit log to the standard error stream (`stderr`). Further stream processing depends on the {{ ydb-short-name }} cluster [logging](../devops/observability/logging.md) settings.
-
-## Audit event sources overview {#audit-event-sources-overview}
-
-The table below summarizes the built-in audit event sources. Use it to identify which source emits the events you need and how to enable those events.
-
-#|
-|| **Source / UID**                                     | **What it records** | **Source attributes** | **Configuration requirements** ||
-|| [Schemeshard](../concepts/glossary.md#scheme-shard) </br>`schemeshard`       | Schema operations, ACL modifications, and user management actions. | [Attributes](../reference/audit-log-attributes.md#schemeshard) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
-|| [gRPC services](../concepts/glossary.md#grpc-proxy) </br>`grpc-proxy`       | Non-internal requests handled by {{ ydb-short-name }} gRPC endpoints. | [Attributes](../reference/audit-log-attributes.md#grpc-proxy) | Enable the relevant [log classes](../reference/configuration/audit_config.md#log-class-config) and optional [log phases](#log-phases). ||
-|| [gRPC connection](../concepts/glossary.md#grpc-proxy) </br>`grpc-conn` | Client connection and disconnection events. | [Attributes](../reference/audit-log-attributes.md#grpc-connection) | Enable the [`enable_grpc_audit`](../reference/configuration/feature_flags.md) feature flag. ||
-|| [gRPC authentication](../concepts/glossary.md#grpc-proxy) </br>`grpc-login` | gRPC authentication attempts. | [Attributes](../reference/audit-log-attributes.md#grpc-authentication) | Enable the `Login` class in [`log_class_config`](../reference/configuration/audit_config.md#log-class-config). ||
-|| Monitoring service </br>`monitoring`  | HTTP requests handled by the [monitoring endpoint](../reference/configuration/tls.md#http). | [Attributes](../reference/audit-log-attributes.md#monitoring) | Enable the `ClusterAdmin` class in [`log_class_config`](../reference/configuration/audit_config.md#log-class-config). ||
-|| Heartbeat </br>`audit`                 | Synthetic heartbeat events proving that audit logging is alive. | [Attributes](../reference/audit-log-attributes.md#heartbeat) | Enable the `AuditHeartbeat` class in [`log_class_config`](../reference/configuration/audit_config.md#log-class-config) and optionally adjust [heartbeat settings](../reference/configuration/audit_config.md#heartbeat-settings). ||
-|| [BlobStorage Controller](../concepts/glossary.md#distributed-storage) </br>`bsc`            | Console-driven BlobStorage Controller configuration changes. | [Attributes](../reference/audit-log-attributes.md#bsc) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
-|| [Distconf](../concepts/glossary.md#distributed-configuration) </br>`distconf`                | Distributed configuration updates. | [Attributes](../reference/audit-log-attributes.md#distconf) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
-|| Web login </br>`web-login`             | Interactions with the web console authentication widget. | [Attributes](../reference/audit-log-attributes.md#web-login) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
-|| Console </br>`console`                   | Database lifecycle operations and dynamic configuration changes. | [Attributes](../reference/audit-log-attributes.md#console) | Included in the [basic audit configuration](../reference/configuration/audit_config.md#enabling-audit-log). ||
-|#
 
 ## Examples {#examples}
 

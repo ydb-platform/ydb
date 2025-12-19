@@ -11,7 +11,7 @@ from enum import Enum
 from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
-from get_test_history_new import get_test_history
+from get_test_history import get_test_history
 
 
 def load_owner_area_mapping():

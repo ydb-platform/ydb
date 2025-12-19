@@ -54,4 +54,4 @@ var builder = new YdbConnectionStringBuilder
 
 ## Пример
 
-[ADO.NET подключение к Yandex Cloud](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/YC)
+[ADO.NET подключение к Yandex Cloud](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/Ydb.Sdk.AdoNet.Yandex.Cloud)

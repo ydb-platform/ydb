@@ -16,14 +16,14 @@ public:
     }
 
     static const ::NYql::NUdf::TStringRef& Name() {
-        static auto name = ::NYql::NUdf::TStringRef::Of("FulltextContains");
+        static auto name = ::NYql::NUdf::TStringRef::Of("Contains");
         return name;
     }
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         Y_UNUSED(valueBuilder);
         if (!args[0] || !args[1]) {
-            TString errorMessage = TStringBuilder() << Pos_ << " FulltextContains: arguments are null";
+            TString errorMessage = TStringBuilder() << Pos_ << " Contains: arguments are null";
             UdfTerminate(errorMessage.c_str());
             return TUnboxedValuePod();
         }

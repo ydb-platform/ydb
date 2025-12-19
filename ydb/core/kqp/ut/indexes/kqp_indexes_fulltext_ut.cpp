@@ -2272,7 +2272,7 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
     for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
         TString query = Sprintf(R"sql(
             SELECT Key, body FROM `/Root/table` VIEW `index_fulltext`
-            WHERE FullText::FulltextContains(body, "%s")
+            WHERE FullText::Contains(body, "%s")
             ORDER BY Key
         )sql", term.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2298,7 +2298,7 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
     for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
         TString query = Sprintf(R"sql(
             SELECT Key FROM `/Root/table` VIEW `index_fulltext`
-            WHERE FullText::FulltextContains(body, "%s")
+            WHERE FullText::Contains(body, "%s")
             ORDER BY Key
         )sql", term.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2322,7 +2322,7 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
     {
         TString query = R"sql(
             SELECT Key, body FROM `/Root/table`
-            WHERE FullText::FulltextContains(body, "машинное обучение")
+            WHERE FullText::Contains(body, "машинное обучение")
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;

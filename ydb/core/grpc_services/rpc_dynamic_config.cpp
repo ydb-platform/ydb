@@ -1,10 +1,13 @@
 #include "service_dynamic_config.h"
 #include "rpc_deferrable.h"
 
+#include <type_traits>
+
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
 namespace NKikimr::NGRpcService {
@@ -66,6 +69,32 @@ public:
     {
         TBase::Bootstrap(TActivationContext::AsActorContext());
 
+        if constexpr (std::is_same_v<TRequest, TEvSetConfigRequest> || std::is_same_v<TRequest, TEvReplaceConfigRequest>) {
+            if (AppData()->FeatureFlags.GetSwitchToConfigV2()) {
+                NYql::TIssues issues;
+                issues.AddIssue("Dynamic Config V1 is disabled. Use V2 API.");
+                TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
+                return;
+            }
+
+            this->Send(MakeBlobStorageNodeWardenID(IActor::SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
+            this->Become(&TThis::StateWaitNodeWarden);
+        } else {
+            StartConsolePipe();
+        }
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
+        if (ev->Get()->SelfManagementEnabled) {
+            NYql::TIssues issues;
+            issues.AddIssue("Dynamic Config V1 is disabled. Use V2 API.");
+            TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
+        } else {
+            StartConsolePipe();
+        }
+    }
+
+    void StartConsolePipe() {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
             .RetryLimitCount = 10,
@@ -76,6 +105,13 @@ public:
         SendRequest();
 
         this->Become(&TThis::StateWork);
+    }
+
+    STFUNC(StateWaitNodeWarden) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvNodeWardenStorageConfig, Handle);
+            default: TBase::StateFuncBase(ev);
+        }
     }
 
 private:

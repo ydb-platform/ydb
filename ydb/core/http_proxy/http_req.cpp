@@ -1149,7 +1149,7 @@ namespace NKikimr::NHttpProxy {
                              1, true, true,
                              AddCommonLabels({
                                  {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
-                                 {"name", "api.http.message_queue.response.count"},
+                                 {"name", "api.sqs.response.count"},
                              })});
                 ReplyToHttpContext(ctx, issueCode);
 
@@ -1174,7 +1174,7 @@ namespace NKikimr::NHttpProxy {
                              1, true, true,
                              AddCommonLabels({
                                  {"code", ToString(httpStatusCode)},
-                                 {"name", "api.http.message_queue.response.count"},
+                                 {"name", "api.sqs.response.count"},
                              })});
                 ReplyToHttpContext(ctx);
 
@@ -1200,7 +1200,7 @@ namespace NKikimr::NHttpProxy {
                 InputCountersReported = true;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{1, true, true,
-                            AddCommonLabels({{"name", "api.http.message_queue.request.count"}})
+                            AddCommonLabels({{"name", "api.sqs.request.count"}})
                          });
             }
 
@@ -1208,7 +1208,7 @@ namespace NKikimr::NHttpProxy {
                 TDuration dur = ctx.Now() - StartTime;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
-                             BuildLabels(Method, HttpContext, "api.http.message_queue.response.duration_milliseconds")
+                             BuildLabels(Method, HttpContext, "api.sqs.response.duration_milliseconds")
                         });
             }
 
@@ -1224,7 +1224,7 @@ namespace NKikimr::NHttpProxy {
                                  1, true, true,
                                  AddCommonLabels({
                                      {"code", "200"},
-                                     {"name", "api.http.message_queue.response.count"}})});
+                                     {"name", "api.sqs.response.count"}})});
                     ReplyToHttpContext(ctx);
                 } else {
                     auto retryClass =

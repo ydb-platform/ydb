@@ -169,7 +169,6 @@ public:
     // Not using `std::lower_bound()` here because need an index to map to `suffix` and `prefix` sum.
     template <typename T>
     ui32 FindBucketIndex(T val) const {
-        T bucketWidth = GetBucketWidth<T>();
         T domainStart = LoadFrom<T>(DomainRange_.Start);
         T domainEnd = LoadFrom<T>(DomainRange_.End);
         if (CmpLess<T>(val, domainStart)) {
@@ -178,13 +177,16 @@ public:
         if (CmpLess<T>(domainEnd, val)) {
             return GetNumBuckets() - 1;
         }
+        T bucketWidth = GetBucketWidth<T>();
         if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
             using UT = std::make_unsigned_t<T>;
-            const UT diff = val - domainStart;
+            const UT start = static_cast<UT>(domainStart);
+            const UT value = static_cast<UT>(val);
+            const UT diff = value - start;
             Y_ENSURE(diff < static_cast<UT>(std::numeric_limits<T>::max()));
             UT bucketIndex = diff / static_cast<UT>(bucketWidth);
-            bucketIndex = std::floor(static_cast<T>(bucketWidth));
-            bucketIndex = std::min<T>(GetNumBuckets() - 1, bucketIndex);
+            bucketIndex = std::floor<UT>(bucketIndex);
+            bucketIndex = std::min<UT>(GetNumBuckets() - 1, bucketIndex);
             return static_cast<ui32>(bucketIndex);
         }
         T bucketIndex = std::floor((val - domainStart) / bucketWidth);

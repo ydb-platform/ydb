@@ -154,6 +154,13 @@ Y_UNIT_TEST(Overload) {
                                 /*{value, result}=*/{25, 25},
                                 /*{value, result}=*/{4, 25}),
         yexception);
+
+    UNIT_ASSERT_EXCEPTION(
+        TestHistogramBasic<i32>(1, /*values range=*/{std::numeric_limits<i32>::min(), std::numeric_limits<i32>::max()},
+                                /*column range=*/{std::numeric_limits<i32>::min(), std::numeric_limits<i32>::max()}, EHistogramValueType::Int32,
+                                /*{value, result}=*/{25, 25},
+                                /*{value, result}=*/{4, 25}),
+        yexception);
 }
 
 Y_UNIT_TEST(Serialization) {

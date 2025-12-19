@@ -101,7 +101,7 @@ public:
 
     class TCountedContent : public TContentBase {
     public:
-        TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter);
+        TCountedContent(TString&& data, const std::shared_ptr<std::atomic_size_t>& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, std::weak_ptr<CURLM> handle, size_t threshold);
         ~TCountedContent();
 
         TCountedContent(TCountedContent&&) = default;
@@ -109,8 +109,12 @@ public:
 
         TString Extract();
     private:
+        void BeforeRelease();
+
         const std::shared_ptr<std::atomic_size_t> Counter;
         const ::NMonitoring::TDynamicCounters::TCounterPtr InflightCounter;
+        std::weak_ptr<CURLM> Handle;
+        const size_t Threshold;
     };
 
     using TOnDownloadStart = std::function<void(CURLcode, long)>; // http code.

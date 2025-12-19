@@ -657,6 +657,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             Cout << "(" << currentIdx + 1 << "/" << args.size() << ") ";
             Cout << appendLabel(row, "N");
             Cout << appendLabel(row, "label");
+            Cout.Flush();
 
             auto parameters = extractParameters(row);
             if (timeoutedNs.count(parameters) == 0) {

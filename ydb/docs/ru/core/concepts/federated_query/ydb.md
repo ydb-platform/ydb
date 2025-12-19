@@ -7,10 +7,10 @@
 1. Подготовить аутентификационные данные для доступа к удалённой базе {{ ydb-short-name }}. В настоящее время в федеративных запросах к {{ ydb-short-name }} доступен метод аутентификации по [логину и паролю](../../security/authentication.md#static-credentials) (остальные методы не поддерживаются). Пароль к внешней базе сохраняется в виде [секрета](../datamodel/secrets.md):
 
    ```yql
-    CREATE OBJECT ydb_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
+    CREATE SECRET ydb_datasource_user_password WITH (value = "<password>");
     ```
 
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий стороннюю базу {{ ydb-short-name }}. Параметр `LOCATION` содержит сетевой адрес экземпляра {{ ydb-short-name }}, к которому осуществляется сетевое подключение. В `DATABASE_NAME` указывается имя базы данных (например, `local`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_NAME`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. Если шифрование включено, то в поле `<port>` параметра `LOCATION` необходимо указать порт gRPCs внешней {{ ydb-short-name }}, в противном случае - порт gRPC.
+1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий стороннюю базу {{ ydb-short-name }}. Параметр `LOCATION` содержит сетевой адрес экземпляра {{ ydb-short-name }}, к которому осуществляется сетевое подключение. В `DATABASE_NAME` указывается имя базы данных (например, `local`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_PATH`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. Если шифрование включено, то в поле `<port>` параметра `LOCATION` необходимо указать порт gRPCs внешней {{ ydb-short-name }}, в противном случае - порт gRPC.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE ydb_datasource WITH (
@@ -19,7 +19,7 @@
         DATABASE_NAME="<database>",
         AUTH_METHOD="BASIC",
         LOGIN="user",
-        PASSWORD_SECRET_NAME="ydb_datasource_user_password",
+        PASSWORD_SECRET_PATH="ydb_datasource_user_password",
         USE_TLS="TRUE"
     );
     ```

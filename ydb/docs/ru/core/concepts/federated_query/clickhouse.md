@@ -7,7 +7,7 @@
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
 
     ```yql
-    CREATE OBJECT clickhouse_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
+    CREATE SECRET clickhouse_datasource_user_password WITH (value = "<password>");
     ```
 
 1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий целевую базу данных внутри кластера ClickHouse. Для соединения с ClickHouse можно использовать либо [нативный TCP-протокол](https://clickhouse.com/docs/ru/interfaces/tcp) (`PROTOCOL="NATIVE"`), либо [протокол HTTP](https://clickhouse.com/docs/ru/interfaces/http) (`PROTOCOL="HTTP"`). Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
@@ -19,7 +19,7 @@
         DATABASE_NAME="<database>",
         AUTH_METHOD="BASIC",
         LOGIN="<login>",
-        PASSWORD_SECRET_NAME="clickhouse_datasource_user_password",
+        PASSWORD_SECRET_PATH="clickhouse_datasource_user_password",
         PROTOCOL="NATIVE",
         USE_TLS="TRUE"
     );

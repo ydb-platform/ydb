@@ -1114,6 +1114,7 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
     if (channel.DstTask) {
         FillEndpointDesc(*channelDesc.MutableDstEndpoint(), GetTask(channel.DstTask));
     } else if (!resultChannelProxies.empty()) {
+        Y_ENSURE(!GetMeta().UseFastChannels);
         auto it = resultChannelProxies.find(channel.Id);
         YQL_ENSURE(it != resultChannelProxies.end());
         ActorIdToProto(it->second, channelDesc.MutableDstEndpoint()->MutableActorId());
@@ -3116,6 +3117,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
             BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
         }
+        GetMeta().UseFastChannels = tx.Body->EnableFastChannels();
 
         // Not task-related
         BuildKqpTaskGraphResultChannels(tx.Body, txIdx);

@@ -11,6 +11,8 @@ struct TDqInputChannelStats : TDqInputStats {
     ui64 RowsInMemory = 0;
     ui64 MaxMemoryUsage = 0;
     TDuration DeserializationTime;
+    TInstant PopTime;
+    bool PopResult = false;
 };
 
 class IDqInputChannel : public IDqInput {

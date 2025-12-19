@@ -17,6 +17,8 @@ struct TDqOutputChannelStats : public TDqOutputStats {
     ui64 SpilledBytes = 0;
     ui64 SpilledRows = 0;
     ui64 SpilledBlobs = 0;
+    TInstant FinishCheckTime;
+    bool FinishCheckResult = false;
 };
 
 class IDqOutputChannel : public IDqOutput {

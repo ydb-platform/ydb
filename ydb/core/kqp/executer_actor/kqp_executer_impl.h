@@ -19,6 +19,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
@@ -132,7 +133,8 @@ public:
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
-        TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing())
+        TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing(),
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService = nullptr)
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -155,6 +157,7 @@ public:
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId)
+        , ChannelService(channelService)
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
@@ -347,6 +350,68 @@ protected:
         }
     }
 
+    void HandleResultData(NYql::NDq::TEvDqCompute::TEvResumeExecution::TPtr&) {
+        for (auto& [channelId, inputBuffer] : ResultInputBuffers) {
+            ReadResultFromInputBuffer(channelId, inputBuffer);
+        }
+    }
+
+    void ReadResultFromTaskOutputs(const TTask& task)
+    {
+        for (auto& output : task.Outputs) {
+            for (auto channelId : output.Channels) {
+                auto& channel = TasksGraph.GetChannel(channelId);
+                if (!channel.DstTask && TasksGraph.GetMeta().UseFastChannels) {
+                    Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
+                    auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0));
+                    ReadResultFromInputBuffer(channelId, inputBuffer);
+                    ResultInputBuffers.emplace(channelId, inputBuffer);
+                }
+            }
+        }
+    }
+
+    void ReadResultFromInputBuffer(ui32 channelId, const std::shared_ptr<NYql::NDq::IChannelBuffer>& buffer) {
+        auto& channel = TasksGraph.GetChannel(channelId);
+        YQL_ENSURE(channel.DstTask == 0);
+        auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
+        bool streamingAllowed = TasksGraph.GetMeta().StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined();
+
+        NYql::NDq::TDataChunk data;
+        while (buffer->Pop(data)) {
+            YQL_ENSURE(Stats);
+            Stats->ResultBytes += data.Bytes;
+            Stats->ResultRows += data.Rows;
+
+            const bool trailingResults = data.Finished && Request.IsTrailingResultsAllowed();
+
+            if (!data.Buffer.Empty()) {
+                TVector<NYql::NDq::TDqSerializedBatch> batches(1);
+                auto& batch = batches.front();
+
+                batch.Payload = std::move(data.Buffer);
+                batch.Proto.SetTransportVersion(data.TransportVersion);
+                batch.Proto.SetChunks(1);
+                batch.Proto.SetRows(data.Rows);
+                batch.Proto.SetValuePackerVersion(NYql::NDq::ToProto(data.PackerVersion));
+
+                if (streamingAllowed && !trailingResults) {
+                    ui32 seqNo = 1;
+                    SendStreamData(txResult, std::move(batches), channel.Id, seqNo, data.Finished);
+                } else {
+                    ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
+                    if (streamingAllowed) {
+                        txResult.HasTrailingResult = true;
+                    }
+                }
+            }
+
+            if (data.Finished) {
+                break;
+            }
+        }
+    }
+
     void HandleChannelData(NYql::NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
         auto& record = ev->Get()->Record;
         auto& channelData = record.GetChannelData();
@@ -408,7 +473,6 @@ protected:
         LOG_T("Got result, channelId: " << channel.Id
             << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
             << ", finished: " << channelData.GetFinished());
-
         ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
         LOG_T("Send ack to channelId: " << channel.Id << ", seqNo: " << record.GetSeqNo() << ", to: " << ev->Sender);
 
@@ -422,6 +486,10 @@ protected:
     void HandleStreamAck(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
         if (ev->Get()->Record.GetChannelId() == std::numeric_limits<ui32>::max())
             return;
+
+        if (TasksGraph.GetMeta().UseFastChannels) {
+            return;
+        }
 
         ui64 channelId;
         if (ResponseEv->TxResults.size() == 1) {
@@ -562,6 +630,7 @@ protected:
                     THashMap<TActorId, THashSet<ui64>> updates;
                     Planner->CollectTaskChannelsUpdates(task, updates);
                     Planner->PropagateChannelsUpdates(updates);
+                    ReadResultFromTaskOutputs(task);
                 }
                 break;
             }
@@ -922,6 +991,7 @@ protected:
             bool ack = Planner->AcknowledgeCA(taskId, computeActorId, nullptr);
             if (ack) {
                 Planner->CollectTaskChannelsUpdates(task, channelsUpdates);
+                ReadResultFromTaskOutputs(task);
             }
 
         }
@@ -1026,6 +1096,15 @@ protected:
         if (err) {
             TlsActivationContext->Send(err.release());
             return false;
+        }
+
+        if (TasksGraph.GetMeta().UseFastChannels) {
+            Y_ENSURE(ChannelService);
+            for (auto& [channelId, outputActorId] : Planner->ResultChannels) {
+                auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, outputActorId, SelfId(), 0, 0));
+                ReadResultFromInputBuffer(channelId, inputBuffer);
+                ResultInputBuffers.emplace(channelId, inputBuffer);
+            }
         }
 
         Planner->Submit();
@@ -1413,6 +1492,7 @@ protected:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
+    THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
 
     ui64 LastTaskId = 0;
     TString LastComputeActorId = "";
@@ -1455,6 +1535,7 @@ protected:
 
 protected:
     TKqpTasksGraph TasksGraph;
+    std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
@@ -1470,7 +1551,8 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation);
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
@@ -1478,7 +1560,7 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const std::optional<TLlvmSettings>& llvmSettings);
+    const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 } // namespace NKqp
 } // namespace NKikimr

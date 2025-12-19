@@ -37,7 +37,7 @@ namespace {
         }, entry.Type);
     }
 
-    void FilterAsyncReplicaTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
+    TStatus FilterAsyncReplicaTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
         auto isAsyncReplicaTable = [&](const NScheme::TSchemeEntry& entry) {
             if (entry.Type != NScheme::ESchemeEntryType::Table) {
                 return false;
@@ -50,7 +50,8 @@ namespace {
             return it != attributes.end() && it->second == "true";
         };
 
-        entries.erase(std::remove_if(entries.begin(), entries.end(), isAsyncReplicaTable), entries.end());
+        std::erase_if(entries, isAsyncReplicaTable);
+        return TStatus(EStatus::SUCCESS, {});
     }
 
     TVector<std::pair<TString, TString>> ExpandItem(
@@ -70,10 +71,9 @@ namespace {
 
         // Additionaly remove all async replica tables
         if (ignoreAsyncReplicaTables) {
-            auto sessionResult = tableClient.GetSession().GetValueSync();
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
-            auto session = sessionResult.GetSession();
-            FilterAsyncReplicaTables(session, ret.Entries);
+            tableClient.RetryOperationSync([&ret](NTable::TSession session) {
+                return FilterAsyncReplicaTables(session, ret.Entries);
+            });
         }
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
@@ -102,7 +102,7 @@ namespace {
     ) {
         auto items(std::move(settings.Item_));
         // Ignore async replica tables just for S3 export
-        bool ignoreAsyncReplicaTables = std::is_same_v<TSettings, NExport::TExportToS3Settings>;
+        bool ignoreAsyncReplicaTables = !std::is_same_v<TSettings, NExport::TExportToYtSettings>;
         for (const auto& item : items) {
             for (const auto& [src, dst] : ExpandItem(schemeClient, tableClient, item.Src, item.Dst, filter, ignoreAsyncReplicaTables)) {
                 settings.AppendItem({src, dst});

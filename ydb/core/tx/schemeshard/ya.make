@@ -68,6 +68,7 @@ RECURSE_FOR_TESTS(
     ut_sysview_reboots
     ut_topic_splitmerge
     ut_topic_set_boundaries
+    ut_test_shard
     ut_transfer
     ut_truncate_table_reboots
     ut_truncate_table_simple

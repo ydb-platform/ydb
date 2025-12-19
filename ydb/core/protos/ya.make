@@ -152,6 +152,7 @@ SRCS(
     tenant_pool.proto
     tenant_slot_broker.proto
     test_shard.proto
+    test_shard_control.proto
     tracing.proto
     tx.proto
     tx_columnshard.proto

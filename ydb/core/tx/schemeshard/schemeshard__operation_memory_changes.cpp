@@ -164,6 +164,14 @@ void TMemoryChanges::GrabStreamingQuery(TSchemeShard* ss, const TPathId& pathId)
     Grab<TStreamingQueryInfo>(pathId, ss->StreamingQueries, StreamingQueries);
 }
 
+void TMemoryChanges::GrabNewTestShard(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->TestShards, TestShards);
+}
+
+void TMemoryChanges::GrabTestShard(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TTestShardInfo>(pathId, ss->TestShards, TestShards);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -373,6 +381,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->StreamingQueries.erase(id);
         }
         StreamingQueries.pop();
+    }
+
+    while (TestShards) {
+        const auto& [id, elem] = TestShards.top();
+        if (elem) {
+            ss->TestShards[id] = elem;
+        } else {
+            ss->TestShards.erase(id);
+        }
+        TestShards.pop();
     }
 }
 

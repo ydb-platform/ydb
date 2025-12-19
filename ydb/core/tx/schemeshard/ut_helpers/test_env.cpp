@@ -18,6 +18,7 @@
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/test_tablet/test_tablet.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
 
@@ -1002,6 +1003,9 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TFakeFileStore(tablet, info);
         };
+    case TTabletTypes::TestShard:
+        return &NKikimr::NTestShard::CreateTestShard;
+
     default:
         return nullptr;
     }

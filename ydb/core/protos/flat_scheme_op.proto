@@ -15,6 +15,7 @@ import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
+import "ydb/core/protos/test_shard_control.proto";
 import "ydb/core/protos/yql_translation_settings.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/scheme/protos/type_info.proto";
@@ -1602,7 +1603,7 @@ message TCreateTestShard {
     optional string Name = 1; // mandatory
     optional uint32 Count = 2;
     optional TKeyValueStorageConfig StorageConfig = 3;
-    optional string Config = 4;
+    optional NKikimrClient.TTestShardControlRequest.TCmdInitialize CmdInitialize = 5;
 }
 
 message TBlockStoreAssignOp {

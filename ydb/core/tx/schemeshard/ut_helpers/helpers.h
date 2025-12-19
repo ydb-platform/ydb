@@ -341,6 +341,7 @@ namespace NSchemeShardUT_Private {
 
     // test shard
     GENERIC_HELPERS(CreateTestShard);
+    GENERIC_HELPERS(DropTestShard);
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS

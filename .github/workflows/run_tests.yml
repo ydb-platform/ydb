@@ -88,6 +88,7 @@ jobs:
     outputs:
       branch_array: ${{ steps.set-branches.outputs.branch_array }}
       branch_name_map: ${{ steps.set-branches.outputs.branch_name_map }}
+      pr_number: ${{ steps.set-branches.outputs.pr_number }}
     steps:
       - name: Checkout ${{ matrix.branch }}
         uses: actions/checkout@v4
@@ -141,6 +142,8 @@ jobs:
                     echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
                     echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
                     echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
+                    # Output PR number for use in run_tests job
+                    echo "pr_number=$PULL_REQUEST_NUMBER" >> $GITHUB_OUTPUT
                   fi
                 else
                   echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER, discarding"
@@ -173,6 +176,8 @@ jobs:
               echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
               echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
               echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
+              # Output PR number for use in run_tests job
+              echo "pr_number=$PULL_REQUEST_NUMBER" >> $GITHUB_OUTPUT
               # Output mapping of checkout_branch -> test_history_branch (SHA -> base_branch for PR)
               # Use compact JSON format (no newlines) for GitHub Actions output
               branch_name_map=$(jq -c -n --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '{($sha): $base}')
@@ -322,7 +327,7 @@ jobs:
           put_build_results_to_cache: true
           collect_coredumps: ${{ inputs.collect_coredumps }}
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ inputs.additional_ya_make_args }}
-          pull_number: ${{ inputs.pull_number }}
+          pull_number: ${{ needs.prepare.outputs.pr_number || inputs.pull_number || '' }}
           secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","TELEGRAM_YDBOT_TOKEN":"{4}"}}',
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.TELEGRAM_YDBOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',

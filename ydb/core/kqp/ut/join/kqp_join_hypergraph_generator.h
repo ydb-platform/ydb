@@ -163,85 +163,64 @@ namespace NKikimr::NKqp {
     template <typename TNodeSet>
     class TJoinHypergraphSerializer {
     public:
-        static TString Serialize(NYql::NDq::TJoinHypergraph<TNodeSet>& graph) {
-            TStringStream ss;
-
-            // Build reverse mapping: nodeId -> relationName
-            TVector<TString> nodeIdToRelName(graph.GetNodes().size());
-            for (const auto& [relName, nodeId] : graph.NodeIdByRelationName_) {
-                if (nodeIdToRelName[nodeId].empty()) {
-                    nodeIdToRelName[nodeId] = relName;
-                } else {
-                    // Handle multiple labels for same node
-                    nodeIdToRelName[nodeId] += "," + relName;
-                }
-            }
-
+        static NJson::TJsonValue Serialize(NYql::NDq::TJoinHypergraph<TNodeSet>& graph) {
+            NJson::TJsonValue edgesArray(NJson::JSON_ARRAY);
             const auto& edges = graph.GetEdges();
-            bool firstEdge = true;
 
             for (const auto& edge : edges) {
-                // Skip reversed edges to avoid duplication
                 if (edge.IsReversed) {
                     continue;
                 }
 
-                if (!firstEdge) {
-                    ss << "|";
+                NJson::TJsonValue edgeJson(NJson::JSON_MAP);
+                edgeJson.InsertValue("sources", SerializeNodeSet(edge.Left));
+                edgeJson.InsertValue("targets", SerializeNodeSet(edge.Right));
+                edgeJson.InsertValue("join_kind", NJson::TJsonValue(JoinKindToString(edge.JoinKind)));
+
+                NJson::TJsonValue conditions(NJson::JSON_ARRAY);
+                for (size_t i = 0; i < edge.LeftJoinKeys.size(); ++i) {
+                    NJson::TJsonValue condition(NJson::JSON_MAP);
+
+                    condition.InsertValue("lhs", SerializeColumn(edge.LeftJoinKeys[i]));
+                    condition.InsertValue("rhs", SerializeColumn(edge.RightJoinKeys[i]));
+
+                    conditions.AppendValue(condition);
                 }
-                firstEdge = false;
+                edgeJson.InsertValue("conditions", conditions);
 
-                // Serialize left node set
-                ss << SerializeNodeSet(edge.Left, nodeIdToRelName);
-                ss << ";";
+                // Optional metadata
+                NJson::TJsonValue metadata(NJson::JSON_MAP);
+                metadata.InsertValue("is_commutative", NJson::TJsonValue(edge.IsCommutative));
+                metadata.InsertValue("left_any", NJson::TJsonValue(edge.LeftAny));
+                metadata.InsertValue("right_any", NJson::TJsonValue(edge.RightAny));
+                edgeJson.InsertValue("metadata", metadata);
 
-                // Serialize join kind
-                ss << JoinKindToString(edge.JoinKind);
-                ss << ";";
-
-                // Serialize join conditions
-                SerializeJoinConditions(ss, edge.LeftJoinKeys, edge.RightJoinKeys);
-                ss << ";";
-
-                // Serialize right node set
-                ss << SerializeNodeSet(edge.Right, nodeIdToRelName);
+                edgesArray.AppendValue(edgeJson);
             }
 
-            return ss.Str();
+            return edgesArray;
         }
 
     private:
-        static TString SerializeNodeSet(const TNodeSet& nodeSet,
-                                        const TVector<TString>& nodeIdToRelName) {
-            TStringStream ss;
-            ss << "{";
+        static NJson::TJsonValue SerializeNodeSet(const TNodeSet& nodeSet) {
+            NJson::TJsonValue array(NJson::JSON_ARRAY);
 
-            bool first = true;
-            for (size_t i = 0; i < nodeSet.size(); ++i) {
+            for (size_t i = 0; i < nodeSet.size(); ++ i) {
                 if (nodeSet[i]) {
-                    if (!first) {
-                        ss << ",";
-                    }
-                    ss << nodeIdToRelName[i];
-                    first = false;
+                    array.AppendValue(NJson::TJsonValue(getTableName(i)));
                 }
             }
 
-            ss << "}";
-            return ss.Str();
+            return array;
         }
 
-        static void SerializeJoinConditions(TStringStream& ss,
-                                            const TVector<NYql::NDq::TJoinColumn>& leftKeys,
-                                            const TVector<NYql::NDq::TJoinColumn>& rightKeys) {
-            for (size_t i = 0; i < leftKeys.size(); ++i) {
-                if (i > 0) {
-                    ss << ";";
-                }
-                ss << leftKeys[i].RelName << "." << leftKeys[i].AttributeName;
-                ss << "=";
-                ss << rightKeys[i].RelName << "." << rightKeys[i].AttributeName;
-            }
+        static NJson::TJsonValue SerializeColumn(const NYql::NDq::TJoinColumn& column) {
+            NJson::TJsonValue array(NJson::JSON_ARRAY);
+
+            return TStringBuilder()
+                << column.RelName
+                << "."
+                << column.AttributeName;
         }
 
         static TString JoinKindToString(NYql::EJoinKind kind) {
@@ -257,17 +236,20 @@ namespace NKikimr::NKqp {
                 case NYql::EJoinKind::Cross:
                     return "cross";
                 case NYql::EJoinKind::LeftSemi:
-                    return "leftsemi";
+                    return "left_semi";
                 case NYql::EJoinKind::RightSemi:
-                    return "rightsemi";
+                    return "right_semi";
                 case NYql::EJoinKind::LeftOnly:
-                    return "leftonly";
+                    return "left_only";
                 case NYql::EJoinKind::RightOnly:
-                    return "rightonly";
+                    return "right_only";
+                case NYql::EJoinKind::Exclusion:
+                    return "exclusion";
                 default:
                     return "unknown";
             }
         }
     };
+
 
 }

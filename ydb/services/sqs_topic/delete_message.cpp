@@ -230,6 +230,7 @@ namespace NKikimr::NSqsTopic::V1 {
     public:
         const static inline TString Method = "DeleteMessage";
 
+    public:
         using TBase = TDeleteMessageActorBase<TDeleteMessageActor, TEvSqsTopicDeleteMessageRequest>;
         using TBase::TBase;
 
@@ -259,6 +260,7 @@ namespace NKikimr::NSqsTopic::V1 {
     public:
         const static inline TString Method = "DeleteMessageBatch";
 
+    public:
         using TBase = TDeleteMessageActorBase<TDeleteMessageBatchActor, TEvSqsTopicDeleteMessageBatchRequest>;
         using TBase::TBase;
 

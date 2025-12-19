@@ -64,7 +64,7 @@ namespace NKikimr::NSqsTopic {
         const TString& topicPath,
         const TString& consumerName,
         const TString& method,
-        TVector<std::pair<TString, TString>>& labels
+        TVector<std::pair<TString, TString>>&& labels
     ) {
         TVector<std::pair<TString, TString>> common{
             {"database", databasePath},
@@ -72,8 +72,8 @@ namespace NKikimr::NSqsTopic {
             {"topic", topicPath},
             {"consumer", consumerName},
         };
-        std::move(common.begin(), common.end(), std::back_inserter(labels));
-        return labels;
+        std::move(labels.begin(), labels.end(), std::back_inserter(common));
+        return common;
     }
 
     TVector<std::pair<TString, TString>> GetRequestMessageCountMetricsLabels(
@@ -82,15 +82,14 @@ namespace NKikimr::NSqsTopic {
         const TString& consumer,
         const TString& method
     ) {
-        TVector<std::pair<TString, TString>> labels{
-            {"name", "api.sqs.request.message_count"}
-        };
         return GetMetricsLabels(
             databasePath,
             topicPath,
             consumer,
             method,
-            labels
+            {
+                {"name", "api.sqs.request.message_count"}
+            }
         );
     }
 
@@ -101,16 +100,15 @@ namespace NKikimr::NSqsTopic {
         const TString& method,
         const TString& status
     ) {
-        TVector<std::pair<TString, TString>> labels{
-            {"name", "api.sqs.response.message_count"},
-            {"status", status}
-        };
         return GetMetricsLabels(
             databasePath,
             topicPath,
             consumer,
             method,
-            labels
+            {
+                {"name", "api.sqs.response.message_count"},
+                {"status", status}
+            }
         );
     }
 
@@ -120,15 +118,14 @@ namespace NKikimr::NSqsTopic {
         const TString& consumer,
         const TString& method
     ) {
-        TVector<std::pair<TString, TString>> labels{
-            {"name", "api.sqs.response.empty_count"}
-        };
         return GetMetricsLabels(
             databasePath,
             topicPath,
             consumer,
             method,
-            labels
+            {
+                {"name", "api.sqs.response.empty_count"}
+            }
         );
     }
 

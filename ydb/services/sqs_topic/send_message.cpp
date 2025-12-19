@@ -338,6 +338,7 @@ namespace NKikimr::NSqsTopic::V1 {
     public:
         const static inline TString Method = "SendMessage";
 
+    public:
         using TBase = TSendMessageActorBase<TSendMessageActor, TEvSqsTopicSendMessageRequest>;
         using TBase::TBase;
 
@@ -371,6 +372,7 @@ namespace NKikimr::NSqsTopic::V1 {
     public:
         const static inline TString Method = "SendMessageBatch";
 
+    public:
         using TBase = TSendMessageActorBase<TSendMessageBatchActor, TEvSqsTopicSendMessageBatchRequest>;
         using TBase::TBase;
 

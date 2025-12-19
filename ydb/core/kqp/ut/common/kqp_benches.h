@@ -259,11 +259,10 @@ std::optional<TStatistics> RepeatedTest(TRepeatedTestConfig config, ui64 singleR
             return std::nullopt;
         }
 
+        stats.AddValue(ellapsedTime);
         if (ellapsedTime > singleRunTimeout) {
             break;
         }
-
-        stats.AddValue(ellapsedTime);
     } while ((stats.GetN() < config.MaxRepeats) &&
              (stats.GetN() < config.MinRepeats ||
               (stats.GetTotal() + stats.GetMedian() < config.Timeout &&

@@ -160,9 +160,13 @@ jobs:
             echo "branch_array=$branch_array" >> $GITHUB_OUTPUT
             # Output mapping of checkout_branch -> test_history_branch (for PR: SHA -> base_branch, for regular branches: empty {})
             # Use compact JSON format (no newlines) for GitHub Actions output
-            echo "branch_name_map=$(echo "$branch_name_map" | jq -c .)" >> $GITHUB_OUTPUT
+            branch_name_map_compact=$(echo "$branch_name_map" | jq -c .)
+            echo "branch_name_map=$branch_name_map_compact" >> $GITHUB_OUTPUT
+            echo "Created branch_name_map: $branch_name_map_compact"
             # Output mapping of checkout_branch -> PR number (for PR: SHA -> PR number, for regular branches: empty {})
-            echo "pr_number_map=$(echo "$pr_number_map" | jq -c .)" >> $GITHUB_OUTPUT
+            pr_number_map_compact=$(echo "$pr_number_map" | jq -c .)
+            echo "pr_number_map=$pr_number_map_compact" >> $GITHUB_OUTPUT
+            echo "Created pr_number_map: $pr_number_map_compact"
           elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
             echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
             # No mapping for branches from config file - use branches as-is for test history

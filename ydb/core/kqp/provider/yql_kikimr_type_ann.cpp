@@ -2209,7 +2209,6 @@ private:
             return settings;
         }();
 
-
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
         }

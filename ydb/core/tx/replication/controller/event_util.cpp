@@ -49,15 +49,15 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
 
     auto& command = *record.MutableCommand();
 
-    command->SetDatabase(database);
+    command.SetDatabase(database);
     if (metricsLevel) {
-        command->SetMetricsLevel(metricsLevel);
+        command.SetMetricsLevel(metricsLevel);
     }
     if (replicationName) {
-        command->SetReplicationName(replicationName);
+        command.SetReplicationName(replicationName);
     }
 
-    auto& readerSettings = *command->MutableRemoteTopicReader();
+    auto& readerSettings = *command.MutableRemoteTopicReader();
     readerSettings.MutableConnectionParams()->CopyFrom(connectionParams);
     readerSettings.SetTopicPath(srcStreamPath);
     readerSettings.SetTopicPartitionId(workerId);
@@ -66,13 +66,13 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     switch(config->GetKind()) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable: {
-            auto& writerSettings = *command->MutableLocalTableWriter();
+            auto& writerSettings = *command.MutableLocalTableWriter();
             dstPathId.ToProto(writerSettings.MutablePathId());
             break;
         }
         case TReplication::ETargetKind::Transfer: {
             auto p = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(config);
-            auto& writerSettings = *command->MutableTransferWriter();
+            auto& writerSettings = *command.MutableTransferWriter();
             dstPathId.ToProto(writerSettings.MutablePathId());
             writerSettings.SetTransformLambda(p->GetTransformLambda());
             writerSettings.MutableBatching()->CopyFrom(batchingSettings);
@@ -82,7 +82,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         }
     }
 
-    command->MutableConsistencySettings()->CopyFrom(consistencySettings);
+    command.MutableConsistencySettings()->CopyFrom(consistencySettings);
 
     return ev;
 }

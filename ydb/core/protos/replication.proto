@@ -179,6 +179,7 @@ message TReplicationState {
         TError Error = 4;
     }
 }
+
 message TReplicationStats {
     oneof Stats {
         Ydb.Replication.DescribeTransferResult.Stats Transfer = 1;

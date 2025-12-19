@@ -79,7 +79,7 @@ public:
                 tabletInfo.SetLockedReconnectTimeout(tablet.LockedReconnectTimeout.MilliSeconds());
                 tabletInfo.SetTabletStorageVersion(tablet.TabletStorageInfo->Version);
                 tabletInfo.SetTabletBootMode(tablet.BootMode);
-                tablet.GetResourceValues().ToProto(tabletInfo.MutableResourceUsage());
+                tabletInfo.MutableResourceUsage()->CopyFrom(tablet.GetResourceValues());
 
                 TSubDomainKey objectDomain = TSubDomainKey(tabletRowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
                 tabletInfo.MutableObjectDomain()->CopyFrom(objectDomain);

@@ -22,15 +22,6 @@ TResourceRawValues ResourceRawValuesFromMetrics(const NKikimrTabletBase::TMetric
     return values;
 }
 
-TResourceRawValues ResourceRawValuesFromMetrics(const TMetrics& metrics) {
-    TResourceRawValues values = {};
-    std::get<NMetrics::EResource::Counter>(values) = metrics.Counter;
-    std::get<NMetrics::EResource::CPU>(values) = metrics.CPU;
-    std::get<NMetrics::EResource::Memory>(values) = metrics.Memory;
-    std::get<NMetrics::EResource::Network>(values) = metrics.Network;
-    return values;
-}
-
 NKikimrTabletBase::TMetrics MetricsFromResourceRawValues(const TResourceRawValues& values) {
     NKikimrTabletBase::TMetrics metrics;
     if (std::get<NMetrics::EResource::Counter>(values) != 0) {
@@ -129,25 +120,25 @@ TString GetResourceValuesText(const TTabletInfo& tablet) {
     str << '(';
     str << GetConditionalBoldString(
                GetConditionalGreyString(
-                   GetCounter(values.Counter),
+                   GetCounter(values.GetCounter()),
                    Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kCounterFieldNumber) == allowedMetricIds.end()),
                resource == NMetrics::EResource::Counter);
     str << ",&nbsp;";
     str << GetConditionalBoldString(
                GetConditionalGreyString(
-                   GetTimes(values.CPU),
+                   GetTimes(values.GetCPU()),
                    Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber) == allowedMetricIds.end()),
                resource == NMetrics::EResource::CPU);
     str << ",&nbsp;";
     str << GetConditionalBoldString(
                GetConditionalGreyString(
-                   GetBytes(values.Memory),
+                   GetBytes(values.GetMemory()),
                    Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) == allowedMetricIds.end()),
                resource == NMetrics::EResource::Memory);
     str << ",&nbsp;";
     str << GetConditionalBoldString(
                GetConditionalGreyString(
-                   GetBytesPerSecond(values.Network),
+                   GetBytesPerSecond(values.GetNetwork()),
                    Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) == allowedMetricIds.end()),
                resource == NMetrics::EResource::Network);
     str << ')';
@@ -242,17 +233,17 @@ TString GetValueWithColoredGlyph(double val, double maxVal) {
     return Sprintf("<span>%.2f</span>", val) + glyph;
 }
 
-ui64 GetReadThroughput(const TMetrics& values) {
+ui64 GetReadThroughput(const NKikimrTabletBase::TMetrics& values) {
     ui64 acc = 0;
-    for (const auto& throughput : values.GroupReadThroughput) {
+    for (const auto& throughput : values.GetGroupReadThroughput()) {
         acc += throughput.GetThroughput();
     }
     return acc;
 }
 
-ui64 GetWriteThroughput(const TMetrics& values) {
+ui64 GetWriteThroughput(const NKikimrTabletBase::TMetrics& values) {
     ui64 acc = 0;
-    for (const auto& throughput : values.GroupWriteThroughput) {
+    for (const auto& throughput : values.GetGroupWriteThroughput()) {
         acc += throughput.GetThroughput();
     }
     return acc;
@@ -300,18 +291,18 @@ TString GetTimes(i64 times, const TString& zero) {
     return Sprintf("%.2f%%", (double)times * 100 / 1000000);
 }
 
-TString GetResourceValuesHtml(const TMetrics& values) {
+TString GetResourceValuesHtml(const NKikimrTabletBase::TMetrics& values) {
     TStringStream str;
     str << "<td>";
-    str << GetCounter(values.Counter, TString());
-    str << "</td><td data-text='" << values.CPU << "'>";
-    str << GetTimes(values.CPU, TString());
-    str << "</td><td data-text='" << values.Memory << "'>";
-    str << GetBytes(values.Memory, TString());
-    str << "</td><td data-text='" << values.Network << "'>";
-    str << GetBytesPerSecond(values.Network, TString());
-    str << "</td><td data-text='" << values.Storage << "'>";
-    str << GetBytes(values.Storage, TString());
+    str << GetCounter(values.GetCounter(), TString());
+    str << "</td><td data-text='" << values.GetCPU() << "'>";
+    str << GetTimes(values.GetCPU(), TString());
+    str << "</td><td data-text='" << values.GetMemory() << "'>";
+    str << GetBytes(values.GetMemory(), TString());
+    str << "</td><td data-text='" << values.GetNetwork() << "'>";
+    str << GetBytesPerSecond(values.GetNetwork(), TString());
+    str << "</td><td data-text='" << values.GetStorage() << "'>";
+    str << GetBytes(values.GetStorage(), TString());
     ui64 bytes = GetReadThroughput(values);
     str << "</td><td data-text='" << bytes << "'>";
     str << GetBytesPerSecond(bytes, TString());
@@ -320,6 +311,18 @@ TString GetResourceValuesHtml(const TMetrics& values) {
     str << GetBytesPerSecond(bytes, TString());
     str << "</td>";
     return str.Str();
+}
+
+NJson::TJsonValue GetResourceValuesJson(const NKikimrTabletBase::TMetrics& values) {
+    NJson::TJsonValue value;
+    value.AppendValue(GetCounter(values.GetCounter()));
+    value.AppendValue(GetTimes(values.GetCPU()));
+    value.AppendValue(GetBytes(values.GetMemory()));
+    value.AppendValue(GetBytesPerSecond(values.GetNetwork()));
+    value.AppendValue(GetBytes(values.GetStorage()));
+    value.AppendValue(GetBytesPerSecond(GetReadThroughput(values)));
+    value.AppendValue(GetBytesPerSecond(GetWriteThroughput(values)));
+    return value;
 }
 
 TString GetDataCenterName(ui64 dataCenterId) {

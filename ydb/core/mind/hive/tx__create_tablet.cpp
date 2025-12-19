@@ -442,14 +442,14 @@ public:
 
         NKikimrTabletBase::TMetrics resourceValues;
 
-        Self->GetDefaultResourceValuesForTabletType(tablet.Type).ToProto(&resourceValues);
+        resourceValues.CopyFrom(Self->GetDefaultResourceValuesForTabletType(tablet.Type));
         BLOG_D("THive::TTxCreateTablet::Execute; Default resources after merge for type " << tablet.Type << ": {" << resourceValues.ShortDebugString() << "}");
         if (IsValidObjectId(tablet.ObjectId)) {
-            Self->GetDefaultResourceValuesForObject(tablet.ObjectId).ToProto(&resourceValues);
+            resourceValues.MergeFrom(Self->GetDefaultResourceValuesForObject(tablet.ObjectId));
             BLOG_D("THive::TTxCreateTablet::Execute; Default resources after merge for object " << tablet.ObjectId << ": {" << resourceValues.ShortDebugString() << "}");
         }
         // TODO: provide Hive with resource profile used by the tablet instead of default one.
-        Self->GetDefaultResourceValuesForProfile(tablet.Type, "default").ToProto(&resourceValues);
+        resourceValues.MergeFrom(Self->GetDefaultResourceValuesForProfile(tablet.Type, "default"));
         BLOG_D("THive::TTxCreateTablet::Execute; Default resources after merge for profile 'default': {" << resourceValues.ShortDebugString() << "}");
         if (resourceValues.ByteSize() == 0) {
             resourceValues.SetStorage(1ULL << 30); // 1 GB

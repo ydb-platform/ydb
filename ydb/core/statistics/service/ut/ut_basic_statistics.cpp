@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
             return describe.GetPathDescription().GetTableStats().GetRowCount();
         };
 
-        runtime.SimulateSleep(TDuration::Seconds(100));
+        runtime.SimulateSleep(TDuration::Seconds(150));
         UNIT_ASSERT_EQUAL(getDescribeRowCount(path1), 1000);
         UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId1), 1000);
 

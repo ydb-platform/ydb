@@ -5,7 +5,6 @@ import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/draft/ydb_replication.proto";
 
-
 package NKikimrReplication;
 option java_package = "ru.yandex.kikimr.proto";
 
@@ -264,7 +263,6 @@ message TEvDescribeReplicationResult {
     repeated TReplicationConfig.TTargetSpecific.TTarget Targets = 3;
     optional TReplicationState State = 4;
     optional TReplicationConfig.TTransferSpecific TransferSpecific = 6;
-
     optional TReplicationStats Stats = 7;
 }
 
@@ -354,9 +352,7 @@ message TWorkerStats {
         READ_PARTITION = 9;
         READ_OFFSET = 10;
         RESTARTS_COUNT = 11;
-
         WRITE_ERRORS = 12;
-
         WORK_OPERATION = 13;
     };
 
@@ -368,7 +364,6 @@ message TWorkerStats {
     optional google.protobuf.Timestamp StartTime = 2;
     repeated TWorkerStatItem Values = 3;
 }
-
 
 message TEvWorkerStatus {
     enum EStatus {

@@ -740,4 +740,43 @@ void MCMCRandomize(TRNG& rng, TRelationGraph& graph) {
     }
 }
 
+void ForceReconnection(TRNG& rng, TRelationGraph& graph) {
+    while (!graph.IsConnected()) {
+        std::vector<int> components = graph.FindComponents();
+        int numComponents = *std::max_element(components.begin(), components.end()) + 1;
+
+        if (numComponents <= 1) {
+            break;
+        }
+
+        // Group nodes by component
+        std::vector<std::vector<ui32>> componentNodes(numComponents);
+        for (ui32 i = 0; i < components.size(); ++i) {
+            componentNodes[components[i]].push_back(i);
+        }
+
+        // Pick two different components randomly
+        std::uniform_int_distribution<> componentDist(0, numComponents - 1);
+        int comp1 = componentDist(rng);
+        int comp2 = componentDist(rng);
+
+        // Make sure they're different
+        while (comp2 == comp1) {
+            comp2 = componentDist(rng);
+        }
+
+        // Pick random nodes from each component
+        std::uniform_int_distribution<> nodeDist1(0, componentNodes[comp1].size() - 1);
+        std::uniform_int_distribution<> nodeDist2(0, componentNodes[comp2].size() - 1);
+
+        ui32 node1 = componentNodes[comp1][nodeDist1(rng)];
+        ui32 node2 = componentNodes[comp2][nodeDist2(rng)];
+
+        // Connect them if not already connected
+        if (!graph.HasEdge(node1, node2)) {
+            graph.Connect(node1, node2);
+        }
+    }
+}
+
 } // namespace NKikimr::NKqp

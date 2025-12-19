@@ -97,9 +97,12 @@ namespace NKikimr::NKqp {
 
             assert(maxSize != 0);
             double ratio = minSize / maxSize;
-            // TODO: weight should depend on number of nodes on both sides?
+            double imbalance = 1.0 - ratio;  // 1 = very unbalanced, 0 = balanced
 
-            return std::pow(ratio, bushiness);
+            // bushiness in [0, 1]
+            // 0 = left-deep (prefer unbalanced)
+            // 1 = bushy (no preference, uniform)
+            return std::pow(imbalance, 1.0 - bushiness);
         };
 
         auto mergeTreesRandomly = [&]() {

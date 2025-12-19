@@ -135,7 +135,7 @@ jobs:
                   echo "Replaced pull/$PULL_REQUEST_NUMBER with merge commit: $MERGE_SHA (base: $BASE_BRANCH)"
                   processed_branches+=("\"$MERGE_SHA\"")
                   # Add to mapping: checkout_branch (SHA) -> test_history_branch (base branch for PR, or same for regular branches)
-                  branch_name_map=$(echo "$branch_name_map" | jq --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '. + {($sha): $base}')
+                  branch_name_map=$(echo "$branch_name_map" | jq -c --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '. + {($sha): $base}')
                   # Save merge commit SHA, base branch, and PR number for comment step (use first PR)
                   if [ -z "$COMMIT_SHA" ]; then
                     echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
@@ -155,7 +155,8 @@ jobs:
             branch_array=$(IFS=, ; echo "[${processed_branches[*]}]")
             echo "branch_array=$branch_array" >> $GITHUB_OUTPUT
             # Output mapping of checkout_branch -> test_history_branch (for PR: SHA -> base_branch, for regular branches: empty {})
-            echo "branch_name_map=$branch_name_map" >> $GITHUB_OUTPUT
+            # Use compact JSON format (no newlines) for GitHub Actions output
+            echo "branch_name_map=$(echo "$branch_name_map" | jq -c .)" >> $GITHUB_OUTPUT
           elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
             echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
             # No mapping for branches from config file - use branches as-is for test history
@@ -173,7 +174,8 @@ jobs:
               echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
               echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
               # Output mapping of checkout_branch -> test_history_branch (SHA -> base_branch for PR)
-              branch_name_map=$(jq -n --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '{($sha): $base}')
+              # Use compact JSON format (no newlines) for GitHub Actions output
+              branch_name_map=$(jq -c -n --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '{($sha): $base}')
               echo "branch_name_map=$branch_name_map" >> $GITHUB_OUTPUT
             else
               echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"

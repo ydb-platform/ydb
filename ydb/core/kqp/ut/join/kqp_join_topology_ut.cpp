@@ -783,30 +783,23 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
         auto parameters = TTupleParser{args}.Parse();
 
-        std::stable_sort(parameters.begin(), parameters.end(), [](const auto& lhs, const auto rhs) {
-            std::string lN;
-            for (ui32 i = 0; i < lhs.size(); ++ i) {
-                if (lhs[i].first == "N") {
-                    lN = lhs[i].second;
+        auto findN = [](const auto& row) {
+            std::string n;
+            for (ui32 i = 0; i < row.size(); ++ i) {
+                if (row[i].first == "N") {
+                    n = row[i].second;
                 }
             }
 
-            std::string rN;
-            for (ui32 i = 0; i < rhs.size(); ++ i) {
-                if (rhs[i].first == "N") {
-                    rN = rhs[i].second;
-                }
-            }
+            size_t pos = 0;
+            ui32 intN = std::stoi(n, &pos);
+            Y_ENSURE(pos == n.size());
 
-            size_t pos0 = 0;
-            ui32 lNu = std::stoi(lN, &pos0);
-            Y_ENSURE(pos0 == lN.size());
+            return intN;
+        };
 
-            size_t pos1 = 0;
-            ui32 rNu = std::stoi(rN, &pos1);
-            Y_ENSURE(pos1 == rN.size());
-
-            return lNu < rNu;
+        std::stable_sort(parameters.begin(), parameters.end(), [&](const auto& lhs, const auto rhs) {
+            return findN(lhs) < findN(rhs);
         });
 
         Cout << "\n";

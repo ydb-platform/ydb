@@ -39,6 +39,7 @@ void TTargetTransfer::Progress(const TActorContext& ctx) {
         } else if (!StreamConsumerRemover) {
             StreamConsumerRemover = ctx.Register(CreateStreamConsumerRemover(replication, GetId(), ctx));
         }
+
         return;
     case EStreamState::Creating:
     case EStreamState::Ready:
@@ -135,6 +136,7 @@ void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWork
             if (!Counters) {
                 Counters.ConstructInPlace(counters, Name);
             }
+
             break;
         default:
             Counters = Nothing();
@@ -151,6 +153,7 @@ void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWork
             }
         }
     }
+
     for (const auto& item : newStats.GetValues()) {
         const auto key = static_cast<NKikimrReplication::TWorkerStats::EStatsKeys>(item.GetKey());
         const auto value = item.GetValue();
@@ -173,6 +176,7 @@ void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWork
                 if (Counters) {
                     Counters->Restarts->Add(value);
                 }
+
                 break;
 
             case NKikimrReplication::TWorkerStats::READ_PARTITION:
@@ -187,6 +191,7 @@ void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWork
                 if (newOp != workerStats.Operation) {
                     workerStats.ChangeStateTime = Now();
                 }
+
                 workerStats.Operation = static_cast<NKikimrReplication::EWorkOperation>(value);
                 break;
             }
@@ -218,6 +223,7 @@ void TTransferStats::FillToProto(NKikimrReplication::TEvDescribeReplicationResul
     if (LastWorkerStartTime) {
         dstStats.mutable_min_worker_uptime()->set_seconds((Now() - LastWorkerStartTime).Seconds());
     }
+    
     dstStats.mutable_stats_collection_start()->set_seconds(CollectionStartTime.Seconds());
 
     if (includeDetailed) {

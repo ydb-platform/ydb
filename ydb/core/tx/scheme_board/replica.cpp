@@ -27,8 +27,6 @@
 #include <util/generic/variant.h>
 #include <util/string/builder.h>
 
-#include <fstream>
-
 namespace NKikimr {
 namespace NSchemeBoard {
 
@@ -568,7 +566,6 @@ private:
         TDescription* oldDesc = Descriptions.FindPtr(path);
         auto subscribers = oldDesc->GetSubscribers(SUBSCRIPTION_BY_PATH);
     
-        // SoftDeleteDescription(oldDesc->GetPathId());
         Descriptions.DeleteIndex(path);
 
         UpsertDescription(path, pathId, std::move(pathDescription));
@@ -895,6 +892,7 @@ private:
 
             if (curPathId < pathId) {
                 // If database changed (recreated)
+                SoftDeleteDescription(desc->GetPathId());
                 UpdateDescriptionWithRelinkSubscribers(path, pathId, std::move(pathDescription) );
             }
             else {
@@ -960,7 +958,6 @@ private:
             if (curPathId < pathId) {
                 log("Update description by newest path form tenant schemeshard");
                 SoftDeleteDescription(desc->GetPathId());
-                
                 UpdateDescriptionWithRelinkSubscribers(path, pathId, std::move(pathDescription) );
             }
             else

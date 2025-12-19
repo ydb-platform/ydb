@@ -244,8 +244,8 @@ void TReplicaTest::UpdateWithChangedPath() {
     check(false);           // Simple update without delete notify
 
     pathId.LocalPathId++;
-    check(false);           // Update with changed path local id without delete notify
-    
+    check(true);            // Update with changed path local id without delete notify
+
     pathId.LocalPathId++;
     pathId.OwnerId++;
     check(true);            // Update with changed path owner id and delete notify
@@ -270,7 +270,7 @@ void TReplicaTest::UpdateWithChangedPath() {
     pathId.OwnerId++;
     check(false);           // Emulate case!
     Context->UnsubscribeReplica(Replica, subscriber, path);
-    
+
     // don't test emulate Update from TSS, GSS->TSS case (curDomainId == pathId)
 #if 0    
     pathId.OwnerId++; 

@@ -83,13 +83,13 @@ The table below lists additional attributes specific to the `Schemeshard` source
 **Log classes:** Depends on the RPC request type: `Ddl`, `Dml`, `Operations`, `ClusterAdmin`, `DatabaseAdmin`, or other classes.
 **Log phases:** `Received`, `Completed`.
 
-Тhe table below lists additional attributes specific to the `gRPC services` source.
+The table below lists additional attributes specific to the `gRPC services` source.
 
 #|
 || **Attribute**              | **Description**                                                                                         | **Optional/Required** ||
 || **Common gRPC attributes** | **>**                                                                                                  |  ||
 || `grpc_method`              | RPC method name.                                                                                       | Optional ||
-|| `request`                  | Sanitized representation of the incoming protobuf request in single-line format. Sensitive fields are masked as ***..                                                      | Optional ||
+|| `request`                  | Sanitized representation of the incoming protobuf request in single-line format. Sensitive fields are masked as ***.                                                      | Optional ||
 || `start_time`               | Operation start time in ISO 8601 format.                                                               | Required ||
 || `end_time`                 | Operation end time in ISO 8601 format.                                                                 | Optional ||
 || **Transaction attributes** | **>**                                                                                                  |  ||
@@ -100,7 +100,7 @@ The table below lists additional attributes specific to the `Schemeshard` source
 || `query_text`               | [YQL](../yql/reference/index.md) query text formatted for logging (single-line, max 1024 characters).                                                 | Optional ||
 || `prepared_query_id`        | Identifier of a prepared query.                                                                        | Optional ||
 || `program_text`             | [MiniKQL program](../concepts/glossary.md#minikql) sent with the request.                              | Optional ||
-|| `schema_changes`           | Description of schema modifications requested in the operation.  Example format `{"delta":[{"delta_type":"AddTable","table_id":5555,"table_name":"MyAwesomeTable"}]}`                                      | Optional ||
+|| `schema_changes`           | Description of schema modifications requested in the operation. Example format `{"delta":[{"delta_type":"AddTable","table_id":5555,"table_name":"MyAwesomeTable"}]}`                                      | Optional ||
 || `table`                    | Full table path.                                                                                       | Optional ||
 || `row_count`                | Number of rows processed by a [bulk upsert](../recipes/ydb-sdk/bulk-upsert.md) request.                | Optional ||
 || `tablet_id`                | Tablet identifier (present only for the gRPC TabletService).                                          | Optional ||
@@ -134,7 +134,7 @@ The table below lists additional attributes specific to the `gRPC authentication
 
 **UID:** `monitoring`.
 **Logged operations:** HTTP requests handled by the monitoring service.
-**How to enable:** Requires specifying log classes in [audit configuration](../reference/configuration/#audit-log-configuration).
+**How to enable:** Requires specifying log classes in [audit configuration](../reference/configuration/audit_config.md#audit-log-configuration).
 **Log classes:** `ClusterAdmin`.
 **Log phases:** `Received`, `Completed`.
 

@@ -8,6 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/metadata.h>
@@ -938,6 +939,13 @@ NKikimrSchemeOp::TS3Settings TS3Uploader<NKikimrSchemeOp::TS3Settings>::GetSetti
     return task.GetS3Settings();
 }
 
+template <>
+NKikimrSchemeOp::TFSSettings TS3Uploader<NKikimrSchemeOp::TFSSettings>::GetSettings(
+    const NKikimrSchemeOp::TBackupTask& task) 
+{
+    return task.GetFSSettings();
+}
+
 IActor* CreateUploaderBySettingsType(
     const TActorId& dataShard,
     ui64 txId,
@@ -949,6 +957,13 @@ IActor* CreateUploaderBySettingsType(
 {
     if (task.HasS3Settings()) {
         return new TS3Uploader<NKikimrSchemeOp::TS3Settings>(
+            dataShard, txId, task,
+            std::move(scheme), std::move(changefeeds),
+            std::move(permissions), std::move(metadata));
+    }
+
+    if (task.HasFSSettings()) {
+        return new TS3Uploader<NKikimrSchemeOp::TFSSettings>(
             dataShard, txId, task,
             std::move(scheme), std::move(changefeeds),
             std::move(permissions), std::move(metadata));

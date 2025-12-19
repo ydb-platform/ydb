@@ -24,6 +24,21 @@
             "uri": "file://test.test_Get_/results.txt"
         }
     ],
+    "test.test[Parse64TzNameVsTzOffset]": [
+        {
+            "uri": "file://test.test_Parse64TzNameVsTzOffset_/extracted"
+        }
+    ],
+    "test.test[Parse64TzOffsetVsTzName]": [
+        {
+            "uri": "file://test.test_Parse64TzOffsetVsTzName_/extracted"
+        }
+    ],
+    "test.test[Parse64TzOffset]": [
+        {
+            "uri": "file://test.test_Parse64TzOffset_/results.txt"
+        }
+    ],
     "test.test[Parse64]": [
         {
             "uri": "file://test.test_Parse64_/results.txt"

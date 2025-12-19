@@ -2338,6 +2338,44 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
     }
 }
 
+Y_UNIT_TEST(SelectWithFulltextContainsComplexPredicate) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db);
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `index_fulltext`
+            WHERE FullText::FulltextContains(`Text`, "cats") AND FullText::FulltextContains(`Text`, "love")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[100u];["Cats love cats."]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `index_fulltext`
+            WHERE FullText::FulltextContains(`Text`, "cats") OR FullText::FulltextContains(`Text`, "dogs")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[100u];["Cats love cats."]];
+            [[200u];["Dogs love foxes."]];
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();

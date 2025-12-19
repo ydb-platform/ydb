@@ -7,6 +7,7 @@
 
 #include <util/generic/buffer.h>
 #include <util/stream/buffer.h>
+#include <util/generic/size_literals.h>
 
 #include <unordered_map>
 
@@ -14,7 +15,7 @@ namespace NKikimr::NMiniKQL {
 
 // A clone of TMockSpiller/TMockSpillerFactory that can spill into a large preallocated buffer
 
-class TPreallocatedSpiller: public ISpiller{
+class TPreallocatedSpiller: public ISpiller {
 public:
     TPreallocatedSpiller(TBuffer& dataStore)
         : NextKey_(0)
@@ -100,8 +101,8 @@ private:
 class TPreallocatedSpillerFactory : public ISpillerFactory
 {
 public:
-    TPreallocatedSpillerFactory()
-        : DataStore(4ULL << 30) // TODO: configure
+    TPreallocatedSpillerFactory(size_t dataStoreLen = 4_GB)
+        : DataStore(dataStoreLen)
     {
         // prefault the buffer
         memset(DataStore.Data(), 0xFF, DataStore.Capacity());
@@ -118,6 +119,10 @@ public:
 
     const std::vector<ISpiller::TPtr>& GetCreatedSpillers() const {
         return Spillers_;
+    }
+
+    void ForgetSpillers() {
+        Spillers_.clear();
     }
 
     void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback reportAlloc, ISpiller::TMemoryReportCallback reportFree) override {

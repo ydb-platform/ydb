@@ -1035,14 +1035,14 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     return TExprBase(result);
 }
 
-NNodes::TExprBase DqPeepholeRewriteWideCombiner([[maybe_unused]] const NNodes::TExprBase& node, [[maybe_unused]]  TExprContext& ctx) {
-    if (!node.Maybe<TCoWideCombiner>()) {
-        return node;
-    }
+NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, bool rewritingFinalAggregator, TExprContext& ctx)
+{
     const auto wideCombiner = node.Cast<TCoWideCombiner>();
     i64 memLimit = 0;
-    const bool withLimit = TryFromString<i64>(wideCombiner.MemLimit().Value(), memLimit);
-    if (!withLimit) {
+
+    const bool isAggregator = !TryFromString<i64>(wideCombiner.MemLimit().Value(), memLimit);
+
+    if (isAggregator != rewritingFinalAggregator) {
         return node;
     }
 
@@ -1050,9 +1050,12 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner([[maybe_unused]] const NNodes::T
         return ctx.DeepCopyLambda(prev.Ref());
     };
 
-    auto inputFromFlow = NNodes::TExprBase(ctx.Builder(node.Pos()).Callable("FromFlow").Add(0, wideCombiner.Input().Ptr()).Seal().Build());
+    //auto inputFromFlow = NNodes::TExprBase(ctx.Builder(node.Pos()).Callable("FromFlow").Add(0, wideCombiner.Input().Ptr()).Seal().Build());
+
+    // TODO: Use a separate Callable for aggregations (TDqPhyHashAggregate)
     auto dqPhyCombine = Build<TDqPhyHashCombine>(ctx, node.Pos())
-        .Input(inputFromFlow)
+        .Input(wideCombiner.Input().Ptr())
+        //.Input(inputFromFlow)
         .MemLimit(wideCombiner.MemLimit())
         .KeyExtractor(copyLambda(wideCombiner.KeyExtractor()))
         .InitHandler(copyLambda(wideCombiner.InitHandler()))
@@ -1060,6 +1063,8 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner([[maybe_unused]] const NNodes::T
         .FinishHandler(copyLambda(wideCombiner.FinishHandler()))
     .Done();
 
+    return NNodes::TExprBase(dqPhyCombine);
+    /*
     return NNodes::TExprBase(
         ctx.Builder(node.Pos())
             .Callable("ToFlow")
@@ -1067,6 +1072,21 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner([[maybe_unused]] const NNodes::T
             .Seal()
             .Build()
     );
+    */
 }
 
+NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashAggregator(const NNodes::TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TCoWideCombiner>()) {
+        return node;
+    }
+    return DqPeepholeRewriteWideCombiner(node, true, ctx);
+}
+
+NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashCombiner(const NNodes::TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TCoWideCombiner>()) {
+        return node;
+    }
+    return DqPeepholeRewriteWideCombiner(node, false, ctx);
 } // namespace NYql::NDq
+
+}

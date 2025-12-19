@@ -7,7 +7,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
-    Y_UNIT_TEST_TWIN(DqHashCombineTest, UseDqHashCombine) {
+    Y_UNIT_TEST_QUAD(DqHashCombineTest, UseDqHashCombine, UseDqHashAggregate) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
 
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
@@ -52,7 +52,8 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
             TString hints = R"(
                 PRAGMA TablePathPrefix = "/Root";
             )";
-            TString dqHashPragma = Sprintf("PRAGMA ydb.UseDqHashCombine = \"%s\";\n\n", UseDqHashCombine ? "true" : "false");
+            TString dqHashCombinePragma = Sprintf("PRAGMA ydb.UseDqHashCombine = \"%s\";\n\n", UseDqHashCombine ? "true" : "false");
+            TString dqHashAggregatePragma = Sprintf("PRAGMA ydb.UseDqHashAggregate = \"%s\";\n\n", UseDqHashAggregate ? "true" : "false");
             TString select = R"(
                 PRAGMA ydb.OptUseFinalizeByKey = "true";
                 PRAGMA ydb.OptEnableOlapPushdown = "false"; -- need this to force intermediate/final combiner pair over the sample table
@@ -62,14 +63,7 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
                 GROUP BY group_key
             )";
 
-            TString groupQuery = TStringBuilder() << hints << dqHashPragma << select;
-
-            auto status = queryClient.ExecuteQuery(groupQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-
-            auto resultSet = status.GetResultSets()[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
+            TString groupQuery = TStringBuilder() << hints << dqHashCombinePragma << dqHashAggregatePragma << select;
 
             auto explainResult = queryClient.ExecuteQuery(
                 groupQuery,
@@ -80,16 +74,28 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
 
             auto astOpt = explainResult.GetStats()->GetAst();
             UNIT_ASSERT(astOpt.has_value());
+            Cerr << TString(*astOpt) << Endl;
             TString ast = TString(*astOpt);
-            Cout << "AST (DqPhyHashCombine=" << (UseDqHashCombine ? "true" : "false") << "): " << ast << Endl;
+            Cout << "AST (HashCombine=" << (UseDqHashCombine ? "true" : "false") << ", HashAggregate=" << (UseDqHashAggregate ? "true" : "false") << "): " << ast << Endl;
 
-            if (UseDqHashCombine) {
-                UNIT_ASSERT_C(ast.Contains("DqPhyHashCombine"),
-                    TStringBuilder() << "AST should contain DqPhyHashCombine when enabled! Actual AST: " << groupQuery << Endl << ast);
-            } else {
-                UNIT_ASSERT_C(!ast.Contains("DqPhyHashCombine"),
-                    TStringBuilder() << "AST should NOT contain DqPhyHashCombine when disabled! Actual AST: " << ast);
+            int hashCombines = 0;
+            size_t pos = 0;
+            const std::string_view combinerName {"DqPhyHashCombine"};
+            while ((pos = ast.find(combinerName, pos)) != std::string::npos) {
+                ++hashCombines;
+                ++pos;
             }
+
+            int hashCombinesExpected = (UseDqHashCombine ? 1 : 0) + (UseDqHashAggregate ? 1 : 0);
+            UNIT_ASSERT_C(hashCombinesExpected == hashCombines,
+                TStringBuilder() << "AST should contain " << hashCombinesExpected << " DqPhyHashCombine instances; actual AST: " << groupQuery << Endl << ast);
+
+            auto status = queryClient.ExecuteQuery(groupQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto resultSet = status.GetResultSets()[0];
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
         }
     }
 }

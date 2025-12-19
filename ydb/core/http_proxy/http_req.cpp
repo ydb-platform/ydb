@@ -27,6 +27,7 @@
 
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/services/sqs_topic/utils.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/api/iam_token_service.h>
@@ -1130,15 +1131,7 @@ namespace NKikimr::NHttpProxy {
             }
 
             TVector<std::pair<TString, TString>> AddCommonLabels(TVector<std::pair<TString, TString>> labels) const {
-                TVector<std::pair<TString, TString>> common{
-                    {"database", HttpContext.DatabasePath},
-                    {"method", Method},
-                    {"database_id", HttpContext.DatabaseId},
-                    {"topic", TopicPath},
-                    {"consumer", ConsumerName},
-                };
-                std::move(common.begin(), common.end(), std::back_inserter(labels));
-                return labels;
+                return NSqsTopic::GetMetricsLabels(HttpContext.DatabasePath, TopicPath, ConsumerName, Method, labels);
             }
 
             void ReplyWithYdbError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {

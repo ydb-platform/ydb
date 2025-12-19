@@ -3,7 +3,9 @@
 #include "error.h"
 #include "receipt.h"
 #include "request.h"
+#include "utils.h"
 
+#include <ydb/core/http_proxy/events.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
@@ -149,6 +151,9 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
+            ssize_t successCount = 0;
+            ssize_t failedCount = 0;
+
             for (const auto& message : response.Messages) {
                 const TString* id = PositionToIdMap_.FindPtr(message.MessageId);
                 if (!id) {
@@ -157,10 +162,34 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
                 if (message.Success) {
                     Success_.insert(*id);
+                    ++successCount;
                 } else {
                     Failed_[*id] = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, {});
+                    ++failedCount;
                 }
             }
+
+            ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    successCount, true, true,
+                    GetResponseMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method,
+                        "success")
+                });
+            ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    failedCount, true, true,
+                    GetResponseMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method,
+                        "failed")
+                });
+
             static_cast<TDerived*>(this)->ReplyAndDie(ctx);
         }
 
@@ -188,9 +217,9 @@ namespace NKikimr::NSqsTopic::V1 {
     };
 
     class TDeleteMessageActor: public TDeleteMessageActorBase<TDeleteMessageActor, TEvSqsTopicDeleteMessageRequest> {
+    public:
         const static inline TString Method = "DeleteMessage";
 
-    public:
         using TBase = TDeleteMessageActorBase<TDeleteMessageActor, TEvSqsTopicDeleteMessageRequest>;
         using TBase::TBase;
 
@@ -217,9 +246,9 @@ namespace NKikimr::NSqsTopic::V1 {
     };
 
     class TDeleteMessageBatchActor: public TDeleteMessageActorBase<TDeleteMessageBatchActor, TEvSqsTopicDeleteMessageBatchRequest> {
+    public:
         const static inline TString Method = "DeleteMessageBatch";
 
-    public:
         using TBase = TDeleteMessageActorBase<TDeleteMessageBatchActor, TEvSqsTopicDeleteMessageBatchRequest>;
         using TBase::TBase;
 

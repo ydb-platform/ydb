@@ -29,4 +29,20 @@ namespace NKikimr::NSqsTopic {
     TString GetEndpoint(const NKikimrConfig::TSqsConfig& config);
 
     TString GenerateMessageId(const TString& database, const TString& topicPath, const NPQ::NMLP::TMessageId& pos);
+
+    TVector<std::pair<TString, TString>> GetMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method,
+        TVector<std::pair<TString, TString>>& labels
+    );
+
+    TVector<std::pair<TString, TString>> GetResponseMessageCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method,
+        const TString& status
+    );
 } // namespace NKikimr::NSqsTopic

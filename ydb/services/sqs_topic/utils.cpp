@@ -58,4 +58,42 @@ namespace NKikimr::NSqsTopic {
         }
         return res;
     }
+
+    TVector<std::pair<TString, TString>> GetMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumerName,
+        const TString& method,
+        TVector<std::pair<TString, TString>>& labels
+    ) {
+        TVector<std::pair<TString, TString>> common{
+            {"database", databasePath},
+            {"method", method},
+            {"topic", topicPath},
+            {"consumer", consumerName},
+        };
+        std::move(common.begin(), common.end(), std::back_inserter(labels));
+        return labels;
+    }
+
+    TVector<std::pair<TString, TString>> GetResponseMessageCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method,
+        const TString& status
+    ) {
+        TVector<std::pair<TString, TString>> labels{
+            {"name", "api.sqs.response.message_count"},
+            {"status", status}
+        };
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            labels
+        );
+    }
+
 } // namespace NKikimr::NSqsTopic

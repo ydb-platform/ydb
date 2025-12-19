@@ -5,6 +5,7 @@
 #include "receipt.h"
 #include "utils.h"
 
+#include <ydb/core/http_proxy/events.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/attributes/attribute_name.h>
@@ -210,6 +211,17 @@ namespace NKikimr::NSqsTopic::V1 {
                     return;
                 }
             }
+
+            ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(response.Messages.size()), true, true,
+                    GetResponseMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        "ReceiveMessage",
+                        "success")
+                });
 
             Ydb::Ymq::V1::ReceiveMessageResult result;
             for (auto& message : response.Messages) {

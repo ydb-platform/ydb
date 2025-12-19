@@ -36,8 +36,8 @@ inline NActors::TActorId MakeKqpWarmupActorId(ui32 nodeId) {
 
 NActors::IActor* CreateKqpWarmupActor(
     const TKqpWarmupConfig& config,
-    NActors::TActorId notifyActorId = {}, // for testing
     const TString& database = {},
-    const TString& cluster = {});
+    const TString& cluster = {},
+    NActors::TActorId notifyActorId = {}); // for testing
 
 } // namespace NKikimr::NKqp

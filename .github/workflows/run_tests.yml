@@ -87,6 +87,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       branch_array: ${{ steps.set-branches.outputs.branch_array }}
+      pr_base_branch: ${{ steps.set-branches.outputs.pr_base_branch }}
     steps:
       - name: Checkout ${{ matrix.branch }}
         uses: actions/checkout@v4
@@ -123,18 +124,22 @@ jobs:
                 PULL_REQUEST_NUMBER=${BASH_REMATCH[1]}
                 echo "Processing pull request: $PULL_REQUEST_NUMBER"
                 
-                # Get merge_commit_sha from GitHub API
-                MERGE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER" | \
-                  jq -r '.merge_commit_sha')
+                # Get PR data from GitHub API
+                PR_DATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER")
+                MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
+                BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
                 
                 if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
                   echo "Replaced pull/$PULL_REQUEST_NUMBER with merge commit: $MERGE_SHA"
                   processed_branches+=("\"$MERGE_SHA\"")
-                  # Save merge commit SHA and PR number for comment step
+                  # Save merge commit SHA, base branch, and PR number for comment step
                   if [ -z "$COMMIT_SHA" ]; then
                     echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
+                    echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
                     echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
+                    # Output base branch for use in run_tests job (use first PR's base branch)
+                    echo "pr_base_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
                   fi
                 else
                   echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER, discarding"
@@ -151,14 +156,19 @@ jobs:
           elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
             echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
           elif [[ -n "$PULL_REQUEST_NUMBER" ]] && [[ $PULL_REQUEST_NUMBER =~ ^[0-9]+$ ]]; then
-            MERGE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER" | \
-                  jq -r '.merge_commit_sha')
+            PR_DATA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER")
+            MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
+            BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
             if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+              # Use merge commit SHA for checkout, but base branch for test history and results
               echo "branch_array=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
-              # Save merge commit SHA and PR number for comment step
+              # Save merge commit SHA, base branch, and PR number for comment step
               echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
+              echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
               echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
+              # Output base branch for use in run_tests job
+              echo "pr_base_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
             else
               echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
               exit 1
@@ -272,7 +282,7 @@ jobs:
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
           test_threads: ${{ fromJson(env.threads_count) }}
-          custom_branch_name: ${{ matrix.branch }}
+          custom_branch_name: ${{ needs.prepare.outputs.pr_base_branch || matrix.branch }}
           put_build_results_to_cache: true
           collect_coredumps: ${{ inputs.collect_coredumps }}
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ inputs.additional_ya_make_args }}

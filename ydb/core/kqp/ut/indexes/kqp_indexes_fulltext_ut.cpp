@@ -2377,7 +2377,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsWithoutTextField) {
     TString query = R"sql(
         SELECT `Key`
         FROM `/Root/Texts` VIEW `fulltext_idx`
-        WHERE FullText::FulltextContains(`Text`, "dog")
+        WHERE FullText::FulltextContains(`Text`, "dogs")
         ORDER BY `Key`;
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();

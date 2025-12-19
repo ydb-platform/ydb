@@ -29,8 +29,7 @@ END DO;
 - `SCHEMA = (...)` —  описание схемы хранимых данных.
 
 
-### Пример
-
+### Примеры
 
 ```sql
 CREATE STREAMING QUERY `streaming_test/query_name` AS
@@ -38,5 +37,18 @@ DO BEGIN
 INSERT INTO ydb_source.output_topic_name
 SELECT Data FROM ydb_source.input_topic_name;
 END DO;
+```
 
+```sql
+CREATE STREAMING QUERY `streaming_test/query_name` AS
+DO BEGIN
+INSERT INTO ydb_source.output_topic_name
+SELECT
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+FROM ydb_source.input_topic_name;
+WITH (
+    FORMAT = 'json_each_row',
+    SCHEMA = (time String NOT NULL, service_id UInt32 NOT NULL, message String NOT NULL)
+);
+END DO;
 ```

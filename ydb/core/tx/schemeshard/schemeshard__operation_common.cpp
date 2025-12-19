@@ -1038,6 +1038,7 @@ TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextS
     IgnoreMessages(DebugHint(),
         { TEvHive::TEvCreateTabletReply::EventType
         , TEvDataShard::TEvProposeTransactionResult::EventType
+        , TEvColumnShard::TEvProposeTransactionResult::EventType
         , TEvPrivate::TEvOperationPlan::EventType }
     );
 }

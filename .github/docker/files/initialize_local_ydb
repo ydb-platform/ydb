@@ -19,9 +19,8 @@ export YDB_PDISKS_DIRECTORY="${YDB_WORKING_DIR}/pdisks"
 /ydb version --disable-checks >/dev/null 2>&1
 # Create and activate a YDB profile for simplified commands
 /ydb config profile create local \
-    --endpoint grpcs://localhost:${GRPC_TLS_PORT} \
-    --database /local \
-    --ca-file /ydb_certs/ca.pem
+    --endpoint grpc://localhost:${GRPC_PORT} \
+    --database /local
 /ydb config profile activate local >/dev/null 2>&1
 
 log() {

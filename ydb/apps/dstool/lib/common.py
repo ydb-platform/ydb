@@ -1347,11 +1347,12 @@ def dump_group_mapper_error(response: kikimr_bsconfig.TConfigResponse, args):
         for fail_param in response.Status[0].FailParam:
             if fail_param.HasField("GroupMapperError"):
                 err = fail_param.GroupMapperError
-    
+
     if err is None:
         return
-    
+
     table_args = SimpleNamespace(sort_by=None, columns=None, format=args.format, no_header=None)
+
     def table_generator(data: typing.Iterable[kikimr_bsconfig.TGroupMapperError.TStats], print_domain: bool = True):
         all_columns = []
         if print_domain:
@@ -1375,9 +1376,9 @@ def dump_group_mapper_error(response: kikimr_bsconfig.TConfigResponse, args):
             row['Not operational'] = str(st.NotOperational)
             row['Decommission'] = str(st.Decommission)
             rows.append(row)
-        
+
         table_output.dump(rows, table_args)
-    
+
     print("Total stats")
     table_generator([err.TotalStats], print_domain=False)
     if len(err.MatchingDomainsStats) > 0:

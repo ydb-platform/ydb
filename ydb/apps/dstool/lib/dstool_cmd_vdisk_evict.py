@@ -1,5 +1,4 @@
 import ydb.apps.dstool.lib.common as common
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import sys
 
 description = 'Relocate vdisks to other pdisks'

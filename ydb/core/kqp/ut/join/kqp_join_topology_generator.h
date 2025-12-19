@@ -255,4 +255,9 @@ TRelationGraph ConstructGraphHavelHakimi(std::vector<int> degrees);
 // switching edges ergodic and still produce connected graphs)
 void MCMCRandomize(TRNG& rng, TRelationGraph& graph);
 
+// Sometimes, even though we tried, we couldn't get graph to be connected.
+// This connects components randomly until it becomes connected as a last resort,
+// if anything else fails (like simulated annealing in MCMC)
+void ForceReconnection(TRNG& rng, TRelationGraph& graph);
+
 } // namespace NKikimr::NKqp

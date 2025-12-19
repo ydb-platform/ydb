@@ -712,6 +712,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 MCMCRandomize(rng, graph);
             }
 
+            // Fallback in case graph disconnects
+            ForceReconnection(rng, graph);
+
             // 2. Update keys so that they match given distribution
             graph.SetupKeysPitmanYor(rng, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
 

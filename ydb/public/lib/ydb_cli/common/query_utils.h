@@ -36,6 +36,7 @@ public:
         EDataFormat OutputFormat = EDataFormat::Default;
         NQuery::TExecuteQuerySettings Settings;
         std::optional<TParams> Parameters;
+        bool AddIndent = false;
     };
 
     int Execute(const TString& query, const TSettings& execSettings);

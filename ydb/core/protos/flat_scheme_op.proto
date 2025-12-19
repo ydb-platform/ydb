@@ -15,6 +15,7 @@ import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
+import "ydb/core/protos/test_shard_control.proto";
 import "ydb/core/protos/yql_translation_settings.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/scheme/protos/type_info.proto";
@@ -315,7 +316,7 @@ message TTableDescription {
     optional bool PartitionRangeEndIsInclusive = 23;
 
     optional string CopyFromTable = 30;
-    repeated TSplitBoundary SplitBoundary = 31;     // Boundaries for non-uniform split
+    repeated TSplitBoundary SplitBoundary = 31; // Boundaries for non-uniform split
 
     repeated TIndexDescription TableIndexes = 32;
 
@@ -1584,7 +1585,7 @@ message TCreateTestShard {
     optional string Name = 1; // mandatory
     optional uint32 Count = 2;
     optional TKeyValueStorageConfig StorageConfig = 3;
-    optional string Config = 4;
+    optional NKikimrClient.TTestShardControlRequest.TCmdInitialize CmdInitialize = 5;
 }
 
 message TBlockStoreAssignOp {
@@ -1608,7 +1609,7 @@ message TSplitMergeTablePartitions {
     optional string TablePath = 2;
     optional uint64 TableLocalId = 3;
     repeated uint64 SourceTabletId = 4;
-    repeated TSplitBoundary SplitBoundary = 5;  // Points of split (there will be N+1 parts)
+    repeated TSplitBoundary SplitBoundary = 5; // Points of split (there will be N+1 parts)
     optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path
     optional uint64 TableOwnerId = 7;
     optional bool AllowOneToOneSplitMerge = 8;  // Allow a special 1-to-1 split/merge for emergencies
@@ -2145,9 +2146,9 @@ message TLastBackupResult {
 // Result for TDescribePath request
 message TPathDescription {
     optional TDirEntry Self = 1;                    // info about the path itself
-    repeated TDirEntry Children = 2;                // for directory
+    repeated TDirEntry Children = 2; // for directory
     optional TTableDescription Table = 3;           // for table
-    repeated TTablePartition TablePartitions = 4;   // for table
+    repeated TTablePartition TablePartitions = 4; // for table
     optional TPersQueueGroupDescription PersQueueGroup = 5; // for pq group
     optional TBackupProgress BackupProgress = 6;
     repeated TLastBackupResult LastBackupResult = 7;

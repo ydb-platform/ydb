@@ -113,7 +113,8 @@ public:
                      "TDropTestShard Propose"
                          << ", path: " << parentPathStr << "/" << name
                          << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+                         << ", at schemeshard: " << ssId
+                         << ", drop: " << drop.ShortDebugString());
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -133,6 +134,10 @@ public:
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
+                if (path.IsResolved()) {
+                    result->SetPathDropTxId(ui64(path.Base()->DropTxId));
+                    result->SetPathId(path.Base()->PathId.LocalPathId);
+                }
                 return result;
             }
         }
@@ -143,6 +148,9 @@ public:
             return result;
         }
 
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.DbChanges.PersistTxState(OperationId);
+
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropTestShard, path.Base()->PathId);
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"
         txState.MinStep = TStepId(1);
@@ -150,27 +158,28 @@ public:
 
         auto testShard = context.SS->TestShards.at(path.Base()->PathId);
 
-        NIceDb::TNiceDb db(context.GetDB());
-
         for (auto& part : testShard->TestShards) {
             auto shardIdx = part.first;
 
             txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos.at(shardIdx).TabletType, txState.State);
 
+            context.MemChanges.GrabShard(context.SS, shardIdx);
             context.SS->ShardInfos[shardIdx].CurrentTxId = OperationId.GetTxId();
-            context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
+            context.DbChanges.PersistShard(shardIdx);
         }
 
         context.OnComplete.ActivateTx(OperationId);
-        context.SS->PersistTxState(db, OperationId);
 
+        context.MemChanges.GrabPath(context.SS, path.Base()->PathId);
         path.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
         path.Base()->DropTxId = OperationId.GetTxId();
         path.Base()->LastTxId = OperationId.GetTxId();
+        context.DbChanges.PersistPath(path.Base()->PathId);
 
         auto parentDir = path.Parent();
         ++parentDir.Base()->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentDir.Base());
+        context.MemChanges.GrabPath(context.SS, parentDir.Base()->PathId);
+        context.DbChanges.PersistPath(parentDir.Base()->PathId);
         context.SS->ClearDescribePathCaches(parentDir.Base());
         context.SS->ClearDescribePathCaches(path.Base());
 

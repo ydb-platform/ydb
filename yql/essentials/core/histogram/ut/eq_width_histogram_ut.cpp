@@ -136,6 +136,26 @@ Y_UNIT_TEST(Basic) {
                                /*{value, result}=*/{101.0, 0});
 }
 
+Y_UNIT_TEST(Overload) {
+    TestHistogramBasic<ui32>(1, /*values range=*/{0, 25}, /*column range=*/{5, 10}, EHistogramValueType::Uint32,
+                             /*{value, result}=*/{25, 25},
+                             /*{value, result}=*/{4, 25});
+
+    TestHistogramBasic<i32>(1, /*values range=*/{0, 25}, /*column range=*/{-10, -5}, EHistogramValueType::Int32,
+                            /*{value, result}=*/{25, 25},
+                            /*{value, result}=*/{4, 25});
+
+    TestHistogramBasic<i32>(1, /*values range=*/{0, 25}, /*column range=*/{-5, 10}, EHistogramValueType::Int32,
+                            /*{value, result}=*/{25, 25},
+                            /*{value, result}=*/{4, 25});
+
+    UNIT_ASSERT_EXCEPTION(
+        TestHistogramBasic<i32>(1, /*values range=*/{0, 25}, /*column range=*/{-1, std::numeric_limits<i32>::max()}, EHistogramValueType::Int32,
+                                /*{value, result}=*/{25, 25},
+                                /*{value, result}=*/{4, 25}),
+        yexception);
+}
+
 Y_UNIT_TEST(Serialization) {
     TestHistogramSerialization<ui32>(10, /*values range=*/{0, 10}, /*column range=*/{0, 20},
                                      EHistogramValueType::Uint32);

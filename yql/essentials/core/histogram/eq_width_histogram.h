@@ -175,8 +175,17 @@ public:
         if (CmpLess<T>(val, domainStart)) {
             return 0;
         }
-        if (!CmpLess<T>(val, domainEnd)) {
+        if (CmpLess<T>(domainEnd, val)) {
             return GetNumBuckets() - 1;
+        }
+        if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
+            using UT = std::make_unsigned_t<T>;
+            const UT diff = val - domainStart;
+            Y_ENSURE(diff < static_cast<UT>(std::numeric_limits<T>::max()));
+            UT bucketIndex = diff / static_cast<UT>(bucketWidth);
+            bucketIndex = std::floor(static_cast<T>(bucketWidth));
+            bucketIndex = std::min<T>(GetNumBuckets() - 1, bucketIndex);
+            return static_cast<ui32>(bucketIndex);
         }
         T bucketIndex = std::floor((val - domainStart) / bucketWidth);
         return static_cast<ui32>(bucketIndex);
@@ -195,8 +204,9 @@ public:
             const UT start = static_cast<UT>(LoadFrom<T>(DomainRange_.Start));
             const UT end = static_cast<UT>(LoadFrom<T>(DomainRange_.End));
             const UT rangeLen = end - start;
-            T bucketWidth = static_cast<T>(rangeLen / static_cast<UT>(GetNumBuckets()));
-            return bucketWidth;
+            Y_ENSURE(rangeLen < static_cast<UT>(std::numeric_limits<T>::max()));
+            const UT bucketWidth = rangeLen / static_cast<UT>(GetNumBuckets());
+            return static_cast<T>(bucketWidth);
         }
         const T start = LoadFrom<T>(DomainRange_.Start);
         const T end = LoadFrom<T>(DomainRange_.End);

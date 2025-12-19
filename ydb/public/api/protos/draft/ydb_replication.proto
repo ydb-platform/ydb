@@ -146,6 +146,7 @@ message DescribeTransferResult {
             // writing data to table
             STATE_WRITE = 4;
         }
+
         message WorkerStats {
             // unique worker identifier
             string worker_id = 1;

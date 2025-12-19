@@ -4,7 +4,7 @@ SRCS(
     kqp_compile_actor.cpp
     kqp_compile_service.cpp
     kqp_compile_computation_pattern_service.cpp
-    kqp_warmup_actor.cpp
+    kqp_warmup_compile_actor.cpp
 )
 
 PEERDIR(

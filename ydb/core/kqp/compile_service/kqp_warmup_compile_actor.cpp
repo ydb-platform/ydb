@@ -1,4 +1,4 @@
-#include "kqp_warmup_actor.h"
+#include "kqp_warmup_compile_actor.h"
 
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -17,6 +17,7 @@ namespace NKikimr::NKqp {
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
 
+// Event for child actor completion notification
 struct TEvPrivate {
     enum EEv {
         EvFetchCacheResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -41,12 +42,13 @@ struct TEvPrivate {
 
 class TFetchCacheActor : public TQueryBase {
 public:
-    TFetchCacheActor(const TString& database)
-        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
+    TFetchCacheActor(const TString& database, ui32 selfNodeId)
+        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, 
+                     /*sessionId=*/{}, database, /*isSystemUser=*/true, /*isStreamingMode=*/true)
+        , SelfNodeId(selfNodeId)
     {}
 
     void OnRunQuery() override {
-        // todo anely-d: add more complex query
         TString sql = TStringBuilder()
             << "SELECT Query, UserSID, AccessCount"
             << " FROM `" << Database << "/.sys/compile_cache_queries` "
@@ -86,6 +88,7 @@ public:
     }
 
 private:
+    [[maybe_unused]] ui32 SelfNodeId;
     std::unique_ptr<TEvPrivate::TEvFetchCacheResult> Result = std::make_unique<TEvPrivate::TEvFetchCacheResult>(false);
 };
 
@@ -222,7 +225,7 @@ private:
     }
 
     void SendPrepareRequest(const TEvPrivate::TQueryToCompile& query) {
-        LOG_D("Sending PREPARE request for user: " << query.UserSID
+        LOG_T("Sending PREPARE request for user: " << query.UserSID
               << ", query length: " << query.QueryText.size());
         
         Send(MakeKqpProxyID(SelfId().NodeId()), 

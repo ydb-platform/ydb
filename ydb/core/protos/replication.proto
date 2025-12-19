@@ -364,6 +364,7 @@ message TWorkerStats {
         optional uint64 Key = 1;
         optional int64 Value = 2;
     }
+
     optional google.protobuf.Timestamp StartTime = 2;
     repeated TWorkerStatItem Values = 3;
 }

@@ -60,7 +60,6 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
-    ydb/public/lib/ydb_cli/commands/sqs_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump
@@ -85,6 +84,12 @@ PEERDIR(
     yql/essentials/public/decimal
 )
 
+IF (NOT OS_WINDOWS)
+PEERDIR(
+    ydb/public/lib/ydb_cli/commands/sqs_workload
+)
+ENDIF()
+
 GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
 GENERATE_ENUM_SERIALIZATION(ydb_latency.h)
 
@@ -95,7 +100,12 @@ RECURSE(
     interactive
     sdk_core_access
     topic_workload
-    sqs_workload
     transfer_workload
     ydb_discovery
 )
+
+IF (NOT OS_WINDOWS)
+RECURSE(
+    sqs_workload
+)
+ENDIF()

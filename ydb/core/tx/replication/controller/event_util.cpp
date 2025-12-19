@@ -56,6 +56,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     if (replicationName) {
         command->SetReplicationName(replicationName);
     }
+
     auto& readerSettings = *command->MutableRemoteTopicReader();
     readerSettings.MutableConnectionParams()->CopyFrom(connectionParams);
     readerSettings.SetTopicPath(srcStreamPath);

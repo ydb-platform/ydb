@@ -550,11 +550,6 @@ void Test(TJoinTestData testData, bool blockJoin) {
                                                  testData.Setup->Alloc.GetUsed());
     }
 
-    NYql::NUdf::TUniquePtr<NYql::NUdf::ILogProvider> provider =
-        NYql::NUdf::MakeLogProvider([&](std::string_view component, NYql::NUdf::ELogLevel, std::string_view message) {
-            Cout << std::format("component: {}, message: {}\n", component, message);
-        });
-    got->GetContext().LogProvider = provider.Get();
     if (blockJoin) {
         CompareListAndBlockStreamIgnoringOrder(testData.Result, *got);
     } else {

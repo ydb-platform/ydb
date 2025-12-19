@@ -330,8 +330,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         NUdf::TLogComponentId LogComponent_ ;
 
         void LogDebug(TStringRef msg) const {
-            Cerr << msg << Endl;
-            // UDF_LOG(Logger_, LogComponent_, NYql::NUdf::ELogLevel::Fatal, msg);
+            // Cerr << msg << Endl;
+            UDF_LOG(Logger_, LogComponent_, NYql::NUdf::ELogLevel::Debug, msg);
         }
     };
 

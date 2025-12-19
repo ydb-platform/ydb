@@ -134,7 +134,6 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
 
     TFlushResult Flush() {
         TFlushResult res;
-        res.Packs = std::move(Output_.Data);
         res.Packs.Build.NTuples = Output_.NItems;
         res.Packs.Build.PackedTuples = std::move(Output_.Data.Build.PackedTuples);
         res.Packs.Build.Overflow = std::move(Output_.Data.Build.Overflow);

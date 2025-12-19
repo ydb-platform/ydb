@@ -1,3 +1,6 @@
+
+## 2.28.0 ##
+
 * The `ydb admin cluster state fetch` command was renamed to the `ydb admin cluster diagnostics collect`.
 * Added a new `--no-sanitize` option of the `ydb admin cluster state fetch` command. The new option disable sanitization and preserve sensitive data in the output.
 * Added `snapshot-ro` and `snapshot-rw` transaction modes to `--tx-mode` option of the `ydb table query execute` command.

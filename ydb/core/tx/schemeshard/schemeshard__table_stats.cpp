@@ -619,9 +619,8 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     bool collectKeySample
 ) {
     // NOTE: intentionally avoid using TPath.Check().{PathShardsLimit,ShardsLimit}() here.
-    // PathShardsLimit() performs pedantic validation by recalculating shard count through
-    // iteration over entire ShardInfos, which is too slow for this hot spot. It also performs
-    // additional lookups we want to avoid.
+    // PathShardsLimit() no longer performs full shard count validation by iterating all ShardInfos
+    // (too slow for this hot path), but still does additional lookups we want to avoid.
     {
         constexpr ui64 deltaShards = 2;
         if ((pathElement->GetShardsInside() + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShardsInPath) {

@@ -987,14 +987,6 @@ const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus stat
     TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
     const ui64 shardInPath = Path.Shards();
 
-    if (Path.IsResolved() && !Path.IsDeleted()) {
-        const auto allShards = Path.SS->CollectAllShards({Path.Base()->PathId});
-        Y_VERIFY_DEBUG_S(allShards.size() == shardInPath, "pedantic check"
-            << ": CollectAllShards(): " << allShards.size()
-            << ", Path.Shards(): " << shardInPath
-            << ", path: " << Path.PathString());
-    }
-
     if (!delta || shardInPath + delta <= domainInfo->GetSchemeLimits().MaxShardsInPath) {
         return *this;
     }
@@ -1208,17 +1200,17 @@ const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerM
     if (Failed) {
         return *this;
     }
-    
+
     TChecker left(*this);
     (left.*leftFunc)(status);
-    
+
     if (!left.Failed) {
         return *this;
     }
-    
+
     TChecker right(*this);
     (right.*rightFunc)(status);
-    
+
     if (right.Failed) {
         return Fail(left.Status, TStringBuilder() << left.Error << " and " << right.Error);
     }

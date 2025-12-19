@@ -374,6 +374,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             "potential max thread count without shared cpu: ", potentialMaxThreadCountWithoutSharedCpu,
             "possible max shared quota: ", possibleMaxSharedQuota,
             "thread count: ", fullThreadCount,
+            "max thread count: ", pool.MaxThreadCount,
             "elapsed cpu: ", elapsedCpu,
             "parked cpu: ", parkedCpu,
             "additional threads from lower priority: ", additionalThreadsFromLowerPriority

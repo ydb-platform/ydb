@@ -41,6 +41,7 @@
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -63,6 +64,9 @@ class TMovePortionsChange;
 namespace NReader {
 class TTxScan;
 class TTxInternalScan;
+namespace NCommon {
+class TReadMetadata;
+}
 namespace NPlain {
 class TIndexScannerConstructor;
 }
@@ -110,6 +114,7 @@ class TTxBlobsWritingFinished;
 class TTxBlobsWritingFailed;
 class TWriteTasksQueue;
 class TWriteTask;
+class TCommitOperation;
 
 namespace NLoading {
 class TTxControllerInitializer;
@@ -211,6 +216,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
     friend class NOlap::NReader::NSimple::TIndexScannerConstructor;
+    friend class NOlap::NReader::NCommon::TReadMetadata;
     friend class NOlap::TRemovePortionsChange;
     friend class NOlap::TMovePortionsChange;
 
@@ -300,6 +306,12 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
+    void SubscribeLockIfNotAlready(const ui64 lockId, const ui32 lockNodeId) const;
+    void ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie);
+    void TransactionToAbort(const ui64 lockId);
+    void MaybeAbortTransaction(const ui64 lockId);
+    void CancelTransaction(const ui64 txId);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 
@@ -461,6 +473,7 @@ protected:
             HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvColumnShard::TEvOverloadUnsubscribe, Handle);
+            HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {

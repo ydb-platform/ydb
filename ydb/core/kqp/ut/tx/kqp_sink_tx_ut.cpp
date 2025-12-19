@@ -401,15 +401,15 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     protected:
         void Setup(TKikimrSettings& settings) override {   
             if (!UsePragma) {
-                settings.AppConfig.MutableQueryServiceConfig()->SetDefaultTxMode([&]() {
+                settings.AppConfig.MutableTableServiceConfig()->SetDefaultTxMode([&]() {
                     if (Isolation == "SerializableRW") {
-                        return NKikimrConfig::TQueryServiceConfig::SerializableRW;
+                        return NKikimrConfig::TTableServiceConfig::SerializableRW;
                     } else if (Isolation == "SnapshotRW") {
-                        return NKikimrConfig::TQueryServiceConfig::SnapshotRW;
+                        return NKikimrConfig::TTableServiceConfig::SnapshotRW;
                     } else if (Isolation == "SnapshotRO") {
-                        return NKikimrConfig::TQueryServiceConfig::SnapshotRO;
+                        return NKikimrConfig::TTableServiceConfig::SnapshotRO;
                     } else if (Isolation == "StaleRO") {
-                        return NKikimrConfig::TQueryServiceConfig::StaleRO;
+                        return NKikimrConfig::TTableServiceConfig::StaleRO;
                     } else {
                         ythrow yexception() << "unknonw isolation: " << Isolation;
                     }

@@ -453,4 +453,13 @@ message TTableServiceConfig {
     optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
     
     optional bool EnableWatermarks = 110 [default = false, (InvalidateCompileCache) = true];
+
+    enum ETxMode {
+        SerializableRW = 0;
+        SnapshotRW = 1;
+        SnapshotRO = 2;
+        StaleRO = 3;
+    }
+
+    optional ETxMode DefaultTxMode = 111 [default = SerializableRW];
 };

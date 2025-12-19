@@ -1031,14 +1031,14 @@ public:
             const auto isolation = QueryState->PreparedQuery->GetPhysicalQuery().GetDefaultTxMode() != NKqpProto::ISOLATION_LEVEL_UNDEFINED
                 ? QueryState->PreparedQuery->GetPhysicalQuery().GetDefaultTxMode()
                 : [&]() {
-                    switch (QueryServiceConfig.GetDefaultTxMode()) {
-                    case NKikimrConfig::TQueryServiceConfig::SerializableRW:
+                    switch (Settings.TableService.GetDefaultTxMode()) {
+                    case NKikimrConfig::TTableServiceConfig::SerializableRW:
                         return NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
-                    case NKikimrConfig::TQueryServiceConfig::SnapshotRW:
+                    case NKikimrConfig::TTableServiceConfig::SnapshotRW:
                         return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
-                    case NKikimrConfig::TQueryServiceConfig::SnapshotRO:
+                    case NKikimrConfig::TTableServiceConfig::SnapshotRO:
                         return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
-                    case NKikimrConfig::TQueryServiceConfig::StaleRO:
+                    case NKikimrConfig::TTableServiceConfig::StaleRO:
                         return NKqpProto::ISOLATION_LEVEL_READ_STALE;
                     default:
                         ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)

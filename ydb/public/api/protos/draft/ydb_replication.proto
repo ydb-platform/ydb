@@ -178,6 +178,7 @@ message DescribeTransferResult {
             // cpu usage time on processing, microseconds
             MultipleWindowsStat processing_cpu_time = 14;
         }
+
         // detailed stats of every worker, only included if DescribeTransferRequest.include_stats flag = true in request
         repeated WorkerStats workers_stats = 1;
         // minimal uptime of all current workers

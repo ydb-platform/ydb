@@ -213,7 +213,7 @@ protected:
         Y_DEFER { ResetInterrupted(); };
 
         try {
-            if (ExecuteRunner.Execute(Query, {}) != EXIT_SUCCESS) {
+            if (ExecuteRunner.Execute(Query, {.AddIndent = true}) != EXIT_SUCCESS) {
                 YDB_CLI_LOG(Notice, "Query execution was interrupted by user");
                 return TResponse::Error(TStringBuilder() << "Query execution was interrupted by user", UserMessage);
             }

@@ -127,7 +127,7 @@ public:
         NQuery::TExecuteQuerySettings settings;
         settings.StatsMode(CollectStatsMode);
         settings.ConcurrentResultSets(false);
-        ExecuteRunner.Execute(line, {.Settings = settings});
+        ExecuteRunner.Execute(line, {.Settings = settings, .AddIndent = true});
     }
 
 private:

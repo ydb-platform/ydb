@@ -304,7 +304,6 @@ ELSE()
     SRCS(
         export_s3_buffer.cpp
         export_s3_uploader.cpp
-        extstorage_usage_config.cpp
         import_s3.cpp
     )
 ENDIF()

@@ -6,6 +6,7 @@
 #include <util/stream/file.h>
 #include <util/stream/output.h>
 #include <ydb/core/kqp/ut/common/kqp_arg_parser.h>
+#include <ydb/core/kqp/ut/common/kqp_tuple_parser.h>
 #include <ydb/core/kqp/ut/common/kqp_benches.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/join/kqp_join_hypergraph_generator.h>
@@ -16,6 +17,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt_make_join_hypergraph.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
 
 #include <cstdint>
 #include <exception>
@@ -438,27 +440,21 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             };
         }
 
-        if (topologyName == "mcmc") {
+        if (topologyName == "mcmc" || topologyName == "havel-hakimi") {
             return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
-                Cout << "================================= METRICS ================================\n";
                 auto sampledDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
-                Cout << "sampled degrees: " << JoinSeq(", ", sampledDegrees) << "\n";
-
                 auto graphicDegrees = MakeGraphicConnected(sampledDegrees);
-                Cout << "graphic degrees: " << JoinSeq(", ", graphicDegrees) << "\n";
-
                 auto initialGraph = ConstructGraphHavelHakimi(graphicDegrees);
+
                 return initialGraph;
             };
         }
 
         if (topologyName == "chung-lu") {
             return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
-                Cout << "================================= METRICS ================================\n";
                 auto initialDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
-                Cout << "initial degrees: " << JoinSeq(", ", initialDegrees) << "\n";
-
                 auto initialGraph = GenerateRandomChungLuGraph(rng, initialDegrees);
+
                 return initialGraph;
             };
         }
@@ -553,8 +549,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                                 graph.ReorderDFS();
                                             }
 
-                                            DoIt(ctx.RNG, graph, 0.5);
-
                                             auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, resultType, graph);
                                             if (!result) {
                                                 goto stop;
@@ -602,6 +596,230 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
         RunBenches(ctx, config, args);
     }
+
+
+    void RunHypergraphBenches(TRNG rng, TBenchmarkConfig config, TUnbufferedFileOutput output, TTupleParser::TTable args) {
+        auto getArg = [&](const std::vector<std::pair<std::string, std::string>>& row, const std::string& key) {
+            auto it = std::find_if(row.begin(), row.end(),
+                [&key](const auto& pair) { return pair.first == key; });
+
+            if (it == row.end()) {
+                return std::string{};
+            }
+
+            return it->second;
+        };
+
+        auto getDouble = [&](const auto& row, const std::string& key) {
+            std::string arg = getArg(row, key);
+            if (arg.empty()) {
+                return 0.0;
+            }
+            return std::stod(arg);
+        };
+
+        auto extractParameters = [&](std::vector<std::pair<std::string, std::string>> row) {
+            std::vector<std::pair<std::string, std::string>> pairs;
+            for (const auto& pair : row) {
+                if (pair.first != "N" && pair.first != "idx") {
+                    pairs.emplace_back(pair);
+                }
+            }
+            return pairs;
+        };
+
+        std::string header = "idx," + TComputedStatistics::GetCSVHeader() + ",hypergraph";
+
+        std::map<std::string, ui32> labels;
+        auto appendLabel = [&](const auto& row, std::string label) {
+            std::string arg = getArg(row, label);
+
+            TStringStream ss;
+            ss << label << " = " << getArg(row, label) << "; ";
+
+            std::string result = ss.Str();
+            labels[label] = std::max<ui32>(result.size(), labels[label]);
+
+            while (result.size() < labels[label]) {
+                result.push_back(' ');
+            }
+
+            return result;
+        };
+
+        ui64 idx = 0;
+        std::map<std::vector<std::pair<std::string, std::string>>, double> timeoutedNs;
+        for (const auto& row : args) {
+            // Controls number of relations, used for every topology
+            double n = getDouble(row, "N");
+
+            ui32 currentIdx = idx ++;
+            Cout << "(" << currentIdx + 1 << "/" << args.size() << ") ";
+            Cout << appendLabel(row, "N");
+            Cout << appendLabel(row, "label");
+
+            auto parameters = extractParameters(row);
+            if (timeoutedNs.count(parameters) == 0) {
+                timeoutedNs[parameters] = UINT32_MAX;
+            }
+            auto& maxN = timeoutedNs[parameters];
+            if (n > maxN) {
+                Cout << "[SKIPPED]\n";
+                continue;
+            }
+
+            // Controls topology type (e.g. random-trees, clique, havel-hakimi, mcmc, etc)
+            std::string type = getArg(row, "type");
+
+            // Controls lognormal degree distribution for topologies chun-lu, havel-hakimi & mcmc
+            double sigma = getDouble(row, "sigma");
+            double mu = getDouble(row, "mu");
+
+            // Controls how many edges go into the same column (i.e. clustering), Pitman-Yor
+            // distribution is used to model it. Heavily impacts transitive closure and shuffle elimination:
+            double alpha = getDouble(row, "alpha");
+            double theta = getDouble(row, "theta");
+
+            // Controls which random tree decomposition is prefered, only impacts hypegraph structure
+            double bushiness = getDouble(row, "bushiness");
+
+            // Probabilities of different join kinds:
+            std::map<NYql::EJoinKind, double> probabilities = {
+                { NYql::EJoinKind::InnerJoin, getDouble(row, "inner-join")      },
+                { NYql::EJoinKind::LeftJoin,  getDouble(row, "left-join")       },
+                { NYql::EJoinKind::RightJoin, getDouble(row, "right-join")      },
+                { NYql::EJoinKind::OuterJoin, getDouble(row, "outer-join")      },
+                { NYql::EJoinKind::LeftOnly,  getDouble(row, "left-only-join")  },
+                { NYql::EJoinKind::RightOnly, getDouble(row, "right-only-join") },
+                { NYql::EJoinKind::LeftSemi,  getDouble(row, "left-semi-join")  },
+                { NYql::EJoinKind::RightSemi, getDouble(row, "right-semi-join") },
+                { NYql::EJoinKind::Cross,     getDouble(row, "cross-join")      } ,
+                { NYql::EJoinKind::Exclusion, getDouble(row, "exclusion-join")  }
+            };
+
+
+            // 1. Generate initial undirected regular graph
+            auto generateTopology = GetTopology(type);
+            auto graph = generateTopology(rng, n, mu, sigma);
+            if (type == "mcmc") {
+                MCMCRandomize(rng, graph);
+            }
+
+            // 2. Update keys so that they match given distribution
+            graph.SetupKeysPitmanYor(rng, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
+
+            // 3. Convert to a random join tree
+            auto tree = ToJoinTree(rng, graph, bushiness);
+
+            // 4. Randomly select different join kinds with given probabilities
+            RandomizeJoinTypes(rng, tree, probabilities);
+
+            // 5. Make join hypegraph (this includes closure and cross join
+            //    elimination/reconstructions)
+            using THypergraphNodes = std::bitset<64>;
+            auto hypergraph = NYql::NDq::MakeJoinHypergraph<THypergraphNodes>(tree);
+
+            // 6. Optimize and write down average optimization time
+            std::optional<TStatistics> stats = Benchmark(config, [&]() -> bool {
+                NYql::TCBOSettings settings{
+                    .MaxDPhypDPTableSize = UINT32_MAX
+                };
+
+                NYql::TBaseProviderContext ctx;
+                NYql::TExprContext dummyCtx;
+
+                // TODO: enable Shuffle Elimination
+                auto optimizer =
+                    std::unique_ptr<NYql::IOptimizerNew>(
+                        NYql::NDq::MakeNativeOptimizerNew(ctx, settings, dummyCtx, false));
+
+                if (tree->Kind == NYql::EOptimizerNodeKind::JoinNodeType) {
+                    optimizer->JoinSearch(std::static_pointer_cast<NYql::TJoinOptimizerNode>(tree));
+                }
+
+                return true;
+            });
+
+            if (stats) {
+                auto computedStats = stats->ComputeStatistics();
+                auto serializedHypegraph = TJoinHypergraphSerializer<THypergraphNodes>::Serialize(hypergraph);
+
+                TStringStream ss;
+                ss << currentIdx << ",";
+                computedStats.ToCSV(ss);
+                ss << "," << serializedHypegraph << "\n";
+                output << ss.Str();
+
+                Cout << "Median = " << TimeFormatter::Format(computedStats.Median, computedStats.MAD);
+
+                if (computedStats.Median > config.SingleRunTimeout) {
+                    maxN = n;
+                }
+            }
+
+            Cout << "\n";
+        }
+    }
+
+    Y_UNIT_TEST(Dataset) {
+        // std::random_device randomDevice;
+        TRNG rng(0);
+
+        std::string benchArgs = GetTestParam("BENCHMARK");
+        auto config = GetBenchmarkConfig(TArgs{benchArgs});
+        DumpBenchmarkConfig(Cout, config);
+
+        std::string args = GetTestParam("DATASET");
+        if (args.empty()) {
+            std::string datasetFile = GetTestParam("DATASET_FILE");
+            if (datasetFile.empty()) {
+                // Don't launch in non-interactive mode
+                Cerr << "Filename with dataset description is required, please provide one: --test-param DATASET_FILE='<filename>'";
+                return;
+            }
+
+            args = TFileInput(datasetFile).ReadAll();
+        }
+
+        auto parameters = TTupleParser{args}.Parse();
+
+        std::stable_sort(parameters.begin(), parameters.end(), [](const auto& lhs, const auto rhs) {
+            std::string lN;
+            for (ui32 i = 0; i < lhs.size(); ++ i) {
+                if (lhs[i].first == "N") {
+                    lN = lhs[i].second;
+                }
+            }
+
+            std::string rN;
+            for (ui32 i = 0; i < rhs.size(); ++ i) {
+                if (rhs[i].first == "N") {
+                    rN = rhs[i].second;
+                }
+            }
+
+            size_t pos0 = 0;
+            ui32 lNu = std::stoi(lN, &pos0);
+            Y_ENSURE(pos0 == lN.size());
+
+            size_t pos1 = 0;
+            ui32 rNu = std::stoi(rN, &pos1);
+            Y_ENSURE(pos1 == rN.size());
+
+            return lNu < rNu;
+        });
+
+        Cout << "\n";
+        PrintTable(parameters);
+
+        std::string outputFile = GetTestParam("OUTPUT");
+        if (outputFile.empty()) {
+            throw std::runtime_error("Filename for output file is required, please provide one: --test-param OUTPUT='<filename>'");
+        }
+
+        RunHypergraphBenches(rng, config, TUnbufferedFileOutput(outputFile.c_str()), parameters);
+    }
+
 
     struct CustomQuery {
         std::string Query;

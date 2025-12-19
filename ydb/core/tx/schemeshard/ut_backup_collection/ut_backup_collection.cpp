@@ -2724,5 +2724,12 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist});
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist});
     }
 } // TBackupCollectionTests

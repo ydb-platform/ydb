@@ -49,7 +49,7 @@ struct TPackResult {
         int tupleSize = std::ssize(PackedTuples) / NTuples;
         for (int index = 0; index < NTuples; ++index) {
             // Cout << Sprintf("index: %i, ", index);
-            Cout.Flush();
+            // Cout.Flush();
             fn(TSingleTuple{ .PackedData = &PackedTuples[index * tupleSize], .OverflowBegin = Overflow.data() });
         }
     }

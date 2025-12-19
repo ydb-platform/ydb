@@ -228,8 +228,6 @@ struct TTupleLayout {
     // Pretty prints a single packed tuple for debugging purposes.
     // Fixed-size fields are printed as integers, variable-length fields as strings.
     std::string Stringify(TSingleTuple tuple) const;
-
-    TSingleTuple NullsTuple() const;
 };
 
 struct TTupleLayoutFallback : public TTupleLayout {

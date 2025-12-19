@@ -66,8 +66,6 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
     const bool scalar = !IsBlockJoin(algo);
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
     TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
-
-    ;
     TGraceJoinRenames renames;
     if (descr.CustomRenames) {
         renames = TGraceJoinRenames::FromDq(*descr.CustomRenames);

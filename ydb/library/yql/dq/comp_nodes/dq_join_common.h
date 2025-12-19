@@ -222,15 +222,10 @@ template <typename T> [[nodiscard]] T ExtractReadyFuture(NThreading::TFuture<T>&
     return future.ExtractValueSync();
 }
 
-namespace detail{
-template<typename T, EJoinKind Kind>
-constexpr bool isJoinMatchFn = SemiOrOnlyJoin(Kind) ? std::is_invocable<T, TSingleTuple>::value : std::is_invocable<T, TSides<TSingleTuple>>::value;
-}
 
 
-
-template<typename T, EJoinKind Kind>
-concept JoinMatchFn = detail::isJoinMatchFn<T, Kind>;
+template<typename T>
+concept JoinMatchFn = std::invocable<T, TSingleTuple> && std::invocable<T, TSides<TSingleTuple>>;
 
 TPackResult GetPage(TFuturePage&& future);
 
@@ -461,8 +456,6 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         , Spiller_(ctx.SpillerFactory->CreateSpiller())
         , Sources_(std::move(sources))
     {
-        using enum EJoinKind;
-        MKQL_ENSURE(Kind == Inner || Kind == LeftOnly || Kind == LeftSemi || Kind == Left , "unsupported join kind");
     }
 
     struct Finish {};
@@ -483,9 +476,28 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
 
 
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
-                           JoinMatchFn<Kind> auto consume) {
+                           /*JoinMatchFn todo(becalm): uncomment constraint when scalar join supports left joins*/ auto consume) {
         auto notEnoughMemory = [] {
             return TlsAllocState->IsMemoryYellowZoneEnabled();
+        };
+        auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
+            bool found = false;
+            table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                found = true;
+                if constexpr (Kind == EJoinKind::Inner || Kind == EJoinKind::Left) {
+                    consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                }
+            });
+            if constexpr (Kind == EJoinKind::Left || Kind == EJoinKind::LeftOnly) {
+                if (!found) {
+                    consume(tuple);
+                }
+            }
+            if constexpr(Kind == EJoinKind::LeftSemi) {
+                if (found) {
+                    consume(tuple);
+                }
+            }
         };
         if (std::get_if<Init>(&State_)) {
             State_ = FetchingBuild{*this};
@@ -630,14 +642,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     } else {
                         TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
                         MKQL_ENSURE(thisTable, "sanity check");
-                        bool found = false;
-                        thisTable->Lookup(tuple, [&](TSingleTuple tableMatch) {
-                            found = true;
-                            if constexpr (Kind == EJoinKind::Inner) {
-                                consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                            }
-                        });
-                        
+                        lookupToTable(*thisTable, tuple);
                     }
                 });
                 state.FetchedPack = std::nullopt;
@@ -700,9 +705,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         if (table->Futures.front().IsReady()) {
                             TPackResult pack = GetPage(*GetFrontOrNull(table->Futures), ESide::Probe);
                             pack.ForEachTuple([&](TSingleTuple probeTuple) {
-                                table->Table.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                                    consume({.Build = buildTuple, .Probe = probeTuple});
-                                });
+                                lookupToTable(table->Table, probeTuple);
                             });
                         } else {
                             return WaitWhileSpilling();

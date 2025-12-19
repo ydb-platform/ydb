@@ -344,13 +344,14 @@ TJoinTestData EmptyRightInnerTestData() {
     TVector<ui64> rightKeys = {1, 2, 3};
     TVector<TString> rightValues = {"a2", "b2", "c2"};
 
-    TVector<std::optional<ui64>> expectedKeys = {2, 3};
-    TVector<std::optional<TString>> expectedValues = {"b1", "c1"};
+    TVector<ui64> expectedKeys = {2, 3};
+    TVector<TString> expectedValues = {"b1", "c1"};
 
     td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
     td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
     td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
     td.Kind = EJoinKind::LeftSemi;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft} };
     return td;
 }
 
@@ -363,13 +364,14 @@ TJoinTestData EmptyRightInnerTestData() {
     TVector<ui64> rightKeys = {1, 2, 3};
     TVector<TString> rightValues = {"a2", "b2", "c2"};
 
-    TVector<std::optional<ui64>> expectedKeys = {2, 3};
-    TVector<std::optional<TString>> expectedValues = {"b2", "c2"};
+    TVector<ui64> expectedKeys = {2, 3};
+    TVector<TString> expectedValues = {"b2", "c2"};
 
     td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
     td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
     td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
     td.Kind = EJoinKind::RightSemi;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kRight}, {1, EJoinSide::kRight} };
     return td;
 }
 
@@ -382,13 +384,15 @@ TJoinTestData EmptyRightInnerTestData() {
     TVector<ui64> rightKeys = {1, 2, 3};
     TVector<TString> rightValues = {"a2", "b2", "c2"};
 
-    TVector<std::optional<ui64>> expectedKeys = {4};
-    TVector<std::optional<TString>> expectedValues = {"d1"};
+    TVector<ui64> expectedKeys = {4};
+    TVector<TString> expectedValues = {"d1"};
 
     td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
     td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
     td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
     td.Kind = EJoinKind::LeftOnly;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft} };
+
     return td;
 }
 
@@ -401,13 +405,14 @@ TJoinTestData EmptyRightInnerTestData() {
     TVector<ui64> rightKeys = {1, 2, 3};
     TVector<TString> rightValues = {"a2", "b2", "c2"};
 
-    TVector<std::optional<ui64>> expectedKeys = {1};
-    TVector<std::optional<TString>> expectedValues = {"a2"};
+    TVector<ui64> expectedKeys = {1};
+    TVector<TString> expectedValues = {"a2"};
 
     td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
     td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
     td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
     td.Kind = EJoinKind::RightOnly;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kRight}, {1, EJoinSide::kRight} };
     return td;
 }
 
@@ -533,7 +538,11 @@ void Test(TJoinTestData testData, bool blockJoin) {
     descr.RightSource.ColumnTypes =
         AS_TYPE(TTupleType, AS_TYPE(TListType, testData.Right.Type)->GetItemType())->GetElements();
     descr.RightSource.ValuesList = testData.Right.Value;
-
+    if (testData.JoinMemoryConstraint){
+        descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+    } else {
+        descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    }
     THolder<IComputationGraph> got = ConstructJoinGraphStream(
         testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr);
     if (testData.JoinMemoryConstraint) {
@@ -584,7 +593,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     //     Test(LeftJoinTestData(), BlockJoin);
     // }
 
-    // Y_UNIT_TEST_TWIN(FullBehaves, BlockJoin) {
+    // Y_UNIT_TEST_TWIN(FullBehavesAsLeftIfRightEmpty, BlockJoin) {
     //     Test(FullBehavesAsLeftIfRightEmptyTestData(), BlockJoin);
     // }
 
@@ -604,17 +613,17 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     //     Test(ExclusionTestData(), BlockJoin);
     // }
 
-    // Y_UNIT_TEST_TWIN(TestLeftSemiKind, BlockJoin) {
-    //     Test(LeftSemiTestData(), BlockJoin);
-    // }
+    Y_UNIT_TEST(TestLeftSemiKind) {
+        Test(LeftSemiTestData(),true);
+    }
 
     // Y_UNIT_TEST_TWIN(TestRightSemiKind, BlockJoin) {
     //     Test(RightSemiTestData(), BlockJoin);
     // }
 
-    // Y_UNIT_TEST_TWIN(TestLeftOnlyKind, BlockJoin) {
-    //     Test(LeftOnlyTestData(), BlockJoin);
-    // }
+    Y_UNIT_TEST(TestLeftOnlyKind) {
+        Test(LeftOnlyTestData(), true);
+    }
 
     // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {
     //     Test(RightOnlyTestData(), BlockJoin);

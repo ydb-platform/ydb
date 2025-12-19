@@ -974,7 +974,7 @@ struct TReplicationSettingsBase {
             None = 0,
             Database = 1,
             Object = 2,
-            Detailed = 3
+            Detailed = 3,
         };
         EMetricsLevel Level;
     };

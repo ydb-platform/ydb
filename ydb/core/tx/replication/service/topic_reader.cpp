@@ -1,6 +1,6 @@
 #include "logging.h"
-#include "worker.h"
 #include "topic_reader.h"
+#include "worker.h"
 
 #include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>

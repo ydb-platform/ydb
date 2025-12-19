@@ -1,7 +1,7 @@
 #include "logging.h"
 #include "service.h"
-#include "worker.h"
 #include "topic_reader.h"
+#include "worker.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>

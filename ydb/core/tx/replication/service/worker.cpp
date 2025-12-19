@@ -1,6 +1,6 @@
 #include "logging.h"
 #include "service.h"
-#include "topic_reader.h"
+#include "transfer_reader_stats.h"
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
@@ -253,9 +253,11 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         Y_ABORT_UNLESS(!InFlightData);
         InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->PartitionId, ev->Get()->Source, ev->Get()->Records);
+
         if (ev->Get()->Stats) {
             Send(Parent, MakeEvStatusFromReaderStats(std::move(ev->Get()->Stats)));
         }
+
         if (Writer) {
             Send(ev->Forward(Writer));
         }

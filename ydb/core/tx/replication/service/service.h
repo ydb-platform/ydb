@@ -1,9 +1,9 @@
 #pragma once
 
+#include <google/protobuf/timestamp.pb.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/row_version.h>
-#include <google/protobuf/timestamp.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/common/sensitive_event_pb.h>
 #include <ydb/core/tx/replication/common/worker_id.h>

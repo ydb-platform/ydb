@@ -2713,6 +2713,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
         env.TestWaitNotification(runtime, txId);
 
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
         env.TestWaitNotification(runtime, txId);
@@ -2723,13 +2725,18 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             "Name: \"" DEFAULT_NAME_1 "\"");
         env.TestWaitNotification(runtime, txId);
 
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist});
 
-        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        runtime.SimulateSleep(TDuration::Seconds(5));
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist});
+        runtime.SimulateSleep(TDuration::Seconds(5));
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist});
     }
 } // TBackupCollectionTests

@@ -117,7 +117,6 @@ struct TEvWorker {
         explicit TEvTerminateWriter(ui64 partitionId);
         TString ToString() const override;
     };
-
 };
 
 IActor* CreateWorker(

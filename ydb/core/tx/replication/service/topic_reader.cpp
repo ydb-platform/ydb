@@ -1,5 +1,6 @@
 #include "logging.h"
 #include "topic_reader.h"
+#include "transfer_reader_stats.h"
 #include "worker.h"
 
 #include <ydb/core/transfer/transfer_writer.h>

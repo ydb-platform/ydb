@@ -2,6 +2,7 @@
 #include "service.h"
 #include "table_writer.h"
 #include "topic_reader.h"
+#include "transfer_reader_stats.h"
 #include "transfer_writer_factory.h"
 #include "worker.h"
 
@@ -49,6 +50,7 @@ class TSessionInfo {
         void EnsureCounters(NMonitoring::TDynamicCounterPtr& countersRoot) {
             if (MetricsLevel != TMetricsConfig::LEVEL_DETAILED || !ReplicationName)
                 return;
+
             if (!WorkerCounters) {
                 WorkerCounters.ConstructInPlace(countersRoot->GetSubgroup("counters", "transfer_detailed"), ReplicationName, WorkerId);
             }
@@ -62,7 +64,9 @@ class TSessionInfo {
                 HostCounters->DecompressCpu->Add(stats.ReaderStats->DecompressCpu.MicroSeconds());
                 WorkerCounters->DecompressCpu->Add(stats.ReaderStats->DecompressCpu.MicroSeconds());
                 WorkerCounters->ReadTime->Add(stats.ReaderStats->ReadTime.MilliSeconds());
-            } if (stats.WriterStats) {
+            }
+
+            if (stats.WriterStats) {
                 HostCounters->ProcessCpu->Add(stats.WriterStats->ProcessingCpu.MicroSeconds());
                 WorkerCounters->ProcessCpu->Add(stats.WriterStats->ProcessingCpu.MicroSeconds());
                 WorkerCounters->WriteTime->Add(stats.WriterStats->WriteDuration.MilliSeconds());
@@ -70,6 +74,7 @@ class TSessionInfo {
                 WorkerCounters->WriteBytes->Add(stats.WriterStats->WriteBytes);
                 WorkerCounters->WriteErrors->Add(stats.WriterStats->WriteErrors);
             }
+            
             WorkerCounters->Restarts->Add(stats.RestartsCount);
         }
 

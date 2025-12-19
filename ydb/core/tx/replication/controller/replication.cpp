@@ -28,8 +28,9 @@ TString MakeReplicationName(const NKikimrReplication::TReplicationConfig& config
     if (!config.GetTransferSpecific().GetTarget().HasDstPath()) {
         return TString{};
     }
+
     return TStringBuilder() << config.GetTransferSpecific().GetTarget().GetSrcPath() << "--" << config.GetTransferSpecific().GetTarget().GetDstPath();
-    }
+}
 
 class TReplication::TImpl: public TLagProvider {
     friend class TReplication;

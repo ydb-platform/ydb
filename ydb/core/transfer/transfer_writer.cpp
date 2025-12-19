@@ -562,7 +562,6 @@ private:
         }
         Stats.StartCpuSec = GetElapsedTicksAsSeconds();
         Stats.Operation = newState;
-
     }
 
     void SendStats(EWorkerOperation newCurrentOperation) {

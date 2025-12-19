@@ -489,11 +489,13 @@ def iter_build_results_files(path):
                 report = json.load(f)
             
             for result in report.get("results") or []:
-                if result.get("type") == "test":
-                    # Skip suite-level entries (they are aggregates, not individual tests)
-                    if result.get("suite") is True:
-                        continue
-                    yield fn, result
+                # Only include results that have a status field (indicates it's a test/check)
+                # Filtering (suite, build, import/configure) is done by transform_build_results.py
+                status = result.get("status")
+                if not status:
+                    continue
+                
+                yield fn, result
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)
             continue

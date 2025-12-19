@@ -2717,7 +2717,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
         env.TestWaitNotification(runtime, txId);
 
-        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        runtime.SimulateSleep(TDuration::Seconds(5));
 
         TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
             "Name: \"" DEFAULT_NAME_1 "\"");

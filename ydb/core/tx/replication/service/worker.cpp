@@ -8,8 +8,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/core/protos/counters_replication.pb.h>
+#include <ydb/core/transfer/transfer_writer.h>
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
@@ -161,7 +161,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
         ui32 GetCreateAttempt() const {
             return CreateAttempt;
         }
-
     };
 
     TStringBuf GetLogPrefix() const {

@@ -20,9 +20,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         target.GetDstPathId(),
         replication->GetConfig().GetTransferSpecific().GetBatching(),
         replication->GetDatabase(),
-        replication->GetConfig().HasMetricsConfig()
-            ? replication->GetConfig().GetMetricsConfig().GetLevel()
-            : NKikimrReplication::TReplicationConfig::TMetricsConfig::LEVEL_NONE,
+        replication->GetConfig().GetMetricsConfig().GetLevel(),
         replication->GetName());
 }
 

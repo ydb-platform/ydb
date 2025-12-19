@@ -183,7 +183,7 @@ message TReplicationState {
 message TReplicationStats {
     oneof Stats {
         Ydb.Replication.DescribeTransferResult.Stats Transfer = 1;
-    };
+    }
 }
 
 message TOperationId {

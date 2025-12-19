@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/json/writer/json_value.h>
 #include <util/generic/array_size.h>
 #include <util/generic/utility.h>
 #include <util/generic/ylimits.h>
@@ -40,6 +41,8 @@ struct TComputedStatistics {
 
     static std::string GetCSVHeader();
     void ToCSV(IOutputStream& os) const;
+
+    NJson::TJsonValue ToJson() const;
 };
 
 double CalculatePercentile(const std::vector<double>& data, double percentile);

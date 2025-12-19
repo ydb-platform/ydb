@@ -186,18 +186,6 @@ bool RewriteCreateAsyncReplicationQueryNoSecrets(
     return RewriteCreateQuery(query, "CREATE ASYNC REPLICATION `{}`", dbPath, issues);
 }
 
-bool RewriteCreateAsyncReplicationQuery(
-    TString& query,
-    const TString& dbRestoreRoot,
-    const TString& dbPath,
-    NYql::TIssues& issues) {
-
-    if (!RewriteSecretsNoCheck(query, dbRestoreRoot, issues)) {
-        return false;
-    }
-    return RewriteCreateAsyncReplicationQueryNoSecrets(query, dbRestoreRoot, dbPath, issues);
-}
-
 bool RewriteCreateTransferQueryNoSecrets(
     TString& query,
     const TString& dbRestoreRoot,
@@ -208,18 +196,6 @@ bool RewriteCreateTransferQueryNoSecrets(
         return false;
     }
     return RewriteCreateQuery(query, "CREATE TRANSFER `{}`", dbPath, issues);
-}
-
-bool RewriteCreateTransferQuery(
-    TString& query,
-    const TString& dbRestoreRoot,
-    const TString& dbPath,
-    NYql::TIssues& issues) {
-
-    if (!RewriteSecretsNoCheck(query, dbRestoreRoot, issues)) {
-        return false;
-    }
-    return RewriteCreateTransferQueryNoSecrets(query, dbRestoreRoot, dbPath, issues);
 }
 
 } // namespace NYdb::NDump

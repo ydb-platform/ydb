@@ -11,10 +11,12 @@ namespace NYql {
 }
 
 namespace NYdb::NDump {
-    TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableResult& description);
 
-    bool RewriteCreateExternalTableQuery(
-        TString& query,
-        const TString& dbPath,
-        NYql::TIssues& issues);
+TString BuildCreateExternalTableQuery(const Ydb::Table::DescribeExternalTableResult& description);
+
+bool RewriteCreateExternalTableQuery(
+    TString& query,
+    const TString& dbPath,
+    NYql::TIssues& issues);
+
 }

@@ -47,16 +47,4 @@ bool RewriteCreateExternalDataSourceQueryNoSecrets(
     return RewriteCreateQuery(query, "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`", dbPath, issues);
 }
 
-bool RewriteCreateExternalDataSourceQuery(
-    TString& query,
-    const TString& dbRestoreRoot,
-    const TString& dbPath,
-    NYql::TIssues& issues) {
-
-    if (!RewriteSecretsNoCheck(query, dbRestoreRoot, issues)) {
-        return false;
-    }
-    return RewriteCreateExternalDataSourceQueryNoSecrets(query, dbPath, issues);
-}
-
 }

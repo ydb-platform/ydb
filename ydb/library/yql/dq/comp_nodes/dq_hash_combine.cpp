@@ -6,7 +6,9 @@
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_counters.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
+#include <yql/essentials/minikql/computation/mkql_spiller_adapter.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
@@ -15,7 +17,10 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/defs.h>
 
+
+
 #include <util/system/mutex.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -27,6 +32,10 @@ namespace {
 
 bool HasMemoryForProcessing() {
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
+}
+
+bool SpillingTime() {
+    return !HasMemoryForProcessing() || TlsAllocState->GetMaximumLimitValueReached();
 }
 
 using TEqualsPtr = bool(*)(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
@@ -56,6 +65,97 @@ struct TStorageWrapper
 
     void Clear() {
         Storage.Clear();
+    }
+};
+
+struct TSegmentedArena
+{
+    // TODO: Account for MKQL-specific headers
+    // TODO: Must be variable, Max(64k, AllocSize)
+    // TODO: Build a proper class
+    static constexpr const size_t PageSize = 63 * 1024;
+
+    struct TPageEntry {
+        TPageEntry* Prev;
+        void* Page;
+        ui32 Tag;
+        ui32 Used;
+    };
+
+    TPagedArena Storage;
+
+    using TPageList = std::deque<TPageEntry>;
+    TPageList Pages;
+    std::vector<TPageEntry*> PagesByTag;
+
+    size_t AllocSize = 0;
+    size_t UsedMem = 0;
+    ui32 PageCapacity = 0;
+    TPageList::iterator LastUsedPage;
+    bool NeedNewPages = true;
+
+    TSegmentedArena()
+        : Storage(TlsAllocState)
+        , LastUsedPage(Pages.end())
+    {
+    }
+
+    void* Alloc(const ui32 tag) {
+        YQL_ENSURE(AllocSize > 0, "Allocation size must be specified via Format(...)");
+
+        auto& prevPtr = PagesByTag.at(tag);
+
+        TPageEntry* pagePtr = nullptr;
+        if (prevPtr == nullptr || prevPtr->Used >= PageCapacity) {
+            if (LastUsedPage == Pages.end()) {
+                auto rawPtr = Storage.Alloc(PageSize, EMemorySubPool::Temporary);
+                pagePtr = &Pages.emplace_back(TPageEntry{
+                    .Prev = prevPtr,
+                    .Page = rawPtr,
+                    .Tag = tag,
+                    .Used = 0,
+                });
+                LastUsedPage = Pages.end();
+            } else {
+                pagePtr = &*LastUsedPage;
+                ++LastUsedPage;
+                pagePtr->Prev = prevPtr;
+                pagePtr->Tag = tag;
+                pagePtr->Used = 0;
+            }
+            NeedNewPages = (LastUsedPage == Pages.end() && PageCapacity == 1);
+            PagesByTag[tag] = pagePtr;
+        } else {
+            pagePtr = prevPtr;
+            NeedNewPages = (LastUsedPage == Pages.end() && (PageCapacity - 1) == pagePtr->Used);
+        }
+
+        UsedMem += AllocSize;
+        return static_cast<void*>(static_cast<char*>(pagePtr->Page) + (AllocSize * pagePtr->Used++));
+    }
+
+    void Format(const ui32 numTags, const size_t allocSize) {
+        MKQL_ENSURE(allocSize <= PageSize, "PageSize must be adjusted to be >= allocSize");
+        AllocSize = allocSize;
+        PageCapacity = PageSize / AllocSize;
+        PagesByTag.clear();
+        PagesByTag.resize(numTags, 0);
+        LastUsedPage = Pages.begin();
+        NeedNewPages = Pages.empty();
+        UsedMem = 0;
+    }
+
+    void Clear() {
+        AllocSize = 0;
+        Pages.clear();
+        LastUsedPage = Pages.end();
+        PagesByTag.clear();
+        Storage.Clear();
+    }
+
+    size_t GetUsedMem()
+    {
+        return UsedMem;
     }
 };
 
@@ -328,6 +428,10 @@ constexpr const float MaxCompressionRatio = 32.0;
 constexpr const size_t MemorySampleRowCount = 16384ULL; // sample size for row weight estimation, in rows
 constexpr const size_t LowerFixedRowCount = 1024ULL; // minimum viable hash table size, rows
 constexpr const size_t UpperFixedRowCount = 128 * 1024ULL; // maximum hash table size, rows (fixed constant for now)
+constexpr const size_t BucketBits = 7;
+constexpr const size_t NumBuckets = 1ULL << BucketBits;
+constexpr const size_t SpillingIoBuffer = 5_MB;
+constexpr const size_t StorageArenaMinSize = 64_MB;
 
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
 {
@@ -376,25 +480,310 @@ protected:
         }
     }
 
-    EFillState ProcessFetchedRow(TUnboxedValue* const* input) {
-        TUnboxedValuePod* keyBuffer = static_cast<TUnboxedValuePod*>(KeyStateBuffer);
+    struct TPerBucketSpillage {
+        std::unique_ptr<TWideUnboxedValuesSpillerAdapter> SpilledState;
+        std::unique_ptr<TWideUnboxedValuesSpillerAdapter> SpilledInput;
+    };
 
+    struct TTaskSpillage {
+        std::vector<TPerBucketSpillage> Spillage;
+        ui32 StateWidth = 0;
+        ui32 NumBuckets = 0;
+        ui32 CurrentBucket = 0;
+        bool CurrentBucketRead = false;
+    };
+
+    std::deque<TTaskSpillage> SpillingStack;
+
+    ISpiller::TPtr Spiller;
+
+    void InitiateSpilling()
+    {
+        if (!Spiller) {
+            Spiller = Ctx.SpillerFactory->CreateSpiller();
+        }
+
+        MKQL_ENSURE(SpillingStack.empty(), "Spilling buckets should not have been initialized yet");
+        SpillingStack.emplace_back();
+        TTaskSpillage& currentSpilling = SpillingStack.back();
+        currentSpilling.Spillage.resize(NumBuckets);
+
+        const ui32 keysAndStatesWidth = KeysAndStatesType->GetElementsCount();
+        currentSpilling.StateWidth = keysAndStatesWidth;
+
+        for (size_t i = 0; i < NumBuckets; ++i) {
+            currentSpilling.Spillage[i].SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeysAndStatesType, SpillingIoBuffer);
+            currentSpilling.Spillage[i].SpilledInput = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, InputItemsType, SpillingIoBuffer);
+        }
+
+        [[maybe_unused]] size_t totalWritten = 0;
+        [[maybe_unused]] size_t totalFlushed = 0;
+
+        for (size_t i = 0; i < NumBuckets; ++i) {
+            TWideUnboxedValuesSpillerAdapter& spiller = *currentSpilling.Spillage[i].SpilledState;
+            TSegmentedArena::TPageEntry* page = Store->PagesByTag[i];
+            while (page != nullptr) {
+                TUnboxedValuePod* item = static_cast<TUnboxedValuePod*>(page->Page);
+                for (ui32 writtenFromPage = 0; writtenFromPage < page->Used; ++writtenFromPage, item += keysAndStatesWidth) {
+                    TArrayRef<TUnboxedValuePod> pageItems(item, keysAndStatesWidth);
+                    ++totalWritten;
+                    auto pageFuture = spiller.WriteWideItem(pageItems);
+                    for (auto& uv : pageItems) {
+                        uv.UnRef();
+                    }
+                    if (!pageFuture.has_value()) {
+                        continue;
+                    }
+                    spiller.AsyncWriteCompleted(pageFuture->ExtractValue());
+                    ++totalFlushed;
+                }
+                page = page->Prev;
+            }
+            auto finishFuture = spiller.FinishWriting();
+            if (finishFuture.has_value()) {
+                ++totalFlushed;
+                spiller.AsyncWriteCompleted(finishFuture->ExtractValue());
+            }
+        }
+
+        Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputWidth);
+    }
+
+    void FlushSpillingInput()
+    {
+        if (SpillingStack.empty()) {
+            return;
+        }
+
+        MKQL_ENSURE(!!Spiller, "Spiller must have been created");
+
+        [[maybe_unused]] size_t totalWritten = 0;
+        [[maybe_unused]] size_t totalFlushed = 0;
+
+        TTaskSpillage& currentSpill = SpillingStack.back();
+        for (size_t i = 0; i < NumBuckets; ++i) {
+            TWideUnboxedValuesSpillerAdapter& spiller = *currentSpill.Spillage[i].SpilledInput;
+            TSegmentedArena::TPageEntry* page = Store->PagesByTag[i];
+            while (page != nullptr) {
+                TUnboxedValuePod* item = static_cast<TUnboxedValuePod*>(page->Page);
+                for (ui32 writtenFromPage = 0; writtenFromPage < page->Used; ++writtenFromPage, item += InputWidth) {
+                    TArrayRef<TUnboxedValuePod> pageItems(item, InputWidth);
+                    ++totalWritten;
+                    auto pageFuture = spiller.WriteWideItem(pageItems);
+                    for (auto& uv : pageItems) {
+                        uv.UnRef();
+                    }
+                    if (!pageFuture.has_value()) {
+                        continue;
+                    }
+                    ++totalFlushed;
+                    spiller.AsyncWriteCompleted(pageFuture->ExtractValue());
+                }
+                page = page->Prev;
+            }
+            auto finishFuture = spiller.FinishWriting();
+            if (finishFuture.has_value()) {
+                ++totalFlushed;
+                spiller.AsyncWriteCompleted(finishFuture->ExtractValue());
+            }
+        }
+
+        Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputWidth);
+    }
+
+    bool HasPendindSpillingBuckets()
+    {
+        if (SpillingStack.empty()) {
+            return false;
+        }
+        return SpillingStack.back().CurrentBucket < NumBuckets;
+    }
+
+    void ReadBackNextSpillingBucket()
+    {
+        // Run aggregation on a single bucket
+
+        // TODO: maybe reallocate?
+        if (Map->GetSize() > 0) {
+            Map->Clear();
+        }
+
+        TTaskSpillage& currentSpill = SpillingStack.back();
+
+        const ui32 bucket = currentSpill.CurrentBucket;
+        MKQL_ENSURE(bucket < NumBuckets, "Trying to read past the last spilling bucket");
+        Store->Format(1, sizeof(TUnboxedValuePod) * KeysAndStatesWidth);
+
+        CachedHash = 0;
+
+        {
+            // Read the state
+            TWideUnboxedValuesSpillerAdapter& stateSpiller = *currentSpill.Spillage[bucket].SpilledState;
+            [[maybe_unused]] size_t readStateItems = 0;
+
+            while (!stateSpiller.Empty()) {
+                TUnboxedValuePod* keyAndStateBuf = static_cast<TUnboxedValuePod*>(Store->Alloc(0));
+                for (size_t i = 0; i < KeysAndStatesWidth; ++i) {
+                    keyAndStateBuf[i] = TUnboxedValuePod();
+                }
+                TArrayRef<TUnboxedValue> keyAndStateArr(static_cast<TUnboxedValue*>(keyAndStateBuf), KeysAndStatesWidth);
+
+                auto readFuture = stateSpiller.ExtractWideItem(keyAndStateArr);
+                if (readFuture.has_value()) {
+                    auto stuff = readFuture->ExtractValueSync();
+                    MKQL_ENSURE(stuff.has_value(), "A spilled blob is missing while reading back the aggregation state");
+                    stateSpiller.AsyncReadCompleted(std::move(stuff.value()), Ctx.HolderFactory);
+                    continue;
+                }
+                ++readStateItems;
+                // TODO: Checkpoint: ensure RefCounts are == 1
+                bool isNew = false;
+                Map->Insert(keyAndStateBuf, isNew);
+
+                MKQL_ENSURE(isNew, "Every key in the spilled state must be unique");
+            }
+        }
+
+        {
+            // Read the saved input
+            TWideUnboxedValuesSpillerAdapter& inputSpiller = *currentSpill.Spillage[bucket].SpilledInput;
+            std::vector<TUnboxedValue> input;
+            input.resize(InputWidth);
+            TArrayRef<TUnboxedValue> inputArr(input);
+            std::vector<TUnboxedValue*> inputPtrs;
+            for (auto& uv : input) {
+                inputPtrs.push_back(&uv);
+            }
+
+            [[maybe_unused]] size_t readInputItems = 0;
+            while (!inputSpiller.Empty()) {
+                auto readFuture = inputSpiller.ExtractWideItem(inputArr);
+                if (readFuture.has_value()) {
+                    auto stuff = readFuture->ExtractValueSync();
+                    MKQL_ENSURE(stuff.has_value(), "A spilled blob is missing while reading back spilled input rows");
+                    inputSpiller.AsyncReadCompleted(std::move(stuff.value()), Ctx.HolderFactory);
+                    continue;
+                }
+                ++readInputItems;
+
+                if (HasGenericAggregation) {
+                    LoadItem(inputPtrs.data());
+                    ExtractKey(TempKeyBuffer.data());
+                } else {
+                    MKQL_ENSURE(false, "Not implemented yet");
+                }
+
+                // TODO: Checkpoint: ensure RefCounts are == 1
+
+                // TODO: extract into a method (this is a copy from ProcessFetchedRow)
+                TUnboxedValuePod* keyBuffer = nullptr;
+                bool isNew = false;
+                char* mapIt = Map->Insert(TempKeyBuffer.data(), isNew);
+                char* statePtr = nullptr;
+
+                if (isNew) {
+                    // Copy the value to the specified arena page
+                    keyBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(0));
+                    std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), keyBuffer);
+                    *(static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt))) = keyBuffer;
+                } else {
+                    keyBuffer = Map->GetKeyValue(mapIt);
+                }
+                statePtr = reinterpret_cast<char *>(keyBuffer) + StatesOffset;
+
+                for (auto& agg : Aggs) {
+                    if (isNew) {
+                        agg->InitState(statePtr, inputPtrs.data());
+                    } else {
+                        agg->UpdateState(statePtr, inputPtrs.data());
+                    }
+                    statePtr += agg->GetStateSize();
+                }
+
+                if (!isNew) {
+                    auto keys = TempKeyBuffer.data();
+                    for (ui32 i = 0U; i < Nodes.KeyNodes.size(); ++i) {
+                        keys->UnRef();
+                        keys++;
+                    }
+                }
+
+                if (isNew) {
+                    CheckAutoGrowMap();
+                    if (Map->GetSize() > MaxRowCount) {
+                        throw TMemoryLimitExceededException();
+                    }
+                }
+            }
+
+            for (auto& uv : input) {
+                if (uv.RefCount()) {
+                    uv.UnRef();
+                }
+            }
+        }
+
+        ++currentSpill.CurrentBucket;
+    }
+
+    void CheckAutoGrowMap()
+    {
+        if (Map->GetSize() >= MaxRowCount && MapAutoGrowEnabled && !MapAutoGrowLimitReached) {
+            try {
+                Map->CheckGrow();
+                MaxRowCount = Map->GetCapacity() / 2;
+            }
+            catch(const TMemoryLimitExceededException& e) {
+                MapAutoGrowLimitReached = true;
+                // Slow, but still better than spilling or crashing
+                MaxRowCount = Map->GetCapacity() / 1.3;
+            }
+        }
+    }
+
+    EFillState ProcessFetchedRow(TUnboxedValue* const* input) {
         if (HasGenericAggregation) {
             LoadItem(input);
-            ExtractKey(keyBuffer);
+            ExtractKey(TempKeyBuffer.data());
         } else {
             MKQL_ENSURE(false, "Not implemented yet");
         }
 
+        ui64 bucketId = 0;
+        if (EnableSpilling) {
+            CachedHash = 0;
+            ui64 hash = Hasher(TempKeyBuffer.data());
+            bucketId = (hash * 11400714819323198485llu) & ((1ull << BucketBits) - 1);
+            CachedHash = hash;
+        }
+
+        if (!SpillingStack.empty()) {
+            auto rowBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
+            for (size_t i = 0; i < InputWidth; ++i) {
+                rowBuffer[i] = *input[i];
+            }
+            // TODO: GetUsedItems actually. Maybe with an estimation of the actual memory size adjusted for non-embedded values.
+            if (!HasMemoryForProcessing() && Store->GetUsedMem() > StorageArenaMinSize) {
+                FlushSpillingInput();
+            }
+            return EFillState::ContinueFilling;
+        }
+
+        TUnboxedValuePod* keyBuffer = nullptr;
         bool isNew = false;
-        auto mapIt = Map->Insert(keyBuffer, isNew);
+        auto mapIt = Map->Insert(TempKeyBuffer.data(), isNew);
         char* statePtr = nullptr;
         if (isNew) {
-            statePtr = static_cast<char *>(KeyStateBuffer) + StatesOffset;
+            // Copy the value to the specified arena page
+            keyBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
+            std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), keyBuffer);
+            *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = keyBuffer;
         } else {
-            TUnboxedValuePod* mapKeyPtr = Map->GetKeyValue(mapIt);
-            statePtr = reinterpret_cast<char *>(mapKeyPtr) + StatesOffset;
+            keyBuffer = Map->GetKeyValue(mapIt);
         }
+        statePtr = reinterpret_cast<char *>(keyBuffer) + StatesOffset;
+
+        CachedHash = 0;
 
         for (auto& agg : Aggs) {
             if (isNew) {
@@ -406,25 +795,47 @@ protected:
         }
 
         if (!isNew) {
-            auto keys = keyBuffer;
+            auto keys = TempKeyBuffer.data();
             for (ui32 i = 0U; i < Nodes.KeyNodes.size(); ++i) {
                 keys->UnRef();
                 keys++;
             }
         }
 
-        if (isNew) {
-            if (Map->GetSize() >= MaxRowCount || (!HasMemoryForProcessing() && Map->GetSize() >= LowerFixedRowCount)) {
-                OpenDrain();
-                return EFillState::Drain;
+        auto canFitMoreKeys = [&]() -> bool {
+            if (isNew) {
+                CheckAutoGrowMap();
+                if (Map->GetSize() >= MaxRowCount) {
+                    return false;
+                }
+                if (IsAggregation && !EnableSpilling) {
+                    // There is still space in the hashmap but we have no choice but to raise an OOM if/when the memory runs out.
+                    // So we don't check for yellow zone in this case.
+                    return true;
+                }
+                if (!HasMemoryForProcessing() && Map->GetSize() >= LowerFixedRowCount) {
+                    return false;
+                }
             }
+            return true;
+        };
 
-            try {
-                KeyStateBuffer = Store->Alloc();
-            } catch (TMemoryLimitExceededException) {
+        if (!canFitMoreKeys()) {
+            if (!IsAggregation) {
                 OpenDrain();
                 return EFillState::Drain;
+            } else if (EnableSpilling) {
+                InitiateSpilling();
+                return EFillState::ContinueFilling;
+            } else {
+                throw TMemoryLimitExceededException();
             }
+        }
+
+        if (IsAggregation && EnableSpilling && SpillingTime()) {
+            // The SpillingTime() limit is presumably lower than the yellow zone
+            // so it can trigger separately, earlier than !HasMemoryForProcessing()
+            InitiateSpilling();
         }
 
         return EFillState::ContinueFilling;
@@ -435,33 +846,55 @@ public:
 
     TBaseAggregationState(
         TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, size_t inputWidth,
-        const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes, const std::vector<TType*>& stateItemTypes
+        const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes,
+        const std::vector<TType*>& inputItemTypes,
+        const std::vector<TType*>& keyItemTypes,
+        const std::vector<TType*>& stateItemTypes,
+        const bool isAggregator,
+        const bool enableSpilling
     )
         : TBase(memInfo)
         , Ctx(ctx)
         , MemoryHelper(memoryHelper)
         , MemoryLimit(memoryLimit)
+        , IsAggregation(isAggregator)
+        , EnableSpilling(enableSpilling && ctx.SpillerFactory)
         , InputWidth(inputWidth)
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , KeyTypes(keyTypes)
-        , Hasher(TWideUnboxedHasher(KeyTypes))
+        , Hasher(IsAggregation ? THashFunc(TWideUnboxedHasherWithExternalValue(KeyTypes, CachedHash)) : THashFunc(TWideUnboxedHasher(KeyTypes)))
         , Equals(TWideUnboxedEqual(KeyTypes))
-        , KeyStateBuffer(nullptr)
         , Draining(false)
         , SourceEmpty(false)
     {
-        IsEstimating = !(MemoryHelper.KeySizeBound && MemoryHelper.StateSizeBound);
-        if (IsEstimating) {
-            MaxRowCount = MemorySampleRowCount;
+        TempKeyBuffer.resize(KeyTypes.size());
+
+        if (!IsAggregation) {
+            IsEstimating = !(MemoryHelper.KeySizeBound && MemoryHelper.StateSizeBound);
+            if (IsEstimating) {
+                MaxRowCount = MemorySampleRowCount;
+            } else {
+                MaxRowCount = GetStaticMaxRowCount(memoryHelper.KeySizeBound.value() + memoryHelper.StateSizeBound.value(), MemoryLimit);
+            }
         } else {
-            MaxRowCount = GetStaticMaxRowCount(memoryHelper.KeySizeBound.value() + memoryHelper.StateSizeBound.value(), MemoryLimit);
+            MaxRowCount = 512ULL * 1_KB;
+            MapAutoGrowEnabled = true;
         }
+
         MaxRowCount = TryAllocMapForRowCount(MaxRowCount);
+
+        InputItemsType = TMultiType::Create(inputItemTypes.size(), inputItemTypes.data(), ctx.TypeEnv);
+
+        std::vector<TType*> keyAndStateTypesVec = keyItemTypes;
 
         if (HasGenericAggregation) {
             Aggs.push_back(std::make_unique<TGenericAggregation>(Ctx, Nodes, stateItemTypes));
+            keyAndStateTypesVec.insert(keyAndStateTypesVec.end(), stateItemTypes.begin(), stateItemTypes.end());
         }
+
+        KeysAndStatesType = TMultiType::Create(keyAndStateTypesVec.size(), keyAndStateTypesVec.data(), ctx.TypeEnv);
+        KeysAndStatesWidth = keyAndStateTypesVec.size();
 
         MKQL_ENSURE(Aggs.size(), "No aggregations defined");
         size_t allAggsSize = 0;
@@ -469,7 +902,8 @@ public:
             allAggsSize += agg->GetStateSize();
         }
         StatesOffset = sizeof(TUnboxedValuePod) * KeyTypes.size();
-        Store = std::make_unique<TStore>(StatesOffset + allAggsSize);
+        KeyAndStatesByteSize = StatesOffset + allAggsSize;
+        Store = std::make_unique<TStore>();
 
         PrepareForNewBatch();
     }
@@ -583,17 +1017,23 @@ protected:
             }
         }
         Store->Clear();
-        KeyStateBuffer = Store->Alloc();
+        Store->Format(EnableSpilling ? NumBuckets : 1, sizeof(TUnboxedValuePod) * KeysAndStatesWidth);
     }
 
     TComputationContext& Ctx;
 
     const TMemoryEstimationHelper& MemoryHelper;
+
     size_t MemoryLimit;
+    const bool IsAggregation;
+    const bool EnableSpilling;
+
     bool IsEstimating = false;
     size_t EstimateBatchSize = 0;
     size_t MaxRowCount = 0;
     size_t InitialMapCapacity = 0;
+    bool MapAutoGrowEnabled = false;
+    bool MapAutoGrowLimitReached = false;
 
     size_t InputWidth;
     TUnboxedValueVector InputBuffer;
@@ -601,14 +1041,19 @@ protected:
     const ui32 WideFieldsIndex;
     std::vector<std::unique_ptr<IAggregation>> Aggs;
     const TKeyTypes& KeyTypes;
+    ui64 CachedHash = 0;
+    TMultiType* InputItemsType;
+    ui32 KeysAndStatesWidth;
+    TMultiType* KeysAndStatesType;
     THashFunc const Hasher;
     TEqualsFunc const Equals;
     constexpr static const bool HasGenericAggregation = true;
+    size_t KeyAndStatesByteSize = 0;
 
-    using TStore = TStorageWrapper<char>;
+    using TStore = TSegmentedArena;
     std::unique_ptr<TStore> Store;
     THolder<TMap> Map;
-    void* KeyStateBuffer;
+    std::vector<TUnboxedValuePod> TempKeyBuffer;
     size_t StatesOffset;
     bool Draining;
     bool SourceEmpty;
@@ -621,28 +1066,36 @@ private:
         if (!SourceEmpty && IsEstimating && Map->GetSize() > 0) {
             UpdateRowLimitFromSample();
         }
+        FlushSpillingInput();
         Draining = true;
-        DrainMapIterator = Map->Begin();
+        if (!IsAggregation || SpillingStack.empty()) {
+            DrainMapIterator = Map->Begin();
+        }
     }
-
-    size_t OutputRowCounter = 0;
-    size_t InputRowCounter = 0;
 
 public:
     TWideAggregationState(
         TMemoryUsageInfo* memInfo,
         TComputationContext& ctx,
         const TMemoryEstimationHelper& memoryHelper,
+        NYql::NUdf::TCounter& outputRowCounter,
         size_t memoryLimit,
         size_t inputWidth,
         size_t outputWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes,
         ui32 wideFieldsIndex,
         const TKeyTypes& keyTypes,
-        const std::vector<TType*>& stateItemTypes
-
+        const std::vector<TType*>& inputItemTypes,
+        const std::vector<TType*>& keyItemTypes,
+        const std::vector<TType*>& stateItemTypes,
+        const bool isAggregator,
+        const bool enableSpilling
     )
-        : TBaseAggregationState(memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes, stateItemTypes)
+        : TBaseAggregationState(
+            memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
+            inputItemTypes, keyItemTypes, stateItemTypes, isAggregator, enableSpilling
+        )
+        , OutputRowCounter(outputRowCounter)
         , StartMoment(TInstant::Now()) // Temporary. Helps correlate debug outputs with SVGs
         , OutputWidth(outputWidth)
         , DrainMapIterator(nullptr)
@@ -706,7 +1159,7 @@ public:
             return EFillState::SourceEmpty;
         }
 
-        ++InputRowCounter;
+        ++InputRows;
         return ProcessFetchedRow(Ctx.WideFields.data() + WideFieldsIndex);
     }
 
@@ -719,17 +1172,48 @@ public:
         return TryDrainInternal(OutputPtrs.data());
     }
 
+    bool CheckRefillFromPendingBuckets()
+    {
+        if (DrainMapIterator != nullptr) {
+            return true;
+        } else if (SpillingStack.empty()) {
+            return false;
+        }
+
+        while (HasPendindSpillingBuckets()) {
+            ReadBackNextSpillingBucket();
+            if (Map->GetSize() > 0) {
+                DrainMapIterator = Map->Begin();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     bool TryDrainInternal(NUdf::TUnboxedValue* const* outputPtrs) {
-        for (; DrainMapIterator != Map->End(); Map->Advance(DrainMapIterator)) {
-            if (Map->IsValid(DrainMapIterator)) {
+        while (CheckRefillFromPendingBuckets()) {
+            // TODO: we can iterate over the arena now. Might be more efficient w/large maps
+            for (; DrainMapIterator != Map->End(); Map->Advance(DrainMapIterator)) {
+                if (Map->IsValid(DrainMapIterator)) {
+                    break;
+                }
+            }
+
+            if (DrainMapIterator == Map->End()) {
+                DrainMapIterator = nullptr;
+            } else {
                 break;
             }
         }
 
-        if (DrainMapIterator == Map->End()) {
-            PrepareForNewBatch();
+        if (DrainMapIterator == nullptr) {
+            if (!IsAggregation) {
+                PrepareForNewBatch();
+            } else {
+                Map.Reset();
+            }
             Draining = false;
-            DrainMapIterator = nullptr;
             return false;
         }
 
@@ -749,7 +1233,8 @@ public:
             statePtr += agg->GetStateSize();
         }
 
-        ++OutputRowCounter;
+        ++OutputRows;
+        OutputRowCounter.Inc();
 
         if (HasGenericAggregation) {
             auto keyIter = key;
@@ -770,34 +1255,40 @@ public:
             }
         }
 
-        if (Map->GetSize() > 0) {
-            if (!Draining) {
-                DrainMapIterator = Map->Begin();
-            }
-            for (; DrainMapIterator != Map->End(); Map->Advance(DrainMapIterator)) {
-                if (!Map->IsValid(DrainMapIterator)) {
-                    continue;
+        if (Map) {
+            if (Map->GetSize() > 0) {
+                if (!Draining) {
+                    DrainMapIterator = Map->Begin();
                 }
-                const auto key = Map->GetKeyValue(DrainMapIterator);
-                char* statePtr = static_cast<char *>(static_cast<void *>(key)) + StatesOffset;
-                for (auto& agg : Aggs) {
-                    agg->ForgetState(statePtr);
-                    statePtr += agg->GetStateSize();
-                }
-                if (HasGenericAggregation) {
-                    auto keyIter = key;
-                    for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
-                        (keyIter++)->UnRef();
+                for (; DrainMapIterator != Map->End(); Map->Advance(DrainMapIterator)) {
+                    if (!Map->IsValid(DrainMapIterator)) {
+                        continue;
+                    }
+                    const auto key = Map->GetKeyValue(DrainMapIterator);
+                    char* statePtr = static_cast<char *>(static_cast<void *>(key)) + StatesOffset;
+                    for (auto& agg : Aggs) {
+                        agg->ForgetState(statePtr);
+                        statePtr += agg->GetStateSize();
+                    }
+                    if (HasGenericAggregation) {
+                        auto keyIter = key;
+                        for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
+                            (keyIter++)->UnRef();
+                        }
                     }
                 }
             }
+            Map = nullptr;
         }
-        Map->Clear();
+
         Store->Clear();
         // TODO: CleanupCurrentContext for the allocator?
     }
 
 private:
+    size_t OutputRows = 0;
+    size_t InputRows = 0;
+    NYql::NUdf::TCounter OutputRowCounter;
     TInstant StartMoment;
     TUnboxedValueVector InputBuffer;
     [[maybe_unused]] size_t OutputWidth;
@@ -833,6 +1324,7 @@ public:
         TMemoryUsageInfo* memInfo,
         TComputationContext& ctx,
         const TMemoryEstimationHelper& memoryHelper,
+        NYql::NUdf::TCounter& outputRowCounter,
         size_t memoryLimit,
         const std::vector<TType*>& inputTypes,
         const std::vector<TType*>& outputTypes,
@@ -840,9 +1332,17 @@ public:
         const NDqHashOperatorCommon::TCombinerNodes& nodes,
         ui32 wideFieldsIndex,
         const TKeyTypes& keyTypes,
-        const std::vector<TType*>& stateItemTypes
+        const std::vector<TType*>& inputItemTypes,
+        const std::vector<TType*>& keyItemTypes,
+        const std::vector<TType*>& stateItemTypes,
+        const bool isAggregator,
+        const bool enableSpilling
     )
-        : TBaseAggregationState(memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes, stateItemTypes)
+        : TBaseAggregationState(
+            memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex,
+            keyTypes, inputItemTypes, keyItemTypes, stateItemTypes, isAggregator, enableSpilling
+        )
+        , OutputRowCounter(outputRowCounter)
         , InputTypes(inputTypes)
         , OutputTypes(outputTypes)
         , InputColumns(inputTypes.size() - 1)
@@ -1036,6 +1536,7 @@ public:
             }
 
             *output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(currentBlockSize)));
+            OutputRowCounter.Inc();
         }
 
         if (DrainMapIterator == Map->End()) {
@@ -1059,6 +1560,9 @@ public:
 
 private:
     static constexpr const size_t OutputBlockSize = 8192;
+
+    NYql::NUdf::TCounter OutputRowCounter;
+
     TUnboxedValueVector EmptyUVs;
 
     std::vector<TType*> InputTypes;
@@ -1159,13 +1663,15 @@ public:
         const bool blockMode,
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
         size_t inputWidth, const std::vector<TType*>& keyItemTypes, const std::vector<TType*>& stateItemTypes,
-        NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit
+        NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit,
+        const bool isAggregator, const bool enableSpilling
     )
         : TBaseComputation(mutables, source, EValueRepresentation::Boxed)
         , BlockMode(blockMode)
         , Source(source)
         , InputTypes(inputTypes)
         , OutputTypes(outputTypes)
+        , KeyItemTypes(keyItemTypes)
         , StateItemTypes(stateItemTypes)
         , InputWidth(inputWidth)
         , Nodes(std::move(nodes))
@@ -1173,6 +1679,8 @@ public:
         , MemoryLimit(memoryLimit)
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(InputWidth)) // Need to reserve this here, can't do it later after the Context is built
         , MemoryHelper(keyItemTypes, stateItemTypes)
+        , IsAggregator(isAggregator)
+        , EnableSpilling(enableSpilling)
     {
     }
 
@@ -1447,10 +1955,17 @@ private:
         NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("DqHashCombine");
         UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 
+        NYql::NUdf::TCounter rowCounter;
+
+        if (ctx.CountersProvider) {
+            TString id = TString(Operator_Aggregation) + "0";
+            rowCounter = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+        }
+
         if (!BlockMode) {
-            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes, StateItemTypes);
+            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, IsAggregator, EnableSpilling);
         } else {
-            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes, StateItemTypes);
+            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, IsAggregator, EnableSpilling);
         }
     }
 
@@ -1458,6 +1973,7 @@ private:
     IComputationWideFlowNode *const Source;
     std::vector<TType*> InputTypes;
     std::vector<TType*> OutputTypes;
+    const std::vector<TType*> KeyItemTypes;
     const std::vector<TType*> StateItemTypes;
     size_t InputWidth;
     const NDqHashOperatorCommon::TCombinerNodes Nodes;
@@ -1465,6 +1981,8 @@ private:
     const ui64 MemoryLimit;
     const ui32 WideFieldsIndex;
     const TMemoryEstimationHelper MemoryHelper;
+    const bool IsAggregator;
+    const bool EnableSpilling;
 };
 
 class TDqHashCombineStreamWrapper: public TMutableComputationNode<TDqHashCombineStreamWrapper>
@@ -1478,7 +1996,8 @@ public:
         const bool blockMode,
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
         size_t inputWidth, const std::vector<TType*>& keyItemTypes, const std::vector<TType*>& stateItemTypes,
-        NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit
+        NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit,
+        const bool isAggregator, const bool enableSpilling
     )
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , BlockMode(blockMode)
@@ -1489,9 +2008,12 @@ public:
         , InputWidth(inputWidth)
         , Nodes(std::move(nodes))
         , KeyTypes(std::move(keyTypes))
+        , KeyItemTypes(keyItemTypes)
         , MemoryLimit(memoryLimit)
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(InputWidth)) // Need to reserve this here, can't do it later after the Context is built
         , MemoryHelper(keyItemTypes, stateItemTypes)
+        , IsAggregator(isAggregator)
+        , EnableSpilling(enableSpilling)
     {
     }
 
@@ -1511,10 +2033,17 @@ private:
         NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("DqHashCombine");
         UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 
+        NYql::NUdf::TCounter rowCounter;
+
+        if (ctx.CountersProvider) {
+            TString id = TString(Operator_Aggregation) + "0";
+            rowCounter = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+        }
+
         if (!BlockMode) {
-            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes, StateItemTypes);
+            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, IsAggregator, EnableSpilling);
         } else {
-            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes, StateItemTypes);
+            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, IsAggregator, EnableSpilling);
         }
     }
 
@@ -1534,12 +2063,15 @@ private:
     size_t InputWidth;
     const NDqHashOperatorCommon::TCombinerNodes Nodes;
     const TKeyTypes KeyTypes;
+    const std::vector<TType*> KeyItemTypes;
     const ui64 MemoryLimit;
     const ui32 WideFieldsIndex;
     const TMemoryEstimationHelper MemoryHelper;
+    const bool IsAggregator;
+    const bool EnableSpilling;
 };
 
-IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNodeFactoryContext& ctx, const EOperatorKind kind) {
     TDqHashOperatorParams params = ParseCommonDqHashOperatorParams(callable, ctx);
 
     auto inputComponents = GetWideComponents(callable.GetInput(NDqHashOperatorParams::Input).GetStaticType());
@@ -1555,8 +2087,20 @@ IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeF
     const auto input = LocateNode(ctx.NodeLocator, callable, NDqHashOperatorParams::Input);
 
     const TTupleLiteral* operatorParams = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::OperatorParams));
-    const ui64 memLimit = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::CombineParamMemLimit))->AsValue().Get<ui64>();
 
+    ui64 memLimit = 0;
+    bool enableSpilling = false;
+    bool isAggregator = false;
+
+    if (kind == EOperatorKind::Combiner) {
+        memLimit = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::CombineParamMemLimit))->AsValue().Get<ui64>();
+        if (memLimit <= 0) {
+            memLimit = DefaultMemoryLimit;
+        }
+    } else {
+        isAggregator = true;
+        enableSpilling = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::CombineParamMemLimit))->AsValue().Get<bool>();
+    }
 
     if (params.IsStream) {
         return new TDqHashCombineStreamWrapper(
@@ -1570,7 +2114,9 @@ IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeF
             params.StateItemTypes,
             std::move(params.Nodes),
             std::move(params.KeyTypes),
-            memLimit > 0 ? memLimit : DefaultMemoryLimit);
+            memLimit,
+            isAggregator,
+            enableSpilling);
     } else {
         IComputationWideFlowNode* flowInput = dynamic_cast<IComputationWideFlowNode*>(input);
         MKQL_ENSURE(flowInput != nullptr, "Flow input is expected to be IComputationWideFlowNode*");
@@ -1585,9 +2131,19 @@ IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeF
             params.StateItemTypes,
             std::move(params.Nodes),
             std::move(params.KeyTypes),
-            memLimit > 0 ? memLimit : DefaultMemoryLimit);
+            memLimit,
+            isAggregator,
+            enableSpilling);
 
     }
+}
+
+IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapDqHashOperator(callable, ctx, EOperatorKind::Aggregator);
+}
+
+IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    return WrapDqHashOperator(callable, ctx, EOperatorKind::Combiner);
 }
 
 }

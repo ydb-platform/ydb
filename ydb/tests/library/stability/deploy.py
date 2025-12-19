@@ -451,7 +451,7 @@ class StressUtilDeployer:
                         # 1. Set execute permissions for nemesis
                         chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
                         chmod_result = execute_command(
-                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=30
+                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=90
                         )
 
                         chmod_stderr = (
@@ -600,7 +600,7 @@ class StressUtilDeployer:
                 try:
                     cmd = f"sudo service nemesis {action}"
                     result = execute_command(
-                        host=host, cmd=cmd, raise_on_error=False, timeout=30)
+                        host=host, cmd=cmd, raise_on_error=False, timeout=90)
 
                     stdout = result.stdout if result.stdout else ""
                     stderr = result.stderr if result.stderr else ""
@@ -922,7 +922,7 @@ class StressUtilDeployer:
                 host=host,
                 cmd=f"sudo cp {fallback_source} {remote_path}",
                 raise_on_error=False,
-                timeout=30
+                timeout=90
             )
 
         # Check the result

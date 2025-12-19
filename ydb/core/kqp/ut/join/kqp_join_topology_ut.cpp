@@ -1,6 +1,8 @@
 #include "kqp_join_topology_generator.h"
 
 #include <library/cpp/testing/common/env.h>
+#include <library/cpp/json/writer/json.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <util/generic/array_size.h>
 #include <util/generic/ptr.h>
 #include <util/stream/file.h>
@@ -599,6 +601,8 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
 
     void RunHypergraphBenches(TRNG rng, TBenchmarkConfig config, TUnbufferedFileOutput output, TTupleParser::TTable args) {
+        output << "[\n";
+
         auto getArg = [&](const std::vector<std::pair<std::string, std::string>>& row, const std::string& key) {
             auto it = std::find_if(row.begin(), row.end(),
                 [&key](const auto& pair) { return pair.first == key; });
@@ -646,6 +650,8 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
             return result;
         };
+
+        bool isFirst = true;
 
         ui64 idx = 0;
         std::map<std::vector<std::pair<std::string, std::string>>, double> timeoutedNs;
@@ -745,11 +751,21 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 auto computedStats = stats->ComputeStatistics();
                 auto serializedHypegraph = TJoinHypergraphSerializer<THypergraphNodes>::Serialize(hypergraph);
 
-                TStringStream ss;
-                ss << currentIdx << ",";
-                computedStats.ToCSV(ss);
-                ss << "," << serializedHypegraph << "\n";
-                output << ss.Str();
+                // Recreate array structure manually to make it suitable for streaming data
+                if (!isFirst) {
+                    output << ",\n";
+                }
+
+                isFirst = false;
+
+                NJsonWriter::TBuf writer(NJsonWriter::HEM_ESCAPE_HTML, &output);
+                writer.SetIndentSpaces(4);
+
+                NJson::TJsonValue entry(NJson::JSON_MAP);
+                entry.InsertValue("idx", NJson::TJsonValue(currentIdx));
+                entry.InsertValue("time", computedStats.ToJson());
+                entry.InsertValue("hypergraph", serializedHypegraph);
+                writer.WriteJsonValue(&entry);
 
                 Cout << "Median = " << TimeFormatter::Format(computedStats.Median, computedStats.MAD);
 
@@ -760,6 +776,8 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
             Cout << "\n";
         }
+
+        output << "\n]\n";
     }
 
     Y_UNIT_TEST(Dataset) {

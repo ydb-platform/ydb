@@ -1,5 +1,6 @@
 #include "kqp_benches.h"
 
+#include <library/cpp/json/writer/json.h>
 #include <util/generic/array_size.h>
 #include <util/system/yassert.h>
 
@@ -14,6 +15,19 @@ void TComputedStatistics::ToCSV(IOutputStream& os) const {
         << "," << Q1 << "," << Q3 << "," << IQR
         << "," << Mean << "," << Stdev
         << "," << N << "," << Min << "," << Max;
+}
+
+NJson::TJsonValue TComputedStatistics::ToJson() const {
+    NJson::TJsonValue stats;
+    stats.InsertValue("Median", NJson::TJsonValue(Median));
+    stats.InsertValue("MAD", NJson::TJsonValue(MAD));
+    stats.InsertValue("Q1", NJson::TJsonValue(Q1));
+    stats.InsertValue("Q3", NJson::TJsonValue(Q3));
+    stats.InsertValue("IQR", NJson::TJsonValue(IQR));
+    stats.InsertValue("N", NJson::TJsonValue(N));
+    stats.InsertValue("Min", NJson::TJsonValue(Max));
+
+    return stats;
 }
 
 double CalculatePercentile(std::vector<double>& data, double percentile) {

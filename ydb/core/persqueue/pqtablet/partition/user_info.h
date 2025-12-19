@@ -35,8 +35,6 @@ namespace NDeprecatedUserData {
 static const ui32 MAX_USER_TS_CACHE_SIZE = 10'000;
 static const ui64 MIN_TIMESTAMP_MS = 1'000'000'000'000ll; // around 2002 year
 
-typedef TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor> TUserLabeledCounters;
-
 struct TMessageInfo {
     TInstant CreateTimestamp;
     TInstant WriteTimestamp;
@@ -145,7 +143,7 @@ public:
     std::deque<std::pair<ui64, std::pair<TInstant, TInstant>>> Cache;
 
     bool HasReadRule = false;
-    THolder<TUserLabeledCounters> LabeledCounters;
+    std::optional<TTabletLabeledCountersBase> LabeledCounters;
     NPersQueue::TTopicConverterPtr TopicConverter;
 
     TWorkingTimeCounter Counter;

@@ -454,6 +454,12 @@ private:
         }
 
         auto outTableInfo = TYtTableInfo(table);
+        if (outTableInfo.Meta && outTableInfo.Meta->IsDynamic && outTableInfo.Epoch && *outTableInfo.Epoch > 0) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << "Multiple modification of dynamic table is not supported yet. Table " <<
+                outTableInfo.Cluster << "." << TString{table->Child(TYtTable::idx_Name)->Content()}.Quote()));
+            return TStatus::Error;
+        }
+
         TYtTableDescription& description = State_->TablesData->GetModifTable(cluster, outTableInfo.Name, outTableInfo.Epoch);
 
         auto meta = description.Meta;

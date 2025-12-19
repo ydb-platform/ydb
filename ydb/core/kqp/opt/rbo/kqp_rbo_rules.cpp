@@ -2,6 +2,9 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
+#include <ydb/core/kqp/opt/physical/predicate_collector.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
+
 #include <typeinfo>
 
 using namespace NYql::NNodes;
@@ -115,6 +118,7 @@ TExprNode::TPtr PruneCast(TExprNode::TPtr node) {
     return node;
 }
 
+[[maybe_unused]]
 TVector<TInfoUnit> GetHashableKeys(const std::shared_ptr<IOperator> &input) {
     if (!input->Type) {
         return input->GetOutputIUs();
@@ -648,6 +652,93 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     return output;
 }
 
+bool IsSuitableToPushPredicateToColumnTables(const std::shared_ptr<IOperator>& input) {
+    if (input->Kind != EOperator::Filter) {
+        return false;
+    }
+
+    const auto filter = CastOperator<TOpFilter>(input);
+    const auto maybeRead = filter->GetInput();
+    return ((maybeRead->Kind == EOperator::Source) && (CastOperator<TOpRead>(maybeRead)->GetTableStorageType() == NYql::EStorageType::ColumnStorage) && filter->GetTypeAnn());
+}
+
+std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+    Y_UNUSED(props);
+    if (!ctx.KqpCtx.Config->HasOptEnableOlapPushdown()) {
+        return input;
+    }
+
+    const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->EnableOlapScalarApply, ctx.KqpCtx.Config->EnableOlapSubstringPushdown,
+                                           /*StripAliasPrefixForColumnName=*/true);
+    if (!IsSuitableToPushPredicateToColumnTables(input)) {
+        return input;
+    }
+
+    const auto filter = CastOperator<TOpFilter>(input);
+    const auto read = CastOperator<TOpRead>(filter->GetInput());
+    const auto lambda = TCoLambda(filter->FilterLambda);
+    const auto& lambdaArg = lambda.Args().Arg(0).Ref();
+    TExprBase predicate = lambda.Body();
+
+    TOLAPPredicateNode predicateTree;
+    predicateTree.ExprNode = predicate.Ptr();
+    CollectPredicates(predicate, predicateTree, &lambdaArg, filter->GetTypeAnn()->Cast<TListExprType>()->GetItemType(), pushdownOptions);
+    YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
+    TPositionHandle pos = input->Pos;
+
+    auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, false);
+    TVector<TFilterOpsLevels> pushedPredicates;
+    for (const auto& p : pushable) {
+        pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx.ExprCtx, pos, pushdownOptions));
+    }
+
+    // TODO: All or nothing currently. Add partial pushdown.
+    if (pushedPredicates.empty() || !remaining.empty()) {
+        return input;
+    }
+
+    const auto& pushedFilter = TFilterOpsLevels::Merge(pushedPredicates, ctx.ExprCtx, pos);
+    const auto remainingFilter = CombinePredicatesWithAnd(remaining, ctx.ExprCtx, pos, false, true);
+
+    TMaybeNode<TExprBase> olapFilter;
+    if (pushedFilter.FirstLevelOps.IsValid()) {
+        // clang-format off
+        olapFilter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
+            .Input(lambda.Args().Arg(0))
+            .Condition(pushedFilter.FirstLevelOps.Cast())
+        .Done();
+        // clang-format on
+    }
+
+    if (pushedFilter.SecondLevelOps.IsValid()) {
+        // clang-format off
+        olapFilter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
+            .Input(olapFilter.IsValid() ? olapFilter.Cast() : lambda.Args().Arg(0))
+            .Condition(pushedFilter.SecondLevelOps.Cast())
+        .Done();
+        // clang-format on
+    }
+
+    if (!olapFilter.IsValid()) {
+        YQL_CLOG(TRACE, ProviderKqp) << "KqpOlapFilter was not constructed";
+        return input;
+    }
+
+    // clang-format off
+    auto newOlapFilterLambda = Build<TCoLambda>(ctx.ExprCtx, pos)
+        .Args({"olap_filter_row"})
+        .Body<TExprApplier>()
+            .Apply(olapFilter.Cast())
+            .With(lambda.Args().Arg(0), "olap_filter_row")
+            .Build()
+        .Done();
+    // clang-format on
+    YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newOlapFilterLambda, ctx.ExprCtx);
+
+    return std::make_shared<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(),
+                                     read->Pos);
+}
+
 /**
  * Initially we build CBO only for joins that don't have other joins or CBO trees as arguments
  * There could be an intermediate filter in between, we also check that
@@ -920,10 +1011,13 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
 
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
-        const auto shuffleKeys = aggregate->KeyColumns.size() ? aggregate->KeyColumns : GetHashableKeys(aggregate->GetInput());
+        if (!aggregate->KeyColumns.empty()) {
+            props.StageGraph.Connect(inputStageId, newStageId,
+                                 std::make_shared<TShuffleConnection>(aggregate->KeyColumns, props.StageGraph.GetStorageType(inputStageId)));
+        } else {
+            props.StageGraph.Connect(inputStageId, newStageId, std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(inputStageId)));
+        }
 
-        props.StageGraph.Connect(inputStageId, newStageId,
-                                 std::make_shared<TShuffleConnection>(shuffleKeys, props.StageGraph.GetStorageType(inputStageId)));
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to Aggregation ";
     } else {
         Y_ENSURE(false, "Unknown operator encountered");
@@ -943,19 +1037,21 @@ TRuleBasedStage RuleStage2 = TRuleBasedStage("Logical rewrites I",
         std::make_shared<TPushLimitIntoSortRule>()
     });
 
-TRuleBasedStage RuleStage3 = TRuleBasedStage("Prepare for CBO", 
+TRuleBasedStage RuleStage3 = TRuleBasedStage("Physical rewrites I", {std::make_shared<TPushOlapFilterRule>()});
+
+TRuleBasedStage RuleStage4 = TRuleBasedStage("Prepare for CBO",
     {
         std::make_shared<TBuildInitialCBOTreeRule>(),
         std::make_shared<TExpandCBOTreeRule>()
     });
 
-TRuleBasedStage RuleStage4 = TRuleBasedStage("Invoke CBO", {std::make_shared<TOptimizeCBOTreeRule>()});
+TRuleBasedStage RuleStage5 = TRuleBasedStage("Invoke CBO", {std::make_shared<TOptimizeCBOTreeRule>()});
 
-TRuleBasedStage RuleStage5 = TRuleBasedStage("Clean up after CBO", 
+TRuleBasedStage RuleStage6 = TRuleBasedStage("Clean up after CBO",
     {std::make_shared<TInlineCBOTreeRule>(),
     std::make_shared<TPushFilterRule>()});
 
-TRuleBasedStage RuleStage6 = TRuleBasedStage("Assign stages", {std::make_shared<TAssignStagesRule>()});
+TRuleBasedStage RuleStage7 = TRuleBasedStage("Assign stages", {std::make_shared<TAssignStagesRule>()});
 
 } // namespace NKqp
 } // namespace NKikimr

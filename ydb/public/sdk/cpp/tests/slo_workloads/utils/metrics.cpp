@@ -6,15 +6,29 @@
 
 #include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>
 #include <opentelemetry/sdk/metrics/meter_provider_factory.h>
+#include <opentelemetry/sdk/metrics/meter_context.h>
+#include <opentelemetry/sdk/resource/resource.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
+
 using namespace std::chrono_literals;
+
+#ifdef REF
+static constexpr const std::string_view REF_LABEL = Y_STRINGIZE(REF);
+#else
+static constexpr const std::string_view REF_LABEL = "unknown";
+#endif
 
 class TOtelMetricsPusher : public IMetricsPusher {
 public:
     TOtelMetricsPusher(const std::string& metricsPushUrl, const std::string& operationType)
         : OperationType_(operationType)
+        , CommonAttributes_{
+            {"ref", std::string(REF_LABEL)},
+            {"sdk", "cpp"},
+            {"sdk_version", NYdb::GetSdkSemver()}
+        }
     {
         auto exporterOptions = opentelemetry::exporter::otlp::OtlpHttpMetricExporterOptions();
         exporterOptions.url = metricsPushUrl;
@@ -22,12 +36,18 @@ public:
         auto exporter = opentelemetry::exporter::otlp::OtlpHttpMetricExporterFactory::Create(exporterOptions);
 
         opentelemetry::sdk::metrics::PeriodicExportingMetricReaderOptions readerOptions;
-        readerOptions.export_interval_millis = 1000ms;
-        readerOptions.export_timeout_millis  = 500ms;
+        readerOptions.export_interval_millis = 250ms;
+        readerOptions.export_timeout_millis  = 200ms;
 
         auto metricReader = opentelemetry::sdk::metrics::PeriodicExportingMetricReaderFactory::Create(std::move(exporter), readerOptions);
 
-        MeterProvider_ = opentelemetry::sdk::metrics::MeterProviderFactory::Create();
+        // Create MeterContext with resource
+        auto context = std::make_unique<opentelemetry::sdk::metrics::MeterContext>(
+            std::unique_ptr<opentelemetry::sdk::metrics::ViewRegistry>(new opentelemetry::sdk::metrics::ViewRegistry()),
+            opentelemetry::sdk::resource::Resource::Create(opentelemetry::common::MakeKeyValueIterableView(CommonAttributes_))
+        );
+
+        MeterProvider_ = opentelemetry::sdk::metrics::MeterProviderFactory::Create(std::move(context));
         MeterProvider_->AddMetricReader(std::move(metricReader));
 
         Meter_ = MeterProvider_->GetMeter("slo_workloads", NYdb::GetSdkSemver());
@@ -37,14 +57,14 @@ public:
 
     void PushRequestData(const TRequestData& requestData) override {
         if (requestData.Status == NYdb::EStatus::SUCCESS) {
-            OperationsSuccessTotal_->Add(1, {{"operation_type", OperationType_}});
+            OperationsSuccessTotal_->Add(1, MergeAttributes({{"operation_type", OperationType_}}));
         } else {
-            ErrorsTotal_->Add(1, {{"status", YdbStatusToString(requestData.Status)}});
-            OperationsFailureTotal_->Add(1, {{"operation_type", OperationType_}});
+            ErrorsTotal_->Add(1, MergeAttributes({{"status", YdbStatusToString(requestData.Status)}}));
+            OperationsFailureTotal_->Add(1, MergeAttributes({{"operation_type", OperationType_}}));
         }
-        OperationsTotal_->Add(1, {{"operation_type", OperationType_}});
-        OperationLatencySeconds_->Record(requestData.Delay.SecondsFloat(), {{"operation_type", OperationType_}, {"status", YdbStatusToString(requestData.Status)}});
-        RetryAttempts_->Record(requestData.RetryAttempts, {{"operation_type", OperationType_}});
+        OperationsTotal_->Add(1, MergeAttributes({{"operation_type", OperationType_}}));
+        OperationLatencySeconds_->Record(requestData.Delay.SecondsFloat(), MergeAttributes({{"operation_type", OperationType_}, {"status", YdbStatusToString(requestData.Status)}}));
+        RetryAttempts_->Record(requestData.RetryAttempts, MergeAttributes({{"operation_type", OperationType_}}));
     }
 
 private:
@@ -123,7 +143,15 @@ private:
         return Meter_->CreateDoubleHistogram(name, description, unit);
     }
 
+    // Helper to merge common attributes with metric-specific ones
+    std::map<std::string, std::string> MergeAttributes(const std::map<std::string, std::string>& metricAttrs) const {
+        std::map<std::string, std::string> result = CommonAttributes_;
+        result.insert(metricAttrs.begin(), metricAttrs.end());
+        return result;
+    }
+
     std::string OperationType_;
+    std::map<std::string, std::string> CommonAttributes_;  // ref, sdk, sdk_version
 
     std::unique_ptr<opentelemetry::sdk::metrics::MeterProvider> MeterProvider_;
     std::shared_ptr<opentelemetry::metrics::Meter> Meter_;

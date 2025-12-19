@@ -40,28 +40,29 @@ SRCS(
     api/private.cpp
 
     api/rpc_proxy/address_helpers.cpp
-    api/rpc_proxy/public.cpp
-    api/rpc_proxy/config.cpp
-    api/rpc_proxy/helpers.cpp
     api/rpc_proxy/chaos_lease.cpp
-    api/rpc_proxy/client_impl.cpp
     api/rpc_proxy/client_base.cpp
-    api/rpc_proxy/connection.cpp
+    api/rpc_proxy/client_impl.cpp
+    api/rpc_proxy/cluster_directory.cpp
+    api/rpc_proxy/config.cpp
     api/rpc_proxy/connection_impl.cpp
+    api/rpc_proxy/connection.cpp
     api/rpc_proxy/file_reader.cpp
     api/rpc_proxy/file_writer.cpp
+    api/rpc_proxy/helpers.cpp
     api/rpc_proxy/journal_reader.cpp
     api/rpc_proxy/journal_writer.cpp
+    api/rpc_proxy/public.cpp
+    api/rpc_proxy/row_batch_reader.cpp
+    api/rpc_proxy/row_batch_writer.cpp
+    api/rpc_proxy/row_stream.cpp
     api/rpc_proxy/table_mount_cache.cpp
     api/rpc_proxy/table_reader.cpp
     api/rpc_proxy/table_writer.cpp
     api/rpc_proxy/target_cluster_injecting_channel.cpp
     api/rpc_proxy/timestamp_provider.cpp
-    api/rpc_proxy/transaction.cpp
     api/rpc_proxy/transaction_impl.cpp
-    api/rpc_proxy/row_batch_reader.cpp
-    api/rpc_proxy/row_stream.cpp
-    api/rpc_proxy/row_batch_writer.cpp
+    api/rpc_proxy/transaction.cpp
     api/rpc_proxy/wire_row_stream.cpp
 
     bundle_controller_client/bundle_controller_client.cpp

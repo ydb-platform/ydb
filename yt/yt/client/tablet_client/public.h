@@ -97,6 +97,7 @@ YT_DEFINE_ERROR_ENUM(
     ((OrderedDynamicStoreRotateEpochMismatch) (1743))
     ((TabletIsInIntermediateState)            (1744))
     ((HunkTabletStoreToggleConflict)          (1745))
+    ((HunkStoreAllocationFailed)              (1746))
 );
 
 DEFINE_ENUM(EInMemoryMode,

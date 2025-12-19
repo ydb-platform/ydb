@@ -431,7 +431,7 @@ TString TWriteOperation::GetTxBody() const {
     TAllocChunkSerializer serializer;
     bool success = WriteRequest->SerializeToArcadiaStream(&serializer);
     Y_ENSURE(success);
-    TEventSerializationInfo serializationInfo = WriteRequest->CreateSerializationInfo();
+    TEventSerializationInfo serializationInfo = WriteRequest->CreateSerializationInfo(false);
 
     NKikimrTxDataShard::TSerializedEvent proto;
     proto.SetIsExtendedFormat(serializationInfo.IsExtendedFormat);

@@ -1,7 +1,6 @@
 #include "sqs_workload_read_scenario.h"
 #include "http_client.h"
 #include "sqs_workload_reader.h"
-#include "sqs_workload_stats_collector.h"
 #include <aws/core/utils/threading/Executor.h>
 #include <aws/sqs/model/SetQueueAttributesRequest.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
@@ -11,10 +10,15 @@
 namespace NYdb::NConsoleClient {
 
     int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
-        auto statsCollector = std::make_shared<TSqsWorkloadStatsCollector>(
-            0, Concurrency, Quiet, PrintTimestamp, WindowSec.Seconds(),
-            TotalSec.Seconds(), WarmupSec.Seconds(), Percentile, ErrorFlag);
-        InitMeasuringHttpClient(statsCollector);
+        InitAwsSdk();
+        auto result = RunScenario();
+        DestroyAwsSdk();
+        return result;
+    }
+
+    int TSqsWorkloadReadScenario::RunScenario() {
+        InitStatsCollector(0, Concurrency);
+        InitMeasuringHttpClient(StatsCollector);
         InitSqsClient();
 
         auto finishedFlag = std::make_shared<std::atomic_bool>(false);
@@ -37,12 +41,12 @@ namespace NYdb::NConsoleClient {
             .ErrorMessagesDestiny = ErrorMessagesDestiny,
             .HandleMessageDelay = TDuration::MilliSeconds(HandleMessageDelayMs),
             .VisibilityTimeout = TDuration::MilliSeconds(VisibilityTimeoutMs),
-            .ValidateFifo = ValidateFifo,
             .SetSubjectToken = SetSubjectToken,
+            .ValidateFifo = ValidateFifo,
             .HashMapMutex = std::make_shared<std::mutex>(),
             .LastReceivedMessageInGroup =
                 std::make_shared<THashMap<TString, ui64>>(),
-            .StatsCollector = statsCollector,
+            .StatsCollector = StatsCollector,
         };
 
         auto f = std::async([&params, finishedFlag]() {

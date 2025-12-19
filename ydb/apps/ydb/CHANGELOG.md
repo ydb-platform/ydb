@@ -11,6 +11,7 @@
 * Named expression-containing view restoration and restoration of views that access secondary indexes have been fixed.
 * Added the `--materialize-indexes` option to the `ydb export s3` command, enabling index materialization during export.
 * Added the `--index-filling-mode` option to the `ydb import s3` command, allowing selection of the index filling mode (e.g. build or import a materialized index).
+* Added new options for shared consumers only to the `ydb topic consumer add` command to configure DLQ and max attempts policy
 
 ## 2.27.0 ##
 

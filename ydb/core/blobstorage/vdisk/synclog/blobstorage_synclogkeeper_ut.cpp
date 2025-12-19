@@ -153,7 +153,6 @@ namespace NKikimr {
         void Start(TSyncLogKeeperState *state, ui64 recoveryLogConfirmedLsn) {
             CommitData = std::make_unique<TSyncLogKeeperCommitData>(state->PrepareCommitData(recoveryLogConfirmedLsn));
             Y_ABORT_UNLESS((!CommitData->SwapSnap || CommitData->SwapSnap->Empty()) &&
-                    CommitData->ChunksToDeleteDelayed.empty() &&
                     CommitData->ChunksToDelete.empty());
             STR << "Commit started\n";
             PrintStatus(state);
@@ -163,12 +162,12 @@ namespace NKikimr {
             TStringStream s;
             TDeltaToDiskRecLog delta(10);
             TEntryPointSerializer entryPointSerializer(CommitData->SyncLogSnap,
-                std::move(CommitData->ChunksToDeleteDelayed), CommitData->RecoveryLogConfirmedLsn);
+                {}, CommitData->RecoveryLogConfirmedLsn);
             entryPointSerializer.Serialize(delta);
 
             TCommitHistory commitHistory(TInstant(), commitLsn, CommitData->RecoveryLogConfirmedLsn);
             TEvSyncLogCommitDone commitDone(commitHistory, entryPointSerializer.GetEntryPointDbgInfo(),
-                std::move(delta));
+                std::move(delta), {});
 
             // apply commit result
             state->ApplyCommitResult(&commitDone);

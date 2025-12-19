@@ -25,6 +25,8 @@ SRCS(
     dq_arrow_helpers.cpp
     dq_async_input.cpp
     dq_async_output.cpp
+    dq_channel_service.cpp
+    dq_channel_service_pack.cpp
     dq_columns_resolve.cpp
     dq_compute.cpp
     dq_input_channel.cpp

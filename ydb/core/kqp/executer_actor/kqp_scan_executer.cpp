@@ -48,10 +48,12 @@ public:
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-        const std::optional<TLlvmSettings>& llvmSettings)
+        const std::optional<TLlvmSettings>& llvmSettings,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database,
             userToken, std::move(formatsSettings), counters, executerConfig,
-            userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter")
+            userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
+            {}, nullptr, Nothing(), channelService)
         , LlvmSettings(llvmSettings)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
@@ -97,7 +99,8 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvDqCompute::TEvState, HandleComputeState);
-                hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
+                hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);    // from CA
+                hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -274,11 +277,11 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const std::optional<TLlvmSettings>& llvmSettings)
+    const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
 {
     return new TKqpScanExecuter(std::move(request), database, userToken, std::move(formatsSettings),
         counters, executerConfig, std::move(asyncIoFactory), userRequestContext, statementResultIndex,
-        federatedQuerySetup, GUCSettings, llvmSettings);
+        federatedQuerySetup, GUCSettings, llvmSettings, channelService);
 }
 
 } // namespace NKqp

@@ -248,8 +248,10 @@ namespace NActors {
             CachedByteSize = 0;
         }
 
-        TEventSerializationInfo CreateSerializationInfo() const override {
-            return CreateSerializationInfoImpl(0, static_cast<const TEv&>(*this).AllowExternalDataChannel(), GetPayload(), Record.ByteSize());
+        TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+            allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
+            return CreateSerializationInfoImpl(0, allowExternalDataChannel, GetPayload(),
+                allowExternalDataChannel ? Record.ByteSize() : 0);
         }
 
         bool AllowExternalDataChannel() const {
@@ -437,8 +439,10 @@ namespace NActors {
             return GetCachedByteSize();
         }
 
-        TEventSerializationInfo CreateSerializationInfo() const override {
-            return CreateSerializationInfoImpl(PreSerializedData.size(), static_cast<const TEv&>(*this).AllowExternalDataChannel(), TBase::GetPayload(), Record.ByteSize());
+        TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+            allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
+            return CreateSerializationInfoImpl(PreSerializedData.size(), allowExternalDataChannel, TBase::GetPayload(),
+                allowExternalDataChannel ? Record.ByteSize() : 0);
         }
     };
 

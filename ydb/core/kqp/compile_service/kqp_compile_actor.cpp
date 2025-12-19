@@ -763,6 +763,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
     kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
     kqpConfig.DefaultEnableShuffleElimination = serviceConfig.GetDefaultEnableShuffleElimination();
+    kqpConfig.DefaultUseFastChannels = serviceConfig.GetEnableFastChannels();
     kqpConfig.EnableConstantFolding = serviceConfig.GetEnableConstantFolding();
     kqpConfig.EnableFoldUdfs = serviceConfig.GetEnableFoldUdfs();
     kqpConfig.SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());

@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         ui64 buildIndexTx = ++txId;
         auto sender = runtime.AllocateEdgeActor();
         auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
-            "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+            "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
         });
         if (Overlap) {
             auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->mutable_global_vector_kmeans_tree_index();
@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         {
             auto sender = runtime.AllocateEdgeActor();
             auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
-                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
             });
             auto settings = request->Record.MutableSettings();
             settings->set_max_shards_in_flight(1);
@@ -719,7 +719,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         {
             auto sender = runtime.AllocateEdgeActor();
             auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
-                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
             });
             auto settings = request->Record.MutableSettings();
             settings->set_max_shards_in_flight(1);
@@ -910,7 +910,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         {
             auto sender = runtime.AllocateEdgeActor();
             auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
-                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
             });
             auto settings = request->Record.MutableSettings();
             settings->set_max_shards_in_flight(1);

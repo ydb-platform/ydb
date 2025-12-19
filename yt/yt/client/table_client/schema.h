@@ -122,7 +122,7 @@ public:
     DEFINE_BYREF_RO_PROPERTY(TLogicalTypePtr, LogicalType);
     DEFINE_BYREF_RO_PROPERTY(std::optional<ESortOrder>, SortOrder);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Lock);
-    DEFINE_BYREF_RO_PROPERTY(std::optional<TString>, Expression);
+    DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Expression);
     DEFINE_BYREF_RO_PROPERTY(std::optional<bool>, Materialized);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Aggregate);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Group);

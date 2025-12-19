@@ -2,6 +2,7 @@
 #include "select_builder.h"
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 

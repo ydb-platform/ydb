@@ -4,13 +4,15 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <yql/essentials/core/minsketch/count_min_sketch.h>
-#include <yql/essentials/core/histogram/eq_width_histogram.h>
 #include <ydb/library/actors/core/events.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 
 namespace NKikimr {
+
+class TCountMinSketch;
+class TEqWidthHistogram;
+
 namespace NStat {
 
 struct TStatSimple {

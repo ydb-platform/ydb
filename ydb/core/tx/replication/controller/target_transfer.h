@@ -1,10 +1,9 @@
 #pragma once
 
 #include "target_with_stream.h"
-#include <ydb/core/tx/replication/service/worker.h>
 #include <library/cpp/sliding_window/sliding_window.h>
-
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/replication/service/worker.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -19,6 +18,7 @@ class TTransferStats : public TReplication::ITargetStats {
         {
         }
     };
+
     struct TWorkserStats {
         NKikimrReplication::EWorkOperation Operation;
         TInstant LastChange = TInstant::Zero();
@@ -115,6 +115,7 @@ private:
         {
         }
     };
+    
     TMaybe<TCounters> Counters;
 
     TActorId StreamConsumerRemover;

@@ -261,6 +261,7 @@ private:
         SendOperationChange(EWorkerOperation::PROCESS);
 
         PollSent = false;
+
         if (!LastWriteTime) {
             LastWriteTime = TInstant::Now();
         }

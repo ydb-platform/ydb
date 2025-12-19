@@ -10,11 +10,11 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
+#include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/core/protos/counters_replication.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -101,6 +101,7 @@ class TSessionInfo {
             {
             }
         };
+
         struct THostCounters {
             NMonitoring::TDynamicCounterPtr HostCounters;
             NMonitoring::TDynamicCounters::TCounterPtr DecompressCpu;
@@ -113,6 +114,7 @@ class TSessionInfo {
             {
             }
         };
+
         TMaybe<TWorkerCounters> WorkerCounters;
         TMaybe<THostCounters> HostCounters;
         const TString ReplicationName;

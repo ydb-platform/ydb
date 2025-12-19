@@ -5,14 +5,10 @@
 namespace NYdb::NConsoleClient {
 
     int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig&) {
-    #ifndef _win_
         InitAwsSdk();
         auto result = RunScenario();
         DestroyAwsSdk();
         return result;
-    #else
-        return EXIT_SUCCESS;
-    #endif
     }
 
     int TSqsWorkloadWriteScenario::RunScenario() {

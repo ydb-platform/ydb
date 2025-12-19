@@ -1,3 +1,5 @@
+IF (NOT OS_WINDOWS)
+
 LIBRARY(sqs_workload)
 
 SRCS(
@@ -44,3 +46,5 @@ PEERDIR(
 )
 
 END()
+
+ENDIF()

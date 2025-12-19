@@ -387,8 +387,10 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
             status = result.get("status", "")
             is_fail = status in ("FAILED", "ERROR")
             is_muted = result.get("muted", False)
+            is_not_launched = result.get("error_type") == "NOT_LAUNCHED"
             # Keep all logs for muted tests (they were failed before muting)
-            if not is_fail and not is_muted:
+            # Keep all logs for NOT_LAUNCHED tests (they were skipped but may have logs)
+            if not is_fail and not is_muted and not is_not_launched:
                 # Remove logsdir for passed tests if no failed tests in suite
                 # (ZIP was not created, so logsdir would point to raw path which is incorrect)
                 if "links" in result:
@@ -396,10 +398,10 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                     if not has_fail_tests and "logsdir" in result["links"]:
                         result["links"].pop("logsdir", None)
                     # Keep only logsdir for passed tests (if ZIP was created)
-                    processed_link_types = set()
                     if "logsdir" in result.get("links", {}):
-                        processed_link_types.add("logsdir")
-                    result["links"] = {k: v for k, v in result["links"].items() if k in processed_link_types}
+                        result["links"] = {"logsdir": result["links"]["logsdir"]}
+                    else:
+                        result["links"] = {}
 
     suites_time = time.time() - suites_start
     log_print(f"Processed {suite_count} suites: {suites_time:.2f}s (save_log: {total_save_log_time:.2f}s, save_zip: {total_save_zip_time:.2f}s)")

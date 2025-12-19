@@ -130,6 +130,7 @@ message TReplicationConfig {
         }
         optional EMetricsLevel Level = 1;
     }
+
     optional TConnectionParams SrcConnectionParams = 1;
     optional TConsistencySettings ConsistencySettings = 7;
     optional TMetricsConfig MetricsConfig = 9;

@@ -3,10 +3,15 @@
 #include <ydb/library/yql/dq/opt/dq_opt_make_join_hypergraph.h>
 #include <sstream>
 #include <string>
-
+#include <random>
+#include <vector>
+#include <map>
 
 
 namespace NKikimr::NKqp {
+    NYql::NDq::TJoinColumn GetJoinColumn(ui32 tableID, ui32 columnID) {
+        return {getTableName(tableID), getColumnName(tableID, columnID)};
+    }
 
     // Generate a random valid join tree to be used later for hypegraph construction.
     //
@@ -20,12 +25,15 @@ namespace NKikimr::NKqp {
 
         const auto& adjacencyList = graph.GetAdjacencyList();
 
-        struct Edge { ui32 u, v; TVector<NYql::NDq::TJoinColumn> lhs, rhs; };
-        std::vector<Edge> edges;
+        struct TEdge { ui32 u, v; TVector<NYql::NDq::TJoinColumn> lhs, rhs; };
+        std::vector<TEdge> edges;
         for (ui32 i = 0; i < adjacencyList.size(); ++i) {
             for (const auto& edge : adjacencyList[i]) {
                 if (i < edge.Target) {
-                    edges.push_back(Edge{i, edge.Target, {NYql::NDq::TJoinColumn(getTableName(i), getColumnName(i, edge.ColumnLHS))}, {NYql::NDq::TJoinColumn(getTableName(edge.Target), getColumnName(edge.Target, edge.ColumnRHS))}});
+                    edges.push_back(TEdge{i, edge.Target,
+                        {GetJoinColumn(i, edge.ColumnLHS)},
+                        {GetJoinColumn(edge.Target, edge.ColumnRHS)}
+                    });
                 }
             }
         }
@@ -47,14 +55,17 @@ namespace NKikimr::NKqp {
         // Initial forest is just a relation for each graph node:
         for (ui32 i = 0; i < adjacencyList.size(); ++ i) {
             auto relation = std::static_pointer_cast<NYql::IBaseOptimizerNode>(
-                std::make_shared<NYql::TRelOptimizerNode>(getTableName(i), NYql::TOptimizerStatistics(NYql::EStatisticsType::BaseTable))
+                std::make_shared<NYql::TRelOptimizerNode>(
+                    getTableName(i),
+                    NYql::TOptimizerStatistics(NYql::EStatisticsType::BaseTable, 1e9, 20, 1e10)
+                )
             );
 
             trees[i] = std::move(relation);
         }
 
         // Merges trees containing node "i" and node "j", stores resulting tree in trees
-        auto mergeTrees = [&](Edge edge) {
+        auto mergeTrees = [&](TEdge edge) {
             ui32 u = connectedComponents.CanonicSetElement(edge.u);
             ui32 v = connectedComponents.CanonicSetElement(edge.v);
             if (u == v) {
@@ -68,7 +79,7 @@ namespace NKikimr::NKqp {
                     edge.lhs,
                     edge.rhs,
                     NYql::EJoinKind::LeftJoin,
-                    NYql::EJoinAlgoType::Undefined,
+                    NYql::EJoinAlgoType::GraceJoin,
                     /*leftAny=*/false,
                     /*rightAny=*/false
                 )
@@ -86,13 +97,14 @@ namespace NKikimr::NKqp {
 
             assert(maxSize != 0);
             double ratio = minSize / maxSize;
+            // TODO: weight should depend on number of nodes on both sides?
 
             return std::pow(ratio, bushiness);
         };
 
         auto mergeTreesRandomly = [&]() {
             std::vector<double> weights;
-            std::vector<Edge> candidates;
+            std::vector<TEdge> candidates;
             for (const auto& edge : edges) {
                 ui32 u = connectedComponents.CanonicSetElement(edge.u);
                 ui32 v = connectedComponents.CanonicSetElement(edge.v);
@@ -108,10 +120,10 @@ namespace NKikimr::NKqp {
                 }
             }
 
-            assert(!candidates.empty() && "Graph has to be connected");
+            Y_ENSURE(!candidates.empty());
 
             std::discrete_distribution distribution(weights.begin(), weights.end());
-            Edge edge = candidates[distribution(rng)];
+            TEdge edge = candidates[distribution(rng)];
 
             mergeTrees(edge);
         };
@@ -121,6 +133,30 @@ namespace NKikimr::NKqp {
         }
 
         return trees[connectedComponents.CanonicSetElement(0)];
+    }
+
+
+    void RandomizeJoinTypes(TRNG rng, std::shared_ptr<NYql::IBaseOptimizerNode> joinTree,
+                            const std::map<NYql::EJoinKind, double>& probabilities) {
+
+        auto join = std::dynamic_pointer_cast<NYql::TJoinOptimizerNode>(joinTree);
+        if (!join) {
+            return;
+        }
+
+        std::vector<NYql::EJoinKind> kinds;
+        std::vector<double> weights;
+        for (const auto& [kind, probability] : probabilities) {
+            kinds.push_back(kind);
+            weights.push_back(probability);
+        }
+
+        std::discrete_distribution<> distribution(weights.begin(), weights.end());
+        join->JoinType = kinds[distribution(rng)];
+        join->JoinType = NYql::EJoinKind::InnerJoin;
+
+        RandomizeJoinTypes(rng, join->LeftArg, probabilities);
+        RandomizeJoinTypes(rng, join->RightArg, probabilities);
     }
 
 
@@ -233,21 +269,5 @@ namespace NKikimr::NKqp {
             }
         }
     };
-
-    void DoIt(TRNG &rng, const TRelationGraph &graph, double bushiness) {
-        auto tree = ToJoinTree(rng, graph, bushiness);
-
-        std::stringstream ss;
-        tree->Print(ss, 0);
-
-        Cout << ss.str() << "\n";
-
-        auto hypergraph = NYql::NDq::MakeJoinHypergraph<std::bitset<16>>(tree);
-        Cout << hypergraph.String() << "\n";
-
-        Cout << TJoinHypergraphSerializer<std::bitset<16>>::Serialize(hypergraph) << "\n";
-    }
-
-
 
 }

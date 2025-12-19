@@ -209,11 +209,29 @@ protected:
         this->Die(ctx);
     }
 
+    void Reply(Ydb::StatusIds::StatusCode status,
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message)
+    {
+        NYql::TIssues issues;
+        IssuesFromMessage(message, issues);
+        Request_->RaiseIssues(issues);
+        Request_->ReplyWithYdbStatus(status);
+        NWilson::EndSpanWithStatus(Span_, status);
+        this->Die(TActivationContext::AsActorContext());
+    }
+
     void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
         Request_->RaiseIssues(issues);
         Request_->ReplyWithYdbStatus(status);
         NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
+        Request_->RaiseIssues(issues);
+        Request_->ReplyWithYdbStatus(status);
+        NWilson::EndSpanWithStatus(Span_, status);
+        this->Die(TActivationContext::AsActorContext());
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, const TString& message, NKikimrIssues::TIssuesIds::EIssueCode issueCode, const TActorContext& ctx) {
@@ -222,10 +240,22 @@ protected:
         Reply(status, issues, ctx);
     }
 
+    void Reply(Ydb::StatusIds::StatusCode status, const TString& message, NKikimrIssues::TIssuesIds::EIssueCode issueCode) {
+        NYql::TIssues issues;
+        issues.AddIssue(MakeIssue(issueCode, message));
+        Reply(status, issues);
+    }
+
     void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
         Request_->ReplyWithYdbStatus(status);
         NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status) {
+        Request_->ReplyWithYdbStatus(status);
+        NWilson::EndSpanWithStatus(Span_, status);
+        this->Die(TActivationContext::AsActorContext());
     }
 
     template<typename TResult>

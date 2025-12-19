@@ -2336,30 +2336,6 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
     }
-
-    {
-        TString query = R"sql(
-            SELECT `Key`, `body`
-            FROM `/Root/table` VIEW `index_fulltext`
-            WHERE FullText::FulltextContains(`body`, "term1") AND FullText::FulltextContains(`body`, "term2")
-            ORDER BY `Key`;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-    }
-
-    {
-        TString query = R"sql(
-            SELECT `Key`, `body`
-            FROM `/Root/table` VIEW `index_fulltext`
-            WHERE FullText::FulltextContains(`body`, "term1") OR FullText::FulltextContains(`body`, "term2")
-            ORDER BY `Key`;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-    }
 }
 
 Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {

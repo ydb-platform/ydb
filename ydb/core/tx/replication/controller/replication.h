@@ -4,7 +4,6 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/scheme/scheme_pathid.h>
-//#include <ydb/core/protos/replication.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>

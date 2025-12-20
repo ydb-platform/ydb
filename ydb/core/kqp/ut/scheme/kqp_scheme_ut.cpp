@@ -12187,6 +12187,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         config.MutableFeatureFlags()->SetEnableStreamingQueries(enableStreamingQueries);
         config.MutableFeatureFlags()->SetEnableExternalDataSources(true);
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
+        config.MutableTableServiceConfig()->SetEnableFastChannels(false);
 
         auto kikimr = std::make_unique<TKikimrRunner>(NKqp::TKikimrSettings(config)
             .SetEnableStreamingQueries(enableStreamingQueries)

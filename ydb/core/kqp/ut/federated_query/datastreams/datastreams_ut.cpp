@@ -80,7 +80,9 @@ public:
         UNIT_ASSERT_C(!AppConfig, "AppConfig is already initialized");
         EnsureNotInitialized("AppConfig");
 
-        return AppConfig.emplace();
+        auto& result = AppConfig.emplace();
+        result.MutableTableServiceConfig()->SetEnableFastChannels(false);
+        return result;
     }
 
     TIntrusivePtr<IMockPqGateway> SetupMockPqGateway() {
@@ -117,6 +119,9 @@ public:
 
             auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
             queryServiceConfig.SetEnableMatchRecognize(true);
+
+            auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
+            tableServiceConfig.SetEnableFastChannels(false);
 
             LogSettings
                 .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)

@@ -57,6 +57,6 @@ EXPOSE ${GRPC_PORT:-2136}
 EXPOSE ${MON_PORT:-8765}
 EXPOSE ${YDB_KAFKA_PROXY_PORT:-9092}
 
-HEALTHCHECK --start-period=60s --interval=60s CMD sh /health_check
+HEALTHCHECK --start-period=10s --interval=15s CMD sh /health_check
 
 ENTRYPOINT ["bash", "/initialize_local_ydb"]

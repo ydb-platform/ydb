@@ -57,6 +57,12 @@ EXPOSE ${GRPC_PORT:-2136}
 EXPOSE ${MON_PORT:-8765}
 EXPOSE ${YDB_KAFKA_PROXY_PORT:-9092}
 
+# pass envs to container runtime
+ENV GRPC_PORT=${GRPC_PORT:-2136}
+ENV GRPC_TLS_PORT=${GRPC_TLS_PORT:-2135}
+ENV MON_PORT=${MON_PORT:-8765}
+ENV YDB_KAFKA_PROXY_PORT=${YDB_KAFKA_PROXY_PORT:-9092}
+
 HEALTHCHECK --start-period=10s --interval=15s CMD sh /health_check
 
 ENTRYPOINT ["bash", "/initialize_local_ydb"]

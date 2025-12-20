@@ -313,6 +313,7 @@ static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSyste
                                                 const NKikimr::TAppData* appData)
 {
     TCpuManagerConfig cpuManager;
+    cpuManager.Shared.United = config.GetUseUnitedPool();
     cpuManager.PingInfoByPool.resize(config.GetExecutor().size());
     for (int poolId = 0; poolId < config.GetExecutor().size(); poolId++) {
         AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, appData);

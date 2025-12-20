@@ -121,9 +121,13 @@ namespace NActors {
     {
         Y_UNUSED(Jail, SoftProcessingDurationTs);
 
+        ui32 sharedThreads = cfg.AllThreadsAreShared ? DefaultThreadCount : HasOwnSharedThread ? 1 : 0;
         ui32 threads = ThreadCount;
-        if (HasOwnSharedThread && threads) {
-            threads = threads - 1;
+        if (sharedThreads && threads) {
+            threads = threads - sharedThreads;
+        }
+        if (cfg.AllThreadsAreShared) {
+            threads = 0;
         }
 
         if (MaxLocalQueueSize) {
@@ -140,12 +144,12 @@ namespace NActors {
         }
 
         i16 limit = Min(threads, (ui32)Max<i16>());
-        DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - HasOwnSharedThread, limit);
+        DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - sharedThreads, limit);
 
-        MaxFullThreadCount = Min(Max<i16>(MaxFullThreadCount - HasOwnSharedThread, DefaultFullThreadCount), limit);
+        MaxFullThreadCount = Min(Max<i16>(MaxFullThreadCount - sharedThreads, DefaultFullThreadCount), limit);
 
         if (MinFullThreadCount) {
-            MinFullThreadCount = Min<i16>(MinFullThreadCount - HasOwnSharedThread, DefaultFullThreadCount);
+            MinFullThreadCount = Min<i16>(MinFullThreadCount - sharedThreads, DefaultFullThreadCount);
         } else {
             MinFullThreadCount = DefaultFullThreadCount;
         }
@@ -155,9 +159,9 @@ namespace NActors {
         semaphore.CurrentThreadCount = ThreadCount;
         Semaphore = semaphore.ConvertToI64();
 
-        DefaultThreadCount = DefaultFullThreadCount + HasOwnSharedThread;
-        MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
-        MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
+        DefaultThreadCount = DefaultFullThreadCount + sharedThreads;
+        MinThreadCount = MinFullThreadCount + sharedThreads;
+        MaxThreadCount = MaxFullThreadCount + sharedThreads;
 
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
         if constexpr (DebugMode) {

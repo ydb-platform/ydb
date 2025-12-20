@@ -997,6 +997,15 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
             return command->Options.StatisticsAggregation;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<int>>(
+        "hyper_log_log_precision",
+        [] (TThis* command) -> auto& {
+            return command->Options.HyperLogLogPrecision;
+        })
+        .GreaterThan(6)
+        .LessThan(15)
+        .Optional(/*init*/ false);
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const

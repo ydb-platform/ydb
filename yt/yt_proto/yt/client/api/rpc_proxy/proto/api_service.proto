@@ -734,6 +734,7 @@ message TReqSelectRows
     optional bool use_order_by_in_join_subqueries = 32;
     optional int32 statistics_aggregation = 33; // EStatisticsAggregation
     optional int32 optimization_level = 35; // EOptimizationLevel
+    optional int32 hyper_log_log_precision = 36;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 
@@ -937,6 +938,7 @@ message TReqExplainQuery
     optional bool new_range_inference = 12;
     optional int32 syntax_version = 13 [default = 1];
     optional int64 min_row_count_per_subquery = 14;
+    optional int32 hyper_log_log_precision = 15;
 }
 
 message TRspExplainQuery

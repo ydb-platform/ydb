@@ -72,6 +72,8 @@ public:
         ForcedUpdate,
     };
 
+    int GetSize() const;
+
 protected:
     TAsyncExpiringCacheConfigPtr GetConfig() const;
 
@@ -128,8 +130,11 @@ private:
         //! Uncancelable version of #Promise.
         TFuture<TValue> Future;
 
-        //! Corresponds to a future probation request.
-        NConcurrency::TDelayedExecutorCookie ProbationCookie;
+        //! Corresponds to a future refresh request.
+        NConcurrency::TDelayedExecutorCookie RefreshCookie;
+
+        //! Corresponds to a future expiration request.
+        NConcurrency::TDelayedExecutorCookie ExpirationCookie;
 
         //! Constructs a fresh entry.
         explicit TEntry(NProfiling::TCpuInstant accessDeadline);
@@ -194,8 +199,18 @@ private:
     void DeleteExpiredItems();
     void RefreshAllItems();
 
+    void ScheduleAllEntriesUpdate(const TAsyncExpiringCacheConfigPtr& config);
+
     // Schedules entry expiration and refresh.
     void ScheduleEntryUpdate(
+        const TEntryPtr& entry,
+        const TKey& key,
+        const TAsyncExpiringCacheConfigPtr& config);
+    void ScheduleEntryRefresh(
+        const TEntryPtr& entry,
+        const TKey& key,
+        const TAsyncExpiringCacheConfigPtr& config);
+    void ScheduleEntryExpiration(
         const TEntryPtr& entry,
         const TKey& key,
         const TAsyncExpiringCacheConfigPtr& config);
@@ -226,4 +241,3 @@ private:
 #define EXPIRING_CACHE_INL_H_
 #include "async_expiring_cache-inl.h"
 #undef EXPIRING_CACHE_INL_H_
-

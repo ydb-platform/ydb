@@ -152,25 +152,30 @@ def _init_stress_utils():
 
     if filtered_stress_utils_arg:
         filtered_stress_utils = filtered_stress_utils_arg.split(',')
-        filtered_stress_utils = [util_name.lower() for util_name in filtered_stress_utils if not util_name.startsWith('!')]
-        ignored_stress_utils = [util_name[1:].lower() for util_name in filtered_stress_utils if util_name.startsWith('!')]
+        # ! prefix is used for exclusion filtering
+        print(f'RAW {filtered_stress_utils}')
+        ignored_stress_utils = [util_name[1:].lower() for util_name in filtered_stress_utils if util_name.startswith('!')]
+        filtered_stress_utils = [util_name.lower() for util_name in filtered_stress_utils if not util_name.startswith('!')]
 
-        print(f'Using {filtered_stress_utils} stress utils')
+        print(f'Filtered {filtered_stress_utils} stress utils')
         print(f'Ignoring {ignored_stress_utils} stress utils')
 
-        _all_stress_utils = {k: v for k, v in _all_stress_utils.items() if
-                             any(filtered_util in k.lower() for filtered_util in filtered_stress_utils) and
-                             all(ignored_util not in k.lower() for ignored_util in ignored_stress_utils)}
+        if len(filtered_stress_utils) == 0:
+            _all_stress_utils = {k: v for k, v in _all_stress_utils.items() if all(ignored_util not in k.lower() for ignored_util in ignored_stress_utils)}
+        else:
+            _all_stress_utils = {k: v for k, v in _all_stress_utils.items() if
+                                any(filtered_util in k.lower() for filtered_util in filtered_stress_utils) and
+                                all(ignored_util not in k.lower() for ignored_util in ignored_stress_utils)}
 
-    print(f'Enabled {get_all_stress_names()} stress utils')
-
-
-# Initialize on import
-_init_stress_utils()
+    print(f'Using {get_all_stress_names()} stress utils')
 
 
 def get_all_stress_names():
     return list(_all_stress_utils.keys())
+
+
+# Initialize on import
+_init_stress_utils()
 
 
 def get_stress_util(name, common_args):

@@ -72,6 +72,7 @@ public:
         , Invoker_(std::move(invoker))
         , OwnPoller_(ownPoller)
         , Address_(Listener_ ? Listener_->GetAddress() : TNetworkAddress::CreateIPv6Any(Config_->Port))
+        , Profiling_(HttpProfiler.WithTag("server", Config_->ServerName))
         , RequestPathMatcher_(std::move(requestPathMatcher))
     { }
 
@@ -136,22 +137,90 @@ public:
     }
 
 private:
+    class TProfiling
+    {
+    public:
+        struct TStatusCodeCounter
+        {
+            explicit TStatusCodeCounter(TProfiler profiler)
+                : Profiler_(std::move(profiler))
+            { }
+
+            TCounter* GetCounter(EStatusCode statusCode)
+            {
+                return StatusCodeCounter_.FindOrInsert(statusCode, [&] {
+                    return Profiler_
+                        .WithTag("status", ToString(statusCode))
+                        .Counter("/status_count");
+                }).first;
+            }
+
+        private:
+            const TProfiler Profiler_;
+
+            TSyncMap<EStatusCode, TCounter> StatusCodeCounter_;
+        };
+
+        struct TRequestProfiling
+            : public TRefCounted
+        {
+            explicit TRequestProfiling(const TProfiler& profiler)
+                : RequestCounter(profiler.Counter("/request_count"))
+                , TotalTimeCounter(profiler.TimeCounter("/request_time/total"))
+                , StatusCodeCounter(profiler)
+            { }
+
+            TCounter RequestCounter;
+            TCounter FailedRequestCounter;
+            TCounter RequestWithoutHandlerCount;
+
+            TTimeCounter TotalTimeCounter;
+
+            TStatusCodeCounter StatusCodeCounter;
+        };
+
+        explicit TProfiling(const TProfiler& profiler)
+            : ConnectionsActive(profiler.Gauge("/connections_active"))
+            , ConnectionsAccepted(profiler.Counter("/connections_accepted"))
+            , ConnectionsDropped(profiler.Counter("/connections_dropped"))
+            , Profiler_(profiler)
+        { }
+
+        TGauge ConnectionsActive;
+        TCounter ConnectionsAccepted;
+        TCounter ConnectionsDropped;
+
+        TRequestProfiling* GetRequestProfiling(const THttpInputPtr& httpRequest)
+        {
+            TRequestProfilingKey profilingKey{httpRequest->GetUrl().Path};
+            return RequestProfilingMap_.FindOrInsert(profilingKey, [&] {
+                return New<TRequestProfiling>(Profiler_
+                    .WithTag("path", std::string(std::get<0>(profilingKey))));
+            }).first->Get();
+        }
+
+    private:
+        TProfiler Profiler_;
+
+        // Path.
+        using TRequestProfilingKey = std::tuple<std::string>;
+        NConcurrency::TSyncMap<TRequestProfilingKey, TIntrusivePtr<TRequestProfiling>> RequestProfilingMap_;
+    };
+
     const TServerConfigPtr Config_;
     IListenerPtr Listener_;
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
     const IInvokerPtr Invoker_;
     const bool OwnPoller_ = false;
-
     const TNetworkAddress Address_;
+
+    TProfiling Profiling_;
     IRequestPathMatcherPtr RequestPathMatcher_;
     bool Started_ = false;
     std::atomic<bool> Stopped_ = false;
 
     std::atomic<int> ActiveConnections_ = 0;
-    TGauge ConnectionsActive_ = HttpProfiler.Gauge("/connections_active");
-    TCounter ConnectionsAccepted_ = HttpProfiler.Counter("/connections_accepted");
-    TCounter ConnectionsDropped_ = HttpProfiler.Counter("/connections_dropped");
 
     void AsyncAcceptConnection()
     {
@@ -178,14 +247,14 @@ private:
 
         auto count = ActiveConnections_.fetch_add(1) + 1;
         if (count >= Config_->MaxSimultaneousConnections) {
-            ConnectionsDropped_.Increment();
+            Profiling_.ConnectionsDropped.Increment();
             ActiveConnections_--;
             YT_LOG_WARNING("Server is over max active connection limit (RemoteAddress: %v)",
                 connection->GetRemoteAddress());
             return;
         }
-        ConnectionsActive_.Update(count);
-        ConnectionsAccepted_.Increment();
+        Profiling_.ConnectionsActive.Update(count);
+        Profiling_.ConnectionsAccepted.Increment();
 
         YT_LOG_DEBUG("Connection accepted (ConnectionId: %v, RemoteAddress: %v, LocalAddress: %v)",
             connection->GetId(),
@@ -198,7 +267,13 @@ private:
 
     bool HandleRequest(const THttpInputPtr& request, const THttpOutputPtr& response)
     {
+        auto* requestProfiling = Profiling_.GetRequestProfiling(request);
+        requestProfiling->RequestCounter.Increment();
+
         response->SetStatus(EStatusCode::InternalServerError);
+        auto finallyGuard = Finally([requestProfiling, &response] {
+            requestProfiling->StatusCodeCounter.GetCounter(*response->GetStatus())->Increment();
+        });
 
         bool closeResponse = true;
         try {
@@ -243,6 +318,8 @@ private:
                 handler->HandleRequest(request, response);
 
                 NTracing::FlushCurrentTraceContextElapsedTime();
+
+                requestProfiling->TotalTimeCounter.Add(timer.GetElapsedTime());
 
                 YT_LOG_DEBUG("Finished handling HTTP request (RequestId: %v, WallTime: %v, CpuTime: %v)",
                     request->GetRequestId(),
@@ -291,7 +368,7 @@ private:
 
             auto finally = Finally([&] {
                 auto count = ActiveConnections_.fetch_sub(1) - 1;
-                ConnectionsActive_.Update(count);
+                Profiling_.ConnectionsActive.Update(count);
             });
 
             if (Config_->NoDelay) {
@@ -330,6 +407,7 @@ private:
             response->SetRequestId(requestId);
 
             bool ok = HandleRequest(request, response);
+
             if (!ok) {
                 break;
             }

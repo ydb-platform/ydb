@@ -66,7 +66,7 @@ Create a shell script to configure database settings:
 #!/bin/bash
 # /init.d/01-setup.sh
 echo "Setting up database..."
-/ydb --no-discovery sql -s "CREATE TABLE test (id Uint64, PRIMARY KEY (id));"
+/ydb -e grpc://localhost:2136 -d /local --no-discovery sql -s "CREATE TABLE test (id Uint64, PRIMARY KEY (id));"
 ```
 
 Mount the script when starting the container:
@@ -135,7 +135,7 @@ Create a script in the `/init.d` directory to perform the restoration:
 # /init.d/01-restore-backup.sh
 #!/bin/bash
 if [ -d "/backup" ] && [ -n "$(ls -A /backup)" ]; then
-    /ydb --no-discovery tools restore -p . -i /backup
+    /ydb -e grpc://localhost:2136 -d /local --no-discovery tools restore -p . -i /backup
 fi
 ```
 

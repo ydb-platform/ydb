@@ -2067,6 +2067,30 @@ public:
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
         QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
 
+        // For separate commit operations that break locks, report them
+        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX &&
+            (ev->LocksBrokenAsBreaker > 0 || ev->LocksBrokenAsVictim > 0)) {
+
+            auto now = TInstant::Now();
+            auto queryDuration = now - QueryState->StartTime;
+
+            TKqpQueryStats commitStats;
+            commitStats.DurationUs = queryDuration.MicroSeconds();
+            commitStats.WorkerCpuTimeUs = QueryState->GetCpuTime().MicroSeconds();
+            commitStats.LocksBrokenAsBreaker = ev->LocksBrokenAsBreaker;
+            commitStats.LocksBrokenAsVictim = ev->LocksBrokenAsVictim;
+            if (executerResults.HasStats()) {
+                commitStats.Executions.emplace_back(executerResults.GetStats());
+            }
+
+            const TString queryText = "COMMIT";
+            auto ru = CalcRequestUnit(commitStats);
+            auto userSID = QueryState->UserToken->GetUserSID();
+
+            CollectQueryStats(TlsActivationContext->AsActorContext(), &commitStats, queryDuration, queryText,
+                userSID, 0, QueryState->GetDatabase(), NKikimrKqp::QUERY_TYPE_PREPARED_DML, ru);
+        }
+
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
         } else {

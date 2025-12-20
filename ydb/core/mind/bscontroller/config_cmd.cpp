@@ -173,6 +173,10 @@ namespace NKikimr::NBsController {
                 if (Cmd.CommandSize() == 1) {
                     bool res = true;
                     WrapCommand([&] {
+                        if (Cmd.GetRollback()) {
+                            RollbackSuccess = true;
+                            throw TExError() << "transaction rollback";
+                        }
                         res = ExecuteSoleCommand(Cmd.GetCommand(0), txc);
                     });
                     if (res) {
@@ -377,20 +381,22 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
                     HANDLE_COMMAND(ReconfigureVirtualGroup)
 
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::COMMAND_NOT_SET:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeclareIntent:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadIntent:
+                        throw TExError() << "unsupported command " << static_cast<int>(cmd.GetCommandCase());
+
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::COMMAND_NOT_SET:
-                        throw TExError() << "unsupported command";
+                        throw TExError() << "command must be sole";
                 }
 
-                throw TExError() << "unsupported command";
+                throw TExError() << "unsupported command " << static_cast<int>(cmd.GetCommandCase());
             }
 
             void Complete(const TActorContext&) override {

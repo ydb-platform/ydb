@@ -1233,4 +1233,74 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             }
         }
     }
+
+    Y_UNIT_TEST(SoleCommandRollback) {
+        TEnvironmentSetup env(1, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+            auto updateSettings = [&env](TColor::E colorBorder, bool rollback = false) {
+                NKikimrBlobStorage::TConfigRequest request;
+                auto* us = request.AddCommand()->MutableUpdateSettings();
+                us->AddPDiskSpaceColorBorder(colorBorder);
+                request.SetRollback(rollback);
+                return env.Invoke(request);
+            };
+
+            NKikimrBlobStorage::TConfigResponse response1 = updateSettings(TColor::CYAN);
+            Cerr << (TStringBuilder() << response1.DebugString() << Endl);
+            UNIT_ASSERT_C(response1.GetSuccess(), response1.GetErrorDescription());
+
+            NKikimrBlobStorage::TConfigResponse response2 = updateSettings(TColor::YELLOW, true);
+            Cerr << (TStringBuilder() << response2.DebugString() << Endl);
+            UNIT_ASSERT(!response2.GetSuccess());
+            UNIT_ASSERT(response2.GetRollbackSuccess());
+
+            NKikimrBlobStorage::TConfigRequest request3;
+            request3.AddCommand()->MutableQueryBaseConfig();
+            NKikimrBlobStorage::TConfigResponse response3 = env.Invoke(request3);
+            Cerr << (TStringBuilder() << response3.DebugString() << Endl);
+            UNIT_ASSERT(response3.GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(response3.StatusSize(), 1);
+            auto baseConfig = response3.GetStatus(0).GetBaseConfig();
+            UNIT_ASSERT_VALUES_EQUAL(baseConfig.GetSettings().GetPDiskSpaceColorBorder(0), TColor::CYAN);
+        });
+    }
+
+    Y_UNIT_TEST(SoleCommandErrorWhenCombined) {
+        TEnvironmentSetup env(1, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            request.AddCommand()->MutableDefineHostConfig();
+            request.AddCommand()->MutableEnableSelfHeal();
+            request.AddCommand()->MutableQueryBaseConfig();
+            NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+            Cerr << (TStringBuilder() << response.DebugString() << Endl);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetErrorDescription(), "command must be sole");
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).GetSuccess(), true);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(1).GetErrorDescription(), "command must be sole");
+        });
+    }
+
+    Y_UNIT_TEST(UnsupportedCommandError) {
+        TEnvironmentSetup env(1, 1);
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            request.AddCommand();
+            NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+            Cerr << (TStringBuilder() << response.DebugString() << Endl);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetErrorDescription(), "unsupported command 0");
+        });
+    }
 }

@@ -366,14 +366,16 @@ protected:
 
     void ReadResultFromTaskOutputs(const TTask& task)
     {
-        for (auto& output : task.Outputs) {
-            for (auto channelId : output.Channels) {
-                auto& channel = TasksGraph.GetChannel(channelId);
-                if (!channel.DstTask && TasksGraph.GetMeta().DqChannelVersion >= 2u) {
-                    Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
-                    auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0));
-                    ReadResultFromInputBuffer(channelId, inputBuffer);
-                    ResultInputBuffers.emplace(channelId, inputBuffer);
+        if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
+            for (auto& output : task.Outputs) {
+                for (auto channelId : output.Channels) {
+                    auto& channel = TasksGraph.GetChannel(channelId);
+                    if (!channel.DstTask) {
+                        Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
+                        auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0));
+                        ReadResultFromInputBuffer(channelId, inputBuffer);
+                        ResultInputBuffers.emplace(channelId, inputBuffer);
+                    }
                 }
             }
         }
@@ -411,6 +413,19 @@ protected:
                     if (streamingAllowed) {
                         txResult.HasTrailingResult = true;
                     }
+                }
+            } else if (data.Finished) {
+                if (streamingAllowed && !trailingResults) {
+                    ui32 seqNo = 1;
+                    TVector<NYql::NDq::TDqSerializedBatch> batches(1);
+                    auto& batch = batches.front();
+                    batch.Proto.SetTransportVersion(data.TransportVersion);
+                    batch.Proto.SetChunks(0);
+                    batch.Proto.SetRows(0);
+                    batch.Proto.SetValuePackerVersion(NYql::NDq::ToProto(data.PackerVersion));
+                    SendStreamData(txResult, std::move(batches), channel.Id, seqNo, true);
+                } else {
+                    txResult.HasTrailingResult = true;
                 }
             }
 

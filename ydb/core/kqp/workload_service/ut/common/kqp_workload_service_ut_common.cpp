@@ -265,6 +265,9 @@ private:
         queryServiceConfig.SetAllExternalDataSourcesAreAvailable(true);
         queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
+        auto& tableServiceConfig = *appConfig.MutableTableServiceConfig();
+        tableServiceConfig.SetEnableFastChannels(false);
+
         appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         return appConfig;
     }

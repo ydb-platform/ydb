@@ -6,11 +6,11 @@ if [ "${DEBUG}" = "true" ]; then
 fi
 
 # Create and activate a YDB profile for simplified commands
-if [ $(/ydb config profile list | grep local | wc -l) -eq 0 ]; then
+if ! /ydb config profile list | grep -q "^local$"; then
     /ydb config profile create local \
         --endpoint grpc://localhost:${GRPC_PORT} \
         --database /local
-    /ydb config profile activate local >/dev/null
 fi
 
+/ydb config profile activate local 2>&1 >/dev/null
 /ydb --no-discovery monitoring healthcheck | grep -q GOOD || exit 1

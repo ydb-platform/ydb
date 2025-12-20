@@ -66,7 +66,7 @@ Docker-контейнер {{ ydb-short-name }} поддерживает поль
 #!/bin/bash
 # /init.d/01-setup.sh
 echo "Настройка базы данных..."
-/ydb --no-discovery sql -s "CREATE TABLE test (id Uint64, PRIMARY KEY (id));"
+/ydb -e grpc://localhost:2136 -d /local --no-discovery sql -s "CREATE TABLE test (id Uint64, PRIMARY KEY (id));"
 ```
 
 Примонтируйте скрипт при запуске контейнера:
@@ -116,7 +116,7 @@ docker run -d \
 # /init.d/01-restore-backup.sh
 #!/bin/bash
 if [ -d "/backup" ] && [ -n "$(ls -A /backup)" ]; then
-    /ydb --no-discovery tools restore -p . -i /backup
+    /ydb -e grpc://localhost:2136 -d /local --no-discovery tools restore -p . -i /backup
 fi
 ```
 

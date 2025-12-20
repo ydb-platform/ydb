@@ -11827,6 +11827,25 @@ Y_UNIT_TEST(ImplicitCrossJoinAndExplicitJoin) {
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
+Y_UNIT_TEST(ImplicitCrossJoinColumnName) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiImplicitCrossJoin;
+        USE plato;
+        SELECT a FROM x, y;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlResultItem", "YqlColumnRef"};
+    VerifyProgram(res, stat, [](const TString&, const TString& line) {
+        UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlResultItem 'a)");
+        UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlColumnRef '"a")");
+    });
+}
+
 Y_UNIT_TEST(ExplicitCrossJoin) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();

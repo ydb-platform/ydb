@@ -1103,6 +1103,9 @@ void FillRequestBySelectRowsOptionsBase(
         request->set_udf_registry_path(*defaultUdfRegistryPath);
     }
     request->set_syntax_version(options.SyntaxVersion);
+    if (options.HyperLogLogPrecision) {
+        request->set_hyper_log_log_precision(*options.HyperLogLogPrecision);
+    }
 }
 
 TFuture<TSelectRowsResult> TClientBase::SelectRows(

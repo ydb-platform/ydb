@@ -24,6 +24,12 @@ def get_test_history(test_names_array, days_back, build_type, branch):
     Returns:
         Dictionary with test history: {test_name: {timestamp: {status, datetime, ...}}}
     """
+    # Cap days_back to prevent performance issues
+    MAX_DAYS_BACK = 180
+    if days_back > MAX_DAYS_BACK:
+        print(f"Warning: days_back ({days_back}) exceeds maximum ({MAX_DAYS_BACK}), capping to {MAX_DAYS_BACK}")
+        days_back = MAX_DAYS_BACK
+    
     with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
@@ -55,7 +61,9 @@ def get_test_history(test_names_array, days_back, build_type, branch):
     $build_type = '{build_type}';
     $branch = '{branch}';
 
-    -- Запрос для получения истории за указанное количество дней
+    -- Query to get test history for the specified number of days
+    -- Results are ordered by test_name, then by run_timestamp DESC (newest first)
+    -- This order is expected by the UI which displays results from newest to oldest
     SELECT 
         suite_folder || '/' || test_name AS full_name,
         test_name,

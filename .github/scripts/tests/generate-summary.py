@@ -443,8 +443,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     )
     
     # Minify HTML output to reduce file size
-    import re
-    # Remove HTML comments (but preserve conditional comments)
+    # Remove HTML comments (but preserve conditional comments like <!--[if IE]-->)
     content = re.sub(r'<!--(?!\[if).*?-->', '', content, flags=re.DOTALL)
     # Remove excessive whitespace between tags
     content = re.sub(r'>\s+<', '><', content)

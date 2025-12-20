@@ -83,6 +83,7 @@ def get_test_history(test_names_array, days_back, build_type, branch):
         AND t.run_timestamp > CurrentUtcDate() - $days_back * Interval("P1D")
         AND ($build_type = '' OR t.build_type = $build_type)
         AND ($branch = '' OR t.branch = $branch)
+        AND t.job_name != 'Run-tests'
     ORDER BY 
         test_name, 
         run_timestamp DESC;

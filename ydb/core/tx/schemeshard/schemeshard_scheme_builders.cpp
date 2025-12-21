@@ -103,6 +103,34 @@ bool BuildReplicationScheme(
     return true;
 }
 
+bool BuildTransferScheme(
+    const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
+    TString& scheme,
+    const TString& database,
+    const TString& backupRoot,
+    TString& error) {
+
+    const auto& pathDesc = describeResult.GetPathDescription();
+    if (!pathDesc.HasReplicationDescription()) {
+        error = "Path description does not contain a description of transfer";
+        return false;
+    }
+
+    const auto& replicationDesc = pathDesc.GetReplicationDescription();
+    Ydb::Replication::DescribeTransferResult transferDescResult;
+    Ydb::StatusIds::StatusCode status;
+
+    if (!FillTransferDescription(transferDescResult, replicationDesc, pathDesc.GetSelf(), status, error)) {
+        return false;
+    }
+
+    scheme = NYdb::NDump::BuildCreateTransferQuery(
+        database, backupRoot, replicationDesc.GetName(),
+        NYdb::NReplication::TTransferDescription(transferDescResult));
+
+    return true;
+}
+
 bool BuildScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
     TString& scheme,
@@ -118,6 +146,8 @@ bool BuildScheme(
             return BuildTopicScheme(describeResult, scheme, error);
         case NKikimrSchemeOp::EPathTypeReplication:
             return BuildReplicationScheme(describeResult, scheme, databaseRoot, databaseRoot, error);
+        case NKikimrSchemeOp::EPathTypeTransfer:
+            return BuildTransferScheme(describeResult, scheme, databaseRoot, databaseRoot, error);
         default:
             error = TStringBuilder() << "unsupported path type: " << pathType;
             return false;

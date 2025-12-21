@@ -82,20 +82,23 @@ protected:
     }
 
 public:
-    bool WaitCompactions(const TDuration d) const {
+    bool WaitCompactions(const TDuration d, const ui32 maxCount = 0) const {
         TInstant start = TInstant::Now();
         ui32 compactionsStart = GetCompactionStartedCounter().Val();
         ui32 count = 0;
         while (Now() - start < d) {
             if (compactionsStart != GetCompactionStartedCounter().Val()) {
+                count += GetCompactionStartedCounter().Val() - compactionsStart;
                 compactionsStart = GetCompactionStartedCounter().Val();
                 start = TInstant::Now();
-                ++count;
             }
-            Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << Endl;
+            Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << "; count: " << count << "; max: " << maxCount << Endl;
+            if (maxCount && count >= maxCount) {
+                return true;
+            }
             Sleep(std::min(TDuration::Seconds(1), d));
         }
-        return count > 0;
+        return count >= (maxCount ? maxCount : 1);
     }
 
     bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {

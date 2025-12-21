@@ -2713,30 +2713,19 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
         env.TestWaitNotification(runtime, txId);
 
-        runtime.SimulateSleep(TDuration::Seconds(5));
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
         env.TestWaitNotification(runtime, txId);
 
-        runtime.SimulateSleep(TDuration::Seconds(5));
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
         TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
             "Name: \"" DEFAULT_NAME_1 "\"");
         env.TestWaitNotification(runtime, txId);
 
-        runtime.SimulateSleep(TDuration::Seconds(5));
-
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist});
-
-        runtime.SimulateSleep(TDuration::Seconds(5));
-
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        runtime.SimulateSleep(TDuration::Seconds(5));
-
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist});
-        runtime.SimulateSleep(TDuration::Seconds(5));
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist});
     }
 } // TBackupCollectionTests

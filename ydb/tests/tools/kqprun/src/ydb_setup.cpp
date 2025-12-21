@@ -128,9 +128,10 @@ class TYdbSetup::TImpl : public TKikimrSetupBase {
 
     inline static NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
     inline static NColorizer::TColors CerrColors_ = NColorizer::AutoColors(Cerr);
-    inline static std::terminate_handler TerminateHandler;
+    inline static std::terminate_handler TerminateHandler_;
     inline static std::unordered_map<int, void (*)(int)> SignalHandlers_;
     inline static std::unique_ptr<TFileHandle> StorageHolder_;
+    inline static std::atomic<int> CurrentSignal_ = 0;
 
 private:
     void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) {
@@ -197,25 +198,17 @@ private:
         serverSettings.SetStorageGeneration(0, /* fetchPoolsGeneration */ true);
     }
 
-    static void FlushStorageFileHolder() {
-        if (StorageHolder_ && !StorageHolder_->Flush()) {
-            Cerr << CerrColors_.Red() << "Failed to flush storage data, errno: " << errno << CerrColors_.Default() << Endl;
-        }
+    static void HandleFinalizeSignal(int signal) {
+        int expected = 0;
+        CurrentSignal_.compare_exchange_strong(expected, signal);
     }
 
     static void FlushStorageFileHolderOnTerminate() {
-        FlushStorageFileHolder();
+        Finalize();
 
-        if (TerminateHandler) {
-            TerminateHandler();
+        if (TerminateHandler_) {
+            TerminateHandler_();
         }
-    }
-
-    static void FlushStorageFileHolderOnSignal(int signal) {
-        FlushStorageFileHolder();
-        std::signal(signal, SignalHandlers_[signal]);
-        std::raise(signal);
-        std::exit(1);
     }
 
     void SetupStorageFileHolder(const TString& storagePath) {
@@ -224,11 +217,33 @@ private:
             ythrow yexception() << "Failed to open storage file: " << storagePath;
         }
 
-        std::atexit(&FlushStorageFileHolder);
-        TerminateHandler = std::set_terminate(&FlushStorageFileHolderOnTerminate);
+        std::atexit(&Finalize);
+        TerminateHandler_ = std::set_terminate(&FlushStorageFileHolderOnTerminate);
+
+        SignalHandlerPool_ = MakeHolder<TThreadPool>();
+        SignalHandlerPool_->Start(1);
+        Y_ENSURE(SignalHandlerPool_->AddFunc([]() {
+            while (true) {
+                const auto signal = CurrentSignal_.load();
+                if (!signal) {
+                    Sleep(TDuration::MilliSeconds(100));
+                    continue;
+                }
+
+                Finalize();
+                Cout << Endl << CoutColors_.Yellow() << "INTERRUPTED" << CoutColors_.Default() << Endl;
+
+                if (const auto it = SignalHandlers_.find(signal); it != SignalHandlers_.end()) {
+                    std::signal(signal, it->second);
+                    std::raise(signal);
+                }
+
+                std::exit(1);
+            }
+        }));
 
         for (auto sig : {SIGTERM, SIGABRT, SIGINT}) {
-            const auto prevHandler = std::signal(sig, &FlushStorageFileHolderOnSignal);
+            const auto prevHandler = std::signal(sig, &HandleFinalizeSignal);
             Y_ENSURE(prevHandler != SIG_ERR);
             SignalHandlers_.emplace(sig, prevHandler);
         }
@@ -605,6 +620,17 @@ public:
         return Settings_.DomainName;
     }
 
+    static void Finalize() try {
+        if (StorageHolder_) {
+            if (!StorageHolder_->Flush()) {
+                Cerr << CerrColors_.Red() << "Failed to flush storage data, errno: " << errno << CerrColors_.Default() << Endl;
+            }
+            StorageHolder_.reset();
+        }
+    } catch (...) {
+        Cerr << CerrColors_.Red() << "Failed to finalize: " << CurrentExceptionMessage() << CerrColors_.Default() << Endl;
+    }
+
 private:
     NActors::TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
@@ -726,6 +752,7 @@ private:
     std::optional<TSessionState> SessionState_;
     TFsPath StorageMetaPath_;
     NKqpRun::TStorageMeta StorageMeta_;
+    THolder<TThreadPool> SignalHandlerPool_;
 };
 
 

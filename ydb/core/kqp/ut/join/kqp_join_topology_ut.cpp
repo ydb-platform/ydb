@@ -601,8 +601,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
 
     void RunHypergraphBenches(TRNG rng, TBenchmarkConfig config, TUnbufferedFileOutput output, TTupleParser::TTable args) {
-        output << "[\n";
-
         auto getArg = [&](const std::vector<std::pair<std::string, std::string>>& row, const std::string& key) {
             auto it = std::find_if(row.begin(), row.end(),
                 [&key](const auto& pair) { return pair.first == key; });
@@ -651,136 +649,171 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             return result;
         };
 
-        bool isFirst = true;
-
-        ui64 idx = 0;
+        // Idx counts entries in tuple table, but not all of those are written
+        // (in case of a timeout). entryIdx counts lines in output ndjson
+        ui64 idx = 0, entryIdx = 0;
         std::map<std::vector<std::pair<std::string, std::string>>, double> timeoutedNs;
         for (const auto& row : args) {
-            // Controls number of relations, used for every topology
-            double n = getDouble(row, "N");
+            try {
+                ui64 serializedRNG = rng.Serialize();
 
-            ui32 currentIdx = idx ++;
-            Cout << "(" << currentIdx + 1 << "/" << args.size() << ") ";
-            Cout << appendLabel(row, "N");
-            Cout << appendLabel(row, "label");
-            Cout.Flush();
+                // Controls number of relations, used for every topology
+                double n = getDouble(row, "N");
+                std::string label = getArg(row, "label");
 
-            auto parameters = extractParameters(row);
-            if (timeoutedNs.count(parameters) == 0) {
-                timeoutedNs[parameters] = UINT32_MAX;
-            }
-            auto& maxN = timeoutedNs[parameters];
-            if (n > maxN) {
-                Cout << "[SKIPPED]\n";
-                continue;
-            }
+                ui32 currentIdx = idx ++;
+                Cout << "(" << currentIdx + 1 << "/" << args.size() << ") ";
+                Cout << appendLabel(row, "N");
+                Cout << appendLabel(row, "label");
+                Cout.Flush();
 
-            // Controls topology type (e.g. random-trees, clique, havel-hakimi, mcmc, etc)
-            std::string type = getArg(row, "type");
+                auto parameters = extractParameters(row);
+                if (timeoutedNs.count(parameters) == 0) {
+                    timeoutedNs[parameters] = UINT32_MAX;
+                }
+                auto& maxN = timeoutedNs[parameters];
+                if (n > maxN) {
+                    Cout << "[SKIPPED]\n";
+                    continue;
+                }
 
-            // Controls lognormal degree distribution for topologies chun-lu, havel-hakimi & mcmc
-            double sigma = getDouble(row, "sigma");
-            double mu = getDouble(row, "mu");
+                // Controls topology type (e.g. random-trees, clique, havel-hakimi, mcmc, etc)
+                std::string type = getArg(row, "type");
 
-            // Controls how many edges go into the same column (i.e. clustering), Pitman-Yor
-            // distribution is used to model it. Heavily impacts transitive closure and shuffle elimination:
-            double alpha = getDouble(row, "alpha");
-            double theta = getDouble(row, "theta");
+                // Controls lognormal degree distribution for topologies chun-lu, havel-hakimi & mcmc
+                double sigma = getDouble(row, "sigma");
+                double mu = getDouble(row, "mu");
 
-            // Controls which random tree decomposition is prefered, only impacts hypegraph structure
-            double bushiness = getDouble(row, "bushiness");
+                // Controls how many edges go into the same column (i.e. clustering), Pitman-Yor
+                // distribution is used to model it. Heavily impacts transitive closure and shuffle elimination:
+                double alpha = getDouble(row, "alpha");
+                double theta = getDouble(row, "theta");
 
-            // Probabilities of different join kinds:
-            std::map<NYql::EJoinKind, double> probabilities = {
-                { NYql::EJoinKind::InnerJoin, getDouble(row, "inner-join")      },
-                { NYql::EJoinKind::LeftJoin,  getDouble(row, "left-join")       },
-                { NYql::EJoinKind::RightJoin, getDouble(row, "right-join")      },
-                { NYql::EJoinKind::OuterJoin, getDouble(row, "outer-join")      },
-                { NYql::EJoinKind::LeftOnly,  getDouble(row, "left-only-join")  },
-                { NYql::EJoinKind::RightOnly, getDouble(row, "right-only-join") },
-                { NYql::EJoinKind::LeftSemi,  getDouble(row, "left-semi-join")  },
-                { NYql::EJoinKind::RightSemi, getDouble(row, "right-semi-join") },
-                { NYql::EJoinKind::Cross,     getDouble(row, "cross-join")      } ,
-                { NYql::EJoinKind::Exclusion, getDouble(row, "exclusion-join")  }
-            };
+                // Controls which random tree decomposition is prefered, only impacts hypegraph structure
+                double bushiness = getDouble(row, "bushiness");
 
-
-            // 1. Generate initial undirected regular graph
-            auto generateTopology = GetTopology(type);
-            auto graph = generateTopology(rng, n, mu, sigma);
-            if (type == "mcmc") {
-                MCMCRandomize(rng, graph);
-            }
-
-            // Fallback in case graph disconnects
-            ForceReconnection(rng, graph);
-
-            // 2. Update keys so that they match given distribution
-            graph.SetupKeysPitmanYor(rng, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
-
-            // 3. Convert to a random join tree
-            auto tree = ToJoinTree(rng, graph, bushiness);
-
-            // 4. Randomly select different join kinds with given probabilities
-            RandomizeJoinTypes(rng, tree, probabilities);
-
-            // 5. Make join hypegraph (this includes closure and cross join
-            //    elimination/reconstructions)
-            using THypergraphNodes = std::bitset<64>;
-            auto hypergraph = NYql::NDq::MakeJoinHypergraph<THypergraphNodes>(tree);
-
-            // 6. Optimize and write down average optimization time
-            std::optional<TStatistics> stats = Benchmark(config, [&]() -> bool {
-                NYql::TCBOSettings settings{
-                    .MaxDPhypDPTableSize = UINT32_MAX
+                // Probabilities of different join kinds:
+                std::map<NYql::EJoinKind, double> probabilities = {
+                    { NYql::EJoinKind::InnerJoin, getDouble(row, "inner-join")      },
+                    { NYql::EJoinKind::LeftJoin,  getDouble(row, "left-join")       },
+                    { NYql::EJoinKind::RightJoin, getDouble(row, "right-join")      },
+                    { NYql::EJoinKind::OuterJoin, getDouble(row, "outer-join")      },
+                    { NYql::EJoinKind::LeftOnly,  getDouble(row, "left-only-join")  },
+                    { NYql::EJoinKind::RightOnly, getDouble(row, "right-only-join") },
+                    { NYql::EJoinKind::LeftSemi,  getDouble(row, "left-semi-join")  },
+                    { NYql::EJoinKind::RightSemi, getDouble(row, "right-semi-join") },
+                    { NYql::EJoinKind::Cross,     getDouble(row, "cross-join")      } ,
+                    { NYql::EJoinKind::Exclusion, getDouble(row, "exclusion-join")  }
                 };
 
-                NYql::TBaseProviderContext ctx;
-                NYql::TExprContext dummyCtx;
 
-                // TODO: enable Shuffle Elimination
-                auto optimizer =
-                    std::unique_ptr<NYql::IOptimizerNew>(
-                        NYql::NDq::MakeNativeOptimizerNew(ctx, settings, dummyCtx, false));
-
-                if (tree->Kind == NYql::EOptimizerNodeKind::JoinNodeType) {
-                    optimizer->JoinSearch(std::static_pointer_cast<NYql::TJoinOptimizerNode>(tree));
+                // 1. Generate initial undirected regular graph
+                auto generateTopology = GetTopology(type);
+                auto graph = generateTopology(rng, n, mu, sigma);
+                if (type == "mcmc") {
+                    MCMCRandomize(rng, graph);
                 }
 
-                return true;
-            });
+                // Fallback in case graph disconnects
+                ForceReconnection(rng, graph);
 
-            if (stats) {
-                auto computedStats = stats->ComputeStatistics();
-                auto serializedHypegraph = TJoinHypergraphSerializer<THypergraphNodes>::Serialize(hypergraph);
+                // 2. Update keys so that they match given distribution
+                graph.SetupKeysPitmanYor(rng, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
 
-                // Recreate array structure manually to make it suitable for streaming data
-                if (!isFirst) {
-                    output << ",\n";
+                // 3. Convert to a random join tree
+                auto tree = ToJoinTree(rng, graph, bushiness);
+
+                // 4. Randomly select different join kinds with given probabilities
+                RandomizeJoinTypes(rng, tree, probabilities);
+
+                // 5. Make join hypegraph (this includes closure and cross join
+                //    elimination/reconstructions)
+                using THypergraphNodes = std::bitset<64>;
+                auto hypergraph = NYql::NDq::MakeJoinHypergraph<THypergraphNodes>(tree);
+
+                // 6. Optimize and write down average optimization time
+                std::optional<TStatistics> stats = Benchmark(config, [&]() -> bool {
+                    NYql::TCBOSettings settings{
+                        .MaxDPhypDPTableSize = UINT32_MAX
+                    };
+
+                    NYql::TBaseProviderContext ctx;
+                    NYql::TExprContext dummyCtx;
+
+                    // TODO: enable Shuffle Elimination
+                    auto optimizer =
+                        std::unique_ptr<NYql::IOptimizerNew>(
+                            NYql::NDq::MakeNativeOptimizerNew(ctx, settings, dummyCtx, false));
+
+                    if (tree->Kind == NYql::EOptimizerNodeKind::JoinNodeType) {
+                        optimizer->JoinSearch(std::static_pointer_cast<NYql::TJoinOptimizerNode>(tree));
+                    }
+
+                    return true;
+                });
+
+                if (stats) {
+                    auto computedStats = stats->ComputeStatistics();
+                    auto serializedHypegraph = TJoinHypergraphSerializer<THypergraphNodes>::Serialize(hypergraph);
+                    auto serializedRelationGraph = TRelationGraphSerializer::Serialize(graph);
+                    auto serializedQuery = TOptimizerNodeSerializer::Serialize(tree);
+
+                    NJsonWriter::TBuf writer(NJsonWriter::HEM_ESCAPE_HTML, &output);
+                    writer.SetIndentSpaces(0); // Do not align
+
+                    NJson::TJsonValue parameters(NJson::JSON_MAP);
+                    parameters.InsertValue("N", NJson::TJsonValue(n));
+                    parameters.InsertValue("type", NJson::TJsonValue(type));
+                    parameters.InsertValue("sigma", NJson::TJsonValue(sigma));
+                    parameters.InsertValue("mu", NJson::TJsonValue(mu));
+                    parameters.InsertValue("alpha", NJson::TJsonValue(alpha));
+                    parameters.InsertValue("theta", NJson::TJsonValue(theta));
+                    parameters.InsertValue("bushiness", NJson::TJsonValue(bushiness));
+
+                    NJson::TJsonValue joinProbabilities(NJson::JSON_MAP);
+                    joinProbabilities.InsertValue("inner-join",      NJson::TJsonValue(probabilities[NYql::EJoinKind::InnerJoin]));
+                    joinProbabilities.InsertValue("left-join",       NJson::TJsonValue(probabilities[NYql::EJoinKind::LeftJoin ]));
+                    joinProbabilities.InsertValue("right-join",      NJson::TJsonValue(probabilities[NYql::EJoinKind::RightJoin]));
+                    joinProbabilities.InsertValue("outer-join",      NJson::TJsonValue(probabilities[NYql::EJoinKind::OuterJoin]));
+                    joinProbabilities.InsertValue("left-only-join",  NJson::TJsonValue(probabilities[NYql::EJoinKind::LeftOnly ]));
+                    joinProbabilities.InsertValue("right-only-join", NJson::TJsonValue(probabilities[NYql::EJoinKind::RightOnly]));
+                    joinProbabilities.InsertValue("left-semi-join",  NJson::TJsonValue(probabilities[NYql::EJoinKind::LeftSemi ]));
+                    joinProbabilities.InsertValue("right-semi-join", NJson::TJsonValue(probabilities[NYql::EJoinKind::RightSemi]));
+                    joinProbabilities.InsertValue("cross-join",      NJson::TJsonValue(probabilities[NYql::EJoinKind::Cross    ]));
+                    joinProbabilities.InsertValue("exclusion-join",  NJson::TJsonValue(probabilities[NYql::EJoinKind::Exclusion]));
+                    parameters.InsertValue("join-probabilities", joinProbabilities);
+
+                    NJson::TJsonValue serializedLabel(NJson::JSON_ARRAY);
+                    for (const auto &part: StringSplitter(label).Split(',').SkipEmpty()) {
+                        serializedLabel.AppendValue(NJson::TJsonValue(part));
+                    }
+
+                    NJson::TJsonValue entry(NJson::JSON_MAP);
+                    entry.InsertValue("idx", NJson::TJsonValue(entryIdx ++));
+                    entry.InsertValue("table-id", NJson::TJsonValue(currentIdx));
+                    entry.InsertValue("label", serializedLabel);
+                    entry.InsertValue("time", computedStats.ToJson());
+                    entry.InsertValue("hypergraph", serializedHypegraph);
+                    entry.InsertValue("parameters", parameters);
+                    entry.InsertValue("seed", serializedRNG);
+                    entry.InsertValue("query", serializedQuery);
+                    entry.InsertValue("relation-graph", serializedRelationGraph);
+                    writer.WriteJsonValue(&entry, /*sortKeys=*/false);
+                    output << "\n";
+
+                    Cout << "Median = " << TimeFormatter::Format(computedStats.Median, computedStats.MAD);
+
+                    if (computedStats.Median > config.SingleRunTimeout) {
+                        maxN = n;
+                    }
                 }
 
-                isFirst = false;
-
-                NJsonWriter::TBuf writer(NJsonWriter::HEM_ESCAPE_HTML, &output);
-                writer.SetIndentSpaces(4);
-
-                NJson::TJsonValue entry(NJson::JSON_MAP);
-                entry.InsertValue("idx", NJson::TJsonValue(currentIdx));
-                entry.InsertValue("time", computedStats.ToJson());
-                entry.InsertValue("hypergraph", serializedHypegraph);
-                writer.WriteJsonValue(&entry);
-
-                Cout << "Median = " << TimeFormatter::Format(computedStats.Median, computedStats.MAD);
-
-                if (computedStats.Median > config.SingleRunTimeout) {
-                    maxN = n;
-                }
+                Cout << "\n";
+            } catch (const std::exception& exc) {
+                // Prevent dataset collection stop in case of an error:
+                Cerr << "Bench #" << idx << " skipped because of uncaught exception: " << exc.what() << "\n";
             }
-
-            Cout << "\n";
         }
-
-        output << "\n]\n";
     }
 
     Y_UNIT_TEST(Dataset) {

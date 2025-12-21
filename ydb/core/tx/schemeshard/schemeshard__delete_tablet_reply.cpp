@@ -133,26 +133,32 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             NIceDb::TNiceDb db(txc.DB);
             Self->PersistShardDeleted(db, ShardIdx, shardInfo.BindedChannels);
 
-            Y_VERIFY_S(Self->PathsById.contains(pathId), "pathid: " << pathId);
-            auto path = Self->PathsById.at(pathId);
-            path->DecShardsInside();
+            if (Self->PathsById.contains(pathId)) {
+                auto path = Self->PathsById.at(pathId);
+                path->DecShardsInside();
 
-            auto domain = Self->ResolveDomainInfo(path);
-            domain->RemoveInternalShard(ShardIdx, Self);
-            switch (tabletType) {
-            case ETabletType::SequenceShard:
-                domain->RemoveSequenceShard(ShardIdx);
-                break;
-            default:
-                break;
+                auto domain = Self->ResolveDomainInfo(path);
+                domain->RemoveInternalShard(ShardIdx, Self);
+                
+                switch (tabletType) {
+                case ETabletType::SequenceShard:
+                    domain->RemoveSequenceShard(ShardIdx);
+                    break;
+                default:
+                    break;
+                }
+                
+                Self->DecrementPathDbRefCount(pathId, "shard deleted");
+            } else {
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                           "DeleteTabletReply: PathId " << pathId << " missing for Shard " << ShardIdx 
+                           << ". Assuming path was deleted via cascade drop (e.g. BackupCollection).");
             }
 
             TabletId = shardInfo.TabletID;
             Self->TabletIdToShardIdx[TabletId] = ShardIdx;
 
             Self->ShardInfos.erase(ShardIdx);
-
-            Self->DecrementPathDbRefCount(pathId, "shard deleted");
 
             // This is for tests, so it's kinda ok to reply from execute
             auto itSubscribers = Self->ShardDeletionSubscribers.find(ShardIdx);

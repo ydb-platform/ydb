@@ -2725,6 +2725,10 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             "Name: \"" DEFAULT_NAME_1 "\"");
         env.TestWaitNotification(runtime, txId);
 
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist});
     }

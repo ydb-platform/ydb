@@ -283,10 +283,6 @@ void TClientCommand::SaveParseResult(TConfig& config) {
     }
 }
 
-const TMap<TString, std::unique_ptr<TClientCommand>>& TClientCommandTree::GetSubCommands() const {
-    return SubCommands;
-}
-
 void TClientCommand::Prepare(TConfig& config) {
     config.ArgsSettings = TConfig::TArgSettings();
     Opts.SetHelpCommandVerbosiltyLevel(config.HelpCommandVerbosiltyLevel);

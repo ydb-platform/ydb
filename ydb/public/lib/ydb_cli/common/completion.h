@@ -10,6 +10,8 @@ public:
     TYdbCommandAutoCompletionWrapper(TClientCommand *command, TClientCommand::TConfig config)
         : command(command), config(config) {}
 
+  virtual ~TYdbCommandAutoCompletionWrapper() override = default;
+
   virtual void RegisterOptions(NLastGetopt::TOpts &opts) override;
   virtual int DoRun(NLastGetopt::TOptsParseResult &&parsedOptions) override;
 
@@ -23,6 +25,8 @@ public:
     TYdbCommandTreeAutoCompletionWrapper(TClientCommandTree *commandTree, TClientCommand::TConfig config)
         : commandTree(commandTree), config(config) {}
 
+  virtual ~TYdbCommandTreeAutoCompletionWrapper() override = default;
+
   virtual void RegisterOptions(NLastGetopt::TOpts &opts) override;
   virtual void RegisterModes(TModChooser &modes) override;
   virtual int DoRun(NLastGetopt::TOptsParseResult &&parsedOptions) override;
@@ -30,9 +34,10 @@ public:
 private:
   TClientCommandTree *commandTree;
   TClientCommand::TConfig config;
+  std::vector<std::unique_ptr<TMainClass>> subCommands;
 };
 
-NLastGetopt::TOpt GenerateCompletionOption(const TClientCommandTree *commandTree, TClientCommand::TConfig& config);
+NLastGetopt::TOpt GenerateCompletionOption(TStringBuf command, TClientCommandTree *commandTree, TClientCommand::TConfig& config);
 
 } // namespace NConsoleClient
 } // namespace NYdb

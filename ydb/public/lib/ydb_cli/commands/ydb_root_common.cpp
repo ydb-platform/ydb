@@ -166,9 +166,6 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             .Optional().Hidden().StoreTrue(&config.SkipDiscovery);
     }
 
-    opts.GetOpts().AddOption(GenerateCompletionOption(this, config));
-    // opts.GetOpts().AddCompletionOption("ydb");
-
     TClientCommandRootBase::Config(config);
 
     TAuthMethodOption* iamTokenAuth = nullptr;
@@ -421,6 +418,9 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         ydbUserAuth,
         oauth2TokenExchangeAuth
     );
+
+
+    opts.GetOpts().AddOption(GenerateCompletionOption("ydb", this, config));
 
     TStringStream stream;
     stream << " [options...] <subcommand>" << Endl << Endl

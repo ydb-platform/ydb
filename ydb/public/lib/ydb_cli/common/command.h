@@ -21,9 +21,6 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TYdbCommandTreeAutoCompletionWrapper;
-class TYdbCommandAutoCompletionWrapper;
-
 struct TCommandFlags {
     bool Dangerous = false;
     bool OnlyExplicitProfile = false;
@@ -427,8 +424,8 @@ public:
     void MarkLocal();
     void UseOnlyExplicitProfile();
 
-    virtual void Config(TConfig& config); // TODO fix add friend
 protected:
+    virtual void Config(TConfig& config);
     virtual void SaveParseResult(TConfig& config);
     virtual void Parse(TConfig& config);
     virtual void Validate(TConfig& config);
@@ -446,6 +443,9 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
+
+    friend class TYdbCommandAutoCompletionWrapper;
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TClientCommandTree : public TClientCommand {
@@ -467,10 +467,8 @@ public:
     virtual void SetFreeArgs(TConfig& config);
     bool HasSelectedCommand() const { return SelectedCommand; }
 
-    const TMap<TString, std::unique_ptr<TClientCommand>>& GetSubCommands() const;
-
-    virtual void Config(TConfig& config) override; // TODO make protected back and add friend
 protected:
+    virtual void Config(TConfig& config) override;
     virtual void SaveParseResult(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
@@ -488,8 +486,6 @@ protected:
     TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;
     TMap<TString, TString> Aliases;
 
-    // friend void TYdbCommandTreeAutoCompletionWrapper::RegisterModes(TModChooser& chooser);
-    friend class TYdbCommandAutoCompletionWrapper;
     friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 

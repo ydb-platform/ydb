@@ -5,30 +5,38 @@
 #include <util/string/ascii.h>
 #include <util/generic/hash_set.h>
 
-#include "last_getopt_parse_result.h"
 
-using NLastGetopt::NEscaping::Q;
-using NLastGetopt::NEscaping::QQ;
-using NLastGetopt::NEscaping::C;
-using NLastGetopt::NEscaping::CC;
-using NLastGetopt::NEscaping::S;
-using NLastGetopt::NEscaping::SS;
-using NLastGetopt::NEscaping::B;
-using NLastGetopt::NEscaping::BB;
+#include <library/cpp/getopt/small/last_getopt_parse_result.h>
 
-namespace NLastGetopt {
+using NLastGetoptFork::NEscaping::Q;
+using NLastGetoptFork::NEscaping::QQ;
+using NLastGetoptFork::NEscaping::C;
+using NLastGetoptFork::NEscaping::CC;
+using NLastGetoptFork::NEscaping::S;
+using NLastGetoptFork::NEscaping::SS;
+using NLastGetoptFork::NEscaping::B;
+using NLastGetoptFork::NEscaping::BB;
+
+namespace NLastGetoptFork {
 
 #define L out.Line()
 #define I auto Y_GENERATE_UNIQUE_ID(indent) = out.Indent()
 
+    TCompletionGenerator::TCompletionGenerator(const TModChooser* modChooser, const TOpts* opts)
+        : chooser(modChooser), opts(opts)
+    {
+        Y_ABORT_UNLESS(modChooser != nullptr);
+        Y_ABORT_UNLESS(opts != nullptr);
+    }
+
     TCompletionGenerator::TCompletionGenerator(const TModChooser* modChooser)
-        : Options_(modChooser)
+        : chooser(modChooser), opts(nullptr)
     {
         Y_ABORT_UNLESS(modChooser != nullptr);
     }
 
     TCompletionGenerator::TCompletionGenerator(const TOpts* opts)
-        : Options_(opts)
+        : chooser(nullptr), opts(opts)
     {
         Y_ABORT_UNLESS(opts != nullptr);
     }
@@ -48,14 +56,13 @@ namespace NLastGetopt {
             L << "local prefix_orig=\"$PREFIX\"";
             L << "local suffix_orig=\"$SUFFIX\"";
             L;
-            std::visit(TOverloaded{
-                [&out, &manager](const TModChooser* modChooser) {
-                    GenerateModesCompletion(out, *modChooser, manager);
-                },
-                [&out, &manager](const TOpts* opts) {
-                    GenerateOptsCompletion(out, *opts, manager);
-                }
-            }, Options_);
+            if (chooser != nullptr && opts != nullptr) {
+                GenerateBothCompletion(out, *chooser, *opts, manager);
+            } else if (chooser != nullptr) {
+                GenerateModesCompletion(out, *chooser, manager);
+            } else if (opts != nullptr) {
+                GenerateOptsCompletion(out, *opts, manager);
+            }
             L;
             L << "return ret";
         }
@@ -64,6 +71,124 @@ namespace NLastGetopt {
         manager.GenerateZsh(out);
 
         out.Print(stream);
+    }
+
+    void TZshCompletionGenerator::GenerateBothCompletion(TFormattedOutput& out, const TModChooser& chooser, const TOpts& opts, NComp::TCompleterManager& manager) {
+        L << "_arguments -s -C \\";
+        {
+            I;
+
+            if (opts.ArgPermutation_ == EArgPermutation::REQUIRE_ORDER) {
+                L << "-S \\";
+            }
+
+            for (auto opt: opts.GetOpts()) {
+                if (!opt->Hidden_) {
+                    GenerateOptCompletion(out, opts, *opt, manager);
+                }
+            }
+
+            L << "  '()1: :->modes' \\";
+            L << "  '()*:: :->args' \\";
+            L << "&& ret=0";
+        }
+        
+        auto modes = chooser.GetUnsortedModes();
+
+        L;
+        L << "case $state in";
+        {
+            I;
+
+            L << "modes)";
+            {
+                I;
+
+                size_t tag = 0;
+                bool empty = true;
+
+                L << "desc='modes'";
+                L << "modes=(";
+                for (auto& mode : modes) {
+                    if (mode->Hidden) {
+                        continue;
+                    }
+                    if (!mode->Name.empty()) {
+                        I;
+                        if (!mode->Description.empty()) {
+                            L << QQ(mode->Name) << ":" << QQ(mode->Description);
+                        } else {
+                            L << QQ(mode->Name);
+                        }
+                        empty = false;
+                    } else {
+                        L << ")";
+                        if (!empty) {
+                            L << "_describe -t 'mode-group-" << tag << "' $desc modes";
+                        }
+                        L;
+                        if (mode->Description.empty()) {
+                            L << "desc='modes'";
+                        } else {
+                            L << "desc=" << SS(mode->Description);
+                        }
+                        L << "modes=(";
+                        empty = true;
+                        ++tag;
+                    }
+                }
+                L << ")";
+                if (!empty) {
+                    L << "_describe -t 'mode-group-" << tag << "' $desc modes";
+                }
+                L;
+
+                L << ";;";
+            }
+
+            L << "args)";
+            {
+                I;
+
+                L << "case $line[1] in";
+                {
+                    I;
+
+                    for (auto& mode : modes) {
+                        if (mode->Name.empty() || mode->Hidden) {
+                            continue;
+                        }
+
+                        auto& line = L << SS(mode->Name);
+                        for (auto& alias : mode->Aliases) {
+                            line << "|" << SS(alias);
+                        }
+                        line << ")";
+
+                        {
+                            I;
+
+                            auto mainArgs = dynamic_cast<TMainClassArgs*>(mode->Main);
+                            auto mainModes = dynamic_cast<TMainClassModes*>(mode->Main);
+                            if (mainArgs && mainModes) {
+                                GenerateBothCompletion(out, mainModes->GetSubModes(), mainArgs->GetOptions(), manager);
+                            } else if (mainArgs) {
+                                GenerateOptsCompletion(out, mainArgs->GetOptions(), manager);
+                            } else if (mainModes) {
+                                GenerateModesCompletion(out, mainModes->GetSubModes(), manager);
+                            } else {
+                                GenerateDefaultOptsCompletion(out, manager);
+                            }
+
+                            L << ";;";
+                        }
+                    }
+                }
+                L << "esac";
+                L << ";;";
+            }
+        }
+        L << "esac";
     }
 
     void TZshCompletionGenerator::GenerateModesCompletion(TFormattedOutput& out, const TModChooser& chooser, NComp::TCompleterManager& manager) {
@@ -152,10 +277,14 @@ namespace NLastGetopt {
 
                         {
                             I;
-
-                            if (auto mainArgs = dynamic_cast<TMainClassArgs*>(mode->Main)) {
+                            
+                            auto mainArgs = dynamic_cast<TMainClassArgs*>(mode->Main);
+                            auto mainModes = dynamic_cast<TMainClassModes*>(mode->Main);
+                            if (mainArgs && mainModes) {
+                                GenerateBothCompletion(out, mainModes->GetSubModes(), mainArgs->GetOptions(), manager);
+                            } else if (mainArgs) {
                                 GenerateOptsCompletion(out, mainArgs->GetOptions(), manager);
-                            } else if (auto mainModes = dynamic_cast<TMainClassModes*>(mode->Main)) {
+                            } else if (mainModes) {
                                 GenerateModesCompletion(out, mainModes->GetSubModes(), manager);
                             } else {
                                 GenerateDefaultOptsCompletion(out, manager);
@@ -390,14 +519,13 @@ namespace NLastGetopt {
             L << "local need_space=\"1\"";
             L << "local IFS=$' \\t\\n'";
             L;
-            std::visit(TOverloaded{
-                [&out, &manager](const TModChooser* modChooser) {
-                    GenerateModesCompletion(out, *modChooser, manager, 1);
-                },
-                [&out, &manager](const TOpts* opts) {
-                    GenerateOptsCompletion(out, *opts, manager, 1);
-                }
-            }, Options_);
+            if (chooser != nullptr && opts != nullptr) {
+                GenerateBothCompletion(out, *chooser, *opts, manager, 1);
+            } else if (chooser != nullptr) {
+                GenerateModesCompletion(out, *chooser, manager, 1);
+            } else if (opts != nullptr) {
+                GenerateOptsCompletion(out, *opts, manager, 1);
+            }
             L;
             L;
             L << "__ltrim_colon_completions \"$cur\"";
@@ -427,6 +555,90 @@ namespace NLastGetopt {
         L << "complete -o nospace -o default -F _" << command << " " << command;
 
         out.Print(stream);
+    }
+
+    void TBashCompletionGenerator::GenerateBothCompletion(TFormattedOutput& out, const TModChooser& chooser, const TOpts& opts, NComp::TCompleterManager& manager, size_t level) {
+        auto modes = chooser.GetUnsortedModes();
+        auto unorderedOpts = opts.GetOpts();
+
+        L << "if [[ ${cword} == " << level << " ]] ; then";
+        {
+            I;
+            L << "if [[ ${cur} == -* ]] ;  then";
+            {
+                I;
+                auto& line = L << "COMPREPLY+=( $(compgen -W '";
+                TStringBuf sep = "";
+                for (auto& opt : unorderedOpts) {
+                    if (opt->IsHidden()) {
+                        continue;
+                    }
+
+                    for (auto& shortName : opt->GetShortNames()) {
+                        line << sep << "-" << B(TStringBuf(&shortName, 1));
+                        sep = " ";
+                    }
+                    for (auto& longName: opt->GetLongNames()) {
+                        line << sep << "--" << B(longName);
+                        sep = " ";
+                    }
+                }
+                line << "' -- ${cur}) )";
+            }
+            L << "else";
+            {
+                I;
+                auto& line = L << "COMPREPLY+=( $(compgen -W '";
+                TStringBuf sep = "";
+                for (auto& mode : modes) {
+                    if (!mode->Hidden && !mode->NoCompletion) {
+                        line << sep << B(mode->Name);
+                        sep = " ";
+                    }
+                }
+                line << "' -- ${cur}) )";
+            }
+            L << "fi";
+        }
+        L << "else";
+        {
+            I;
+            L << "case \"${words[" << level << "]}\" in";
+            {
+                I;
+
+                for (auto& mode : modes) {
+                    if (mode->Name.empty() || mode->Hidden || mode->NoCompletion) {
+                        continue;
+                    }
+
+                    auto& line = L << BB(mode->Name);
+                    for (auto& alias : mode->Aliases) {
+                        line << "|" << BB(alias);
+                    }
+                    line << ")";
+
+                    {
+                        I;
+                        auto mainArgs = dynamic_cast<TMainClassArgs*>(mode->Main);
+                        auto mainModes = dynamic_cast<TMainClassModes*>(mode->Main);
+                        if (mainArgs && mainModes) {
+                            GenerateBothCompletion(out, mainModes->GetSubModes(), mainArgs->GetOptions(), manager, level + 1);
+                        } else if (mainArgs) {
+                            GenerateOptsCompletion(out, mainArgs->GetOptions(), manager, level + 1);
+                        } else if (mainModes) {
+                            GenerateModesCompletion(out, mainModes->GetSubModes(), manager, level + 1);
+                        } else {
+                            GenerateDefaultOptsCompletion(out, manager);
+                        }
+
+                        L << ";;";
+                    }
+                }
+            }
+            L << "esac";
+        }
+        L << "fi";
     }
 
     void TBashCompletionGenerator::GenerateModesCompletion(TFormattedOutput& out, const TModChooser& chooser, NComp::TCompleterManager& manager, size_t level) {

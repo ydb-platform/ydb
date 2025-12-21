@@ -1150,7 +1150,7 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
 
     auto udf = apply.Callable().Maybe<TCoUdf>().Cast();
 
-    if (udf.MethodName().Value() != "FullText.FulltextContains") {
+    if (udf.MethodName().Value() != "FullText.Contains") {
         return node;
     }
 

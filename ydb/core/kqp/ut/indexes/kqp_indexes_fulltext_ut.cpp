@@ -108,6 +108,14 @@ void AddIndexSnowball(NQuery::TQueryClient& db, const TString& language) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
+void DropIndex(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        ALTER TABLE `/Root/Texts` DROP INDEX `fulltext_idx`;
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
 TResultSet ReadIndex(NQuery::TQueryClient& db, const char* table = "indexImplTable") {
     TString query = Sprintf(R"sql(
         SELECT * FROM `/Root/Texts/fulltext_idx/%s`;
@@ -2327,6 +2335,120 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+                (1, "LLMs often hallucinate"),
+                (2, "code with erasure"),
+                (3, "hallucinated once upon a time"),
+                (4, "you float like a feather"),
+                (5, "quantization of floating point number")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    AddIndexSnowball(db, "english");
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::FulltextContains(`Text`, "hallucination")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts`
+            WHERE String::Contains(`Text`, "hallucination")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1u];["LLMs often hallucinate"]];
+            [[3u];["hallucinated once upon a time"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::FulltextContains(`Text`, "erasure coding")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts`
+            WHERE String::Contains(`Text`, "erasure coding")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[2u];["code with erasure"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::FulltextContains(`Text`, "float")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[4u];["you float like a feather"]];
+            [[5u];["quantization of floating point number"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    DropIndex(db);
+    AddIndexSnowball(db, "russian");
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+                (1, "С учетом поляризации")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::FulltextContains(`Text`, "поляризация")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text`
+            FROM `/Root/Texts`
+            WHERE String::Contains(`Text`, "поляризация")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1u];["С учетом поляризации"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
 }
 

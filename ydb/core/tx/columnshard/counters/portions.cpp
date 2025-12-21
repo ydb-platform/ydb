@@ -10,6 +10,7 @@ void TPortionCategoryCounters::AddPortion(const std::shared_ptr<const NOlap::TPo
     Count->Add(1);
     BlobBytes->Add(p->GetTotalBlobBytes());
     RawBytes->Add(p->GetTotalRawBytes());
+    BlobBytesHistogram->Add(p->GetTotalBlobBytes(), 1);
 }
 
 void TPortionCategoryCounters::RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
@@ -17,6 +18,7 @@ void TPortionCategoryCounters::RemovePortion(const std::shared_ptr<const NOlap::
     Count->Remove(1);
     BlobBytes->Remove(p->GetTotalBlobBytes());
     RawBytes->Remove(p->GetTotalRawBytes());
+    BlobBytesHistogram->Sub(p->GetTotalBlobBytes(), 1);
 }
 
 }   // namespace NKikimr::NColumnShard

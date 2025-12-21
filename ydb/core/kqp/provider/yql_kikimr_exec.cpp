@@ -1293,7 +1293,14 @@ private:
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(res.Ref());
 
-        if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, SessionCtx->Query().Type)) {
+        if (SessionCtx->Query().Type == EKikimrQueryType::Script) {
+            if (fillSettings.Discard) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
+                    << "DISCARD not supported in YDB scripts"));
+                return SyncError();
+            }
+        }
+        if (!SessionCtx->Config().EnableDiscardSelect && SessionCtx->Query().Type == EKikimrQueryType::Query) {
             if (fillSettings.Discard) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
                     << "DISCARD not supported in YDB queries"));

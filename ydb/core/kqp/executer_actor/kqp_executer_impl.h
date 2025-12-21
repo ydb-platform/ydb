@@ -473,6 +473,7 @@ protected:
         LOG_T("Got result, channelId: " << channel.Id
             << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
             << ", finished: " << channelData.GetFinished());
+
         ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
         LOG_T("Send ack to channelId: " << channel.Id << ", seqNo: " << record.GetSeqNo() << ", to: " << ev->Sender);
 

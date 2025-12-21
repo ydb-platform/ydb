@@ -504,6 +504,7 @@ message TKqpPhyResult {
     bool IsStream = 3;
     repeated string ColumnHints = 4;
     optional uint32 QueryResultIndex = 5;
+    optional bool CanSkipChannel = 6;
 }
 
 message TKqpAnalyzeOperation {

@@ -384,7 +384,8 @@ private:
 
     TString DisambiguatedResultItemName(TString name, const TNodePtr& term) const {
         if (const auto* source = term->GetSourceName();
-            source && Source && 1 < Source->Sources.size()) {
+            source && !source->empty() &&
+            Source && 1 < Source->Sources.size()) {
             name.prepend(".").prepend(*source);
         }
 

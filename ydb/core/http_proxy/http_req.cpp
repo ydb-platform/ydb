@@ -27,6 +27,7 @@
 
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
+#include <ydb/services/sqs_topic/utils.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/api/iam_token_service.h>
@@ -1129,16 +1130,8 @@ namespace NKikimr::NHttpProxy {
                 ReplyWithYdbError(ctx, ev->Get()->Status, ev->Get()->Response, ev->Get()->IssueCode);
             }
 
-            TVector<std::pair<TString, TString>> AddCommonLabels(TVector<std::pair<TString, TString>> labels) const {
-                TVector<std::pair<TString, TString>> common{
-                    {"database", HttpContext.DatabasePath},
-                    {"method", Method},
-                    {"database_id", HttpContext.DatabaseId},
-                    {"topic", TopicPath},
-                    {"consumer", ConsumerName},
-                };
-                std::move(common.begin(), common.end(), std::back_inserter(labels));
-                return labels;
+            TVector<std::pair<TString, TString>> AddCommonLabels(TVector<std::pair<TString, TString>>&& labels) const {
+                return NSqsTopic::GetMetricsLabels(HttpContext.DatabasePath, TopicPath, ConsumerName, Method, std::move(labels));
             }
 
             void ReplyWithYdbError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
@@ -1149,7 +1142,7 @@ namespace NKikimr::NHttpProxy {
                              1, true, true,
                              AddCommonLabels({
                                  {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
-                                 {"name", "api.http.message_queue.response.count"},
+                                 {"name", "api.sqs.response.count"},
                              })});
                 ReplyToHttpContext(ctx, issueCode);
 
@@ -1174,7 +1167,7 @@ namespace NKikimr::NHttpProxy {
                              1, true, true,
                              AddCommonLabels({
                                  {"code", ToString(httpStatusCode)},
-                                 {"name", "api.http.message_queue.response.count"},
+                                 {"name", "api.sqs.response.count"},
                              })});
                 ReplyToHttpContext(ctx);
 
@@ -1200,7 +1193,7 @@ namespace NKikimr::NHttpProxy {
                 InputCountersReported = true;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{1, true, true,
-                            AddCommonLabels({{"name", "api.http.message_queue.request.count"}})
+                            AddCommonLabels({{"name", "api.sqs.request.count"}})
                          });
             }
 
@@ -1208,7 +1201,7 @@ namespace NKikimr::NHttpProxy {
                 TDuration dur = ctx.Now() - StartTime;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
-                             BuildLabels(Method, HttpContext, "api.http.message_queue.response.duration_milliseconds")
+                             BuildLabels(Method, HttpContext, "api.sqs.response.duration_milliseconds")
                         });
             }
 
@@ -1224,7 +1217,7 @@ namespace NKikimr::NHttpProxy {
                                  1, true, true,
                                  AddCommonLabels({
                                      {"code", "200"},
-                                     {"name", "api.http.message_queue.response.count"}})});
+                                     {"name", "api.sqs.response.count"}})});
                     ReplyToHttpContext(ctx);
                 } else {
                     auto retryClass =

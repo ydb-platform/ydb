@@ -87,6 +87,7 @@ class TestResult:
     error_type: str = ""
     is_sanitizer_issue: bool = False
     is_timeout_issue: bool = False
+    is_not_launched: bool = False
 
     @property
     def status_display(self):
@@ -141,7 +142,6 @@ class TestResult:
         status_description = result.get("rich-snippet")
         properties = result.get("properties")
         metrics = result.get("metrics")
-        is_muted = bool(result.get("muted"))
         
         classname = path_str
         if subtest_name and subtest_name.strip():
@@ -152,11 +152,9 @@ class TestResult:
         else:
             name = name_part or ""
         
-        if status_str == "OK":
-            status_str = "PASSED"
-        
+        # Status normalization (OK->PASSED, NOT_LAUNCHED->SKIPPED, mute->MUTE) is done by transform_build_results.py
         # Map status to TestStatus enum
-        if is_muted:
+        if status_str == "MUTE":
             status = TestStatus.MUTE
         elif status_str == "FAILED":
             status = TestStatus.FAIL
@@ -203,7 +201,9 @@ class TestResult:
             status_description=status_description or '',
             error_type=error_type or '',
             is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
-            is_timeout_issue=(error_type or '').lower() == 'timeout'
+            is_timeout_issue=(error_type or '').upper() == 'TIMEOUT',
+            # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
+            is_not_launched=(error_type or '').upper() == 'NOT_LAUNCHED' and status in (TestStatus.SKIP, TestStatus.MUTE)
         )
 
 
@@ -489,11 +489,13 @@ def iter_build_results_files(path):
                 report = json.load(f)
             
             for result in report.get("results") or []:
-                if result.get("type") == "test":
-                    # Skip suite-level entries (they are aggregates, not individual tests)
-                    if result.get("suite") is True:
-                        continue
-                    yield fn, result
+                # Only include results that have a status field (indicates it's a test/check)
+                # Filtering (suite, build, configure) is done by transform_build_results.py
+                status = result.get("status")
+                if not status:
+                    continue
+                
+                yield fn, result
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)
             continue

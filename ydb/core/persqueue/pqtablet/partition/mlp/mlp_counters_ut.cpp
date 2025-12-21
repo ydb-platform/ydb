@@ -117,10 +117,18 @@ Y_UNIT_TEST(SimpleCounters) {
     assertMetric("topic.inflight.unlocked_messages", 101);
 
     assertMetric("topic.committed_messages", 1);
-    assertMetric("topic.moved_to_dlq_messages", 0);
     assertMetric("topic.purged_messages", 0);
-    assertMetric("topic.deleted_by_deadline_policy_messages", 0);
-    assertMetric("topic.deleted_by_retention_messages", 0);
+
+    auto assertDeletedMetric = [&](const auto& reason, const auto& value) {
+        auto counter = group->GetSubgroup("name", "topic.deleted_messages")->FindNamedCounter("reason", reason);
+        UNIT_ASSERT_C(counter, TStringBuilder() << "metric 'topic.deleted_messages/reason." << reason << " not found");
+        UNIT_ASSERT_VALUES_EQUAL_C(counter->Val(), value, TStringBuilder() << "metric 'topic.deleted_messages.reason." << reason << "'");
+
+    };
+
+    assertDeletedMetric("delete_policy", 0);
+    assertDeletedMetric("move_policy", 0);
+    assertDeletedMetric("retention", 0);
 }
 
 }

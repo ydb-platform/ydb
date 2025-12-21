@@ -91,7 +91,7 @@ namespace NActors {
                         if (event.EventSerializedSize) {
                             Chunker.SetSerializingEvent(base);
                         }
-                        SerializationInfoContainer = base->CreateSerializationInfo();
+                        SerializationInfoContainer = base->CreateSerializationInfo(Params.UseExternalDataChannel);
                         SerializationInfo = &SerializationInfoContainer;
                         SectionIndex = 0;
                         PartLenRemain = 0;
@@ -334,7 +334,7 @@ namespace NActors {
                 return false; // serialization failed
             }
             event.Buffer = MakeIntrusive<TEventSerializedData>(
-                std::move(*rope), event.Event->CreateSerializationInfo()
+                std::move(*rope), event.Event->CreateSerializationInfo(Params.UseExternalDataChannel)
             );
             Iter = event.Buffer->GetBeginIter();
         }

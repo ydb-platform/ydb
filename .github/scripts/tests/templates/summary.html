@@ -1052,6 +1052,7 @@
 {% for status in status_order %}
 {% set sanitizer_count = tests[status] | selectattr('is_sanitizer_issue') | list | length %}
 {% set timeout_count = tests[status] | selectattr('is_timeout_issue') | list | length %}
+{% set not_launched_count = tests[status] | selectattr('is_not_launched') | list | length %}
 <h1 id="{{ status.name}}" class="collapsible-header">
     {{ status.name }} ({{ tests[status] | length }})
     {% if sanitizer_count > 0 %}
@@ -1059,6 +1060,9 @@
     {% endif %}
     {% if timeout_count > 0 %}
         <span style="color: #ff8c00; font-weight: bold;">- {{ timeout_count }} TIMEOUT ISSUE{{ 's' if timeout_count != 1 else '' }}</span>
+    {% endif %}
+    {% if not_launched_count > 0 %}
+        <span style="color: #6c757d; font-weight: bold;">- {{ not_launched_count }} NOT LAUNCHED ISSUE{{ 's' if not_launched_count != 1 else '' }}</span>
     {% endif %}
 </h1>
 <table class="collapsible-content active" border="1">
@@ -1098,6 +1102,9 @@
             {% endif %}
             {% if t.is_timeout_issue %}
                 <span style="background-color: #ff8c00; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">TIMEOUT</span>
+            {% endif %}
+            {% if t.is_not_launched %}
+                <span style="background-color: #6c757d; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">NOT LAUNCHED</span>
             {% endif %}
             {% if status.is_error %}
             <div class="button-group">

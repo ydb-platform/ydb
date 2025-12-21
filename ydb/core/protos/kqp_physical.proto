@@ -504,6 +504,7 @@ message TKqpPhyResult {
     bool IsStream = 3;
     repeated string ColumnHints = 4;
     optional uint32 QueryResultIndex = 5;
+    optional bool CanSkipChannel = 6;
 }
 
 message TKqpAnalyzeOperation {
@@ -619,6 +620,7 @@ message TKqpPhyTx {
     TKqpSchemeOperation SchemeOperation = 8;
     repeated string SecretNames = 9;
     bool EnableShuffleElimination = 10;
+    bool EnableFastChannels = 11;
 }
 
 message TKqpTableInfo {

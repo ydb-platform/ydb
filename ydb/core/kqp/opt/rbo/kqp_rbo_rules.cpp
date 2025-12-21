@@ -118,6 +118,7 @@ TExprNode::TPtr PruneCast(TExprNode::TPtr node) {
     return node;
 }
 
+[[maybe_unused]]
 TVector<TInfoUnit> GetHashableKeys(const std::shared_ptr<IOperator> &input) {
     if (!input->Type) {
         return input->GetOutputIUs();
@@ -1010,10 +1011,13 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
 
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
-        const auto shuffleKeys = aggregate->KeyColumns.size() ? aggregate->KeyColumns : GetHashableKeys(aggregate->GetInput());
+        if (!aggregate->KeyColumns.empty()) {
+            props.StageGraph.Connect(inputStageId, newStageId,
+                                 std::make_shared<TShuffleConnection>(aggregate->KeyColumns, props.StageGraph.GetStorageType(inputStageId)));
+        } else {
+            props.StageGraph.Connect(inputStageId, newStageId, std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(inputStageId)));
+        }
 
-        props.StageGraph.Connect(inputStageId, newStageId,
-                                 std::make_shared<TShuffleConnection>(shuffleKeys, props.StageGraph.GetStorageType(inputStageId)));
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to Aggregation ";
     } else {
         Y_ENSURE(false, "Unknown operator encountered");

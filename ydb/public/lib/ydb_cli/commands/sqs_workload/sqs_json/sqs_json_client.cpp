@@ -363,12 +363,35 @@ namespace NYdb::NConsoleClient {
             message.WithBody(messages[i].GetString("Body"))
                 .WithMessageId(messages[i].GetString("MessageId"))
                 .WithReceiptHandle(messages[i].GetString("ReceiptHandle"))
-                .WithMD5OfBody(messages[i].GetString("MD5OfBody"));
+                .WithMD5OfBody(messages[i].GetString("MD5OfBody"))
+                .WithMD5OfMessageAttributes(messages[i].GetString("MD5OfMessageAttributes"));
 
             if (messages[i].KeyExists("Attributes")) {
                 const auto& messageAttributes = messages[i].GetObject("Attributes");
+                Aws::Map<Aws::SQS::Model::MessageSystemAttributeName, Aws::String>
+                    messageSystemAttributesMap;
+                for (const auto& [attributeName, attributeValue] :
+                     messageAttributes.GetAllObjects()) {
+
+                    auto messageAttribute = Aws::SQS::Model::MessageSystemAttributeNameMapper::GetMessageSystemAttributeNameForName(attributeName);
+                    if (attributeValue.IsString()) {
+                        messageSystemAttributesMap[messageAttribute] =
+                            attributeValue.AsString();
+                    } else {
+                        Cerr << "Unknown attribute type: " << attributeName << Endl;
+
+                        continue;
+                    }
+                }
+
+                message.WithAttributes(messageSystemAttributesMap);
+            }
+
+            if (messages[i].KeyExists("MessageAttributes")) {
+                const auto& messageAttributes = messages[i].GetObject("MessageAttributes");
                 Aws::Map<Aws::String, Aws::SQS::Model::MessageAttributeValue>
                     messageAttributesMap;
+
                 for (const auto& [attributeName, attributeValue] :
                      messageAttributes.GetAllObjects()) {
                     if (attributeValue.IsString()) {

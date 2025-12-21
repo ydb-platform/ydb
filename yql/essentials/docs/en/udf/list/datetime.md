@@ -364,6 +364,7 @@ Implemented specifiers:
 * `%H`: 2-digit hour;
 * `%M`: 2-digit minutes;
 * `%S`: Seconds, can also accept microseconds in the formats from `XX` up to `XX.XXXXXX`;
+* `%z`: Timezone offset in the one of the following format: `±hh:mm`, `±hhmm`, `±hh`- added in the version [2025.05](../../changelog/2025.05.md#datetime-module);
 * `%Z`: The IANA name of the timezone (GMT);
 * `%b`: A short three-letter case-insensitive English name of the month (Jan);
 * `%B`: A full case-insensitive English name of the month (January).

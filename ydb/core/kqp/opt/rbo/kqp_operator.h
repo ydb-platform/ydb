@@ -354,6 +354,8 @@ class IOperator {
      */
     virtual TVector<TInfoUnit> GetOutputIUs() = 0;
 
+    virtual TVector<TInfoUnit> GetUsedIUs() { return {}; }
+
     virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) { Y_UNUSED(props); return {}; }
 
     const TTypeAnnotationNode* GetIUType(TInfoUnit iu);
@@ -462,15 +464,13 @@ class TOpMap : public IUnaryOperator {
     TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements,
            bool project);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetUsedIUs() override;
     virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) override;
     virtual TVector<TExprNode::TPtr> GetLambdas() override;
-    virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
-
-    bool HasRenames() const;
-    bool HasLambdas() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
-    TVector<std::pair<TInfoUnit, TExprNode::TPtr>> GetLambdas() const;
+    virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
+
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
 
     virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
@@ -507,6 +507,7 @@ class TOpAggregate : public IUnaryOperator {
     TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggFunctions, TVector<TInfoUnit>& keyColumns,
                  EAggregationPhase aggPhase, bool distinctAll, TPositionHandle pos);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetUsedIUs() override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -525,6 +526,7 @@ class TOpFilter : public IUnaryOperator {
     TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprNode::TPtr filterLambda);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetUsedIUs() override;
     virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual TVector<TExprNode::TPtr> GetLambdas() override;
@@ -546,6 +548,8 @@ class TOpJoin : public IBinaryOperator {
     TOpJoin(std::shared_ptr<IOperator> leftArg, std::shared_ptr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
             TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetUsedIUs() override;
+
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
 
@@ -582,6 +586,7 @@ class TOpSort : public IUnaryOperator {
   public:
     TOpSort(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TSortElement> sortElements, TExprNode::TPtr limitCond = nullptr);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetUsedIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
 

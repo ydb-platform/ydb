@@ -78,6 +78,9 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(false)
             .Hidden()
             .StoreTrue(&Scenario.SetSubjectToken);
+        config.Opts->AddLongOption("validate-fifo", "Validate FIFO.")
+            .DefaultValue(false)
+            .StoreTrue(&Scenario.ValidateFifo);
         config.Opts->AddLongOption("max-unique-messages", "Max unique messages. If set to 0, content based deduplication is used.")
             .DefaultValue(0)
             .StoreResult(&Scenario.MaxUniqueMessages);

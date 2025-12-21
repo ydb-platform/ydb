@@ -32,33 +32,33 @@ def download_binary_from_s3(version, working_dir):
     """
     Downloads ydbd binary from S3 storage if not already downloaded.
     Each version is stored in a separate directory: binary/<version>/ydbd
-    
+
     Args:
         version: Git ref/version (e.g., '25.3.1.21')
         working_dir: Base working directory
-        
+
     Returns:
         Path to downloaded binary
     """
     binary_dir = os.path.join(working_dir, "binary", version)
     binary_path = os.path.join(binary_dir, "ydbd")
-    
+
     if os.path.exists(binary_path) and os.access(binary_path, os.X_OK):
         logger.info("Binary already exists for version %s: %s", version, binary_path)
         return binary_path
-    
+
     url = f"https://storage.yandexcloud.net/ydb-builds/{version}/release/ydbd"
-    
+
     logger.info("Downloading ydbd binary from S3...")
     logger.info("Version: %s", version)
     logger.info("URL: %s", url)
     logger.info("Destination: %s", binary_path)
-    
+
     try:
         os.makedirs(binary_dir, exist_ok=True)
         urllib.request.urlretrieve(url, binary_path)
         os.chmod(binary_path, 0o755)
-        
+
         logger.info("Binary downloaded successfully")
         return binary_path
     except Exception as e:

@@ -1,11 +1,13 @@
 #include "keyvalue_storage_read_request.h"
 #include "keyvalue_const.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <util/generic/overloaded.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 
 namespace NKikimr {
@@ -512,7 +514,9 @@ public:
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , TabletGeneration(tabletGeneration)
         , Span(TWilsonTablet::TabletBasic, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")
-    {}
+    {
+        IntermediateResult->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now();
+    }
 };
 
 

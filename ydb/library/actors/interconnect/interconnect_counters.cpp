@@ -224,11 +224,13 @@ namespace {
         void AddInputChannelsIncomingTraffic(ui16 channel, ui64 incomingTraffic) override {
             auto& ch = InputChannels.Get(channel);
             *ch.IncomingTraffic += incomingTraffic;
+            *ch.Traffic += incomingTraffic;
         }
 
         void IncInputChannelsIncomingEvents(ui16 channel) override {
             auto& ch = InputChannels.Get(channel);
             ++*ch.IncomingEvents;
+            ++*ch.Events;
         }
 
         void IncRecvSyscalls(ui64 ns) override {
@@ -254,22 +256,14 @@ namespace {
 
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
-            if (ch.OutgoingTraffic) {
-                *ch.OutgoingTraffic += value;
-            }
-            if (ch.Traffic) {
-                *ch.Traffic += value;
-            }
+            *ch.OutgoingTraffic += value;
+            *ch.Traffic += value;
         }
 
         void UpdateOutputChannelEvents(ui16 channel) override {
             auto& ch = GetOutputChannel(channel);
-            if (ch.OutgoingEvents) {
-                ++*ch.OutgoingEvents;
-            }
-            if (ch.Events) {
-                ++*ch.Events;
-            }
+            ++*ch.OutgoingEvents;
+            ++*ch.Events;
         }
 
         void SetUtilization(ui32 total, ui32 starvation) override {
@@ -593,11 +587,13 @@ namespace {
         void AddInputChannelsIncomingTraffic(ui16 channel, ui64 incomingTraffic) override {
             auto& ch = InputChannels_.Get(channel);
             ch.IncomingTraffic->Add(incomingTraffic);
+            ch.Traffic->Add(incomingTraffic);
         }
 
         void IncInputChannelsIncomingEvents(ui16 channel) override {
             auto& ch = InputChannels_.Get(channel);
             ch.IncomingEvents->Inc();
+            ch.Events->Inc();
         }
 
         void IncRecvSyscalls(ui64 /*ns*/) override {

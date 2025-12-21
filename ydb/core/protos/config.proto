@@ -2459,6 +2459,11 @@ message TColumnShardConfig {
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
     optional uint32 ProxyOverloadedDelayMs = 59 [default = 5000];
     optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
+    
+    oneof DefaultCompaction {
+        string DefaultCompactionPreset = 61 [default = "tiling"];
+        NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
+    }
 }
 
 message TSchemeShardConfig {

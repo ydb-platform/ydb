@@ -526,6 +526,107 @@ TExprNode::TPtr NormalizeMemberNames(TExprNode::TPtr node, TExprContext& ctx, TP
     return replaces.empty() ? node : ctx.ReplaceNodes(std::move(node), replaces);
 }
 
+void SplitByAnd(TExprNode::TPtr node, TVector<TExprNode::TPtr>& predicates) {
+    // TODO: Here we need to build a predicate tree to handle OR.
+    Y_ENSURE(!TCoOr::Match(node.Get()), "OR in join predicate is not supported");
+
+    if (!TCoAnd::Match(node.Get())) {
+        predicates.push_back(node);
+        return;
+    }
+
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        SplitByAnd(node->ChildPtr(i), predicates);
+    }
+}
+
+bool IsJoinKeys(TExprNode::TPtr node, TExprNode::TPtr lambdaArg) {
+    if (!TCoCmpEqual::Match(node.Get())) {
+        return false;
+    }
+
+    auto equalOp = TCoCmpEqual(node);
+    auto left = equalOp.Left().Ptr();
+    auto right = equalOp.Right().Ptr();
+    if (!left->IsCallable("Member") || !right->IsCallable("Member")) {
+        return false;
+    }
+
+    return left->ChildPtr(0) == lambdaArg.Get() && right->ChildPtr(0) == lambdaArg.Get();
+}
+
+void ExtractJoinKeysAndPredicates(TExprNode::TPtr node, TVector<TInfoUnit>& joinKeys, TVector<TExprNode::TPtr>& joinPredicates) {
+    Y_ENSURE(node->IsLambda());
+    auto lambda = TCoLambda(node);
+    TVector<TExprNode::TPtr> predicates;
+    SplitByAnd(lambda.Body().Ptr(), predicates);
+
+    for (const auto& predicate : predicates) {
+        if (IsJoinKeys(predicate, lambda.Args().Arg(0).Ptr())) {
+            TVector<TInfoUnit> currentJoinKeys;
+            GetAllMembers(predicate, currentJoinKeys);
+            joinKeys.insert(joinKeys.end(), currentJoinKeys.begin(), currentJoinKeys.end());
+        } else {
+            joinPredicates.push_back(predicate);
+        }
+    }
+}
+
+void SplitJoinPredicatesByAliases(const TVector<TExprNode::TPtr>& joinPredicates, const TString& leftSideAlias, const TString& rightSideAlias,
+                                  TVector<TExprNode::TPtr>& leftSidePredicates, TVector<TExprNode::TPtr>& rightSidePredicates) {
+    for (const auto& predicate : joinPredicates) {
+        TVector<TInfoUnit> members;
+        GetAllMembers(predicate, members);
+        bool isLeftSidePredicate = false;
+        bool isRightSidePredicate = false;
+        for (const auto& member : members) {
+            const auto alias = member.GetAlias();
+            if (alias == leftSideAlias) {
+                isLeftSidePredicate = true;
+            } else if (alias == rightSideAlias) {
+                isRightSidePredicate = true;
+            } else {
+                Y_ENSURE(false, "Invalid alias in join predicate" + member.GetAlias());
+            }
+        }
+        Y_ENSURE((isLeftSidePredicate && !isRightSidePredicate) || (isRightSidePredicate && !isLeftSidePredicate));
+        if (isLeftSidePredicate) {
+            leftSidePredicates.push_back(predicate);
+        } else {
+            rightSidePredicates.push_back(predicate);
+        }
+    }
+}
+
+TExprNode::TPtr CombineByAnd(TVector<TExprNode::TPtr> &predicates, TExprContext &ctx, TPositionHandle pos) {
+    Y_ENSURE(predicates.size());
+    if (predicates.size() == 1) {
+        return predicates.front();
+    }
+
+    // clang-format off
+    return Build<TCoAnd>(ctx, pos)
+        .Add(predicates)
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildFilter(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TVector<TExprNode::TPtr> &predicates, TExprContext &ctx, TPositionHandle pos) {
+    auto predicate = CombineByAnd(predicates, ctx, pos);
+    // clang-format off
+    return Build<TKqpOpFilter>(ctx, pos)
+        .Input(input)
+        .Lambda<TCoLambda>()
+            .Args({"arg"})
+            .Body<TExprApplier>()
+                .Apply(TExprBase(predicate))
+                .With(TExprBase(lambdaArg), "arg")
+            .Build()
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
 } // namespace
 
 namespace NKikimr {
@@ -629,8 +730,10 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         ++tableInputsCount;
                         continue;
                     }
-                    // FIXME: join on clause may include expressions, we need to handle this case
+
                     TVector<TInfoUnit> joinKeys;
+                    TVector<TExprNode::TPtr> joinPredicates;
+                    TExprNode::TPtr joinLambda;
                     Y_ENSURE(join->ChildrenSize() > 1 && join->Child(1)->ChildrenSize() > 1);
                     if (pgSyntax) {
                         auto pgResolvedOps = FindNodes(join->Child(1)->Child(1)->TailPtr(), [](const TExprNode::TPtr& node) {
@@ -646,15 +749,20 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                             joinKeys.insert(joinKeys.end(), keys.begin(), keys.end());
                         }
                     } else {
-                        // FIXME: Add verification for that we do not have expressions.
                         auto yqlWhere = join->ChildPtr(1);
                         Y_ENSURE(yqlWhere->IsCallable("YqlWhere"), yqlWhere->Content());
-                        GetAllMembers(yqlWhere, joinKeys);
+                        Y_ENSURE(yqlWhere->ChildPtr(1)->IsLambda(), "YqlWhere invalid child type.");
+                        joinLambda = TCoLambda(ctx.DeepCopyLambda(*(yqlWhere->Child(1)))).Ptr();
+                        ExtractJoinKeysAndPredicates(joinLambda, joinKeys, joinPredicates);
                     }
 
                     TJoinTableAliases joinAliases;
                     TExprNode::TPtr leftInput;
                     TExprNode::TPtr rightInput;
+                    TVector<TExprNode::TPtr> leftSidePredicates;
+                    TVector<TExprNode::TPtr> rightSidePredicates;
+                    TString leftSideAlias;
+                    TString rightSideAlias;
 
                     if (joinKeys.empty()) {
                         // Ansi cross join.
@@ -665,15 +773,18 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                     Y_ENSURE(joinKeys.size() && !ansiCrossJoinCount, "Ansi cross joins mixed with other joins");
                     if (tableInputsCount == 2) {
                         joinAliases = GatherJoinAliasesTwoInputs(joinKeys);
-                        const auto leftSideAlias = *joinAliases.LeftSideAliases.begin();
-                        const auto rightSideAlias = *joinAliases.RightSideAliases.begin();
+                        leftSideAlias = *joinAliases.LeftSideAliases.begin();
+                        rightSideAlias = *joinAliases.RightSideAliases.begin();
                         Y_ENSURE(aliasToInputMap.count(leftSideAlias), "Left side alias is not present in input tables");
                         Y_ENSURE(aliasToInputMap.count(rightSideAlias), "Right sided alias is not present input tables");
                         leftInput = aliasToInputMap[leftSideAlias];
                         rightInput = aliasToInputMap[rightSideAlias];
-                    } else if (tableInputsCount == 1) {
+
+                   } else if (tableInputsCount == 1) {
                         joinAliases = GatherJoinAliasesLeftSideMultiInputs(joinKeys, processedInputs);
-                        const auto rightSideAlias = *joinAliases.RightSideAliases.begin();
+                        // TODO: Add support to build a join filter with multi input side.
+                        leftSideAlias = *joinAliases.LeftSideAliases.begin();
+                        rightSideAlias = *joinAliases.RightSideAliases.begin();
                         Y_ENSURE(aliasToInputMap.contains(rightSideAlias), "Right side alias is not present in input tables");
                         leftInput = joinExpr;
                         rightInput = aliasToInputMap[rightSideAlias];
@@ -681,6 +792,17 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
 
                     auto joinKind = TString(joinType);
                     ToCamelCase(joinKind.MutRef());
+
+                    if (joinLambda && (joinKind == "Left" || joinKind == "Inner")) {
+                        auto lambdaArg = TCoLambda(joinLambda).Args().Arg(0).Ptr();
+                        SplitJoinPredicatesByAliases(joinPredicates, leftSideAlias, rightSideAlias, leftSidePredicates, rightSidePredicates);
+                        if (leftSidePredicates.size()) {
+                            leftInput = BuildFilter(leftInput, lambdaArg, leftSidePredicates, ctx, node->Pos());
+                        }
+                        if (rightSidePredicates.size()) {
+                            rightInput = BuildFilter(rightInput, lambdaArg, rightSidePredicates, ctx, node->Pos());
+                        }
+                    }
 
                     // clang-format off
                     joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())

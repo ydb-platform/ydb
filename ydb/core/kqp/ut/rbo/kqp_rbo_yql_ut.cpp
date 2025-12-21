@@ -598,6 +598,26 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA AnsiImplicitCrossJoin;
                 SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1, `/Root/t2` as t2, `/Root/t3` as t3 order by t1.a, t2.a, t3.a;
             )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a and t2.b > 2 order by t1.a, t2.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a and t2.b = 2 order by t1.a, t2.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a and t1.b = 2 order by t1.a, t2.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a inner join `/Root/t3` as t3 on t2.a = t3.a and t3.b = 2 order by t1.a, t2.a, t3.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a left join `/Root/t3` as t3 on t2.a = t3.a and t3.b = 2 order by t1.a, t2.a, t3.b;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -606,6 +626,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[0;0;0];[1;1;1];[2;2;2]])",
             R"([[0;0;0];[0;0;1];[0;0;2];[0;0;3];[0;0;4];[1;1;0];[1;1;1];[1;1;2];[1;1;3];[1;1;4];[2;2;0];[2;2;1];[2;2;2];[2;2;3];[2;2;4]])",
             R"([[0;0;0];[0;0;1];[0;0;2];[0;0;3];[0;0;4];[0;1;0];[0;1;1];[0;1;2];[0;1;3];[0;1;4];[0;2;0];[0;2;1];[0;2;2];[0;2;3];[0;2;4];[1;0;0];[1;0;1];[1;0;2];[1;0;3];[1;0;4];[1;1;0];[1;1;1];[1;1;2];[1;1;3];[1;1;4];[1;2;0];[1;2;1];[1;2;2];[1;2;3];[1;2;4];[2;0;0];[2;0;1];[2;0;2];[2;0;3];[2;0;4];[2;1;0];[2;1;1];[2;1;2];[2;1;3];[2;1;4];[2;2;0];[2;2;1];[2;2;2];[2;2;3];[2;2;4];[3;0;0];[3;0;1];[3;0;2];[3;0;3];[3;0;4];[3;1;0];[3;1;1];[3;1;2];[3;1;3];[3;1;4];[3;2;0];[3;2;1];[3;2;2];[3;2;3];[3;2;4]])",
+            R"([[0;#];[1;#];[2;[2]];[3;#]])",
+            R"([[0;#];[1;[1]];[2;#];[3;#]])",
+            R"([[1;1]])",
+            R"([[1;1;1]])",
+            R"([[0;[0];#];[1;[1];[1]];[2;[2];#];[3;#;#]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -614,6 +639,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+
+        // Not supported.
+        std::vector<std::string> queriesNotSupported = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a and t1.b != t2.b order by t1.a, t2.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a and t1.b > 1 or t2.b > 2 order by t1.a, t2.a;
+            )"
+        };
+
+        for (ui32 i = 0; i < queriesNotSupported.size(); ++i) {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            const auto &query = queriesNotSupported[i];
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
         }
     }
 

@@ -386,6 +386,9 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     class TSnapshotTwoUpdate : public TTableDataModificationTester {
+    public:
+        bool UpdateAfterInsert = false;
+
     protected:
         void DoExecute() override {
             auto client = Kikimr->GetQueryClient();
@@ -401,7 +404,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                 edgeActor,
                 "/Root/KV2");
 
-            {
+            if (!UpdateAfterInsert) {
                 const TString insertQuery(Q1_(R"(
                     INSERT INTO `/Root/KV2` (Key, Value) VALUES (4u, "test");
                 )"));
@@ -416,7 +419,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
             {
                 const TString updateQuery(Q1_(R"(
                     UPDATE `/Root/KV2` ON (Key, Value) VALUES (4u, "test2");
-                    UPDATE `/Root/KV` ON (Key, Value) VALUES (5u, "test2");
+                    UPDATE `/Root/KV` ON (Key, Value) VALUES (4u, "test2");
                 )"));
 
                 std::vector<std::unique_ptr<IEventHandle>> writes;
@@ -470,9 +473,9 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
 
                 {
                     // Another request changes data
-                    const TString insertQuery(Q1_(R"(
-                        INSERT INTO `/Root/KV` (Key, Value) VALUES (5u, "test");
-                    )"));
+                    const TString insertQuery(Q1_(std::format(R"(
+                        UPSERT INTO `{}` (Key, Value) VALUES (4u, "test");
+                    )", UpdateAfterInsert ? "/Root/KV2" : "/Root/KV")));
                     auto insetResult = Kikimr->RunCall([&]{
                         auto txc = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx();
                         return session2.ExecuteQuery(insertQuery, txc).ExtractValueSync();
@@ -490,24 +493,32 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
 
                 auto result = runtime.WaitFuture(future);
                 // Tx was write only, so it is executed with snapshot timestamp = commit timestamp, like serializable.
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), GetIsOlap() ? EStatus::ABORTED : EStatus::SUCCESS, result.GetIssues().ToString());// TODO: ?
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    result.GetStatus(),
+                    GetIsOlap()
+                        ? (UpdateAfterInsert ? EStatus::SUCCESS : EStatus::ABORTED)
+                        : EStatus::SUCCESS, result.GetIssues().ToString());
             }
         }
     };
 
-    Y_UNIT_TEST(TSnapshotTwoUpdateOlap) {
+    Y_UNIT_TEST_TWIN(TSnapshotTwoUpdateOlap, UpdateAfterInsert) {
         TSnapshotTwoUpdate tester;
         tester.SetIsOlap(true);
         tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
+        tester.SetFillTables(false);
+        tester.UpdateAfterInsert = UpdateAfterInsert;
         tester.Execute();
     }
 
-    Y_UNIT_TEST(TSnapshotTwoUpdateOltp) {
+    Y_UNIT_TEST_TWIN(TSnapshotTwoUpdateOltp, UpdateAfterInsert) {
         TSnapshotTwoUpdate tester;
         tester.SetIsOlap(false);
         tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
+        tester.SetFillTables(false);
+        tester.UpdateAfterInsert = UpdateAfterInsert;
         tester.Execute();
     }
 

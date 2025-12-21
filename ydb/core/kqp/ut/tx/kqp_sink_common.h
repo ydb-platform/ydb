@@ -94,7 +94,7 @@ public:
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        {
+        if (FillTables) {
             auto result = client.ExecuteQuery(R"(
                 REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES
                     (1u, "Anna", 3500ul, "None"),

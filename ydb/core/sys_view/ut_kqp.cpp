@@ -4570,7 +4570,7 @@ R"(CREATE TABLE `test_show_create` (
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT QueryText, LocksBrokenAsBreaker, LocksBrokenAsVictim
                 FROM `/Root/Tenant1/.sys/query_metrics_one_minute`
-                WHERE QueryText = 'COMMIT' OR QueryText LIKE '%victim-commit%';
+                WHERE QueryText LIKE 'COMMIT%' OR QueryText LIKE '%victim-commit%';
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -4600,7 +4600,10 @@ R"(CREATE TABLE `test_show_create` (
                 ui64 breaker = getUint64Value(row.AsList()[1]);
                 ui64 victim = getUint64Value(row.AsList()[2]);
 
-                if (queryText == "COMMIT") {
+                if (queryText.StartsWith("COMMIT")) {
+                    UNIT_ASSERT_STRING_CONTAINS(queryText, "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\") /* lock-breaker */");
+                    UNIT_ASSERT_STRING_CONTAINS(queryText, "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (2u, \"UsualValue\") /* non-breaker */");
+
                     locksBrokenAsBreaker = breaker;
                     foundBreaker = true;
                 }

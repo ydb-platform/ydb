@@ -891,7 +891,7 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
 
-        QueryState->TxCtx->OnBeginQuery();
+        QueryState->TxCtx->OnBeginQuery(QueryState->ExtractQueryText());
 
         if (QueryState->NeedPersistentSnapshot()) {
             AcquirePersistentSnapshot();
@@ -1004,7 +1004,7 @@ public:
 
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
-        QueryState->TxCtx->OnBeginQuery();
+        QueryState->TxCtx->OnBeginQuery(QueryState->ExtractQueryText());
 
         if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
                 && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
@@ -2047,6 +2047,22 @@ public:
         }
     }
 
+
+    TString BuildCommitQueryText(const TIntrusivePtr<TKqpTransactionContext>& txCtx) {
+        if (!txCtx || txCtx->QueryTexts.empty()) {
+            return "COMMIT";
+        }
+
+        TStringBuilder builder;
+        builder << "COMMIT (after: ";
+        builder << std::accumulate(txCtx->QueryTexts.begin() + 1, txCtx->QueryTexts.end(), txCtx->QueryTexts[0],
+            [](const TString& acc, const TString& query) {
+                return acc + "; " + query;
+            });
+        builder << ")";
+        return builder;
+    }
+
     void ProcessExecuterResult(TEvKqpExecuter::TEvTxResponse* ev) {
         QueryState->Orbit = std::move(ev->Orbit);
 
@@ -2083,7 +2099,8 @@ public:
                 commitStats.Executions.emplace_back(executerResults.GetStats());
             }
 
-            const TString queryText = "COMMIT";
+            // For commit operations, include the actual queries that were executed in the transaction
+            TString queryText = BuildCommitQueryText(QueryState->TxCtx);
             auto ru = CalcRequestUnit(commitStats);
             auto userSID = QueryState->UserToken->GetUserSID();
 

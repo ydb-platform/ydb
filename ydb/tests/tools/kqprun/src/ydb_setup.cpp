@@ -188,7 +188,8 @@ private:
             .ChunkSize = Settings_.PDisksPath ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
             .DiskSize = Settings_.DiskSize ? *Settings_.DiskSize : 32_GB,
             .FormatDisk = formatDisk,
-            .DiskPath = storagePath
+            .DiskPath = storagePath,
+            .EventDispatchTimeout = TDuration::Max()
         };
 
         serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.PDisksPath);
@@ -351,13 +352,12 @@ private:
         NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(domainGrpcPort);
 
         Server_ = MakeIntrusive<TKqprunServer>(serverSettings);
+        Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
         Server_->Initialize();
 
         if (serverSettings.CustomDiskParams.UseDisk) {
             SetupStorageFileHolder(serverSettings.CustomDiskParams.DiskPath);
         }
-
-        Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
 
         if (Settings_.GrpcEnabled) {
             Server_->EnableGRpc(GetGrpcSettings(domainGrpcPort, 0));

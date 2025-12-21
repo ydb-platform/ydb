@@ -1,7 +1,10 @@
 #pragma once
 
 #include <util/stream/output.h>
+#include <util/string/builder.h>
 #include <ydb/core/kqp/ut/common/kqp_serializable_rng.h>
+#include <library/cpp/json/writer/json.h>
+#include <library/cpp/json/writer/json_value.h>
 
 #include <queue>
 #include <random>
@@ -112,6 +115,10 @@ public:
         return Tables_[index];
     }
 
+    const TTable& operator[](unsigned index) const {
+        return Tables_[index];
+    }
+
     size_t GetSize() const {
         return Tables_.size();
     }
@@ -163,13 +170,13 @@ public:
     // used to reorder graph in connected subgraphs-first order.
     void Rename(const std::vector<int>& oldToNew);
 
-    // Update keys for the whole graph accroding to Pitman-Yor distribution, 
+    // Update keys for the whole graph accroding to Pitman-Yor distribution,
     // where degree is distributed into clusters and each cluster means
     // that that number of edges joins this particular node with the same key
     void SetupKeysPitmanYor(TRNG& rng, TPitmanYorConfig config);
 
     // Dump graph in undirected graphviz dot format. Neato is recommended
-    // for layouting such graphs. 
+    // for layouting such graphs.
     void DumpGraph(IOutputStream& os) const;
 
 public:
@@ -209,6 +216,93 @@ public:
 
 private:
     std::vector<TTableStats> Stats_;
+};
+
+class TRelationGraphSerializer {
+public:
+    static NJson::TJsonValue Serialize(const TRelationGraph& graph) {
+        NJson::TJsonValue root(NJson::JSON_MAP);
+
+        root.InsertValue("nodes", SerializeNodes(graph));
+        root.InsertValue("edges", SerializeEdges(graph));
+        return root;
+    }
+
+    static NJson::TJsonValue SerializeCompact(const TRelationGraph& graph) {
+        NJson::TJsonValue root(NJson::JSON_MAP);
+
+        root.InsertValue("nodes", NJson::TJsonValue(static_cast<int>(graph.GetN())));
+        root.InsertValue("edges", SerializeEdgesCompact(graph));
+
+        return root;
+    }
+
+private:
+    static NJson::TJsonValue SerializeNodes(const TRelationGraph& graph) {
+        NJson::TJsonValue nodesArray(NJson::JSON_ARRAY);
+
+        for (size_t i = 0; i < graph.GetN(); ++i) {
+            NJson::TJsonValue node(NJson::JSON_MAP);
+            node.InsertValue("id", NJson::TJsonValue(static_cast<int>(i)));
+            node.InsertValue("name", NJson::TJsonValue(getTableName(i)));
+            node.InsertValue("columns", NJson::TJsonValue(static_cast<int>(graph.GetSchema()[i].GetNumColumns())));
+
+            nodesArray.AppendValue(node);
+        }
+
+        return nodesArray;
+    }
+
+    static NJson::TJsonValue SerializeEdges(const TRelationGraph& graph) {
+        NJson::TJsonValue edgesArray(NJson::JSON_ARRAY);
+        const auto& adjacencyList = graph.GetAdjacencyList();
+
+        // Only serialize each edge once (u < v to avoid duplicates)
+        for (size_t u = 0; u < adjacencyList.size(); ++u) {
+            for (const auto& edge : adjacencyList[u]) {
+                if (u < edge.Target) {
+                    NJson::TJsonValue edgeJson(NJson::JSON_MAP);
+
+                    edgeJson.InsertValue("source", NJson::TJsonValue(static_cast<int>(u)));
+                    edgeJson.InsertValue("target", NJson::TJsonValue(static_cast<int>(edge.Target)));
+                    edgeJson.InsertValue("source_column", NJson::TJsonValue(static_cast<int>(edge.ColumnLHS)));
+                    edgeJson.InsertValue("target_column", NJson::TJsonValue(static_cast<int>(edge.ColumnRHS)));
+
+                    TString condition = TStringBuilder()
+                        << getRelationName(u, edge.ColumnLHS)
+                        << " = "
+                        << getRelationName(edge.Target, edge.ColumnRHS);
+
+                    edgeJson.InsertValue("condition", NJson::TJsonValue(condition));
+
+                    edgesArray.AppendValue(edgeJson);
+                }
+            }
+        }
+
+        return edgesArray;
+    }
+
+    static NJson::TJsonValue SerializeEdgesCompact(const TRelationGraph& graph) {
+        NJson::TJsonValue edgesArray(NJson::JSON_ARRAY);
+        const auto& adjacencyList = graph.GetAdjacencyList();
+
+        for (size_t u = 0; u < adjacencyList.size(); ++u) {
+            for (const auto& edge : adjacencyList[u]) {
+                if (u < edge.Target) {
+                    NJson::TJsonValue edgeArray(NJson::JSON_ARRAY);
+                    edgeArray.AppendValue(NJson::TJsonValue(static_cast<int>(u)));
+                    edgeArray.AppendValue(NJson::TJsonValue(static_cast<int>(edge.Target)));
+                    edgeArray.AppendValue(NJson::TJsonValue(static_cast<int>(edge.ColumnLHS)));
+                    edgeArray.AppendValue(NJson::TJsonValue(static_cast<int>(edge.ColumnRHS)));
+
+                    edgesArray.AppendValue(edgeArray);
+                }
+            }
+        }
+
+        return edgesArray;
+    }
 };
 
 // Basic topologies, this all have fixed node layouts (not random)

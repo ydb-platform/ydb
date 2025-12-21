@@ -158,7 +158,6 @@ namespace NKikimr::NKqp {
 
         std::discrete_distribution<> distribution(weights.begin(), weights.end());
         join->JoinType = kinds[distribution(rng)];
-        join->JoinType = NYql::EJoinKind::InnerJoin;
 
         RandomizeJoinTypes(rng, join->LeftArg, probabilities);
         RandomizeJoinTypes(rng, join->RightArg, probabilities);

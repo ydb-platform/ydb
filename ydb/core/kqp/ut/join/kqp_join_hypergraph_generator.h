@@ -1,6 +1,8 @@
 #include "kqp_join_topology_generator.h"
 #include <ydb/core/kqp/ut/common/kqp_serializable_rng.h>
 #include <ydb/library/yql/dq/opt/dq_opt_make_join_hypergraph.h>
+#include <library/cpp/json/writer/json.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <sstream>
 #include <string>
 #include <random>
@@ -169,6 +171,7 @@ namespace NKikimr::NKqp {
         static NJson::TJsonValue Serialize(NYql::NDq::TJoinHypergraph<TNodeSet>& graph) {
             NJson::TJsonValue edgesArray(NJson::JSON_ARRAY);
             const auto& edges = graph.GetEdges();
+            TVector<TString> nodeNamesById = graph.getNodeNamesById();
 
             for (const auto& edge : edges) {
                 if (edge.IsReversed) {
@@ -176,8 +179,8 @@ namespace NKikimr::NKqp {
                 }
 
                 NJson::TJsonValue edgeJson(NJson::JSON_MAP);
-                edgeJson.InsertValue("sources", SerializeNodeSet(edge.Left));
-                edgeJson.InsertValue("targets", SerializeNodeSet(edge.Right));
+                edgeJson.InsertValue("sources", SerializeNodeSet(edge.Left, nodeNamesById));
+                edgeJson.InsertValue("targets", SerializeNodeSet(edge.Right, nodeNamesById));
                 edgeJson.InsertValue("join_kind", NJson::TJsonValue(JoinKindToString(edge.JoinKind)));
 
                 NJson::TJsonValue conditions(NJson::JSON_ARRAY);
@@ -205,12 +208,12 @@ namespace NKikimr::NKqp {
         }
 
     private:
-        static NJson::TJsonValue SerializeNodeSet(const TNodeSet& nodeSet) {
+        static NJson::TJsonValue SerializeNodeSet(const TNodeSet& nodeSet, TVector<TString> nodeNamesById) {
             NJson::TJsonValue array(NJson::JSON_ARRAY);
 
             for (size_t i = 0; i < nodeSet.size(); ++ i) {
                 if (nodeSet[i]) {
-                    array.AppendValue(NJson::TJsonValue(getTableName(i)));
+                    array.AppendValue(NJson::TJsonValue(nodeNamesById[i]));
                 }
             }
 
@@ -254,5 +257,131 @@ namespace NKikimr::NKqp {
         }
     };
 
+    class TOptimizerNodeSerializer {
+    public:
+        static NJson::TJsonValue Serialize(const std::shared_ptr<NYql::IBaseOptimizerNode>& node) {
+            if (!node) {
+                return NJson::TJsonValue(NJson::JSON_NULL);
+            }
+
+            if (node->Kind == NYql::EOptimizerNodeKind::RelNodeType) {
+                return SerializeRelation(std::static_pointer_cast<NYql::TRelOptimizerNode>(node));
+            } else if (node->Kind == NYql::EOptimizerNodeKind::JoinNodeType) {
+                return SerializeJoin(std::static_pointer_cast<NYql::TJoinOptimizerNode>(node));
+            }
+
+            return NJson::TJsonValue(NJson::JSON_NULL);
+        }
+
+    private:
+        static NJson::TJsonValue SerializeRelation(const std::shared_ptr<NYql::TRelOptimizerNode>& rel) {
+            NJson::TJsonValue node(NJson::JSON_MAP);
+
+            node.InsertValue("type", NJson::TJsonValue("relation"));
+            node.InsertValue("label", NJson::TJsonValue(rel->Label));
+
+            // Labels (can be multiple if aliased)
+            NJson::TJsonValue labels(NJson::JSON_ARRAY);
+            for (const auto& label : rel->Labels()) {
+                labels.AppendValue(NJson::TJsonValue(label));
+            }
+            node.InsertValue("labels", labels);
+
+            // Statistics (optional)
+            NJson::TJsonValue stats(NJson::JSON_MAP);
+            stats.InsertValue("nrows", NJson::TJsonValue(rel->Stats.Nrows));
+            stats.InsertValue("ncols", NJson::TJsonValue(static_cast<int>(rel->Stats.Ncols)));
+            stats.InsertValue("cost", NJson::TJsonValue(rel->Stats.Cost));
+            node.InsertValue("stats", stats);
+
+            return node;
+        }
+
+        static NJson::TJsonValue SerializeJoin(const std::shared_ptr<NYql::TJoinOptimizerNode>& join) {
+            NJson::TJsonValue node(NJson::JSON_MAP);
+
+            node.InsertValue("type", NJson::TJsonValue("join"));
+            node.InsertValue("join_kind", NJson::TJsonValue(JoinKindToString(join->JoinType)));
+            node.InsertValue("join_algo", NJson::TJsonValue(JoinAlgoToString(join->JoinAlgo)));
+
+            // Join conditions
+            NJson::TJsonValue conditions(NJson::JSON_ARRAY);
+            for (size_t i = 0; i < join->LeftJoinKeys.size(); ++i) {
+                NJson::TJsonValue condition(NJson::JSON_MAP);
+                condition.InsertValue("lhs", SerializeColumn(join->LeftJoinKeys[i]));
+                condition.InsertValue("rhs", SerializeColumn(join->RightJoinKeys[i]));
+                conditions.AppendValue(condition);
+            }
+            node.InsertValue("conditions", conditions);
+
+            // Metadata
+            NJson::TJsonValue metadata(NJson::JSON_MAP);
+            metadata.InsertValue("left_any", NJson::TJsonValue(join->LeftAny));
+            metadata.InsertValue("right_any", NJson::TJsonValue(join->RightAny));
+            node.InsertValue("metadata", metadata);
+
+            // Statistics
+            NJson::TJsonValue stats(NJson::JSON_MAP);
+            stats.InsertValue("nrows", NJson::TJsonValue(join->Stats.Nrows));
+            stats.InsertValue("ncols", NJson::TJsonValue(static_cast<int>(join->Stats.Ncols)));
+            stats.InsertValue("cost", NJson::TJsonValue(join->Stats.Cost));
+            node.InsertValue("stats", stats);
+
+            // Recursively serialize children
+            node.InsertValue("left", Serialize(join->LeftArg));
+            node.InsertValue("right", Serialize(join->RightArg));
+
+            return node;
+        }
+
+        static TString SerializeColumn(const NYql::NDq::TJoinColumn& column) {
+            return TStringBuilder()
+                << column.RelName
+                << "."
+                << column.AttributeName;
+        }
+
+        static TString JoinKindToString(NYql::EJoinKind kind) {
+            switch (kind) {
+                case NYql::EJoinKind::InnerJoin:
+                    return "inner";
+                case NYql::EJoinKind::LeftJoin:
+                    return "left";
+                case NYql::EJoinKind::RightJoin:
+                    return "right";
+                case NYql::EJoinKind::OuterJoin:
+                    return "full";
+                case NYql::EJoinKind::Cross:
+                    return "cross";
+                case NYql::EJoinKind::LeftSemi:
+                    return "left_semi";
+                case NYql::EJoinKind::RightSemi:
+                    return "right_semi";
+                case NYql::EJoinKind::LeftOnly:
+                    return "left_only";
+                case NYql::EJoinKind::RightOnly:
+                    return "right_only";
+                case NYql::EJoinKind::Exclusion:
+                    return "exclusion";
+                default:
+                    return "unknown";
+            }
+        }
+
+        static TString JoinAlgoToString(NYql::EJoinAlgoType algo) {
+            switch (algo) {
+                case NYql::EJoinAlgoType::GraceJoin:
+                    return "grace";
+                case NYql::EJoinAlgoType::MapJoin:
+                    return "map";
+                case NYql::EJoinAlgoType::StreamLookupJoin:
+                    return "stream_lookup";
+                case NYql::EJoinAlgoType::LookupJoin:
+                    return "lookup";
+                default:
+                    return "unknown";
+            }
+        }
+    };
 
 }

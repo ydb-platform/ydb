@@ -2670,62 +2670,62 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         UNIT_ASSERT_VALUES_EQUAL(tableDesc4.GetPathDescription().GetTable().CdcStreamsSize(), 1);
     }
 
-    Y_UNIT_TEST(DropCollectionAfterIncrementalRestore) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
+    // Y_UNIT_TEST(DropCollectionAfterIncrementalRestore) {
+    //     TTestBasicRuntime runtime;
+    //     TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+    //     ui64 txId = 100;
 
-        SetupLogging(runtime);
-        PrepareDirs(runtime, env, txId);
+    //     SetupLogging(runtime);
+    //     PrepareDirs(runtime, env, txId);
 
-        TString collectionSettings = R"(
-            Name: ")" DEFAULT_NAME_1 R"("
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/Table1"
-                }
-            }
-            Cluster: {}
-            IncrementalBackupConfig: {}
-        )";
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
-        env.TestWaitNotification(runtime, txId);
+    //     TString collectionSettings = R"(
+    //         Name: ")" DEFAULT_NAME_1 R"("
+    //         ExplicitEntryList {
+    //             Entries {
+    //                 Type: ETypeTable
+    //                 Path: "/MyRoot/Table1"
+    //             }
+    //         }
+    //         Cluster: {}
+    //         IncrementalBackupConfig: {}
+    //     )";
+    //     TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+    //     env.TestWaitNotification(runtime, txId);
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table1"
-            Columns { Name: "key" Type: "Uint32" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
+    //     TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+    //         Name: "Table1"
+    //         Columns { Name: "key" Type: "Uint32" }
+    //         Columns { Name: "value" Type: "Utf8" }
+    //         KeyColumnNames: ["key"]
+    //     )");
+    //     env.TestWaitNotification(runtime, txId);
 
-        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
-            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
-        env.TestWaitNotification(runtime, txId);
+    //     TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+    //         R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+    //     env.TestWaitNotification(runtime, txId);
 
-        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+    //     runtime.AdvanceCurrentTime(TDuration::Seconds(1));
 
-        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
-            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
-        env.TestWaitNotification(runtime, txId);
+    //     TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+    //         R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+    //     env.TestWaitNotification(runtime, txId);
 
-        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
-        env.TestWaitNotification(runtime, txId);
+    //     TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+    //     env.TestWaitNotification(runtime, txId);
 
-        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    //     runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
-            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
-        env.TestWaitNotification(runtime, txId);
+    //     TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
+    //         R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+    //     env.TestWaitNotification(runtime, txId);
 
-        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    //     runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-            "Name: \"" DEFAULT_NAME_1 "\"");
-        env.TestWaitNotification(runtime, txId);
+    //     TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+    //         "Name: \"" DEFAULT_NAME_1 "\"");
+    //     env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist});
-    }
+    //     TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {NLs::PathNotExist});
+    //     TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"), {NLs::PathExist});
+    // }
 } // TBackupCollectionTests

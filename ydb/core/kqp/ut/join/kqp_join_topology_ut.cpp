@@ -810,8 +810,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
                 Cout << "\n";
             } catch (const std::exception& exc) {
-                // Prevent dataset collection stop in case of an error:
-                Cerr << "Bench #" << idx << " skipped because of uncaught exception: " << exc.what() << "\n";
+                Cout << "\nBench #" << idx << " skipped because of uncaught exception: " << exc.what() << "\n";
             }
         }
     }

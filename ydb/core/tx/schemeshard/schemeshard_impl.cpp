@@ -1786,6 +1786,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxChangePathState:
     case TTxState::TxAlterSecret:
     case TTxState::TxAlterStreamingQuery:
+    case TTxState::TxTruncateTable:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1845,8 +1846,6 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
         return TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
     case TTxState::TxIncrementalRestoreFinalize:
         return TPathElement::EPathState::EPathStateAlter; // Finalization is an alter operation to normalize path states
-    case TTxState::TxTruncateTable:
-        return TPathElement::EPathState::EPathStateNoChanges;
     }
     return oldState;
 }

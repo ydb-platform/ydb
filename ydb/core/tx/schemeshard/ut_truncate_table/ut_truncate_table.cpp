@@ -9,8 +9,8 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 
-Y_UNIT_TEST_SUITE(TruncateTable) {
-    Y_UNIT_TEST_WITH_REBOOTS(TruncateTableWithReboot) {
+Y_UNIT_TEST_SUITE(TruncateTableReboots) {
+    Y_UNIT_TEST_WITH_REBOOTS(Simple) {
         T t(true /*killOnCommit*/);
 
         // speed up the test: only check scheme shard reboots
@@ -36,9 +36,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         t.NoRebootEventTypes.insert(TEvTxProxySchemeCache::EvNavigateKeySetResult);
         t.NoRebootEventTypes.insert(TEvTxProxySchemeCache::EvResolveKeySetResult);
         
-        int cntRun = 0;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            Cerr << "RUN " << cntRun << " BEGINS" << Endl;
             {
                 TInactiveZone inactive(activeZone);
                 
@@ -71,10 +69,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             }
 
             const ui64 truncateTxId = ++t.TxId;
-
             t.TestEnv->ReliablePropose(runtime, TruncateTableRequest(truncateTxId, "/MyRoot", "TestTable", TTestTxConfig::SchemeShard, {}),
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
-            Cerr << "TestTruncateTable(runtime, truncateId..) finished" << Endl;
             t.TestEnv->TestWaitNotification(runtime, truncateTxId);
 
             {
@@ -84,8 +80,102 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
                     UNIT_ASSERT_VALUES_EQUAL(rows, 0);
                 }
             }
+        });
+    }
 
-            Cerr << "RUN " << cntRun++ << " ENDS" << Endl;
+    Y_UNIT_TEST_WITH_REBOOTS(WithSplit) {
+        T t(true /*killOnCommit*/);
+
+        // speed up the test: only check scheme shard reboots
+        t.TabletIds.clear();
+        t.TabletIds.push_back(t.SchemeShardTabletId);
+
+        t.NoRebootEventTypes.insert(TSchemeBoardEvents::EvUpdateAck);
+        t.NoRebootEventTypes.insert(TEvSchemeShard::EvNotifyTxCompletionRegistered);
+        t.NoRebootEventTypes.insert(TEvTabletPipe::EvServerDisconnected);
+        t.NoRebootEventTypes.insert(TEvTabletPipe::EvServerConnected);
+        t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientConnected);
+        t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientDestroyed);
+
+        t.NoRebootEventTypes.insert(TEvSchemeShard::EvModifySchemeTransaction);
+
+        t.NoRebootEventTypes.insert(TEvDataShard::EvPeriodicTableStats);
+        t.NoRebootEventTypes.insert(TEvDataShard::EvGetTableStatsResult);
+        t.NoRebootEventTypes.insert(TEvDataShard::EvGetTableStats);
+        t.NoRebootEventTypes.insert(TEvDataShard::EvProposeTransaction);
+        t.NoRebootEventTypes.insert(TEvDataShard::EvProposeTransactionResult);
+        t.NoRebootEventTypes.insert(TEvDataShard::EvSchemaChanged);
+        t.NoRebootEventTypes.insert(TEvPrivate::EvPersistTableStats);
+        t.NoRebootEventTypes.insert(TEvTxProxySchemeCache::EvNavigateKeySetResult);
+        t.NoRebootEventTypes.insert(TEvTxProxySchemeCache::EvResolveKeySetResult);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "PartitionedTable"
+                    Columns { Name: "id" Type: "Uint64" }
+                    Columns { Name: "text" Type: "String" }
+                    Columns { Name: "data" Type: "String" }
+                    KeyColumnNames: [ "id" ]
+                    SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } }}}
+                    SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } }}}
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TVector<TCell> cells = {
+                    TCell::Make((ui64)1), TCell(TStringBuf("row one")), TCell(TStringBuf("data one")),
+                    TCell::Make((ui64)10), TCell(TStringBuf("row ten")), TCell(TStringBuf("data ten")),
+                    TCell::Make((ui64)25), TCell(TStringBuf("row twenty five")), TCell(TStringBuf("data twenty five")),
+
+                    TCell::Make((ui64)100), TCell(TStringBuf("row hundred")), TCell(TStringBuf("data hundred")),
+                    TCell::Make((ui64)125), TCell(TStringBuf("row hundred twenty five")), TCell(TStringBuf("data hundred twenty five")),
+                    TCell::Make((ui64)150), TCell(TStringBuf("row hundred fifty")), TCell(TStringBuf("data hundred fifty")),
+
+                    TCell::Make((ui64)200), TCell(TStringBuf("row two hundred")), TCell(TStringBuf("data two hundred")),
+                    TCell::Make((ui64)250), TCell(TStringBuf("row two fifty")), TCell(TStringBuf("data two fifty")),
+                    TCell::Make((ui64)300), TCell(TStringBuf("row three hundred")), TCell(TStringBuf("data three hundred")),
+                };
+                WriteOp(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/PartitionedTable",
+                    0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                    {1, 2, 3}, TSerializedCellMatrix(cells, 9, 3), true);
+
+                {
+                    auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/PartitionedTable");
+                    UNIT_ASSERT_VALUES_EQUAL(rows, 9);
+                }
+            }
+
+            const ui64 truncateTxId = ++t.TxId;
+            t.TestEnv->ReliablePropose(runtime, TruncateTableRequest(truncateTxId, "/MyRoot", "PartitionedTable", TTestTxConfig::SchemeShard, {}),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+
+            const ui64 splitTxId = ++t.TxId;
+            AsyncSplitTable(runtime, splitTxId, "/MyRoot/PartitionedTable", R"(
+                            SourceTabletId: 72075186233409546
+                            SplitBoundary {
+                                KeyPrefix {
+                                    Tuple {
+                                        Optional {
+                                            Uint64: 50
+                                        }
+                                    }
+                                }
+                            }
+                            )");
+
+            t.TestEnv->TestWaitNotification(runtime, {truncateTxId, splitTxId});
+
+            {
+                TInactiveZone inactive(activeZone);
+                {
+                    auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/PartitionedTable");
+                    UNIT_ASSERT_VALUES_EQUAL(rows, 0);
+                }
+            }
         });
     }
 }

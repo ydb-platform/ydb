@@ -348,7 +348,7 @@ public:
         Y_ABORT_UNLESS(table->GetPartitions().size());
 
         {
-            tablePath.Base()->PathState = TPathElement::EPathState::EPathStateNoChanges;
+            tablePath.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
             tablePath.Base()->LastTxId = OperationId.GetTxId();
 
             NIceDb::TNiceDb db(context.GetDB());
@@ -385,6 +385,12 @@ public:
             SetState(NextState());
             Y_ABORT_UNLESS(txState.Shards.size());
         }
+
+        // for (auto splitTx: table->GetSplitOpsInFlight()) {
+        //     context.OnComplete.Dependence(splitTx.GetTxId(), opId.GetTxId());
+        // }
+
+        // IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, path, context.SS, context.OnComplete);
 
         return result;
     }

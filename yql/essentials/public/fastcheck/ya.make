@@ -19,6 +19,7 @@ PEERDIR(
     yql/essentials/core/services/mounts
     yql/essentials/core/user_data
     yql/essentials/core/issue/protos
+    yql/essentials/core/type_ann
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql
     yql/essentials/sql/pg

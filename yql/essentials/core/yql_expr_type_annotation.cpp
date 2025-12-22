@@ -5971,6 +5971,10 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
     switch (type.GetKind()) {
     case ETypeAnnotationKind::Unit:
         return ctx.NewCallable(position, "UnitType", {});
+    case ETypeAnnotationKind::Universal:
+        return ctx.NewCallable(position, "UniversalType", {});
+    case ETypeAnnotationKind::UniversalStruct:
+        return ctx.NewCallable(position, "UniversalStructType", {});
     case ETypeAnnotationKind::EmptyList:
         return ctx.NewCallable(position, "EmptyListType", {});
     case ETypeAnnotationKind::EmptyDict:

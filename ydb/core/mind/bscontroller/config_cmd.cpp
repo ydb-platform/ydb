@@ -53,6 +53,13 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            void Rollback() {
+                Y_ENSURE(Success);
+                Success = false;
+                RollbackSuccess = true;
+                Error = "transaction rollback";
+            }
+
             void Finish() {
                 Response->SetSuccess(Success);
                 Response->SetRollbackSuccess(RollbackSuccess);
@@ -174,7 +181,7 @@ namespace NKikimr::NBsController {
                     }
 
                     default:
-                        return;
+                        throw TExError() << "unsupported sole command " << static_cast<int>(cmd.GetCommandCase());
                 }
             }
 
@@ -186,9 +193,7 @@ namespace NKikimr::NBsController {
                 if (Cmd.CommandSize() == 1 && IsSoleCommand(Cmd.GetCommand(0))) {
                     WrapCommand([&] {
                         if (Cmd.GetRollback()) {
-                            Success = false;
-                            RollbackSuccess = true;
-                            Error = "transaction rollback";
+                            Rollback();
                         } else {
                             ExecuteSoleCommand(Cmd.GetCommand(0), txc);
                         }
@@ -280,9 +285,7 @@ namespace NKikimr::NBsController {
                 }
 
                 if (Success && Cmd.GetRollback()) {
-                    Success = false;
-                    RollbackSuccess = true;
-                    Error = "transaction rollback";
+                    Rollback();
                 }
 
                 if (Success && SelfHeal && !Self->SelfHealEnable) {
@@ -390,23 +393,14 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(MovePDisk)
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
                     HANDLE_COMMAND(ReconfigureVirtualGroup)
-
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::COMMAND_NOT_SET:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeclareIntent:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kReadIntent:
-                        throw TExError() << "unsupported command " << static_cast<int>(cmd.GetCommandCase());
-
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings:
-                        throw TExError() << "command must be sole";
+                    default: break;
                 }
 
-                throw TExError() << "unsupported command " << static_cast<int>(cmd.GetCommandCase());
+                if (IsSoleCommand(cmd)) {
+                    throw TExError() << "command must be sole";
+                } else {
+                    throw TExError() << "unsupported command " << static_cast<int>(cmd.GetCommandCase());
+                }
             }
 
             void Complete(const TActorContext&) override {

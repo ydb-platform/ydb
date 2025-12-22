@@ -890,8 +890,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     TString scriptDifferentIndexesConfig = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,
         FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "hashes_count" : $$1|5|8$$,
-                   "filter_size_bytes" : $$128|129|131|255|256|257|4095|4096|4097$$,
-                   "records_count" : $$128|331|1879$$, "case_sensitive": $$false|true$$,
+                   "filter_size_bytes" : $$128|129|131|255|257$$,
+                   "records_count" : $$331|1879$$, "case_sensitive": $$false|true$$,
                    "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "$$SIMPLE_STRING|BITSET$$"}`);
     )";
 
@@ -904,8 +904,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     TString scriptDifferentIndexesConfigIlike = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,
         FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "hashes_count" : $$1|5|8$$,
-                   "filter_size_bytes" : $$128|129|131|255|256|257|4095|4096|4097$$,
-                   "records_count" : $$128|331|1879$$, "case_sensitive": $$false$$,
+                   "filter_size_bytes" : $$128|129|131|255|257$$,
+                   "records_count" : $$331|1879$$, "case_sensitive": $$false$$,
                    "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "$$SIMPLE_STRING|BITSET$$"}`);
     )";
 

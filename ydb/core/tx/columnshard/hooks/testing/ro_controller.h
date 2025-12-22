@@ -98,7 +98,7 @@ public:
             }
             Sleep(std::min(TDuration::Seconds(1), d));
         }
-        return count >= (maxCount ? maxCount : 1);
+        return count >= std::max(1u, maxCount);
     }
 
     bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {

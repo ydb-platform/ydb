@@ -109,6 +109,7 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
    )
    
    docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
+   ```
 
 В этом примере:
 

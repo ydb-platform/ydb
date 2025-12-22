@@ -6,10 +6,10 @@ The {{ ydb-short-name }} Docker container supports custom initialization scripts
 
 There are two directories for placing custom scripts:
 
-| Directory | Description |
-|---|---|
-| `/preinit.d` | Scripts in this directory are executed on every container start, **before** the {{ ydb-short-name }} server starts. |
-| `/init.d` | Scripts in this directory are executed only **once** after a successful {{ ydb-short-name }} server start. A marker file is created to prevent re-execution on subsequent container restarts. |
+| Directory | Description | Usage |
+|---|---|---|
+| `/preinit.d` | Scripts in this directory are executed on every container start, **before** the {{ ydb-short-name }} server starts. | Executed on every container start before the server starts. Useful for setting environment variables, configuring logging, or other preparatory tasks that might need to be done each time the container starts. |
+| `/init.d` | Scripts in this directory are executed only **once** after a successful {{ ydb-short-name }} server start. A marker file is created to prevent re-execution on subsequent container restarts. | Executed only once after a successful server start. For example, creating database structure (tables, indexes) and inserting initial data. |
 
 ### Understanding preinit vs init
 
@@ -78,6 +78,8 @@ docker run -d \
     {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
 ```
 
+When the container starts, the `test` table will be automatically created using the {{ ydb-short-name }} CLI. The script runs only once after a successful server start.
+
 ### Using SQL files
 
 Create a SQL file with your table definitions:
@@ -108,6 +110,8 @@ docker run -d \
     {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
 ```
 
+When the container starts, two tables — `users` and `orders` — will be automatically created using the SQL script. The script runs only once after a successful server start.
+
 ### Using pre-init scripts
 
 Create a pre-init script to set environment variables:
@@ -126,6 +130,8 @@ docker run -d \
     -v $(pwd)/preinit.d:/preinit.d \
     {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
 ```
+
+When the container starts, the `YDB_DEFAULT_LOG_LEVEL` environment variable will be exported with the value `INFO`. The script runs on every container start.
 
 ### Restoring from a backup using init scripts
 
@@ -148,3 +154,5 @@ docker run -d \
     -v $(pwd)/backup:/backup \
     {{ ydb_local_docker_image }}:{{ ydb_local_docker_image_tag }}
 ```
+
+When the container starts, restoration from the `/backup` backup will occur in the `/local` database. The script runs only once after a successful server start.

@@ -42,13 +42,13 @@ docker run "${docker_args[@]}"
 
 For more information about environment variables available when running a Docker container with {{ ydb-short-name }}, see [{#T}](configuration.md).
 
-With the parameters specified in the example above and running Docker locally, [Embedded UI](../embedded-ui/index.md) will be available at [http://localhost:8765](http://localhost:8765).
+With the parameters specified in the example above and running Docker locally, [Embedded UI](../embedded-ui/index.md) {{ ydb-short-name }} will be available at [http://localhost:8765](http://localhost:8765).
 
 For more information about stopping and deleting a Docker container with {{ ydb-short-name }}, see [{#T}](cleanup.md).
 
 ### Overriding the configuration file
 
-To override the configuration file when starting the container, you can use the `--config-path` parameter, specifying the path to your configuration file, which has been pre-mounted in the container:
+By default, when starting a Docker container for {{ ydb-short-name }}, a built-in [configuration file](../configuration/index.md) is used, which provides standard operating parameters. To override the configuration file when starting the container, you can use the `--config-path` parameter, specifying the path to your configuration file, which has been pre-mounted in the container:
 
 ```bash
 docker run "${docker_args[@]}" --config-path /path/to/your/config/file
@@ -76,12 +76,14 @@ For users who are not experienced with Docker, it's important to understand how 
    ```bash
    mkdir ydb_config
    docker cp ydb-local:/ydb_data/cluster/kikimr_configs/config.yaml ydb_config/my-ydb-config.yaml
+   ```
 
 3. Stop the container if it's still running, and remove the created data directory:
 
    ```bash
    docker stop ydb-local
    rm -rf ydb_data
+   ```
 
 4. Edit the copied configuration file `ydb_config/my-ydb-config.yaml` as needed.
 
@@ -105,7 +107,7 @@ For users who are not experienced with Docker, it's important to understand how 
        -e MON_PORT=8765
        {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
    )
-
+   
    docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
    ```
 

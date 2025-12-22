@@ -22,18 +22,20 @@
 
 Для записи необходимо указывать одну колонку, поддерживаются типы: String, Json, Yson. При этом колонка должна быть неопциональной. Например:
 
-```sql
-INSERT INTO ydb_source.output_topic_name
+```yql
+INSERT INTO
+    ydb_source.output_topic
 SELECT
-    CAST(Data as String)
+    CAST(Data AS String)
 FROM
     ...
 ```
 
 Чтобы записать значение нескольких колонок в формате Json (одним полем) можно воспользоваться выражением:
 
-```sql
-INSERT INTO ydb_source.output_topic_name
+```yql
+INSERT INTO
+    ydb_source.output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
@@ -58,22 +60,21 @@ Year,Manufacturer,Model,Price
 
 Пример запроса:
 
-```sql
+```yql
 SELECT
     *
-FROM ydb_source.input_topic_name
-WITH
-(
-    FORMAT = "csv_with_names",
-    SCHEMA =
-    (
+FROM
+    ydb_source.input_topic
+WITH (
+    FORMAT = csv_with_names,
+    SCHEMA = (
         Year Int32 NOT NULL, 
         Manufacturer String NOT NULL,
         Model String NOT NULL,
         Price Double NOT NULL
     )
 )
-LIMIT 1;
+LIMIT 1
 ```
 
 ### Формат tsv_with_names {#tsv_with_names}
@@ -90,22 +91,21 @@ Year    Manufacturer    Model   Price
 
 Пример запроса:
 
-```sql
+```yql
 SELECT
     *
-FROM ydb_source.input_topic_name
-WITH
-(
-    FORMAT = "tsv_with_names",
-    SCHEMA =
-    (
+FROM
+    ydb_source.input_topic
+WITH (
+    FORMAT = tsv_with_names,
+    SCHEMA = (
         Year Int32 NOT NULL,
         Manufacturer String NOT NULL,
         Model String NOT NULL,
         Price Double NOT NULL
     )
 )
-LIMIT 1;
+LIMIT 1
 ```
 
 ### Формат json_list {#json_list}
@@ -128,6 +128,25 @@ LIMIT 1;
 { "Year": 1999, "Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900.00 }
 ```
 
+Пример запроса:
+
+```yql
+SELECT
+    *
+FROM
+    ydb_source.input_topic
+WITH (
+    FORMAT = json_list,
+    SCHEMA = (
+        Year Int32 NOT NULL,
+        Manufacturer String NOT NULL,
+        Model String NOT NULL,
+        Price Double NOT NULL
+    )
+)
+LIMIT 1
+```
+
 ### Формат json_each_row {#json_each_row}
 
 Данный формат основан на [JSON-представлении](https://ru.wikipedia.org/wiki/JSON) данных. В этом формате внутри каждого сообщения в топике должен находиться объект в корректном JSON-представлении. Такой формат используется при передаче данных через потоковые системы, например, Apache Kafka или [Топики {{ydb-full-name}}](../datamodel/topic.md).
@@ -141,21 +160,21 @@ LIMIT 1;
 
 Пример запроса:
 
-```sql
+```yql
 SELECT
     *
-FROM ydb_source.input_topic_name
+FROM
+    ydb_source.input_topic
 WITH (
-    FORMAT = 'json_each_row',
-    SCHEMA =
-    (
-        Year Int32,
-        Manufacturer Utf8,
-        Model Utf8,
-        Price Double
+    FORMAT = json_each_row,
+    SCHEMA = (
+        Year Int32 NOT NULL,
+        Manufacturer Utf8 NOT NULL,
+        Model Utf8 NOT NULL,
+        Price Double NOT NULL
     )
 )
-LIMIT 1;
+LIMIT 1
 ```
 
 ### Формат json_as_string {#json_as_string}
@@ -180,19 +199,18 @@ LIMIT 1;
 
 Пример запроса:
 
-```sql
+```yql
 SELECT
     *
-FROM ydb_source.input_topic_name
-WITH
-(
-    FORMAT = 'json_as_string',
-    SCHEMA = 
-    (
+FROM
+    ydb_source.input_topic
+WITH (
+    FORMAT = json_as_string,
+    SCHEMA = (
         Data Json
     )
 )
-LIMIT 1;
+LIMIT 1
 ```
 
 ### Формат parquet {#parquet}
@@ -201,22 +219,21 @@ LIMIT 1;
 
 Пример запроса:
 
-```sql
+```yql
 SELECT
     *
-FROM ydb_source.input_topic_name
-WITH
-(
-    FORMAT = 'parquet',
-    SCHEMA =
-    (
-        Year Int32,
-        Manufacturer Utf8,
-        Model Utf8,
-        Price Double
+FROM
+    ydb_source.input_topic
+WITH (
+    FORMAT = parquet,
+    SCHEMA = (
+        Year Int32 NOT NULL,
+        Manufacturer Utf8 NOT NULL,
+        Model Utf8 NOT NULL,
+        Price Double NOT NULL
     )
 )
-LIMIT 1;
+LIMIT 1
 ```
 
 ### Формат raw {#raw}
@@ -225,19 +242,18 @@ LIMIT 1;
 
 Пример запроса:
 
-```sql
+```yql
 SELECT
     *
-FROM ydb_source.input_topic_name
-WITH
-(
-    FORMAT = 'raw',
-    SCHEMA =
-    (
-        data String)
+FROM
+    ydb_source.input_topic
+WITH (
+    FORMAT = raw,
+    SCHEMA = (
+        Data String
     )
 )
-LIMIT 1;
+LIMIT 1
 ```
 
 ### Поддерживаемые типы данных {#schema}
@@ -271,31 +287,19 @@ LIMIT 1;
 
 Пример запроса:
 
-```sql
-$input = 
+```yql
 SELECT
-    CAST(data AS Json) AS json
-FROM ydb_source.input_topic_name
-WITH
-(
-    FORMAT = 'raw',
-    SCHEMA =
-    (
-        data String
-    )
-);
-
-$parsed =
-SELECT
-    JSON_VALUE(json, '$.key') AS key,
-    JSON_VALUE(json, '$.value') AS value
+    JSON_VALUE(Data, "$.key") AS Key,
+    JSON_VALUE(Data, "$.value") AS Value
 FROM
-    $input;
-
-SELECT 
-    *
-FROM $parsed
-LIMIT 1;
+    ydb_source.input_topic
+WITH (
+    FORMAT = raw,
+    SCHEMA = (
+        Data Json
+    )
+)
+LIMIT 1
 ```
 
 ### Парсинг JSON библиотекой Yson {#json_yson}
@@ -308,31 +312,31 @@ LIMIT 1;
 
 Пример запроса:
 
-```sql
-$input = 
-SELECT 
-    *
-FROM ydb_source.input_topic_name
+```yql
+$input = SELECT 
+    Yson::ConvertTo(
+        Data, Struct<
+            update: Struct<volume: Uint64>,
+            key: List<Uint64>,
+            ts: List<Uint64>
+        >
+    )
+FROM
+    ydb_source.input_topic
 WITH (
     FORMAT = json_as_string,
-    SCHEMA = (Data Json));
+    SCHEMA = (
+        Data Json
+    )
+);
 
-$col = SELECT * FROM (select Yson::ConvertTo(Data,
-    Struct<
-        update: Struct<volume: Uint64>,
-        key: List<UInt64>,
-        ts: List<UInt64>
-    >) FROM $input) FLATTEN COLUMNS;
-
-$volumes =
 SELECT
-    *
-FROM (SELECT ts[0] as ts, update FROM $col) FLATTEN COLUMNS;
-
-SELECT 
-    *
-FROM $volumes
-LIMIT 1;
+    ts[0] AS Ts,
+    update.volume AS Volume
+FROM
+    $input
+FLATTEN COLUMNS
+LIMIT 1
 ```
 
 ### Парсинг DSV (TSKV) {#dsv}
@@ -347,23 +351,19 @@ name=Mikhail	uid=70609792906901286
 
 Пример запроса:
 
-```sql
-$input =
-SELECT value FROM (
-    SELECT
-        String::SplitToList(Data, "\n", TRUE AS SkipEmpty) AS value
-    FROM ydb_source.input_topic_name
-)
-FLATTEN LIST BY value;
-
-$parsed =
-SELECT Dsv::Parse(value, "\t") as parsed
-FROM $input;
+```yql
+$input = SELECT
+    Dsv::Parse(Data, "\t") AS Data
+FROM
+    ydb_source.input_topic
+FLATTEN LIST BY (
+    String::SplitToList(Data, "\n", TRUE AS SkipEmpty) AS Data
+);
 
 SELECT
-    DictLookup(parsed, "name") as name,
-    DictLookup(parsed, "uid") as uid
+    DictLookup(Data, "name") AS Name,
+    DictLookup(Data, "uid") AS Uid
 FROM
-    $parsed
-LIMIT 2;
+    $input
+LIMIT 2
 ```

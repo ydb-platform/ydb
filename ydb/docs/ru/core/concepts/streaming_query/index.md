@@ -69,8 +69,14 @@
 Подробную информацию о запросе можно получить через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries).
 Например, выполнив такой запрос:
 
-```sql
-SELECT Path, Status, Text, Run FROM `.sys/streaming_queries`;
+```yql
+SELECT
+    Path,
+    Status,
+    Text,
+    Run
+FROM
+    `.sys/streaming_queries`
 ```
 
 ### Поддерживаемые типы данных в топиках
@@ -83,13 +89,13 @@ SELECT Path, Status, Text, Run FROM `.sys/streaming_queries`;
 
 Пример:
 
-```sql
-CREATE EXTERNAL DATA SOURCE `streaming_test/ydb_source` WITH (
-    SOURCE_TYPE = 'Ydb',
-    LOCATION = 'localhost:2135',
-    DATABASE_NAME = '/Root',
-    AUTH_METHOD = 'NONE'
-);
+```yql
+CREATE EXTERNAL DATA SOURCE ydb_source WITH (
+    SOURCE_TYPE = "Ydb",
+    LOCATION = "localhost:2135",
+    DATABASE_NAME = "/Root",
+    AUTH_METHOD = "NONE"
+)
 ```
 
 Управлять потоковыми запросами можно с помощью следующих конструкций SQL:
@@ -104,12 +110,12 @@ CREATE EXTERNAL DATA SOURCE `streaming_test/ydb_source` WITH (
 
 Пример:
 
-```sql
+```yql
 SELECT 
     Data
 FROM
-    `streaming_test/ydb_source`.topic_name
-LIMIT 1;
+    ydb_source.topic_name
+LIMIT 1
 ```
 
 ### Потоковая агрегация
@@ -129,68 +135,75 @@ LIMIT 1;
 
 {% cut "Пример запроса" %}
 
-```sql
-CREATE SECRET `streaming_test/secrets/ydb_token` WITH (value = "<ydb_token>");
+Подготовка источников данных:
 
-CREATE EXTERNAL DATA SOURCE `streaming_test/ydb_source` WITH (
+```yql
+CREATE SECRET `secrets/ydb_token` WITH (value = "<ydb_token>");
+
+CREATE EXTERNAL DATA SOURCE ydb_source WITH (
     SOURCE_TYPE = "Ydb",
     LOCATION = "<location>",
     DATABASE_NAME = "<db_name>",
     AUTH_METHOD = "TOKEN",
-    TOKEN_SECRET_NAME = "streaming_test/secrets/ydb_token"
+    TOKEN_SECRET_NAME = "secrets/ydb_token"
 );
 
-CREATE EXTERNAL DATA SOURCE `streaming_test/s3_source` WITH (
+CREATE EXTERNAL DATA SOURCE s3_source WITH (
     SOURCE_TYPE = "ObjectStorage",
     LOCATION = "https://storage.yandexcloud.net/my_public_bucket/",
     AUTH_METHOD = "NONE"
+)
+```
+
+Создание потокового запроса:
+
+```yql
+CREATE STREAMING QUERY query_with_join AS
+DO BEGIN
+
+$topic_data = SELECT
+    *
+FROM
+    ydb_source.input_topic
+WITH (
+    FORMAT = json_each_row,
+    SCHEMA = (
+        Time String NOT NULL,
+        ServiceId Uint32 NOT NULL,
+        Message String NOT NULL
+    )
 );
 
-CREATE STREAMING QUERY `streaming_test/query_name` AS
-DO BEGIN
-$parsed =
-    SELECT
-        *
-    FROM `streaming_test/s3_source`.`streaming_test/input_topic`
-    WITH (
-        FORMAT = 'json_each_row',
-        SCHEMA = (time String NOT NULL, service_id UInt32 NOT NULL, message String NOT NULL)
-    );
+$s3_data = SELECT
+    *
+FROM
+    s3_source.`file.csv`
+WITH (
+    FORMAT = csv_with_names,
+    SCHEMA = (
+        ServiceId Uint32,
+        Name Utf8
+    )
+);
 
-$lookup =
-    SELECT
-        service_id,
-        name
-    FROM
-      `streaming_test/s3_source`.`file.csv`
-    WITH (
-        FORMAT = "csv_with_names",
-        SCHEMA =
-        (
-            service_id UInt32,
-            name Utf8,
-        )    
-    );
+$joined_data = SELECT
+    s.Name AS Name,
+    t.*
+FROM
+    $topic_data AS t
+LEFT JOIN
+    $s3_data AS s
+ON
+    t.ServiceId = s.ServiceId;
 
-$parsed = (
-    SELECT
-        lookup.name AS name,
-        p.*
-    FROM
-        $parsed AS p
-    LEFT JOIN
-        $lookup AS lookup
-    ON
-        lookup.service_id = p.service_id
-    );
-
-INSERT INTO `streaming_test/ydb_source`.`streaming_test/output_topic`
+INSERT INTO
+    ydb_source.output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
-    $parsed
-;
-END DO;
+    $joined_data
+
+END DO
 ```
 
 {% endcut %}
@@ -203,30 +216,28 @@ END DO;
 
 {% cut "Пример запроса" %}
 
-```sql
-CREATE STREAMING QUERY my_query AS
+```yql
+CREATE STREAMING QUERY query_with_table_write AS
 DO BEGIN
-$input = SELECT
-    *
-    FROM ydb_source.my_topic WITH
-    (
-        FORMAT = "json_each_row",
-        SCHEMA =
-        (
-            ts String NOT NULL,
-            count UInt64 NOT NULL,
-            country Utf8 NOT NULL
-        )
-    );
 
-$table_data = SELECT
-       Unwrap(CAST(ts as Timestamp)) as time,
-       country as country,
-       count
-    FROM $input;
+UPSERT INTO
+    output_table
+SELECT
+    Unwrap(CAST(Ts AS Timestamp)) AS Ts,
+    Country,
+    Count
+FROM
+    ydb_source.input_topic
+WITH (
+    FORMAT = json_each_row,
+    SCHEMA = (
+        Ts String NOT NULL,
+        Count Uint64 NOT NULL,
+        Country Utf8 NOT NULL
+    )
+)
 
-UPSERT INTO my_table
-SELECT * FROM $table_data;
+END DO
 ```
 
 {% endcut %}

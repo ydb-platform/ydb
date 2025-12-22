@@ -4,7 +4,7 @@
 
 Вызов `CREATE STREAMING QUERY` создает [потоковый запрос](../../../concepts/streaming_query/index.md).
 
-```sql
+```yql
 CREATE [OR REPLACE] STREAMING QUERY [IF NOT EXISTS] <query name> [WITH (
     <key1> = <value1>,
     <key2> = <value2>,
@@ -14,7 +14,7 @@ DO BEGIN
     <query statement1>;
     <query statement2>;
     ...
-END DO;
+END DO
 ```
 
 Настройки WITH:
@@ -30,24 +30,42 @@ END DO;
 
 ### Примеры
 
-```sql
-CREATE STREAMING QUERY `streaming_test/query_name` AS
+Запись одной строковой колонки:
+
+```yql
+CREATE STREAMING QUERY streaming_query AS
 DO BEGIN
-INSERT INTO ydb_source.output_topic_name
-SELECT Data FROM ydb_source.input_topic_name;
-END DO;
+
+INSERT INTO
+    ydb_source.output_topic
+SELECT
+    *
+FROM
+    ydb_source.input_topic
+
+END DO
 ```
 
-```sql
-CREATE STREAMING QUERY `streaming_test/query_name` AS
+Парсинг данных в формате JSON:
+
+```yql
+CREATE STREAMING QUERY streaming_query AS
 DO BEGIN
-INSERT INTO ydb_source.output_topic_name
+
+INSERT INTO
+    ydb_source.output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-FROM ydb_source.input_topic_name
+FROM
+    ydb_source.input_topic
 WITH (
-    FORMAT = 'json_each_row',
-    SCHEMA = (time String NOT NULL, service_id UInt32 NOT NULL, message String NOT NULL)
-);
-END DO;
+    FORMAT = json_each_row,
+    SCHEMA = (
+        Time String NOT NULL,
+        ServiceId Uint32 NOT NULL,
+        Message String NOT NULL
+    )
+)
+
+END DO
 ```

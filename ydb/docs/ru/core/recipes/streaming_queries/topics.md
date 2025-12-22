@@ -42,8 +42,8 @@
 Сначала нужно создать входной и выходной [топики](../../concepts/datamodel/topic.md) в {{ ydb-short-name }}. Из входного потоковый запрос будет читать данные; в выходной топик будет записывать данные. Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-topic.md):
 
 ```yql
-CREATE TOPIC `streaming_test/input_topic`;
-CREATE TOPIC `streaming_test/output_topic`;
+CREATE TOPIC input_topic;
+CREATE TOPIC output_topic
 ```
 
 ## Шаг 2. Создание внешнего источника данных {#step2}
@@ -51,12 +51,12 @@ CREATE TOPIC `streaming_test/output_topic`;
 После создания топиков нужно создать внешний источник данных. Это можно сделать с помощью SQL-запроса:
 
 ```yql
-CREATE EXTERNAL DATA SOURCE `streaming_test/ydb_source` WITH (
-    SOURCE_TYPE = 'Ydb',
-    LOCATION = 'localhost:2136',
-    DATABASE_NAME = '/local',
-    AUTH_METHOD = 'NONE'
-);
+CREATE EXTERNAL DATA SOURCE ydb_source WITH (
+    SOURCE_TYPE = "Ydb",
+    LOCATION = "localhost:2136",
+    DATABASE_NAME = "/Root",
+    AUTH_METHOD = "NONE"
+)
 ```
 
 ## Шаг 3. Создание потокового запроса {#step3}
@@ -64,51 +64,37 @@ CREATE EXTERNAL DATA SOURCE `streaming_test/ydb_source` WITH (
 Далее необходимо запустить потоковый запрос. Это можно сделать с помощью SQL-запроса:
 
 ```yql
-CREATE STREAMING QUERY `streaming_test/query_name` AS
+CREATE STREAMING QUERY query_example AS
 DO BEGIN
-$input = (
-    SELECT
-        *
-    FROM
-        `streaming_test/ydb_source`.`streaming_test/input_topic` WITH (
-            FORMAT = 'json_each_row',
-            SCHEMA = (time String NOT NULL, level String NOT NULL, host String NOT NULL)
-        )
-);
 
-$filtered = (
-    SELECT
-        *
-    FROM
-        $input
-    WHERE
-        level == 'error'
-);
-
-$number_errors = (
-    SELECT
-        host,
-        COUNT(*) AS error_count,
-        CAST(HOP_START() AS String) AS ts
-    FROM
-        $filtered
-    GROUP BY HOP(CAST(time AS Timestamp), 'PT600S', 'PT600S', 'PT0S'), host
-);
-
-$json = (
-    SELECT
-        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-    FROM
-        $number_errors
-);
-
-INSERT INTO `streaming_test/ydb_source`.`streaming_test/output_topic`
-SELECT
-    *
+$number_errors = SELECT
+    Host,
+    COUNT(*) AS ErrorCount,
+    CAST(HOP_START() AS String) AS Ts
 FROM
-    $json
-;
-END DO;
+    ydb_source.input_topic
+WITH (
+    FORMAT = json_each_row,
+    SCHEMA = (
+        Time String NOT NULL,
+        Level String NOT NULL,
+        Host String NOT NULL
+    )
+)
+WHERE
+    Level = "error"
+GROUP BY
+    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),
+    Host;
+
+INSERT INTO
+    ydb_source.output_topic
+SELECT
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+FROM
+    $number_errors
+
+END DO
 ```
 
 ## Шаг 4. Просмотр состояния запроса {#step4}
@@ -117,8 +103,13 @@ END DO;
 Это можно сделать с помощью SQL-запроса:
 
 ```yql
-SELECT Path, Status, Issues, Run FROM `.sys/streaming_queries`
-;
+SELECT
+    Path,
+    Status,
+    Issues,
+    Run
+FROM
+    `.sys/streaming_queries`
 ```
 
 Убедитесь что в поле `Status` значение RUNNING. В противном случае проверьте поле `Issues`.
@@ -128,11 +119,11 @@ SELECT Path, Status, Issues, Run FROM `.sys/streaming_queries`
 Записать в топик сообщения можно, например, с помощью [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md).
 
 ```bash
-echo '{"time": "2025-01-01T00:00:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_test/input_topic'
-echo '{"time": "2025-01-01T00:04:00.000000Z", "level": "error", "host": "host-2"}' | ./ydb --profile quickstart topic write 'streaming_test/input_topic'
-echo '{"time": "2025-01-01T00:08:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_test/input_topic'
-echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-2"}' | ./ydb --profile quickstart topic write 'streaming_test/input_topic'
-echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_test/input_topic'
+echo '{"Time": "2025-01-01T00:00:00.000000Z", "Level": "error", "Host": "host-1"}' | ./ydb --profile quickstart topic write input_topic
+echo '{"Time": "2025-01-01T00:04:00.000000Z", "Level": "error", "Host": "host-2"}' | ./ydb --profile quickstart topic write input_topic
+echo '{"Time": "2025-01-01T00:08:00.000000Z", "Level": "error", "Host": "host-1"}' | ./ydb --profile quickstart topic write input_topic
+echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-2"}' | ./ydb --profile quickstart topic write input_topic
+echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-1"}' | ./ydb --profile quickstart topic write input_topic
 ```
 
 ## Шаг 6. Проверка содержимого выходного топика {#step6}
@@ -142,14 +133,14 @@ echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"
 Также прочитать данные из выходного топика можно через cli (читаем партицию с номером 0 c нулевого смещения):
 
 ```bash
-./ydb --profile quickstart topic read 'streaming_test/output_topic' --partition-ids=0 --start-offset 0 --limit 10 --format=newline-delimited
+./ydb --profile quickstart topic read output_topic --partition-ids=0 --start-offset 0 --limit 10 --format=newline-delimited
 ```
 
 Ожидаемый результат:
 
-```yql
-{"error_count":1,"host":"host-2","ts":"2025-01-01T00:00:00Z"}
-{"error_count":2,"host":"host-1","ts":"2025-01-01T00:00:00Z"}
+```json
+{"ErrorCount":1,"Host":"host-2","Ts":"2025-01-01T00:00:00Z"}
+{"ErrorCount":2,"Host":"host-1","Ts":"2025-01-01T00:00:00Z"}
 ```
 
 ## Шаг 7. Удаление запроса {#step7}
@@ -157,5 +148,5 @@ echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"
 Остановить и удалить запрос можно помощью SQL запроса:
 
 ```yql
-DROP STREAMING QUERY `streaming_test/query_name`;
+DROP STREAMING QUERY query_example
 ```

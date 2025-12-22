@@ -4,12 +4,12 @@
 
 Вызов `DROP STREAMING QUERY` удаляет [потоковый запрос](../../../concepts/streaming_query/index.md).
 
-```sql
-DROP STREAMING QUERY [IF EXISTS] <query name>;
+```yql
+DROP STREAMING QUERY [IF EXISTS] <query name>
 ```
 
 Пример:
 
-```sql
-DROP STREAMING QUERY `my_queries/query_name`;
+```yql
+DROP STREAMING QUERY streaming_query
 ```

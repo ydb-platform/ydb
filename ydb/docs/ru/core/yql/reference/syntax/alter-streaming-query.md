@@ -37,11 +37,11 @@ ALTER STREAMING QUERY [IF EXISTS] <query_name> SET (<key> = <value>)
 Доступные параметры:
 
 * `RUN = (TRUE|FALSE)` — запустить или остановить запрос.
-* `RESOURCE_POOL = <resource_pool_name>` — имя [пула ресурсов](../../../concepts/glossary.md#resource-pool.md), в котором будет выполняться запрос.
+* `RESOURCE_POOL = <resource_pool_name>` — имя [пула ресурсов](../../../concepts/glossary.md#resource-pool), в котором будет выполняться запрос.
 
 При выполнении `SET (RUN = TRUE)` — команды запуска потокового запроса, смещения чтения из топика и состояния агрегационных функций будут восстановлены из [чекпоинта](../../../concepts/streaming_query/checkpoints.md). В случае отсутствия чекпоинта запрос будет читать входной поток начиная с самых свежих данных.
 
-Примеры изменения параметров запроса [см. ниже](#изменение-параметров).
+Примеры изменения параметров запроса [см. ниже](#parameters-changing-examples).
 
 ### Изменение текста запроса
 
@@ -54,7 +54,7 @@ DO BEGIN
 END DO
 ```
 
-Где `<query_statement>` — новый текст потокового запроса.
+Где `<query_statement>` — новый текст потокового запроса, ограничения для текста запроса приведены в [{#T}](../../../concepts/streaming_query/index.md#limitations), примеры текста [см. ниже](#text-changing-examples).
 
 {% note info %}
 
@@ -70,13 +70,13 @@ Changing the query text will result in the loss of the checkpoint. Please use FO
 
 {% note warning %}
 
-Поддержка изменения текста запроса с возможностью полного переноса [чекпоинта](../../../concepts/streaming_query/checkpoints.md) находится в разработке, по этому настройка `FORCE = TRUE` является обязательной при изменении текста.
+Поддержка изменения текста запроса с возможностью полного переноса [чекпоинта](../../../concepts/streaming_query/checkpoints.md) находится в разработке, поэтому настройка `FORCE = TRUE` является обязательной при изменении текста.
 
 {% endnote %}
 
 Если не указана явно настройка `RUN` в блоке `SET`, то запрос останется в том же состоянии, в котором он был до изменения текста и будет перезапущен с новым текстом, если был запущен до этого.
 
-Примеры изменения текста запроса [см. ниже](#изменение-текста).
+Примеры изменения текста запроса [см. ниже](#text-changing-examples).
 
 ## Разрешения
 
@@ -88,7 +88,7 @@ GRANT ALTER SCHEMA ON my_streaming_query TO `user@domain`
 
 ## Примеры
 
-### Изменение параметров
+### Изменение параметров {#parameters-changing-examples}
 
 Следующая команда остановит запрос с именем `my_streaming_query`:
 
@@ -98,7 +98,7 @@ ALTER STREAMING QUERY my_streaming_query SET (
 )
 ```
 
-Следующая команда запустит запрос с именем `my_streaming_query` в [пуле ресурсов](../../../concepts/glossary.md#resource-pool.md) `my_resource_pool`:
+Следующая команда запустит запрос с именем `my_streaming_query` в [пуле ресурсов](../../../concepts/glossary.md#resource-pool) `my_resource_pool`:
 
 ```yql
 ALTER STREAMING QUERY my_streaming_query SET (
@@ -107,9 +107,9 @@ ALTER STREAMING QUERY my_streaming_query SET (
 )
 ```
 
-### Изменение текста
+### Изменение текста {#text-changing-examples}
 
-Следующая команда измени текст запроса с именем `my_streaming_query`, после запуска из [чекпоинта](../../../concepts/streaming_query/checkpoints.md) запроса будут восстановлены только смещения чтения из топика:
+Следующая команда изменит текст запроса с именем `my_streaming_query`, после запуска из [чекпоинта](../../../concepts/streaming_query/checkpoints.md) запроса будут восстановлены только смещения чтения из топика:
 
 ```yql
 ALTER STREAMING QUERY my_streaming_query SET (
@@ -126,3 +126,11 @@ FROM
 
 END DO
 ```
+
+Примеры обработки данных в других форматах приведены в статье [{#T}](../../../concepts/streaming_query/formats.md). Подробнее о возможностях и ограничениях потоковых запросов [см. в документации](../../../concepts/streaming_query/index.md).
+
+## См. также
+
+* [{#T}](../../../concepts/streaming_query/index.md)
+* [{#T}](create-streaming-query.md)
+* [{#T}](drop-streaming-query.md)

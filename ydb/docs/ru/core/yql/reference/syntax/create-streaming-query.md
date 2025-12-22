@@ -1,37 +1,53 @@
 # CREATE STREAMING QUERY
 
-Вызов `CREATE STREAMING QUERY` создает [потоковый запрос](../../../concepts/streaming_query/index.md).
+`CREATE STREAMING QUERY` создает [потоковый запрос](../../../concepts/streaming_query/index.md).
+
+## Синтаксис
 
 ```yql
-CREATE [OR REPLACE] STREAMING QUERY [IF NOT EXISTS] <query name> [WITH (
+CREATE [OR REPLACE] STREAMING QUERY [IF NOT EXISTS] <query_name> [WITH (
     <key1> = <value1>,
     <key2> = <value2>,
     ...
 )] AS
 DO BEGIN
-    <query statement1>;
-    <query statement2>;
+    <query_statement1>;
+    <query_statement2>;
     ...
 END DO
 ```
 
-Настройки WITH:
+### Параметры
 
-- `RUN = (TRUE|FALSE)` - запустить запрос после создания, по умолчанию TRUE
+* `OR REPLACE` — если потоковый запрос с таким именем уже существует, то он будет заменён на новый запрос с сохранением смещений чтения из топика.
+* `IF NOT EXISTS` — не выводить ошибку, если потоковый запрос с таким именем уже существует, в этом случае существующий запрос останется неизменным.
+* `query_name` — имя потокового запроса, который нужно создать.
+* `WITH (<key> = <value>)` — список настроек нового потокового запроса, опционально.
+* `AS DO BEGIN ... END DO` — текст нового потокового запроса, ограничения для текста запроса приведены в [{#T}](../../../concepts/streaming_query/index.md#limitations), примеры текста [см. ниже](#examples).
 
-## Указание формата и схемы
+Настройки `OR REPLACE` и `IF NOT EXISTS` нельзя использовать одновременно.
 
-Для указания формата и схемы данных используется секция [WITH](select/with.md):
+Доступные параметры блока `WITH`:
 
-- `FORMAT = "<format>",` - см. [форматы](../../../concepts/streaming_query/formats.md),
-- `SCHEMA = (...)` —  описание схемы хранимых данных.
+* `RUN = (TRUE|FALSE)` - запустить запрос после создания, по умолчанию `TRUE`
+* `RESOURCE_POOL = <resource_pool_name>` — имя [пула ресурсов](../../../concepts/glossary.md#resource-pool), в котором будет выполняться запрос.
 
-### Примеры
+Примеры создания потокового запроса [см. ниже](#examples).
 
-Запись одной строковой колонки:
+## Разрешения
+
+Требуется [разрешение](./grant.md#permissions-list) `CREATE TABLE` на директорию, где будет создаваться потоковый запрос, пример выдачи такого разрешения для директории `my_queries/`:
 
 ```yql
-CREATE STREAMING QUERY streaming_query AS
+GRANT CREATE TABLE ON my_queries TO `user@domain`
+```
+
+## Примеры {#examples}
+
+Следующая команда создаст и запустит запрос с именем `my_streaming_query`:
+
+```yql
+CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
 INSERT INTO
@@ -44,26 +60,29 @@ FROM
 END DO
 ```
 
-Парсинг данных в формате JSON:
+Следующая команда создаст запрос с именем `my_streaming_query` в [пуле ресурсов](../../../concepts/glossary.md#resource-pool) `my_resource_pool`, при этом запрос не будет запущен:
 
 ```yql
-CREATE STREAMING QUERY streaming_query AS
+CREATE STREAMING QUERY my_streaming_query WITH (
+    RUN = FALSE,
+    RESOURCE_POOL = my_resource_pool
+) AS
 DO BEGIN
 
 INSERT INTO
     ydb_source.output_topic
 SELECT
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+    *
 FROM
     ydb_source.input_topic
-WITH (
-    FORMAT = json_each_row,
-    SCHEMA = (
-        Time String NOT NULL,
-        ServiceId Uint32 NOT NULL,
-        Message String NOT NULL
-    )
-)
 
 END DO
 ```
+
+Примеры обработки данных в других форматах приведены в статье [{#T}](../../../concepts/streaming_query/formats.md). Подробнее о возможностях и ограничениях потоковых запросов [см. в документации](../../../concepts/streaming_query/index.md).
+
+## См. также
+
+* [{#T}](../../../concepts/streaming_query/index.md)
+* [{#T}](alter-streaming-query.md)
+* [{#T}](drop-streaming-query.md)

@@ -61,32 +61,45 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            bool ExecuteSoleCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd, TTransactionContext& txc) {
+            bool IsSoleCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd) {
+                switch (cmd.GetCommandCase()) {
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings:
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+
+            void ExecuteSoleCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd, TTransactionContext& txc) {
                 NIceDb::TNiceDb db(txc.DB);
                 switch (cmd.GetCommandCase()) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
                         Self->SelfHealEnable = cmd.GetEnableSelfHeal().GetEnable();
                         db.Table<Schema::State>().Key(true).Update<Schema::State::SelfHealEnable>(Self->SelfHealEnable);
-                        return true;
+                        return;
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
                         Self->DonorMode = cmd.GetEnableDonorMode().GetEnable();
                         db.Table<Schema::State>().Key(true).Update<Schema::State::DonorModeEnable>(Self->DonorMode);
-                        return true;
+                        return;
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity: {
                         const ui32 seconds = cmd.GetSetScrubPeriodicity().GetScrubPeriodicity();
                         Self->ScrubPeriodicity = TDuration::Seconds(seconds);
                         db.Table<Schema::State>().Key(true).Update<Schema::State::ScrubPeriodicity>(seconds);
                         Self->ScrubState.OnScrubPeriodicityChange();
-                        return true;
+                        return;
                     }
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille: {
                         const ui32 value = cmd.GetSetPDiskSpaceMarginPromille().GetPDiskSpaceMarginPromille();
                         Self->PDiskSpaceMarginPromille = value;
                         db.Table<Schema::State>().Key(true).Update<Schema::State::PDiskSpaceMarginPromille>(value);
-                        return true;
+                        return;
                     }
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings: {
@@ -157,11 +170,11 @@ namespace NKikimr::NBsController {
                             Self->TryToRelocateBrokenDisksLocallyFirst = value;
                             db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
                         }
-                        return true;
+                        return;
                     }
 
                     default:
-                        return false;
+                        return;
                 }
             }
 
@@ -170,22 +183,19 @@ namespace NKikimr::NBsController {
                 THPTimer timer;
 
                 // check if there is some special sole command
-                if (Cmd.CommandSize() == 1) {
-                    bool res = true;
+                if (Cmd.CommandSize() == 1 && IsSoleCommand(Cmd.GetCommand(0))) {
                     WrapCommand([&] {
                         if (Cmd.GetRollback()) {
+                            Success = false;
                             RollbackSuccess = true;
-                            throw TExError() << "transaction rollback";
+                            Error = "transaction rollback";
+                        } else {
+                            ExecuteSoleCommand(Cmd.GetCommand(0), txc);
                         }
-                        res = ExecuteSoleCommand(Cmd.GetCommand(0), txc);
                     });
-                    if (res) {
-                        Finish();
-                        LogCommand(txc, TDuration::Seconds(timer.Passed()));
-                        return true;
-                    }
-                    Y_ABORT_UNLESS(Success);
-                    Response->MutableStatus()->RemoveLast();
+                    Finish();
+                    LogCommand(txc, TDuration::Seconds(timer.Passed()));
+                    return true;
                 }
 
                 const auto& hostRecords = EnforceHostRecords ? *EnforceHostRecords : Self->HostRecords;

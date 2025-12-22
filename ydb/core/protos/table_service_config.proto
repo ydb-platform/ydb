@@ -462,4 +462,12 @@ message TTableServiceConfig {
 
     optional bool EnableDiscardSelect = 115 [default = false, (InvalidateCompileCache) = true];
 
+    message TWarmupConfig {
+        optional bool Enabled = 1 [default = false];
+        optional uint32 DeadlineSeconds = 2 [default = 30];
+        optional bool CompileCacheWarmupEnabled = 3 [default = true];
+        optional uint32 MaxNodesToQuery = 4 [default = 5];
+        optional uint32 MaxConcurrentCompilations = 5 [default = 5];
+    }
+    optional TWarmupConfig WarmupConfig = 116 [default = false, (InvalidateCompileCache) = false];
 };

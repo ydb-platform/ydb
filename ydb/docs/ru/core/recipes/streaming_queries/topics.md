@@ -15,7 +15,7 @@
 ## Предварительные условия {#requirements}
 
 * запущенная база {{ ydb-short-name }}, пример запуска [quick start](../../quickstart.md),
-* включены флаги `enable_external_data_sources` и  `enable_streaming_queries`:
+* включены флаги `enable_external_data_sources` и `enable_streaming_queries`:
 
   * если вы запускаете {{ ydb-short-name }} через docker, то передайте флаги в `docker run`:
 
@@ -113,7 +113,7 @@ END DO;
 
 ## Шаг 4. Просмотр состояния запроса {#step4}
 
-Состояние запроса можно проверить через YDB UI во вкладке диагностики по клику на стриминговый запрос или альтернативно через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries).
+Состояние запроса можно проверить через YDB UI во вкладке диагностики по клику на потоковый запрос или альтернативно через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries).
 Это можно сделать с помощью SQL-запроса:
 
 ```yql

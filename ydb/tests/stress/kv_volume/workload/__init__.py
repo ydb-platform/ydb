@@ -1,9 +1,11 @@
 import logging
 from datetime import datetime, timedelta
 import random
+from collections import defaultdict, deque
+import asyncio
 
 from ydb.public.api.protos import ydb_status_codes_pb2 as ydb_status_codes
-# from library.python import resource
+# from ibrary.python import resource
 
 
 from ydb.tests.stress.common.common import WorkloadBase
@@ -32,34 +34,77 @@ def parse_endpoint(endpoint):
     return host, parse_int_with_default(s_port, DEFAULT_YDB_KV_PORT)
 
 
+class Worker:
+    def __init__(self, worker_id):
+        self.worker_id = worker_id
+        self.triggers_by_name = defaultdict(list) # action.name -> [action.name]
+        self.always_triggered = set()
+        
+        self.aqueue = None # asyncio.Queue
+        
+    def add_action(self, action):
+        if not action.name:
+            raise ValueError(f"inapriopriate action name: {action.name}")
+        parent_action = action.name or ""
+        if parent_action == "":
+            self.always_triggered.add(action.name)
+        self.triggers_by_name[parent_action].append(action.name)
+        
+    async def arun(self):
+        self.aqueue = asyncio.Queue(maxsize=10)
+        ...
+
+    def run(self):
+        asyncio.run(self.arun())
+
+class WorkerBuilder:
+    def __init__(self, config):
+        self.config = config
+        
+    def build(self, worker_id):
+        worker = Worker(worker_id)
+        return worker
+        
+
+
 class YdbKeyValueVolumeWorkload(WorkloadBase):
     INIT_DATA_PAIRS = 64
     INIT_INLINE_DATA_PAIRS = 8
     INIT_DATA_VALUE_SIZE = 2 * 1024 * 1024
     INIT_DATA_PATTERN = '0123456789ABCDEF'
 
-    def __init__(self, endpoint, database, duration, path, partitions, storage_channels, kv_load_type, inflight, version):
+    def __init__(self, endpoint, database, duration, kv_load_type, worker_count, version, config):
         super().__init__(None, '', 'kv_volume', None)
         fqdn, port = parse_endpoint(endpoint)
         self.fqdn = fqdn
         self.port = port
         self.database = database
         self.duration = duration
-        self.path = path
-        self.partitions = partitions
-        self.storage_channels = storage_channels
         self.kv_load_type = kv_load_type
-        self.inflight = inflight
+        self.worker_count = worker_count
         self.begin_time = None
         self.end_time = None
         self.version = version
         self.init_data_keys = set()
+        self.config = config
+
+    @property
+    def partition_count(self):
+        return self.config.volume_config.partition_count
+
+    @property
+    def storage_channels(self):
+        return self.config.volume_config.storage_channels
+
+    @property
+    def path(self):
+        return self.config.volume_config.path
 
     def _volume_path(self):
         return f'{self.database}/{self.path}'
 
     def _create_volume(self, client):
-        return client.create_tablets(self.partitions, self._volume_path(), self.storage_channels)
+        return client.create_tablets(self.partition_count, self._volume_path(), self.storage_channels)
 
     def _drop_volume(self, client):
         return client.drop_tablets(self._volume_path())
@@ -78,7 +123,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         # Pre-populate keys set used by workers
         for pair_id in range(pairs):
             self.init_data_keys.add(self._get_init_pair_key(pair_id))
-        for partition_id in range(self.partitions):
+        for partition_id in range(self.partition_count):
             for pair_id in range(pairs):
                 self._write(client, partition_id, self._get_init_pair_key(pair_id), data, channel=channel)
 
@@ -127,7 +172,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
             default_pairs = t.INIT_DATA_PAIRS if self.kv_load_type == 'read' else t.INIT_INLINE_DATA_PAIRS
             keys = [self._get_init_pair_key(i) for i in range(default_pairs)]
         while datetime.now() < self.end_time:
-            partition_id = random.randrange(0, self.partitions)
+            partition_id = random.randrange(0, self.partition_count)
             key = random.choice(keys)
             size = random.randint(1, t.INIT_DATA_VALUE_SIZE)
             if size != t.INIT_DATA_VALUE_SIZE:
@@ -145,4 +190,4 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         return lambda: self.run_worker(worker_id)
 
     def get_workload_thread_funcs(self):
-        return [self._get_worker_action(i) for i in range(self.inflight)]
+        return [self._get_worker_action(i) for i in range(self.worker_count)]

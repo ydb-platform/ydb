@@ -1,0 +1,71 @@
+message PartitionMode {
+    enum Code {
+        UNSPECIFIED,
+        OnePartition,
+        MultiPartition
+    }
+}
+
+message ActionDataMode {
+    message All {}
+    message Worker {}
+    message FromPrevActions {
+        repeated string action_name = 1;
+    }
+    
+    oneof Mode {
+        All all = 1;
+        Worker worker = 2;
+        FromPrevActions from_prev_actions = 3;
+    }
+}
+
+message ActionCommand {
+    message Print {
+        string msg = 1;
+    }
+    
+    message Read {
+        uint32 size = 1;
+        uint32 count = 2;
+    }
+    
+    message Write {
+        uint32 size = 1;
+        uint32 count = 2;
+        uint32 channel = 3;
+    }
+    
+    oneof Command {
+        Print print = 1;
+        Read read = 2;
+        Write write = 3;
+    }
+}
+
+message Action {
+    string name = 1;
+    string parent_action = 2;
+    
+    optional uint32 period_us = 3;
+    optional uint32 worker_max_in_flight = 4;
+    optional uint32 global_max_in_flight = 5;
+    
+    ActionDataMode action_data_mode = 6;
+    
+    repeated ActionCommand action_command = 7;
+}
+
+message KeyValueVolumeConfig {
+    string path = 1;
+    uint32 partition_count = 2;
+    
+    repeated string channel_media = 3;
+}
+
+message KeyValueVolumeStressLoad {
+    KeyValueVolumeConfig volume_config = 1;
+
+    PartitionMode.Code partition_mode = 2;
+    repeated Action actions = 3;
+}

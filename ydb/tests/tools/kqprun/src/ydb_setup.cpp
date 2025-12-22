@@ -296,10 +296,11 @@ private:
         Y_ENSURE(freeSlots >= tenantsToDistribute);
 
         const auto extractSlots = [&freeSlots, &tenantsToDistribute]() {
+            Y_ENSURE(tenantsToDistribute > 0);
             auto slots = freeSlots / tenantsToDistribute;
             freeSlots -= slots;
             tenantsToDistribute--;
-            Y_ENSURE(tenantsToDistribute >= 0 && freeSlots >= tenantsToDistribute);
+            Y_ENSURE(freeSlots >= tenantsToDistribute);
             return slots;
         };
 
@@ -307,6 +308,7 @@ private:
             if (Settings_.Tenants.empty()) {
                 Settings_.StorageGroupCount = extractSlots();
             } else {
+                Y_ENSURE(tenantsToDistribute > 0);
                 Settings_.StorageGroupCount = 1;
                 freeSlots--;
                 tenantsToDistribute--;

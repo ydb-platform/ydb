@@ -3,14 +3,12 @@
 
 During cluster operation, the entire nodes on which {{ydb-short-name }} is running may fail.
 
-Self Heal State Storage is used to maintain the operability and fault tolerance of the [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) of a cluster, if it is impossible to quickly restore failed nodes, and automatically increase the number of replicas of these subsystems when new nodes are added to the cluster.
+Self Heal State Storage is used to maintain the operability and fault tolerance of the [metadata distribution subsystem](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) of a cluster, if it is impossible to quickly restore failed nodes, and automatically increase the number of replicas of these subsystems when new nodes are added to the cluster.
 
 Self Heal State Storage allows you to:
 
 * detect faulty {{ ydb-short-name }} components;
 * move replicas of [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) to other nodes or add new replicas.
-
-Self Heal State Storage is enabled by default.
 
 The {{ydb-short-name }} component responsible for Self Heal State Storage is called [CMS Sentinel](../../concepts/glossary.md#cms).
 

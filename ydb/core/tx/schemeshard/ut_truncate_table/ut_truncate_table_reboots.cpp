@@ -152,10 +152,12 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
             const ui64 truncateTxId = ++t.TxId;
             t.TestEnv->ReliablePropose(runtime, TruncateTableRequest(truncateTxId, "/MyRoot", "PartitionedTable", TTestTxConfig::SchemeShard, {}),
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+            
+            const ui64 firstDatashard = TTestTxConfig::TxTablet0;
 
             const ui64 splitTxId = ++t.TxId;
-            AsyncSplitTable(runtime, splitTxId, "/MyRoot/PartitionedTable", R"(
-                            SourceTabletId: 72075186233409546
+            AsyncSplitTable(runtime, splitTxId, "/MyRoot/PartitionedTable", TStringBuilder() << R"(
+                            SourceTabletId: )" << firstDatashard << R"(
                             SplitBoundary {
                                 KeyPrefix {
                                     Tuple {

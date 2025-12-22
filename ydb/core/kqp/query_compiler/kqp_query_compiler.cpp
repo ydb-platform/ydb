@@ -181,6 +181,8 @@ NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(EStreamLookupStrategyTy
             break;
         case EStreamLookupStrategyType::LookupRows:
             return NKqpProto::EStreamLookupStrategy::LOOKUP;
+        case EStreamLookupStrategyType::LookupUniqueRows:
+            return NKqpProto::EStreamLookupStrategy::UNIQUE;
         case EStreamLookupStrategyType::LookupJoinRows:
             return NKqpProto::EStreamLookupStrategy::JOIN;
         case EStreamLookupStrategyType::LookupSemiJoinRows:
@@ -1987,7 +1989,8 @@ private:
             }
 
             switch (streamLookupProto.GetLookupStrategy()) {
-                case NKqpProto::EStreamLookupStrategy::LOOKUP: {
+                case NKqpProto::EStreamLookupStrategy::LOOKUP:
+                case NKqpProto::EStreamLookupStrategy::UNIQUE: {
                     YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Struct);
                     const auto& lookupKeyColumns = inputItemType->Cast<TStructExprType>()->GetItems();
                     for (const auto keyColumn : lookupKeyColumns) {

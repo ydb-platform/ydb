@@ -64,6 +64,10 @@ namespace NKikimr {
         }
     };
 
-    extern IActor *CreateCompBrokerActor(const TControlWrapper& maxActiveCompactionsPerPDisk, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
+    extern IActor *CreateCompBrokerActor(
+        const TControlWrapper& maxActiveCompactionsPerPDisk,
+        const TControlWrapper& longWaitingThresholdSec,
+        const TControlWrapper& longWorkingThresholdSec,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
 } // NKikimr

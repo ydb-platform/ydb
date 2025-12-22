@@ -1650,7 +1650,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return {CreateAlterStreamingQuery(op.NextPartId(), tx)};
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
-        return {CreateTruncateTable(op.NextPartId(), tx)};
+        return CreateConsistentTruncateTable(op.NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

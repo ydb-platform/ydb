@@ -678,6 +678,9 @@ ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, TTxState::ETxState state);
 
+ISubOperation::TPtr CreateTruncateTable(TOperationId id, TTxState::ETxState state);
+TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+
 // Resource Pool
 // Create
 ISubOperation::TPtr CreateNewResourcePool(TOperationId id, const TTxTransaction& tx);
@@ -763,9 +766,6 @@ inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& working
 
     return tx;
 }
-ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateTruncateTable(TOperationId id, TTxState::ETxState state);
-
 
 }
 }

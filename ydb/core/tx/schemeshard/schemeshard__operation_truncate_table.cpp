@@ -14,37 +14,6 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-
-/*
-The meaning of the function is that in the code below, you need to iterate through
-all the DataShards that relate to the children of the main table several times.
-*/
-template<typename F>
-concept TDoFunc = requires(F f, TOperationContext& context, TPathId implTableChildPathId) {
-    { f(context, implTableChildPathId) } -> std::same_as<void>;
-};
-
-void DoFuncOnTableChilds(TOperationContext& context, const TPath& tablePath, TDoFunc auto&& doFunc) {
-    for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-        Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
-        TPath childPath = tablePath.Child(childName);
-
-        if (childPath.IsDeleted() || !childPath->IsTableIndex()) {
-            continue;
-        }
-
-        for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
-            if (!context.SS->Tables.contains(implTablePathId)) {
-                continue;
-            }
-
-            Y_UNUSED(implTableName);
-
-            doFunc(context, implTablePathId);
-        }
-    }
-}
-
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -97,48 +66,12 @@ public:
         TPath tablePath = TPath::Init(txState->TargetPathId, context.SS);
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
 
-        struct TShardIdxHash {
-            size_t operator()(const TShardIdx& idx) const {
-                return idx.Hash();
-            }
-        };
-
-        absl::flat_hash_map<TShardIdx, TPathId, TShardIdxHash> childPathIdByShardIdx;
-
-        { // Fill childPathIdByShardIdx
-            size_t sumSize = 0;
-
-            auto countSum = [&](TOperationContext& context, TPathId implTablePathId) {
-                TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
-                sumSize += indexTable->GetPartitions().size();
-            };
-
-            DoFuncOnTableChilds(context, tablePath, std::move(countSum));
-
-            childPathIdByShardIdx.max_load_factor(0.25);
-            childPathIdByShardIdx.reserve(sumSize);
-
-            auto fillChildPathIdByShardIdx = [&](TOperationContext& context, TPathId implTablePathId) {
-                TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
-                for (const auto& partition : indexTable->GetPartitions()) {
-                    childPathIdByShardIdx[partition.ShardIdx] = implTablePathId;
-                }
-            };
-
-            DoFuncOnTableChilds(context, tablePath, std::move(fillChildPathIdByShardIdx));
-        }
-
         Y_ABORT_UNLESS(txState->Shards.size());
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            auto it = childPathIdByShardIdx.find(idx);
-
             TPathId targetPathId = txState->TargetPathId;
-            if (it != childPathIdByShardIdx.end()) { // means that target is index
-                targetPathId = it->second;
-            }
 
             TString txBody;
             {
@@ -271,7 +204,7 @@ public:
         }
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> CheckConditions(TOperationContext& context) {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         THolder<TProposeResponse> result;
@@ -283,7 +216,6 @@ public:
             return result;
         }
 
-        TString errStr;
         const auto& op = Transaction.GetTruncateTable();
         const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), op.GetTableName()});
         TPath tablePath = TPath::Resolve(stringTablePath, context.SS);
@@ -338,10 +270,19 @@ public:
             }
         }
 
+        TString errStr;
         if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }
+
+        return result;
+    }
+
+    void Persist(TOperationContext& context) {
+        const auto& op = Transaction.GetTruncateTable();
+        const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), op.GetTableName()});
+        TPath tablePath = TPath::Resolve(stringTablePath, context.SS);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
@@ -370,27 +311,26 @@ public:
                 persistShard(shard);
             }
 
-            auto persistIndexShards = [&](TOperationContext& context, TPathId implTablePathId) {
-                TTableInfo::TPtr indexTable = context.SS->Tables.at(implTablePathId);
-                for (const auto& shard : indexTable->GetPartitions()) {
-                    persistShard(shard);
-                }
-            };
-
-            DoFuncOnTableChilds(context, tablePath, std::move(persistIndexShards));
-
             context.SS->PersistTxState(db, OperationId);
+
+            for (auto splitTx : table->GetSplitOpsInFlight()) {
+                context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
+            }
+
+            IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, tablePath, context.SS, context.OnComplete);
 
             context.OnComplete.ActivateTx(OperationId);
             SetState(NextState());
             Y_ABORT_UNLESS(txState.Shards.size());
         }
+    }
 
-        // for (auto splitTx: table->GetSplitOpsInFlight()) {
-        //     context.OnComplete.Dependence(splitTx.GetTxId(), opId.GetTxId());
-        // }
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        auto result = CheckConditions(context);
 
-        // IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, path, context.SS, context.OnComplete);
+        if (result->IsAccepted()) {
+            Persist(context);
+        }
 
         return result;
     }
@@ -407,17 +347,56 @@ public:
     }
 };
 
-} // anonymous namespace
-
-namespace NKikimr::NSchemeShard {
-
 ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TTruncateTable>(id, tx);
 }
 
+// dfs on the children's tree
+void AddChildren(TOperationId id, const TTxTransaction& tx, TOperationContext& context, const TPathId& vertexPathId, TVector<ISubOperation::TPtr>& result) {
+    TPath vertexPath = TPath::Init(vertexPathId, context.SS);
+
+    bool isTable = vertexPath->IsTable();
+    bool isIndexParent = vertexPath.Base()->IsTableIndex();
+
+    if (isTable) {
+        const auto [workingDir, tableName] = NKikimr::SplitPathByDirAndBaseNames(vertexPath.PathString());
+
+        {
+            auto modifycheme = TransactionTemplate(workingDir, NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
+            modifycheme.SetInternal(tx.GetInternal());
+            auto truncateTable = modifycheme.MutableTruncateTable();
+            truncateTable->SetTableName(tableName);
+            result.push_back(CreateTruncateTable(NextPartId(id, result), modifycheme));
+        }
+    }
+
+    if (isTable || isIndexParent) {
+        for (const auto& [childName, childPathId] : vertexPath.Base()->GetChildren()) {
+            Y_UNUSED(childName);
+            AddChildren(id, tx, context, childPathId, result);
+        }
+    }
+}
+
+} // anonymous namespace
+
+namespace NKikimr::NSchemeShard {
+
 ISubOperation::TPtr CreateTruncateTable(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TTruncateTable>(id, state);
+}
+
+TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    const auto& op = tx.GetTruncateTable();
+    const auto stringMainTablePath = NKikimr::JoinPath({tx.GetWorkingDir(), op.GetTableName()});
+    TPath mainTablePath = TPath::Resolve(stringMainTablePath, context.SS);
+
+    TVector<ISubOperation::TPtr> result = {};
+
+    AddChildren(id, tx, context, mainTablePath.Base()->PathId, result);
+
+    return result;
 }
 
 }

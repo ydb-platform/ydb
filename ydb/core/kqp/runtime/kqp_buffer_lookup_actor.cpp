@@ -333,7 +333,7 @@ public:
         record.SetMaxBytes(defaultSettings.GetMaxBytes());
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
-        CA_LOG_D(TStringBuilder() << "Send EvRead (index lookup) to shardId=" << shardId
+        CA_LOG_D(TStringBuilder() << "Send EvRead (buffer lookup) to shardId=" << shardId
             << ", readId = " << record.GetReadId()
             << ", tablePath: " << worker->GetTablePath()
             << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"

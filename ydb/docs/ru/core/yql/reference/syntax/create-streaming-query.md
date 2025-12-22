@@ -45,7 +45,7 @@ DO BEGIN
 INSERT INTO ydb_source.output_topic_name
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
-FROM ydb_source.input_topic_name;
+FROM ydb_source.input_topic_name
 WITH (
     FORMAT = 'json_each_row',
     SCHEMA = (time String NOT NULL, service_id UInt32 NOT NULL, message String NOT NULL)

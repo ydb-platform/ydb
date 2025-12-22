@@ -6,6 +6,8 @@
 #include <util/generic/string.h>
 #include <util/string/join.h>
 
+#include <ydb/core/base/path.h>
+
 namespace NKikimr::NKqp::NSchemeHelpers {
 
 TString CanonizePath(const TString& path);
@@ -39,7 +41,5 @@ bool Validate(const NYql::TAlterDatabaseSettings& settings, NYql::TIssue& error)
 void FillAlterDatabaseOwner(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name, const TString& newOwner);
 
 void FillAlterDatabaseSchemeLimits(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name, const NKikimrSubDomains::TSchemeLimits& in);
-
-std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path);
 
 } // namespace NKikimr::NKqp::NSchemeHelpers

@@ -355,8 +355,7 @@ ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& t
     return MakeSubOperation<TTruncateTable>(id, tx);
 }
 
-// dfs on the children's tree
-void AddChildren(TOperationId id, const TTxTransaction& tx, TOperationContext& context, const TPathId& vertexPathId, TVector<ISubOperation::TPtr>& result) {
+void DfsOnTableChildrenTree(TOperationId id, const TTxTransaction& tx, TOperationContext& context, const TPathId& vertexPathId, TVector<ISubOperation::TPtr>& result) {
     TPath vertexPath = TPath::Init(vertexPathId, context.SS);
 
     bool isTable = vertexPath->IsTable();
@@ -377,7 +376,7 @@ void AddChildren(TOperationId id, const TTxTransaction& tx, TOperationContext& c
     if (isTable || isIndexParent) {
         for (const auto& [childName, childPathId] : vertexPath.Base()->GetChildren()) {
             Y_UNUSED(childName);
-            AddChildren(id, tx, context, childPathId, result);
+            DfsOnTableChildrenTree(id, tx, context, childPathId, result);
         }
     }
 }
@@ -398,7 +397,7 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId id, cons
 
     TVector<ISubOperation::TPtr> result = {};
 
-    AddChildren(id, tx, context, mainTablePath.Base()->PathId, result);
+    DfsOnTableChildrenTree(id, tx, context, mainTablePath.Base()->PathId, result);
 
     return result;
 }

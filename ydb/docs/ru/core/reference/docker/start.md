@@ -48,7 +48,7 @@ docker run "${docker_args[@]}"
 
 ### Переопределение файла конфигурации
 
-Для переопределения файла конфигурации при запуске контейнера можно использовать аргумент `--config-path`, указав путь к своему файлу конфигурации, который предварительно примонтирован в контейнер:
+По умолчанию при запуске контейнера Docker для {{ ydb-short-name }} используется встроенный [файл конфигурации](../configuration/index.md), который обеспечивает стандартные параметры работы. Для переопределения файла конфигурации при запуске контейнера можно использовать аргумент `--config-path`, указав путь к своему файлу конфигурации, который предварительно примонтирован в контейнер:
 
 ```bash
 docker run "${docker_args[@]}" --config-path /path/to/your/config/file
@@ -76,12 +76,14 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
    ```bash
    mkdir ydb_config
    docker cp ydb-local:/ydb_data/cluster/kikimr_configs/config.yaml ydb_config/my-ydb-config.yaml
+   ```
 
 3. Остановите контейнер, если он все еще запущен, и удалите созданную директорию данных:
 
    ```bash
    docker stop ydb-local
    rm -rf ydb_data
+   ```
 
 4. Отредактируйте скопированный файл конфигурации `ydb_config/my-ydb-config.yaml` по своему усмотрению.
 

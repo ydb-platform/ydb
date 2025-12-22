@@ -1943,6 +1943,20 @@
             "uri": "https://{canondata_backend}/1936273/9e98947f2d27dfd7f20b3f1980b42116b575e145/resource.tar.gz#test.test_select_yql-correlated_projection_trivial-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-from_select_cross_join-default.txt-Debug]": [
+        {
+            "checksum": "c120da3d8dcba6bb4d6760a4d868088b",
+            "size": 493,
+            "uri": "https://{canondata_backend}/1773845/4a74d628af0e1c751268a5efb0781b710efcc968/resource.tar.gz#test.test_select_yql-from_select_cross_join-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-from_select_cross_join-default.txt-Results]": [
+        {
+            "checksum": "7416e92a3311f96d6d7182253da28e6c",
+            "size": 976,
+            "uri": "https://{canondata_backend}/1773845/4a74d628af0e1c751268a5efb0781b710efcc968/resource.tar.gz#test.test_select_yql-from_select_cross_join-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-from_values_limit_offset-default.txt-Debug]": [
         {
             "checksum": "a69bb53dbc3ba38d86d3bba36a5762c6",

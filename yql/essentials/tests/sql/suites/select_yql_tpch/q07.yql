@@ -1,5 +1,3 @@
-/* dqfile can not */
-/* hybridfile can not - missing langver support */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -14,18 +12,51 @@ FROM (
         n2.n_name AS cust_nation,
         DateTime::GetYear(CAST(l_shipdate AS Timestamp)) AS l_year,
         l_extendedprice * (1 - l_discount) AS volume
-    FROM
-        plato.supplier
-    ,
-        plato.lineitem
-    ,
-        plato.orders
-    ,
-        plato.customer
-    ,
-        plato.nation AS n1
-    ,
-        plato.nation AS n2
+    FROM (
+        VALUES
+            (1, 1)
+    ) AS supplier (
+        s_suppkey,
+        s_nationkey
+    )
+    , (
+        VALUES
+            (1, 1, Date('1995-01-01'), 1.0, 1.0)
+    ) AS lineitem (
+        l_suppkey,
+        l_orderkey,
+        l_shipdate,
+        l_extendedprice,
+        l_discount
+    )
+    , (
+        VALUES
+            (1, 1)
+    ) AS orders (
+        o_orderkey,
+        o_custkey
+    )
+    , (
+        VALUES
+            (1, 1)
+    ) AS customer (
+        c_custkey,
+        c_nationkey
+    )
+    , (
+        VALUES
+            (1, 'GERMANY')
+    ) AS n1 (
+        n_nationkey,
+        n_name
+    )
+    , (
+        VALUES
+            (1, 'FRANCE')
+    ) AS n2 (
+        n_nationkey,
+        n_name
+    )
     WHERE
         s_suppkey == l_suppkey
         AND o_orderkey == l_orderkey

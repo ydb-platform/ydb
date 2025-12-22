@@ -113,6 +113,8 @@ private:
     bool HasSnapshot = false;
 
     bool FirstPipeCacheRequest = true;
+
+    ui64 CPUUsageMetric = 0;
 };
 
 }

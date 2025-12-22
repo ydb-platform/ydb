@@ -177,6 +177,13 @@ private:
                 ythrow yexception() << "Cannot change domain name without formatting storage, current name " << StorageMeta_.GetDomainName() << ", please use --format-storage";
             }
 
+            if (!Settings_.NodeCount) {
+                Settings_.NodeCount = StorageMeta_.GetNodesCount();
+            }
+            if (!Settings_.StorageGroupCount) {
+                Settings_.StorageGroupCount = StorageMeta_.GetStorageGroupsCount();
+            }
+
             UpdateStorageMeta();
         }
 
@@ -250,22 +257,109 @@ private:
     }
 
 private:
+    void DistributeDefaultResources() {
+        static constexpr ui32 PDISKS_COUNT = 1;
+        static constexpr ui32 PDISKS_SLOTS_COUNT = 16; // Maximal number of VDisks in PDisk (in kqprun storage config 1 VDisks <=> 1 Storage group)
+
+        if (!Settings_.NodeCount) {
+            Settings_.NodeCount = 1;
+        }
+
+        ui64 usedSlots = 1 + Settings_.StorageGroupCount; // One PDisk slot is reserved for static storage group
+        ui64 tenantsToDistribute = !Settings_.StorageGroupCount;
+        for (auto& [_, tenant] : Settings_.Tenants) {
+            if (tenant.GetType() != TStorageMeta::TTenant::SERVERLESS) {
+                if (!tenant.GetNodesCount()) {
+                    tenant.SetNodesCount(1);
+                }
+
+                usedSlots += tenant.GetStorageGroupsCount();
+                tenantsToDistribute += !tenant.GetStorageGroupsCount();
+            }
+        }
+
+        const auto totalSlots = PDISKS_COUNT * PDISKS_SLOTS_COUNT;
+        if (usedSlots + tenantsToDistribute > totalSlots) {
+            auto storageInfo = TStringBuilder() << ".\nMaximum number of storage groups is "
+                << totalSlots - 1 << ", number of PDisks: " << PDISKS_COUNT
+                << ", number of slots per PDisk: " << PDISKS_SLOTS_COUNT << ", one group is reserved for static storage group";
+
+            if (usedSlots > totalSlots) {
+                ythrow yexception() << "Too many storage groups requested: " << usedSlots - 1 << ", try to format storage" << storageInfo;
+            } else {
+                ythrow yexception() << "Too many tenants requested, can not allocate at least one storage group for " << tenantsToDistribute
+                    << " tenants" << (usedSlots - 1 ? TStringBuilder() << ", already used storage groups: " << usedSlots - 1 : TStringBuilder()) << ", try to format storage" << storageInfo;
+            }
+        }
+
+        auto freeSlots = totalSlots - usedSlots;
+        Y_ENSURE(freeSlots >= tenantsToDistribute);
+
+        const auto extractSlots = [&freeSlots, &tenantsToDistribute]() {
+            auto slots = freeSlots / tenantsToDistribute;
+            freeSlots -= slots;
+            tenantsToDistribute--;
+            Y_ENSURE(tenantsToDistribute >= 0 && freeSlots >= tenantsToDistribute);
+            return slots;
+        };
+
+        if (!Settings_.StorageGroupCount) {
+            if (Settings_.Tenants.empty()) {
+                Settings_.StorageGroupCount = extractSlots();
+            } else {
+                Settings_.StorageGroupCount = 1;
+                freeSlots--;
+                tenantsToDistribute--;
+            }
+        }
+
+        for (auto& [_, tenant] : Settings_.Tenants) {
+            if (tenant.GetType() != TStorageMeta::TTenant::SERVERLESS && !tenant.GetStorageGroupsCount()) {
+                tenant.SetStorageGroupsCount(extractSlots());
+            }
+        }
+
+        StorageMeta_.SetNodesCount(Settings_.NodeCount);
+        StorageMeta_.SetStorageGroupsCount(Settings_.StorageGroupCount);
+        UpdateStorageMeta();
+    }
+
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
         auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerbosityLevel >= EVerbosity::InitLogs);
-        serverSettings
-            .SetDataCenterCount(Settings_.DcCount)
-            .SetPqGateway(Settings_.PqGateway);
-
         SetStorageSettings(serverSettings);
 
         for (const auto& [tenantPath, tenantInfo] : StorageMeta_.GetTenants()) {
-            Settings_.Tenants.emplace(tenantPath, tenantInfo);
+            const auto [it, inserted] = Settings_.Tenants.emplace(tenantPath, tenantInfo);
+            if (inserted) {
+                continue;
+            }
+
+            if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
+                auto& info = it->second;
+                if (!info.GetNodesCount()) {
+                    info.SetNodesCount(tenantInfo.GetNodesCount());
+                }
+                if (!info.GetStorageGroupsCount()) {
+                    info.SetStorageGroupsCount(tenantInfo.GetStorageGroupsCount());
+                } else if (info.GetStorageGroupsCount() < tenantInfo.GetStorageGroupsCount()) {
+                    ythrow yexception() << "Reducing number of storage groups is not allowed, number of storage groups in tenant " << tenantPath << " is " << tenantInfo.GetStorageGroupsCount();
+                }
+            }
         }
+
+        DistributeDefaultResources();
+        serverSettings
+            .SetNodeCount(Settings_.NodeCount)
+            .SetDataCenterCount(Settings_.DcCount)
+            .SetPqGateway(Settings_.PqGateway);
+
+        serverSettings.StoragePoolTypes.clear();
+        serverSettings.AddStoragePool("test", TStringBuilder() << NKikimr::CanonizePath(Settings_.DomainName) << ":test", Settings_.StorageGroupCount);
 
         ui32 dynNodesCount = 0;
         for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
             if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
-                serverSettings.AddStoragePool(tenantPath, TStringBuilder() << GetTenantPath(tenantPath) << ":" << tenantPath);
+                serverSettings.AddStoragePool(tenantPath, TStringBuilder() << GetTenantPath(tenantPath) << ":" << tenantPath, tenantInfo.GetStorageGroupsCount());
                 dynNodesCount += tenantInfo.GetNodesCount();
             }
         }
@@ -296,8 +390,9 @@ private:
             if (it->second.GetSharedTenant() != tenantInfo.GetSharedTenant()) {
                 ythrow yexception() << "Can not change tenant " << absolutePath << " shared resources without formatting storage from '" << it->second.GetSharedTenant() << "', please use --format-storage";
             }
-            if (it->second.GetNodesCount() != tenantInfo.GetNodesCount()) {
+            if (it->second.GetNodesCount() != tenantInfo.GetNodesCount() || it->second.GetStorageGroupsCount() != tenantInfo.GetStorageGroupsCount()) {
                 it->second.SetNodesCount(tenantInfo.GetNodesCount());
+                it->second.SetStorageGroupsCount(tenantInfo.GetStorageGroupsCount());
                 UpdateStorageMeta();
             }
             if (Settings_.VerbosityLevel >= EVerbosity::Info) {
@@ -309,9 +404,9 @@ private:
         }
     }
 
-    static void AddTenantStoragePool(Ydb::Cms::StorageUnits* storage, const TString& name) {
+    static void AddTenantStoragePool(Ydb::Cms::StorageUnits* storage, const TString& name, ui64 storageGroupsCount) {
         storage->set_unit_kind(name);
-        storage->set_count(1);
+        storage->set_count(storageGroupsCount);
     }
 
     void CreateTenants() {
@@ -323,13 +418,13 @@ private:
 
             switch (tenantInfo.GetType()) {
                 case TStorageMeta::TTenant::DEDICATED:
-                    AddTenantStoragePool(request.mutable_resources()->add_storage_units(), tenantPath);
+                    AddTenantStoragePool(request.mutable_resources()->add_storage_units(), tenantPath, tenantInfo.GetStorageGroupsCount());
                     CreateTenant(std::move(request), tenantPath, "dedicated", tenantInfo);
                     break;
 
                 case TStorageMeta::TTenant::SHARED:
                     sharedTenants.emplace(tenantPath);
-                    AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), tenantPath);
+                    AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), tenantPath, tenantInfo.GetStorageGroupsCount());
                     CreateTenant(std::move(request), tenantPath, "shared", tenantInfo);
                     break;
 

@@ -3,8 +3,6 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
-#include <google/protobuf/port.h>
-
 #include <util/string/join.h>
 
 #include <format>
@@ -14,7 +12,7 @@ namespace NYdb::NDump {
 
 namespace {
 
-std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>& property) {
+std::string PropertyToString(const std::pair<TString, TString>& property) {
     const auto& [key, value] = property;
     return KeyValueToString(key, value);
 }
@@ -23,11 +21,17 @@ std::string PropertyToString(const std::pair<TProtoStringType, TProtoStringType>
 
 TString BuildCreateExternalDataSourceQuery(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
-    const TString& db) {
+    const TString& db)
+{
 
     return std::format(
         "-- database: \"{}\"\n"
-        "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}` WITH (\n{},\n{}{}\n);",
+        "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`\n"
+        "WITH (\n"
+        "{},\n"
+        "{}"
+        "{}\n"
+        ");",
         db.c_str(),
         description.self().name().c_str(),
         KeyValueToString("SOURCE_TYPE", description.source_type()),
@@ -42,7 +46,8 @@ TString BuildCreateExternalDataSourceQuery(
 bool RewriteCreateExternalDataSourceQueryNoSecrets(
     TString& query,
     const TString& dbPath,
-    NYql::TIssues& issues) {
+    NYql::TIssues& issues)
+{
 
     return RewriteCreateQuery(query, "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`", dbPath, issues);
 }

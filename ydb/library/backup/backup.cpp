@@ -22,9 +22,9 @@
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
-#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>

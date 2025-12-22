@@ -384,7 +384,7 @@ bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::str
 
 std::string KeyValueToString(std::string_view key, std::string_view value) {
     // indented to follow the default YQL formatting
-    return std::format(R"(  {} = '{}')", key, value);
+    return std::format("  {} = '{}'", key, value);
 }
 
 bool IsSchemaSecret(TStringBuf secretName) {

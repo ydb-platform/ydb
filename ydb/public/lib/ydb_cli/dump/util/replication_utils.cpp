@@ -5,9 +5,9 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <util/generic/vector.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
-#include <util/string/printf.h>
 
 #include <format>
 
@@ -106,10 +106,11 @@ void CleanQuery(TString& query, const TString& patternToRemove) {
 } // anonymous namespace
 
 TString BuildCreateReplicationQuery(
-        const TString& db,
-        const TString& backupRoot,
-        const TString& name,
-        const NReplication::TReplicationDescription& desc) {
+    const TString& db,
+    const TString& backupRoot,
+    const TString& name,
+    const NReplication::TReplicationDescription& desc)
+{
 
     TVector<TString> targets(::Reserve(desc.GetItems().size()));
     for (const auto& item : desc.GetItems()) {
@@ -129,17 +130,28 @@ TString BuildCreateReplicationQuery(
     }
 
     return std::format(
-            "-- database: \"{}\"\n"
-            "-- backup root: \"{}\"\n"
-            "CREATE ASYNC REPLICATION `{}`\nFOR\n{}\nWITH (\n{}\n);",
-        db.c_str(), backupRoot.c_str(), name.c_str(), JoinSeq(",\n", targets).c_str(), JoinSeq(",\n", opts).c_str());
+        "-- database: \"{}\"\n"
+        "-- backup root: \"{}\"\n"
+        "CREATE ASYNC REPLICATION `{}`\n"
+        "FOR\n"
+        "  {}\n"
+        "WITH (\n"
+        "  {}\n"
+        ");",
+        db.c_str(),
+        backupRoot.c_str(),
+        name.c_str(),
+        JoinSeq(",\n", targets).c_str(),
+        JoinSeq(",\n", opts).c_str()
+    );
 }
 
 TString BuildCreateTransferQuery(
-        const TString& db,
-        const TString& backupRoot,
-        const TString& name,
-        const NReplication::TTransferDescription& desc) {
+    const TString& db,
+    const TString& backupRoot,
+    const TString& name,
+    const NReplication::TTransferDescription& desc)
+{
 
     TVector<TString> options(::Reserve(7));
 
@@ -160,25 +172,29 @@ TString BuildCreateTransferQuery(
     CleanQuery(cleanedLambdaCreateQuery, TStringBuilder() << TRANSFER_LAMBDA_DEFAULT_NAME << " = " << lambdaName << ";");
 
     return std::format(
-            "-- database: \"{}\"\n"
-            "-- backup root: \"{}\"\n"
-            "{}\n\n"
-            "CREATE TRANSFER `{}`\n"
-            "FROM `{}` TO `{}` USING {}\n"
-            "WITH (\n{}\n);",
-            db.c_str(), backupRoot.c_str(),
-            cleanedLambdaCreateQuery.c_str(),
-            name.c_str(),
-            desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), lambdaName.c_str(),
-            JoinSeq(",\n", options).c_str()
-        );
+        "-- database: \"{}\"\n"
+        "-- backup root: \"{}\"\n"
+        "{}\n\n"
+        "CREATE TRANSFER `{}`\n"
+        "FROM `{}` TO `{}` USING {}\n"
+        "WITH (\n"
+        "  {}\n"
+        ");",
+        db.c_str(),
+        backupRoot.c_str(),
+        cleanedLambdaCreateQuery.c_str(),
+        name.c_str(),
+        desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), lambdaName.c_str(),
+        JoinSeq(",\n", options).c_str()
+    );
 }
 
 bool RewriteCreateAsyncReplicationQueryNoSecrets(
     TString& query,
     const TString& dbRestoreRoot,
     const TString& dbPath,
-    NYql::TIssues& issues) {
+    NYql::TIssues& issues)
+{
 
     if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
         return false;
@@ -190,7 +206,8 @@ bool RewriteCreateTransferQueryNoSecrets(
     TString& query,
     const TString& dbRestoreRoot,
     const TString& dbPath,
-    NYql::TIssues& issues) {
+    NYql::TIssues& issues)
+{
 
     if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
         return false;

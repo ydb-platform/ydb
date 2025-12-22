@@ -1,7 +1,6 @@
 #pragma once
 
 #include <util/generic/string.h>
-#include <util/generic/vector.h>
 
 namespace NYdb::inline Dev::NReplication {
     class TReplicationDescription;

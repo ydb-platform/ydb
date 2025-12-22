@@ -302,6 +302,22 @@
         table > tbody > tr > td:nth-child(4) {
             text-align: left;
         }
+        
+        /* Status column styling */
+        th.status-column,
+        td.status-column {
+            width: 60px;
+            min-width: 50px;
+            max-width: 60px;
+            text-align: center;
+        }
+        
+        /* Ensure status text is centered */
+        td.status-column span.test_status {
+            display: inline-block;
+            width: 100%;
+            text-align: center;
+        }
     
         .collapsible-content {
             display: table-row-group;
@@ -469,6 +485,10 @@
         #successRateModal .modal-header {
             flex-shrink: 0;
         }
+        #successRateModalTitle {
+            font-size: 14px;
+            word-break: break-word;
+        }
         #successRateModalContent {
             overflow-y: auto;
             overflow-x: hidden;
@@ -614,7 +634,9 @@
 
     // Utility functions
     function buildGitHubIssueUrl(title, body, labels) {
-        return GITHUB_ISSUE_BASE_URL + "?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+        // Body is already partially encoded (contains %0A for newlines, etc.)
+        // Title and labels need to be encoded, but body is already encoded
+        return GITHUB_ISSUE_BASE_URL + "?title=" + encodeURIComponent(title) + "&body=" + body + "&labels=" + encodeURIComponent(labels) + "&type=Bug";
     }
 
     // Show tooltip stub to avoid runtime errors (visual feedback provided by icon swap)
@@ -708,7 +730,7 @@
         return labels.join(',');
     }
 
-    function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText, reportUrl) {
+    function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, successRates, logUrls, errorText, reportUrl) {
         let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
         
         // Add type-specific header
@@ -729,8 +751,14 @@
         body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
         
         // Report link (if available)
+        // Always include report link if reportUrl is provided, even if it's a local file:// URL
         if (reportUrl && reportUrl.trim() !== "") {
-            body += "**Test Report:** [View report](" + reportUrl + ")%0A%0A";
+            // Encode the URL part of the markdown link to prevent special characters (like #) from breaking the link
+            // when the body is used as a URL parameter. This matches the pattern used for other URLs in the body.
+            body += "**Test Report:** [View report](" + encodeURIComponent(reportUrl) + ")%0A%0A";
+        } else {
+            // Log warning if reportUrl is missing
+            console.warn('reportUrl is empty or undefined in buildIssueBody, Test Report link will not be included');
         }
         
         // Run command
@@ -739,12 +767,20 @@
         // Owner
         body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
         
-        // Summary history (only for non-sanitizer issues)
-        if (issueType !== 'sanitizer') {
-            if (success_count + fail_count != 0) {
-                body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+        // Success rate (for all issue types)
+        if (successRates) {
+            body += "**Success rate (last 4 days):**%0A";
+            const parts = [];
+            if (successRates.other) {
+                parts.push(branch.toUpperCase() + ": " + successRates.other.rate + "%25 (" + successRates.other.passed + "/" + successRates.other.total + ")");
+            }
+            if (successRates.pr_check) {
+                parts.push("PR-Check: " + successRates.pr_check.rate + "%25 (" + successRates.pr_check.passed + "/" + successRates.pr_check.total + ")");
+            }
+            if (parts.length > 0) {
+                body += parts.join(" | ") + "%0A%0A";
             } else {
-                body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+                body += "No history data available%0A%0A";
             }
         }
         
@@ -774,7 +810,7 @@
         if (errorText && errorText.trim() !== "") {
             const errorPrefix = "**Error Summary:**%0A```%0A";
             const errorSuffix = "%0A```%0A%0A";
-            const truncationMsg = "%0A<TRUNCATED>";
+            const tooLongMsg = "**Error Summary:**%0A```%0A_Error text is too long to include automatically. Please copy the error text from the test report and paste it here manually._%0A```%0A%0A";
             
             const fullErrorText = errorText.trim();
             const encodedFullError = encodeURIComponent(fullErrorText);
@@ -782,28 +818,29 @@
             // Compute minimal overhead URL length (without error content)
             const minimalSection = errorPrefix + errorSuffix;
             const minimalUrl = buildGitHubIssueUrl(title, body + minimalSection, labels);
-            if (minimalUrl.length > maxUrlLength) {
-                // Can't include error section at all
-            } else {
+            
+            // Check if we can add the full error text
+            if (minimalUrl.length <= maxUrlLength) {
                 const allowedDelta = maxUrlLength - minimalUrl.length;
                 if (encodedFullError.length <= allowedDelta) {
+                    // Error text fits, include it fully
                     body += errorPrefix + encodedFullError + errorSuffix;
-                } else {
-                    const allowedForEncoded = allowedDelta - truncationMsg.length;
-                    if (allowedForEncoded > 0) {
-                        const truncatedEncoded = safeTruncateEncoded(encodedFullError, allowedForEncoded);
-                        if (truncatedEncoded) {
-                            body += errorPrefix + truncatedEncoded + truncationMsg + errorSuffix;
-                        }
-                    }
+                    return body;
                 }
             }
+            
+            // Error text doesn't fit or minimal section doesn't fit - try to add message instead
+            const urlWithMsg = buildGitHubIssueUrl(title, body + tooLongMsg, labels);
+            if (urlWithMsg.length <= maxUrlLength) {
+                body += tooLongMsg;
+            }
+            // If even the message doesn't fit, we skip it entirely
         }
         
         return body;
     }
 
-    function createIssueGeneric(issueType, test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+    function createIssueGeneric(issueType, test, owner, successRates, is_sanitizer, errorText, logUrls = {}) {
         const parsed = parseTestName(test);
         if (!parsed) return;
         
@@ -819,6 +856,11 @@
         // Get report URL - use current page URL (the report page itself)
         const reportUrl = window.location.href;
         
+        // Log warning if reportUrl is empty (shouldn't happen in normal browser context)
+        if (!reportUrl || reportUrl.trim() === "") {
+            console.warn('Warning: reportUrl is empty, Test Report link will not be included');
+        }
+        
         // Determine issue type based on parameters
         let actualIssueType = issueType;
         if (is_sanitizer && issueType === 'bug') {
@@ -826,17 +868,18 @@
         }
         
         // Create title based on issue type
+        // Don't encode here - encoding will be done in buildGitHubIssueUrl
         let title;
         if (actualIssueType === 'sanitizer') {
-            title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            title = "Sanitizer error in " + path + "/" + testName;
         } else if (actualIssueType === 'mute') {
-            title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            title = "Mute test " + path + "/" + testName;
         } else {
-            title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+            title = "Test failure in " + path + "/" + testName;
         }
         
         // Build body
-        const body = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText, reportUrl);
+        const body = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, successRates, logUrls, errorText, reportUrl);
         
         // Build labels
         const labels = buildLabels(actualIssueType, buildPreset, ownerAreaLabel);
@@ -849,12 +892,12 @@
         window.open(finalUrl, '_blank');
     }
 
-    function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
-        createIssueGeneric('bug', test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
+    function createIssue(test, owner, successRates, is_sanitizer, errorText, logUrls = {}) {
+        createIssueGeneric('bug', test, owner, successRates, is_sanitizer, errorText, logUrls);
     }
 
-    function createMuteIssue(test, owner, success_count, fail_count, errorText = '', logUrls = {}) {
-        createIssueGeneric('mute', test, owner, success_count, fail_count, false, errorText, logUrls);
+    function createMuteIssue(test, owner, successRates, errorText = '', logUrls = {}) {
+        createIssueGeneric('mute', test, owner, successRates, false, errorText, logUrls);
     }
 
     function openHistory(test) {
@@ -1021,20 +1064,17 @@
                 const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
                 const owner = testRow.querySelector('.test_owner').innerText;
                 
-                // Get success/fail counts from history if available
-                let success_count = 0;
-                let fail_count = 0;
+                // Get success rates from testSuccessRates (same data used for the button)
+                let successRates = null;
                 try {
-                    const history = await getTestHistory();
-                    if (history && history[testName]) {
-                        for (const timestamp in history[testName]) {
-                            const status = history[testName][timestamp].status;
-                            if (status === 'passed') success_count++;
-                            else if (status === 'failure' || status === 'mute') fail_count++;
-                        }
+                    if (Object.keys(testSuccessRates).length === 0) {
+                        await getTestSuccessRates().catch((e) => {
+                            console.warn('Failed to load success rates for issue creation:', e);
+                        });
                     }
+                    successRates = testSuccessRates[testName] || null;
                 } catch (e) {
-                    console.warn('Failed to load history for issue creation:', e);
+                    console.warn('Failed to load success rates for issue creation:', e);
                 }
                 
                 // Check if this is a sanitizer issue by looking for the SANITIZER badge
@@ -1052,16 +1092,19 @@
                 
                 // Extract log URLs from the test row
                 let logUrls = {};
-                const logCells = testRow.querySelectorAll('td:last-child a');
-                logCells.forEach(link => {
-                    const logName = link.textContent.trim();
-                    const logUrl = link.href;
-                    if (logName && logUrl) {
-                        logUrls[logName] = logUrl;
-                    }
-                });
+                const logCell = testRow.querySelector('td.log-column');
+                if (logCell) {
+                    const logLinks = logCell.querySelectorAll('a');
+                    logLinks.forEach(link => {
+                        const logName = link.textContent.trim();
+                        const logUrl = link.href;
+                        if (logName && logUrl) {
+                            logUrls[logName] = logUrl;
+                        }
+                    });
+                }
 
-                createIssue(testName, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
+                createIssue(testName, owner, successRates, is_sanitizer, errorText, logUrls);
             });
         });
         
@@ -1073,20 +1116,17 @@
                 const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
                 const owner = testRow.querySelector('.test_owner').innerText;
                 
-                // Get success/fail counts from history if available
-                let success_count = 0;
-                let fail_count = 0;
+                // Get success rates from testSuccessRates (same data used for the button)
+                let successRates = null;
                 try {
-                    const history = await getTestHistory();
-                    if (history && history[testName]) {
-                        for (const timestamp in history[testName]) {
-                            const status = history[testName][timestamp].status;
-                            if (status === 'passed') success_count++;
-                            else if (status === 'failure' || status === 'mute') fail_count++;
-                        }
+                    if (Object.keys(testSuccessRates).length === 0) {
+                        await getTestSuccessRates().catch((e) => {
+                            console.warn('Failed to load success rates for issue creation:', e);
+                        });
                     }
+                    successRates = testSuccessRates[testName] || null;
                 } catch (e) {
-                    console.warn('Failed to load history for issue creation:', e);
+                    console.warn('Failed to load success rates for issue creation:', e);
                 }
                 
                 // Get error text from the test description if available
@@ -1101,16 +1141,19 @@
                 
                 // Extract log URLs from the test row
                 let logUrls = {};
-                const logCells = testRow.querySelectorAll('td:last-child a');
-                logCells.forEach(link => {
-                    const logName = link.textContent.trim();
-                    const logUrl = link.href;
-                    if (logName && logUrl) {
-                        logUrls[logName] = logUrl;
-                    }
-                });
+                const logCell = testRow.querySelector('td.log-column');
+                if (logCell) {
+                    const logLinks = logCell.querySelectorAll('a');
+                    logLinks.forEach(link => {
+                        const logName = link.textContent.trim();
+                        const logUrl = link.href;
+                        if (logName && logUrl) {
+                            logUrls[logName] = logUrl;
+                        }
+                    });
+                }
 
-                createMuteIssue(testName, owner, success_count, fail_count, errorText, logUrls);
+                createMuteIssue(testName, owner, successRates, errorText, logUrls);
             });
         });
 
@@ -1165,16 +1208,19 @@
             }
         }
         
-        // Close modals on Escape key
+        // Close modals on Escape key - close only the topmost (last opened) modal
         document.addEventListener('keydown', function(event) {
             if (event.key === 'Escape' || event.keyCode === 27) {
                 const errorModal = document.getElementById('errorModal');
                 const successRateModal = document.getElementById('successRateModal');
-                if (errorModal && errorModal.style.display === 'block') {
-                    errorModal.style.display = 'none';
-                }
+                
+                // Check which modal is currently visible (has display: block)
+                // Close only the one that is visible, prioritizing successRateModal if both are visible
+                // (successRateModal typically has higher z-index and is on top)
                 if (successRateModal && successRateModal.style.display === 'block') {
                     successRateModal.style.display = 'none';
+                } else if (errorModal && errorModal.style.display === 'block') {
+                    errorModal.style.display = 'none';
                 }
             }
         });
@@ -1551,10 +1597,13 @@
         }
         const logUrls = {};
         if (testRow) {
-            const logCells = testRow.querySelectorAll('td:last-child a');
-            logCells.forEach(link => {
-                logUrls[link.textContent.trim()] = link.href;
-            });
+            const logCell = testRow.querySelector('td.log-column');
+            if (logCell) {
+                const logLinks = logCell.querySelectorAll('a');
+                logLinks.forEach(link => {
+                    logUrls[link.textContent.trim()] = link.href;
+                });
+            }
         }
         
         showTestInfo({
@@ -1638,7 +1687,7 @@
         <th>Success rate</th>
     {% endif %}
         <th>elapsed</th>
-        <th>status</th>
+        <th class="status-column">status</th>
     {% if status in has_any_log %}
         <th>LOG</th>
     {% endif %}
@@ -1754,17 +1803,17 @@
         <td>
             {% if t.full_name in history %}
             <button class="success-rate-button" data-test-full-name="{{ t.full_name|e }}" data-action="show-success-rate" title="View success rate and history">
-                <span class="emoji">&#128202;</span> <span class="success-rate-text">No history</span>
+                <span class="success-rate-text">No history</span>
             </button>
                     {% endif %}
         </td> 
         {% endif %}
         <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
-        <td>
+        <td class="status-column">
             <span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span>
         </td>
         {% if status in has_any_log %}
-        <td>
+        <td class="log-column">
             {% if t.log_urls %}
                 {% for log_name, log_url in t.log_urls.items() %}
                 <a href="{{ log_url }}">{{ log_name }}</a>{% if not loop.last %} | {% endif %}

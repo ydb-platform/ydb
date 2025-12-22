@@ -102,11 +102,14 @@ class TestResult:
 
     @property
     def elapsed_display(self):
-        m, s = divmod(self.elapsed, 60)
+        import math
+        # Round up to 1 decimal place: 10.545s -> 10.6s (ceiling to 0.1)
+        elapsed_rounded = math.ceil(self.elapsed * 10) / 10
+        m, s = divmod(elapsed_rounded, 60)
         parts = []
         if m > 0:
             parts.append(f'{int(m)}m')
-        parts.append(f"{s:.3f}s")
+        parts.append(f"{s:.1f}s")
         return ' '.join(parts)
 
     def __str__(self):

@@ -10,7 +10,7 @@ from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.clients.kikimr_bridge_client import BridgeClient
 from ydb.tests.stress.common.common import WorkloadBase
-from ydb.tests.stress.common.common import YdbClient
+from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as bridge
 
 logger = logging.getLogger(__name__)
@@ -277,7 +277,7 @@ class WorkloadDiscovery(WorkloadBase):
 
 class WorkloadRunner:
     def __init__(self, grpc_endpoint, http_endpoint, database, path, duration):
-        self.client = YdbClient(grpc_endpoint, database, True)
+        self.client = InstrumentedYdbClient(grpc_endpoint, database, True)
         self.client.wait_connection()
         self.grpc_endpoint = grpc_endpoint
         self.http_endpoint = http_endpoint

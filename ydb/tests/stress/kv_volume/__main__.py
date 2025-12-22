@@ -16,7 +16,7 @@ if __name__ == '__main__':
     parser.add_argument('--log-file', default=None, help='Append log into specified file')
     parser.add_argument('--partitions', default=1, type=int, help='Append log into specified file')
     parser.add_argument('--storage-channels', default=['ssd']*3, nargs='*', help='Storage channels')
-    parser.add_argument('--use-multiprocessing', action='store_true', help='Use processes instead of threads')
+    parser.add_argument('--version', default='v1', choices=['v1', 'v2'], help='Keyvalue grpc api version')
 
     args = parser.parse_args()
 
@@ -38,6 +38,7 @@ if __name__ == '__main__':
         storage_channels=args.storage_channels,
         kv_load_type=args.load_type,
         inflight=args.in_flight,
+        version=args.version
     )
     workload.start(use_multiprocessing=True)
     workload.wait_stop()

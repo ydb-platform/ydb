@@ -318,6 +318,10 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
 
     settingsProto.set_index_filling_mode(TProtoAccessor::GetProto(settings.IndexFillingMode_));
 
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        settingsProto.add_exclude_regexps(excludeRegexp);
+    }
+
     return Impl_->ImportFromS3(std::move(request), settings);
 }
 
@@ -349,6 +353,10 @@ TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettin
         settingsProto.set_skip_checksum_validation(settings.SkipChecksumValidation_.value());
     }
 
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        settingsProto.add_exclude_regexps(excludeRegexp);
+    }
+
     return Impl_->ImportFromFs(std::move(request), settings);
 }
 
@@ -368,6 +376,10 @@ TAsyncListObjectsInS3ExportResult TImportClient::ListObjectsInS3Export(const TLi
         }
 
         settingsProto.add_items()->set_path(item.Path);
+    }
+
+    for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
+        settingsProto.add_exclude_regexps(excludeRegexp);
     }
 
     // Paging

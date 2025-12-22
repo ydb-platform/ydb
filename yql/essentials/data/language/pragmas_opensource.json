@@ -51,6 +51,9 @@
     "name": "yt.CoreDumpPath"
   },
   {
+    "name": "yt.CostBasedOptimizerPartial"
+  },
+  {
     "name": "yt.DQRPCReaderInflight"
   },
   {

@@ -103,6 +103,19 @@ def test_lockfile_get_packages_meta_ok():
     assert pkg.integrity_algorithm == "sha512"
 
 
+def test_lockfile_get_packages_skip_directory():
+    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf.data = {
+        "packages": {
+            "@plus-int/auth@file:../../packages/platform/auth": {
+                "resolution": {"directory": "../../packages/platform/auth", "type": "directory"}
+            }
+        },
+    }
+
+    assert len(list(lf.get_packages_meta())) == 0
+
+
 def test_lockfile_get_packages_empty():
     lf = PnpmLockfile(path="/pnpm-lock.yaml")
     lf.data = {}

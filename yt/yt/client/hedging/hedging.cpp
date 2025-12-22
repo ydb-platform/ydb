@@ -155,6 +155,8 @@ public:
     UNSUPPORTED_METHOD(TFuture<std::vector<NTableClient::TColumnarStatistics>>, GetColumnarStatistics, (const std::vector<TRichYPath>&, const TGetColumnarStatisticsOptions&));
     UNSUPPORTED_METHOD(TFuture<TMultiTablePartitions>, PartitionTables, (const std::vector<TRichYPath>&, const TPartitionTablesOptions&));
     UNSUPPORTED_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (const TTablePartitionCookiePtr&, const TReadTablePartitionOptions&));
+    UNSUPPORTED_METHOD(TFuture<IFormattedTableReaderPtr>, CreateFormattedTableReader, (const NYPath::TRichYPath&, const NYson::TYsonString&, const TTableReaderOptions&));
+    UNSUPPORTED_METHOD(TFuture<IFormattedTableReaderPtr>, CreateFormattedTablePartitionReader, (const TTablePartitionCookiePtr&, const NYson::TYsonString&, const TReadTablePartitionOptions&));
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetTablePivotKeys, (const TYPath&, const TGetTablePivotKeysOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, CreateTableBackup, (const TBackupManifestPtr&, const TCreateTableBackupOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RestoreTableBackup, (const TBackupManifestPtr&, const TRestoreTableBackupOptions&));

@@ -531,6 +531,18 @@ public:
         const TReadTablePartitionOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<IFormattedTableReaderPtr>, CreateFormattedTableReader, (
+        const NYPath::TRichYPath& path,
+        const NYson::TYsonString& format,
+        const TTableReaderOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<IFormattedTableReaderPtr>, CreateFormattedTablePartitionReader, (
+        const TTablePartitionCookiePtr& cookie,
+        const NYson::TYsonString& format,
+        const TReadTablePartitionOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, TruncateJournal, (
         const NYPath::TYPath& path,
         i64 rowCount,

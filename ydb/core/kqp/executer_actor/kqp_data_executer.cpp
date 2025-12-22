@@ -109,11 +109,12 @@ public:
         const TActorId bufferActorId,
         TMaybe<NBatchOperations::TSettings> batchOperationSettings,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        ui64 generation)
+        ui64 generation,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(formatsSettings), counters,
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
-            "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings))
+            "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
         , QueryServiceConfig(queryServiceConfig)
@@ -122,11 +123,11 @@ public:
         TasksGraph.GetMeta().AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
 
-        YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
+        YQL_ENSURE(Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_UNDEFINED);
 
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {
-            YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
-                || Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW);
+            YQL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
+                || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW);
         }
 
         ReadOnlyTx = IsReadOnlyTx();
@@ -181,7 +182,7 @@ public:
     bool GetUseFollowers() const {
         return (
             // first, we must specify read stale flag.
-            Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_STALE &&
+            Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_STALE &&
             // next, if snapshot is already defined, so in this case followers are not allowed.
             !GetSnapshot().IsValid() &&
             // ensure that followers are allowed only for read only transactions.
@@ -272,6 +273,7 @@ public:
                 IgnoreFunc(TEvPrivate::TEvReattachToShard);
                 IgnoreFunc(TEvDqCompute::TEvState);
                 IgnoreFunc(TEvDqCompute::TEvChannelData);
+                IgnoreFunc(TEvDqCompute::TEvResumeExecution);
                 IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);
                 IgnoreFunc(TEvPipeCache::TEvDeliveryProblem);
                 IgnoreFunc(TEvInterconnect::TEvNodeDisconnected);
@@ -314,13 +316,15 @@ public:
 
         ResponseEv->Snapshot = GetSnapshot();
 
-        if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
+        if (TxManager && LockHandle) {
+            // Keep LockHandle even if locks are empty.
+            ResponseEv->LockHandle = std::move(LockHandle);
+        }
+        if (!TxManager && !Locks.empty()) {
             if (LockHandle) {
                 ResponseEv->LockHandle = std::move(LockHandle);
             }
-            if (!TxManager) {
-                BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
-            }
+            BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
         }
 
         if (TxManager) {
@@ -417,6 +421,7 @@ private:
                 hFunc(TEvPrivate::TEvReattachToShard, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandlePrepare); // from CA
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
+                hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
                 hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
@@ -1134,7 +1139,8 @@ private:
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvTxProxy::TEvProposeTransactionStatus, HandleExecute);
                 hFunc(TEvDqCompute::TEvState, HandleComputeState);
-                hFunc(NYql::NDq::TEvDqCompute::TEvChannelData, HandleChannelData);
+                hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);
+                hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
@@ -1856,7 +1862,6 @@ private:
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             const auto& tx = Request.Transactions[txIdx];
-            AFL_ENSURE(tx.Body->StagesSize() < (static_cast<ui64>(1) << TKqpTasksGraph::PriorityTxShift));
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 const auto& stage = tx.Body->GetStages(stageIdx);
                 const auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
@@ -1867,7 +1872,7 @@ private:
                     if (stageInfo.Meta.ShardKey->RowOperation != TKeyDesc::ERowOperation::Read) {
                         error = TStringBuilder() << "Non-read operations can't be performed on async index table"
                             << ": " << stageInfo.Meta.ShardKey->TableId;
-                    } else if (Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_READ_STALE) {
+                    } else if (Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_STALE) {
                         error = TStringBuilder() << "Read operation can be performed on async index table"
                             << ": " << stageInfo.Meta.ShardKey->TableId << " only with StaleRO isolation level";
                     }
@@ -1977,7 +1982,7 @@ private:
 
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
-            case NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED:
+            case NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED:
                 YQL_ENSURE(ReadOnlyTx);
                 YQL_ENSURE(!VolatileTx);
                 TasksGraph.GetMeta().AllowInconsistentReads = true;
@@ -2079,6 +2084,11 @@ private:
                 }
                 const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
+                    YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
+                    HasDatashardSourceScan = true;
+                }
+
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
                     YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
                     HasDatashardSourceScan = true;
                 }
@@ -3006,11 +3016,13 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation)
+    TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
-        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation);
+        std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
+        channelService);
 }
 
 } // namespace NKqp

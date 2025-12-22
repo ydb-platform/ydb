@@ -392,6 +392,8 @@ void TGetTableColumnarStatisticsCommand::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("enable_early_finish", &TThis::EnableEarlyFinish)
         .Default(true);
+    registrar.Parameter("enable_read_size_estimation", &TThis::EnableReadSizeEstimation)
+        .Default(false);
 }
 
 void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
@@ -399,6 +401,7 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
     Options.FetchChunkSpecConfig = context->GetConfig()->TableReader;
     Options.FetcherConfig = context->GetConfig()->Fetcher;
     Options.EnableEarlyFinish = EnableEarlyFinish;
+    Options.EnableReadSizeEstimation = EnableReadSizeEstimation;
 
     if (MaxChunksPerNodeFetch) {
         Options.FetcherConfig = CloneYsonStruct(Options.FetcherConfig);
@@ -494,6 +497,7 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
                             })
                             .OptionalItem("chunk_row_count", statistics.ChunkRowCount)
                             .OptionalItem("legacy_chunk_row_count", statistics.LegacyChunkRowCount)
+                            .OptionalItem("read_size_estimation", statistics.ReadDataSizeEstimate)
                         .EndMap();
                 }
             });
@@ -992,6 +996,15 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& {
             return command->Options.StatisticsAggregation;
         })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<int>>(
+        "hyper_log_log_precision",
+        [] (TThis* command) -> auto& {
+            return command->Options.HyperLogLogPrecision;
+        })
+        .GreaterThan(6)
+        .LessThan(15)
         .Optional(/*init*/ false);
 }
 

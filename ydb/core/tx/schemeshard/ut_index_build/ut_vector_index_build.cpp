@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         ui64 buildIndexTx = ++txId;
         auto sender = runtime.AllocateEdgeActor();
         auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
-            "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+            "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
         });
         if (Overlap) {
             auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->mutable_global_vector_kmeans_tree_index();
@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         {
             auto sender = runtime.AllocateEdgeActor();
             auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
-                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
             });
             auto settings = request->Record.MutableSettings();
             settings->set_max_shards_in_flight(1);
@@ -719,7 +719,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         {
             auto sender = runtime.AllocateEdgeActor();
             auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
-                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
             });
             auto settings = request->Record.MutableSettings();
             settings->set_max_shards_in_flight(1);
@@ -910,7 +910,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         {
             auto sender = runtime.AllocateEdgeActor();
             auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
-                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
             });
             auto settings = request->Record.MutableSettings();
             settings->set_max_shards_in_flight(1);
@@ -1504,16 +1504,12 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
             Cout << "BuildIndex 3 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
             UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLATION,
                 buildIndexOperation.DebugString()
             );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: YES");
         }
-
-        // but we need to turn EnableVectorIndex back to progress:
-        runtime.GetAppData().FeatureFlags.SetEnableVectorIndex(true);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
         env.TestWaitNotification(runtime, buildIndexTx);
 
@@ -1610,14 +1606,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
-    Y_UNIT_TEST(UnknownState) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
+    ui64 DoCreateBrokenIndex(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "vectors"
             Columns { Name: "id" Type: "Uint64" }
@@ -1683,6 +1672,19 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
         }
 
+        return buildIndexTx;
+    }
+
+    Y_UNIT_TEST(UnknownState) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        const ui64 buildIndexTx = DoCreateBrokenIndex(runtime, env, txId);
+
         {
             // set a known State but unknown SubState
             TString writeQuery = Sprintf(R"(
@@ -1740,6 +1742,29 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build kind");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
         }
+    }
+
+    Y_UNIT_TEST(CancelBroken) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        const ui64 buildIndexTx = DoCreateBrokenIndex(runtime, env, txId);
+
+        const ui64 cancelTxId = ++txId;
+        TestCancelBuildIndex(runtime, cancelTxId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_CANCELLED);
+
+        // Check that another index is built successfully (i.e. the table is not left in a locked state)
+        const ui64 buildIndex2Tx = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndex2Tx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndex2Tx);
     }
 
     Y_UNIT_TEST(CreateBuildProposeReject) {
@@ -1828,6 +1853,90 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             );
         }
 
+    }
+
+    Y_UNIT_TEST(BuildTableWithEmptyShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write only 10 rows
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 10);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
+
+        TBlockEvents<TEvDataShard::TEvFilterKMeansRequest> filterBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+
+        ui64 buildIndexTx = ++txId;
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+            "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+        });
+        auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->mutable_global_vector_kmeans_tree_index();
+        // 20 clusters with 10 rows will be merged into 1 cluster
+        kmeansSettings->mutable_vector_settings()->set_clusters(20);
+        kmeansSettings->mutable_vector_settings()->set_levels(2);
+        kmeansSettings->mutable_vector_settings()->set_overlap_clusters(2);
+        ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+
+        runtime.WaitFor("FilterKMeansRequest", [&]{ return filterBlocker.size(); });
+
+        // Now wait for the 1st level to be finalized
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> level1Blocker(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
+                return true;
+            }
+            return false;
+        });
+        filterBlocker.Stop().Unblock();
+
+        // Reshard the first level table (1build) so that one of the shards becomes empty.
+        // (pretend that it's really luckily presharded to contain the empty child cluster range)
+        {
+            const char* buildTable = "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable1build";
+            auto indexDesc = DescribePath(runtime, tenantSchemeShard, buildTable, true, true, true);
+            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_EQUAL(parts.size(), 1);
+            // There should be only 1 cluster because there are too little rows. So no clusters with ID > 1.
+            TestSplitTable(runtime, tenantSchemeShard, ++txId, buildTable, Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 2 } } } }
+            )", parts[0].GetDatashardId()));
+            env.TestWaitNotification(runtime, txId);
+        }
+        level1Blocker.Stop().Unblock();
+
+        // Now wait for the index build
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+
+        // Check row count in the posting table
+        {
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+            Cerr << "... posting table contains " << rows << " rows" << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(rows, 10);
+        }
     }
 
 }

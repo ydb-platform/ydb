@@ -90,12 +90,12 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
 
             // PostgreSQL AST rewrtiting
             if (TCoPgSelect::Match(node.Get())) {
-                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, true);
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter,  true);
             }
             
             // YQL AST rewriting
             else if (TCoYqlSelect::Match(node.Get())) {
-                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, false);
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, false);
             } else if (TKqpExprSublink::Match(node.Get())) {
                 return RemoveRootFromSublink(node, ctx);
             }  else if (TCoTake::Match(node.Get())) {

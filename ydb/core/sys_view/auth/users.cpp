@@ -50,6 +50,16 @@ protected:
         IsAdmin = isClusterAdmin || isDatabaseAdmin;
 
         auto request = MakeHolder<TEvSchemeShard::TEvListUsers>();
+        if (!IsAdmin) {
+            if (UserToken && UserToken->GetUserSID()) {
+                request->Record.SetUser(UserToken->GetUserSID());
+            } else { // non-admins users without sid can't read any data
+                auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
+                FillBatch(*batch, NKikimrScheme::TEvListUsersResult());
+                TBase::SendBatch(std::move(batch));
+                return;
+            }
+        }
 
         LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Sending list users request " << request->Record.ShortUtf8DebugString());
@@ -61,7 +71,7 @@ protected:
         const auto& record = ev->Get()->Record;
 
         LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-            "Got list users response " <<   record.ShortUtf8DebugString());
+            "Got list users response " << record.ShortUtf8DebugString());
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 

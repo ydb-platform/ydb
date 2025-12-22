@@ -1062,7 +1062,7 @@ public:
         : ExternalStorageConfig(new NExternalStorage::TS3ExternalStorageConfig(task.GetS3Settings()))
         , DataShard(dataShard)
         , TxId(txId)
-        , Settings(TS3Settings::FromRestoreTask(task))
+        , Settings(TStorageSettings::FromRestoreTask<NKikimrSchemeOp::TS3Settings>(task))
         , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
         , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
         , TableInfo(tableInfo)
@@ -1122,7 +1122,7 @@ private:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     const TActorId DataShard;
     const ui64 TxId;
-    const NDataShard::TS3Settings Settings;
+    const TStorageSettings Settings;
     const NBackupRestoreTraits::EDataFormat DataFormat;
     NBackupRestoreTraits::ECompressionCodec CompressionCodec;
     const TTableInfo TableInfo;

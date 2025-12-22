@@ -1,11 +1,12 @@
 #pragma once
 
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
-#include <ydb/core/protos/feature_flags.pb.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NKikimrConfig {
     enum TTableServiceConfig_EBlockChannelsMode : int;
@@ -62,6 +63,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
+    NCommon::TConfSetting<bool, Static> UseFastChannels;
 
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
 
@@ -100,6 +102,8 @@ public:
 
     NCommon::TConfSetting<ui32, Static> KMeansTreeSearchTopSize;
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
+
+    NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
 
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;
@@ -227,6 +231,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
     bool EnableDqHashCombineByDefault = true;
     bool EnableWatermarks = false;
+    bool DefaultUseFastChannels = false;
+    bool EnableDiscardSelect = false;
 
     bool Antlr4ParserIsAmbiguityError = false;
 

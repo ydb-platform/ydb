@@ -4,10 +4,10 @@ PY3TEST()
     ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
     TEST_SRCS(
+        compaction_config.py
         order_by_with_limit.py
         tablets_movement.py
         test_cs_many_updates.py
-        test_log_scenario.py
         upgrade_to_internal_path_id.py
         data_read_correctness.py
         test_overloads.py
@@ -47,6 +47,7 @@ RECURSE(
     common
     docs
     high_load
+    large
     lib
     load
     oom

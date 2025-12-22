@@ -1,5 +1,6 @@
-#include "dq_tasks_runner.h"
+#include "dq_channel_service.h"
 #include "dq_tasks_counters.h"
+#include "dq_tasks_runner.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
@@ -640,10 +641,17 @@ public:
                         .MaxStoredBytes = memoryLimits.ChannelBufferSize
                     };
 
-                    auto inputChannel = CreateDqInputChannel(settings, typeEnv);
+                    IDqInputChannel::TPtr inputChannel;
+                    if (task.GetFastChannels()) {
+                        Y_ENSURE(Context.ChannelService);
+                        inputChannel = Context.ChannelService->GetInputChannel(settings);
+                    } else {
+                        inputChannel = CreateDqInputChannel(settings, typeEnv);
+                    }
 
                     auto ret = AllocatedHolder->InputChannels.emplace(channelId, inputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated input channelId: " << channelId);
+
                     inputs.emplace_back(inputChannel);
                 }
             }
@@ -763,7 +771,13 @@ public:
                         .BufferPageAllocSize = memoryLimits.BufferPageAllocSize
                     };
 
-                    auto outputChannel = CreateDqOutputChannel(settings, LogFunc);
+                    IDqOutputChannel::TPtr outputChannel;
+                    if (task.GetFastChannels()) {
+                        Y_ENSURE(Context.ChannelService);
+                        outputChannel = Context.ChannelService->GetOutputChannel(settings);
+                    } else {
+                        outputChannel = CreateDqOutputChannel(settings, LogFunc);
+                    }
 
                     if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
                         auto outputActorId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId());
@@ -836,6 +850,8 @@ public:
 
         InputConsumed = false;
         auto runStatus = FetchAndDispatch();
+        LastFetchTime = TInstant::Now();
+        LastFetchStatus = runStatus;
 
         if (Y_UNLIKELY(CollectFull())) {
             if (SpillingTaskCounters) {

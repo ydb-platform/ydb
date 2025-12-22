@@ -1,5 +1,4 @@
 #include "blobstorage_syncer_recoverlostdata_proxy.h"
-#include "blobstorage_syncer_broker.h"
 #include "blobstorage_syncer_committer.h"
 #include "blobstorage_syncer_data.h"
 #include "blobstorage_syncquorum.h"
@@ -52,33 +51,8 @@ namespace NKikimr {
                       VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): START",
                             TargetVDiskId.ToString().data()));
-            ctx.Send(MakeBlobStorageSyncBrokerID(), new TEvQuerySyncToken(SyncerCtx->VCtx->VDiskActorId),
-                IEventHandle::FlagTrackDelivery);
-            Become(&TThis::WaitForBrokerStateFunc);
-        }
-
-        void Handle(TEvSyncToken::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            LOG_DEBUG(ctx, BS_SYNCER,
-                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
-                        "TSyncerRLDFullSyncProxyActor(%s): TEvSyncToken received",
-                            TargetVDiskId.ToString().data()));
             CreateAndRunTask(ctx);
         }
-
-        void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
-            // no sync broker service
-            if (ev->Get()->SourceType == TEvQuerySyncToken::EventType) {
-                CreateAndRunTask(ctx);
-            }
-        }
-
-        STRICT_STFUNC(WaitForBrokerStateFunc,
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvSyncToken, Handle)
-            HFunc(TEvents::TEvUndelivered, Handle)
-            HFunc(TEvVGenerationChange, Handle)
-        )
 
         void CreateAndRunTask(const TActorContext &ctx) {
             TActorId sstWriterId;
@@ -111,7 +85,6 @@ namespace NKikimr {
         }
 
         void Handle(TEvSyncerJobDone::TPtr &ev, const TActorContext &ctx) {
-            ctx.Send(MakeBlobStorageSyncBrokerID(), new TEvReleaseSyncToken(SyncerCtx->VCtx->VDiskActorId));
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): TEvSyncerJobDone; Task# %s",
@@ -154,9 +127,7 @@ namespace NKikimr {
 
         void Handle(TEvSyncerRLDWakeup::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
-            ctx.Send(MakeBlobStorageSyncBrokerID(), new TEvQuerySyncToken(SyncerCtx->VCtx->VDiskActorId),
-                IEventHandle::FlagTrackDelivery);
-            Become(&TThis::WaitForBrokerStateFunc);
+            CreateAndRunTask(ctx);
         }
 
         STRICT_STFUNC(WaitForTimeoutStateFunc,
@@ -199,7 +170,6 @@ namespace NKikimr {
         // HandlePoison
         ////////////////////////////////////////////////////////////////////////
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            ctx.Send(MakeBlobStorageSyncBrokerID(), new TEvReleaseSyncToken(SyncerCtx->VCtx->VDiskActorId));
             LOG_DEBUG(ctx, BS_SYNCER,
                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): PoisonPill",

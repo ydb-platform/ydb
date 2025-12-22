@@ -734,6 +734,7 @@ message TReqSelectRows
     optional bool use_order_by_in_join_subqueries = 32;
     optional int32 statistics_aggregation = 33; // EStatisticsAggregation
     optional int32 optimization_level = 35; // EOptimizationLevel
+    optional int32 hyper_log_log_precision = 36;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 
@@ -937,6 +938,7 @@ message TReqExplainQuery
     optional bool new_range_inference = 12;
     optional int32 syntax_version = 13 [default = 1];
     optional int64 min_row_count_per_subquery = 14;
+    optional int32 hyper_log_log_precision = 15;
 }
 
 message TRspExplainQuery
@@ -2161,6 +2163,7 @@ message TReqGetColumnarStatistics
     optional TFetcherConfig fetcher_config = 3;
     optional EColumnarStatisticsFetcherMode fetcher_mode = 4;
     optional bool enable_early_finish = 5 [default = false];
+    optional bool enable_read_size_estimation = 6 [default = false];
 
     optional TTransactionalOptions transactional_options = 100;
 }
@@ -2192,6 +2195,8 @@ message TColumnarStatistics
 
     // Per-column hyperloglog digest to approximate number of unique values
     repeated NYT.NProto.THyperLogLogDigest column_hyperloglog_digests = 14;
+
+    optional int64 read_size_estimation = 15;
 }
 
 message TRspGetColumnarStatistics

@@ -164,6 +164,7 @@ public:
             RequestHealthCheck();
             RequestBaseConfig();
             RequestStorageConfig();
+            RequestStateStorageConfig();
         }
         NodeReceived.resize(Nodes.size());
         NodeRequested.resize(Nodes.size());
@@ -257,6 +258,20 @@ public:
         Requested++;
     }
 
+    void RequestStateStorageConfig() {
+        auto request = std::make_unique<NKikimr::NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableGetStateStorageConfig()->SetNodesState(true);
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        Requested++;
+    }
+
+
+    void HandleResult(NKikimr::NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
+        State.MutableStateStorageConfig()->CopyFrom(ev->Get()->Record.GetStateStorageConfig());
+        ++Received;
+        CheckReply();
+    }
+
     void Handle(NKikimr::NStorage::TEvNodeWardenBaseConfig::TPtr ev) {
         State.MutableBaseConfig()->CopyFrom(ev->Get()->BaseConfig);
         ++Received;
@@ -264,6 +279,7 @@ public:
     }
 
     void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr ev) {
+        State.MutableStorageConfig()->CopyFrom(*ev->Get()->Config);
         State.MutableBridgeClusterState()->CopyFrom(ev->Get()->Config->GetClusterState());
         State.MutableBridgeClusterStateDetails()->CopyFrom(ev->Get()->Config->GetClusterStateDetails());
         ++Received;
@@ -388,6 +404,7 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, Wakeup);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
+            hFunc(NKikimr::NStorage::TEvNodeConfigInvokeOnRootResult, HandleResult);
         }
     }
 

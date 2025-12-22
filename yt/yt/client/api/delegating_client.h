@@ -624,6 +624,13 @@ public:
         const TPollJobShellOptions& options),
         (jobId, shellName, parameters, options))
 
+    DELEGATE_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, RunJobShellCommand, (
+        NJobTrackerClient::TJobId jobId,
+        const std::optional<std::string>& shellName,
+        const std::string& command,
+        const TRunJobShellCommandOptions& options),
+        (jobId, shellName, command, options))
+
     DELEGATE_METHOD(TFuture<void>, AbortJob, (
         NJobTrackerClient::TJobId jobId,
         const TAbortJobOptions& options),

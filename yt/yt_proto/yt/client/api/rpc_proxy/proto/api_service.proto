@@ -2789,6 +2789,19 @@ message TRspPollJobShell
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqRunJobShellCommand
+{
+    required NYT.NProto.TGuid job_id = 1;
+    required string command = 2;
+    optional string shell_name = 3;
+}
+
+message TRspRunJobShellCommand
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqAbortJob
 {
     required NYT.NProto.TGuid job_id = 1;

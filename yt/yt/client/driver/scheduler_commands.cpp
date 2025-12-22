@@ -788,6 +788,25 @@ void TPollJobShellCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TRunJobShellCommandCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("job_id", &TThis::JobId);
+    registrar.Parameter("command", &TThis::Command);
+    registrar.Parameter("shell_name", &TThis::ShellName)
+        .Default();
+}
+
+void TRunJobShellCommandCommand::DoExecute(ICommandContextPtr context)
+{
+    auto reader = WaitFor(context->GetClient()->RunJobShellCommand(JobId, ShellName, Command, Options))
+        .ValueOrThrow();
+
+    auto output = context->Request().OutputStream;
+    PipeInputToOutput(reader, output);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TAbortJobCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("job_id", &TThis::JobId);

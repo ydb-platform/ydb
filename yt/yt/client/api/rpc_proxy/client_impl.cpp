@@ -1791,6 +1791,31 @@ TFuture<TPollJobShellResponse> TClient::PollJobShell(
     }));
 }
 
+TFuture<IAsyncZeroCopyInputStreamPtr> TClient::RunJobShellCommand(
+    NJobTrackerClient::TJobId jobId,
+    const std::optional<std::string>& shellName,
+    const std::string& command,
+    const TRunJobShellCommandOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.RunJobShellCommand();
+
+    if (options.Timeout) {
+        SetTimeoutOptions(*req, options);
+    } else {
+        InitStreamingRequest(*req);
+    }
+
+    ToProto(req->mutable_job_id(), jobId);
+    req->set_command(command);
+    if (shellName) {
+        req->set_shell_name(*shellName);
+    }
+
+    return CreateRpcClientInputStream(std::move(req));
+}
+
 TFuture<void> TClient::AbortJob(
     NJobTrackerClient::TJobId jobId,
     const TAbortJobOptions& options)

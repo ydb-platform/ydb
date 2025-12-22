@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
     static std::tuple<TString, TString> DoLocalKMeans(
         Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parentFrom, NTableIndex::NKMeans::TClusterId parentTo, ui64 seed, ui64 k,
         NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
-        VectorIndexSettings::Metric metric, ui32 maxBatchRows = 50000, ui32 overlapClusters = 0)
+        VectorIndexSettings::Metric metric, ui32 maxBatchRows = 50000, ui32 overlapClusters = 0, bool expectEmpty = false)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -153,6 +153,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
             NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
             UNIT_ASSERT_EQUAL_C(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE,
                                 issues.ToOneLineString());
+            UNIT_ASSERT_EQUAL(reply->Record.GetIsEmpty(), expectEmpty);
         }
 
         auto level = ReadShardedTable(server, kLevelTable);
@@ -1031,7 +1032,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 auto [level, posting] = DoLocalKMeans(server, sender,
                     30, 31, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
-                    maxBatchRows);
+                    maxBatchRows, 0, true);
                 UNIT_ASSERT_VALUES_EQUAL(level, "");
                 UNIT_ASSERT_VALUES_EQUAL(posting, "");
                 recreate();
@@ -1043,7 +1044,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 auto [level, posting] = DoLocalKMeans(server, sender,
                     100, 101, 111, 2,
                     NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN,
-                    maxBatchRows);
+                    maxBatchRows, 0, true);
                 UNIT_ASSERT_VALUES_EQUAL(level, "");
                 UNIT_ASSERT_VALUES_EQUAL(posting, "");
                 recreate();

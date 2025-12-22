@@ -2785,7 +2785,11 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
     }
 
     void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
-        if (Response->Get()->Record.GetIsEmpty()) {
+        if (Response->Get()->Record.GetIsEmpty() &&
+            buildInfo.KMeans.Parent == 0)
+        {
+            // We only handle the root level through MultiLocal if the table has exactly 1 shard.
+            // If that shard is empty then it means the whole index is empty.
             buildInfo.KMeans.IsEmpty = true;
             Self->PersistBuildIndexKMeansState(db, buildInfo);
         }

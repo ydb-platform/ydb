@@ -404,11 +404,11 @@ private:
         if (IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
             YQL_ENSURE(!LockTxId, "SnapshotReadOnly should not take locks");
         }
-        if (LockTxId && IsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW && LookupStrategy == NKqpProto::EStreamLookupStrategy::UNIQUE) {
+        if (LockTxId && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW && LookupStrategy == NKqpProto::EStreamLookupStrategy::UNIQUE) {
             YQL_ENSURE(LockMode == NKikimrDataEvents::OPTIMISTIC);
-        } else if (LockTxId && IsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
+        } else if (LockTxId && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
             YQL_ENSURE(LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
-        } else if (LockTxId && IsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SERIALIZABLE) {
+        } else if (LockTxId && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SERIALIZABLE) {
             YQL_ENSURE(LockMode == NKikimrDataEvents::OPTIMISTIC);
         }
         LookupActorStateSpan.EndOk();

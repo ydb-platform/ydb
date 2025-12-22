@@ -148,10 +148,6 @@ ydb/tests/functional/serverless test_serverless.py.test_turn_on_serverless_stora
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v1-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
 ydb/tests/functional/tenants py3test.[*/*] chunk
-ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--false-enable_pool_encryption--false]
-ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
-ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
-ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_when_deactivate_fat_tenant_creation_another_tenant_is_ok[enable_alter_database_create_hive_first--false-enable_pool_encryption--false]
 ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py] chunk

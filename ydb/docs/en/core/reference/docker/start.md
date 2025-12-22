@@ -78,16 +78,16 @@ For users who are not experienced with Docker, it's important to understand how 
   docker cp ydb-local:/ydb_data/cluster/kikimr_configs/config.yaml ydb_config/my-ydb-config.yaml
   ```
 
-1. Stop the container if it's still running, and remove the created data directory:
+3. Stop the container if it's still running, and remove the created data directory:
 
   ```bash
   docker stop ydb-local
   rm -rf ydb_data
   ```
 
-1. Edit the copied configuration file `ydb_config/my-ydb-config.yaml` as needed.
+4. Edit the copied configuration file `ydb_config/my-ydb-config.yaml` as needed.
 
-1. When running the container, use the `-v` flag to mount the directory with your configuration file into the container:
+5. When running the container, use the `-v` flag to mount the directory with your configuration file into the container:
 
    ```bash
    docker_args=(

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import dataclasses
+import json
+import math
 import os
+import re
 import sys
 import traceback
-import re
-import json
 from codeowners import CodeOwners
 from enum import Enum
 from operator import attrgetter
@@ -102,7 +103,6 @@ class TestResult:
 
     @property
     def elapsed_display(self):
-        import math
         # Round up to 1 decimal place: 10.545s -> 10.6s (ceiling to 0.1)
         elapsed_rounded = math.ceil(self.elapsed * 10) / 10
         m, s = divmod(elapsed_rounded, 60)

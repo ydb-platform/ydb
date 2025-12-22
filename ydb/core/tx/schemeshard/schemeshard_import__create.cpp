@@ -70,6 +70,10 @@ bool IsCreateReplicationQuery(const TString& query) {
     return query.Contains("CREATE ASYNC REPLICATION");
 }
 
+bool IsCreateTransferQuery(const TString& query) {
+    return query.Contains("CREATE TRANSFER");
+}
+
 bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
@@ -81,6 +85,9 @@ bool RewriteCreateQuery(
     }
     if (IsCreateReplicationQuery(query)) {
         return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
+    }
+    if (IsCreateTransferQuery(query)) {
+        return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
     }
 
     issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);

@@ -33,7 +33,6 @@ FROM
 Чтобы записать значение нескольких колонок в формате Json (одним полем) можно воспользоваться выражением:
 
 ```sql
-
 INSERT INTO ydb_source.output_topic_name
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
@@ -200,7 +199,6 @@ LIMIT 1;
 
 Данный формат позволяет считывать содержимое сообщений в формате [Apache Parquet](https://parquet.apache.org).
 
-
 Пример запроса:
 
 ```sql
@@ -245,6 +243,7 @@ LIMIT 1;
 ### Поддерживаемые типы данных {#schema}
 
 Таблица всех поддерживаемых типов в схеме запроса:
+
 |Тип                                  |csv_with_names|tsv_with_names|json_list|json_each_row|json_as_string|parquet|raw|
 |-------------------------------------|--------------|--------------|---------|-------------|--------------|-------|---|
 |`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓|✓|✓||✓ |✓   |   |
@@ -288,8 +287,8 @@ WITH
 
 $parsed =
 SELECT
-    JSON_VALUE (json, '$.key') AS key,
-    JSON_VALUE (json, '$.value') AS value
+    JSON_VALUE(json, '$.key') AS key,
+    JSON_VALUE(json, '$.value') AS value
 FROM
     $input;
 
@@ -318,7 +317,7 @@ WITH (
     FORMAT = json_as_string,
     SCHEMA = (Data Json));
 
-$col = SELECT * from (select Yson::ConvertTo(Data,
+$col = SELECT * FROM (select Yson::ConvertTo(Data,
     Struct<
         update: Struct<volume: Uint64>,
         key: List<UInt64>,
@@ -328,7 +327,7 @@ $col = SELECT * from (select Yson::ConvertTo(Data,
 $volumes =
 SELECT
     *
-FROM (SELECT ts[0] as ts, update from $col) FLATTEN COLUMNS;
+FROM (SELECT ts[0] as ts, update FROM $col) FLATTEN COLUMNS;
 
 SELECT 
     *

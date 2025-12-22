@@ -28,7 +28,6 @@ END DO;
 - `FORMAT = "<format>",` - см. [форматы](../../../concepts/streaming_query/formats.md),
 - `SCHEMA = (...)` —  описание схемы хранимых данных.
 
-
 ### Примеры
 
 ```sql

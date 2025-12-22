@@ -26,7 +26,7 @@
 INSERT INTO
     ydb_source.output_topic
 SELECT
-    CAST(Data AS String)
+    Unwrap(CAST(Data AS String))
 FROM
     ...
 ```

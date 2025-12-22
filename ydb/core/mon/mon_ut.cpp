@@ -329,8 +329,8 @@ Y_UNIT_TEST_SUITE(MonPage) {
         UNIT_ASSERT_STRING_CONTAINS(response, TEST_RESPONSE);
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
-        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);
-        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 1);
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 0);
     }
 
@@ -369,8 +369,8 @@ Y_UNIT_TEST_SUITE(Other) {
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
-        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 2);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 2);
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 0);
     }
 

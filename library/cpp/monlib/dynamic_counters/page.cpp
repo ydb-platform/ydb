@@ -76,6 +76,7 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
             return true;
         });
     }
+    Cerr << "GET PATH INFO = " << request.GetPathInfo() << Endl;
     if (!request.GetPathInfo().empty()) {
         StringSplitter(request.GetPathInfo())
             .Split('/')

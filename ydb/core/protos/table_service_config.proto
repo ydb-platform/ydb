@@ -462,4 +462,12 @@ message TTableServiceConfig {
 
     optional bool EnableDiscardSelect = 115 [default = false, (InvalidateCompileCache) = true];
 
+    enum ETxMode {
+        SerializableRW = 0;
+        SnapshotRW = 1;
+        SnapshotRO = 2;
+        StaleRO = 3;
+    }
+
+    optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
 };

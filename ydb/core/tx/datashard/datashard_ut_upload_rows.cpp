@@ -768,13 +768,12 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         TVector<TActorId> requestedTablets;
         auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvUploadRowsRequest) {
-                bool firstMessage = requestedTablets.empty();
                 requestedTablets.push_back(ev->Recipient);
-
-                if (firstMessage) {
+            } else if (ev->GetTypeRewrite() == TEvDataShard::EvUploadRowsResponse) {
+                if (blockedEnqueueRecords.size() < 2) {
                     blockedEnqueueRecords.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP; // drop a message for one datashard
-                };
+                }
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -795,13 +794,23 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         splitShard(0, 5);
 
+        ui64 minTabletId = Max<ui64>();
         for (auto& ev : blockedEnqueueRecords) {
-            auto response = MakeHolder<TEvDataShard::TEvUploadRowsResponse>();
-            response->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
-            response->Record.SetTabletID(shards[0]);
-            runtime.Send(ev->Sender, ev->Recipient, response.Release());
+            auto shardResponse = ev->Get<TEvDataShard::TEvUploadRowsResponse>();
+            minTabletId = std::min(minTabletId, shardResponse->Record.GetTabletID());
         }
-        blockedEnqueueRecords.clear();
+
+        for (auto& ev : blockedEnqueueRecords) {
+            auto shardResponse = ev->Get<TEvDataShard::TEvUploadRowsResponse>();
+            if (shardResponse->Record.GetTabletID() == minTabletId) {
+                auto response = MakeHolder<TEvDataShard::TEvUploadRowsResponse>();
+                response->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
+                response->Record.SetTabletID(shardResponse->Record.GetTabletID());
+                runtime.Send(ev->Recipient, ev->Sender, response.Release());
+            } else {
+                runtime.Send(ev.Release(), 0, true);
+            }
+        }
 
         DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SUCCESS);
         // Must receive 4 events:
@@ -810,7 +819,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         // - two shards created after split
         UNIT_ASSERT_VALUES_EQUAL(requestedTablets.size(), 4);
         THashSet<TActorId> requestedTabletsSet(requestedTablets.begin(), requestedTablets.end());
-        UNIT_ASSERT_VALUES_EQUAL(requestedTabletsSet.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL_C(requestedTabletsSet.size(), 4, JoinRange(",", requestedTabletsSet.begin(), requestedTabletsSet.end()));
 
         auto data = KqpSimpleExec(runtime, Q_(R"(
             SELECT COUNT(*) FROM `/Root/table-1`

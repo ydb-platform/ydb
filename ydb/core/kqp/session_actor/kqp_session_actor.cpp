@@ -1008,7 +1008,7 @@ public:
         QueryState->TxCtx->SetIsolationLevel(settings);
         QueryState->TxCtx->OnBeginQuery();
 
-        if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
+        if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                 << "Writes aren't supported for Snapshot Isolation";
@@ -1030,7 +1030,40 @@ public:
     Ydb::Table::TransactionControl GetTxControlWithImplicitTx() {
         if (!QueryState->ImplicitTxId) {
             Ydb::Table::TransactionSettings settings;
-            settings.mutable_serializable_read_write();
+            const auto isolation = QueryState->PreparedQuery->GetPhysicalQuery().GetDefaultTxMode() != NKqpProto::ISOLATION_LEVEL_UNDEFINED
+                ? QueryState->PreparedQuery->GetPhysicalQuery().GetDefaultTxMode()
+                : [&]() {
+                    switch (Settings.TableService.GetDefaultTxMode()) {
+                    case NKikimrConfig::TTableServiceConfig::SerializableRW:
+                        return NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+                    case NKikimrConfig::TTableServiceConfig::SnapshotRW:
+                        return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
+                    case NKikimrConfig::TTableServiceConfig::SnapshotRO:
+                        return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                    case NKikimrConfig::TTableServiceConfig::StaleRO:
+                        return NKqpProto::ISOLATION_LEVEL_READ_STALE;
+                    default:
+                        ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
+                            << "Unknown DefaultTxMode";
+                    }
+                }();
+            switch (isolation) {
+                case NKqpProto::ISOLATION_LEVEL_SERIALIZABLE:
+                    settings.mutable_serializable_read_write();
+                    break;
+                case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
+                    settings.mutable_snapshot_read_write();
+                    break;
+                case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO:
+                    settings.mutable_snapshot_read_only();
+                    break;
+                case NKqpProto::ISOLATION_LEVEL_READ_STALE:
+                    settings.mutable_stale_read_only();
+                    break;
+                default:
+                    ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
+                        << "Unknown DefaultTxMode";
+            }
             BeginTx(settings);
             QueryState->ImplicitTxId = QueryState->TxId;
         }
@@ -1074,7 +1107,7 @@ public:
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
                 AppData()->TimeProvider, AppData()->RandomProvider);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-            QueryState->TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
+            QueryState->TxCtx->EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
         }
 
         return true;
@@ -1145,9 +1178,9 @@ public:
         QueryState->TxCtx->HasTableWrite |= hasOlapWrite || hasOltpWrite;
         QueryState->TxCtx->HasTableRead |= hasOlapRead || hasOltpRead;
 
-        if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
-                && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO
-                && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
+        if (QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_AST_SCAN
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
@@ -1283,7 +1316,7 @@ public:
             request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
             request.UserTraceId = queryState->UserRequestContext->TraceId;
         } else {
-            request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+            request.IsolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
         }
 
         return request;
@@ -1302,12 +1335,9 @@ public:
     IKqpGateway::TExecPhysicalRequest PrepareGenericRequest(TKqpQueryState *queryState) {
         auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
 
-        if (queryState) {
-            request.Snapshot = queryState->TxCtx->GetSnapshot();
-            request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
-        } else {
-            request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
-        }
+        AFL_ENSURE(queryState);
+        request.Snapshot = queryState->TxCtx->GetSnapshot();
+        request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
 
         return request;
     }
@@ -1315,6 +1345,7 @@ public:
     IKqpGateway::TExecPhysicalRequest PrepareRequest(const TKqpPhyTxHolder::TConstPtr& tx, bool literal,
         TKqpQueryState *queryState)
     {
+        AFL_ENSURE(queryState && QueryState);
         if (literal) {
             YQL_ENSURE(tx);
             return PrepareLiteralRequest(QueryState.get());
@@ -1492,7 +1523,7 @@ public:
 
         if (isBatchQuery && (!tx || !tx->IsLiteralTx())) {
             ExecutePartitioned(tx);
-        } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
+        } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
             ExecuteDeferredEffectsImmediately(tx);
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
             ExecutePhyTx(tx, commit);
@@ -1549,7 +1580,7 @@ public:
     }
 
     void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
-        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects(tx));
+        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects());
 
         auto& txCtx = *QueryState->TxCtx;
         auto request = PrepareRequest(/* tx */ nullptr, /* literal */ false, QueryState.get());
@@ -1579,7 +1610,7 @@ public:
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
-                    if (QueryState->HasTxControl() && !QueryState->HasImplicitTx() && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                    if (QueryState->HasTxControl() && !QueryState->HasImplicitTx() && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Scheme operations cannot be executed inside transaction");
                         return true;
@@ -1590,7 +1621,7 @@ public:
 
                 case NKqpProto::TKqpPhyTx::TYPE_DATA:
                 case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
-                    if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                    if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Data operations cannot be executed outside of transaction");
                         return true;

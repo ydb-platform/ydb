@@ -184,8 +184,7 @@ namespace {
             } else if (name == "passwordEncrypted") {
                 // PasswordEncrypted is never used
             } else if (name == "hash") {
-                createUserSettings.IsHashedPassword = true;
-                createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+                createUserSettings.HashedPassword = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 createUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
@@ -210,8 +209,7 @@ namespace {
             } else if (name == "passwordEncrypted") {
                 // PasswordEncrypted is never used
             } else if (name == "hash") {
-                alterUserSettings.IsHashedPassword = true;
-                alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+                alterUserSettings.HashedPassword = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 alterUserSettings.CanLogin = true;
             } else if (name == "noLogin") {

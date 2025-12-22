@@ -437,12 +437,18 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();
     const TTableInfo* mainTableForIndex = (index ? Self->GetMainTableForIndex(pathId) : nullptr);
 
-    TString errStr;
+    // Save CPU resources when potential merge will certainly be immediately rejected by Self->IgniteOperation()
+    // and potential split will probably be rejected later.
+    TString inflightLimitErrStr;
+    if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Do not consider split-merge: " << inflightLimitErrStr);
+        return true;
+    }
+
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
     TString mergeReason;
     if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady)
-        && Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, errStr)
         && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, Self->ShardInfos[shardIdx].TabletID, shardsToMerge, mainTableForIndex, now, mergeReason)
     ) {
         TTxId txId = Self->GetCachedTxId(ctx);

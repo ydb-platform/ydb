@@ -6,6 +6,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/queue.h>
 #include <util/datetime/base.h>
+#include <util/string/join.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/histogram_snapshot.h>
 
@@ -132,10 +133,13 @@ namespace NKikimr {
             TString ToString() const {
                 TStringStream str;
                 str << "{TCompactionRequests Size# " << size() << ", Compactions# [";
+                TVector<TString> items;
                 for (const auto& [key, request] : *this) {
-                    str << " {Key# " << key << " Request# " << request.ToString() << "},";
+                    TStringStream item;
+                    item << " {Key# " << key << " Request# " << request.ToString() << "}";
+                    items.push_back(item.Str());
                 }
-                str << "]}";
+                str << JoinSeq(", ", items) << "]}";
                 return str.Str();
             }
         };
@@ -144,10 +148,13 @@ namespace NKikimr {
             TString ToString() const {
                 TStringStream str;
                 str << "{TCompactionsInfo Size# " << size() << ", Compactions# [";
+                TVector<TString> items;
                 for (const auto& [key, info] : *this) {
-                    str << " {Key# " << key << " Info# " << info.ToString() << "},";
+                    TStringStream item;
+                    item << " {Key# " << key << " Info# " << info.ToString() << "}";
+                    items.push_back(item.Str());
                 }
-                str << "]}";
+                str << JoinSeq(", ", items) << "]}";
                 return str.Str();
             }
         };
@@ -234,10 +241,13 @@ namespace NKikimr {
         TString ToString() const {
             TStringStream str;
             str << "{TPDiskCompactions [";
+            TVector<TString> items;
             for (const auto& [pdiskId, compactionQueue] : CompactionsPerPDisk) {
-                str << " {PDiskId# " << pdiskId << " Compactions# " << compactionQueue.ToString() << "},";
+                TStringStream item;
+                item << " {PDiskId# " << pdiskId << " Compactions# " << compactionQueue.ToString() << "}";
+                items.push_back(item.Str());
             }
-            str << "]}";
+            str << JoinSeq(", ", items) << "]}";
             return str.Str();
         }
 
@@ -284,6 +294,8 @@ namespace NKikimr {
         TPDiskCompactions CompactionsPerPDisk;
         ui64 Token = 1;
         TMemorizableControlWrapper MaxActiveCompactionsPerPDisk;
+        TMemorizableControlWrapper LongWaitingThresholdSec;
+        TMemorizableControlWrapper LongWorkingThresholdSec;
         TIntrusivePtr<TCompBrokerMon> Mon;
 
     public:
@@ -291,9 +303,15 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_COMP_BROKER_ACTOR;
         }
 
-        TCompBroker(const TControlWrapper& maxActiveCompactionsPerPDisk, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
+        TCompBroker(
+            const TControlWrapper& maxActiveCompactionsPerPDisk,
+            const TControlWrapper& longWaitingThresholdSec,
+            const TControlWrapper& longWorkingThresholdSec,
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
             : TActorBootstrapped<TThis>()
             , MaxActiveCompactionsPerPDisk(maxActiveCompactionsPerPDisk)
+            , LongWaitingThresholdSec(longWaitingThresholdSec)
+            , LongWorkingThresholdSec(longWorkingThresholdSec)
             , Mon(new TCompBrokerMon(counters))
         {}
 
@@ -343,27 +361,65 @@ namespace NKikimr {
                 Token++;
             }
             
-            UpdateMetrics();
+            UpdateMetrics(ctx);
         }
 
-        void CollectCurrentCompactionsStats() {
+        void CollectCurrentCompactionsStats(const TActorContext& ctx) {
             TInstant now = TInstant::Now();
+            i64 longWaitingThreshold = LongWaitingThresholdSec.Update(ctx.Now());
+            i64 longWorkingThreshold = LongWorkingThresholdSec.Update(ctx.Now());
+            
+            TVector<TString> longWaitingCompactions;
+            TVector<TString> longWorkingCompactions;
             
             for (const auto& [pdiskId, queue] : CompactionsPerPDisk.CompactionsPerPDisk) {
                 for (const auto& [key, request] : queue.PendingCompactions) {
                     double waitTimeSeconds = (now - request.RequestTime).SecondsFloat();
                     Mon->WaitTimeSeconds->Collect(waitTimeSeconds);
+                    
+                    if (longWaitingThreshold > 0 && waitTimeSeconds >= longWaitingThreshold) {
+                        TStringStream ss;
+                        ss << "{PDiskId# " << pdiskId 
+                           << " VDiskId# " << request.Key.VDiskId 
+                           << " ActorId# " << request.Key.ActorId
+                           << " WaitTimeSec# " << static_cast<i64>(waitTimeSeconds)
+                           << " Priority# " << request.Priority << "}";
+                        longWaitingCompactions.push_back(ss.Str());
+                    }
                 }
                 
                 for (const auto& [key, info] : queue.CompactionsInfo) {
                     double workTimeSeconds = (now - info.StartTime).SecondsFloat();
                     Mon->WorkTimeSeconds->Collect(workTimeSeconds);
+                    
+                    if (longWorkingThreshold > 0 && workTimeSeconds >= longWorkingThreshold) {
+                        TStringStream ss;
+                        ss << "{PDiskId# " << pdiskId
+                           << " VDiskId# " << info.VDiskId
+                           << " ActorId# " << info.ActorId
+                           << " Token# " << info.Token
+                           << " WorkTimeSec# " << static_cast<i64>(workTimeSeconds)
+                           << " StartTime# " << info.StartTime.ToStringUpToSeconds() << "}";
+                        longWorkingCompactions.push_back(ss.Str());
+                    }
                 }
+            }
+            
+            if (!longWaitingCompactions.empty()) {
+                LOG_WARN_S(ctx, NKikimrServices::BS_COMP_BROKER, 
+                    "Long waiting compactions detected: Count# " << longWaitingCompactions.size() 
+                    << " Compactions# [" << JoinSeq(", ", longWaitingCompactions) << "]");
+            }
+            
+            if (!longWorkingCompactions.empty()) {
+                LOG_WARN_S(ctx, NKikimrServices::BS_COMP_BROKER,
+                    "Long working compactions detected: Count# " << longWorkingCompactions.size() 
+                    << " Compactions# [" << JoinSeq(", ", longWorkingCompactions) << "]");
             }
         }
 
-        void UpdateMetrics() {
-            CollectCurrentCompactionsStats();
+        void UpdateMetrics(const TActorContext& ctx) {
+            CollectCurrentCompactionsStats(ctx);
             Mon->PendingCompactions->Set(CompactionsPerPDisk.GetTotalPending());
             Mon->ActiveCompactions->Set(CompactionsPerPDisk.GetTotalActive());
         }
@@ -376,8 +432,12 @@ namespace NKikimr {
         )
     };
 
-    IActor *CreateCompBrokerActor(const TControlWrapper& maxActiveCompactionsPerPDisk, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
-        return new TCompBroker(maxActiveCompactionsPerPDisk, counters);
+    IActor *CreateCompBrokerActor(
+        const TControlWrapper& maxActiveCompactionsPerPDisk,
+        const TControlWrapper& longWaitingThresholdSec,
+        const TControlWrapper& longWorkingThresholdSec,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
+        return new TCompBroker(maxActiveCompactionsPerPDisk, longWaitingThresholdSec, longWorkingThresholdSec, counters);
     }
 
 } // NKikimr

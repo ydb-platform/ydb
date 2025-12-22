@@ -139,9 +139,18 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             }
             ssLog << ": " << messages.size() << " messages;";
             ssLog << " " << early << " early messages";
-            ssLog << ": [";
-            for (auto&& m : messages) {
-                ssLog << "{" << m.GetCreateTime().MicroSeconds() << "," << m.GetWriteTime().MicroSeconds() << "}, ";
+            ssLog << ": [\n";
+            for (size_t i = 0; i < messages.size(); ++i) {
+                const auto& m = messages[i];
+                TMaybe<i64> writeDiff;
+                if (startTimestamp.has_value()) {
+                    writeDiff = (i64)m.GetWriteTime().MicroSeconds() - (i64)startTimestamp->MicroSeconds();
+                }
+                ssLog << "    " << i << ":{create:" << m.GetCreateTime().MicroSeconds() << ",write:" << m.GetWriteTime().MicroSeconds();
+                if (writeDiff) {
+                    ssLog << ",write-start:" << *writeDiff;
+                }
+                ssLog << "},\n ";
             }
             ssLog << "]\n";
             Cerr << ssLog.Str() << Endl;

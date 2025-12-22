@@ -264,7 +264,7 @@ TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant t
     ss << "GetOffsetEstimate: container.size()=" << container.size() << '\n';
     for(const auto& item : container) {
         const auto& key = item.Key;
-        ss << "  GetOffsetEstimate: item.Timestamp=" << item.Timestamp.MilliSeconds() << " " << LabeledOutput(key.GetOffset(), key.GetPartNo(), key.IsHead(), key.IsFastWrite()) << '\n';
+        ss << "  GetOffsetEstimate: item.Timestamp=" << item.Timestamp.MilliSeconds() << " diff_ms=" << ((i64)item.Timestamp.MilliSeconds() - (i64)timestamp.MilliSeconds()) << " " << LabeledOutput(key.GetOffset(), key.GetPartNo(), key.IsHead(), key.IsFastWrite()) << '\n';
     }
     if (container.empty()) {
         return Nothing();

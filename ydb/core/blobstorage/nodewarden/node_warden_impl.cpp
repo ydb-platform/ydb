@@ -66,6 +66,8 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxCommonLogChunksSSD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , CommonStaticLogChunks(NPDisk::CommonStaticLogChunks, 1, 1'000'000)
     , MaxActiveCompactionsPerPDisk(0, 0, 1'000'000)
+    , LongWaitingCompactionThresholdSec(3600, 0, 2592000)
+    , LongWorkingCompactionThresholdSec(3600, 0, 2592000)
     , CostMetricsParametersByMedia({
         TCostMetricsParameters{200},
         TCostMetricsParameters{50},
@@ -430,6 +432,8 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksSSD, icb->PDiskControls.MaxCommonLogChunksSSD);
         TControlBoard::RegisterSharedControl(CommonStaticLogChunks, icb->PDiskControls.CommonStaticLogChunks);
         TControlBoard::RegisterSharedControl(MaxActiveCompactionsPerPDisk, icb->PDiskControls.MaxActiveCompactionsPerPDisk);
+        TControlBoard::RegisterSharedControl(LongWaitingCompactionThresholdSec, icb->PDiskControls.LongWaitingCompactionThresholdSec);
+        TControlBoard::RegisterSharedControl(LongWorkingCompactionThresholdSec, icb->PDiskControls.LongWorkingCompactionThresholdSec);
 
         TControlBoard::RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
                 icb->VDiskControls.BurstThresholdNsHDD);
@@ -492,7 +496,8 @@ void TNodeWarden::Bootstrap() {
     SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig.GetBridgeSyncRateBytesPerSecond());
 
     // start compaction broker
-    actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(CreateCompBrokerActor(MaxActiveCompactionsPerPDisk, AppData()->Counters)));
+    actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
+        CreateCompBrokerActor(MaxActiveCompactionsPerPDisk, LongWaitingCompactionThresholdSec, LongWorkingCompactionThresholdSec, AppData()->Counters)));
 
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();

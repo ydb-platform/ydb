@@ -10,6 +10,7 @@ class TWaitCompactionController: public NYDBTest::NColumnShard::TController {
 private:
     using TBase = NKikimr::NYDBTest::ICSController;
     TAtomicCounter ExportsFinishedCount = 0;
+    TAtomicCounter ImportsFinishedCount = 0;
     THashMap<TString, NColumnShard::NTiers::TTierConfig> OverrideTiers;
     ui32 TiersModificationsCount = 0;
     YDB_READONLY(TAtomicCounter, TieringMetadataActualizationCount, 0);
@@ -22,6 +23,9 @@ protected:
     virtual void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override;
     virtual void OnExportFinished() override {
         ExportsFinishedCount.Inc();
+    }
+    virtual void OnImportFinished() override {
+        ImportsFinishedCount.Inc();
     }
     virtual bool NeedForceCompactionBacketsConstruction() const override {
         return true;
@@ -54,6 +58,10 @@ public:
 
     ui32 GetFinishedExportsCount() const {
         return ExportsFinishedCount.Val();
+    }
+    
+    ui32 GetFinishedImportsCount() const {
+        return ImportsFinishedCount.Val();
     }
 
     virtual void OnTieringMetadataActualized() override {

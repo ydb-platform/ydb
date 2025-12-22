@@ -185,7 +185,7 @@ TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> TMainBase::CreateFunc
 
     const auto previousHandler = std::signal(SIGINT, SIG_DFL);
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, paths)->Clone();
-    std::signal(SIGINT, previousHandler); // Preserve default signal handler after udfs load
+    std::signal(SIGINT, previousHandler); // Restore previous signal handler after udfs load
 
     if (ExcludeLinkedUdfs) {
         for (const auto& wrapper : NYql::NUdf::GetStaticUdfModuleWrapperList()) {

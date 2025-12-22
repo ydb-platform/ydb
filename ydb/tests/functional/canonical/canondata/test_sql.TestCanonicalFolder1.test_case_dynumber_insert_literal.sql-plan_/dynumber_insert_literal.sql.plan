@@ -6,21 +6,13 @@
     "tables": [
         {
             "name": "/local/base_dynumber_insert_literal_sql_plan/ResultLiteralDyNumber",
-            "reads": [
-                {
-                    "lookup_by": [
-                        "Key"
-                    ],
-                    "type": "Lookup"
-                }
-            ],
             "writes": [
                 {
                     "columns": [
                         "Key",
                         "Value"
                     ],
-                    "type": "MultiUpsert"
+                    "type": "MultiInsert"
                 }
             ]
         }

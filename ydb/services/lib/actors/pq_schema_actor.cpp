@@ -267,7 +267,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TClientServiceTypes& supportedClientServiceTypes,
         const bool checkServiceType,
         const NKikimrPQ::TPQConfig& pqConfig,
-        bool enableTopicDiskSubDomainQuota
+        bool enableTopicDiskSubDomainQuota,
+        const TAppData* appData
     ) {
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.name(), pqConfig);
         if (consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
@@ -282,6 +283,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         consumer->SetName(consumerName);
 
         if (rr.has_shared_consumer_type()) {
+                if (!appData->FeatureFlags.GetEnableTopicMessageLevelParallelism()) {
+                    return TMsgPqCodes(TStringBuilder() << "shared consumers is disabled", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+                }
                 consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
 
                 consumer->SetKeepMessageOrder(rr.shared_consumer_type().keep_messages_order());
@@ -1244,7 +1248,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         for (const auto& consumer : request.consumers()) {
             auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, consumer, supportedClientServiceTypes, true, pqConfig,
-                                                      appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
+                                                      appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota(), appData);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
@@ -1493,7 +1497,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         for (const auto& rr : consumers) {
             auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr.second, supportedClientServiceTypes, rr.first,
-                                                      pqConfig, appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
+                                                      pqConfig, appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota(), appData);
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;

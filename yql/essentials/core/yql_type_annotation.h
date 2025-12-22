@@ -222,11 +222,11 @@ public:
 
     TString Find(const TString&) const;
 
-    TVector<TOrderedItem>::const_pointer begin() const {
+    TVector<TOrderedItem>::const_iterator begin() const {
         return Order_.cbegin();
     }
 
-    TVector<TOrderedItem>::const_pointer end() const {
+    TVector<TOrderedItem>::const_iterator end() const {
         return Order_.cend();
     }
 
@@ -418,7 +418,6 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TCredentials::TPtr Credentials = MakeIntrusive<TCredentials>();
     IModuleResolver::TPtr Modules;
     IUrlListerManagerPtr UrlListerManager;
-    bool UseUrlListerForFolder = false;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
@@ -450,6 +449,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool StrictTableProps = true;
     bool JsonQueryReturnsJsonDocument = false;
     bool YsonCastToString = true;
+    bool CaseInsensitiveNamedArgs = false;
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
@@ -481,8 +481,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool DirectRowDependsOn = true;
     bool EnableLineage = false;
     bool EnableStandaloneLineage = false;
-    bool CorrectLineage = true;
+    TMaybe<bool> CorrectLineage;
     TMaybe<bool> CorrectStandaloneLineage;
+    TMaybe<ui32> LineageSize;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;

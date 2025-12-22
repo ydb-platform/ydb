@@ -59,6 +59,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMaxLogChunkCount(130, 1, 100000)
     , MaxInProgressSyncCount(0, 0, 1000)
     , EnablePhantomFlagStorage(0, 0, 1)
+    , PhantomFlagStorageLimitPerVDiskBytes(10'000'000, 0, 100'000'000'000)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , MaxCommonLogChunksSSD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , CommonStaticLogChunks(NPDisk::CommonStaticLogChunks, 1, 1'000'000)
@@ -80,6 +81,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerBucketSize(1, 1, 100'000)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
+    , MaxPutTimeoutSeconds(DefaultMaxPutTimeout.Seconds(), 1, 1'000'000)
     , EnableDeepScrubbing(false, false, true)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
@@ -410,6 +412,7 @@ void TNodeWarden::Bootstrap() {
 
         TControlBoard::RegisterSharedControl(MaxInProgressSyncCount, icb->VDiskControls.MaxInProgressSyncCount);
         TControlBoard::RegisterSharedControl(EnablePhantomFlagStorage, icb->VDiskControls.EnablePhantomFlagStorage);
+        TControlBoard::RegisterSharedControl(PhantomFlagStorageLimitPerVDiskBytes, icb->VDiskControls.PhantomFlagStorageLimitPerVDiskBytes);
 
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksHDD, icb->PDiskControls.MaxCommonLogChunksHDD);
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksSSD, icb->PDiskControls.MaxCommonLogChunksSSD);
@@ -446,6 +449,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(ReportingControllerBucketSize, icb->DSProxyControls.RequestReportingSettings.BucketSize);
         TControlBoard::RegisterSharedControl(ReportingControllerLeakDurationMs, icb->DSProxyControls.RequestReportingSettings.LeakDurationMs);
         TControlBoard::RegisterSharedControl(ReportingControllerLeakRate, icb->DSProxyControls.RequestReportingSettings.LeakRate);
+        TControlBoard::RegisterSharedControl(MaxPutTimeoutSeconds, icb->DSProxyControls.MaxPutTimeoutSeconds);
     }
 
     // start replication broker

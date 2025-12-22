@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
@@ -31,6 +32,7 @@ namespace {
         return IsIn({
             NScheme::ESchemeEntryType::Table,
             NScheme::ESchemeEntryType::View,
+            NScheme::ESchemeEntryType::Topic,
         }, entry.Type);
     }
 
@@ -85,7 +87,7 @@ TCommandExport::TCommandExport(bool useExportToYt)
 TCommandExportToYt::TCommandExportToYt()
     : TYdbOperationCommand("yt", {}, "Create export to YT")
 {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
         {"Destination", {{"destination", "dst", "d"}, "Path to a table or a directory in YT", true}},
@@ -214,7 +216,7 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    auto colors = NColorizer::AutoColors(Cout);
+    auto colors = NConsoleClient::AutoColors(Cout);
     config.Opts->AddLongOption("scheme", TStringBuilder()
             << "S3 endpoint scheme - "
             << colors.BoldColor() << "http" << colors.OldColor()
@@ -315,6 +317,18 @@ void TCommandExportToS3::Config(TConfig& config) {
         .RequiredArgument("BOOL").StoreResult<bool>(&UseVirtualAddressing).DefaultValue("true");
 
     {
+        TStringBuilder help;
+        help << "Materialize index table data or not";
+        if (config.HelpCommandVerbosiltyLevel >= 2) {
+            help << Endl << "    By default, only index metadata is uploaded and indexes are built during import — it"
+                 << Endl << "    saves space and reduces export time, but it can potentially increase the import time."
+                 << Endl << "    Indexes can be materialized, then their data will be uploaded during export and downloaded during import.";
+        }
+        config.Opts->AddLongOption("materialize-indexes", help)
+            .RequiredArgument("BOOL").StoreResult<bool>(&MaterializeIndexes).DefaultValue("false");
+    }
+
+    {
         TStringBuilder encryptionAlgorithmHelp;
         encryptionAlgorithmHelp << "Encryption algorithm. Supported values: ";
         bool first = true;
@@ -407,6 +421,7 @@ int TCommandExportToS3::Run(TConfig& config) {
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
     settings.UseVirtualAddressing(UseVirtualAddressing);
+    settings.MaterializeIndexes(MaterializeIndexes);
 
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});

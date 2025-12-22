@@ -230,6 +230,7 @@ namespace NKikimr::NStorage {
 
         vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
         vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
+        vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
 
         vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 
@@ -262,6 +263,12 @@ namespace NKikimr::NStorage {
         vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
 
         vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
+
+        // debug options
+        if (Cfg->TinySyncLog) {
+            vdiskConfig->SyncLogMaxDiskAmount = 1;
+            vdiskConfig->SyncLogMaxMemAmount = 1;
+        }
 
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),

@@ -146,7 +146,7 @@ IF (CGO_ENABLED)
             cgo_unix_cgo_res.go
     )
 ENDIF()
-ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM6 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM6 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED)
+ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM6 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM6 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_ARM7 AND NOT RACE AND NOT CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND NOT RACE AND NOT CGO_ENABLED)
     SRCS(
         addrselect.go
         cgo_stub.go
@@ -270,5 +270,79 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         unixsock_posix.go
         unixsock_readmsg_other.go
     )
+ELSEIF (OS_ANDROID AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED)
+    SRCS(
+        addrselect.go
+        cgo_unix.go
+        conf.go
+        dial.go
+        dnsclient.go
+        dnsclient_unix.go
+        dnsconfig.go
+        dnsconfig_unix.go
+        error_posix.go
+        error_unix.go
+        fd_posix.go
+        fd_unix.go
+        file.go
+        file_posix.go
+        file_unix.go
+        hook.go
+        hook_unix.go
+        hosts.go
+        interface.go
+        interface_linux.go
+        ip.go
+        iprawsock.go
+        iprawsock_posix.go
+        ipsock.go
+        ipsock_posix.go
+        lookup.go
+        lookup_unix.go
+        mac.go
+        mptcpsock_linux.go
+        net.go
+        netcgo_off.go
+        netgo_off.go
+        nss.go
+        parse.go
+        pipe.go
+        port.go
+        port_unix.go
+        rawconn.go
+        rlimit_unix.go
+        sendfile.go
+        sendfile_nonwindows.go
+        sock_cloexec.go
+        sock_linux.go
+        sock_posix.go
+        sockaddr_posix.go
+        sockopt_linux.go
+        sockopt_posix.go
+        sockoptip4_linux.go
+        sockoptip6_posix.go
+        splice_linux.go
+        tcpsock.go
+        tcpsock_posix.go
+        tcpsock_unix.go
+        tcpsockopt_posix.go
+        tcpsockopt_unix.go
+        udpsock.go
+        udpsock_posix.go
+        unixsock.go
+        unixsock_posix.go
+        unixsock_readmsg_cmsg_cloexec.go
+        writev_unix.go
+    )
+    
+IF (CGO_ENABLED)
+    CGO_SRCS(
+                    cgo_android.go
+            cgo_resold.go
+            cgo_socknew.go
+            cgo_unix_cgo.go
+            cgo_unix_cgo_res.go
+    )
+ENDIF()
 ENDIF()
 END()

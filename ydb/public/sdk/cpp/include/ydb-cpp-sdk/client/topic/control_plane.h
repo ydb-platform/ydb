@@ -48,11 +48,10 @@ enum class EDeadLetterAction {
     Move = 2,
 };
 
-// 0 - unspecified
-// 1 - disabeld
-// 2 - database level metrics
-// 3 - object level metrics
-// 4 - detailed metrics
+// 0 - disabled
+// 1 - database level metrics
+// 2 - object level metrics
+// 3 - detailed metrics
 using EMetricsLevel = uint32_t;
 
 class TDeadLetterPolicyCondition {
@@ -948,13 +947,31 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
         return *this;
     }
 
-    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer() {
+    TConsumerSettings<TAlterTopicSettings>& BeginAddSharedConsumer() {
+        return BeginAddConsumer(EConsumerType::Shared);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddStreamingConsumer() {
+        return BeginAddConsumer(EConsumerType::Streaming);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer(EConsumerType consumerType = EConsumerType::Streaming) {
         AddConsumers_.push_back({*this});
+        AddConsumers_.back().ConsumerType(consumerType);
         return AddConsumers_.back();
     }
 
-    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer(const std::string& name) {
+    TConsumerSettings<TAlterTopicSettings>& BeginAddSharedConsumer(const std::string& name) {
+        return BeginAddConsumer(name, EConsumerType::Shared);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddStreamingConsumer(const std::string& name) {
+        return BeginAddConsumer(name, EConsumerType::Streaming);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer(const std::string& name, EConsumerType consumerType = EConsumerType::Streaming) {
         AddConsumers_.push_back({*this, name});
+        AddConsumers_.back().ConsumerType(consumerType);
         return AddConsumers_.back();
     }
 

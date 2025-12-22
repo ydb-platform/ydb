@@ -121,6 +121,8 @@ message TQueryStats {
     optional uint64 TotalCpuTimeUs = 15;
     optional string Type = 16;
     optional uint64 RequestUnits = 17;
+    optional uint64 LocksBrokenAsBreaker = 18;
+    optional uint64 LocksBrokenAsVictim = 19;
 }
 
 message TTopQueryStats {
@@ -426,6 +428,8 @@ message TQueryMetrics {
     optional TMetrics UpdateBytes = 8;
     optional TMetrics DeleteRows = 9;
     optional TMetrics RequestUnits = 10;
+    optional uint64 LocksBrokenAsBreaker = 11;
+    optional uint64 LocksBrokenAsVictim = 12;
 }
 
 // node -> sysview processor tablet

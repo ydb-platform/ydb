@@ -24,7 +24,7 @@ IF (TRUE)
         s390x.go
         shift.go
     )
-
+    
 IF (CGO_ENABLED)
     CGO_SRCS(
                     asm.go

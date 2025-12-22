@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
+#include <yt/yt/core/rpc/dispatcher.h>
+
 #include <library/cpp/yt/misc/hash.h>
 
 namespace NYT::NTabletClient {
@@ -170,6 +172,7 @@ TTableMountCacheBase::TTableMountCacheBase(
     NProfiling::TProfiler profiler)
     : TAsyncExpiringCache(
         config,
+        NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker(),
         logger.WithTag("Cache: TableMount"),
         profiler)
     , Logger(std::move(logger))

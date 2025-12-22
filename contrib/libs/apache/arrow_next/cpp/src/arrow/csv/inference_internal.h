@@ -20,9 +20,9 @@
 
 #include <memory>
 
-#include "arrow/csv/converter.h"
-#include "arrow/csv/options.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/converter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace csv {

@@ -918,9 +918,11 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
-    TFuture<TGenericResult> AlterDatabase(const TString& cluster, const NYql::TAlterDatabaseSettings& settings) override {
-        Y_UNUSED(cluster);
-        Y_UNUSED(settings);
+    TFuture<TGenericResult> AlterDatabase(const TString&, const NYql::TAlterDatabaseSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
+    TFuture<TGenericResult> TruncateTable(const TString&, const NYql::TTruncateTableSettings&) override {
         return NotImplemented<TGenericResult>();
     }
 

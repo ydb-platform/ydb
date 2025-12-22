@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/core/scheme/scheme_tablecell.h>
+#include "common.h"
+
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 
 namespace NKikimr::NStat::NAggFuncs {
@@ -13,12 +14,17 @@ public:
 
     static constexpr size_t ParamsCount = 2;
 
-    static TState CreateState(const std::array<ui64, ParamsCount>& params) {
-        return TState(NKikimr::TCountMinSketch::Create(params[0], params[1]));
+    static TState CreateState(
+            TTypeId /*columnTypeId*/, const std::span<const TValue, ParamsCount>& params) {
+        return TState(NKikimr::TCountMinSketch::Create(
+            params[0].Get<ui64>(), params[1].Get<ui64>()));
     }
-    static auto CreateStateUpdater() {
-        return [](TState& state, const TCell& cell) {
-            state->Count(cell.Data(), cell.Size());
+    static auto CreateStateUpdater(TTypeId columnTypeId) {
+        return [columnTypeId](TState& state, const TValue& val) {
+            VisitValue(columnTypeId, val, RawDataVisitor(
+                [&state](const char* data, size_t size) {
+                    state->Count(data, size);
+                }));
         };
     }
     static void MergeStates(const TState& left, TState& right) {

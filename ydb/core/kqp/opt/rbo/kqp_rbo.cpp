@@ -17,7 +17,9 @@ bool ISimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContex
     }
 }
 
-TRuleBasedStage::TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules) : Rules(rules) {
+TRuleBasedStage::TRuleBasedStage(TString stageName, TVector<std::shared_ptr<IRule>> rules) : 
+    IRBOStage(stageName),
+    Rules(rules) {
     for (auto & r : Rules) {
         Props |= r->Props;
     }
@@ -27,10 +29,16 @@ void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
     if (props & ERuleProperties::RequireParents) {
         root.ComputeParents();
     }
-    if (props & ERuleProperties::RequireTypes) {
+    if (props & (ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics)) {
         if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
             Y_ENSURE(false, "RBO type annotation failed");
         }
+    }
+    if (props & (ERuleProperties::RequireMetadata | ERuleProperties::RequireStatistics)) {
+        root.ComputePlanMetadata(ctx);
+    }
+    if (props & ERuleProperties::RequireStatistics) {
+        root.ComputePlanStatistics(ctx);
     }
 }
 
@@ -48,6 +56,8 @@ void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
 void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     bool fired = true;
     int nMatches = 0;
+    bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
+
 
     while (fired && nMatches < 1000) {
         fired = false;
@@ -64,7 +74,11 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                     if (iter.Parent) {
                         iter.Parent->Children[iter.ChildIndex] = op;
                     } else {
-                        root.Children[0] = op;
+                        root.SetInput(op);
+                    }
+
+                    if (needToLog && rule->LogRule) {
+                        YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
                     }
 
                     ComputeRequiredProps(root, Props, ctx);
@@ -84,21 +98,34 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 }
 
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {
-    YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
+    bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
 
-    auto context = TRBOContext(KqpCtx,ctx,TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
+    if (needToLog) {
+        YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
+    }
+
+    auto context = TRBOContext(KqpCtx, ctx, TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
 
     for (size_t idx = 0; idx < Stages.size(); idx++) {
-        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;
         auto stage = Stages[idx];
+        YQL_CLOG(TRACE, CoreDq) << "Running stage: " << stage->StageName;
         ComputeRequiredProps(root, stage->Props, context);
+        if (needToLog) {
+            YQL_CLOG(TRACE, CoreDq) << "Before stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+        }
         stage->RunStage(root, context);
-        YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
+        if (needToLog) {
+            YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+        }
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    ComputeRequiredProps(root, ERuleProperties::RequireParents | ERuleProperties::RequireTypes, context);
+    auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireStatistics;
+    ComputeRequiredProps(root, convertProps, context);
+    if (needToLog) {
+        YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
+    }
 
     return ConvertToPhysical(root, context, TypeAnnTransformer, PeepholeTransformer);
 }

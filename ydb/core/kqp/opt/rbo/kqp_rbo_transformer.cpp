@@ -90,12 +90,12 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
 
             // PostgreSQL AST rewrtiting
             if (TCoPgSelect::Match(node.Get())) {
-                return RewriteSelect(node, ctx, TypeCtx, true);
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter,  true);
             }
             
             // YQL AST rewriting
             else if (TCoYqlSelect::Match(node.Get())) {
-                return RewriteSelect(node, ctx, TypeCtx, false);
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, false);
             } else if (TKqpExprSublink::Match(node.Get())) {
                 return RemoveRootFromSublink(node, ctx);
             }  else if (TCoTake::Match(node.Get())) {
@@ -181,7 +181,7 @@ TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePt
     return new TKqpRewriteSelectTransformer(kqpCtx, typeCtx);
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
                                                        TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
                                                        TAutoPtr<IGraphTransformer> typeAnnTransformer,
                                                        TAutoPtr<IGraphTransformer> peephole,

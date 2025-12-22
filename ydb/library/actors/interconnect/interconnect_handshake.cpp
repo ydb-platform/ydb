@@ -1528,6 +1528,9 @@ namespace NActors {
                     } else {
                         sb << "Unable to complete rdma READ work request due to cq runtime error";
                     }
+                    if (Rdma.Qp) {
+                        sb << " qp: " << Rdma.Qp;
+                    }
                     LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR, sb.c_str());
                     rdmaReadAck.SetErr(sb);
                 }

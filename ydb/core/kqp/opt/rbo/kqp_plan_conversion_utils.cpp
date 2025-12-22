@@ -90,6 +90,7 @@ std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr nod
     return result;
 }
 
+
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
     auto opMap = TKqpOpMap(node);
     auto input = ExprNodeToOperator(opMap.Input().Ptr());
@@ -97,15 +98,17 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
     TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
 
     for (auto mapElement : opMap.MapElements()) {
-        auto iu = TInfoUnit(mapElement.Variable().StringValue());
+        const auto iu = TInfoUnit(mapElement.Variable().StringValue());
         if (mapElement.Maybe<TKqpOpMapElementRename>()) {
             auto element = mapElement.Cast<TKqpOpMapElementRename>();
             auto fromIU = TInfoUnit(element.From().StringValue());
             mapElements.push_back(std::make_pair(iu, fromIU));
         } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
-            if (element.Lambda().Body().Maybe<TCoMember>().Name().Maybe<TCoAtom>()) {
-                auto member = element.Lambda().Body().Cast<TCoMember>();
+            // case lambda ($arg) { member $arg `name }
+            if (auto maybeMember = element.Lambda().Body().Maybe<TCoMember>();
+                maybeMember && maybeMember.Cast().Struct().Ptr() == element.Lambda().Args().Arg(0).Ptr()) {
+                auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
                 mapElements.push_back(std::make_pair(iu, fromIU));
@@ -193,7 +196,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
         output = std::make_shared<TOpMap>(input, input->Pos, mapElements, false);
     }
 
-    output->Props.OrderEnforcer = TOrderEnforcer(EOrderEnforcerAction::REQUIRE, EOrderEnforcerReason::USER, sortElements);
+    output = std::make_shared<TOpSort>(output, node->Pos(), sortElements);
     return output;
 }
 
@@ -205,8 +208,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TInfoUnit(TString(traits.OriginalColName()));
         const auto aggFuncName = TString(traits.AggregationFunction());
-        const auto resultColName = TInfoUnit(TString(traits.ResultColName()));
-        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, resultColName);
+        TOpAggregationTraits opAggTraits(originalColName, aggFuncName);
         opAggTraitsList.push_back(opAggTraits);
     }
 

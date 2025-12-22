@@ -20,16 +20,13 @@ namespace numpy
           out_type &, decltype(aexpr), out_type::value,
           (int)out_type::value - (int)utils::dim_of<E>::value,
           out_type::is_vectorizable &&
-              std::is_same<typename out_type::dtype,
-                           typename types::dtype_of<E>::type>::value &&
+              std::is_same<typename out_type::dtype, typename types::dtype_of<E>::type>::value &&
               types::is_vectorizable<E>::value>(out, aexpr);
     } else {
       utils::broadcast_copy<
-          out_type &, E, out_type::value,
-          (int)out_type::value - (int)utils::dim_of<E>::value,
+          out_type &, E, out_type::value, (int)out_type::value - (int)utils::dim_of<E>::value,
           out_type::is_vectorizable &&
-              std::is_same<typename out_type::dtype,
-                           typename types::dtype_of<E>::type>::value &&
+              std::is_same<typename out_type::dtype, typename types::dtype_of<E>::type>::value &&
               types::is_vectorizable<E>::value>(out, expr);
     }
     return {};
@@ -42,8 +39,7 @@ namespace numpy
   }
 
   template <class T, class pS, class E>
-  types::none_type copyto(types::numpy_texpr<types::ndarray<T, pS>> &out,
-                          E const &expr)
+  types::none_type copyto(types::numpy_texpr<types::ndarray<T, pS>> &out, E const &expr)
   {
     using out_type = types::numpy_texpr<types::ndarray<T, pS>>;
     if (may_overlap(out, expr)) {
@@ -52,24 +48,20 @@ namespace numpy
           out_type &, decltype(aexpr), out_type::value,
           (int)out_type::value - (int)utils::dim_of<E>::value,
           out_type::is_vectorizable &&
-              std::is_same<typename out_type::dtype,
-                           typename types::dtype_of<E>::type>::value &&
+              std::is_same<typename out_type::dtype, typename types::dtype_of<E>::type>::value &&
               types::is_vectorizable<E>::value>(out, aexpr);
     } else {
       utils::broadcast_copy<
-          out_type &, E, out_type::value,
-          (int)out_type::value - (int)utils::dim_of<E>::value,
+          out_type &, E, out_type::value, (int)out_type::value - (int)utils::dim_of<E>::value,
           out_type::is_vectorizable &&
-              std::is_same<typename out_type::dtype,
-                           typename types::dtype_of<E>::type>::value &&
+              std::is_same<typename out_type::dtype, typename types::dtype_of<E>::type>::value &&
               types::is_vectorizable<E>::value>(out, expr);
     }
     return {};
   }
 
   template <class T, class pS, class E>
-  types::none_type copyto(types::numpy_texpr<types::ndarray<T, pS>> &&out,
-                          E const &expr)
+  types::none_type copyto(types::numpy_texpr<types::ndarray<T, pS>> &&out, E const &expr)
   {
     return copyto(out, expr);
   }

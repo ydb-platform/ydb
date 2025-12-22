@@ -467,18 +467,30 @@ public:
     }
 
     TString GetPoolId(const TString& databaseId, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorContext actorContext) {
-        if (!userToken || userToken->GetUserSID().empty()) {
-            return NResourcePool::DEFAULT_POOL_ID;
+        TString resultPoolId;
+        i64 resultRank;
+
+        const bool isSystemUser = userToken && userToken->IsSystemUser();
+        TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(databaseId);
+
+        if (!isSystemUser) {
+            auto userSID = userToken ? userToken->GetUserSID() : NACLib::TSID();
+            std::tie(resultPoolId, resultRank) = GetPoolIdFromClassifiers(databaseId, userSID, databaseInfo, userToken, actorContext);
         }
 
-        TDatabaseInfo& databaseInfo = *GetOrCreateDatabaseInfo(databaseId);
-        auto [resultPoolId, resultRank] = GetPoolIdFromClassifiers(databaseId, userToken->GetUserSID(), databaseInfo, userToken, actorContext);
-        for (const auto& userSID : userToken->GetGroupSIDs()) {
-            const auto& [poolId, rank] = GetPoolIdFromClassifiers(databaseId, userSID, databaseInfo, userToken, actorContext);
-            if (poolId && (!resultPoolId || resultRank > rank)) {
+        // System user maybe just default unspecified user like "user@system", so if there are group sids then check them first.
+        // TODO: explicitly distinguish "no user but has group" vs "real system user".
+        for (const auto& groupSID : userToken->GetGroupSIDs()) {
+            const auto& [poolId, rank] = GetPoolIdFromClassifiers(databaseId, groupSID, databaseInfo, userToken, actorContext);
+            if (poolId && (resultPoolId.empty() || resultRank > rank)) {
                 resultPoolId = poolId;
                 resultRank = rank;
             }
+        }
+
+        // System user by default always goes to the default pool.
+        if (isSystemUser && resultPoolId.empty()) {
+            return NResourcePool::DEFAULT_POOL_ID;
         }
 
         return resultPoolId ? resultPoolId : NResourcePool::DEFAULT_POOL_ID;
@@ -599,7 +611,7 @@ private:
             return it->second;
         }
 
-        TString poolId = "";
+        TString poolId = ""; // TODO: use optional or replace with DEFAULT_POOL
         i64 rank = -1;
         for (const auto& [_, classifier] : databaseInfo.RankToClassifierInfo) {
             if (classifier.MemberName.value_or(userSID) != userSID) {

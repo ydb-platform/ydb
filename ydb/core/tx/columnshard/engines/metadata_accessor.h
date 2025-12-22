@@ -83,7 +83,7 @@ public:
     };
 
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
-        const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const = 0;
+        const NReader::TReadDescription& readDescription, const bool isPlain) const = 0;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const = 0;
 };
@@ -109,7 +109,7 @@ public:
     }
 
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
-        const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const override;
+        const NReader::TReadDescription& readDescription, const bool isPlain) const override;
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& indexVersionsPointer, const NOlap::TSnapshot& ss) const override {
         return indexVersionsPointer->GetShardingInfoOptional(PathId.GetInternalPathId(), ss);
@@ -145,7 +145,7 @@ public:
         return std::nullopt;
     }
     virtual std::unique_ptr<NReader::NCommon::ISourcesConstructor> SelectMetadata(const TSelectMetadataContext& context,
-        const NReader::TReadDescription& readDescription, const bool withUncommitted, const bool isPlain) const override;
+        const NReader::TReadDescription& readDescription, const bool isPlain) const override;
 };
 
-}   // namespace NKikimr::NOlap
+} // namespace NKikimr::NOlap

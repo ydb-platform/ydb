@@ -8,8 +8,6 @@
 #include "proto_yson_struct.h"
 #include "yson_struct.h"
 
-#include <yt/yt/core/misc/mpl.h>
-
 #include <yt/yt/core/yson/protobuf_interop.h>
 
 #include <library/cpp/yt/misc/enum.h>
@@ -19,42 +17,6 @@
 #include <type_traits>
 
 namespace NYT::NYTree {
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class T>
-concept CEnum = TEnumTraits<T>::IsEnum;
-
-template <class T>
-concept CNullable = NMpl::IsSpecialization<T, std::unique_ptr> ||
-    NMpl::IsSpecialization<T, std::shared_ptr> ||
-    NMpl::IsSpecialization<T, std::optional> ||
-    NMpl::IsSpecialization<T, NYT::TIntrusivePtr>;
-
-template <class T>
-concept CYsonStruct = std::derived_from<T, TYsonStruct>;
-
-template <class T>
-concept CYsonStructLite = std::derived_from<T, TYsonStructLite>;
-
-template <class T>
-concept CTuple = requires {
-    std::tuple_size<T>::value;
-} && !CYsonStruct<T> && !CYsonStructLite<T>;
-
-template <class T>
-concept CStringLike = std::is_same_v<std::decay_t<T>, std::string> ||
-    std::is_same_v<std::decay_t<T>, std::string_view> ||
-    std::is_same_v<std::decay_t<T>, TString> ||
-    std::is_same_v<std::decay_t<T>, TStringBuf>;
-
-// To remove ambiguous behaviour for std::array.
-// std::array is handling as tuple
-template <class T>
-concept CList = std::ranges::range<T> && !CTuple<T> && !CStringLike<T> && !CYsonStruct<T> && !CYsonStructLite<T>;
-
-template <class T>
-concept CDict = CList<T> && NMpl::CMapping<T> && !CYsonStruct<T> && !CYsonStructLite<T>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -150,16 +112,14 @@ void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOpt
             })
             .Item("elements")
                 .DoList([&] (auto fluent) {
-                    std::apply(
-                        [&] (auto&&... args) {
-                            (fluent.Item()
-                                .BeginMap()
-                                    .Item("type").Do([&] (auto fluent) {
-                                        WriteSchema<std::decay_t<decltype(args)>>(fluent.GetConsumer(), options);
-                                    })
-                                .EndMap(), ...);
-                        },
-                        T{});
+                    [&]<size_t ...I> (std::index_sequence<I...>) {
+                        (fluent.Item()
+                            .BeginMap()
+                                .Item("type").Do([&] (auto fluent) {
+                                    WriteSchema<std::tuple_element_t<I, T>>(fluent.GetConsumer(), options);
+                                })
+                            .EndMap(), ...);
+                    } (std::make_index_sequence<std::tuple_size_v<T>>());
                 })
         .EndMap();
 }
@@ -209,16 +169,10 @@ void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOpt
     return WriteSchema<TString>(consumer, options);
 }
 
-template <CYsonStruct T>
+template <CYsonStructDerived T>
 void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
 {
-    New<T>()->WriteSchema(consumer, options);
-}
-
-template <CYsonStructLite T>
-void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options)
-{
-    T().WriteSchema(consumer, options);
+    TYsonStructRegistry::Get()->GetMeta<T>()->WriteSchema(consumer, options);
 }
 
 // Default implementation

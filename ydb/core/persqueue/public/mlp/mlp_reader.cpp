@@ -1,4 +1,5 @@
 #include "mlp_reader.h"
+#include "mlp_message_attributes.h"
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -133,13 +134,18 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             messageMetaAttr.try_emplace(meta.key(), meta.value());
         }
 
+        TString messageGroupId;
+        auto it = messageMetaAttr.find(MESSAGE_KEY);
+        if (it != messageMetaAttr.end()) {
+            messageGroupId = std::move(it->second);
+        }
         response->Messages.push_back(TEvReadResponse::TMessage{
             .MessageId = {PartitionId, message.GetId().GetOffset()},
             .Codec = codec,
             .Data = std::move(data),
             .MessageMetaAttributes = std::move(messageMetaAttr),
             .SentTimestamp = TInstant::MilliSeconds(message.messagemeta().senttimestampmilliseconds()),
-            .MessageGroupId = message.messagemeta().messagegroupid(),
+            .MessageGroupId = messageGroupId,
         });
     }
 

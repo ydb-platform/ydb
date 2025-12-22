@@ -70,9 +70,13 @@ void TTxScan::Complete(const TActorContext& ctx) {
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.TxId = txId;
-        if (request.HasLockTxId()) {
-            read.LockId = request.GetLockTxId();
-        }
+        read.SetLock(
+            request.HasLockTxId() ? std::make_optional(request.GetLockTxId()) : std::nullopt,
+            request.HasLockNodeId() ? std::make_optional(request.GetLockNodeId()) : std::nullopt,
+            request.HasLockMode() ? std::make_optional(request.GetLockMode()) : std::nullopt,
+            request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr,
+            false
+        );
 
         {
             auto accConclusion =

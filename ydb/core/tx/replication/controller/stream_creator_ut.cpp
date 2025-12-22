@@ -72,6 +72,51 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
     Y_UNIT_TEST(WithResolvedTimestamps) {
         Basic(TDuration::Seconds(10));
     }
+
+    void TopicAutoPartitioning(bool enabled) {
+        TEnv env(TFeatureFlags().SetEnableTopicAutopartitioningForCDC(true));
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
+
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        }));
+
+        env.GetRuntime().Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt, enabled
+        ));
+        {
+            auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
+            env.GetRuntime().Send(ev->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        }
+        {
+            auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender());
+            UNIT_ASSERT(ev->Get()->IsSuccess());
+        }
+
+        auto desc = env.GetDescription("/Root/Table/Stream/streamImpl");
+
+        const auto& pqconfig = desc.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
+        const auto& strategy = pqconfig.GetPartitionStrategy();
+
+        if (enabled) {
+            UNIT_ASSERT_EQUAL(strategy.GetPartitionStrategyType(), NKikimrPQ::TPQTabletConfig::CAN_SPLIT);
+        } else {
+            UNIT_ASSERT_EQUAL(strategy.GetPartitionStrategyType(), NKikimrPQ::TPQTabletConfig::DISABLED);
+        }
+    }
+
+    Y_UNIT_TEST(TopicAutoPartitioning) {
+        TopicAutoPartitioning(true);
+        TopicAutoPartitioning(false);
+    }
 }
 
 }

@@ -8,22 +8,7 @@ NKikimr::TConclusionStatus TExportTask::DoDeserializeFromProto(const NKikimrColu
     if (!id) {
         return id;
     }
-    auto selector = TSelectorContainer::BuildFromProto(proto.GetSelector());
-    if (!selector) {
-        return selector;
-    }
-    auto initializer = TStorageInitializerContainer::BuildFromProto(proto.GetStorageInitializer());
-    if (!initializer) {
-        return initializer;
-    }
-    auto serializer = NArrow::NSerialization::TSerializerContainer::BuildFromProto(proto.GetSerializer());
-    if (!serializer) {
-        return serializer;
-    }
     Identifier = id.DetachResult();
-    Selector = selector.DetachResult();
-    StorageInitializer = initializer.DetachResult();
-    Serializer = serializer.DetachResult();
     if (proto.HasTxId()) {
         TxId = proto.GetTxId();
     }
@@ -33,9 +18,6 @@ NKikimr::TConclusionStatus TExportTask::DoDeserializeFromProto(const NKikimrColu
 NKikimrColumnShardExportProto::TExportTask TExportTask::DoSerializeToProto() const {
     NKikimrColumnShardExportProto::TExportTask result;
     *result.MutableIdentifier() = Identifier.SerializeToProto();
-    *result.MutableSelector() = Selector.SerializeToProto();
-    *result.MutableStorageInitializer() = StorageInitializer.SerializeToProto();
-    *result.MutableSerializer() = Serializer.SerializeToProto();
     if (TxId) {
         result.SetTxId(*TxId);
     }
@@ -50,8 +32,28 @@ NBackground::TSessionControlContainer TExportTask::BuildAbortControl() const {
     return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(), std::make_shared<TAbortSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
 }
 
+TExportTask::TExportTask(const TIdentifier& id, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask, const std::optional<ui64> txId)
+    : Identifier(id)
+    , BackupTask(backupTask)
+    , TxId(txId)
+    , Columns(columns)
+{
+}
+
+TString TExportTask::GetClassNameStatic() {
+    return "CS::EXPORT";
+}
+
+TString TExportTask::GetClassName() const {
+    return GetClassNameStatic();
+}
+
+TString TExportTask::DebugString() const {
+    return TStringBuilder() << "{task_id=" << Identifier.DebugString() << ";}";
+}
+
 std::shared_ptr<NBackground::ISessionLogic> TExportTask::DoBuildSession() const {
-    auto result = std::make_shared<TSession>(std::make_shared<TExportTask>(Identifier, Selector, StorageInitializer, Serializer, TxId));
+    auto result = std::make_shared<TSession>(std::make_shared<TExportTask>(Identifier, Columns, BackupTask, TxId));
     if (!!TxId) {
         result->Confirm();
     }

@@ -41,14 +41,15 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
                         continue;
                     }
 
+                    const auto& cmsStr = statistic.GetData();
+                    std::unique_ptr<TCountMinSketch> cms(TCountMinSketch::FromString(
+                        cmsStr.data(), cmsStr.size()));
                     auto [currentIt, emplaced] = Self->CountMinSketches.try_emplace(tag);
                     if (emplaced) {
-                        currentIt->second.reset(TCountMinSketch::Create());
+                        currentIt->second = std::move(cms);
+                    } else {
+                        *(currentIt->second) += *cms;
                     }
-
-                    auto* data = statistic.GetData().data();
-                    auto* sketch = reinterpret_cast<const TCountMinSketch*>(data);
-                    *(currentIt->second) += *sketch;
                 }
             }
         }

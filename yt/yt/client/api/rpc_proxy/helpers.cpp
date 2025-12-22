@@ -1,6 +1,7 @@
 #include "helpers.h"
 
 #include <yt/yt/client/api/distributed_table_session.h>
+#include <yt/yt/client/api/operation_client.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
 
@@ -457,6 +458,54 @@ void FromProto(
     if (proto.has_incarnation_switch_info()) {
         result->IncarnationSwitchInfo = TYsonString(proto.incarnation_switch_info());
     }
+}
+
+void ToProto(
+    NProto::TJobTrace* proto,
+    const NApi::TJobTraceMeta& result)
+{
+    ToProto(proto->mutable_trace_id(), result.TraceId);
+    proto->set_progress(ConvertJobTraceProgressToProto(result.Progress));
+    proto->set_health(ConvertJobTraceHealthToProto(result.Health));
+
+    if (!result.ProcessTraceMetas.empty()) {
+        auto* pids = proto->mutable_process_trace_metas();
+        for (const auto& [processId, info] : result.ProcessTraceMetas) {
+            (*pids->mutable_pids())[processId].set_state(ConvertJobTraceStateToProto(info.State));
+        }
+    }
+}
+
+void FromProto(
+    NApi::TJobTraceMeta* result,
+    const NProto::TJobTrace& proto)
+{
+    result->TraceId = FromProto<NJobTrackerClient::TJobTraceId>(proto.trace_id());
+    result->Progress = ConvertJobTraceProgressFromProto(proto.progress());
+    result->Health = ConvertJobTraceHealthFromProto(proto.health());
+
+    result->ProcessTraceMetas.clear();
+    if (proto.has_process_trace_metas()) {
+        for (const auto& [processId, processTrace] : proto.process_trace_metas().pids()) {
+            result->ProcessTraceMetas[processId] = NApi::TProcessTraceMeta{
+                ConvertJobTraceStateFromProto(processTrace.state()),
+            };
+        }
+    }
+}
+
+void ToProto(
+    NProto::TCheckOperationPermissionResult* proto,
+    const NApi::TCheckOperationPermissionResult& result)
+{
+    proto->set_action(static_cast<NProto::ESecurityAction>(result.Action));
+}
+
+void FromProto(
+    NApi::TCheckOperationPermissionResult* result,
+    const NProto::TCheckOperationPermissionResult& proto)
+{
+    result->Action = static_cast<NSecurityClient::ESecurityAction>(proto.action());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1219,6 +1268,8 @@ void ToProto(
     YT_OPTIONAL_SET_PROTO(protoStatistics, legacy_chunk_row_count, statistics.LegacyChunkRowCount);
 
     ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
+
+    YT_OPTIONAL_SET_PROTO(protoStatistics, read_size_estimation, statistics.ReadDataSizeEstimate);
 }
 
 void FromProto(
@@ -1237,6 +1288,8 @@ void FromProto(
     statistics->LegacyChunkRowCount = YT_OPTIONAL_FROM_PROTO(protoStatistics, legacy_chunk_row_count);
 
     FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
+
+    statistics->ReadDataSizeEstimate = YT_OPTIONAL_FROM_PROTO(protoStatistics, read_size_estimation);
 }
 
 void ToProto(
@@ -1461,6 +1514,21 @@ void FromProto(
     }
     if (protoQuery.has_is_indexed()) {
         query->IsIndexed = protoQuery.is_indexed();
+    }
+}
+
+void FromProto(
+    NApi::TSuppressableAccessTrackingOptions* options,
+    const NApi::NRpcProxy::NProto::TSuppressableAccessTrackingOptions& proto)
+{
+    if (proto.has_suppress_access_tracking()) {
+        options->SuppressAccessTracking = proto.suppress_access_tracking();
+    }
+    if (proto.has_suppress_modification_tracking()) {
+        options->SuppressModificationTracking = proto.suppress_modification_tracking();
+    }
+    if (proto.has_suppress_expiration_timeout_renewal()) {
+        options->SuppressExpirationTimeoutRenewal = proto.suppress_expiration_timeout_renewal();
     }
 }
 
@@ -1944,6 +2012,151 @@ NProto::EJobStderrType ConvertJobStderrTypeToProto(
     }
 }
 
+NProto::EJobTraceProgress ConvertJobTraceProgressToProto(
+    NApi::EJobTraceProgress progress)
+{
+    switch (progress) {
+        case NApi::EJobTraceProgress::InProgress:
+            return NProto::EJobTraceProgress::JTP_IN_PROGRESS;
+        case NApi::EJobTraceProgress::Finished:
+            return NProto::EJobTraceProgress::JTP_FINISHED;
+    }
+}
+
+NApi::EJobTraceProgress ConvertJobTraceProgressFromProto(
+    NProto::EJobTraceProgress proto)
+{
+    switch (proto) {
+        case NProto::EJobTraceProgress::JTP_IN_PROGRESS:
+            return NApi::EJobTraceProgress::InProgress;
+        case NProto::EJobTraceProgress::JTP_FINISHED:
+            return NApi::EJobTraceProgress::Finished;
+    }
+}
+
+NProto::EJobTraceHealth ConvertJobTraceHealthToProto(
+    NApi::EJobTraceHealth health)
+{
+    switch (health) {
+        case NApi::EJobTraceHealth::Healthy:
+            return NProto::EJobTraceHealth::JTH_HEALTHY;
+        case NApi::EJobTraceHealth::Unhealthy:
+            return NProto::EJobTraceHealth::JTH_UNHEALTHY;
+    }
+}
+
+NApi::EJobTraceHealth ConvertJobTraceHealthFromProto(
+    NProto::EJobTraceHealth proto)
+{
+    switch (proto) {
+        case NProto::EJobTraceHealth::JTH_HEALTHY:
+            return NApi::EJobTraceHealth::Healthy;
+        case NProto::EJobTraceHealth::JTH_UNHEALTHY:
+            return NApi::EJobTraceHealth::Unhealthy;
+    }
+}
+
+NProto::EJobTraceState ConvertJobTraceStateToProto(
+    NJobTrackerClient::EJobTraceState state)
+{
+    switch (state) {
+        case NJobTrackerClient::EJobTraceState::Started:
+            return NProto::EJobTraceState::JTS_STARTED;
+        case NJobTrackerClient::EJobTraceState::Finished:
+            return NProto::EJobTraceState::JTS_FINISHED;
+        case NJobTrackerClient::EJobTraceState::Dropped:
+            return NProto::EJobTraceState::JTS_DROPPED;
+        case NJobTrackerClient::EJobTraceState::Orphaned:
+            return NProto::EJobTraceState::JTS_ORPHANED;
+    }
+}
+
+NJobTrackerClient::EJobTraceState ConvertJobTraceStateFromProto(
+    NProto::EJobTraceState proto)
+{
+    switch (proto) {
+        case NProto::EJobTraceState::JTS_STARTED:
+            return NJobTrackerClient::EJobTraceState::Started;
+        case NProto::EJobTraceState::JTS_FINISHED:
+            return NJobTrackerClient::EJobTraceState::Finished;
+        case NProto::EJobTraceState::JTS_DROPPED:
+            return NJobTrackerClient::EJobTraceState::Dropped;
+        case NProto::EJobTraceState::JTS_ORPHANED:
+            return NJobTrackerClient::EJobTraceState::Orphaned;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqReadTable* req,
+    const NYPath::TRichYPath& path,
+    const std::optional<TYsonString>& format,
+    const TTableReaderOptions& options)
+{
+    ToProto(req->mutable_path(), path);
+
+    if (format) {
+        req->set_format(ToProto(*format));
+        req->set_desired_rowset_format(NProto::ERowsetFormat::RF_FORMAT);
+    }
+
+    req->set_unordered(options.Unordered);
+    req->set_omit_inaccessible_columns(options.OmitInaccessibleColumns);
+    req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
+    req->set_enable_table_index(options.EnableTableIndex);
+    req->set_enable_row_index(options.EnableRowIndex);
+    req->set_enable_range_index(options.EnableRangeIndex);
+    req->set_enable_any_unpacking(options.EnableAnyUnpacking);
+    if (options.Config) {
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
+    }
+
+    ToProto(req->mutable_transactional_options(), options);
+    ToProto(req->mutable_suppressable_access_tracking_options(), options);
+}
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    std::optional<TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TTableReaderOptions* mutableOptions,
+    const TReqReadTable& req)
+{
+    *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+
+    if (req.has_format()) {
+        *mutableFormat = TYsonStringBuf(req.format());
+    }
+
+    *mutableDesiredRowsetFormat = req.desired_rowset_format();
+    *mutableArrowFallbackFormat = req.arrow_fallback_rowset_format();
+
+    TTableReaderOptions parsedOptions;
+    parsedOptions.Unordered = req.unordered();
+    parsedOptions.OmitInaccessibleColumns = req.omit_inaccessible_columns();
+    parsedOptions.OmitInaccessibleRows = req.omit_inaccessible_rows();
+    parsedOptions.EnableTableIndex = req.enable_table_index();
+    parsedOptions.EnableRowIndex = req.enable_row_index();
+    parsedOptions.EnableRangeIndex = req.enable_range_index();
+    parsedOptions.EnableAnyUnpacking = req.enable_any_unpacking();
+
+    if (req.has_config()) {
+        parsedOptions.Config = ConvertTo<TTableReaderConfigPtr>(TYsonString(req.config()));
+    }
+
+    if (req.has_transactional_options()) {
+        FromProto(&parsedOptions, req.transactional_options());
+    }
+
+    if (req.has_suppressable_access_tracking_options()) {
+        FromProto(&parsedOptions, req.suppressable_access_tracking_options());
+    }
+
+    *mutableOptions = std::move(parsedOptions);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
@@ -2185,6 +2398,7 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
         error.FindMatching(NTabletClient::EErrorCode::HunkTabletStoreToggleConflict) ||
+        error.FindMatching(NTabletClient::EErrorCode::HunkStoreAllocationFailed) ||
         IsChaosRetriableError(error);
 }
 

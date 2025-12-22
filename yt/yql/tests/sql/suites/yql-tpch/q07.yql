@@ -1,0 +1,50 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: No such column: supp_nation */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    supp_nation,
+    cust_nation,
+    l_year,
+    Sum(volume) AS revenue
+FROM (
+    SELECT
+        n1.n_name AS supp_nation,
+        n2.n_name AS cust_nation,
+        DateTime::GetYear(CAST(l_shipdate AS Timestamp)) AS l_year,
+        l_extendedprice * (1 - l_discount) AS volume
+    FROM
+        plato.supplier
+    ,
+        plato.lineitem
+    ,
+        plato.orders
+    ,
+        plato.customer
+    ,
+        plato.nation AS n1
+    ,
+        plato.nation AS n2
+    WHERE
+        s_suppkey == l_suppkey
+        AND o_orderkey == l_orderkey
+        AND c_custkey == o_custkey
+        AND s_nationkey == n1.n_nationkey
+        AND c_nationkey == n2.n_nationkey
+        AND (
+            (n1.n_name == 'FRANCE' AND n2.n_name == 'GERMANY')
+            OR (n1.n_name == 'GERMANY' AND n2.n_name == 'FRANCE')
+        )
+        AND l_shipdate BETWEEN Date('1995-01-01') AND Date('1996-12-31')
+) AS shipping
+GROUP BY
+    supp_nation,
+    cust_nation,
+    l_year
+ORDER BY
+    supp_nation,
+    cust_nation,
+    l_year
+;

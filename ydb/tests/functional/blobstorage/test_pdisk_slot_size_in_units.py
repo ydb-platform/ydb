@@ -55,6 +55,7 @@ class TestPDiskSlotSizeInUnits(object):
 
         self.pdisk_id = base_config.PDisk[1].PDiskId
         self.groups = [group for group in base_config.Group if group.StoragePoolId == 1]
+        self.groups.sort(key=lambda g: g.GroupId)
         assert len(self.groups) == 2
         for g in self.groups:
             assert len(g.VSlotId) == 1
@@ -114,6 +115,7 @@ class TestPDiskSlotSizeInUnits(object):
     def get_storage_groups(self):
         response = self.http_get('/storage/groups?fields_required=all&with=all').json()
         groups = [group for group in response['StorageGroups'] if group['PoolName'] == self.pool_name]
+        groups.sort(key=lambda g: g['GroupId'])
         assert len(groups) == 2
         for group in groups:
             vdisk = group['VDisks'][0]
@@ -147,11 +149,12 @@ class TestPDiskSlotSizeInUnits(object):
             self.check_group(groups[1], expected_vdisk_weight=1, expected_num_active_slots=3)
         self.retriable(wait_whiteboard_updated)
 
-        pdisk_info = self.get_pdisk_info()
-        logger.info(json.dumps(pdisk_info, indent=2))
-
-        self.check_pdisk(pdisk_info['Whiteboard']['PDisk'], expected_num_active_slots=3)
-        self.check_pdisk(pdisk_info['BSC']['PDisk'], expected_num_active_slots=3, expected_slot_size_in_units=0)
+        def wait_pdisk_info_updated():
+            pdisk_info = self.get_pdisk_info()
+            logger.info(json.dumps(pdisk_info, indent=2))
+            self.check_pdisk(pdisk_info['Whiteboard']['PDisk'], expected_num_active_slots=3)
+            self.check_pdisk(pdisk_info['BSC']['PDisk'], expected_num_active_slots=3, expected_slot_size_in_units=0)
+        self.retriable(wait_pdisk_info_updated)
 
     def test_change_pdisk_slot_size_in_units(self):
         self.change_pdisk_slot_size_in_units(slot_size_in_units=2)
@@ -164,8 +167,15 @@ class TestPDiskSlotSizeInUnits(object):
             self.check_group(groups[1], expected_vdisk_weight=2, expected_num_active_slots=3)
         self.retriable(wait_whiteboard_updated)
 
-        pdisk_info = self.get_pdisk_info()
-        logger.info(json.dumps(pdisk_info, indent=2))
+        def wait_bsc_updated():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            logger.info(base_config.PDisk[1])
+            assert base_config.PDisk[1].PDiskMetrics.SlotSizeInUnits == 2
+        self.retriable(wait_bsc_updated)
 
-        self.check_pdisk(pdisk_info['Whiteboard']['PDisk'], expected_num_active_slots=3)
-        self.check_pdisk(pdisk_info['BSC']['PDisk'], expected_num_active_slots=3, expected_slot_size_in_units=2)
+        def wait_pdisk_info_updated():
+            pdisk_info = self.get_pdisk_info()
+            logger.info(json.dumps(pdisk_info, indent=2))
+            self.check_pdisk(pdisk_info['Whiteboard']['PDisk'], expected_num_active_slots=3)
+            self.check_pdisk(pdisk_info['BSC']['PDisk'], expected_num_active_slots=3, expected_slot_size_in_units=2)
+        self.retriable(wait_pdisk_info_updated)

@@ -691,6 +691,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
         );
 
         YQL_ENSURE(
+            path.QLFilter().Maybe<TCoVoid>(),
+            "Unexpected QLFilter: " << path.QLFilter().Ref().Content()
+        );
+
+        YQL_ENSURE(
             path.Table().Maybe<TYtOutput>().Operation(),
             "Unexpected node: " << path.Table().Ref().Content()
         );
@@ -815,13 +820,18 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
         return {};
     }
 
+    const bool keepWorld =
+        State_->Configuration->KeepWorldDepForFillOp.Get().GetOrElse(DEFAULT_KEEP_WORLD_DEP_FOR_FILL_OP);
+
+    auto fillWorld = keepWorld ? write.World().Ptr() : ctx.NewWorld(write.Pos());
+
     return Build<TYtPublish>(ctx, write.Pos())
         .World(write.World())
         .DataSink(write.DataSink())
         .Input()
             .Add()
                 .Operation<TYtFill>()
-                    .World(ApplySyncListToWorld(ctx.NewWorld(write.Pos()), syncList, ctx))
+                    .World(ApplySyncListToWorld(fillWorld, syncList, ctx))
                     .DataSink(write.DataSink())
                     .Content(MakeJobLambdaNoArg(cleanup.Cast(), ctx))
                     .Output()

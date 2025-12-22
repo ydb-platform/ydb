@@ -9,6 +9,7 @@
 #include <yt/yt/core/ytree/convert.h>
 
 namespace NYT::NTableClient {
+namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -72,7 +73,9 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
             }
 
             auto currentTypeCompatibility = NComplexTypes::CheckTypeCompatibility(
-                inputColumn->LogicalType(), outputColumn.LogicalType());
+                inputColumn->LogicalType(),
+                outputColumn.LogicalType(),
+                options.TypeCompatibilityOptions);
 
             if (currentTypeCompatibility.first < result.first) {
                 result = {
@@ -232,24 +235,24 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
     return result;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
+
 std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibility(
     const TTableSchema& inputSchema,
     const TTableSchema& outputSchema,
     TTableSchemaCompatibilityOptions options)
 {
-    auto result = CheckTableSchemaCompatibilityImpl(
-        inputSchema,
-        outputSchema,
-        options);
-    if (result.first != ESchemaCompatibility::FullyCompatible) {
-        result.second = TError(NTableClient::EErrorCode::IncompatibleSchemas, "Table schemas are incompatible")
-            << result.second
+    auto [result, error] = CheckTableSchemaCompatibilityImpl(inputSchema, outputSchema, options);
+    if (result != ESchemaCompatibility::FullyCompatible) {
+        error = TError(NTableClient::EErrorCode::IncompatibleSchemas, "Table schemas are incompatible")
+            << error
             << TErrorAttribute("input_table_schema", inputSchema)
             << TErrorAttribute("output_table_schema", outputSchema);
     }
-    return result;
+    return std::pair(result, std::move(error));
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 

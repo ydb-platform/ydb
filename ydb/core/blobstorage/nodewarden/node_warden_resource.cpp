@@ -92,6 +92,7 @@ void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
 void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     auto *msg = ev->Get();
     StorageConfig = std::move(msg->Config);
+    CommittedStorageConfig = std::move(msg->CommittedConfig);
     SelfManagementEnabled = msg->SelfManagementEnabled;
     BridgeInfo = std::move(msg->BridgeInfo);
 
@@ -111,7 +112,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     }
 
     for (const TActorId& subscriber : StorageConfigSubscribers) {
-        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
+        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo, CommittedStorageConfig));
     }
 
     if (StorageConfig->HasConfigComposite()) {
@@ -121,17 +122,10 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (error) {
             STLOG_DEBUG_FAIL(BS_NODE, NW49, "failed to decompose yaml configuration", (Error, error));
         } else if (mainConfigYaml) {
-            std::optional<TString> storageConfigYaml;
-            std::optional<ui64> storageConfigYamlVersion;
-            if (StorageConfig->HasCompressedStorageYaml()) {
-                try {
-                    TStringInput s(StorageConfig->GetCompressedStorageYaml());
-                    storageConfigYaml.emplace(TZstdDecompress(&s).ReadAll());
-                    storageConfigYamlVersion.emplace(NYamlConfig::GetStorageMetadata(*storageConfigYaml).Version.value_or(0));
-                } catch (const std::exception& ex) {
-                    Y_ABORT("CompressedStorageYaml format incorrect: %s", ex.what());
-                }
-            }
+            std::optional<TString> storageConfigYaml = GetStorageYaml(*StorageConfig);
+            std::optional<ui64> storageConfigYamlVersion = storageConfigYaml
+                ? std::make_optional(NYamlConfig::GetStorageMetadata(*storageConfigYaml).Version.value_or(0))
+                : std::nullopt;
 
             // TODO(alexvru): make this blocker for confirmation?
             PersistConfig(std::move(mainConfigYaml), mainConfigYamlVersion, std::move(storageConfigYaml),
@@ -149,12 +143,6 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             TAutoPtr<IEventHandle> temp(ev.Release());
             Receive(temp);
         }
-
-        using TEvBridgeInfoUpdate = NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoUpdate;
-        std::unique_ptr<TEvBridgeInfoUpdate> update(new TEvBridgeInfoUpdate);
-        update->Record.MutableClusterState()->CopyFrom(StorageConfig->GetClusterState());
-
-        Send(WhiteboardId, update.release());
     }
 }
 

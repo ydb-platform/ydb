@@ -116,6 +116,11 @@ namespace NKikimr {
             Handle(std::move(outcome), ctx);
         }
 
+        void Handle(TEvFullSyncFinished::TPtr &ev, const TActorContext &ctx) {
+            TSjOutcome outcome = Task->Handle(ev);
+            Handle(std::move(outcome), ctx);
+        }
+
         void HandleWakeup(const TActorContext &ctx) {
             LOG_DEBUG(ctx, BS_SYNCER,
                 VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob: job timed out"));
@@ -183,6 +188,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSyncFullResult, Handle)
             HFunc(TEvBlobStorage::TEvVSyncResult, Handle)
             HFunc(TEvLocalSyncDataResult, Handle)
+            HFunc(TEvFullSyncFinished, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
             HFunc(TEvInterconnect::TEvNodeDisconnected, Handle)

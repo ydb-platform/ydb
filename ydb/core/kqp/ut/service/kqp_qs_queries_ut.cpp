@@ -5059,7 +5059,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().contains("Data manipulation queries do not support column shard tables."),
+                prepareResult.GetIssues().ToString().contains(
+                    "Data manipulation queries with column-oriented tables are disabled."),
                 prepareResult.GetIssues().ToString());
         }
 

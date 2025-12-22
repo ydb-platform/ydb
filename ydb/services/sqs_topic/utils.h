@@ -11,6 +11,10 @@ namespace NKikimr::NGrpcService {
     class IRequestOpCtx;
 } // namespace NKikimr::NGrpcService
 
+namespace NKikimr::NPQ::NMLP {
+    struct TMessageId;
+} // namespace NKikimr::NPQ::NMLP
+
 namespace NKikimr::NSqsTopic {
 
     struct TQueueNameWithConsumer {
@@ -23,4 +27,36 @@ namespace NKikimr::NSqsTopic {
     const NKikimrConfig::TSqsConfig& Cfg();
 
     TString GetEndpoint(const NKikimrConfig::TSqsConfig& config);
+
+    TString GenerateMessageId(const TString& database, const TString& topicPath, const NPQ::NMLP::TMessageId& pos);
+
+    TVector<std::pair<TString, TString>> GetMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method,
+        TVector<std::pair<TString, TString>>&& labels
+    );
+
+    TVector<std::pair<TString, TString>> GetRequestMessageCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    );
+
+    TVector<std::pair<TString, TString>> GetResponseMessageCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method,
+        const TString& status
+    );
+
+    TVector<std::pair<TString, TString>> GetResponseEmptyCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    );
 } // namespace NKikimr::NSqsTopic

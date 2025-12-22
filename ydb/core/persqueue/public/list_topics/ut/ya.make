@@ -1,5 +1,11 @@
 UNITTEST_FOR(ydb/core/persqueue/public/list_topics)
 
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(MEDIUM)
+ELSE()
+    SIZE(SMALL)
+ENDIF()
+
 YQL_LAST_ABI_VERSION()
 
 SRCS(

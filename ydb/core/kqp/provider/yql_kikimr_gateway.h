@@ -263,12 +263,31 @@ struct TIndexDescription {
                 }
                 return true;
             case EType::GlobalFulltext:
-                return true;
+                const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+                const auto& settings = fulltextDesc->GetSettings();
+                if (settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT) {
+                    // Only FLAT fulltext index update is supported at the moment
+                    return true;
+                }
+                return false;
         }
     }
 
     std::span<const std::string_view> GetImplTables() const {
-        return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
+        switch (Type) {
+            case EType::GlobalSync:
+            case EType::GlobalSyncUnique:
+            case EType::GlobalAsync:
+            case EType::GlobalSyncVectorKMeansTree:
+                return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
+            case EType::GlobalFulltext:
+                const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+                const auto& settings = fulltextDesc->GetSettings();
+                return NKikimr::NTableIndex::GetFulltextImplTables(settings.layout());
+        }
+        return {};
     }
 };
 
@@ -747,6 +766,10 @@ struct TAlterDatabaseSettings {
     TString DatabasePath;
     std::optional<TString> Owner;
     std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
+};
+
+struct TTruncateTableSettings {
+    TString TablePath;
 };
 
 struct TCreateUserSettings {
@@ -1258,6 +1281,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 

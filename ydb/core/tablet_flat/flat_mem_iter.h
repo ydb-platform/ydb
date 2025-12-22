@@ -133,13 +133,13 @@ namespace NTable {
             const auto *key = RowIt.GetKey();
 
             if (len >= KeyCellDefaults->BasicTypes().size()) {
-                return { KeyCellDefaults->BasicTypes().begin(), key, len };
+                return { KeyCellDefaults->BasicTypes().data(), key, len };
             } else if (!Key) {
                 Key.insert(Key.end(), key, key + len);
                 Key.insert(Key.end(), (**KeyCellDefaults).begin() + len, (**KeyCellDefaults).end());
             }
 
-            return { KeyCellDefaults->BasicTypes().begin(), Key.begin(), ui32(Key.size()) };
+            return { KeyCellDefaults->BasicTypes().data(), Key.data(), ui32(Key.size()) };
         }
 
         bool IsDelta() const
@@ -373,7 +373,7 @@ namespace NTable {
         /**
          * Finds the first committed row and returns its version
          */
-        std::optional<TRowVersion> SkipToCommitted(
+        TSkipToCommittedResult SkipToCommitted(
                 NTable::ITransactionMapSimplePtr committedTransactions,
                 NTable::ITransactionObserverSimplePtr transactionObserver,
                 ELockMode& lockMode, ui64& lockTxId)
@@ -392,7 +392,7 @@ namespace NTable {
                 if (chain->Rop != ERowOp::Absent) {
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                     if (commitVersion) {
-                        return *commitVersion;
+                        return { *commitVersion, chain->RowVersion.TxId };
                     }
                     transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
                 }

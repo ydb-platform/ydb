@@ -14,9 +14,6 @@ TSchedulableTask::TSchedulableTask(const TQueryPtr& query)
 }
 
 TSchedulableTask::~TSchedulableTask() {
-    if (Iterator) {
-        Query->RemoveTask(*Iterator);
-    }
     --Query->Demand;
 }
 

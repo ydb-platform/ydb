@@ -3,7 +3,9 @@
 #include "error.h"
 #include "request.h"
 #include "receipt.h"
+#include "utils.h"
 
+#include <ydb/core/http_proxy/events.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/attributes/attribute_name.h>
@@ -36,7 +38,6 @@
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
 #include <ydb/library/actors/core/log.h>
-
 #include <library/cpp/digest/md5/md5.h>
 
 using namespace NActors;
@@ -139,28 +140,7 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         TString GenerateMessageId(const NPQ::NMLP::TMessageId& pos) const {
-            MD5 md5;
-            md5.Init();
-            md5.Update(QueueUrl_->Database);
-            md5.Update("/");
-            md5.Update(FullTopicPath_);
-            md5.Update("/");
-            md5.Update(ToString(pos.PartitionId));
-            md5.Update("/");
-            md5.Update(ToString(pos.Offset));
-            ui8 digest[16];
-            md5.Final(digest);
-            // make guid v3 like
-            digest[8] &= 0b10111111;
-            digest[8] |= 0b10000000;
-            digest[6] &= 0b01011111;
-            digest[6] |= 0b01010000;
-
-            TStringBuilder res;
-            for (int i = 0; i < std::ssize(digest); ++i) {
-                res << (EqualToOneOf(i, 4, 6, 8, 10) ? "-" : "") << Hex(digest[i], HF_FULL);
-            }
-            return res;
+            return NKikimr::NSqsTopic::GenerateMessageId(QueueUrl_->Database, FullTopicPath_, pos);
         }
 
         Ydb::Ymq::V1::Message ConvertMessage(NKikimr::NPQ::NMLP::TEvReadResponse::TMessage&& message, const TActorContext& ctx) const {
@@ -182,12 +162,9 @@ namespace NKikimr::NSqsTopic::V1 {
             if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageDeduplicationId)) {
                 result.mutable_attributes()->emplace("MessageDeduplicationId", *value);
             }
-            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageId)) {
-                result.set_message_id(*value);
-            } else {
-                // probably message was written not via the sqs api
-                result.set_message_id(GenerateMessageId(message.MessageId));
-            }
+
+            result.set_message_id(GenerateMessageId(message.MessageId));
+
             if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageAttributes)) {
                 NKikimr::NSQS::TMessageAttributes messageAttributes;
                 if (messageAttributes.ParseFromString(*value)) {
@@ -233,6 +210,29 @@ namespace NKikimr::NSqsTopic::V1 {
                     ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Error reading from topic: {}", response.ErrorDescription.ConstRef())));
                     return;
                 }
+            }
+
+            ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(response.Messages.size()), true, true,
+                    GetResponseMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        "ReceiveMessage",
+                        "success")
+                });
+
+            if (response.Messages.empty()) {
+                ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                    new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                        1, true, true,
+                        GetResponseEmptyCountMetricsLabels(
+                            QueueUrl_->Database,
+                            FullTopicPath_,
+                            QueueUrl_->Consumer,
+                            "ReceiveMessage")
+                    });
             }
 
             Ydb::Ymq::V1::ReceiveMessageResult result;

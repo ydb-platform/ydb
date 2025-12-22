@@ -75,9 +75,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
             << "Cannot perform transaction: out of disk space at tablet "
             << DataShard.TabletID() << " txId " << op->GetTxId();
 
-        DataShard.IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+        DataShard.IncCounter(COUNTER_PREPARE_DISK_GROUP_OUT_OF_SPACE);
 
-        BuildResult(op)->AddError(NKikimrTxDataShard::TError::OUT_OF_SPACE, err);
+        BuildResult(op)->AddError(NKikimrTxDataShard::TError::DISK_GROUP_OUT_OF_SPACE, err);
         op->Abort(EExecutionUnitKind::FinishPropose);
 
         LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);
@@ -201,9 +201,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                             // Updates are not allowed when database is out of space
                             TString err = "Cannot perform writes: database is out of disk space";
 
-                            DataShard.IncCounter(COUNTER_PREPARE_DISK_SPACE_EXHAUSTED);
+                            DataShard.IncCounter(COUNTER_PREPARE_DATABASE_DISK_SPACE_QUOTA_EXCEEDED);
 
-                            BuildResult(op)->AddError(NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED, err);
+                            BuildResult(op)->AddError(NKikimrTxDataShard::TError::DATABASE_DISK_SPACE_QUOTA_EXCEEDED, err);
                             op->Abort(EExecutionUnitKind::FinishPropose);
 
                             LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::CheckDataTxUnit_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, err);

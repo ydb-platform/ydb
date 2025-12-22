@@ -24,8 +24,8 @@
 #include <string_view>
 #include <vector>
 
-#include "arrow/filesystem/filesystem.h"
-#include "arrow/util/windows_fixup.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_fixup.h"
 
 namespace arrow20::fs::internal {
 

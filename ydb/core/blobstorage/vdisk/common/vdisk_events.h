@@ -569,10 +569,8 @@ namespace NKikimr {
     // TEvVPut
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    struct TMessageRelevanceTracker {};
-
     struct TEventWithRelevanceTracker {
-        std::optional<std::weak_ptr<TMessageRelevanceTracker>> MessageRelevanceTracker;
+        std::optional<TMessageRelevance> MessageRelevanceTracker;
     };
 
     struct TEvBlobStorage::TEvVPut
@@ -2655,8 +2653,9 @@ namespace NKikimr {
     {
         TEvVBaldSyncLog() = default;
 
-        TEvVBaldSyncLog(const TVDiskID &vdisk) {
+        TEvVBaldSyncLog(const TVDiskID &vdisk, bool dropChunksExplicitly = false) {
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
+            Record.SetDropChunksExplicitly(dropChunksExplicitly);
         }
     };
 

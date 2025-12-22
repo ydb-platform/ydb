@@ -139,7 +139,7 @@ protected:
     TLazyDictBase(const TPyCastContext::TPtr& castCtx, const NUdf::TType* itemType, PyObject* pyObject)
         : CastCtx_(castCtx)
         , ItemType_(itemType)
-        , PyObject_(pyObject, TPyObjectPtr::AddRef())
+        , PyObject_(pyObject, TPyObjectPtr::EAddRef())
     {
     }
 

@@ -21,6 +21,7 @@ public:
         TypeNone = 0,
         TypeInfo = 'm',
         TypeData = 'd',
+        TypeDeduplicator = 'e',
         TypeTmpData = 'x',
         TypeMeta = 'i',
         TypeTxMeta = 'I',

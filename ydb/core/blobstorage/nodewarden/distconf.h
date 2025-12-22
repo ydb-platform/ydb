@@ -52,6 +52,8 @@ namespace NKikimr::NStorage {
         }
     };
 
+    using TStorageConfigPtr = std::shared_ptr<const NKikimrBlobStorage::TStorageConfig>;
+
 } // NKikimr::NStorage
 
 template<>
@@ -82,6 +84,7 @@ namespace NKikimr::NStorage {
                EvQueryFinished,
                EvConfigProposed,
                EvRetryCollectConfigsAndPropose,
+               EvRetryPersistConfig,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -201,10 +204,12 @@ namespace NKikimr::NStorage {
             TEvScatter Request;
             TEvGather Response;
             std::vector<TEvGather> CollectedResponses; // from bound nodes
+            TMonotonic StartTimestamp;
 
-            TScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, ui64 scepterCounter)
+            TScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, ui64 scepterCounter, TMonotonic startTimestamp)
                 : Origin(std::move(origin))
                 , ScepterCounter(scepterCounter)
+                , StartTimestamp(startTimestamp)
             {
                 Request.Swap(&request);
                 if (Request.HasCookie()) {
@@ -220,7 +225,7 @@ namespace NKikimr::NStorage {
         THashMap<TString, TBridgePileId> BridgePileNameMap;
 
         // currently active storage config
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        TStorageConfigPtr StorageConfig;
         TString MainConfigYaml; // the part we have to push (unless this is storage-only) to console
         std::optional<ui64> MainConfigYamlVersion;
         TString MainConfigFetchYaml; // the part we would get is we fetch from console
@@ -228,24 +233,31 @@ namespace NKikimr::NStorage {
         std::optional<TString> StorageConfigYaml; // set if dedicated storage yaml is enabled; otherwise nullopt
 
         // base config from config file
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> BaseConfig;
+        TStorageConfigPtr BaseConfig;
 
-        // initial config based on config file and stored committed configs
-        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> InitialConfig;
+        // newest committed storage config
+        TStorageConfigPtr CommittedStorageConfig;
+
+        // locally committed storage config
+        TStorageConfigPtr LocalCommittedStorageConfig;
+
+        // last reported storage config to NW
+        std::tuple<TStorageConfigPtr, bool, TBridgeInfo::TPtr, TStorageConfigPtr> LastReportedStorageConfig;
 
         // proposed storage configuration of the cluster
-        std::optional<NKikimrBlobStorage::TStorageConfig> ProposedStorageConfig; // proposed one
-        std::optional<ui64> ProposedStorageConfigCookie; // if set, then this configuration is being written right now
+        bool PersistProposedStorageConfigInFlight = false;
 
         // most relevant proposed config
         using TPersistCallback = std::function<void(TEvPrivate::TEvStorageConfigStored&)>;
         struct TPersistQueueItem {
             THPTimer Timer;
-            std::vector<TString> Drives;
-            NKikimrBlobStorage::TPDiskMetadataRecord Record; // what we are going to write
             TPersistCallback Callback; // what will be called upon completion
+            THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> MetadataByPath;
         };
         std::deque<TPersistQueueItem> PersistQ;
+        THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> MetadataByPath;
+        THashSet<TString> PathsToRetry;
+        std::vector<TString> PrevDrivesToRead;
 
         // initialization state
         bool NodeListObtained = false;
@@ -256,7 +268,7 @@ namespace NKikimr::NStorage {
         ui64 BindingCookie = RandomNumber<ui64>();
         TBindQueue BindQueue;
         TBindQueue RevBindQueue;
-        TBindQueue PrimaryPileBindQueue;
+        TBindQueue OtherPilesBindQueue;
         bool Scheduled = false;
 
         // incoming bindings
@@ -272,11 +284,12 @@ namespace NKikimr::NStorage {
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
         std::vector<ui32> NodeIdsForOutgoingBinding;
         std::vector<ui32> NodeIdsForIncomingBinding;
-        std::vector<ui32> NodeIdsForPrimaryPileOutgoingBinding;
+        std::vector<ui32> NodeIdsForOtherPilesOutgoingBinding;
         THashMap<ui32, TNodeIdentifier> AllNodeIds;
         THashSet<ui32> NodesFromSamePile;
         TNodeIdentifier SelfNode;
         std::optional<TString> SelfNodeBridgePileName;
+        THashSet<std::tuple<TString, ui32>> Hosts;
 
         // scatter tasks
         ui64 NextScatterCookie = RandomNumber<ui64>();
@@ -309,7 +322,6 @@ namespace NKikimr::NStorage {
         ui64 ScepterCounter = 1; // increased every time Scepter gets changed
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
-        bool LocalPileQuorum = false;
         bool GlobalQuorum = false;
         bool QuorumValid = false;
 
@@ -332,7 +344,6 @@ namespace NKikimr::NStorage {
         // pipe to Console
         TActorId ConsolePipeId;
         bool ConsoleConnected = false;
-        bool ConfigCommittedToConsole = false;
         ui64 ValidateRequestCookie = 0;
         ui64 ProposeRequestCookie = 0;
         ui64 CommitRequestCookie = 0;
@@ -358,13 +369,14 @@ namespace NKikimr::NStorage {
             return NKikimrServices::TActivity::NODEWARDEN_DISTRIBUTED_CONFIG;
         }
 
-        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
-            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> baseConfig, bool isSelfStatic);
+        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg, TStorageConfigPtr baseConfig, bool isSelfStatic);
 
         void Bootstrap();
         void PassAway() override;
         void Halt(); // cease any distconf activity, unbind and reject any bindings
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
+        void ApplyCommittedStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
+        void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);
         void HandleConfigConfirm(STATEFN_SIG);
         void ReportStorageConfigToNodeWarden();
 
@@ -372,12 +384,13 @@ namespace NKikimr::NStorage {
         // PDisk configuration retrieval and storing
 
         void ReadConfig(std::vector<TString> paths, ui64 cookie = 0);
-        void WriteConfig(std::vector<TString> drives, NKikimrBlobStorage::TPDiskMetadataRecord record);
-        void PersistConfig(TPersistCallback callback);
+        void WriteConfig(THashMap<TString, NKikimrBlobStorage::TPDiskMetadataRecord> records);
+        void PersistConfig(TPersistCallback callback, const std::vector<TString>& drives);
         void Handle(TEvPrivate::TEvStorageConfigStored::TPtr ev);
+        void HandleRetryPersistConfig();
         void Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev);
 
-        std::vector<TString> GetDrivesToRead(bool initial) const;
+        std::vector<TString> GetDrives(const NKikimrBlobStorage::TStorageConfig& config) const;
 
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
         static void UpdateFingerprint(NKikimrBlobStorage::TStorageConfig *config);
@@ -407,12 +420,11 @@ namespace NKikimr::NStorage {
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
         void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig);
-        void UnbindNodesFromOtherPiles(const char *reason);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
 
-        void UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg);
+        bool UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg);
         void DeleteBound(ui32 refererNodeId, const TNodeIdentifier& nodeId, TEvNodeConfigPush *msg);
         void Handle(TEvNodeConfigPush::TPtr ev);
         void Handle(TEvNodeConfigUnbind::TPtr ev);
@@ -431,7 +443,7 @@ namespace NKikimr::NStorage {
         void HandleErrorTimeout();
         void UndoCurrentPropositionNodeChange(TProposition& proposition);
         void ProcessGather(TEvGather *res);
-        bool HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, bool local) const;
+        bool HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config) const;
 
         struct TProcessCollectConfigsResult {
             std::optional<TString> ErrorReason;
@@ -507,6 +519,7 @@ namespace NKikimr::NStorage {
         // Scatter/gather logic
 
         void IssueScatterTask(TScatterTaskOrigin&& origin, TEvScatter&& request, std::span<TNodeIdentifier> addedNodes = {});
+        void IssueAddedNodeScatterTask(ui32 nodeId, ui64 cookie, TScatterTask& task);
         void CheckCompleteScatterTask(TScatterTasks::iterator it);
         void FinishAsyncOperation(ui64 cookie);
         void IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task);
@@ -550,6 +563,8 @@ namespace NKikimr::NStorage {
         class TInvokeRequestHandlerActor;
         struct TLifetimeToken {};
         std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
+
+        THashSet<TActorId> DetachedQueries;
 
         ui64 InvokePipelineGeneration = 1;
 
@@ -711,6 +726,8 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
         ui64 *mainConfigVersion, TString *mainConfigFetchYaml);
+
+    std::optional<TString> GetStorageYaml(const NKikimrBlobStorage::TStorageConfig& config);
 
     void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState);
 

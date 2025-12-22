@@ -2,6 +2,9 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
+#include <ydb/core/kqp/opt/physical/predicate_collector.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
+
 #include <typeinfo>
 
 using namespace NYql::NNodes;
@@ -115,6 +118,7 @@ TExprNode::TPtr PruneCast(TExprNode::TPtr node) {
     return node;
 }
 
+[[maybe_unused]]
 TVector<TInfoUnit> GetHashableKeys(const std::shared_ptr<IOperator> &input) {
     if (!input->Type) {
         return input->GetOutputIUs();
@@ -145,10 +149,107 @@ bool IsNullRejectingPredicate(const TFilterInfo &filter, TExprContext &ctx) {
     }
     return false;
 }
+
+std::shared_ptr<TOpCBOTree> JoinCBOTrees(std::shared_ptr<TOpCBOTree> & left, std::shared_ptr<TOpCBOTree> & right, std::shared_ptr<TOpJoin> &join) {
+    auto newJoin = std::make_shared<TOpJoin>(left->TreeRoot, right->TreeRoot, join->Pos, join->JoinKind, join->JoinKeys);
+
+    auto treeNodes = left->TreeNodes;
+    treeNodes.insert(treeNodes.end(), right->TreeNodes.begin(), right->TreeNodes.end());
+    treeNodes.push_back(newJoin);
+
+    return std::make_shared<TOpCBOTree>(newJoin, treeNodes, newJoin->Pos);
+}
+
+std::shared_ptr<TOpCBOTree> AddJoinToCBOTree(std::shared_ptr<TOpCBOTree> & cboTree, std::shared_ptr<TOpJoin> &join) {
+    TVector<std::shared_ptr<IOperator>> treeNodes;
+
+    if (join->GetLeftInput() == cboTree) {
+        join->SetLeftInput(cboTree->TreeRoot);
+        treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
+        treeNodes.push_back(join);
+    } 
+    else {
+        join->SetRightInput(cboTree->TreeRoot);
+        treeNodes.push_back(join);
+        treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
+    }
+
+    return std::make_shared<TOpCBOTree>(join, treeNodes, join->Pos);
+}
+
+void ExtractConjuncts(TExprNode::TPtr node, TVector<TExprNode::TPtr> & conjuncts) {
+    if (TCoAnd::Match(node.Get())) {
+        for (auto c : node->ChildrenList()) {
+            conjuncts.push_back(c);
+        }
+    }
+    else {
+        conjuncts.push_back(node);
+    }
+}
+
+std::shared_ptr<TOpFilter> FuseFilters(const std::shared_ptr<TOpFilter>& top, const std::shared_ptr<TOpFilter>& bottom, TExprContext &ctx) {
+    auto topLambda = TCoLambda(top->FilterLambda);
+    auto bottomLambda = TCoLambda(bottom->FilterLambda);
+    auto arg = Build<TCoArgument>(ctx, top->Pos).Name("lambda_arg").Done();
+
+    TVector<TExprNode::TPtr> newConjuncts;
+    ExtractConjuncts(ReplaceArg(topLambda.Body().Ptr(), arg.Ptr(), ctx), newConjuncts);
+    ExtractConjuncts(ReplaceArg(bottomLambda.Body().Ptr(), arg.Ptr(), ctx), newConjuncts);
+
+    // clang-format off
+    auto newLambda = Build<TCoLambda>(ctx, top->Pos)
+        .Args(arg)
+        .Body<TCoAnd>()
+            .Add(newConjuncts)
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+
+    return make_shared<TOpFilter>(bottom->GetInput(), top->Pos, newLambda);
+}
+
 } // namespace
 
 namespace NKikimr {
 namespace NKqp {
+
+// Remove extra maps that arrise during translation
+// Identity map that doesn't project can always be removed
+// Identity map that projects maybe a projection operator and can be removed if it doesn't do any extra
+// projections
+
+std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+    
+    if (input->Kind != EOperator::Map) {
+        return input;
+    }
+
+    auto map = CastOperator<TOpMap>(input);
+
+    /***
+     * If its a project map, check that it output the same number of columns as the operator below
+     */
+
+    if (map->Project && map->GetOutputIUs().size() != map->GetInput()->GetOutputIUs().size()) {
+        return input;
+    }
+
+    for (auto [toColumn, body] : map->MapElements) {
+        if (! std::holds_alternative<TInfoUnit>(body)) {
+            return input;
+        }
+        auto fromColumn = std::get<TInfoUnit>(body);
+        if (fromColumn != toColumn) {
+            return input;
+        }
+    }
+
+    return map->GetInput();
+}
 
 // Currently we only extract simple expressions where there is only one variable on either side
 
@@ -264,7 +365,7 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input
         filter->FilterLambda = newFilterLambda;
 
         auto newMap = std::make_shared<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
-        filter->Children[0] = newMap;
+        filter->SetInput(newMap);
         return true;
     }
 
@@ -316,7 +417,7 @@ bool TInlineScalarSubplanRule::TestAndApply(std::shared_ptr<IOperator> &input, T
 
     TVector<std::pair<TInfoUnit,TInfoUnit>> joinKeys;
     auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
-    unaryOp->Children[0] = cross;
+    unaryOp->SetInput(cross);
 
     props.ScalarSubplans.Remove(scalarIU);
 
@@ -394,20 +495,37 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_pt
 
     if (leftMapElements.size()) {
         auto leftInput = join->GetLeftInput();
-        join->Children[0] = std::make_shared<TOpMap>(leftInput, input->Pos, leftMapElements, false);
+        join->SetLeftInput(std::make_shared<TOpMap>(leftInput, input->Pos, leftMapElements, false));
     }
 
     if (rightMapElements.size()) {
         auto rightInput = join->GetRightInput();
-        join->Children[1] = std::make_shared<TOpMap>(rightInput, input->Pos, rightMapElements, false);
-    }
-
-    // If there was an enforcer on the input map, move it to the output
-    if (input->Props.OrderEnforcer.has_value()) {
-        output->Props.OrderEnforcer = input->Props.OrderEnforcer;
+        join->SetRightInput(std::make_shared<TOpMap>(rightInput, input->Pos, rightMapElements, false));
     }
 
     return output;
+}
+
+std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+
+    if (input->Kind != EOperator::Limit) {
+        return input;
+    }
+
+    auto limit = CastOperator<TOpLimit>(input);
+    if (limit->GetInput()->Kind != EOperator::Sort) {
+        return input;
+    }
+
+    auto sort = CastOperator<TOpSort>(limit->GetInput());
+    if (sort->LimitCond) {
+        return input;
+    }
+
+    sort->LimitCond = limit->LimitCond;
+    return sort;
 }
 
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
@@ -521,8 +639,8 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
         join->JoinKind = "Inner";
     }
 
-    join->Children[0] = leftInput;
-    join->Children[1] = rightInput;
+    join->SetLeftInput(leftInput);
+    join->SetRightInput(rightInput);
 
     if (topLevelPreds.size()) {
         auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, ctx.ExprCtx, props.PgSyntax);
@@ -531,13 +649,232 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
         output = join;
     }
 
-    if (input->Props.OrderEnforcer.has_value()) {
-        output->Props.OrderEnforcer = input->Props.OrderEnforcer;
-    }
-
     return output;
 }
 
+bool IsSuitableToPushPredicateToColumnTables(const std::shared_ptr<IOperator>& input) {
+    if (input->Kind != EOperator::Filter) {
+        return false;
+    }
+
+    const auto filter = CastOperator<TOpFilter>(input);
+    const auto maybeRead = filter->GetInput();
+    return ((maybeRead->Kind == EOperator::Source) && (CastOperator<TOpRead>(maybeRead)->GetTableStorageType() == NYql::EStorageType::ColumnStorage) && filter->GetTypeAnn());
+}
+
+std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+    Y_UNUSED(props);
+    if (!ctx.KqpCtx.Config->HasOptEnableOlapPushdown()) {
+        return input;
+    }
+
+    const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->EnableOlapScalarApply, ctx.KqpCtx.Config->EnableOlapSubstringPushdown,
+                                           /*StripAliasPrefixForColumnName=*/true);
+    if (!IsSuitableToPushPredicateToColumnTables(input)) {
+        return input;
+    }
+
+    const auto filter = CastOperator<TOpFilter>(input);
+    const auto read = CastOperator<TOpRead>(filter->GetInput());
+    const auto lambda = TCoLambda(filter->FilterLambda);
+    const auto& lambdaArg = lambda.Args().Arg(0).Ref();
+    TExprBase predicate = lambda.Body();
+
+    TOLAPPredicateNode predicateTree;
+    predicateTree.ExprNode = predicate.Ptr();
+    CollectPredicates(predicate, predicateTree, &lambdaArg, filter->GetTypeAnn()->Cast<TListExprType>()->GetItemType(), pushdownOptions);
+    YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
+    TPositionHandle pos = input->Pos;
+
+    auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, false);
+    TVector<TFilterOpsLevels> pushedPredicates;
+    for (const auto& p : pushable) {
+        pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx.ExprCtx, pos, pushdownOptions));
+    }
+
+    // TODO: All or nothing currently. Add partial pushdown.
+    if (pushedPredicates.empty() || !remaining.empty()) {
+        return input;
+    }
+
+    const auto& pushedFilter = TFilterOpsLevels::Merge(pushedPredicates, ctx.ExprCtx, pos);
+    const auto remainingFilter = CombinePredicatesWithAnd(remaining, ctx.ExprCtx, pos, false, true);
+
+    TMaybeNode<TExprBase> olapFilter;
+    if (pushedFilter.FirstLevelOps.IsValid()) {
+        // clang-format off
+        olapFilter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
+            .Input(lambda.Args().Arg(0))
+            .Condition(pushedFilter.FirstLevelOps.Cast())
+        .Done();
+        // clang-format on
+    }
+
+    if (pushedFilter.SecondLevelOps.IsValid()) {
+        // clang-format off
+        olapFilter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
+            .Input(olapFilter.IsValid() ? olapFilter.Cast() : lambda.Args().Arg(0))
+            .Condition(pushedFilter.SecondLevelOps.Cast())
+        .Done();
+        // clang-format on
+    }
+
+    if (!olapFilter.IsValid()) {
+        YQL_CLOG(TRACE, ProviderKqp) << "KqpOlapFilter was not constructed";
+        return input;
+    }
+
+    // clang-format off
+    auto newOlapFilterLambda = Build<TCoLambda>(ctx.ExprCtx, pos)
+        .Args({"olap_filter_row"})
+        .Body<TExprApplier>()
+            .Apply(olapFilter.Cast())
+            .With(lambda.Args().Arg(0), "olap_filter_row")
+            .Build()
+        .Done();
+    // clang-format on
+    YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newOlapFilterLambda, ctx.ExprCtx);
+
+    return std::make_shared<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(),
+                                     read->Pos);
+}
+
+/**
+ * Initially we build CBO only for joins that don't have other joins or CBO trees as arguments
+ * There could be an intermediate filter in between, we also check that
+ */
+std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+
+    auto containsJoins = [](const std::shared_ptr<IOperator>& op) {
+        std::shared_ptr<IOperator> maybeJoin = op;
+        if (op->Kind == EOperator::Filter) {
+            maybeJoin = CastOperator<TOpFilter>(op)->GetInput();
+        }
+        return (maybeJoin->Kind == EOperator::Join || maybeJoin->Kind == EOperator::CBOTree);
+    };
+
+    if (input->Kind == EOperator::Join) {
+        auto join = CastOperator<TOpJoin>(input);
+        if (!containsJoins(join->GetLeftInput()) && !containsJoins(join->GetRightInput())) {
+            return std::make_shared<TOpCBOTree>(input, input->Pos);
+        }
+    }
+
+    return input;
+}
+
+/**
+ * Expanding CBO tree is more tricky:
+ *  - We can have a join that joins a CBOtree with something else, and there could be a filter in between that we
+ *    would like to push out
+ *  - We need to extend this to support filter and aggregates that will be later supported by DP CBO
+ * FIXME: Add maybes to make matching look simpler
+ * FIXME: Support other joins for filter push-out, refactor into a lambda to apply to both sides
+ */
+std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+
+    // In case there is a join of a CBO tree (maybe with a filter stuck in-between)
+    // we push this join into the CBO tree and push the filter out above
+
+    if (input->Kind == EOperator::Join) {
+        auto join = CastOperator<TOpJoin>(input);
+        auto leftInput = join->GetLeftInput();
+        auto rightInput = join->GetRightInput();
+
+        std::shared_ptr<TOpFilter> maybeFilter;
+        std::shared_ptr<TOpCBOTree> cboTree;
+
+        bool leftSideCBOTree = true;
+
+        auto findCBOTree = [&join](const std::shared_ptr<IOperator>& op, 
+                std::shared_ptr<TOpCBOTree>& cboTree, 
+                std::shared_ptr<TOpFilter>& maybeFilter) {
+
+            if (op->Kind == EOperator::CBOTree) {
+                cboTree = CastOperator<TOpCBOTree>(op);
+                return true;
+            }
+            if (op->Kind == EOperator::Filter && 
+                    CastOperator<TOpFilter>(op)->GetInput()->Kind == EOperator::CBOTree &&
+                    join->JoinKind == "Inner") {
+
+                maybeFilter = CastOperator<TOpFilter>(op);
+                cboTree = CastOperator<TOpCBOTree>(maybeFilter->GetInput());
+                return true;
+            }
+
+            return false;
+        };
+
+        if (!findCBOTree(leftInput, cboTree, maybeFilter)) {
+            if (!findCBOTree(rightInput, cboTree, maybeFilter)) {
+                return input;
+            } else {
+                leftSideCBOTree = true;
+            }
+        }
+
+        std::shared_ptr<TOpFilter> maybeAnotherFilter;
+        auto otherSide = leftSideCBOTree ? join->GetRightInput() : join->GetLeftInput();
+        std::shared_ptr<TOpCBOTree> otherSideCBOTree;
+
+        if (otherSide->Kind == EOperator::Filter &&
+                CastOperator<TOpFilter>(otherSide)->GetInput()->Kind == EOperator::CBOTree &&
+                join->JoinKind == "Inner") {
+
+            maybeAnotherFilter = CastOperator<TOpFilter>(otherSide);
+            otherSideCBOTree = CastOperator<TOpCBOTree>(maybeAnotherFilter->GetInput());
+        }
+
+        if (otherSideCBOTree) {
+            if (leftSideCBOTree) {
+                cboTree = JoinCBOTrees(cboTree, otherSideCBOTree, join);
+            } else {
+                cboTree = JoinCBOTrees(otherSideCBOTree, cboTree, join);
+            }
+        } else {
+            cboTree = AddJoinToCBOTree(cboTree, join);
+        }
+
+        if (maybeFilter && maybeAnotherFilter) {
+            maybeFilter = FuseFilters(maybeFilter, maybeAnotherFilter, ctx.ExprCtx);
+        } else if (maybeAnotherFilter) {
+            maybeFilter = maybeAnotherFilter;
+        }
+
+        if (maybeFilter) {
+            maybeFilter->SetInput(cboTree);
+            return maybeFilter;
+        } else {
+            return cboTree;
+        }
+    }
+
+    return input;
+}
+
+/**
+ * Convert unoptimized CBOTrees back into normal operators
+ */
+std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+
+    if (input->Kind == EOperator::CBOTree) {
+        auto cboTree = CastOperator<TOpCBOTree>(input);
+        return cboTree->TreeRoot;
+    }
+
+    return input;
+}
+
+/**
+ * Assign stages and build stage graph in the process
+ */
 bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
@@ -549,7 +886,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
         return false;
     }
 
-    for (auto &child : input->Children) {
+    for (const auto &child : input->Children) {
         if (!child->Props.StageId.has_value()) {
             YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName << " child with unassigned stage";
             return false;
@@ -557,10 +894,11 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
     }
 
     if (input->Kind == EOperator::EmptySource || input->Kind == EOperator::Source) {
+        auto opRead = CastOperator<TOpRead>(input);
         TString readName;
         if (input->Kind == EOperator::Source) {
             auto opRead = CastOperator<TOpRead>(input);
-            auto newStageId = props.StageGraph.AddSourceStage(opRead->GetOutputIUs());
+            auto newStageId = props.StageGraph.AddSourceStage(opRead->Columns, opRead->GetOutputIUs(), opRead->StorageType, opRead->NeedsMap());
             input->Props.StageId = newStageId;
             readName = opRead->Alias;
         } else {
@@ -568,7 +906,6 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
             input->Props.StageId = newStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages source: " << readName;
-
     } else if (input->Kind == EOperator::Join) {
         auto join = CastOperator<TOpJoin>(input);
         auto leftStage = join->GetLeftInput()->Props.StageId;
@@ -577,13 +914,13 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
         auto newStageId = props.StageGraph.AddStage();
         join->Props.StageId = newStageId;
 
-        bool isLeftSourceStage = props.StageGraph.IsSourceStage(*leftStage);
-        bool isRightSourceStage = props.StageGraph.IsSourceStage(*rightStage);
+        const auto leftInputStorageType = props.StageGraph.GetStorageType(*leftStage);
+        const auto rightInputStorageType = props.StageGraph.GetStorageType(*rightStage);
 
         // For cross-join we build a stage with map and broadcast connections
         if (join->JoinKind == "Cross") {
-            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TMapConnection>(isLeftSourceStage));
-            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TBroadcastConnection>(isRightSourceStage));
+            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TMapConnection>(leftInputStorageType));
+            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TBroadcastConnection>(rightInputStorageType));
         }
 
         // For inner join (we don't support other joins yet) we build a new stage
@@ -596,38 +933,62 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
                 rightShuffleKeys.push_back(key.second);
             }
 
-            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TShuffleConnection>(leftShuffleKeys, isLeftSourceStage));
-            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TShuffleConnection>(rightShuffleKeys, isRightSourceStage));
+            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TShuffleConnection>(leftShuffleKeys, leftInputStorageType));
+            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TShuffleConnection>(rightShuffleKeys, rightInputStorageType));
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
     } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
-        auto childOp = input->Children[0];
+        auto childOp = CastOperator<IUnaryOperator>(input)->GetInput();
         auto prevStageId = *(childOp->Props.StageId);
 
         // If the child operator is a source, it requires its own stage
         // So we have build a new stage for current operator
         if (childOp->Kind == EOperator::Source) {
+            auto opRead = CastOperator<TOpRead>(childOp);
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
-            props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TSourceConnection>());
-        } 
+            std::shared_ptr<TConnection> connection;
+            // Type of connections depends on the storage type.
+            switch (opRead->GetTableStorageType()) {
+                case NYql::EStorageType::RowStorage: {
+                    connection.reset(new TSourceConnection());
+                    break;
+                }
+                case NYql::EStorageType::ColumnStorage: {
+                    connection.reset(new TUnionAllConnection(NYql::EStorageType::ColumnStorage));
+                    break;
+                }
+                default: {
+                    Y_ENSURE(false, "Invalid storage type for op read");
+                    break;
+                }
+            }
+            props.StageGraph.Connect(prevStageId, newStageId, connection);
+        }
         // If the child operator is not single use, we also need to create a new stage
         // for current operator with a map connection
         else if (!childOp->IsSingleConsumer()) {
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
-            props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TMapConnection>(false));
-        }
-        else {
+            props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TMapConnection>());
+        } else {
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
-    } else if (input->Kind == EOperator::Limit) {
+    } else if (input->Kind == EOperator::Sort) {
+        auto sort = CastOperator<TOpSort>(input);
+        auto newStageId = props.StageGraph.AddStage();
+        input->Props.StageId = newStageId;
+        auto prevStageId = *(sort->GetInput()->Props.StageId);
+        auto conn = std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(prevStageId));
+        props.StageGraph.Connect(prevStageId, newStageId,conn);
+    }
+    else if (input->Kind == EOperator::Limit) {
         auto limit = CastOperator<TOpLimit>(input);
         auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
         auto prevStageId = *(limit->GetInput()->Props.StageId);
-        auto conn = std::make_shared<TUnionAllConnection>(props.StageGraph.IsSourceStage(prevStageId));
+        auto conn = std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(prevStageId));
         props.StageGraph.Connect(prevStageId, newStageId,conn);
     } else if (input->Kind == EOperator::UnionAll) {
         auto unionAll = CastOperator<TOpUnionAll>(input);
@@ -635,14 +996,13 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
         auto leftStage = unionAll->GetLeftInput()->Props.StageId;
         auto rightStage = unionAll->GetRightInput()->Props.StageId;
 
-        bool isLeftSourceStage = props.StageGraph.IsSourceStage(*leftStage);
-        bool isRightSourceStage = props.StageGraph.IsSourceStage(*rightStage);
-
         auto newStageId = props.StageGraph.AddStage();
         unionAll->Props.StageId = newStageId;
 
-        props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TUnionAllConnection>(isLeftSourceStage));
-        props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TUnionAllConnection>(isRightSourceStage));
+        props.StageGraph.Connect(*leftStage, newStageId,
+                                 std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(*leftStage)));
+        props.StageGraph.Connect(*rightStage, newStageId,
+                                 std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(*rightStage)));
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stages union_all";
     } else if (input->Kind == EOperator::Aggregate) {
@@ -651,10 +1011,13 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
 
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
-        const bool isInputSourceStage = props.StageGraph.IsSourceStage(inputStageId);
-        const auto shuffleKeys = aggregate->KeyColumns.size() ? aggregate->KeyColumns : GetHashableKeys(aggregate->GetInput());
+        if (!aggregate->KeyColumns.empty()) {
+            props.StageGraph.Connect(inputStageId, newStageId,
+                                 std::make_shared<TShuffleConnection>(aggregate->KeyColumns, props.StageGraph.GetStorageType(inputStageId)));
+        } else {
+            props.StageGraph.Connect(inputStageId, newStageId, std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(inputStageId)));
+        }
 
-        props.StageGraph.Connect(inputStageId, newStageId, std::make_shared<TShuffleConnection>(shuffleKeys, isInputSourceStage));
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to Aggregation ";
     } else {
         Y_ENSURE(false, "Unknown operator encountered");
@@ -663,14 +1026,32 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
     return true;
 }
 
-TRuleBasedStage RuleStage1 = TRuleBasedStage(
+TRuleBasedStage RuleStage1 = TRuleBasedStage("Inline scalar subplans", {std::make_shared<TInlineScalarSubplanRule>()});
+
+TRuleBasedStage RuleStage2 = TRuleBasedStage("Logical rewrites I",
     {
-        std::make_shared<TInlineScalarSubplanRule>(),
+        std::make_shared<TRemoveIdenityMapRule>(),
         std::make_shared<TExtractJoinExpressionsRule>(), 
         std::make_shared<TPushMapRule>(), 
-        std::make_shared<TPushFilterRule>()
+        std::make_shared<TPushFilterRule>(),
+        std::make_shared<TPushLimitIntoSortRule>()
     });
-TRuleBasedStage RuleStage2 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()});
+
+TRuleBasedStage RuleStage3 = TRuleBasedStage("Physical rewrites I", {std::make_shared<TPushOlapFilterRule>()});
+
+TRuleBasedStage RuleStage4 = TRuleBasedStage("Prepare for CBO",
+    {
+        std::make_shared<TBuildInitialCBOTreeRule>(),
+        std::make_shared<TExpandCBOTreeRule>()
+    });
+
+TRuleBasedStage RuleStage5 = TRuleBasedStage("Invoke CBO", {std::make_shared<TOptimizeCBOTreeRule>()});
+
+TRuleBasedStage RuleStage6 = TRuleBasedStage("Clean up after CBO",
+    {std::make_shared<TInlineCBOTreeRule>(),
+    std::make_shared<TPushFilterRule>()});
+
+TRuleBasedStage RuleStage7 = TRuleBasedStage("Assign stages", {std::make_shared<TAssignStagesRule>()});
 
 } // namespace NKqp
 } // namespace NKikimr

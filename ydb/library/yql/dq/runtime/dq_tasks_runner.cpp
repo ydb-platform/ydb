@@ -1,6 +1,8 @@
-#include "dq_tasks_runner.h"
+#include "dq_channel_service.h"
 #include "dq_tasks_counters.h"
+#include "dq_tasks_runner.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_multihopping.h>
 
@@ -24,6 +26,7 @@
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_watermark.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <util/generic/scope.h>
@@ -141,16 +144,24 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 
 #define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
 
-NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory, TDqMeteringStats::TInputStatsMeter stats,
-    TInstant& startTs, bool& inputConsumed, NUdf::IPgBuilder* pgBuilder)
-{
+NUdf::TUnboxedValue DqBuildInputValue(
+    const NDqProto::TTaskInput& inputDesc,
+    const NKikimr::NMiniKQL::TType* type,
+    TVector<IDqInput::TPtr>&& inputs,
+    const THolderFactory& holderFactory,
+    TDqMeteringStats::TInputStatsMeter stats,
+    TInstant& startTs,
+    bool& inputConsumed,
+    NUdf::IPgBuilder* pgBuilder,
+    NKikimr::NMiniKQL::TWatermark* watermark,
+    TDqComputeActorWatermarks* watermarksTracker
+) {
     switch (inputDesc.GetTypeCase()) {
         case NYql::NDqProto::TTaskInput::kSource:
             Y_ABORT_UNLESS(inputs.size() == 1);
             [[fallthrough]];
         case NYql::NDqProto::TTaskInput::kUnionAll:
-            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputConsumed);
+            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputConsumed, watermark, watermarksTracker);
         case NYql::NDqProto::TTaskInput::kMerge: {
             const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
             TVector<TSortColumnInfo> sortColsInfo;
@@ -246,6 +257,7 @@ public:
         , Settings(settings)
         , LogFunc(logFunc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>())
+        , WatermarksTracker(Settings.WatermarksTracker)
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
         Stats->CreateTs = TInstant::Now();
@@ -616,11 +628,30 @@ public:
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
-                    auto inputChannel = CreateDqInputChannel(channelId, inputChannelDesc.GetSrcStageId(), *inputType,
-                        memoryLimits.ChannelBufferSize, StatsModeToCollectStatsLevel(Settings.StatsMode), typeEnv, holderFactory,
-                        inputChannelDesc.GetTransportVersion(), FromProto(task.GetValuePackerVersion()));
+
+                    TDqChannelSettings settings = {
+                        .RowType = *inputType,
+                        .HolderFactory = &holderFactory,
+                        .ChannelId = channelId,
+                        .SrcStageId = inputChannelDesc.GetSrcStageId(),
+                        .DstStageId = inputChannelDesc.GetDstStageId(),
+                        .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
+                        .TransportVersion = inputChannelDesc.GetTransportVersion(),
+                        .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                        .MaxStoredBytes = memoryLimits.ChannelBufferSize
+                    };
+
+                    IDqInputChannel::TPtr inputChannel;
+                    if (task.GetFastChannels()) {
+                        Y_ENSURE(Context.ChannelService);
+                        inputChannel = Context.ChannelService->GetInputChannel(settings);
+                    } else {
+                        inputChannel = CreateDqInputChannel(settings, typeEnv);
+                    }
+
                     auto ret = AllocatedHolder->InputChannels.emplace(channelId, inputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated input channelId: " << channelId);
+
                     inputs.emplace_back(inputChannel);
                 }
             }
@@ -628,16 +659,49 @@ public:
             auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, false);
             if (entryNode) {
                 if (transform) {
-                    transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {}, Stats->StartTs, InputConsumed, PgBuilder_.get());
+                    transform->TransformInput = DqBuildInputValue(
+                        inputDesc,
+                        transform->TransformInputType,
+                        std::move(inputs),
+                        holderFactory,
+                        {},
+                        Stats->StartTs,
+                        InputConsumed,
+                        PgBuilder_.get(),
+                        &Watermark,
+                        WatermarksTracker
+                    );
                     inputs.clear();
                     inputs.emplace_back(transform->TransformOutput);
-                    entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                        CreateInputUnionValue(transform->TransformOutput->GetInputType(), std::move(inputs), holderFactory,
-                            {inputStats, transform->TransformOutputType}, Stats->StartTs, InputConsumed));
+                    entryNode->SetValue(
+                        AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
+                        CreateInputUnionValue(
+                            transform->TransformOutput->GetInputType(),
+                            std::move(inputs),
+                            holderFactory,
+                            {inputStats, transform->TransformOutputType},
+                            Stats->StartTs,
+                            InputConsumed,
+                            &Watermark,
+                            WatermarksTracker
+                        )
+                    );
                 } else {
-                    entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
-                        DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory,
-                            {inputStats, entry->InputItemTypes[i]}, Stats->StartTs, InputConsumed, PgBuilder_.get()));
+                    entryNode->SetValue(
+                        AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
+                        DqBuildInputValue(
+                            inputDesc,
+                            entry->InputItemTypes[i],
+                            std::move(inputs),
+                            holderFactory,
+                            {inputStats, entry->InputItemTypes[i]},
+                            Stats->StartTs,
+                            InputConsumed,
+                            PgBuilder_.get(),
+                            &Watermark,
+                            WatermarksTracker
+                        )
+                    );
                 }
             } else {
                 // In some cases we don't need input. For example, for joining EmptyIterator with table.
@@ -689,27 +753,37 @@ public:
                 for (auto& outputChannelDesc : outputDesc.GetChannels()) {
                     ui64 channelId = outputChannelDesc.GetId();
 
-                    TDqOutputChannelSettings settings;
-                    settings.MaxStoredBytes = memoryLimits.ChannelBufferSize;
-                    settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
-                    settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
-                    settings.ArrayBufferMinFillPercentage = memoryLimits.ArrayBufferMinFillPercentage;
-                    settings.BufferPageAllocSize = memoryLimits.BufferPageAllocSize;
-                    settings.TransportVersion = outputChannelDesc.GetTransportVersion();
-                    settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
-                    settings.ValuePackerVersion = task.GetValuePackerVersion();
+                    TDqChannelSettings settings = {
+                        .RowType = *taskOutputType,
+                        .HolderFactory = &holderFactory,
+                        .ChannelId = channelId,
+                        .SrcStageId = outputChannelDesc.GetSrcStageId(),
+                        .DstStageId = outputChannelDesc.GetDstStageId(),
+                        .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
+                        .TransportVersion = outputChannelDesc.GetTransportVersion(),
+                        .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                        .MaxStoredBytes = memoryLimits.ChannelBufferSize,
+                        .MaxChunkBytes = memoryLimits.OutputChunkMaxSize,
+                        .ChunkSizeLimit = memoryLimits.ChunkSizeLimit,
+                        .ChannelStorage = outputChannelDesc.GetInMemory() ? nullptr
+                            : execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling()),
+                        .ArrayBufferMinFillPercentage = memoryLimits.ArrayBufferMinFillPercentage,
+                        .BufferPageAllocSize = memoryLimits.BufferPageAllocSize
+                    };
 
-                    if (!outputChannelDesc.GetInMemory()) {
-                        settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                    IDqOutputChannel::TPtr outputChannel;
+                    if (task.GetFastChannels()) {
+                        Y_ENSURE(Context.ChannelService);
+                        outputChannel = Context.ChannelService->GetOutputChannel(settings);
+                    } else {
+                        outputChannel = CreateDqOutputChannel(settings, LogFunc);
                     }
 
                     if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
-                        const auto srcNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId()).NodeId();
-                        const auto dstNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetDstEndpoint().GetActorId()).NodeId();
-                        settings.MutableSettings.IsLocalChannel = srcNodeId == dstNodeId;
+                        auto outputActorId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId());
+                        auto inputActorId = NActors::ActorIdFromProto(outputChannelDesc.GetDstEndpoint().GetActorId());
+                        outputChannel->Bind(outputActorId, inputActorId);
                     }
-
-                    auto outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);
 
                     auto ret = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << channelId);
@@ -776,6 +850,8 @@ public:
 
         InputConsumed = false;
         auto runStatus = FetchAndDispatch();
+        LastFetchTime = TInstant::Now();
+        LastFetchStatus = runStatus;
 
         if (Y_UNLIKELY(CollectFull())) {
             if (SpillingTaskCounters) {
@@ -1000,6 +1076,16 @@ private:
                     return ERunStatus::Finished;
                 }
                 case NUdf::EFetchStatus::Yield: {
+                    // only for sync ca
+                    if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
+                        const auto watermark = WatermarksTracker->GetPendingWatermark();
+                        WatermarksTracker->PopPendingWatermark();
+
+                        Y_DEBUG_ABORT_UNLESS(watermark.Defined());
+                        NDqProto::TWatermark watermarkRequest;
+                        watermarkRequest.SetTimestampUs(watermark->MicroSeconds());
+                        AllocatedHolder->Output->Consume(std::move(watermarkRequest));
+                    }
                     return ERunStatus::PendingInput;
                 }
             }
@@ -1064,6 +1150,7 @@ private:
 
     std::optional<TAllocatedHolder> AllocatedHolder;
     NKikimr::NMiniKQL::TWatermark Watermark;
+    TDqComputeActorWatermarks* WatermarksTracker;
 
     bool TaskHasEffects = false;
 

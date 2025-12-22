@@ -26,8 +26,8 @@ bool CheckLexers(NYql::TPosition pos, const TString& query, NYql::TIssues& issue
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
     lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
-    auto lexerMain = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true, NSQLTranslationV1::ELexerFlavor::Default);
-    auto lexerPure = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true, NSQLTranslationV1::ELexerFlavor::Pure);
+    auto lexerMain = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, NSQLTranslationV1::ELexerFlavor::Default);
+    auto lexerPure = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, NSQLTranslationV1::ELexerFlavor::Pure);
     auto lexerRegex = NSQLTranslationV1::MakeRegexLexerFactory(settings.AnsiLexer)->MakeLexer();
     TVector<NSQLTranslation::TParsedToken> mainTokens;
     if (!lexerMain->Tokenize(query, "", [&](auto token) { mainTokens.push_back(token); }, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {

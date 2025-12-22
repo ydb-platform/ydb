@@ -458,7 +458,7 @@ protected:
     }
 
     void TestOptionalStringValue(std::optional<std::string_view> value, TValuePackerType& packer, const TString& typeDesc, ui32 expectedLength) {
-        TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? *value : TString("null"));
+        TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? *value : "null");
         const auto v = value ? NUdf::TUnboxedValue(MakeString(*value)) : NUdf::TUnboxedValue();
         const auto uValue = TestPackUnpack(packer, v, additionalMsg, expectedLength);
         if (value) {

@@ -30,6 +30,15 @@ class TBalancer;
 class TMLPBalancer;
 }
 
+class TTopicMetricsHandler;
+
+struct TDatabaseInfo {
+    TString DatabasePath;
+    TString DatabaseId;
+    TString FolderId;
+    TString CloudId;
+};
+
 
 class TMetricsTimeKeeper {
 public:
@@ -156,13 +165,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     ui64 SchemeShardId;
     NKikimrPQ::TPQTabletConfig TabletConfig;
 
-    struct TConsumerInfo {
-        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
-        THolder<TTabletLabeledCountersBase> Aggr;
-    };
-
-    std::unordered_map<TString, TConsumerInfo> Consumers;
-
     ui64 TxId;
     ui32 NumActiveParts;
 
@@ -213,54 +215,17 @@ private:
     std::unordered_map<ui64, TPipeLocation> TabletPipes;
     std::unordered_set<ui64> PipesRequested;
 
-    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
-    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedExtendedCounters;
-    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCompactionCounters;
+    TDatabaseInfo DatabaseInfo;
 
-    NMonitoring::TDynamicCounterPtr DynamicCounters;
-    NMonitoring::TDynamicCounters::TCounterPtr ActivePartitionCountCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr InactivePartitionCountCounter;
+    std::unique_ptr<TTopicMetricsHandler> TopicMetricsHandler;
 
-    TString DatabasePath;
-    TString DatabaseId;
-    TString FolderId;
-    TString CloudId;
-
-    struct TPartitionStats {
-        ui64 DataSize = 0;
-        ui64 UsedReserveSize = 0;
-        NKikimrPQ::TAggregatedCounters Counters;
-        bool HasCounters = false;
-    };
-
-    struct TPartitionMetrics {
-        ui64 TotalAvgWriteSpeedPerSec = 0;
-        ui64 MaxAvgWriteSpeedPerSec = 0;
-        ui64 TotalAvgWriteSpeedPerMin = 0;
-        ui64 MaxAvgWriteSpeedPerMin = 0;
-        ui64 TotalAvgWriteSpeedPerHour = 0;
-        ui64 MaxAvgWriteSpeedPerHour = 0;
-        ui64 TotalAvgWriteSpeedPerDay = 0;
-        ui64 MaxAvgWriteSpeedPerDay = 0;
-    };
-
-    struct TAggregatedStats {
-        std::unordered_map<ui32, TPartitionStats> Stats;
+    struct TStatsRequestTracker {
         std::unordered_map<ui64, ui64> Cookies;
-
-        ui64 TotalDataSize = 0;
-        ui64 TotalUsedReserveSize = 0;
-
-        TPartitionMetrics Metrics;
-        TPartitionMetrics NewMetrics;
 
         ui64 Round = 0;
         ui64 NextCookie = 0;
-
-        void AggrStats(ui32 partition, ui64 dataSize, ui64 usedReserveSize);
-        void AggrStats(ui64 avgWriteSpeedPerSec, ui64 avgWriteSpeedPerMin, ui64 avgWriteSpeedPerHour, ui64 avgWriteSpeedPerDay);
     };
-    TAggregatedStats AggregatedStats;
+    TStatsRequestTracker StatsRequestTracker;
 
     struct TTxWritePartitionStats;
     bool TTxWritePartitionStatsScheduled = false;

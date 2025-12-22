@@ -160,7 +160,10 @@ struct TSelectRowsOptionsBase
     //! Use fixed and rewritten range inference.
     bool NewRangeInference = true;
     //! Typed expression builder version.
-    int ExpressionBuilderVersion = 1;
+    std::optional<int> ExpressionBuilderVersion = 1;
+    //! The quality of the the "cardinality" aggregate function estimates.
+    //! 2^HyperLogLogPrecision 8-bit cells will be used.
+    std::optional<int> HyperLogLogPrecision;
 };
 
 struct TSelectRowsOptions

@@ -240,6 +240,8 @@ message ClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1; // basic operation params, including timeout
     uint32 duration_seconds = 2;
     uint32 period_seconds = 3;
+    bool no_sanitize = 4;
+    bool counters_only = 5;
 }
 
 message ClusterStateResponse {
@@ -249,11 +251,11 @@ message ClusterStateResponse {
 
 message ClusterStateResultBlock {
     string name = 1;
-    string content = 2;
+    bytes content = 2;
     google.protobuf.Timestamp timestamp = 3;
 }
 
 message ClusterStateResult {
-    string result = 1; // deprecated
+    reserved 1; // deprecated
     repeated ClusterStateResultBlock blocks = 2;
 }

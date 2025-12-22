@@ -207,6 +207,17 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     const bool isOlap = (table.Metadata->Kind == EKikimrTableKind::Olap);
     const i64 priority = isOlap ? 0 : order;
 
+    if (isOlap && !(kqpCtx.IsGenericQuery() || (kqpCtx.IsDataQuery() && kqpCtx.Config->AllowOlapDataQuery))) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Data manipulation queries with column-oriented tables are supported only by API QueryService."));
+        return false;
+    }
+    if (isOlap && !kqpCtx.Config->EnableOlapSink) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Data manipulation queries with column-oriented tables are disabled."));
+        return false;
+    }
+
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
             stageInput = RebuildPureStageWithSink(
@@ -349,6 +360,17 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
 
     const bool isOlap = (table.Metadata->Kind == EKikimrTableKind::Olap);
     const i64 priority = isOlap ? 0 : order;
+
+    if (isOlap && !(kqpCtx.IsGenericQuery() || (kqpCtx.IsDataQuery() && kqpCtx.Config->AllowOlapDataQuery))) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Data manipulation queries with column-oriented tables are supported only by API QueryService."));
+        return false;
+    }
+    if (isOlap && !kqpCtx.Config->EnableOlapSink) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Data manipulation queries with column-oriented tables are disabled."));
+        return false;
+    }
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {

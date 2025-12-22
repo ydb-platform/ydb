@@ -24,7 +24,7 @@ public:
 
         if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->State->ConfigProto)) {
             NIceDb::TNiceDb db(txc.DB);
-            db.Table<Schema::Param>().Key(1)
+            db.Table<Schema::Param>().Key(Schema::Param::Key)
                 .Update<Schema::Param::Config>(Config);
 
             Modify = true;

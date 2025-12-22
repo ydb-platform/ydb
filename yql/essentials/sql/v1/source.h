@@ -284,11 +284,12 @@ TSourcePtr BuildSelectCore(
 TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
 TSourcePtr BuildAnyColumnSource(TPosition pos);
 
-enum class ReduceMode {
+enum class EReduceMode {
     ByPartition,
     ByAll,
 };
-TSourcePtr BuildReduce(TPosition pos, ReduceMode mode, TSourcePtr source, TVector<TSortSpecificationPtr>&& orderBy,
+
+TSourcePtr BuildReduce(TPosition pos, EReduceMode mode, TSourcePtr source, TVector<TSortSpecificationPtr>&& orderBy,
                        TVector<TNodePtr>&& keys, TVector<TNodePtr>&& args, TNodePtr udf, TNodePtr having, const TWriteSettings& settings,
                        const TVector<TSortSpecificationPtr>& assumeOrderBy, bool listCall);
 TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, bool withExtFunction, TVector<TNodePtr>&& terms, bool listCall,
@@ -311,6 +312,7 @@ TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& tab
 TNodePtr BuildBatchDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source, TNodePtr options = nullptr);
 
 // Implemented in query.cpp
+TNodePtr BuildTruncateTable(TPosition pos, const TTableRef& tr, const TTruncateTableParameters& params, TScopedStatePtr scoped);
 TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped);
 TNodePtr BuildAlterDatabase(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAlterDatabaseParameters& params, TScopedStatePtr scoped);
 TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TViewDescription& view);

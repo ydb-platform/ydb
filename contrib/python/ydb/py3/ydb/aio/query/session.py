@@ -124,6 +124,9 @@ class QuerySession(BaseQuerySession):
         settings: Optional[BaseRequestSettings] = None,
         *,
         stats_mode: Optional[base.QueryStatsMode] = None,
+        schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
+        result_set_format: Optional[base.QueryResultSetFormat] = None,
+        arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
     ) -> AsyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -138,6 +141,13 @@ class QuerySession(BaseQuerySession):
          2) QueryStatsMode.BASIC;
          3) QueryStatsMode.FULL;
          4) QueryStatsMode.PROFILE;
+        :param schema_inclusion_mode: Schema inclusion mode for result sets:
+         1) QuerySchemaInclusionMode.ALWAYS, which is default;
+         2) QuerySchemaInclusionMode.FIRST_ONLY.
+        :param result_set_format: Format of the result sets:
+         1) QueryResultSetFormat.VALUE, which is default;
+         2) QueryResultSetFormat.ARROW.
+        :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
 
         :return: Iterator with result sets
         """
@@ -150,6 +160,9 @@ class QuerySession(BaseQuerySession):
             syntax=syntax,
             exec_mode=exec_mode,
             stats_mode=stats_mode,
+            schema_inclusion_mode=schema_inclusion_mode,
+            result_set_format=result_set_format,
+            arrow_format_settings=arrow_format_settings,
             concurrent_result_sets=concurrent_result_sets,
             settings=settings,
         )

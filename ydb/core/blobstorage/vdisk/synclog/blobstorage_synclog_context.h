@@ -30,6 +30,10 @@ public:
     }
 };
 
+constexpr static ui32 MaxExpectedDisksInGroup = 9;
+constexpr static ui32 MaxPossibleDisksInGroup = 32;
+using TSyncedMask = std::bitset<MaxPossibleDisksInGroup>;
+
 ////////////////////////////////////////////////////////////////////////////
 // TSyncLogCtx
 ////////////////////////////////////////////////////////////////////////////
@@ -40,6 +44,7 @@ public:
     const TPDiskCtxPtr PDiskCtx;
     const TActorId LoggerID;
     const TActorId LogCutterID;
+    const TActorId SkeletonId;
 
     const ui64 SyncLogMaxDiskAmount;
     const ui64 SyncLogMaxEntryPointSize;
@@ -54,24 +59,28 @@ public:
     const bool IsReadOnlyVDisk;
 
     TControlWrapper EnablePhantomFlagStorage;
+    TControlWrapper PhantomFlagStorageLimit;
 
     TSyncLogCtx(TIntrusivePtr<TVDiskContext> vctx,
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
             const TActorId &loggerId,
             const TActorId &logCutterId,
+            const TActorId& skeletonId,
             ui64 syncLogMaxDiskAmount,
             ui64 syncLogMaxEntryPointSize,
             ui64 syncLogMaxMemAmount,
             ui32 maxResponseSize,
             std::shared_ptr<TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
             bool isReadOnlyVDisk,
-            const TControlWrapper& enablePhantomFlagStorage)
+            const TControlWrapper& enablePhantomFlagStorage,
+            const TControlWrapper& phantomFlagStorageLimit)
         : VCtx(std::move(vctx))
         , LsnMngr(std::move(lsnMngr))
         , PDiskCtx(std::move(pdiskCtx))
         , LoggerID(loggerId)
         , LogCutterID(logCutterId)
+        , SkeletonId(skeletonId)
         , SyncLogMaxDiskAmount(syncLogMaxDiskAmount)
         , SyncLogMaxEntryPointSize(syncLogMaxEntryPointSize)
         , SyncLogMaxMemAmount(syncLogMaxMemAmount)
@@ -82,6 +91,7 @@ public:
         , PhantomFlagStorageGroup(VCtx->VDiskCounters, "subsystem", "phantomflagstorage")
         , IsReadOnlyVDisk(isReadOnlyVDisk)
         , EnablePhantomFlagStorage(enablePhantomFlagStorage)
+        , PhantomFlagStorageLimit(phantomFlagStorageLimit)
     {}
 };
 

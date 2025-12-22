@@ -51,6 +51,9 @@
     "name": "yt.CoreDumpPath"
   },
   {
+    "name": "yt.CostBasedOptimizerPartial"
+  },
+  {
     "name": "yt.DQRPCReaderInflight"
   },
   {
@@ -294,6 +297,9 @@
     "name": "yt.KeepTempTables"
   },
   {
+    "name": "yt.KeepWorldDepForFillOp"
+  },
+  {
     "name": "yt.KeyFilterForStartsWith"
   },
   {
@@ -433,9 +439,6 @@
   },
   {
     "name": "yt.PruneKeyFilterLambda"
-  },
-  {
-    "name": "yt.PruneQLFilterLambda"
   },
   {
     "name": "yt.PublishedAutoMerge"
@@ -829,6 +832,9 @@
   },
   {
     "name": "dq.WatermarksGranularityMs"
+  },
+  {
+    "name": "dq.WatermarksIdleTimeoutMs"
   },
   {
     "name": "dq.WatermarksLateArrivalDelayMs"

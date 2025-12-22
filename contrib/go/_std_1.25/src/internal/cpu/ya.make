@@ -37,5 +37,15 @@ ELSEIF (OS_LINUX AND ARCH_ARM6 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM
         cpu_arm.go
         cpu_no_name.go
     )
+ELSEIF (OS_ANDROID AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        cpu.go
+        cpu.s
+        cpu_arm64.go
+        cpu_arm64.s
+        cpu_arm64_android.go
+        cpu_arm64_hwcap.go
+        cpu_no_name.go
+    )
 ENDIF()
 END()

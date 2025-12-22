@@ -399,7 +399,8 @@ public:
             | EYtSettingType::UserSchema
             | EYtSettingType::UserColumns
             | EYtSettingType::StatColumns
-            | EYtSettingType::SysColumns;
+            | EYtSettingType::SysColumns
+            | EYtSettingType::QLFilter;
         if (!ValidateSettings(*input.Ref().Child(TYtSection::idx_Settings), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
@@ -731,7 +732,8 @@ public:
                     auto tableName = table.Name().Value();
                     auto tableCluster = table.Cluster().StringValue();
                     auto epoch = TEpochInfo::Parse(table.Epoch().Ref());
-                    auto isDynamic = TYtTableBaseInfo::GetMeta(table) -> IsDynamic;
+                    auto meta = TYtTableBaseInfo::GetMeta(table);
+                    auto isDynamic = meta && meta->IsDynamic;
 
                     if (isDynamic && epoch > 0) {
                         const bool useNativeDyntableRead = State_->Configuration->UseNativeDynamicTableRead.Get().GetOrElse(DEFAULT_USE_NATIVE_DYNAMIC_TABLE_READ);

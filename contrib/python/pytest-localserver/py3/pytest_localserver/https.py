@@ -133,32 +133,3 @@ class SecureContentServer(ContentServer):
             certificate path across different versions or test runs.
         """
         return self._cert
-
-
-if __name__ == "__main__":  # pragma: no cover
-
-    import sys
-    import time
-
-    print("Using certificate %s." % DEFAULT_CERTIFICATE)
-
-    server = SecureContentServer()
-    server.start()
-    server.logging = True
-
-    print("HTTPS server is running at %s" % server.url)
-    print("Type <Ctrl-C> to stop")
-
-    try:
-        path = sys.argv[1]
-    except IndexError:
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "README.rst")
-
-    server.serve_content(open(path).read(), 302)
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\rstopping...")
-    server.stop()

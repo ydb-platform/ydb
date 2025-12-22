@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_rec.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include <util/generic/set.h>
@@ -12,48 +13,8 @@
 namespace NKikimr {
 
     template <class TKey, class TMemRec>
-    struct TRecIndexBase : public TThrRefBase {
-#pragma pack(push, 4)
-        struct TRec {
-        private:
-            TKey Key;
-            TMemRec MemRec;
-
-        public:
-            TRec() = default;
-
-            TRec(const TKey &key)
-                : Key(key)
-                , MemRec()
-            {}
-
-            TRec(const TKey &key, const TMemRec &memRec)
-                : Key(key)
-                , MemRec(memRec)
-            {}
-
-            TKey GetKey() const {
-                return ReadUnaligned<TKey>(&Key);
-            }
-
-            TMemRec GetMemRec() const {
-                return ReadUnaligned<TMemRec>(&MemRec);
-            }
-
-            struct TLess {
-                bool operator ()(const TRec &x, const TKey &key) const {
-                    return x.Key < key;
-                }
-            };
-        };
-#pragma pack(pop)
-    };
-
-    template <class TKey, class TMemRec>
-    struct TRecIndex
-        : public TRecIndexBase<TKey, TMemRec>
-    {
-        typedef TRecIndexBase<TKey, TMemRec>::TRec TRec;
+    struct TRecIndex : public TThrRefBase {
+        typedef TIndexRecord<TKey, TMemRec> TRec;
 
         TTrackableVector<TRec> LoadedIndex;
 
@@ -72,9 +33,9 @@ namespace NKikimr {
     };
 
     template <>
-    struct TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>
-        : public TRecIndexBase<TKeyLogoBlob, TMemRecLogoBlob>
-    {
+    struct TRecIndex<TKeyLogoBlob, TMemRecLogoBlob> : public TThrRefBase {
+        typedef TIndexRecord<TKeyLogoBlob, TMemRecLogoBlob> TRec;
+
 #pragma pack(push, 4)
         struct TLogoBlobIdHigh {
             union {
@@ -185,11 +146,9 @@ namespace NKikimr {
                 LowRangeEndIndex = i;
             }
 
-            struct TLess {
-                bool operator ()(const TRecHigh& l, const TLogoBlobIdHigh& r) const {
-                    return l.GetKey() < r;
-                }
-            };
+            bool operator < (const TLogoBlobIdHigh &key) const {
+                return GetKey() < key;
+            }
         };
 
         static_assert(sizeof(TRecHigh) == 20, "expect sizeof(TRecHigh) == 20");
@@ -213,11 +172,9 @@ namespace NKikimr {
                 return ReadUnaligned<TMemRecLogoBlob>(&MemRec);
             }
 
-            struct TLess {
-                bool operator ()(const TRecLow& l, const TLogoBlobIdLow& r) const {
-                    return l.GetKey() < r;
-                }
-            };
+            bool operator < (const TLogoBlobIdLow &key) const {
+                return GetKey() < key;
+            }
         };
 
         static_assert(sizeof(TRecLow) == 28, "expect sizeof(TRecLow) == 28");

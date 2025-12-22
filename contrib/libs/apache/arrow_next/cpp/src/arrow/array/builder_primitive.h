@@ -22,11 +22,11 @@
 #include <memory>
 #include <vector>
 
-#include "arrow/array/builder_base.h"
-#include "arrow/array/data.h"
-#include "arrow/result.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
 
 namespace arrow20 {
 

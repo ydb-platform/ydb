@@ -97,7 +97,7 @@ class EventKind(object):
         )
 
 
-def get_table_description(table_name, mode):
+def get_table_description(table_name, mode, in_memory):
     if mode == "row":
         store_entry = "STORE = ROW,"
         ttl_entry = """TTL = Interval("PT240S") ON `timestamp` AS SECONDS,"""
@@ -107,15 +107,28 @@ def get_table_description(table_name, mode):
     else:
         raise RuntimeError("Unkown mode: {}".format(mode))
 
+    if in_memory:
+        families_entry = """
+            FAMILY default (
+                CACHE_MODE = "in_memory"
+            ),
+            FAMILY lz4_family (
+                CACHE_MODE = "in_memory",
+                COMPRESSION = "lz4"
+            ),"""
+    else:
+        families_entry = """
+            FAMILY lz4_family (
+                COMPRESSION = "lz4"
+            ),"""
+
     return f"""
         CREATE TABLE `{table_name}` (
             key Uint64 NOT NULL,
             `timestamp` Uint64 NOT NULL,
             value Utf8 FAMILY lz4_family NOT NULL,
             PRIMARY KEY (key),
-            FAMILY lz4_family (
-                COMPRESSION = "lz4"
-            ),
+            {families_entry}
             INDEX by_timestamp GLOBAL ON (`timestamp`)
         )
         WITH (
@@ -211,7 +224,7 @@ class WorkloadStats(object):
 
 
 class YdbQueue(object):
-    def __init__(self, idx, database, stats, driver, pool, mode):
+    def __init__(self, idx, database, stats, driver, pool, mode, in_memory):
         self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + "_" + str(idx))
         self.copies_dir = os.path.join(self.working_dir, 'copies')
         self.table_name = self.table_name_with_timestamp()
@@ -227,6 +240,7 @@ class YdbQueue(object):
         self.driver.scheme_client.make_directory(self.working_dir)
         self.driver.scheme_client.make_directory(self.copies_dir)
         self.mode = mode
+        self.in_memory = in_memory
         print("Working dir %s" % self.working_dir)
         self.prepare_new_queue(self.table_name)
         # a queue with tables to drop
@@ -244,7 +258,7 @@ class YdbQueue(object):
 
     def prepare_new_queue(self, table_name=None):
         table_name = self.table_name_with_timestamp() if table_name is None else table_name
-        self.send_query(get_table_description(table_name, self.mode), parameters=None, event_kind=EventKind.CREATE_TABLE)
+        self.send_query(get_table_description(table_name, self.mode, self.in_memory), parameters=None, event_kind=EventKind.CREATE_TABLE)
 
     def switch(self, switch_to):
         self.table_name = switch_to
@@ -450,9 +464,11 @@ class Workload:
         # TODO: run both modes in parallel?
         self.mode = mode
         self.ydb_queues = [
-            YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode)
+            YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode, False)
             for idx in range(2)
         ]
+        if self.mode == "row":
+            self.ydb_queues.append(YdbQueue(len(self.ydb_queues), database, self.workload_stats, self.driver, self.pool, self.mode, True))
         self.pool_semaphore = threading.BoundedSemaphore(value=100)
         self.worker_exception = []
 

@@ -216,6 +216,10 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     tablesSet.insert(source.GetReadRangesSource().GetTable().GetPath());
                 }
+
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                    tablesSet.insert(source.GetFullTextSource().GetTable().GetPath());
+                }
             }
             for (const auto& sink : stage.GetSinks()) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {

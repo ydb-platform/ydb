@@ -3,6 +3,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -941,7 +942,7 @@ namespace {
             break;
         }
         default:
-            NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+            NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
             Cout << "(unknown):" << Endl
                 << colors.RedColor() << "Unknown ttl settings mode. Please update your version of YDB cli"
                 << colors.OldColor() << Endl;
@@ -990,7 +991,7 @@ namespace {
             Cout << "Read replicas total count in all AZs: " << settings->GetReadReplicasCount() << Endl;
             break;
         default:
-            NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+            NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
             Cout << colors.RedColor() << "Unknown read replicas settings mode. Please update your version of YDB cli"
                 << colors.OldColor() << Endl;
         }

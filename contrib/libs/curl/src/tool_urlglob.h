@@ -26,54 +26,53 @@
 #include "tool_setup.h"
 
 typedef enum {
-  GLOB_SET = 1,
-  GLOB_ASCII,
-  GLOB_NUM
-} globtype;
+  UPTSet = 1,
+  UPTCharRange,
+  UPTNumRange
+} URLPatternType;
 
 struct URLPattern {
-  globtype type;
+  URLPatternType type;
   int globindex; /* the number of this particular glob or -1 if not used
                     within {} or [] */
   union {
     struct {
-      char **elem;
+      char **elements;
       curl_off_t size;
-      curl_off_t idx;
-    } set;
+      int ptr_s;
+    } Set;
     struct {
-      int min;
-      int max;
-      int letter;
-      unsigned char step;
-    } ascii;
+      char min_c;
+      char max_c;
+      char ptr_c;
+      int step;
+    } CharRange;
     struct {
-      curl_off_t min;
-      curl_off_t max;
-      curl_off_t idx;
+      curl_off_t min_n;
+      curl_off_t max_n;
+      int padlength;
+      curl_off_t ptr_n;
       curl_off_t step;
-      int npad;
-    } num;
-  } c;
+    } NumRange;
+  } content;
 };
 
 /* the total number of globs supported */
-#define GLOB_PATTERN_NUM 30
+#define GLOB_PATTERN_NUM 100
 
 struct URLGlob {
-  struct dynbuf buf;
-  struct URLPattern *pattern;
-  size_t palloc; /* number of pattern entries allocated */
+  struct URLPattern pattern[GLOB_PATTERN_NUM];
   size_t size;
+  size_t urllen;
+  char *glob_buffer;
   char beenhere;
   const char *error; /* error message */
   size_t pos;        /* column position of error or 0 */
 };
 
-CURLcode glob_url(struct URLGlob *, char *, curl_off_t *, FILE *);
+CURLcode glob_url(struct URLGlob**, char *, curl_off_t *, FILE *);
 CURLcode glob_next_url(char **, struct URLGlob *);
-CURLcode glob_match_url(char **, const char *, struct URLGlob *);
+CURLcode glob_match_url(char **, char *, struct URLGlob *);
 void glob_cleanup(struct URLGlob *glob);
-bool glob_inuse(struct URLGlob *glob);
 
 #endif /* HEADER_CURL_TOOL_URLGLOB_H */

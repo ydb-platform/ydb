@@ -12,7 +12,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TSensorEncoder, Encode)
+TEST(TSensorEncoderTest, Encode)
 {
     // Fill metric registry.
     NMonitoring::TMetricRegistry registry{{{"common", "label"}}};
@@ -43,7 +43,7 @@ TEST(TSensorEncoder, Encode)
 
     auto sensorDump = encoder.BuildSensorDump();
 
-    TString sensorDumpText;
+    TProtoStringType sensorDumpText;
     EXPECT_TRUE(NProtoBuf::TextFormat::PrintToString(sensorDump, &sensorDumpText));
     Cerr << "Sensor dump:\n" << sensorDumpText << Endl;
 
@@ -149,7 +149,7 @@ TEST(TSensorEncoder, Encode)
     }
 }
 
-TEST(TSensorEncoder, EncodeSameSensorWithDifferentTypes)
+TEST(TSensorEncoderTest, EncodeSameSensorWithDifferentTypes)
 {
     // Fill metric registry.
     NMonitoring::TMetricRegistry registry{{{"common", "label"}}};

@@ -67,8 +67,8 @@ struct TQueryStringToList: public TQueryStringParse {
     }
 
     static const TStringRef& Name() {
-        static const auto name = TStringRef::Of("QueryStringToList");
-        return name;
+        static const auto Name = TStringRef::Of("QueryStringToList");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name,
@@ -88,8 +88,8 @@ struct TQueryStringToDict: public TQueryStringParse {
     }
 
     static const TStringRef& Name() {
-        static const auto name = TStringRef::Of("QueryStringToDict");
-        return name;
+        static const auto Name = TStringRef::Of("QueryStringToDict");
+        return Name;
     }
 
     static bool DeclareSignature(const TStringRef& name,
@@ -123,8 +123,8 @@ public:
     }
 
     static const TStringRef& Name() {
-        static const auto name = TStringRef::Of("BuildQueryString");
-        return name;
+        static const auto Name = TStringRef::Of("BuildQueryString");
+        return Name;
     }
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder,

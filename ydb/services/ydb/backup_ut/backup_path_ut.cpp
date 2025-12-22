@@ -53,6 +53,47 @@ class TBackupPathTestFixture : public TS3BackupTestFixture {
 };
 
 Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
+    Y_UNIT_TEST_TWIN(OnlyExportWholeDatabase, IsOlap) {
+        // Export without source path: source path == database root
+        NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
+        auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+        WaitOpSuccess(res);
+
+        ValidateS3FileList({
+            "/test_bucket/Prefix/metadata.json",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/metadata.json",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/scheme.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/permissions.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/data_00.csv",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/metadata.json",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/scheme.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/permissions.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/data_00.csv",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv",
+
+            "/test_bucket/Prefix/metadata.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/metadata.json.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/scheme.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/permissions.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/data_00.csv.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/metadata.json.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/scheme.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/permissions.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/data_00.csv.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
+            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        });
+    }
+
     Y_UNIT_TEST_TWIN(ExportWholeDatabase, IsOlap) {
         // Export without source path: source path == database root
         if (IsOlap) {
@@ -1211,38 +1252,60 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     // Test that covers races between processing and cancellation
     Y_UNIT_TEST_TWIN(CancelWhileProcessing, IsOlap) {
+        if (IsOlap) {
+            return; // TODO: fix me issue@26498
+        }
+
+        using namespace fmt::literals;
+
         // Make tables for parallel export
-        auto createSchemaResult = YdbQueryClient().ExecuteQuery(R"sql(
+        auto createSchemaResult = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
             CREATE TABLE `/Root/Table0` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
             );
 
             CREATE TABLE `/Root/Table1` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
             );
 
             CREATE TABLE `/Root/Table2` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
             );
 
             CREATE TABLE `/Root/Table3` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
             );
 
             CREATE TABLE `/Root/Table4` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
             );
-        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+        )sql", "store"_a = IsOlap ? "COLUMN" : "ROW",
+        "partition_count"_a = IsOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(createSchemaResult.IsSuccess(), createSchemaResult.GetIssues().ToString());
 
         for (bool cancelExport : {true, false}) {

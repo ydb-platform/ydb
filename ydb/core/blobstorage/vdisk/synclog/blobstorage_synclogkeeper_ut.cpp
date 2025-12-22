@@ -109,17 +109,19 @@ namespace NKikimr {
             nullptr,
             TActorId{},
             TActorId{},
+            TActorId{},
             syncLogMaxDiskAmount,
             syncLogMaxEntryPointSize,
             syncLogMaxMemAmount,
             maxResponseSize,
             nullptr,
             false,
-            TControlWrapper(0, 0, 1));
+            TControlWrapper(0, 0, 1),
+            TControlWrapper(20'000'000, 1, 100'000'000'000));
 
         State = std::make_unique<TSyncLogKeeperState>(slCtx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
-                syncLogMaxEntryPointSize, TActorId{});
-        State->Init(nullptr, std::make_shared<TFakeLoggerCtx>());
+                syncLogMaxEntryPointSize);
+        State->Init(nullptr, std::make_shared<TFakeLoggerCtx>(), TActorId{});
 
         STR << "CREATE STATE entryPointLsn# " << ep.EntryPointLsn <<
             " entryPoint# " << (ep.EntryPoint.empty() ? "<empty>" : "<exists>") << "\n";
@@ -151,7 +153,6 @@ namespace NKikimr {
         void Start(TSyncLogKeeperState *state, ui64 recoveryLogConfirmedLsn) {
             CommitData = std::make_unique<TSyncLogKeeperCommitData>(state->PrepareCommitData(recoveryLogConfirmedLsn));
             Y_ABORT_UNLESS((!CommitData->SwapSnap || CommitData->SwapSnap->Empty()) &&
-                    CommitData->ChunksToDeleteDelayed.empty() &&
                     CommitData->ChunksToDelete.empty());
             STR << "Commit started\n";
             PrintStatus(state);
@@ -161,12 +162,12 @@ namespace NKikimr {
             TStringStream s;
             TDeltaToDiskRecLog delta(10);
             TEntryPointSerializer entryPointSerializer(CommitData->SyncLogSnap,
-                std::move(CommitData->ChunksToDeleteDelayed), CommitData->RecoveryLogConfirmedLsn);
+                {}, CommitData->RecoveryLogConfirmedLsn);
             entryPointSerializer.Serialize(delta);
 
             TCommitHistory commitHistory(TInstant(), commitLsn, CommitData->RecoveryLogConfirmedLsn);
             TEvSyncLogCommitDone commitDone(commitHistory, entryPointSerializer.GetEntryPointDbgInfo(),
-                std::move(delta));
+                std::move(delta), {});
 
             // apply commit result
             state->ApplyCommitResult(&commitDone);

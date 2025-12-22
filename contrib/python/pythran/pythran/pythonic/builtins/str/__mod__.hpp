@@ -26,8 +26,7 @@ namespace builtins
       template <class Tuple, size_t I>
       void fmt(boost::format &f, Tuple const &a, utils::int_<I>)
       {
-        fmt(f % std::get<std::tuple_size<Tuple>::value - I>(a), a,
-            utils::int_<I - 1>());
+        fmt(f % std::get<std::tuple_size<Tuple>::value - I>(a), a, utils::int_<I - 1>());
       }
     } // namespace details
 
@@ -46,8 +45,7 @@ namespace builtins
       return fmter.str();
     }
     template <size_t N, class T>
-    types::str __mod__(types::str const &s,
-                       types::array_tuple<T, N> const &args)
+    types::str __mod__(types::str const &s, types::array_tuple<T, N> const &args)
     {
       boost::format fmter(s.chars());
       details::fmt(fmter, args, utils::int_<N>());

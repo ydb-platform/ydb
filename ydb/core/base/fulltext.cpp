@@ -20,9 +20,11 @@ namespace {
 
     Ydb::Table::FulltextIndexSettings::Layout ParseLayout(const TString& layout_, TString& error) {
         const TString layout = to_lower(layout_);
-        if (layout == "flat")
+        if (layout == "flat") {
             return Ydb::Table::FulltextIndexSettings::FLAT;
-        else {
+        } else if (layout == "flat_relevance") {
+            return Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+        } else {
             error = TStringBuilder() << "Invalid layout: " << layout_;
             return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
         }
@@ -114,7 +116,7 @@ namespace {
                 }
                 break;
             default:
-                Y_ENSURE(TStringBuilder() << "Invalid tokenizer: " << static_cast<int>(tokenizer));
+                Y_ENSURE(false, TStringBuilder() << "Invalid tokenizer: " << static_cast<int>(tokenizer));
         }
         return tokens;
     }

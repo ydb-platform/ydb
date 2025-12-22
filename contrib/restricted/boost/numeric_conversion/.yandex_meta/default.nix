@@ -1,7 +1,7 @@
 self: super: with self; {
   boost_numeric_conversion = stdenv.mkDerivation rec {
     pname = "boost_numeric_conversion";
-    version = "1.89.0";
+    version = "1.90.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";

@@ -258,7 +258,7 @@ public:
         auto reads = worker->BuildRequests(Partitioning, ReadId);
 
         // lookup can't be overloaded
-        AFL_ENSURE(!worker->IsOverloaded());
+        AFL_ENSURE(!worker->IsOverloaded(std::numeric_limits<size_t>::max()));
 
         for (auto& [shardId, read] : reads) {
             ++state.ReadsInflight;
@@ -416,6 +416,7 @@ public:
             }());
 
         if (!record.GetBrokenTxLocks().empty()) {
+            BrokenLocksCount += record.GetBrokenTxLocks().size();
             Settings.TxManager->SetError(shardId);
             RuntimeError(
                 NYql::NDqProto::StatusIds::ABORTED,
@@ -664,6 +665,18 @@ public:
 
         ReadRowsCount = 0;
         ReadBytesCount = 0;
+
+        // Add lock stats for broken locks
+        if (BrokenLocksCount > 0) {
+            NKqpProto::TKqpTaskExtraStats extraStats;
+            if (stats->HasExtra()) {
+                stats->GetExtra().UnpackTo(&extraStats);
+            }
+            extraStats.MutableLockStats()->SetBrokenAsVictim(
+                extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocksCount);
+            stats->MutableExtra()->PackFrom(extraStats);
+            BrokenLocksCount = 0;
+        }
     }
 
 private:
@@ -683,6 +696,7 @@ private:
     // stats
     ui64 ReadRowsCount = 0;
     ui64 ReadBytesCount = 0;
+    ui64 BrokenLocksCount = 0;
 
     NWilson::TSpan LookupActorSpan;
 };

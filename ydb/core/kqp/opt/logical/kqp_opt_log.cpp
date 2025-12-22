@@ -68,6 +68,7 @@ public:
         AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextContains));
         AddHandler(1, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(1, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(1, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
@@ -136,10 +137,11 @@ protected:
                 node,
                 ctx,
                 input.Cast(),
-                false,              // analyticsHopping
+                false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                false,               // defaultWatermarksMode
-                true);              // syncActor
+                KqpCtx.Config->EnableWatermarks,
+                false
+            );
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());
@@ -222,6 +224,12 @@ protected:
     TMaybeNode<TExprBase> RewriteTopSortOverFlatMap(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteTopSortOverFlatMap(node, ctx);
         DumpAppliedRule("RewriteTopSortOverFlatMap", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextContains(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpRewriteFlatMapOverFullTextContains(node, ctx, KqpCtx, *getParents());
+        DumpAppliedRule("RewriteFlatMapOverFullTextContains", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

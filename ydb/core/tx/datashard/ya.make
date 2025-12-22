@@ -83,6 +83,8 @@ SRCS(
     datashard__write.cpp
     datashard_active_transaction.cpp
     datashard_active_transaction.h
+    datashard_cdc_stream_common.cpp
+    datashard_cdc_stream_common.h
     datashard_change_receiving.cpp
     datashard_change_sender_activation.cpp
     datashard_change_sending.cpp
@@ -219,7 +221,9 @@ SRCS(
     wait_for_stream_clearance_unit.cpp
 
     build_index/fulltext.cpp
+    build_index/fulltext_dict.cpp
     build_index/kmeans_helper.cpp
+    build_index/filter_kmeans.cpp
     build_index/local_kmeans.cpp
     build_index/prefix_kmeans.cpp
     build_index/recompute_kmeans.cpp
@@ -302,7 +306,6 @@ ELSE()
     SRCS(
         export_s3_buffer.cpp
         export_s3_uploader.cpp
-        extstorage_usage_config.cpp
         import_s3.cpp
     )
 ENDIF()
@@ -341,6 +344,7 @@ RECURSE_FOR_TESTS(
     ut_rs
     ut_sequence
     ut_snapshot
+    ut_snapshot_isolation
     ut_stats
     ut_trace
     ut_upload_rows

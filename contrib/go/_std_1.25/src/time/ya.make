@@ -31,5 +31,17 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         zoneinfo_read.go
         zoneinfo_windows.go
     )
+ELSEIF (OS_ANDROID AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        format.go
+        format_rfc3339.go
+        sleep.go
+        sys_unix.go
+        tick.go
+        time.go
+        zoneinfo.go
+        zoneinfo_android.go
+        zoneinfo_read.go
+    )
 ENDIF()
 END()

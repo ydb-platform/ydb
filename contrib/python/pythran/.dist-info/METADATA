@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: pythran
-Version: 0.18.0
+Version: 0.18.1
 Summary: Ahead of Time compiler for numeric kernels
 Author-email: Serge Guelton <serge.guelton@telecom-bretagne.eu>
 License: Copyright (c) 2012, HPC Project and Serge Guelton
@@ -39,7 +39,6 @@ Project-URL: Changelog, https://pythran.readthedocs.io/en/latest/Changelog.html
 Classifier: Development Status :: 4 - Beta
 Classifier: Environment :: Console
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: BSD License
 Classifier: Natural Language :: English
 Classifier: Operating System :: POSIX :: Linux
 Classifier: Operating System :: MacOS
@@ -89,7 +88,7 @@ It is meant to efficiently compile **scientific programs**, and takes advantage
 of multi-cores and SIMD instruction units.
 
 Until 0.9.5 (included), Pythran was supporting Python 3 and Python 2.7.
-It now only supports Python **3**.
+It now only supports Python **3.7** and upward.
 
 Installation
 ------------

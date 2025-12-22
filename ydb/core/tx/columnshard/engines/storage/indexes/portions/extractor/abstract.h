@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/common.h>
 
@@ -11,7 +12,7 @@ namespace NKikimr::NOlap::NIndexes {
 
 class IReadDataExtractor {
 public:
-    using TRecordVisitor = const std::function<void(const NJson::TJsonValue& value, const ui64 hashBase)>;
+    using TRecordVisitor = const std::function<void(const NArrow::NAccessor::TBinaryJsonValueView& value, const ui64 hashBase)>;
     using TChunkVisitor = const std::function<void(const std::shared_ptr<arrow::Array>&, const ui64 hashBase)>;
     using TProto = NKikimrSchemeOp::TIndexDataExtractor;
     using TFactory = NObjectFactory::TObjectFactory<IReadDataExtractor, TString>;

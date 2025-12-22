@@ -1,5 +1,5 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
 FORK_TEST_FILES()
@@ -10,6 +10,7 @@ SPLIT_FACTOR(10)
 TEST_SRCS(
     test_example.py
     test_followers.py
+    test_in_memory.py
     test_compatibility.py
     test_stress.py
     test_statistics.py

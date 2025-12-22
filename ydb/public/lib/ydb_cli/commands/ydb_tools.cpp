@@ -310,7 +310,8 @@ TCommandCopy::TCommandCopy()
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Source table path", true}},
-        {"Destination", {{"destination", "dst", "d"}, "Destination table path", true}}
+        {"Destination", {{"destination", "dst", "d"}, "Destination table path", true}},
+        {"OmitIndexes", {{"omit-indexes"}, "Omit indexes when copying table; indexes are copied by default", false}}
     });
 }
 
@@ -357,6 +358,9 @@ int TCommandCopy::Run(TConfig& config) {
                 return EXIT_FAILURE;
         }
         copyItems.emplace_back(item.Source, item.Destination);
+        if (item.OmitIndexes) {
+            copyItems.back().SetOmitIndexes();
+        }
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         GetSession(config).CopyTables(

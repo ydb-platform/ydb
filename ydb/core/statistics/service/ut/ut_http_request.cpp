@@ -8,13 +8,24 @@
 namespace NKikimr {
 namespace NStat {
 
+namespace {
+
+TTableInfo PrepareDatabaseAndTable(TTestEnv& env, bool isServerless) {
+    if (isServerless) {
+        CreateDatabase(env, "Shared", 1, true);
+        CreateServerlessDatabase(env, "Database", "/Root/Shared");
+    } else {
+        CreateDatabase(env, "Database");
+    }
+    auto info = PrepareColumnTable(env, "Database", "Table", 10);
+    InsertDataIntoTable(env, "Database", "Table", RowsWithFewDistinctValues(1000));
+    return info;
+}
+
 void AnalyzeTest(bool isServerless) {
     TTestEnv env(1, 1);
     auto& runtime = *env.GetServer().GetRuntime();
-    const auto databaseInfo = isServerless
-        ? CreateServerlessDatabaseColumnTables(env, 1, 10)
-        : CreateDatabaseColumnTables(env, 1, 10);
-    const auto& tableInfo = databaseInfo.Tables[0];
+    const auto tableInfo = PrepareDatabaseAndTable(env, isServerless);
     const auto sender = runtime.AllocateEdgeActor();
 
     runtime.Register(new THttpRequest(THttpRequest::ERequestType::ANALYZE, {
@@ -34,10 +45,8 @@ void AnalyzeTest(bool isServerless) {
 void ProbeTest(bool isServerless) {
     TTestEnv env(1, 1);
     auto& runtime = *env.GetServer().GetRuntime();
-    const auto databaseInfo = isServerless
-        ? CreateServerlessDatabaseColumnTables(env, 1, 10)
-        : CreateDatabaseColumnTables(env, 1, 10);
-    const auto& tableInfo = databaseInfo.Tables[0];
+    const auto tableInfo = PrepareDatabaseAndTable(env, isServerless);
+
     TString columnName = "Value";
     const auto sender = runtime.AllocateEdgeActor();
 
@@ -54,14 +63,15 @@ void ProbeTest(bool isServerless) {
     runtime.WaitFor("TEvSchemeShardStats 2", [&]{ return secondStatsToSA; });
 
     const auto operationId = TULIDGenerator().Next(TInstant::Now()).ToBinary();
-    auto analyzeRequest = MakeAnalyzeRequest({{tableInfo.PathId, {1, 2}}}, operationId);
+    auto analyzeRequest = MakeAnalyzeRequest(
+        {{tableInfo.PathId, {1, 2}}}, operationId, "/Root/Database");
     runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
     runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
     runtime.Register(new THttpRequest(THttpRequest::ERequestType::PROBE_COUNT_MIN_SKETCH, {
             { THttpRequest::EParamType::PATH, tableInfo.Path },
             { THttpRequest::EParamType::COLUMN_NAME, columnName },
-            { THttpRequest::EParamType::CELL_VALUE, "1" }
+            { THttpRequest::EParamType::CELL_VALUE, "\"1\"" }
         },
         THttpRequest::EResponseContentType::HTML,
         sender));
@@ -85,7 +95,7 @@ void ProbeBaseStatsTest(bool isServerless) {
     } else {
         CreateDatabase(env, "Database");
     }
-    CreateColumnStoreTable(env, "Database", "Table", 5);
+    PrepareColumnTable(env, "Database", "Table", 5);
     const TString path = "/Root/Database/Table";
     const TPathId pathId = ResolvePathId(runtime, path);
     const ui32 nodeIdx = 1;
@@ -115,6 +125,8 @@ void ProbeBaseStatsTest(bool isServerless) {
     UNIT_ASSERT_VALUES_EQUAL(json["row_count"].GetIntegerSafe(), ColumnTableRowsNumber);
 }
 
+} // namespace
+
 Y_UNIT_TEST_SUITE(HttpRequest) {
     Y_UNIT_TEST(Analyze) {
         AnalyzeTest(false);
@@ -127,8 +139,7 @@ Y_UNIT_TEST_SUITE(HttpRequest) {
     Y_UNIT_TEST(Status) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
-        const auto& tableInfo = databaseInfo.Tables[0];
+        const auto tableInfo = PrepareDatabaseAndTable(env, /*isServerless=*/false);
 
         const auto sender = runtime.AllocateEdgeActor();
         const auto operationId = TULIDGenerator().Next(TInstant::Now()).ToString();

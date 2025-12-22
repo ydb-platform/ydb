@@ -32,8 +32,7 @@ namespace numpy
       mult *= shape[j];
     }
     out[0] = index / mult;
-    return std::tuple<types::array_tuple<long, E::value>, typename E::dtype>{
-        out, *iter};
+    return std::tuple<types::array_tuple<long, E::value>, typename E::dtype>{out, *iter};
   }
 
   template <class E>
@@ -51,22 +50,19 @@ namespace numpy
   }
 
   template <class E>
-  bool ndenumerate_iterator<E>::operator!=(
-      ndenumerate_iterator<E> const &other) const
+  bool ndenumerate_iterator<E>::operator!=(ndenumerate_iterator<E> const &other) const
   {
     return index != other.index;
   }
 
   template <class E>
-  bool
-  ndenumerate_iterator<E>::operator<(ndenumerate_iterator<E> const &other) const
+  bool ndenumerate_iterator<E>::operator<(ndenumerate_iterator<E> const &other) const
   {
     return index < other.index;
   }
 
   template <class E>
-  long
-  ndenumerate_iterator<E>::operator-(ndenumerate_iterator<E> const &other) const
+  long ndenumerate_iterator<E>::operator-(ndenumerate_iterator<E> const &other) const
   {
     return index - other.index;
   }
@@ -78,8 +74,7 @@ namespace numpy
 
   template <class E>
   _ndenumerate<E>::_ndenumerate(E const &expr)
-      : ndenumerate_iterator<E>(expr, 0), expr(expr),
-        end_iter(expr, expr.flat_size())
+      : ndenumerate_iterator<E>(expr, 0), expr(expr), end_iter(expr, expr.flat_size())
   {
   }
 
@@ -102,8 +97,7 @@ namespace numpy
   }
 
   template <class T, class pS>
-  _ndenumerate<types::ndarray<T, pS>>
-  ndenumerate(types::ndarray<T, pS> const &expr)
+  _ndenumerate<types::ndarray<T, pS>> ndenumerate(types::ndarray<T, pS> const &expr)
   {
     return {expr};
   }

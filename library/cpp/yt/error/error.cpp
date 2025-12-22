@@ -716,31 +716,30 @@ TError& TError::operator <<= (const std::vector<TErrorAttribute>& attributes) &
 
 TError& TError::operator <<= (const TError& innerError) &
 {
-    MutableInnerErrors()->push_back(innerError);
+    if (!innerError.IsOK()) {
+        MutableInnerErrors()->push_back(innerError);
+    }
     return *this;
 }
 
 TError& TError::operator <<= (TError&& innerError) &
 {
-    MutableInnerErrors()->push_back(std::move(innerError));
+    if (!innerError.IsOK()) {
+        MutableInnerErrors()->push_back(std::move(innerError));
+    }
     return *this;
 }
 
 TError& TError::operator <<= (const std::vector<TError>& innerErrors) &
 {
-    MutableInnerErrors()->insert(
-        MutableInnerErrors()->end(),
-        innerErrors.begin(),
-        innerErrors.end());
+    std::ranges::copy_if(innerErrors, std::back_inserter(*MutableInnerErrors()), std::not_fn(&TError::IsOK));
     return *this;
 }
 
 TError& TError::operator <<= (std::vector<TError>&& innerErrors) &
 {
-    MutableInnerErrors()->insert(
-        MutableInnerErrors()->end(),
-        std::make_move_iterator(innerErrors.begin()),
-        std::make_move_iterator(innerErrors.end()));
+    auto filteredErrors = std::views::filter(innerErrors, std::not_fn(&TError::IsOK));
+    std::ranges::move(filteredErrors, std::back_inserter(*MutableInnerErrors()));
     return *this;
 }
 

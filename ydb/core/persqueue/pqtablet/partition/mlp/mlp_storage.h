@@ -7,8 +7,6 @@
 
 #include <library/cpp/time_provider/time_provider.h>
 
-#include <util/datetime/base.h>
-
 #include <deque>
 #include <map>
 #include <unordered_map>
@@ -38,7 +36,7 @@ public:
     static constexpr TDuration MaxDeadline = TDuration::Hours(12);
 
 public:
-    enum EMessageStatus {
+    enum class EMessageStatus : int {
         // The message is waiting to be processed.
         Unprocessed = 0,
         // The message is locked because it is currently being processed.
@@ -52,8 +50,8 @@ public:
     };
 
     struct TMessage {
-        ui32 Status: 3 = EMessageStatus::Unprocessed;
-        ui32 Reserve: 3;
+        ui32 Status: 3 = static_cast<ui32>(EMessageStatus::Unprocessed);
+        ui32 Reserve: 3 = 0;
         // It stores how many times the message was submitted to work.
         // If the value is large, then the message has been processed several times,
         // but it has never been processed successfully.
@@ -66,9 +64,20 @@ public:
         // in the topic.
         ui32 MessageGroupIdHash: 31 = 0;
         ui32 WriteTimestampDelta: 26 = 0;
-        ui32 Reserve2: 6;
+        ui32 Reserve2: 6 = 0;
+        ui32 LockingTimestampMilliSecondsDelta: 26 = 0;
+        ui32 LockingTimestampSign: 1 = 0;
+        ui32 Reserve3: 5 = 0;
+
+        EMessageStatus GetStatus() const {
+            return static_cast<EMessageStatus>(Status);
+        }
+
+        void SetStatus(EMessageStatus status) {
+            Status = static_cast<ui32>(status);
+        }
     };
-    static_assert(sizeof(TMessage) == sizeof(ui32) * 3);
+    static_assert(sizeof(TMessage) == sizeof(ui32) * 4);
 
     struct TMessageWrapper {
         bool SlowZone;
@@ -77,6 +86,7 @@ public:
         ui32 ProcessingCount;
         TInstant ProcessingDeadline;
         TInstant WriteTimestamp;
+        TInstant LockingTimestamp;
     };
 
     struct TMessageIterator {
@@ -130,19 +140,6 @@ public:
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
-    };
-
-    struct TMetrics {
-        size_t InflyMessageCount = 0;
-        size_t UnprocessedMessageCount = 0;
-        size_t LockedMessageCount = 0;
-        size_t LockedMessageGroupCount = 0;
-        size_t DelayedMessageCount = 0;
-        size_t CommittedMessageCount = 0;
-        size_t DeadlineExpiredMessageCount = 0;
-        size_t DLQMessageCount = 0;
-
-        size_t TotalScheduledToDLQMessageCount = 0;
     };
 
     TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages = MIN_MESSAGES, size_t maxMessages = MAX_MESSAGES);
@@ -208,13 +205,16 @@ private:
     ui64 NormalizeDeadline(TInstant deadline);
 
     ui64 DoLock(ui64 offset, TMessage& message, TInstant& deadline);
-    bool DoCommit(ui64 offset);
+    bool DoCommit(ui64 offset, size_t& totalMetrics);
     bool DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
     bool DoUndelay(ui64 offset);
 
     void UpdateFirstUncommittedOffset();
 
+    TInstant GetMessageLockingTime(const TMessage& message) const;
+    void SetMessageLockingTime(TMessage& message, const TInstant& lockingTime, const TInstant& baseDeadline) const;
+    void UpdateMessageLockingDurationMetrics(const TMessage& message);
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 
     void RemoveMessage(ui64 offset, const TMessage& message);

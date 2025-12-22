@@ -17,7 +17,7 @@ message TQYTSinkMessage {
 }
 
 message TPQSourceMessage {
-   optional string Cluster = 1;
+   repeated string Endpoints = 1;
    optional TPqClusterConfig.EClusterType ClusterType = 2;
    optional string Database = 3;
    optional string TopicPath = 4;

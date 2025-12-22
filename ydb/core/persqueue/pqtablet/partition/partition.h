@@ -1,6 +1,7 @@
 #pragma once
 
 #include "consumer_offset_tracker.h"
+#include "message_id_deduplicator.h"
 #include "partition_blob_encoder.h"
 #include "partition_compactification.h"
 #include "partition_init.h"
@@ -34,10 +35,6 @@ static const ui32 DEFAULT_BUCKET_COUNTER_MULTIPLIER = 20;
 static const ui32 MAX_USER_ACTS = 1000;
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
-
-using TPartitionLabeledCounters =
-    TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
-using TPartitionExtendedLabeledCounters = TProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>;
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
 TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp);
@@ -111,6 +108,7 @@ struct TTransaction {
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
     bool SendReply;
     TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> ProposeConfig;
+    TEvPQ::TMessageGroupsPtr ExplicitMessageGroups;
     TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> ProposeTransaction;
 
     //Data Tx
@@ -139,6 +137,8 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitMetaStep;
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
+    friend TDeleteKeysStep;
+    friend TInitMessageDeduplicatorStep;
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
     friend TInitFieldsStep;
@@ -207,7 +207,6 @@ private:
                                const TString& errorStr,
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
-    void ClearOldHead(const ui64 offset, const ui16 partNo);
     void CreateMirrorerActor();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
@@ -627,6 +626,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -701,6 +701,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -798,9 +799,6 @@ private:
 
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
-
-    std::shared_ptr<std::deque<TString>> DeletedKeys;
-    std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
     TPartitionBlobEncoder CompactionBlobEncoder; // Compaction zone
     TPartitionBlobEncoder BlobEncoder;           // FastWrite zone
@@ -963,10 +961,9 @@ private:
     std::deque<THolder<TEvPQ::TEvChangeOwner>> WaitToChangeOwner;
 
     TTabletCountersBase TabletCounters;
-    THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
-    THolder<TPartitionExtendedLabeledCounters> PartitionCountersExtended;
-
-    THolder<TPartitionKeyCompactionCounters> PartitionCompactionCounters;
+    std::optional<TTabletLabeledCountersBase> PartitionCountersLabeled;
+    std::optional<TTabletLabeledCountersBase> PartitionCountersExtended;
+    std::optional<TTabletLabeledCountersBase> PartitionKeyCompactionCounters;
 
     // Per partition counters
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;
@@ -1235,16 +1232,19 @@ private:
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPConsumerState::TPtr&);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>
     void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
 
     void InitializeMLPConsumers();
+    void DropDataOfMLPConsumer(NKikimrClient::TKeyValueRequest& request, const TString& consumer);
     void NotifyEndOffsetChanged();
 
     struct TMLPConsumerInfo {
         TActorId ActorId;
+        NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
     };
     std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
 
@@ -1257,6 +1257,10 @@ private:
     >;
     std::deque<TMLPPendingEvent> MLPPendingEvents;
     ui64 LastNotifiedEndOffset = 0;
+
+    TMessageIdDeduplicator MessageIdDeduplicator;
+    bool AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
+    std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

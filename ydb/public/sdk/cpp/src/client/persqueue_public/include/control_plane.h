@@ -15,7 +15,7 @@ namespace NYdb::inline Dev {
 }
 
 namespace NYdb::inline Dev::NPersQueue {
-    
+
 enum class EFormat {
     BASE = 1,
 };
@@ -57,6 +57,7 @@ struct TDescribeTopicResult : public TStatus {
 
             GETTER(std::string, ConsumerName);
             GETTER(bool, Important);
+            GETTER(TDuration, AvailabilityPeriod);
             GETTER(TInstant, StartingMessageTimestamp);
             GETTER(EFormat, SupportedFormat);
             const std::vector<ECodec>& SupportedCodecs() const {
@@ -68,6 +69,7 @@ struct TDescribeTopicResult : public TStatus {
         private:
             std::string ConsumerName_;
             bool Important_;
+            TDuration AvailabilityPeriod_;
             TInstant StartingMessageTimestamp_;
             EFormat SupportedFormat_;
             std::vector<ECodec> SupportedCodecs_;
@@ -111,6 +113,7 @@ struct TDescribeTopicResult : public TStatus {
         GETTER(std::optional<ui32>, AbcId);
         GETTER(std::optional<std::string>, AbcSlug);
         GETTER(std::optional<std::string>, FederationAccount);
+        GETTER(std::optional<ui32>, MetricsLevel);
 
         const std::vector<TReadRule>& ReadRules() const {
             return ReadRules_;
@@ -144,6 +147,7 @@ struct TDescribeTopicResult : public TStatus {
         std::optional<ui32> AbcId_;
         std::optional<std::string> AbcSlug_;
         std::string FederationAccount_;
+        std::optional<ui32> MetricsLevel_;
 
         std::optional<uint64_t> MaxPartitionsCount_;
         std::optional<TDuration> StabilizationWindow_;
@@ -177,6 +181,7 @@ struct TReadRuleSettings {
     using TSelf = TReadRuleSettings;
     FLUENT_SETTING(std::string, ConsumerName);
     FLUENT_SETTING_DEFAULT(bool, Important, false);
+    FLUENT_SETTING_DEFAULT(TDuration, AvailabilityPeriod, TDuration::Zero());
     FLUENT_SETTING_DEFAULT(TInstant, StartingMessageTimestamp, TInstant::Zero());
     FLUENT_SETTING_DEFAULT(EFormat, SupportedFormat, EFormat::BASE)
     FLUENT_SETTING_DEFAULT(std::vector<ECodec>, SupportedCodecs, GetDefaultCodecs());
@@ -187,6 +192,7 @@ struct TReadRuleSettings {
     TReadRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TReadRule& settings) {
         ConsumerName_ = settings.ConsumerName();
         Important_ = settings.Important();
+        AvailabilityPeriod_ = settings.AvailabilityPeriod();
         StartingMessageTimestamp_ = settings.StartingMessageTimestamp();
         SupportedFormat_ = settings.SupportedFormat();
         SupportedCodecs_.clear();
@@ -247,6 +253,7 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
     FLUENT_SETTING_OPTIONAL(ui32, AbcId);
     FLUENT_SETTING_OPTIONAL(std::string, AbcSlug);
     FLUENT_SETTING_OPTIONAL(std::string, FederationAccount);
+    FLUENT_SETTING_OPTIONAL(ui32, MetricsLevel);
 
     //TODO: FLUENT_SETTING_VECTOR
     FLUENT_SETTING_DEFAULT(std::vector<TReadRuleSettings>, ReadRules, {});
@@ -271,6 +278,7 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
         AbcId_ = settings.AbcId();
         AbcSlug_ = settings.AbcSlug();
         FederationAccount_ = settings.FederationAccount();
+        MetricsLevel_ = settings.MetricsLevel();
         ReadRules_.clear();
         for (const auto& readRule : settings.ReadRules()) {
             ReadRules_.push_back({});

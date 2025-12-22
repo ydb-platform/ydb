@@ -216,10 +216,10 @@ private:
     static auto ParseValue(const std::string& input) {
         if constexpr (std::is_same_v<TValue, double>) {
             return std::stod(input);
-        } else if constexpr (std::is_same_v<TValue, uint64_t>) {
-            return static_cast<uint64_t>(std::stoull(input));
-        } else if constexpr (std::is_same_v<TValue, int64_t>) {
-            return static_cast<int64_t>(std::stoll(input));
+        } else if constexpr (std::is_same_v<TValue, ui64>) {
+            return static_cast<ui64>(std::stoull(input));
+        } else if constexpr (std::is_same_v<TValue, i64>) {
+            return static_cast<i64>(std::stoll(input));
         } else if constexpr (std::is_same_v<TValue, std::string>) {
             return input;
         } else if constexpr (std::is_same_v<TValue, std::chrono::nanoseconds>) {

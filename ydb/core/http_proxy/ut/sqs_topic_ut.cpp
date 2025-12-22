@@ -279,6 +279,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 }}
             });
 
+            Cerr << (TStringBuilder() << "json = " << WriteJson(json, true, true) << '\n');
             UNIT_ASSERT_VALUES_EQUAL(json["Successful"].GetArray().size(), 3);
             auto succesful0 = json["Successful"][0];
             UNIT_ASSERT_VALUES_EQUAL(succesful0["Id"], "Id-0");
@@ -532,6 +533,27 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(!receiptHandle.empty());
 
         DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessageIdempotence, TFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+        TString body = "MessageBody-0";
+        SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", body}});
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
+
+        auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle.empty());
+
+        DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
+        if (!"X-Fail") { // TODO MLP commit idempotence
+            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
+        }
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, TFixture) {

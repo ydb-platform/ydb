@@ -2,6 +2,8 @@
 
 namespace NYT::NTransactionClient {
 
+using namespace NYTree;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void TRemoteTimestampProviderConfig::Register(TRegistrar registrar)
@@ -27,6 +29,23 @@ void TRemoteTimestampProviderConfig::Register(TRegistrar registrar)
         config->RetryAttempts = 100;
         config->RetryTimeout = TDuration::Minutes(3);
     });
+}
+
+TRemoteTimestampProviderConfigPtr TRemoteTimestampProviderConfig::ApplyDynamic(
+    const TRemoteTimestampProviderDynamicConfigPtr& dynamicConfig) const
+{
+    auto mergedConfig = CloneYsonStruct(MakeStrong(this));
+    UpdateYsonStructField(mergedConfig->BatchPeriod, dynamicConfig->BatchPeriod);
+    mergedConfig->Postprocess();
+    return mergedConfig;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRemoteTimestampProviderDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("batch_period", &TThis::BatchPeriod)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

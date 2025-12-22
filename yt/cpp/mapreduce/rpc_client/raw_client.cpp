@@ -26,6 +26,8 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
 #include <library/cpp/iterator/enumerate.h>
 
 #include <library/cpp/yson/node/node_io.h>
@@ -1432,13 +1434,14 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const NApi::TCheckPermissi
 
 TDistributedWriteTableSessionWithCookies TRpcRawClient::StartDistributedWriteTableSession(
     TMutationId& mutationId,
+    const TTransactionId& transactionId,
     const TRichYPath& richPath,
     i64 cookieCount,
     const TStartDistributedWriteTableOptions& options)
 {
     auto future = Client_->StartDistributedWriteSession(
         ToApiRichPath(richPath),
-        SerializeOptionsForStartDistributedTableSession(mutationId, cookieCount, options));
+        SerializeOptionsForStartDistributedTableSession(mutationId, transactionId, cookieCount, options));
 
     auto apiSession = WaitAndProcess(future);
 
@@ -1586,13 +1589,14 @@ std::unique_ptr<IOutputStreamWithResponse> TRpcRawClient::WriteTableFragment(
 
 TDistributedWriteFileSessionWithCookies TRpcRawClient::StartDistributedWriteFileSession(
     TMutationId& mutationId,
+    const TTransactionId& transactionId,
     const TRichYPath& richPath,
     i64 cookieCount,
     const TStartDistributedWriteFileOptions& options)
 {
     auto future = Client_->StartDistributedWriteFileSession(
         ToApiRichPath(richPath),
-        SerializeOptionsForStartDistributedFileSession(mutationId, cookieCount, options));
+        SerializeOptionsForStartDistributedFileSession(mutationId, transactionId, cookieCount, options));
 
     auto apiSession = WaitAndProcess(future);
 

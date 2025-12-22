@@ -89,8 +89,8 @@ class Date(ClickHouseType):
                 if column.tz is None:
                     return column.astype(self.pandas_dtype)
 
-                naive = column.tz_localize(None).astype(self.pandas_dtype)
-                return pd.DatetimeIndex(naive, tz=column.tz)
+                naive = column.tz_convert("UTC").tz_localize(None).astype(self.pandas_dtype)
+                return naive.tz_localize("UTC").tz_convert(column.tz)
 
             if self.nullable and isinstance(column, list):
                 return np.array([None if pd.isna(s) else s for s in column]).astype(
@@ -159,8 +159,8 @@ class DateTimeBase(ClickHouseType, registered=False):
                     result = column.astype(self.pandas_dtype)
                     return pd.array(result) if self.nullable else result
 
-                naive_ns = column.tz_localize(None).astype(self.pandas_dtype)
-                tz_aware_result = pd.DatetimeIndex(naive_ns, tz=column.tz)
+                naive_ns = column.tz_convert("UTC").tz_localize(None).astype(self.pandas_dtype)
+                tz_aware_result = naive_ns.tz_localize("UTC").tz_convert(column.tz)
                 return (
                     pd.array(tz_aware_result) if self.nullable else tz_aware_result
                 )
@@ -249,11 +249,11 @@ class DateTime64(DateTimeBase):
         active_tz = ctx.active_tz(self.tzinfo)
         if ctx.use_numpy:
             np_array = numpy_conv.read_numpy_array(source, self.np_type, num_rows)
-            if ctx.as_pandas and active_tz and active_tz != pytz.UTC:
+            if ctx.as_pandas and active_tz:
                 return pd.DatetimeIndex(np_array, tz='UTC').tz_convert(active_tz)
             return np_array
         column = source.read_array('q', num_rows)
-        if active_tz and active_tz != pytz.UTC:
+        if active_tz:
             return self._read_binary_tz(column, active_tz)
         return self._read_binary_naive(column)
 

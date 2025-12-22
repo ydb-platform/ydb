@@ -22,7 +22,6 @@
  *
  ***************************************************************************/
 #include "tool_strdup.h"
-#include "memdebug.h" /* keep this as LAST include */
 
 #ifndef HAVE_STRDUP
 char *strdup(const char *str)
@@ -43,14 +42,3 @@ char *strdup(const char *str)
   return newstr;
 }
 #endif
-
-char *memdup0(const char *data, size_t len)
-{
-  char *p = malloc(len + 1);
-  if(!p)
-    return NULL;
-  if(len)
-    memcpy(p, data, len);
-  p[len] = 0;
-  return p;
-}

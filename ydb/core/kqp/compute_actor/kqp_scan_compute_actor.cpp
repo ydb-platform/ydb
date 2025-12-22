@@ -247,6 +247,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     execCtx.ApplyCtx = nullptr;
     execCtx.TypeEnv = nullptr;
     execCtx.PatternCache = GetKqpResourceManager()->GetPatternCache();
+    execCtx.ChannelService = RuntimeSettings.ChannelService;
 
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 
@@ -282,7 +283,9 @@ void TKqpScanComputeActor::DoBootstrap() {
     auto wakeupCallback = [actorSystem, selfId]() {
         actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     };
-    auto errorCallback = [this](const TString& error){ SendError(error); };
+    auto errorCallback = [actorSystem, selfId](const TString& error) {
+        actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
+    };
     TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode());

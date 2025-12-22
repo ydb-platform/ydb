@@ -25,7 +25,6 @@ private:
     const ui64 Generation;
     std::atomic<bool> Broken = false;
     std::atomic<bool> Writes = false;
-    std::atomic<LockState> State{LockState::Created};
     friend class TLockFeatures;
 
 public:
@@ -52,18 +51,6 @@ public:
     ui64 GetInternalGenerationCounter() const {
         return IsBroken() ? TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken : 0;
     }
-
-    bool IsDeleted() const {
-        return State == LockState::Deleted || State == LockState::Aborted;
-    }
-
-    bool IsAborted() const {
-        return State == LockState::Aborted;
-    }
-
-    bool IsTxIdAssigned() const {
-        return State == LockState::TxIdAssigned;
-    }
 };
 
 class TLockFeatures: TMoveOnly {
@@ -75,8 +62,14 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, BreakOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, NotifyOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, Committed);
-    YDB_READONLY_DEF(TPositiveControlInteger, OperationsInProgress);
 
+    ui64 OperationsInProgress = 0;
+
+    bool Subscribed = false;
+    bool needsAborting = false;
+    bool Aborting = false;
+    bool Aborted = false;
+    ui64 TxId = 0;
 public:
     ui64 GetLockId() const {
         return SharingInfo->GetLockId();
@@ -101,6 +94,7 @@ public:
     }
 
     void OnWriteOperationFinished() {
+        AFL_VERIFY(OperationsInProgress > 0)("operations_in_progress", OperationsInProgress);
         --OperationsInProgress;
     }
 
@@ -111,35 +105,50 @@ public:
     void SetBroken() {
         SharingInfo->Broken = true;
     }
-
     bool IsBroken() const {
         return SharingInfo->IsBroken();
     }
 
-    void SetDeleted() {
-        auto prevState = TLockSharingInfo::LockState::Created;
-        SharingInfo->State.compare_exchange_strong(prevState, TLockSharingInfo::LockState::Deleted);
+    void SetSubscribed() {
+        Subscribed = true;
+    }
+    bool IsSubscribed() const {
+        return Subscribed;
     }
 
-    bool IsDeleted() const {
-        return SharingInfo->IsDeleted();
+    void SetNeedsAborting() {
+        needsAborting = true;
+    }
+    bool NeedsAborting() const { 
+        return needsAborting;
     }
 
-    bool SetAborted() {
-        auto prevState = TLockSharingInfo::LockState::Deleted;
-        return SharingInfo->State.compare_exchange_strong(prevState, TLockSharingInfo::LockState::Aborted);
+    bool ReadyForAborting() const {
+        return NeedsAborting() && !IsAborting() && OperationsInProgress == 0;
     }
 
+    void SetAborting() {
+        AFL_VERIFY(ReadyForAborting())("lock_id", GetLockId())("needs_aborting", NeedsAborting())("operations_in_progress", OperationsInProgress)("aborting", Aborting);
+        Aborting = true;
+    }
+    bool IsAborting() const {
+        return Aborting;
+    }
+
+    void SetAborted(const ui64 txId) {
+        AFL_VERIFY(IsAborting() && !Aborted && TxId == txId)("arg_tx_id", txId)("assigned_tx_id", TxId)("lock_id", GetLockId())("aborting", IsAborting())("aborted", Aborted);
+        Aborted = true;
+    }
     bool IsAborted() const {
-        return SharingInfo->IsAborted();
+        return Aborted;
     }
 
-    void SetTxIdAssigned() {
-        SharingInfo->State.store(TLockSharingInfo::LockState::TxIdAssigned);
+    void SetTxId(const ui64 txId) {
+        AFL_VERIFY(!TxId || TxId == txId)("tx_id", txId)("lock_id", GetLockId())("tx_id_assigned", TxId);
+        TxId = txId;
     }
-
     bool IsTxIdAssigned() const {
-        return SharingInfo->IsTxIdAssigned();
+        return TxId != 0;
     }
 
     bool IsCommitted(const ui64 lockId) const {
@@ -201,7 +210,7 @@ public:
         AFL_VERIFY(op->GetInsertWriteIds() == insertions)("operation_data", JoinSeq(", ", op->GetInsertWriteIds()))(
             "expected", JoinSeq(", ", insertions));
         for (auto&& i : insertions) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "add_by_insert_id")("id", i)("operation_id", operationId);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "add_write_id_to_operation_id")("write_id", i)("operation_id", operationId);
             InsertWriteIdToOpWriteId.emplace(i, operationId);
         }
     }
@@ -225,21 +234,14 @@ public:
     void CommitTransactionOnExecute(
         TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
     void CommitTransactionOnComplete(
-        TColumnShard& owner, const ui64 txId, const NOlap::TSnapshot& snapshot);
-    void AddTemporaryTxLink(const ui64 lockId) {
-        AFL_VERIFY(Tx2Lock.emplace(lockId, lockId).second);
-        auto& lock = GetLockVerified(lockId);
-        lock.SetTxIdAssigned();
-    }
+        TColumnShard& owner, const ui64 txId, const ui64 lockId, const NOlap::TSnapshot& snapshot);
     void LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void LinkTransactionOnComplete(const ui64 lockId, const ui64 txId);
-    void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
-    void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId);
-    void AbortLockOnExecute(TColumnShard& owner, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
-    void AbortLockOnComplete(TColumnShard& owner, const ui64 lockId);
+    void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
+    void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId, const ui64 lockId);
 
     void BreakConflictingTxs(const TLockFeatures& lock);
-    void BreakConflictingTxs(const ui64 txId);
+    void BreakConflictingTxs(const ui64 lockId);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
     std::optional<ui64> GetLockForTxOptional(const ui64 txId) const {
@@ -254,7 +256,7 @@ public:
     }
     TLockFeatures& GetLockFeaturesForTxVerified(const ui64 txId) {
         auto lockId = GetLockForTxOptional(txId);
-        AFL_VERIFY(lockId);
+        AFL_VERIFY(lockId)("tx_id", txId);
         return GetLockVerified(*lockId);
     }
     ui64 GetLockForTxVerified(const ui64 txId) const {

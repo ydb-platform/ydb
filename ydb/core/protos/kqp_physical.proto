@@ -224,6 +224,8 @@ message TKqpPhyOpReadRanges {
     TKqpPhyValue ItemsLimit = 2;
     // Reverse sign, i.e. if user ask ORDER BY ... DESC we need to read table in reverse direction
     bool Reverse = 3;
+    // Vector top-K pushdown settings for brute force vector search
+    TKqpPhyVectorTopK VectorTopK = 4;
 }
 
 message TKqpPhyTableOperation {
@@ -308,6 +310,7 @@ message TKqpPhyVectorTopK {
     Ydb.Table.VectorIndexSettings Settings = 2;
     TKqpPhyValue TargetVector = 3;
     TKqpPhyValue Limit = 4;
+    repeated uint32 DistinctColumns = 5;
 }
 
 message TKqpPhyCnStreamLookup {
@@ -335,6 +338,8 @@ message TKqpPhyCnVectorResolve {
     bytes OutputType = 8;
     uint32 ClusterColumnOutPos = 9;
     optional uint32 RootClusterColumnIndex = 10;
+    optional uint32 OverlapClusters = 11;
+    optional double OverlapRatio = 12;
 }
 
 message TKqpPhyCnSequencer {
@@ -396,6 +401,20 @@ message TKqpPhyConnection {
     };
 }
 
+message TKqpFullTextSource {
+    message TKqpQuerySettings {
+        repeated TKqpPhyColumnId Columns = 4;
+        optional string Query = 1;
+    }
+
+    optional TKqpPhyTableId Table = 1;
+    optional string Index = 2;
+
+    repeated TKqpPhyColumnId Columns = 3;
+
+    optional TKqpQuerySettings QuerySettings = 4;
+}
+
 message TKqpReadRangesSource {
     TKqpPhyTableId Table = 1;
     repeated TKqpPhyColumnId Columns = 2;
@@ -411,6 +430,8 @@ message TKqpReadRangesSource {
     repeated string SkipNullKeys = 8;
     uint64 SequentialInFlightShards = 9;
     bool IsTableImmutable = 10;
+    // Vector top-K pushdown for brute force vector search
+    TKqpPhyVectorTopK VectorTopK = 11;
 }
 
 message TKqpExternalSource {
@@ -432,6 +453,7 @@ message TKqpSource {
     oneof Type {
         TKqpReadRangesSource ReadRangesSource = 3;
         TKqpExternalSource ExternalSource = 4;
+        TKqpFullTextSource FullTextSource = 5;
     }
 }
 
@@ -482,6 +504,7 @@ message TKqpPhyResult {
     bool IsStream = 3;
     repeated string ColumnHints = 4;
     optional uint32 QueryResultIndex = 5;
+    optional bool CanSkipChannel = 6;
 }
 
 message TKqpAnalyzeOperation {
@@ -597,6 +620,7 @@ message TKqpPhyTx {
     TKqpSchemeOperation SchemeOperation = 8;
     repeated string SecretNames = 9;
     bool EnableShuffleElimination = 10;
+    bool EnableFastChannels = 11;
 }
 
 message TKqpTableInfo {
@@ -653,4 +677,5 @@ message TKqpPhyQuery {
     optional bool ForceImmediateEffectsExecution = 15;
     uint32 LangVer = 16;
     optional bool DisableCheckpoints = 17;
+    optional bool EnableWatermarks = 18;
 }

@@ -191,7 +191,7 @@ TEST(TValidateLogicalTypeTest, TestTimezoneType)
     EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate>(correctValue));
 
     // Short buffer.
-    TString shortValue = "1";
+    std::string shortValue = "1";
     EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate>(shortValue), "Not a valid timezone type");
 
     // Wrong timezone.
@@ -351,10 +351,10 @@ TEST(TValidateLogicalTypeTest, TestListType)
 TEST(TValidateLogicalTypeTest, TestStructType)
 {
     const auto struct1 = StructLogicalType({
-        {"number",  SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-        {"english", SimpleLogicalType(ESimpleLogicalValueType::String)},
-        {"russian", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
-    });
+        {"number", "number", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
+        {"english", "english", SimpleLogicalType(ESimpleLogicalValueType::String)},
+        {"russian", "russian", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
+    }, /*removedFieldStableNames*/ {});
 
     EXPECT_GOOD_TYPE(struct1, " [3; three; TRI ] ");
     EXPECT_GOOD_TYPE(struct1, " [1; one; # ] ");
@@ -366,10 +366,10 @@ TEST(TValidateLogicalTypeTest, TestStructType)
     EXPECT_BAD_TYPE(struct1, " [ ] ");
 
     const auto struct2 = StructLogicalType({
-        {"key",  OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
-        {"subkey", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
-        {"value", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
-    });
+        {"key", "key", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
+        {"subkey", "subkey", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
+        {"value", "value", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
+    }, /*removedFieldStableNames*/ {});
 
     EXPECT_GOOD_TYPE(struct2, " [k ; s ; v ] ");
     EXPECT_GOOD_TYPE(struct2, " [# ; # ; #] ");
@@ -428,8 +428,8 @@ void TestVariantImpl(ELogicalMetatype metatype)
     };
 
     auto variant1 = createVariantType({
-        {"field1", SimpleLogicalType(ESimpleLogicalValueType::Boolean)},
-        {"field2", SimpleLogicalType(ESimpleLogicalValueType::String)},
+        {"field1", "field1", SimpleLogicalType(ESimpleLogicalValueType::Boolean)},
+        {"field2", "field2", SimpleLogicalType(ESimpleLogicalValueType::String)},
     });
 
     EXPECT_GOOD_TYPE(variant1, "[0; %true]");
@@ -498,10 +498,10 @@ TEST(TValidateLogicalTypeTest, TestTaggedType)
     const auto taggedStruct = TaggedLogicalType(
         "tag",
         StructLogicalType({
-            {"number",  SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-            {"english", SimpleLogicalType(ESimpleLogicalValueType::String)},
-            {"russian", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
-        }));
+            {"number", "number",  SimpleLogicalType(ESimpleLogicalValueType::Int64)},
+            {"english", "english", SimpleLogicalType(ESimpleLogicalValueType::String)},
+            {"russian", "russian", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
+        }, /*removedFieldStableNames*/ {}));
 
     EXPECT_GOOD_TYPE(taggedStruct, " [3; three; TRI ] ");
     EXPECT_GOOD_TYPE(taggedStruct, " [1; one; # ] ");

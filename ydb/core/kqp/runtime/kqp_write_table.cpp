@@ -321,12 +321,11 @@ TVector<TSysTables::TTableColumnInfo> BuildColumns(const TConstArrayRef<NKikimrK
 }
 
 std::vector<ui32> BuildWriteColumnIds(
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const std::vector<ui32>& writeIndex) {
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
     std::vector<ui32> result;
     result.resize(inputColumns.size(), 0);
     for (size_t index = 0; index < inputColumns.size(); ++index) {
-        result[writeIndex.at(index)] = inputColumns.at(index).GetId();
+        result[index] = inputColumns.at(index).GetId();
     }
     return result;
 }
@@ -443,10 +442,9 @@ public:
     TColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const std::vector<ui32> writeIndex,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) // key columns then value columns
             : Columns(BuildColumns(inputColumns))
-            , WriteColumnIds(BuildWriteColumnIds(inputColumns, writeIndex))
+            , WriteColumnIds(BuildWriteColumnIds(inputColumns))
             , Alloc(std::move(alloc)) {
         AFL_ENSURE(Alloc);
         AFL_ENSURE(schemeEntry.ColumnTableInfo);
@@ -838,12 +836,10 @@ public:
         const TVector<TKeyDesc::TPartitionInfo>& partitioning,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& inputColumns,
-        std::vector<ui32> writeIndex,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
         : Partitioning(partitioning)
         , Columns(BuildColumns(inputColumns))
-        , WriteIndex(std::move(writeIndex))
-        , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
+        , WriteColumnIds(BuildWriteColumnIds(inputColumns))
         , KeyColumnTypes(BuildKeyColumnTypes(keyColumns))
         , Alloc(std::move(alloc)) {
         AFL_ENSURE(Alloc);
@@ -961,7 +957,6 @@ public:
 private:
     const TVector<TKeyDesc::TPartitionInfo>& Partitioning;
     const TVector<TSysTables::TTableColumnInfo> Columns;
-    const std::vector<ui32> WriteIndex;
     const std::vector<ui32> WriteColumnIds;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
@@ -974,37 +969,35 @@ private:
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const std::vector<ui32> writeIndex,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TColumnShardPayloadSerializer>(
-        schemeEntry, inputColumns, std::move(writeIndex), std::move(alloc));
+        schemeEntry, inputColumns, std::move(alloc));
 }
 
 IPayloadSerializerPtr CreateDataShardPayloadSerializer(
         const TVector<TKeyDesc::TPartitionInfo>& partitioning,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const std::vector<ui32> writeIndex,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TDataShardPayloadSerializer>(
-        partitioning, keyColumns, inputColumns, std::move(writeIndex), std::move(alloc));
+        partitioning, keyColumns, inputColumns, std::move(alloc));
 }
 
 class TDataBatchProjection : public IDataBatchProjection {
 public:
     TDataBatchProjection(
-        std::vector<ui32>&& columnsMapping,
+        TConstArrayRef<ui32> indexes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
-            : ColumnsMapping(std::move(columnsMapping))
+            : Indexes(indexes)
             , Alloc(std::move(alloc))
-            , RowBatcher(ColumnsMapping.size(), std::nullopt, Alloc) {
+            , RowBatcher(Indexes.size(), std::nullopt, Alloc) {
     }
 
     void AddRow(TConstArrayRef<TCell> row) override {
-        const size_t columnsCount = ColumnsMapping.size();
+        const size_t columnsCount = Indexes.size();
         std::vector<TCell> cells(columnsCount);
         for (size_t index = 0; index < columnsCount; ++index) {
-            cells[index] = row[ColumnsMapping[index]];
+            cells[index] = row[Indexes[index]];
         }
         RowBatcher.AddRow(std::move(cells));
     }
@@ -1015,12 +1008,8 @@ public:
         return result;
     }
 
-    bool IsEmpty() const override {
-        return RowBatcher.IsEmpty();
-    }
-
 private:
-    std::vector<ui32> ColumnsMapping;
+    TConstArrayRef<ui32> Indexes;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     TRowsBatcher RowBatcher;
 };
@@ -1035,19 +1024,13 @@ IRowsBatcherPtr CreateRowsBatcher(
 
 std::vector<ui32> CreateMapping(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const TConstArrayRef<ui32> inputWriteIndex,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-        const TConstArrayRef<ui32> outputWriteIndex,
         const bool preferAdditionalInputColumns) {
-    // inputColumns (reordered using inputWriteIndex) + additionalInputColumns 
-    // -> outputColumns (reordered using outputWriteIndex)
-
-    AFL_ENSURE(inputColumns.size() == inputWriteIndex.size());
-    AFL_ENSURE(outputColumns.size() == outputWriteIndex.size());
+    // inputColumns + additionalInputColumns -> outputColumns
     AFL_ENSURE(outputColumns.size() <= inputColumns.size() + additionalInputColumns.size());
 
-    THashMap<TString, ui32> inputColumnNameToIndex;
+    THashMap<TStringBuf, ui32> inputColumnNameToIndex;
     auto fillInputColumnNameToIndex = [&](const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& columns, size_t shift) {
         for (size_t index = 0; index < columns.size(); ++index) {
             inputColumnNameToIndex[columns[index].GetName()] = shift + index;
@@ -1062,21 +1045,11 @@ std::vector<ui32> CreateMapping(
         fillInputColumnNameToIndex(inputColumns, 0);
     }
 
-    std::vector<ui32> outputOrder(outputWriteIndex.size());
-    for (size_t index = 0; index < outputWriteIndex.size(); ++index) {
-        outputOrder[outputWriteIndex[index]] = index;
-    }
-
     std::vector<ui32> columnsMapping(outputColumns.size());
-    for (size_t index = 0; index < outputColumns.size(); ++index) {
-        const auto& outputColumnIndex = outputOrder.at(index);
+    for (size_t outputColumnIndex = 0; outputColumnIndex < outputColumns.size(); ++outputColumnIndex) {
         const auto& outputColumnName = outputColumns.at(outputColumnIndex).GetName();
         const auto& inputColumnIndex = inputColumnNameToIndex.at(outputColumnName);
-        const auto& inputIndex = inputColumnIndex < inputWriteIndex.size()
-            ? inputWriteIndex.at(inputColumnIndex)
-            : inputColumnIndex;
-
-        columnsMapping[index] = inputIndex;
+        columnsMapping[outputColumnIndex] = inputColumnIndex;
     }
 
     return columnsMapping;
@@ -1084,17 +1057,13 @@ std::vector<ui32> CreateMapping(
 
 std::vector<ui32> GetIndexes(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const TConstArrayRef<ui32> inputWriteIndex,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-        const TConstArrayRef<ui32> outputWriteIndex,
         const bool preferAdditionalInputColumns) {
     auto columnsMapping = CreateMapping(
         inputColumns,
-        inputWriteIndex,
         additionalInputColumns,
         outputColumns,
-        outputWriteIndex,
         preferAdditionalInputColumns);
     return columnsMapping;
 }
@@ -1123,23 +1092,10 @@ bool IsEqual(
 }
 
 IDataBatchProjectionPtr CreateDataBatchProjection(
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const TConstArrayRef<ui32> inputWriteIndex,
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
-        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
-        const TConstArrayRef<ui32> outputWriteIndex,
-        const bool preferAdditionalInputColumns,
+        TConstArrayRef<ui32> indexes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
-    auto columnsMapping = CreateMapping(
-        inputColumns,
-        inputWriteIndex,
-        additionalInputColumns,
-        outputColumns,
-        outputWriteIndex,
-        preferAdditionalInputColumns);
-
     return MakeIntrusive<TDataBatchProjection>(
-        std::move(columnsMapping), std::move(alloc));
+        indexes, std::move(alloc));
 }
 
 std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch) {
@@ -1294,7 +1250,6 @@ struct TMetadata {
     const TTableId TableId;
     const TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumnsMetadata;
     const TVector<NKikimrKqp::TKqpColumnMetadataProto> InputColumnsMetadata;
-    const std::vector<ui32> WriteIndex;
     const i64 Priority;
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
 };
@@ -1526,7 +1481,6 @@ public:
             writeInfo.Serializer = CreateColumnShardPayloadSerializer(
                 *SchemeEntry,
                 writeInfo.Metadata.InputColumnsMetadata,
-                writeInfo.Metadata.WriteIndex,
                 Alloc);
         }
         AfterPartitioningChanged();
@@ -1542,7 +1496,6 @@ public:
                 *Partitioning,
                 writeInfo.Metadata.KeyColumnsMetadata,
                 writeInfo.Metadata.InputColumnsMetadata,
-                writeInfo.Metadata.WriteIndex,
                 Alloc);
         }
         AfterPartitioningChanged();
@@ -1557,7 +1510,7 @@ public:
                 if (!writeInfo.Closed) {
                     writeInfo.Serializer->Close();
                 }
-                FlushSerializer(token, true);
+                FlushSerializer(token);
                 writeInfo.Serializer = nullptr;
             }
         }
@@ -1585,7 +1538,6 @@ public:
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
-        std::vector<ui32>&& writeIndex,
         const i64 priority) override {
         AFL_ENSURE(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
         auto [iter, inserted] = WriteInfos.emplace(
@@ -1595,8 +1547,7 @@ public:
                     .TableId = tableId,
                     .KeyColumnsMetadata = std::move(keyColumns),
                     .InputColumnsMetadata = std::move(inputColumns),
-                    .WriteIndex = std::move(writeIndex),
-                    .Priority = priority,
+                    .Priority = priority, // TODO: manage priority on WriteTask level.
                     .OperationType = operationType,
                 },
                 .Serializer = nullptr,
@@ -1609,13 +1560,11 @@ public:
                 *Partitioning,
                 iter->second.Metadata.KeyColumnsMetadata,
                 iter->second.Metadata.InputColumnsMetadata,
-                iter->second.Metadata.WriteIndex,
                 Alloc);
         } else if (SchemeEntry) {
             iter->second.Serializer = CreateColumnShardPayloadSerializer(
                 *SchemeEntry,
                 iter->second.Metadata.InputColumnsMetadata,
-                iter->second.Metadata.WriteIndex,
                 Alloc);
         }
     }
@@ -1654,7 +1603,7 @@ public:
     }
 
     void FlushBuffer(const TWriteToken token) override {
-        FlushSerializer(token, true);
+        FlushSerializer(token);
     }
 
     void FlushBuffers() override {
@@ -1675,7 +1624,7 @@ public:
             });
         
         for (const TWriteToken token : writeTokensFoFlush) {
-            FlushSerializer(token, true);
+            FlushSerializer(token);
         }
     }
 
@@ -1849,38 +1798,14 @@ public:
     }
 
 private:
-    void FlushSerializer(TWriteToken token, bool force) {
+    void FlushSerializer(TWriteToken token) {
         const auto& writeInfo = WriteInfos.at(token);
-        if (force) {
-            for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
-                for (auto& batch : batches) {
-                    if (batch && !batch->IsEmpty()) {
-                        const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
-                                || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
-                        ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
-                            .Token = token,
-                            .OperationType = writeInfo.Metadata.OperationType,
-                            .Data = std::move(batch),
-                            .HasRead = hasRead,
-                        });
-                        ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
-                            .ShardId = shardId,
-                            .HasRead = hasRead,
-                        });
-                    }
-                }
-            }
-        } else {
-            for (const ui64 shardId : writeInfo.Serializer->GetShardIds()) {
-                auto& shard = ShardsInfo.GetShard(shardId);
-                while (true) {
-                    auto batch = writeInfo.Serializer->FlushBatch(shardId);
-                    if (!batch || batch->IsEmpty()) {
-                        break;
-                    }
+        for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
+            for (auto& batch : batches) {
+                if (batch && !batch->IsEmpty()) {
                     const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
-                        || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
-                    shard.PushBatch(TBatchWithMetadata{
+                            || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
+                    ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
                         .Token = token,
                         .OperationType = writeInfo.Metadata.OperationType,
                         .Data = std::move(batch),

@@ -601,6 +601,15 @@ private:
     virtual ::TIntrusivePtr<ITableFragmentWriter<TNode>> CreateNodeFragmentWriter(
         const TDistributedWriteTableCookie& cookie,
         const TTableFragmentWriterOptions& options) = 0;
+
+    virtual ::TIntrusivePtr<ITableFragmentWriter<TYaMRRow>> CreateYaMRFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options) = 0;
+
+    virtual ::TIntrusivePtr<ITableFragmentWriter<Message>> CreateProtoFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options,
+        const ::google::protobuf::Message* prototype) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

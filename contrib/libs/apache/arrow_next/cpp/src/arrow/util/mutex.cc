@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/mutex.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/mutex.h"
 
 #include <mutex>
 
@@ -24,8 +24,8 @@
 #  include <atomic>
 #endif
 
-#include "arrow/util/config.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace util {

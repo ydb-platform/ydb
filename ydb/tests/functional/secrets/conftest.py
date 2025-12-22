@@ -86,3 +86,10 @@ def create_secrets(user_config, secret_paths, secret_values):
         query += f"CREATE SECRET `{secret_path}` WITH ( value='{secret_value}' );\n"
 
     run_with_assert(user_config, query)
+
+
+def write_message_to_topic(user_config, topic_name, messages_cnt):
+    with ydb.Driver(user_config) as driver:
+        with driver.topic_client.writer(topic_name) as writer:
+            writer.write(ydb.TopicWriterMessage(f'message # {messages_cnt}'))
+    return messages_cnt + 1

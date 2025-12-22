@@ -491,14 +491,14 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def start(self):
+    def start(self, timeout_seconds=240):
         """
         Safely starts kikimr instance.
         Do not override this method.
         """
         try:
             logger.debug("Working directory: " + self.__tmpdir)
-            self.__run()
+            self.__run(timeout_seconds=timeout_seconds)
             return self
 
         except Exception:
@@ -536,7 +536,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 time.sleep(interval)
         raise last_exception
 
-    def __run(self):
+    def __run(self, timeout_seconds=240):
         self.prepare()
 
         for node_id in self.__configurator.all_node_ids():
@@ -552,7 +552,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
-            self.__wait_for_bs_controller_to_start()
+            self.__wait_for_bs_controller_to_start(timeout_seconds=timeout_seconds)
             if not self.__configurator.use_self_management:
                 self.__add_bs_box()
 
@@ -635,12 +635,30 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             slot.start()
         return slots
 
+    def write_encryption_key(self, slug):
+        workdir = os.path.join(self.__configurator.working_dir, self.__cluster_name)
+        secret_path = os.path.join(workdir, slug + "_secret.txt")
+        with open(secret_path, "w") as writer:
+            writer.write("fake_secret_data_for_%s" % slug)
+        keyfile_path = os.path.join(workdir, slug + "_key.txt")
+        with open(keyfile_path, "w") as writer:
+            writer.write('Keys { ContainerPath: "%s" Pin: "" Id: "%s" Version: 1 } ' % (secret_path, slug))
+        return keyfile_path
+
     def __register_slot(self, tenant_affiliation=None, encryption_key=None, seed_nodes_file=None):
         slot_index = next(self._slot_index_allocator)
         node_broker_port = (
             self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
             else self.nodes[1].grpc_port
         )
+
+        if tenant_affiliation is None:
+            tenant_affiliation = "dynamic"
+
+        if encryption_key is None and self.__configurator.enable_pool_encryption:
+            slug = tenant_affiliation.replace('/', '_')
+            encryption_key = self.write_encryption_key(slug)
+
         self._slots[slot_index] = KiKiMRNode(
             node_id=slot_index,
             config_path=self.config_path,
@@ -650,7 +668,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             udfs_dir=self.__common_udfs_dir,
             role='slot',
             node_broker_port=node_broker_port,
-            tenant_affiliation=tenant_affiliation if tenant_affiliation is not None else 'dynamic',
+            tenant_affiliation=tenant_affiliation,
             encryption_key=encryption_key,
             binary_path=self.__configurator.get_binary_path(slot_index),
             seed_nodes_file=seed_nodes_file,
@@ -822,7 +840,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                     if key == 'expected_slot_count':
                         drive_proto.PDiskConfig.ExpectedSlotCount = value
                     else:
-                        raise KeyError(f"unknown pdisk_config option {key}")
+                        raise KeyError("unknown pdisk_config option %s" % key)
 
         cmd = request.Command.add()
         cmd.DefineBox.BoxId = 1
@@ -882,13 +900,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
         return name
 
-    def __wait_for_bs_controller_to_start(self):
+    def __wait_for_bs_controller_to_start(self, timeout_seconds=240):
         monitors = [node.monitor for node in self.nodes.values()]
 
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)
 
-        timeout_seconds = 240
         bs_controller_started = wait_for(
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )

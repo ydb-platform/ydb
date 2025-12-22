@@ -455,15 +455,6 @@ class ParallelTestsInSingleNode:
         return value
 
 
-# TODO(bulatman) Temporary class for backward compatibility.
-class ParallelTestsInSingleNodeOnYt:
-    KEY = 'PARALLEL-TESTS-WITHIN-NODE-ON-YT'
-
-    @classmethod
-    def value(cls, unit, flat_args, spec_args):
-        return ParallelTestsInSingleNode.get_value(unit, "PARALLEL_TESTS_ON_YT_WITHIN_NODE_WORKERS")
-
-
 class ForkMode:
     KEY = 'FORK-MODE'
 
@@ -1289,9 +1280,6 @@ class TestFiles:
         'maps/b2bgeo/mvrp_solver/aws_docker',
     )
 
-    # XXX: this is a temporarty fence allowing only taxi to use STYLE_JSON and STYLE_YAML macro
-    _TAXI_PREFIX = 'taxi'
-
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         data_re = re.compile(r"sbr:/?/?(\d+)=?.*")
@@ -1422,14 +1410,6 @@ class TestFiles:
         if not files:
             raise HaltDartConstruction()
         else:
-            upath = unit.path()[3:]
-            lint_name = spec_args['NAME'][0]
-
-            if not upath.startswith(cls._TAXI_PREFIX):
-                if lint_name == 'clang_format_json':
-                    raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_JSON")
-                if lint_name == 'yamlfmt':
-                    raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_YAML")
             resolved_files = []
             for path in files:
                 if path.endswith('ya.make'):

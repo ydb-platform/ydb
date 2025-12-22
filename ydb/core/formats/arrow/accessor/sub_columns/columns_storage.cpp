@@ -22,7 +22,6 @@ TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
         }
         records.DeleteFieldsByIndex(indexesToRemove);
         return TColumnsData(builder.Finish(), std::make_shared<TGeneralContainer>(std::move(records)));
-
     } else {
         return TColumnsData(TDictStats::BuildEmpty(), std::make_shared<TGeneralContainer>(0));
     }
@@ -88,15 +87,9 @@ void TColumnsData::TIterator::InitArrays() {
     AFL_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount())("index", CurrentIndex)("count", GlobalChunkedArray->GetRecordsCount());
 }
 
-NJson::TJsonValue TColumnsData::TIterator::GetValue() const {
+NArrow::NAccessor::TBinaryJsonValueView TColumnsData::TIterator::GetValue() const {
     auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
-    if (view.empty()) {
-        return NJson::TJsonValue(NJson::JSON_UNDEFINED);
-    }
-    auto data = NBinaryJson::SerializeToJson(TStringBuf(view.data(), view.size()));
-    NJson::TJsonValue res;
-    AFL_VERIFY(NJson::ReadJsonTree(data, &res));
-    return res;
+    return NArrow::NAccessor::TBinaryJsonValueView(TStringBuf(view.data(), view.size()));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

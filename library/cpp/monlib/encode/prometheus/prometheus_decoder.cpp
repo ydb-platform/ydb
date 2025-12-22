@@ -576,7 +576,7 @@ namespace NMonitoring {
                     return std::numeric_limits<double>::infinity();
                 } else if (str == TStringBuf("-Inf")) {
                     return -std::numeric_limits<double>::infinity();
-                } else if (str == TStringBuf("NaN")) {
+                } else if (str == TStringBuf("NaN") || str == TStringBuf("Nan")) {
                     return NAN;
                 }
 

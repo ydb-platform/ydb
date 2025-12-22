@@ -49,6 +49,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateTable::CallableName());
         DataSinkNames.insert(TKiAlterTable::CallableName());
         DataSinkNames.insert(TKiDropTable::CallableName());
+        DataSinkNames.insert(TKiTruncateTable::CallableName());
         DataSinkNames.insert(TKiCreateTopic::CallableName());
         DataSinkNames.insert(TKiAlterTopic::CallableName());
         DataSinkNames.insert(TKiDropTopic::CallableName());
@@ -148,7 +149,8 @@ struct TKikimrData {
             TYdbOperation::Restore |
             TYdbOperation::CreateSecret |
             TYdbOperation::AlterSecret |
-            TYdbOperation::DropSecret;
+            TYdbOperation::DropSecret |
+            TYdbOperation::TruncateTable;
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}

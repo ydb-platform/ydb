@@ -315,6 +315,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+
         for (ui32 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 100 * i, 1000);
         }
@@ -326,6 +328,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         }
 
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+
         csController->WaitCompactions(TDuration::Seconds(25));
         {
             auto it = tableClient
@@ -334,6 +338,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
                 SELECT
                     Rows
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
             )")
                           .GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

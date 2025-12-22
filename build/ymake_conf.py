@@ -114,8 +114,9 @@ class Platform(object):
 
         self.is_rv32imc = self.arch in ('riscv32_imc', 'riscv32_esp')
         self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
+        self.is_rv32imc_zicsr_zifencei = self.arch in ('riscv32_imc_zicsr_zifencei',)
 
-        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr
+        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr or self.is_rv32imc_zicsr_zifencei
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
@@ -1297,6 +1298,9 @@ class GnuToolchain(Toolchain):
 
         if target.is_rv32imc_zicsr:
             self.c_flags_platform.append('-march=rv32imc_zicsr')
+
+        if target.is_rv32imc_zicsr_zifencei:
+            self.c_flags_platform.append('-march=rv32imc_zicsr_zifencei')
 
         if self.tc.is_clang or self.tc.is_gcc and self.tc.version_at_least(8, 2):
             target_flags = select(default=[], selectors=[

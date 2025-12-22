@@ -415,6 +415,18 @@ public:
         const TReadTablePartitionOptions& options),
         (descriptor, options))
 
+    DELEGATE_METHOD(TFuture<IFormattedTableReaderPtr>, CreateFormattedTableReader, (
+        const NYPath::TRichYPath& path,
+        const NYson::TYsonString& format,
+        const TTableReaderOptions& options),
+        (path, format, options))
+
+    DELEGATE_METHOD(TFuture<IFormattedTableReaderPtr>, CreateFormattedTablePartitionReader, (
+        const TTablePartitionCookiePtr& cookie,
+        const NYson::TYsonString& format,
+        const TReadTablePartitionOptions& options),
+        (cookie, format, options))
+
     // Journals
     DELEGATE_METHOD(TFuture<void>, TruncateJournal, (
         const NYPath::TYPath& path,
@@ -461,6 +473,7 @@ public:
         const TCheckPermissionByAclOptions& options),
         (user, permission, acl, options))
 
+    // Accounting
     DELEGATE_METHOD(TFuture<void>, TransferAccountResources, (
         const std::string& srcAccount,
         const std::string& dstAccount,
@@ -468,15 +481,22 @@ public:
         const TTransferAccountResourcesOptions& options),
         (srcAccount, dstAccount, resourceDelta, options))
 
-    // Scheduler
     DELEGATE_METHOD(TFuture<void>, TransferPoolResources, (
-        const TString& srcPool,
-        const TString& dstPool,
-        const TString& poolTree,
+        const std::string& srcPool,
+        const std::string& dstPool,
+        const std::string& poolTree,
         NYTree::INodePtr resourceDelta,
         const TTransferPoolResourcesOptions& options),
         (srcPool, dstPool, poolTree, resourceDelta, options))
 
+    DELEGATE_METHOD(TFuture<void>, TransferBundleResources, (
+        const std::string& srcBundle,
+        const std::string& dstBundle,
+        NYTree::INodePtr resourceDelta,
+        const TTransferBundleResourcesOptions& options),
+        (srcBundle, dstBundle, resourceDelta, options))
+
+    // Scheduler
     DELEGATE_METHOD(TFuture<NScheduler::TOperationId>, StartOperation, (
         NScheduler::EOperationType type,
         const NYson::TYsonString& spec,
@@ -572,6 +592,19 @@ public:
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const TListJobsOptions& options),
         (operationIdOrAlias, options))
+
+    DELEGATE_METHOD(TFuture<std::vector<TJobTraceMeta>>, ListJobTraces, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
+        const TListJobTracesOptions& options),
+        (operationIdOrAlias, jobId, options))
+
+    DELEGATE_METHOD(TFuture<TCheckOperationPermissionResult>, CheckOperationPermission, (
+        const std::string& user,
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NYTree::EPermission permission,
+        const TCheckOperationPermissionOptions& options),
+        (user, operationIdOrAlias, permission, options))
 
     DELEGATE_METHOD(TFuture<NYson::TYsonString>, GetJob, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,

@@ -30,10 +30,123 @@ using TEvExportToS3Request = TGrpcRequestOperationCall<Ydb::Export::ExportToS3Re
 using TEvExportToFsRequest = TGrpcRequestOperationCall<Ydb::Export::ExportToFsRequest,
     Ydb::Export::ExportToFsResponse>;
 
+template<typename TEvRequest>
+struct TExportTraits;
+
+template<>
+struct TExportTraits<TEvExportToS3Request> {
+    using TSettings = Ydb::Export::ExportToS3Settings;
+    using TItem = Ydb::Export::ExportToS3Settings::Item;
+    
+    static constexpr bool HasEncryption = true;
+    static constexpr bool HasCompression = true;
+    static constexpr bool HasSourcePath = true;
+    
+    static auto* GetSettings(NKikimrExport::TCreateExportRequest& req) {
+        return req.MutableExportToS3Settings();
+    }
+    
+    static auto& GetItems(const TSettings& settings) {
+        return settings.items();
+    }
+    
+    static const auto& GetSourcePath(const TSettings& settings) {
+        return settings.source_path();
+    }
+
+    static const auto& GetDestination(const TSettings& settings) {
+        return settings.destination_prefix();
+    }
+
+    static bool HasDestination(const TSettings& settings) {
+        return !settings.destination_prefix().empty();
+    }
+
+    static const auto& GetDestination(const TItem& item) {
+        return item.destination_prefix();
+    }
+    
+    static void SetSourcePath(TSettings* settings, const TString& path) {
+        settings->set_source_path(path);
+    }
+    
+    static void SetDestination(TItem* item, const TString& dest) {
+        item->set_destination_prefix(dest);
+    }
+};
+
+template<>
+struct TExportTraits<TEvExportToFsRequest> {
+    using TSettings = Ydb::Export::ExportToFsSettings;
+    using TItem = Ydb::Export::ExportToFsSettings::Item;
+    
+    static constexpr bool HasEncryption = true;
+    static constexpr bool HasCompression = true;
+    static constexpr bool HasSourcePath = true;
+    
+    static auto* GetSettings(NKikimrExport::TCreateExportRequest& req) {
+        return req.MutableExportToFsSettings();
+    }
+    
+    static auto& GetItems(const TSettings& settings) {
+        return settings.items();
+    }
+    
+    static const auto& GetSourcePath(const TSettings& settings) {
+        return settings.source_path();
+    }
+
+    static const auto& GetDestination(const TSettings& settings) {
+        return settings.base_path();
+    }
+
+    static bool HasDestination(const TSettings& settings) {
+        return !settings.base_path().empty();
+    }
+    
+    static const auto& GetDestination(const TItem& item) {
+        return item.destination_path();
+    }
+    
+    static void SetSourcePath(TSettings* settings, const TString& path) {
+        settings->set_source_path(path);
+    }
+    
+    static void SetDestination(TItem* item, const TString& dest) {
+        item->set_destination_path(dest);
+    }
+};
+
+template<>
+struct TExportTraits<TEvExportToYtRequest> {
+    using TSettings = Ydb::Export::ExportToYtSettings;
+    using TItem = Ydb::Export::ExportToYtSettings::Item;
+    
+    static constexpr bool HasEncryption = false;
+    static constexpr bool HasCompression = false;
+    static constexpr bool HasSourcePath = false;
+    
+    static auto* GetSettings(NKikimrExport::TCreateExportRequest& req) {
+        return req.MutableExportToYtSettings();
+    }
+    
+    static auto& GetItems(const TSettings& settings) {
+        return settings.items();
+    }
+    
+    static const auto& GetDestination(const TItem& item) {
+        return item.destination_path();
+    }
+    
+    static void SetDestination(TItem* item, const TString& dest) {
+        item->set_destination_path(dest);
+    }
+};
+
 template <typename TDerived, typename TEvRequest>
 class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TExportConv {
+    using TTraits = TExportTraits<TEvRequest>;
     static constexpr bool IsS3Export = std::is_same_v<TEvRequest, TEvExportToS3Request>;
-    static constexpr bool IsYtExport = std::is_same_v<TEvRequest, TEvExportToYtRequest>;
     static constexpr bool IsFsExport = std::is_same_v<TEvRequest, TEvExportToFsRequest>;
 
     struct TExportItemInfo {
@@ -57,6 +170,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             case NSchemeCache::TSchemeCacheNavigate::KindTable:
             case NSchemeCache::TSchemeCacheNavigate::KindTopic:
                 return true;
+            case NSchemeCache::TSchemeCacheNavigate::KindColumnTable:
+                return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
             case NSchemeCache::TSchemeCacheNavigate::KindView:
                 return AppData()->FeatureFlags.GetEnableViewExport();
             default:
@@ -84,36 +199,19 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto& createExport = *ev->Record.MutableRequest();
         *createExport.MutableOperationParams() = request.operation_params();
-        if constexpr (IsYtExport) {
-            auto* exportSettings = createExport.MutableExportToYtSettings();
-            *exportSettings = request.settings();
-            exportSettings->clear_items();
-            for (const auto& [sourcePath, info] : ExportItems) {
-                auto* item = exportSettings->add_items();
-                item->set_source_path(sourcePath);
-                item->set_destination_path(info.Destination);
-            }
+        
+        auto* exportSettings = TTraits::GetSettings(createExport);
+        *exportSettings = request.settings();
+
+        if constexpr (TTraits::HasSourcePath) {
+            TTraits::SetSourcePath(exportSettings, CommonSourcePath);
         }
-        if constexpr (IsS3Export) {
-            auto* exportSettings = createExport.MutableExportToS3Settings();
-            *exportSettings = request.settings();
-            exportSettings->set_source_path(CommonSourcePath);
-            exportSettings->clear_items();
-            for (const auto& [sourcePath, info] : ExportItems) {
-                auto* item = exportSettings->add_items();
-                item->set_source_path(sourcePath);
-                item->set_destination_prefix(info.Destination);
-            }
-        }
-        if constexpr (IsFsExport) {
-            auto* exportSettings = createExport.MutableExportToFsSettings();
-            *exportSettings = request.settings();
-            exportSettings->clear_items();
-            for (const auto& [sourcePath, info] : ExportItems) {
-                auto* item = exportSettings->add_items();
-                item->set_source_path(sourcePath);
-                item->set_destination_path(info.Destination);
-            }
+        
+        exportSettings->clear_items();
+        for (const auto& [sourcePath, info] : ExportItems) {
+            auto* item = exportSettings->add_items();
+            item->set_source_path(sourcePath);
+            TTraits::SetDestination(item, info.Destination);
         }
 
         return ev.Release();
@@ -121,11 +219,11 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
     bool ExtractSpecifiedPaths(TVector<TString>& paths) {
         const auto& settings = this->GetProtoRequest()->settings();
-        paths.reserve(settings.items_size() + 3);
 
+        paths.reserve(settings.items_size() + 3);
         paths.emplace_back(this->GetDatabaseName()); // first entry is database
         paths.emplace_back(CommonSourcePath); // second entry is common source path
-        for (const auto& item : settings.items()) {
+        for (const auto& item : TTraits::GetItems(settings)) {
             TString path = CanonizePath(item.source_path());
             if (path.size() > CommonSourcePath.size() && path.StartsWith(CommonSourcePath) && path[CommonSourcePath.size()] == '/') {
                 paths.emplace_back(path); // Full path
@@ -137,18 +235,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Duplicate export item source path: \"" << item.source_path() << "\"");
                 return false;
             }
-            if constexpr (IsS3Export) {
-                it->second.Destination = item.destination_prefix();
-            }
-            if constexpr (IsYtExport) {
-                it->second.Destination = item.destination_path();
-            }
-            if constexpr (IsFsExport) {
-                it->second.Destination = item.destination_path();
-            }
+            it->second.Destination = TTraits::GetDestination(item);
         }
 
-        if constexpr (IsS3Export) {
+        if constexpr (TTraits::HasSourcePath) {
             if (settings.items_size() == 0) { // expand all source path by default
                 paths.emplace_back(CommonSourcePath);
                 ExportItems.insert({CommonSourcePath, TExportItemInfo{}});
@@ -391,7 +481,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
     void InitCommonSourcePath() {
         const auto& settings = this->GetProtoRequest()->settings();
-        if constexpr (IsS3Export) {
+        if constexpr (TTraits::HasSourcePath) {
             CommonSourcePath = CanonizePath(settings.source_path()); // /Foo/Bar, but empty result for empty source_path
         }
         if (CommonSourcePath.empty()) {
@@ -424,18 +514,26 @@ public:
         const auto& settings = request.settings();
         InitCommonSourcePath();
 
-        if constexpr (IsYtExport) {
+        if constexpr (IsFsExport) {
+            if (!settings.base_path().StartsWith("/")) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
+                    "base_path must be an absolute path");
+            }
+        }
+
+        if constexpr (!TTraits::HasSourcePath) {
             if (settings.items().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
             }
-        }
-        if constexpr (IsS3Export) {
+        } else {
             const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
-            const bool commonDestPrefixSpecified = !settings.destination_prefix().empty();
+            const bool commonDestSpecified = TTraits::HasDestination(settings);
             if (!encryptedExportFeatureFlag) {
                 // Check that no new fields are specified
-                if (commonDestPrefixSpecified) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination prefix is not supported in current configuration");
+                if constexpr (IsS3Export) {
+                    if (commonDestSpecified) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination prefix is not supported in current configuration");
+                    }
                 }
                 if (!settings.source_path().empty()) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source path is not supported in current configuration");
@@ -444,16 +542,18 @@ public:
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
                 }
             }
-            if (settings.items().empty() && !commonDestPrefixSpecified) {
+            if (settings.items().empty() && !commonDestSpecified) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No destination prefix specified. Don't know where to export");
             }
             for (const auto& item : settings.items()) {
-                if (item.destination_prefix().empty() && !commonDestPrefixSpecified) {
+                if (TTraits::GetDestination(item).empty() && !commonDestSpecified) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix or common destination prefix specified for item \"" << item.source_path() << "\"");
                 }
             }
+        }
+        if constexpr (TTraits::HasEncryption) {
             if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
-                if (!commonDestPrefixSpecified) {
+                if (!TTraits::HasDestination(settings)) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
                 }
 
@@ -462,26 +562,8 @@ public:
                 }
             }
         }
-        if constexpr (IsFsExport) {
-            if (!settings.base_path().StartsWith("/")) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
-                    "base_path must be an absolute path");
-            }
 
-            if (settings.compression()) {
-                StatusIds::StatusCode status;
-                TString error;
-                if (!CheckCompression(settings.compression(), status, error)) {
-                    return this->Reply(status, TIssuesIds::DEFAULT_ERROR, error);
-                }
-            }
-
-            if (settings.items().empty()) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
-            }
-        }
-
-        if constexpr (std::is_same_v<TEvRequest, TEvExportToS3Request>) {
+        if constexpr (TTraits::HasCompression) {
             if (settings.compression()) {
                 StatusIds::StatusCode status;
                 TString error;

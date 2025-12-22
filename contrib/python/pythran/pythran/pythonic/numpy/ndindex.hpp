@@ -17,8 +17,7 @@ namespace numpy
   }
 
   template <size_t N>
-  ndindex_iterator<N>::ndindex_iterator(
-      types::array_tuple<long, N> const &shape, long first)
+  ndindex_iterator<N>::ndindex_iterator(types::array_tuple<long, N> const &shape, long first)
       : index(first), shape(shape)
   {
   }
@@ -76,8 +75,7 @@ namespace numpy
   template <size_t N>
   _ndindex<N>::_ndindex(types::array_tuple<long, N> const &shape)
       : ndindex_iterator<N>(shape, 0), shape(shape),
-        end_iter(shape, std::accumulate(shape.begin(), shape.end(), 1L,
-                                        std::multiplies<long>()))
+        end_iter(shape, std::accumulate(shape.begin(), shape.end(), 1L, std::multiplies<long>()))
   {
   }
 

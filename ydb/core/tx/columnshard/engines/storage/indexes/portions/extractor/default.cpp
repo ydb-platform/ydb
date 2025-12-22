@@ -43,15 +43,8 @@ void TDefaultDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor::
 
 bool TDefaultDataExtractor::DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64* hashBase) const {
     if (request.GetSubColumnName()) {
-        std::string_view sv = [&]() {
-            if (request.GetSubColumnName().StartsWith("$.")) {
-                return std::string_view(request.GetSubColumnName().data() + 2, request.GetSubColumnName().size() - 2);
-            } else {
-                return std::string_view(request.GetSubColumnName().data(), request.GetSubColumnName().size());
-            }
-        }();
         if (hashBase) {
-            *hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(sv);
+            *hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(NArrow::NAccessor::NSubColumns::ToSubcolumnName(request.GetSubColumnName()));
         }
     }
     return true;

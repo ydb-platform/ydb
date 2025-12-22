@@ -65,6 +65,9 @@ public:
     //! Set database, this option can be overridden for client by ClientSettings
     TDriverConfig& SetDatabase(const std::string& database);
 
+    //! Get database path, returns the database path set via connection string or SetDatabase()
+    const std::string& GetDatabase() const;
+
     //! Set credentials data, this option can be overridden for client by ClientSettings
     TDriverConfig& SetCredentialsProviderFactory(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
 

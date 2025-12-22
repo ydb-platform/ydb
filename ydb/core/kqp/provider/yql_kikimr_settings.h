@@ -62,6 +62,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
+    NCommon::TConfSetting<bool, Static> UseFastChannels;
 
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
 
@@ -195,6 +196,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOltpSink = false;
     bool EnableHtapTx = false;
     bool EnableStreamWrite = false;
+    bool EnableBatchUpdates = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
@@ -225,8 +227,13 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
     bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
     bool EnableDqHashCombineByDefault = true;
+    bool EnableWatermarks = false;
+    bool DefaultUseFastChannels = false;
+    bool EnableDiscardSelect = false;
 
     bool Antlr4ParserIsAmbiguityError = false;
+
+    bool EnableFallbackToYqlOptimizer = false;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;

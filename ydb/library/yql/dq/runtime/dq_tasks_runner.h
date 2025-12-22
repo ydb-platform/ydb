@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dq_tasks_counters.h"
+#include "dq_channel_service.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -18,7 +19,6 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_node.h>
-#include <yql/essentials/minikql/mkql_watermark.h>
 
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
@@ -31,7 +31,13 @@ namespace NActors {
     class TActorSystem;
 };
 
+namespace NKikimr::NMiniKQL {
+struct TWatermark;
+} // namespace NKikimr::NMiniKQL
+
 namespace NYql::NDq {
+
+class TDqComputeActorWatermarks;
 
 // TBD: Add Running status and return PendingInput iff no data was consumed from inputs
 //      CA and KQP relies on PendingInput and require careful modifications
@@ -92,7 +98,7 @@ class TDqTaskRunnerStatsView {
 public:
     TDqTaskRunnerStatsView() : IsDefined(false) {}
 
-    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats)   // used in TLocalTaskRunnerActor, cause it holds this stats, and does not modify it asyncronously from TDqAsyncComputeActor
+    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats)   // used in TLocalTaskRunnerActor, cause it holds this stats, and does not modify it asynchronously from TDqAsyncComputeActor
         : StatsPtr(stats)
         , IsDefined(true) {
     }
@@ -147,6 +153,7 @@ struct TDqTaskRunnerContext {
     NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> PatternCache;
+    std::shared_ptr<IDqChannelService> ChannelService;
 };
 
 class IDqTaskRunnerExecutionContext {
@@ -209,6 +216,7 @@ struct TDqTaskRunnerSettings {
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     bool TerminateOnError = false;
     bool UseCacheForLLVM = true;
+    TDqComputeActorWatermarks* WatermarksTracker = nullptr;
     TString OptLLVM = "";
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;
@@ -223,8 +231,15 @@ struct TDqTaskRunnerMemoryLimits {
     TMaybe<size_t> BufferPageAllocSize;
 };
 
-NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInputChannel::TPtr>&& channels, const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::IPgBuilder* pgBuilder);
+NUdf::TUnboxedValue DqBuildInputValue(
+    const NDqProto::TTaskInput& inputDesc,
+    const NKikimr::NMiniKQL::TType* type,
+    TVector<IDqInputChannel::TPtr>&& channels,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    NUdf::IPgBuilder* pgBuilder,
+    NKikimr::NMiniKQL::TWatermark* watermark = nullptr,
+    TDqComputeActorWatermarks* watermarksTracker = nullptr
+);
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
@@ -415,6 +430,10 @@ public:
         return Task_->GetValuePackerVersion();
     }
 
+    bool GetFastChannels() const {
+        return Task_->GetFastChannels();
+    }
+
 private:
 
     // external callback to retrieve parameter value.
@@ -471,6 +490,9 @@ public:
 
     virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
     virtual TString GetOutputDebugString() = 0;
+    TInstant LastFetchTime;
+    ERunStatus LastFetchStatus = ERunStatus::PendingInput;
+
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(

@@ -24,6 +24,7 @@ public:
     TFsBackupParamsValidationTestFixture() = default;
 
     void SetUp(NUnitTest::TTestContext& /* context */) override {
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
         auto res = YdbQueryClient().ExecuteQuery(R"sql(
             CREATE TABLE `/Root/FsExportParamsValidation/dir1/Table1` (
                 Key Uint32 NOT NULL,
@@ -241,6 +242,80 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
     }
 }
 
+// Encryption validation tests
+template <bool encryptionEnabled>
+class TFsBackupEncryptionParamsValidationTestFixture : public TFsBackupParamsValidationTestFixture {
+public:
+    void SetUp(NUnitTest::TTestContext& context) override {
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(encryptionEnabled);
+        TFsBackupParamsValidationTestFixture::SetUp(context);
+    }
+};
+
+Y_UNIT_TEST_SUITE_F(FsBackupEncryptionParamsValidationTest, TFsBackupEncryptionParamsValidationTestFixture<true>)
+{
+    Y_UNIT_TEST(IncorrectKeyLengthExport) {
+        // Test that encryption key must have correct length
+        NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", ""});
+        settings.SymmetricEncryption(NExport::TEncryptionAlgorithm::CHACHA_20_POLY_1305, "123");
+        
+        auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+        UNIT_ASSERT_C(!res.Status().IsSuccess(), 
+            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, 
+            res.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "Invalid encryption settings",
+            res.Status().GetIssues().ToString());
+
+        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in FS
+        // Fix: use correct key length
+        {
+            // NExport::TExportToFsSettings fixSettings = settings;
+            // fixSettings.SymmetricEncryption(NExport::TEncryptionAlgorithm::CHACHA_20_POLY_1305, 
+            //                                  "Key is big enough to be 32 bytes");
+            // auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
+            // WaitOpSuccess(res, "Export with correct key length should succeed");
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE_F(FsBackupEncryptionParamsValidationTestFeatureDisabled, TFsBackupEncryptionParamsValidationTestFixture<false>)
+{
+    Y_UNIT_TEST(EncryptionParamsSpecifiedExport) {
+        // Test that encryption_settings cannot be used when feature flag is disabled
+        NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", ""});
+        settings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, 
+                                      "Cool random key!");
+        
+        auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+        UNIT_ASSERT_C(!res.Status().IsSuccess(), 
+            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, 
+            res.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), 
+            "Export encryption is not supported in current configuration",
+            res.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(SourcePathSpecified) {
+        // Test that source_path cannot be used when feature flag is disabled
+        NExport::TExportToFsSettings settings = MakeExportSettings(TString(TempDir().Path()));
+        settings.AppendItem({"/Root/FsExportParamsValidation/dir1/Table1", ""});
+        settings.SourcePath("/Root/FsExportParamsValidation");
+        
+        auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+        UNIT_ASSERT_C(!res.Status().IsSuccess(), 
+            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, 
+            res.Status().GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), 
+            "Source path is not supported in current configuration",
+            res.Status().GetIssues().ToString());
+    }
+}
+
 // Import validation tests
 Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestFixture)
 {
@@ -292,7 +367,7 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, 
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), 
-            "source_path is required but not set",
+            "Empty item is not allowed",
             res.Status().GetIssues().ToString());
     }
 }

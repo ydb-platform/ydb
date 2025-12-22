@@ -16,6 +16,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/util/aws.h>
+#include <ydb/core/wrappers/events/get_object.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
@@ -4339,6 +4340,193 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         Run(runtime, env, ConvertTestData(data), request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
     }
 
+    Y_UNIT_TEST(CheckItemProgress) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        TBlockEvents<NWrappers::NExternalStorage::TEvGetObjectRequest> blockPartition01(runtime, [](const auto& ev) {
+            return ev->Get()->Request.GetKey() == "/data_01.csv";
+        });
+
+        const auto data = GenerateTestData(R"(
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                partition_at_keys {
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "b" } }
+                    }
+                }
+                primary_key: "key"
+            )",
+            {{"a", 1}, {"b", 1}}
+        );
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("get object request into 01 partition", [&]{ return blockPartition01.size() >= 1; });
+        bool isCompleted = false;
+
+        while (!isCompleted) {
+            const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+            const auto entry = desc.GetResponse().GetEntry();
+
+            const auto item = entry.GetItemsProgress(0);
+            if (item.parts_completed() > 0) {
+                isCompleted = true;
+                UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
+                UNIT_ASSERT_VALUES_UNEQUAL(item.start_time().seconds(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(item.end_time().seconds(), 0);
+            } else {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+        }
+
+        blockPartition01.Stop();
+        blockPartition01.Unblock();
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
+
+        const auto& item = entry.GetItemsProgress(0);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 2);
+        UNIT_ASSERT_VALUES_UNEQUAL(item.start_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_UNEQUAL(item.end_time().seconds(), 0);
+    }
+
+    Y_UNIT_TEST(CheckItemProgressWithIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        // Wait for 3'rd index processing
+        TBlockEvents<TEvIndexBuilder::TEvCreateRequest> block2ndIndexBuild(runtime, [&](const auto& ev) {
+            return ev->Get()->Record.GetSettings().Getindex().Getname() == "by_value_2";
+        });
+
+        const auto data = GenerateTestData(R"(
+                columns {
+                    name: "key"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                columns {
+                    name: "value"
+                    type { optional_type { item { type_id: UTF8 } } }
+                }
+                primary_key: "key"
+                partition_at_keys {
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "b" } }
+                    }
+                    split_points {
+                        type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                        value { items { text_value: "c" } }
+                    }
+                }
+                indexes {
+                    name: "by_value_1"
+                    index_columns: "value"
+                    global_index {
+                        settings {
+                            partition_at_keys {
+                                split_points {
+                                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                                    value { items { text_value: "b" } }
+                                }
+                            }
+                        }
+                    }
+                }
+                indexes {
+                    name: "by_value_2"
+                    index_columns: "value"
+                    global_index {}
+                }
+            )",
+            {{"a", 1}, {"b", 1}, {"c", 1}}
+        );
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("2'nd index build start", [&]{ return block2ndIndexBuild.size() >= 1; });
+
+        const auto desc_blocked = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry_blocked = desc_blocked.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry_blocked.ItemsProgressSize(), 1);
+        // As only 1 item, it is guaranteed for entry to be in the build indexes state
+        UNIT_ASSERT_VALUES_EQUAL(entry_blocked.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES);
+
+        const auto& item_blocked = entry_blocked.GetItemsProgress(0);
+        // 3 table parts + 2 indexes each process 3 table parts
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_total(), 9);
+        // Table and 1'st index processed
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.parts_completed(), 6);
+        UNIT_ASSERT_VALUES_UNEQUAL(item_blocked.start_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(item_blocked.end_time().seconds(), 0);
+
+        block2ndIndexBuild.Stop();
+        block2ndIndexBuild.Unblock();
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
+
+        const auto& item = entry.GetItemsProgress(0);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 9);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 9);
+        UNIT_ASSERT_VALUES_UNEQUAL(item.start_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_UNEQUAL(item.end_time().seconds(), 0);
+    }
+
     Y_UNIT_TEST(UidAsIdempotencyKey) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -6126,6 +6314,126 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(!issues.empty());
         UNIT_ASSERT_EQUAL(issues.begin()->message(), "Unsupported scheme object type");
     }
+
+    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+
+        const auto a = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+            indexes {
+              name: "by_value"
+              index_columns: "value"
+              global_index {}
+            }
+        )", {{"a", 1}});
+
+        const auto b = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "value"
+            primary_key: "key"
+        )", {{"b", 1}});
+
+        Run(runtime, env, ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%%d"
+              scheme: HTTP
+              index_filling_mode: %s
+              items {
+                source_prefix: "a"
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", Ydb::Import::ImportFromS3Settings::IndexFillingMode_Name(mode).c_str()));
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1),
+        });
+    }
+
+    Y_UNIT_TEST(MaterializedIndexBuild) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD);
+    }
+
+    Y_UNIT_TEST(MaterializedIndexImport) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT);
+    }
+
+    Y_UNIT_TEST(MaterializedIndexAuto) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO);
+    }
+
+    void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode, bool shouldFail) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+
+        const auto a = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+            indexes {
+              name: "by_value"
+              index_columns: "value"
+              global_index {}
+            }
+        )", {{"a", 1}});
+
+        const auto expectedStatus = shouldFail ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS;
+        Run(runtime, env, ConvertTestData({{"/a", a}}), Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%%d"
+              scheme: HTTP
+              index_filling_mode: %s
+              items {
+                source_prefix: "a"
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", Ydb::Import::ImportFromS3Settings::IndexFillingMode_Name(mode).c_str()), expectedStatus);
+
+        if (shouldFail) {
+            return;
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1),
+        });
+    }
+
+    Y_UNIT_TEST(MaterializedIndexAbsentBuild) {
+        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD, false);
+    }
+
+    Y_UNIT_TEST(MaterializedIndexAbsentImport) {
+        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT, true);
+    }
+
+    Y_UNIT_TEST(MaterializedIndexAbsentAuto) {
+        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO, false);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
@@ -6727,5 +7035,76 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         }, topic.GetImportRequest());
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnMaterializedIndex) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        const auto a = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+            indexes {
+              name: "by_value"
+              index_columns: "value"
+              global_index {}
+            }
+        )", {{"a", 1}});
+
+        const auto b = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "value"
+            primary_key: "key"
+        )", {{"b", 1}});
+
+        TS3Mock s3Mock(ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+            }
+
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  index_filling_mode: INDEX_FILLING_MODE_IMPORT
+                  items {
+                    source_prefix: "a"
+                    destination_path: "/MyRoot/Table"
+                  }
+                }
+            )", port));
+            t.TestEnv->TestWaitNotification(runtime, importId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetImport(runtime, importId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+            }
+        });
     }
 }

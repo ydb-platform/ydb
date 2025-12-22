@@ -15,6 +15,7 @@ struct TYqlSource {
 };
 
 enum class EYqlJoinKind {
+    Cross,
     Inner,
     Left,
     Right,
@@ -22,7 +23,7 @@ enum class EYqlJoinKind {
 
 struct TYqlJoinConstraint {
     EYqlJoinKind Kind;
-    TNodePtr Condition;
+    TNullable<TNodePtr> Condition;
 };
 
 struct TYqlJoin {
@@ -35,6 +36,10 @@ struct TPlainAsterisk {};
 using TProjection = std::variant<
     TVector<TNodePtr>,
     TPlainAsterisk>;
+
+struct TGroupBy {
+    TVector<TNodePtr> Keys;
+};
 
 struct TOrderBy {
     TVector<TSortSpecificationPtr> Keys;
@@ -56,14 +61,26 @@ struct TYqlSelectArgs {
     TMaybe<TNodePtr> Where;
     TMaybe<TNodePtr> Limit;
     TMaybe<TNodePtr> Offset;
+    TMaybe<TGroupBy> GroupBy;
+    TMaybe<TNodePtr> Having;
     TMaybe<TOrderBy> OrderBy;
 };
+
+bool IsYqlSubQuery(const TNodePtr& node);
 
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
 
 TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 
 TNodePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args);
+
+TNodePtr WrapYqlSelectSubExpr(TNodePtr node);
+
+TNodePtr BuildYqlScalarSubquery(TNodePtr node);
+
+TNodePtr BuildYqlExistsSubquery(TNodePtr node);
+
+TNodePtr BuildYqlInSubquery(TNodePtr node, TNodePtr expression);
 
 TNodePtr BuildYqlStatement(TNodePtr node);
 

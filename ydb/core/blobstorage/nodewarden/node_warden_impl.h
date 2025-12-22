@@ -234,6 +234,7 @@ namespace NKikimr::NStorage {
 
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
+        TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
@@ -262,6 +263,7 @@ namespace NKikimr::NStorage {
         TControlWrapper ReportingControllerBucketSize;
         TControlWrapper ReportingControllerLeakDurationMs;
         TControlWrapper ReportingControllerLeakRate;
+        TControlWrapper MaxPutTimeoutSeconds;
 
         TControlWrapper EnableDeepScrubbing;
 
@@ -708,6 +710,7 @@ namespace NKikimr::NStorage {
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
         std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> CommittedStorageConfig;
         bool SelfManagementEnabled = false;
         TBridgeInfo::TPtr BridgeInfo;
         THashSet<TActorId> StorageConfigSubscribers;

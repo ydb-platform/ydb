@@ -209,6 +209,9 @@ message TTableServiceConfig {
         optional double Multiplier = 5;
         optional uint32 IteratorResponseTimeoutMs = 6;
         optional uint32 MaxTotalRetries = 7;
+
+        optional uint64 MaxRowsProcessingStreamLookup = 9 [default = 65536];
+        optional uint64 MaxTotalBytesQuotaStreamLookup = 10 [default = 2684354560]; // 5_MB * 512
     }
 
     message TIteratorReadQuotaSettings {
@@ -446,4 +449,17 @@ message TTableServiceConfig {
     }
 
     optional EBackportMode BackportMode = 108 [ default = Released, (InvalidateCompileCache) = true];
+
+    optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableWatermarks = 110 [default = false, (InvalidateCompileCache) = true];
+
+    optional uint64 LocalChannelInflightBytes  = 111 [default = 8388608];
+    optional uint64 RemoteChannelInflightBytes = 112 [default = 16777216];
+    optional uint64 NodeSessionIcInflightBytes = 113 [default = 67108864];
+
+    optional bool EnableFastChannels = 114 [ default = false, (InvalidateCompileCache) = true];
+
+    optional bool EnableDiscardSelect = 115 [default = false, (InvalidateCompileCache) = true];
+
 };

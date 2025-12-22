@@ -8,6 +8,7 @@
 #include "yson_schema.h"
 #include "yson_struct.h"
 #include "proto_yson_struct.h"
+#include "traverse.h"
 
 #include <yt/yt/core/yson/token_writer.h>
 
@@ -1213,6 +1214,12 @@ void TYsonStructParameter<TValue>::WriteTypeSchema(
     const TYsonStructWriteSchemaOptions& options) const
 {
     WriteSchema<TValue>(consumer, options);
+}
+
+template <class TValue>
+void TYsonStructParameter<TValue>::TraverseParameter(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path) const
+{
+    TraverseYsonStruct<TValue>(visitor, path);
 }
 
 template <class TValue>

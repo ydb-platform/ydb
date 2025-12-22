@@ -64,7 +64,6 @@ bool RewriteCreateExternalTableQuery(
     const TString& dbPath,
     NYql::TIssues& issues)
 {
-
     return RewriteCreateQuery(query, "CREATE EXTERNAL TABLE IF NOT EXISTS `{}`", dbPath, issues);
 }
 

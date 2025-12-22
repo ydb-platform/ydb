@@ -23,7 +23,6 @@ TString BuildCreateExternalDataSourceQuery(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
     const TString& db)
 {
-
     return std::format(
         "-- database: \"{}\"\n"
         "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`\n"
@@ -48,7 +47,6 @@ bool RewriteCreateExternalDataSourceQueryNoSecrets(
     const TString& dbPath,
     NYql::TIssues& issues)
 {
-
     return RewriteCreateQuery(query, "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`", dbPath, issues);
 }
 

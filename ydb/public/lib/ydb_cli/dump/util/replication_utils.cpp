@@ -111,7 +111,6 @@ TString BuildCreateReplicationQuery(
     const TString& name,
     const NReplication::TReplicationDescription& desc)
 {
-
     TVector<TString> targets(::Reserve(desc.GetItems().size()));
     for (const auto& item : desc.GetItems()) {
         if (!item.DstPath.ends_with("/indexImplTable")) { // TODO(ilnaz): get rid of this hack
@@ -152,7 +151,6 @@ TString BuildCreateTransferQuery(
     const TString& name,
     const NReplication::TTransferDescription& desc)
 {
-
     TVector<TString> options(::Reserve(7));
 
     const auto& connectionParams = desc.GetConnectionParams();
@@ -195,7 +193,6 @@ bool RewriteCreateAsyncReplicationQueryNoSecrets(
     const TString& dbPath,
     NYql::TIssues& issues)
 {
-
     if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
         return false;
     }
@@ -208,7 +205,6 @@ bool RewriteCreateTransferQueryNoSecrets(
     const TString& dbPath,
     NYql::TIssues& issues)
 {
-
     if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
         return false;
     }

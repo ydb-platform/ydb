@@ -410,6 +410,39 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
         return SendSystemViewResult(entry, path, ctx);
     }
 
+    // Special handling for requests for regular tables that can be satisfied
+    // with the data from scheme-cache and do not require getting most up-to-date
+    // data from schemeshard
+    if (AppData()->FeatureFlags.GetEnableDescribeFromSchemeCache()
+        && entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindTable
+        && describePath.GetOptions().GetReturnCachedResult()
+        && describePath.GetOptions().GetReturnBoundaries()
+        // TableInfo can be empty if table still wasn't updated at scheme-cache
+        // after the flag was set
+        && entry.TableInfo
+    ) {
+        auto result = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>(
+            entry.Self->Info.GetName(),
+            TPathId(entry.Self->Info.GetSchemeshardId(), entry.Self->Info.GetPathId())
+        );
+        auto pathDescription = result->Record.MutablePathDescription();
+        pathDescription->MutableSelf()->CopyFrom(entry.Self->Info);
+
+        auto tableDescription = pathDescription->MutableTable();
+        tableDescription->CopyFrom(entry.TableInfo->Description);
+
+        // TDescribeOptions:
+        // - ShowPrivateTable is already accounted for
+        // - ReturnPartitioningInfo commands adding TablePartitions along the Table -- and we don't do that here
+        // - ReturnRangeKey only affects TablePartitions (and none returned here)
+        // - we also ignore other options values, they will have their default effect on pieces
+
+        //TODO: no DomainDescription yet
+
+        ctx.Send(Source, result.Release(), 0, SourceCookie);
+        return Die(ctx);
+    }
+
     const ui64 shardToRequest = entry.DomainInfo->ExtractSchemeShard();
 
     TAutoPtr<NSchemeShard::TEvSchemeShard::TEvDescribeScheme> req(

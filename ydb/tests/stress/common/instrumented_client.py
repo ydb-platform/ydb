@@ -53,7 +53,7 @@ class InstrumentedYdbClient(YdbClient):
             del caller_frame
 
     def query(self, statement: str, is_ddl: bool, retry_settings=None,
-              operation_name: Optional[str] = None):
+              operation_name: Optional[str] = None, log_error: bool = True):
         """
         Executes query with automatic metrics collection.
 
@@ -70,7 +70,7 @@ class InstrumentedYdbClient(YdbClient):
         if operation_name is None:
             operation_name = 'ddl' if is_ddl else 'dml'
         if not self.enable_metrics:
-            return super(InstrumentedYdbClient, self).query(statement, is_ddl, retry_settings)
+            return super(InstrumentedYdbClient, self).query(statement, is_ddl, retry_settings, log_error=log_error)
 
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).query(

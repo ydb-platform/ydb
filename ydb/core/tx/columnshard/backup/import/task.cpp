@@ -31,7 +31,7 @@ NBackground::TSessionControlContainer TImportTask::BuildAbortControl() const {
 }
 
 std::shared_ptr<NBackground::ISessionLogic> TImportTask::DoBuildSession() const {
-    auto result = std::make_shared<TSession>(std::make_shared<TImportTask>(InternalPathId, TxId));
+    auto result = std::make_shared<TSession>(std::make_shared<TImportTask>(InternalPathId, Columns, RestoreTask, SchemaVersion, TxId));
     if (!!TxId) {
         result->Confirm();
     }
@@ -51,8 +51,15 @@ const TInternalPathId TImportTask::GetInternalPathId() const {
 }
 
 TImportTask::TImportTask(const TInternalPathId &internalPathId,
+                         const TVector<TNameTypeInfo>& columns,
+                         const NKikimrSchemeOp::TRestoreTask& restoreTask,
+                         const std::optional<ui64> schemaVersion,
                          const std::optional<ui64> txId)
-    : InternalPathId(internalPathId), TxId(txId) {
+    : InternalPathId(internalPathId)
+    , Columns(columns)
+    , RestoreTask(restoreTask)
+    , TxId(txId)
+    , SchemaVersion(schemaVersion) {
 }
 
 TString TImportTask::DebugString() const {

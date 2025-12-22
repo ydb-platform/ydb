@@ -43,9 +43,10 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
         finally:
             del caller_frame
 
-    def execute_with_retries(self, query: str, parameters=None,
+    def execute_with_retries(self, query: str, *args, parameters=None,
                              retry_settings=None, settings=None,
-                             operation_name: Optional[str] = None):
+                             operation_name: Optional[str] = None,
+                             **kwargs):
         """
         Executes query with automatic metrics collection.
 
@@ -62,17 +63,25 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
         if operation_name is None:
             operation_name = 'query_pool_execute'
         if not self.enable_metrics:
-            return super(InstrumentedQuerySessionPool, self).execute_with_retries(query, parameters, retry_settings, settings)
+            return super(InstrumentedQuerySessionPool, self).execute_with_retries(query,
+                                                                                  parameters=parameters,
+                                                                                  retry_settings=retry_settings,
+                                                                                  settings=settings,
+                                                                                  *args,
+                                                                                  **kwargs)
 
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedQuerySessionPool, self).execute_with_retries(
-                query, parameters, retry_settings, settings
+                query, parameters=parameters, retry_settings=retry_settings, settings=settings,
+                *args,
+                **kwargs
             ),
             operation_name, self.full_name
         )
 
-    def explain_with_retries(self, query: str, retry_settings=None,
-                             operation_name: str = 'explain_query'):
+    def explain_with_retries(self, query: str, *args, retry_settings=None,
+                             operation_name: str = 'explain_query',
+                             **kwargs):
         """
         Executes EXPLAIN query with automatic metrics collection.
 
@@ -85,10 +94,14 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
             EXPLAIN result
         """
         if not self.enable_metrics:
-            return super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings)
+            return super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings,
+                                                                                  *args,
+                                                                                  **kwargs)
 
         return self.metrics_collector.wrap_call(
-            lambda: super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings),
+            lambda: super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings,
+                                                                                   *args,
+                                                                                   **kwargs),
             operation_name, self.full_name
         )
 

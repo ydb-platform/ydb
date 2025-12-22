@@ -84,7 +84,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         void RemoveChild(const TPtr& element) {
             Y_ENSURE(Y_LIKELY(element));
             Y_ENSURE(Children.erase(element));
-            element->Parent = nullptr;
+            // Do not reset child's parent since child may concurrently still refer to parents' attributes.
         }
 
         inline size_t ChildrenSize() const {
@@ -130,7 +130,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
     protected:
         const TId Id;
-        TTreeElementBase* Parent = nullptr;
+        TTreeElementBase* Parent = nullptr; // TODO: init parent in ctor and make it const.
 
     private:
         struct TCompareChildren {

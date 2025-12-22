@@ -1,15 +1,13 @@
 # Self Heal State Storage
 
-В процессе работы кластеров могут выходить из строя узлы целиком, на которых работает {{ ydb-short-name }}.
+В процессе работы кластеров узлы, на которых работает {{ ydb-short-name }} могут выходить из строя целиком.
 
-Self Heal State Storage обеспечивает сохранение работоспособности подсистем [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) кластера, если невозможно быстро восстановить вышедшие из строя узлы, и автоматически увеличивать количество реплик этих подсистем при добавлении новых узлов в кластер.
+Self Heal State Storage обеспечивает сохранение работоспособности [подсистем распространения метаданных](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) кластера, если невозможно быстро восстановить вышедшие из строя узлы, и автоматически увеличивать количество реплик этих подсистем при добавлении новых узлов в кластер.
 
 Self Heal State Storage обеспечивает:
 
 * обнаружение неисправных узлов кластера {{ ydb-short-name }};
 * перенос реплик [StateStorage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), [SchemeBoard](../../concepts/glossary.md#scheme-board) на другие узлы или добавление новых реплик.
-
-Self Heal State Storage  включен по умолчанию.
 
 Компонент Self Heal State Storage, является частью системы управления кластером [CMS Sentinel](../../concepts/glossary.md#cms).
 

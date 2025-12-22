@@ -1,10 +1,10 @@
-# Конфигурирование State Storage
+# Конфигурирование подсистем распространения метаданных State Storage, Board, Scheme Board
 
-Применяется если нужно изменить [конфигурацию State Storage](../../../reference/configuration/domains_config.md#domains-state) состоящую из [State Storage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [Scheme Board](../../../concepts/glossary.md#scheme-board), на кластере {{ ydb-short-name }}.
+Применяется если нужно изменить [конфигурацию подсистем распространения метаданных](../../../reference/configuration/domains_config.md#domains-state) состоящую из [State Storage](../../../concepts/glossary.md#state-storage), [Board](../../../concepts/glossary.md#board), [Scheme Board](../../../concepts/glossary.md#scheme-board), на кластере {{ ydb-short-name }}.
 
-При использовании Конфигурации V2 [конфигурация State Storage](../../../reference/configuration/domains_config.md#domains-state) осуществляется автоматически. Как отключить или включить автоматическое конфигурирование описано в разделе [Self Heal State Storage](../../../maintenance/manual/selfheal_statestorage.md)
+При использовании Конфигурации V2 [конфигурация подсистем распространения метаданных](../../../reference/configuration/domains_config.md#domains-state) осуществляется автоматически. Как отключить или включить автоматическое конфигурирование описано в разделе [Self Heal State Storage](../../../maintenance/manual/selfheal_statestorage.md)
 
-Для изменения конфигурации State Storage в кластере {{ ydb-short-name }} необходимо выполнить следующие шаги.
+Для ручного изменения конфигурации State Storage в кластере {{ ydb-short-name }} необходимо выполнить следующие шаги.
 
 1. Получить текущую конфигурацию кластера с помощью команды [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
 
@@ -16,7 +16,7 @@
 
 2. Внести требуемые изменения в секции `domains_config` конфигурационного файла `config.yaml`:
 
-  Неправильная [конфигурация State Storage](../../../reference/configuration/domains_config.md#domains-state) может привести к отказу кластера.
+  Неправильная [конфигурация подсистем распространения метаданных](../../../reference/configuration/domains_config.md#domains-state) может привести к недоступности кластера.
   Правила конфигурирования перечислены в следующем разделе.
 
 3. Применить новую конфигурацию кластера с помощью [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
@@ -27,10 +27,11 @@
 
 ## Правила конфигурирования State Storage
 
-  Неправильная [конфигурация State Storage](../../../reference/configuration/domains_config.md#domains-state) может привести к отказу кластера.
+  Неправильная [конфигурация подсистем распространения метаданных](../../../reference/configuration/domains_config.md#domains-state) может привести к недоступности кластера.
   Перечисленные ниже правила применяются как для параметра `state_storage` так и для раздельной конфигурации `explicit_state_storage_config`, `explicit_state_storage_board_config`, `explicit_scheme_board_config`
+  Изменение конфигурации производится в несколько шагов. Сначала добавляется новая группа колец состоящая из правильно выбранных узлов (в соответствии с моделью отказа), а затем старая группа колец удаляется, но чтобы избежать недоступности кластера делать это нужно строго соблюдая последовательность шагов описанных ниже.
 
-  1. Чтобы изменить конфигурацию State Storage без отказов кластера необходимо производить это путем добавления и удаления групп колец.
+  1. Чтобы изменить конфигурацию подсистем распространения метаданных без недоступности кластера необходимо производить это путем добавления и удаления групп колец.
   1. Добавлять и удалять можно только группы колец с параметром `WriteOnly: true`.
   1. В новой конфигурации всегда должна присутствовать хотя бы одна группа колец из предыдущей конфигурации без параметра `WriteOnly`. Такая группа колец должна идти первой в списке.
   1. Если в разных группах колец используются одни и те же узлы кластера, добавьте параметр `ring_group_actor_id_offset:1` к группе колец. Значение должно быть уникальным среди групп колец. Этот параметр сделает уникальными идентификаторы реплик в данной группе колец, они не будут совпадать с идентификаторами из других групп, и это позволит разместить на одном узле кластера несколько реплик одного типа.

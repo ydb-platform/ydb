@@ -34,6 +34,7 @@ TMaybe<THashes> ConvertHashes(const TString& hash);
 
 TArgonSecret ParseArgonHash(const TStringBuf hash);
 TScramSecret ParseScramHash(const TStringBuf hash);
+THashMap<NLoginProto::EHashType, TString> MakePasswordHashesMap(const TString& hashes);
 
 class THashesChecker {
 public:

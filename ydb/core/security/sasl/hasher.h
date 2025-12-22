@@ -13,7 +13,7 @@ struct TStaticCredentials {
 
 std::unique_ptr<NActors::IActor> CreateHasher(
     NActors::TActorId sender, const TStaticCredentials& creds,
-    const std::vector<NLogin::EHashType>& hashTypes,
+    const std::vector<NLoginProto::EHashType>& hashTypes,
     NLogin::TPasswordComplexity passwordComplexity = NLogin::TPasswordComplexity()
 );
 

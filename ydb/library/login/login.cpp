@@ -91,6 +91,32 @@ bool TLoginProvider::CheckGroupNameAllowed(const bool strongCheckName, const TSt
     return BasicCheckAllowedName(groupName);
 }
 
+void TLoginProvider::TSidRecord::FillHashStorage() {
+    HashStorage.clear();
+    const auto hashesMap = MakePasswordHashesMap(PasswordHashes);
+    HashStorage.reserve(hashesMap.size());
+    for (const auto& [hashType, hashValue] : hashesMap) {
+        THashRecord hashRecord;
+        const auto& hashDescription = HashesRegistry.HashTypesMap.at(hashType);
+        switch (hashDescription.Class) {
+        case EHashClass::Argon: {
+            auto hashSecrets = ParseArgonHash(hashValue);
+            hashRecord.HashInitParams = std::move(hashSecrets.Salt);
+            hashRecord.ComputedHash = std::move(hashSecrets.Hash);
+            break;
+        }
+        case EHashClass::Scram: {
+            auto hashSecrets = ParseScramHash(hashValue);
+            hashRecord.HashInitParams = hashSecrets.IterationsCount + ":" + hashSecrets.Salt;
+            hashRecord.ComputedHash = hashSecrets.StoredKey + ":" + hashSecrets.ServerKey;
+            break;
+        }
+        }
+
+        HashStorage.emplace(hashType, std::move(hashRecord));
+    }
+}
+
 bool TLoginProvider::CheckHashes(const TString& hashedPassword, TString& error) const {
     auto hashCheckResult = THashesChecker::NewFormatCheck(hashedPassword);
     if (!hashCheckResult.Success) {
@@ -157,6 +183,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     } else {
         user.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(user.ArgonHash));
     }
+    user.FillHashStorage();
 
     return response;
 }
@@ -203,8 +230,10 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
 
     if (request.HashedPassword.has_value()) {
         user.PasswordHashes = request.HashedPassword.value();
+        user.FillHashStorage();
     } else if (request.Password.has_value()) {
         user.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(user.ArgonHash));
+        user.FillHashStorage();
     }
 
     if (request.CanLogin.has_value()) {
@@ -974,7 +1003,13 @@ NLoginProto::TSecurityState TLoginProvider::GetSecurityState() const {
             for (const auto& subSid : sidInfo.Members) {
                 sid.AddMembers(subSid);
             }
-            // no user hash here
+
+            // only init params of user hash
+            for (const auto& [hashType, hashRecord] : sidInfo.HashStorage) {
+                auto& hashParams = *sid.AddHashesInitParams();
+                hashParams.SetHashType(hashType);
+                hashParams.SetInitParams(hashRecord.HashInitParams);
+            }
         }
     }
     return state;
@@ -1015,6 +1050,7 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             } else if (pbSid.GetArgonHash()) {
                 sid.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(pbSid.GetArgonHash()));
             }
+            sid.FillHashStorage();
 
             sid.IsEnabled = pbSid.GetIsEnabled();
             for (const auto& pbSubSid : pbSid.GetMembers()) {

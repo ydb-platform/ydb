@@ -891,7 +891,7 @@ protected:
 
         // Cluster settings
 
-        options.AddLongOption('N', "node-count", "Number of nodes to create and optionally number of storage groups e. g. -N 10:2 for 2 storage groups and 10 nodes (-N <number of nodes>[:<number of storage groups>])")
+        options.AddLongOption('N', "node-count", "Number of nodes to create and optionally number of storage groups e. g. -N 10:2 for 10 nodes and 2 storage groups (-N <number of nodes>[:<number of storage groups>])")
             .RequiredArgument("uint[:uint]")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 TStringBuf nodesCount;

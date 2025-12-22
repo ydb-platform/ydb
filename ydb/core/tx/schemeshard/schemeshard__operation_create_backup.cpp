@@ -24,6 +24,13 @@ struct TBackup {
     static void ProposeTx(const TOperationId& opId, TTxState& txState, TOperationContext& context, TVirtualTimestamp snapshotTime) {
         const auto& pathId = txState.TargetPathId;
         const TPath sourcePath = TPath::Init(pathId, context.SS);
+        
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "TBackup ProposeTx: opId# " << opId
+                       << ", pathId# " << pathId
+                       << ", isColumnTable# " << sourcePath->IsColumnTable()
+                       << ", txState.Shards.size()# " << txState.Shards.size());
+        
         if (sourcePath->IsColumnTable()) {
             return ProposeColumnTableTx(opId, txState, context, snapshotTime);
         } else {
@@ -70,9 +77,29 @@ struct TBackup {
         backup.SetSnapshotStep(snapshotTime.Step);
         backup.SetSnapshotTxId(snapshotTime.TxId);
 
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "TBackup ProposeTableTx: opId# " << opId
+                       << ", pathId# " << pathId
+                       << ", txState.Shards.size()# " << txState.Shards.size()
+                       << ", hasS3Settings# " << backup.has_s3settings()
+                       << ", hasFSSettings# " << backup.has_fssettings());
+
         const auto seqNo = context.SS->StartRound(txState);
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {
             auto idx = txState.Shards[i].Idx;
+            
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       "TBackup ProposeTableTx: shard# " << i 
+                           << ", idx# " << idx
+                           << ", exists in ShardInfos# " << context.SS->ShardInfos.contains(idx));
+            
+            if (!context.SS->ShardInfos.contains(idx)) {
+                LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "TBackup ProposeTableTx: CRITICAL - shard idx# " << idx 
+                                << " NOT FOUND in ShardInfos, skipping");
+                continue;
+            }
+            
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

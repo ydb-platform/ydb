@@ -4,6 +4,7 @@
 
 #include "backup_restore_traits.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -107,7 +108,7 @@ public:
     }
 
     explicit TStorageSettings(const TString& objectKeyPattern, ui32 shard, const TEncryptionSettings& encryptionSettings)
-        : ObjectKeyPattern(objectKeyPattern)
+        : ObjectKeyPattern(CanonizePath(objectKeyPattern))
         , Shard(shard)
         , EncryptionSettings(encryptionSettings)
     {

@@ -7,6 +7,7 @@
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/system/fs.h>
+#include <util/folder/dirut.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
@@ -16,7 +17,7 @@ class TFsOperationActor : public NActors::TActorBootstrapped<TFsOperationActor> 
 private:
     TString BasePath;
     bool Verbose;
-    TReplyAdapterContainer ReplyAdapter;
+    const TReplyAdapterContainer& ReplyAdapter;
 
     TString MakeFullPath(const TString& key) const {
         TFsPath basePath(BasePath);
@@ -25,10 +26,13 @@ private:
     }
 
     void EnsureDirectory(const TString& filePath) {
-        TFsPath path(filePath);
-        TFsPath dirPath = path.Parent();
-        if (!dirPath.Exists()) {
-            dirPath.MkDirs();
+        // Найти последний слеш в пути
+        size_t pos = filePath.find_last_of('/');
+        if (pos != TString::npos) {
+            TString dirPath = filePath.substr(0, pos);
+            if (!dirPath.empty()) {
+                MakePathIfNotExist(dirPath.c_str());
+            }
         }
     }
 
@@ -56,13 +60,25 @@ public:
         , Verbose(verbose)
         , ReplyAdapter(replyAdapter)
     {
+        if (Verbose) {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                "TFsOperationActor created: BasePath# " << BasePath);
+        }
     }
 
     void Bootstrap() {
+        if (Verbose) {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                "TFsOperationActor Bootstrap called");
+        }
         Become(&TThis::StateWork);
     }
 
     STATEFN(StateWork) {
+        if (Verbose) {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                "TFsOperationActor StateWork received event type# " << ev->GetTypeRewrite());
+        }
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPutObjectRequest, Handle);
             hFunc(TEvGetObjectRequest, Handle);
@@ -77,6 +93,9 @@ public:
             hFunc(TEvAbortMultipartUploadRequest, Handle);
             hFunc(TEvUploadPartCopyRequest, Handle);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
+            default:
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                    "TFsOperationActor StateWork received unknown event type# " << ev->GetTypeRewrite());
         }
     }
 
@@ -85,18 +104,43 @@ public:
         const auto& body = ev->Get()->Body;
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+            "FS PutObject START: key# " << key << ", size# " << body.size());
+        
         if (Verbose) {
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
                 "FS PutObject: key# " << key << ", size# " << body.size());
         }
 
         try {
-            TString fullPath = MakeFullPath(key);
-            EnsureDirectory(fullPath);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                "FS PutObject: creating TFsPath for key# " << key);
+            TFsPath fsPath(key);
             
-            TFileOutput file(fullPath);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                "FS PutObject: fsPath.GetPath()# " << fsPath.GetPath() << ", Parent()# " << fsPath.Parent().GetPath());
+            
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                "FS PutObject: calling MkDirs() on parent# " << fsPath.Parent().GetPath());
+            fsPath.Parent().MkDirs();
+
+            auto flags = CreateAlways | WrOnly;
+            // if (isAppend) {
+            //     flags = OpenAlways | WrOnly | ForAppend;
+            // }
+            TFile file(key, flags);
+            file.Flock(LOCK_EX);
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                "FS PutObject: writing to file# " << key << ", body# " << body);
             file.Write(body.data(), body.size());
-            file.Finish();
+            file.Close();
+            // TString fullPath = MakeFullPath(key);
+            // Y_UNUSED(fullPath);
+            // EnsureDirectory(fullPath);
+            
+            // TFileOutput file(fullPath);
+            // file.Write(body.data(), body.size());
+            // file.Finish();
 
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const std::exception& ex) {
@@ -243,9 +287,26 @@ public:
                 "FS CreateMultipartUpload: key# " << key);
         }
 
-        TString uploadId = TStringBuilder() << key << "_" << TInstant::Now().MicroSeconds();
-        
-        ReplySuccess<TEvCreateMultipartUploadResponse>(ev->Sender, key);
+        try {
+            TString uploadId = TStringBuilder() << key << "_" << TInstant::Now().MicroSeconds();
+            
+            if (Verbose) {
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                    "FS CreateMultipartUpload: generated uploadId# " << uploadId);
+            }
+            
+            Aws::S3::Model::CreateMultipartUploadResult awsResult;
+            awsResult.SetUploadId(uploadId.c_str());
+            awsResult.SetKey(request.GetKey());
+            
+            Aws::Utils::Outcome<Aws::S3::Model::CreateMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+            auto response = std::make_unique<TEvCreateMultipartUploadResponse>(key, std::move(outcome));
+            ReplyAdapter.Reply(ev->Sender, std::move(response));
+        } catch (const std::exception& ex) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                "FS CreateMultipartUpload failed: key# " << key << ", error# " << ex.what());
+            ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, key, ex.what());
+        }
     }
 
     void Handle(TEvUploadPartRequest::TPtr& ev) {
@@ -267,7 +328,15 @@ public:
             file.Write(body.data(), body.size());
             file.Finish();
 
-            ReplySuccess<TEvUploadPartResponse>(ev->Sender, key);
+            // Generate fake ETag (in real S3 it's MD5 hash, but we just use part number)
+            TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
+            
+            Aws::S3::Model::UploadPartResult awsResult;
+            awsResult.SetETag(etag.c_str());
+            
+            Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+            auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
+            ReplyAdapter.Reply(ev->Sender, std::move(response));
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
                 "FS UploadPart failed: key# " << key << ", error# " << ex.what());
@@ -278,10 +347,11 @@ public:
     void Handle(TEvCompleteMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
+        const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         
         if (Verbose) {
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                "FS CompleteMultipartUpload: key# " << key);
+                "FS CompleteMultipartUpload: key# " << key << ", uploadId# " << uploadId);
         }
 
         try {
@@ -290,6 +360,7 @@ public:
             TFileOutput finalFile(finalPath);
 
             int partNumber = 1;
+            int totalParts = 0;
             while (true) {
                 TString partPath = TStringBuilder() << finalPath << ".part" << partNumber;
                 if (!TFsPath(partPath).Exists()) {
@@ -300,12 +371,31 @@ public:
                 TString partData = partFile.ReadAll();
                 finalFile.Write(partData.data(), partData.size());
 
+                if (Verbose) {
+                    LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                        "FS CompleteMultipartUpload: merged part# " << partNumber << ", size# " << partData.size());
+                }
+
                 NFs::Remove(partPath);
                 ++partNumber;
+                ++totalParts;
             }
 
             finalFile.Finish();
-            ReplySuccess<TEvCompleteMultipartUploadResponse>(ev->Sender, key);
+            
+            if (Verbose) {
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                    "FS CompleteMultipartUpload: completed, total parts# " << totalParts);
+            }
+            
+            Aws::S3::Model::CompleteMultipartUploadResult awsResult;
+            awsResult.SetKey(request.GetKey());
+            TString etag = "\"completed\"";
+            awsResult.SetETag(etag.c_str());
+            
+            Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+            auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
+            ReplyAdapter.Reply(ev->Sender, std::move(response));
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
                 "FS CompleteMultipartUpload failed: key# " << key << ", error# " << ex.what());
@@ -354,8 +444,11 @@ public:
 
 TFsExternalStorage::TFsExternalStorage(const TString& basePath, bool verbose)
     : BasePath(basePath)
-    , Verbose(verbose)
+    , Verbose(true)
 {
+    Y_UNUSED(verbose);
+    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        "TFsExternalStorage created: BasePath# " << BasePath << ", Verbose# " << Verbose);
 }
 
 TFsExternalStorage::~TFsExternalStorage()
@@ -363,13 +456,18 @@ TFsExternalStorage::~TFsExternalStorage()
 }
 
 void TFsExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {
-    Y_UNUSED(ev);
-    // auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
-    // auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
-    // TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        "TFsExternalStorage::Execute(TEvPutObjectRequest) called, BasePath# " << BasePath);
+    
+    auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
+    auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
+    TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
 }
 
 void TFsExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev) const {
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        "TFsExternalStorage::Execute(TEvGetObjectRequest) called");
+    
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
@@ -406,18 +504,27 @@ void TFsExternalStorage::Execute(TEvDeleteObjectsRequest::TPtr& ev) const {
 }
 
 void TFsExternalStorage::Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const {
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        "TFsExternalStorage::Execute(TEvCreateMultipartUploadRequest) called");
+    
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
 }
 
 void TFsExternalStorage::Execute(TEvUploadPartRequest::TPtr& ev) const {
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        "TFsExternalStorage::Execute(TEvUploadPartRequest) called");
+    
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
 }
 
 void TFsExternalStorage::Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const {
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        "TFsExternalStorage::Execute(TEvCompleteMultipartUploadRequest) called");
+    
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));

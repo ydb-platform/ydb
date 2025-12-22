@@ -438,11 +438,23 @@ TDone::TDone(const TOperationId& id, TPathElement::EPathState targetState)
 }
 
 bool TDone::Process(TOperationContext& context) {
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " Process START");
+
     const auto* txState = context.SS->FindTx(OperationId);
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " Process: txState found");
 
     const auto& pathId = txState->TargetPathId;
     Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
     TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+    
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() 
+            << " Process: pathId# " << pathId
+            << ", PathState# " << path->PathState
+            << ", TargetState# " << (TargetState ? *TargetState : -1));
+    
     Y_VERIFY_S(TargetState || path->PathState != TPathElement::EPathState::EPathStateNoChanges, "with context"
         << ", PathState: " << NKikimrSchemeOp::EPathState_Name(path->PathState)
         << ", PathId: " << path->PathId
@@ -457,6 +469,10 @@ bool TDone::Process(TOperationContext& context) {
         context.SS->ClearDescribePathCaches(parentDir);
     }
 
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() 
+            << " Process: before ReleasePathState, IsDrop# " << txState->IsDrop());
+
     if (txState->IsDrop()) {
         context.OnComplete.ReleasePathState(OperationId, path->PathId, TPathElement::EPathState::EPathStateNotExist);
     } else if (TargetState) {
@@ -464,8 +480,15 @@ bool TDone::Process(TOperationContext& context) {
     } else {
         context.OnComplete.ReleasePathState(OperationId, path->PathId, TPathElement::EPathState::EPathStateNoChanges);
     }
+    
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " Process: after main ReleasePathState");
 
     if (txState->SourcePathId != InvalidPathId) {
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "[" << context.SS->SelfTabletId() << "] " << DebugHint() 
+                << " Process: processing SourcePathId# " << txState->SourcePathId);
+        
         Y_ABORT_UNLESS(context.SS->PathsById.contains(txState->SourcePathId));
         TPathElement::TPtr srcPath = context.SS->PathsById.at(txState->SourcePathId);
         if (srcPath->PathState == TPathElement::EPathState::EPathStateCopying) {
@@ -488,15 +511,23 @@ bool TDone::Process(TOperationContext& context) {
         }
     }
 
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " Process: END, returning true");
+
     context.OnComplete.DoneOperation(OperationId);
     return true;
 }
 
 bool TDone::ProgressState(TOperationContext& context) {
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState");
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState START");
 
-    return Process(context);
+    bool result = Process(context);
+    
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[" << context.SS->SelfTabletId() << "] " << DebugHint() << " ProgressState END, result# " << result);
+    
+    return result;
 }
 
 namespace {

@@ -252,7 +252,7 @@ public:
     // Merge two histograms given their parameters match.
     void Aggregate(const TEqWidthHistogram& other);
 
-        // Returns a number of buckets in histogram.
+    // Returns a number of buckets in histogram.
     ui32 GetNumBuckets() const {
         return Buckets_.size();
     }

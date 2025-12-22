@@ -70,11 +70,11 @@ class InstrumentedYdbClient(YdbClient):
         if operation_name is None:
             operation_name = 'ddl' if is_ddl else 'dml'
         if not self.enable_metrics:
-            return super(InstrumentedYdbClient, self).query(statement, is_ddl, retry_settings)
+            return super(InstrumentedYdbClient, self).query(statement, is_ddl, parameters=parameters, retry_settings=retry_settings, log_error=log_error)
 
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedYdbClient, self).query(
-                statement, is_ddl, retry_settings
+                statement, is_ddl, parameters=parameters, retry_settings=retry_settings, log_error=log_error
             ),
             operation_name, self.full_name
         )

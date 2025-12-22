@@ -1855,4 +1855,88 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
     }
 
+    Y_UNIT_TEST(BuildTableWithEmptyShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write only 10 rows
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 10);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
+
+        TBlockEvents<TEvDataShard::TEvFilterKMeansRequest> filterBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+
+        ui64 buildIndexTx = ++txId;
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+            "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+        });
+        auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->mutable_global_vector_kmeans_tree_index();
+        // 20 clusters with 10 rows will be merged into 1 cluster
+        kmeansSettings->mutable_vector_settings()->set_clusters(20);
+        kmeansSettings->mutable_vector_settings()->set_levels(2);
+        kmeansSettings->mutable_vector_settings()->set_overlap_clusters(2);
+        ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+
+        runtime.WaitFor("FilterKMeansRequest", [&]{ return filterBlocker.size(); });
+
+        // Now wait for the 1st level to be finalized
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> level1Blocker(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
+                return true;
+            }
+            return false;
+        });
+        filterBlocker.Stop().Unblock();
+
+        // Reshard the first level table (1build) so that one of the shards becomes empty.
+        // (pretend that it's really luckily presharded to contain the empty child cluster range)
+        {
+            const char* buildTable = "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable1build";
+            auto indexDesc = DescribePath(runtime, tenantSchemeShard, buildTable, true, true, true);
+            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_EQUAL(parts.size(), 1);
+            // There should be only 1 cluster because there are too little rows. So no clusters with ID > 1.
+            TestSplitTable(runtime, tenantSchemeShard, ++txId, buildTable, Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 2 } } } }
+            )", parts[0].GetDatashardId()));
+            env.TestWaitNotification(runtime, txId);
+        }
+        level1Blocker.Stop().Unblock();
+
+        // Now wait for the index build
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+
+        // Check row count in the posting table
+        {
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+            Cerr << "... posting table contains " << rows << " rows" << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(rows, 10);
+        }
+    }
+
 }

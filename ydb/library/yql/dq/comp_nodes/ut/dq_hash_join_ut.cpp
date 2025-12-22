@@ -584,9 +584,9 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(EmptyRightInnerTestData(), BlockJoin);
     }
 
-    // Y_UNIT_TEST_TWIN(TestLeftKind, BlockJoin) {
-    //     Test(LeftJoinTestData(), BlockJoin);
-    // }
+    Y_UNIT_TEST(TestLeftKind) {
+        Test(LeftJoinTestData(), true);
+    }
 
     // Y_UNIT_TEST_TWIN(FullBehavesAsLeftIfRightEmpty, BlockJoin) {
     //     Test(FullBehavesAsLeftIfRightEmptyTestData(), BlockJoin);

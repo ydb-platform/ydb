@@ -1,5 +1,6 @@
 #include "type_ann_pg.h"
 #include "type_ann_list.h"
+#include "type_ann_yql.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
@@ -3491,6 +3492,14 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
     if (!EnsureTuple(options, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
+
+    if (isYql) {
+        if (auto status = PromoteYqlAggOptions(input, output, ctx);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+    }
+
     bool scanColumnsOnly = true;
     const TStructExprType* outputRowType;
     bool hasAggregations = false;
@@ -4783,7 +4792,8 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     if (!EnsureTupleSize(*option, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
-                } else if (optionName == "distinct_on") {
+                }
+                else if (optionName == "distinct_on") {
                     hasDistinctOn = true;
                     if (pass != 6) {
                         continue;
@@ -4905,7 +4915,8 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             }
                         }
                     }
-                } else if (optionName == "final_extra_sort_keys") {
+                }
+                else if (optionName == "final_extra_sort_keys") {
                     if (pass != 2) {
                         continue;
                     }
@@ -4959,11 +4970,18 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         }
                     }
                     hasProjectionOrder = true;
-                } else if (optionName == "target_columns") {
+                }
+                else if (optionName == "target_columns") {
                     if (!EnsureTupleSize(*option, 2, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
-                } else {
+                }
+                else if (optionName == "yql_agg_promoted") {
+                    if (!EnsureTupleSize(*option, 1, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                }
+                else {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
                         TStringBuilder() << "Unsupported option: " << optionName));
                     return IGraphTransformer::TStatus::Error;

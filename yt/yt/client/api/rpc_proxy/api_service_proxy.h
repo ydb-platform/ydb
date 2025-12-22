@@ -134,6 +134,8 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobFailContext);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AbandonJob);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PollJobShell);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RunJobShellCommand,
+        .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AbortJob);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, DumpJobProxyLog);
 

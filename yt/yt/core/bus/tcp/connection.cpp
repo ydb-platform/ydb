@@ -1102,7 +1102,7 @@ void TTcpConnection::OnSocketRead()
 
 bool TTcpConnection::HasUnreadData() const
 {
-    return Decoder_->IsInProgress();
+    return Decoder_->IsInProgress() || !UnackedPackets_.empty();
 }
 
 ssize_t TTcpConnection::DoReadSocket(char* buffer, size_t size)
@@ -1113,9 +1113,7 @@ ssize_t TTcpConnection::DoReadSocket(char* buffer, size_t size)
         case ESslState::Established: {
             auto result = SSL_read(Ssl_.get(), buffer, size);
             if (PendingSslHandshake_ && result > 0) {
-                YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_read");
-                PendingSslHandshake_ = false;
-                ReadyPromise_.TrySet();
+                PendingSslHandshake_ = DoSslHandshake();
             }
             return result;
         }
@@ -1502,9 +1500,7 @@ ssize_t TTcpConnection::DoWriteFragments(const std::vector<struct iovec>& vec)
             YT_ASSERT(vec.size() == 1);
             auto result = SSL_write(Ssl_.get(), vec[0].iov_base, vec[0].iov_len);
             if (PendingSslHandshake_ && result > 0) {
-                YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_write");
-                PendingSslHandshake_ = false;
-                ReadyPromise_.TrySet();
+                PendingSslHandshake_ = DoSslHandshake();
             }
             return result;
         }
@@ -2058,7 +2054,9 @@ void TTcpConnection::CloseSslSession(ESslState newSslState)
             // Nothing to do.
             return;
         case ESslState::Established:
-            SSL_shutdown(Ssl_.get());
+            if (!PendingSslHandshake_) {
+                DoSslShutdown();
+            }
             break;
         case ESslState::Error:
             break;
@@ -2109,6 +2107,33 @@ bool TTcpConnection::DoSslHandshake()
     Abort(GetLastSslError("Failed to establish TLS/SSL session")
         << TErrorAttribute("sys_error", TError::FromSystem(LastSystemError())));
     return false;
+}
+
+void TTcpConnection::DoSslShutdown()
+{
+    for (int i = 0;; ++i) {
+        YT_ASSERT(i < 2);
+
+        auto result = SSL_shutdown(Ssl_.get());
+        switch (result) {
+            case 0:
+                // SSL_shutdown may sometimes ask us to run itself a second time.
+                break;
+            case 1:
+                // Shutdown is finished.
+                YT_LOG_DEBUG("SSL_shutdown successful");
+                return;
+            default:
+                int error = SSL_get_error(Ssl_.get(), result);
+                YT_LOG_WARNING(
+                    GetLastSslError("TLS/SSL shutdown error"),
+                    "Could not perform SSL_shutdown (SslErrorCode: %v)",
+                    error);
+
+                // We did our best under the circumstances.
+                return;
+        }
+    }
 }
 
 size_t TTcpConnection::GetSslAckPacketSize()

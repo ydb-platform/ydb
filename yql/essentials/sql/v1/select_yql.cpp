@@ -340,13 +340,12 @@ private:
     }
 
     TString TermAlias(const TNodePtr& term, size_t i, const THashSet<TString>& used) const {
-        const TString& label = term->GetLabel();
-        if (!label.empty()) {
+        if (const TString& label = term->GetLabel(); !label.empty()) {
             return label;
         }
 
-        if (const TString* column = term->GetColumnName()) {
-            return *column;
+        if (TMaybe<TString> alias = ColumnAlias(term)) {
+            return std::move(*alias);
         }
 
         for (;; ++i) {
@@ -378,11 +377,16 @@ private:
     }
 
     TNodePtr BuildYqlResultItem(TString name, TNodePtr term) const {
-        name = DisambiguatedResultItemName(std::move(name), term);
         return Y("YqlResultItem", Q(std::move(name)), Y("Void"), Y("lambda", Q(Y()), std::move(term)));
     }
 
-    TString DisambiguatedResultItemName(TString name, const TNodePtr& term) const {
+    TMaybe<TString> ColumnAlias(const TNodePtr& term) const {
+        if (!term->GetColumnName()) {
+            return Nothing();
+        }
+
+        TString name = *term->GetColumnName();
+
         if (const auto* source = term->GetSourceName();
             source && !source->empty() &&
             Source && 1 < Source->Sources.size()) {

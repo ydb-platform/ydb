@@ -373,6 +373,22 @@ void ParseRequest(
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
+    TReqReadTablePartition* req,
+    const TTablePartitionCookiePtr& cookie,
+    const std::optional<NYson::TYsonString>& format,
+    const TReadTablePartitionOptions& options);
+
+void ParseRequest(
+    TTablePartitionCookiePtr* mutableCookie,
+    std::optional<NYson::TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TReadTablePartitionOptions* mutableOptions,
+    const TReqReadTablePartition& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
     TReqStartDistributedWriteSession* req,
     const NYPath::TRichYPath& path,
     const TDistributedWriteSessionStartOptions& options);

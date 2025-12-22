@@ -2160,6 +2160,62 @@ void ParseRequest(
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
+    TReqReadTablePartition* req,
+    const TTablePartitionCookiePtr& cookie,
+    const std::optional<NYson::TYsonString>& format,
+    const TReadTablePartitionOptions& options)
+{
+    ToProto(req->mutable_cookie(), cookie);
+
+    if (format) {
+        req->set_format(ToProto(*format));
+        req->set_desired_rowset_format(NProto::ERowsetFormat::RF_FORMAT);
+    }
+
+    req->set_unordered(options.Unordered);
+    req->set_omit_inaccessible_columns(options.OmitInaccessibleColumns);
+    req->set_enable_table_index(options.EnableTableIndex);
+    req->set_enable_row_index(options.EnableRowIndex);
+    req->set_enable_range_index(options.EnableRangeIndex);
+    if (options.Config) {
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
+    }
+}
+
+void ParseRequest(
+    TTablePartitionCookiePtr* mutableCookie,
+    std::optional<NYson::TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TReadTablePartitionOptions* mutableOptions,
+    const TReqReadTablePartition& req)
+{
+    *mutableCookie = ConvertTo<TTablePartitionCookiePtr>(TYsonStringBuf(req.cookie()));
+
+    if (req.has_format()) {
+        *mutableFormat = TYsonStringBuf(req.format());
+    }
+
+    *mutableDesiredRowsetFormat = req.desired_rowset_format();
+    *mutableArrowFallbackFormat = req.arrow_fallback_rowset_format();
+
+    TReadTablePartitionOptions parsedOptions;
+    parsedOptions.Unordered = req.unordered();
+    parsedOptions.OmitInaccessibleColumns = req.omit_inaccessible_columns();
+    parsedOptions.EnableTableIndex = req.enable_table_index();
+    parsedOptions.EnableRowIndex = req.enable_row_index();
+    parsedOptions.EnableRangeIndex = req.enable_range_index();
+
+    if (req.has_config()) {
+        parsedOptions.Config = ConvertTo<TTableReaderConfigPtr>(TYsonString(req.config()));
+    }
+
+    *mutableOptions = std::move(parsedOptions);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
     TReqStartDistributedWriteSession* req,
     const NYPath::TRichYPath& path,
     const TDistributedWriteSessionStartOptions& options)

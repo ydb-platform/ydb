@@ -321,6 +321,10 @@ struct TPollJobShellOptions
     : public TTimeoutOptions
 { };
 
+struct TRunJobShellCommandOptions
+    : public TTimeoutOptions
+{ };
+
 struct TAbortJobOptions
     : public TTimeoutOptions
 {
@@ -668,6 +672,12 @@ struct IOperationClient
         const std::optional<TString>& shellName,
         const NYson::TYsonString& parameters,
         const TPollJobShellOptions& options = {}) = 0;
+
+    virtual TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr> RunJobShellCommand(
+        NJobTrackerClient::TJobId jobId,
+        const std::optional<std::string>& shellName,
+        const std::string& command,
+        const TRunJobShellCommandOptions& options = {}) = 0;
 
     virtual TFuture<void> AbortJob(
         NJobTrackerClient::TJobId jobId,

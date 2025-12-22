@@ -361,6 +361,12 @@ public:
         const NYson::TYsonString& parameters,
         const NApi::TPollJobShellOptions& options) override;
 
+    TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr> RunJobShellCommand(
+        NJobTrackerClient::TJobId jobId,
+        const std::optional<std::string>& shellName,
+        const std::string& command,
+        const NApi::TRunJobShellCommandOptions& options) override;
+
     TFuture<void> AbortJob(
         NJobTrackerClient::TJobId jobId,
         const NApi::TAbortJobOptions& options) override;

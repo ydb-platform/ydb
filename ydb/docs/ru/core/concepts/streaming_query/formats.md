@@ -344,9 +344,9 @@ LIMIT 1
 Пример данных:
 
 ```json
-name=Elena	uid=95792365232151958
-name=Denis	uid=78086244452810046
-name=Mikhail	uid=70609792906901286
+name=Elena  uid=95792365232151958
+name=Denis  uid=78086244452810046
+name=Mikhail    uid=70609792906901286
 ```
 
 Пример запроса:

@@ -400,7 +400,14 @@ public:
         if (auto maybeNonDeterministic = node.Maybe<TCoNonDeterministicBase>()) {
             return NonDeterministicCanBePushed(maybeNonDeterministic.Cast());
         }
-        return IsLambdaArgument(node);
+        if (IsLambdaArgument(node)) {
+            return true;
+        }
+        {
+            TPredicateNode predicate(node);
+            MarkupPredicates(node, predicate);
+            return predicate.CanBePushed;
+        }
     }
 
 private:
@@ -535,7 +542,7 @@ private:
             if (!CheckExpressionNodeForPushdown(leftList[i]) || !CheckExpressionNodeForPushdown(rightList[i])) {
                 return false;
             }
-            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>())) {
+            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>() || compare.Maybe<TCoAggrEqual>() || compare.Maybe<TCoAggrNotEqual>())) {
                 return false;
             }
         }

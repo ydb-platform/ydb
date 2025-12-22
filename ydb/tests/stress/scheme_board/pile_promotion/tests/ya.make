@@ -9,7 +9,8 @@ TEST_SRCS(
 
 REQUIREMENTS(ram:32 cpu:4)
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 

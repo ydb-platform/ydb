@@ -1215,12 +1215,12 @@
                 const successRateModal = document.getElementById('successRateModal');
                 
                 // Check which modal is currently visible (has display: block)
-                // Close only the one that is visible, prioritizing successRateModal if both are visible
-                // (successRateModal typically has higher z-index and is on top)
-                if (successRateModal && successRateModal.style.display === 'block') {
-                    successRateModal.style.display = 'none';
-                } else if (errorModal && errorModal.style.display === 'block') {
+                // Close only the one that is visible, prioritizing errorModal (test details) if both are visible
+                // errorModal (test details) is typically opened on top of successRateModal
+                if (errorModal && errorModal.style.display === 'block') {
                     errorModal.style.display = 'none';
+                } else if (successRateModal && successRateModal.style.display === 'block') {
+                    successRateModal.style.display = 'none';
                 }
             }
         });

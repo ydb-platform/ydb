@@ -1507,7 +1507,7 @@ public:
 
             auto& op = *tx.MutableDrop();
             op.SetName(settings.Name);
-            
+
             auto& dropBackupOp = *tx.MutableDropBackupCollection();
             dropBackupOp.SetName(settings.Name);
 
@@ -1676,11 +1676,8 @@ public:
             auto& createUser = *schemeTx.MutableAlterLogin()->MutableCreateUser();
 
             createUser.SetUser(settings.UserName);
-            if (settings.Password) {
-                createUser.SetPassword(settings.Password);
-                createUser.SetIsHashedPassword(settings.IsHashedPassword);
-            }
-
+            createUser.SetPassword(settings.Password);
+            createUser.SetHashedPassword(settings.HashedPassword);
             createUser.SetCanLogin(settings.CanLogin);
 
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -1718,7 +1715,10 @@ public:
 
             if (settings.Password.has_value()) {
                 alterUser.SetPassword(settings.Password.value());
-                alterUser.SetIsHashedPassword(settings.IsHashedPassword);
+            }
+
+            if (settings.HashedPassword.has_value()) {
+                alterUser.SetHashedPassword(settings.HashedPassword.value());
             }
 
             if (settings.CanLogin.has_value()) {

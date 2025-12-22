@@ -814,7 +814,7 @@ void TLoginProvider::TImpl::GenerateKeyPair(TString& publicKey, TString& private
 
 TString TLoginProvider::TImpl::GenerateArgonHash(const TString& password) const {
     TString hashType = "argon2id";
-    const auto& hashDescription = *HashesChecker.GetHashParams(hashType);
+    const auto& hashDescription = HashesRegistry.HashNamesMap.at(hashType);
     char salt[hashDescription.SaltSize];
     char hash[hashDescription.HashSize];
     RAND_bytes(reinterpret_cast<unsigned char*>(salt), hashDescription.SaltSize);

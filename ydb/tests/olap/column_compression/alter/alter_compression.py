@@ -1,8 +1,8 @@
 import logging
-from .base import ColumnTestBase
+import pytest
+from ydb.tests.olap.column_compression.common.base import ColumnTestBase
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
-import pytest
 
 logger = logging.getLogger(__name__)
 

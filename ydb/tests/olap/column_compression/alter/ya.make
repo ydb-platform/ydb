@@ -4,11 +4,10 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 FORK_SUBTESTS()
 
 TEST_SRCS(
-    test_disabled.py
-    test_obsolete.py
+    alter_compression.py
 )
 
-SIZE(SMALL)
+SIZE(MEDIUM)
 
 PEERDIR(
     ydb/tests/library
@@ -16,6 +15,7 @@ PEERDIR(
     ydb/public/sdk/python/enable_v3_new_behavior
     ydb/tests/olap/scenario/helpers
     ydb/tests/olap/common
+    ydb/tests/olap/column_compression/common
 )
 
 DEPENDS(

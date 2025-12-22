@@ -66,7 +66,7 @@ protected:
         TPathId dstTablePathId = TPathId::FromProto(incrBackup.GetDstPathId());
         const ui64 tableId = incrBackup.GetSrcPathId().GetLocalId();
 
-        auto* appData = AppData(ctx);
+        auto* appData = AppData();
         NStreamScan::TLimits limits;
         limits.BatchMaxBytes = appData->DataShardConfig.GetIncrementalRestoreScanBatchMaxBytes();
         limits.BatchMinRows = appData->DataShardConfig.GetIncrementalRestoreScanBatchMinRows();
@@ -120,7 +120,7 @@ protected:
 
         THolder<NTable::IScan> scan{CreateScan(restoreSrc, op->GetTxId(), ctx)};
 
-        auto* appData = AppData(ctx);
+        auto* appData = AppData();
         const auto& taskName = appData->DataShardConfig.GetRestoreTaskName();
         const auto taskPrio = appData->DataShardConfig.GetRestoreTaskPriority();
 

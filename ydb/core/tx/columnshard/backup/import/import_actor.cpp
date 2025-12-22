@@ -39,7 +39,7 @@ void TImportActor::OnSessionStateSaved() {
 void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::TPtr& ev) {
     AFL_VERIFY(!ev->Get()->Error)("error", ev->Get()->Error);
     
-    if (!ev->Get()->IsLast) {
+    if (ev->Get()->IsLast) {
         ImportSession->Finish();
     }
     
@@ -50,7 +50,6 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
     
     AFL_VERIFY(ev->Get()->Data)("error", "empty record batch");
     NArrow::TBatchSplitttingContext context(48 * 1024 * 1024);
-    THashMap<ui64, std::vector<NArrow::TSerializedBatch>> result;
     auto blobsSplittedConclusion = NArrow::SplitByBlobSize(ev->Get()->Data, context);
     AFL_VERIFY(blobsSplittedConclusion.IsSuccess());
     AFL_VERIFY(blobsSplittedConclusion.GetResult().size() == 1);

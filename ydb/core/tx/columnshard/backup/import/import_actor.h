@@ -50,7 +50,7 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch, Handle);
-                hFunc(NEvents::TDataEvents::TEvWriteResult, Handle)
+                hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
                 default:
                     TBase::StateInProgress(ev);
             }

@@ -229,6 +229,191 @@ validation:
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.children_size(), 0);
     }
 
+    void CreateTestShardWithInvalidConfig(auto &channel, const TString &path, const TString & config, Ydb::StatusIds::StatusCode expectedStatus, const TString& expectedErrorSubstring = "") {
+        std::unique_ptr<Ydb::TestShard::V1::TestShardService::Stub> stub;
+        stub = Ydb::TestShard::V1::TestShardService::NewStub(channel);
+
+        Ydb::TestShard::CreateTestShardRequest request;
+        request.set_path(path);
+        request.set_count(1);
+        request.set_config(config);
+
+        Ydb::TestShard::CreateTestShardResponse response;
+
+        grpc::ClientContext ctx;
+        AdjustCtxForDB(ctx);
+        stub->CreateTestShard(&ctx, request, &response);
+        
+        UNIT_ASSERT_CHECK_STATUS(response.operation(), expectedStatus);
+        
+        if (!expectedErrorSubstring.empty()) {
+            UNIT_ASSERT_STRING_CONTAINS(response.operation().issues(0).message(), expectedErrorSubstring);
+        }
+    }
+
+    Y_UNIT_TEST(InvalidYamlConfig) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        std::shared_ptr<grpc::Channel> channel;
+        channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
+
+        TString path = "/Root/mydb/";
+        TString testShardPath = "/Root/mydb/mytestshard";
+        MakeDirectory(channel, path);
+
+        {
+            TString invalidConfig = R"(
+workload:
+  sizes:
+    - {weight: 9, min: 128, max: 2048, inline: false
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "Failed to parse YAML config");
+        }
+
+        {
+            TString invalidConfig = R"(
+workload:
+  sizes:
+    - {weight: 9, min: 128, max: 2048, inline: false}
+invalid_section:
+  some_key: some_value
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "Unknown key in 'config root': 'invalid_section'");
+        }
+
+        {
+            TString invalidConfig = R"(
+workload:
+  sizes:
+    - {weight: 9, min: 128, max: 2048, inline: false}
+  invalid_key: some_value
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "Unknown key in 'workload': 'invalid_key'");
+        }
+
+        {
+            TString invalidConfig = R"(
+workload: "not_a_map"
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "'workload' must be a map");
+        }
+
+        {
+            TString invalidConfig = R"(
+validation: "not_a_map"
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "'validation' must be a map");
+        }
+
+        {
+            TString invalidConfig = R"(
+validation:
+  server: "localhost_without_port"
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "'validation.server' must be in 'host:port' format");
+        }
+
+        {
+            TString invalidConfig = R"("not_a_map")";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "Config root must be a YAML map");
+        }
+
+        {
+            TString invalidConfig = R"(
+workload:
+  sizes: "not_a_list"
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "'workload.sizes' must be a list");
+        }
+
+        {
+            TString invalidConfig = R"(
+workload:
+  write: "not_a_list"
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "'workload.write' must be a list");
+        }
+
+        {
+            TString invalidConfig = R"(
+workload:
+  restart: "not_a_list"
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "'workload.restart' must be a list");
+        }
+
+        {
+            TString invalidConfig = R"(
+limits:
+  data: "not_a_map"
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "'limits.data' must be a map");
+        }
+
+        {
+            TString invalidConfig = R"(
+limits:
+  concurrency: "not_a_map"
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "'limits.concurrency' must be a map");
+        }
+
+        {
+            TString invalidConfig = R"(
+limits:
+  data:
+    min: 750000000
+    max: 1000000000
+  invalid_key: some_value
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "Unknown key in 'limits': 'invalid_key'");
+        }
+
+        {
+            TString invalidConfig = R"(
+timing:
+  delay_start: 5
+  invalid_key: some_value
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "Unknown key in 'timing': 'invalid_key'");
+        }
+
+        {
+            TString invalidConfig = R"(
+validation:
+  server: "localhost:2135"
+  invalid_key: some_value
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "Unknown key in 'validation': 'invalid_key'");
+        }
+
+        {
+            TString invalidConfig = R"(
+tracing:
+  put_fraction_ppm: 1000
+  invalid_key: some_value
+)";
+            CreateTestShardWithInvalidConfig(channel, testShardPath, invalidConfig,
+                Ydb::StatusIds::BAD_REQUEST, "Unknown key in 'tracing': 'invalid_key'");
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(TestShardGRPCService)
 
 } // NKikimr::NGRpcService

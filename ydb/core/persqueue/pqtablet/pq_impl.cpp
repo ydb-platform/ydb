@@ -4437,8 +4437,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         switch (tx.Kind) {
         case NKikimrPQ::TTransaction::KIND_DATA:
         case NKikimrPQ::TTransaction::KIND_CONFIG:
-            //WriteTx(tx, NKikimrPQ::TTransaction::CALCULATED);
-
             TryChangeTxState(tx, NKikimrPQ::TTransaction::CALCULATED);
 
             break;
@@ -4518,8 +4516,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         case NKikimrPQ::TTransaction::KIND_UNKNOWN:
             PQ_ENSURE(false);
         }
-
-        //WriteTx(tx, NKikimrPQ::TTransaction::EXECUTED);
 
         TryChangeTxState(tx, NKikimrPQ::TTransaction::EXECUTED);
 

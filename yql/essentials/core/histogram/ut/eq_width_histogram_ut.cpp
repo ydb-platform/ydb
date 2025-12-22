@@ -33,7 +33,7 @@ void PopulateHistogram(std::shared_ptr<TEqWidthHistogram> histogram, const std::
     // NOTE: reconsider the loop on string, date, and bool due to i++
     if (valueType == EHistogramValueType::Float || valueType == EHistogramValueType::Double) {
         TEqWidthHistogram::THistValue bucketWidth = histogram->template GetBucketWidth<T>();
-        T width = LoadFrom<T>(bucketWidth.value);
+        T width = LoadFrom<T>(bucketWidth.Value);
         T step = width / 2;
         T rangeStart = LoadFrom<T>(histogram->GetDomainRange().Start);
         for (ui32 i = 0; i < histogram->GetNumBuckets(); ++i) {

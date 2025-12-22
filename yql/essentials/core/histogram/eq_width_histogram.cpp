@@ -6,16 +6,16 @@ TEqWidthHistogram::TEqWidthHistogram(ui32 numBuckets, EHistogramValueType valueT
     : ValueType_(valueType)
     , Buckets_(numBuckets, 0)
 {
-    // Exptected at least one bucket for histogram.
+    // class invariant: exptected at least one bucket for histogram.
     Y_ENSURE(numBuckets >= 1);
     Y_ENSURE(ValueType_ != EHistogramValueType::NotSupported, "Unsupported histogram type");
 }
 
 TEqWidthHistogram::TEqWidthHistogram(const char* str, size_t size) {
     Y_ENSURE(str && size);
-    const ui32 numBuckets = ReadUnaligned<ui32>(str);
+    const auto numBuckets = ReadUnaligned<ui32>(str);
     Y_ENSURE(GetBinarySize(numBuckets) == size);
-    ui32 offset = sizeof(ui32);
+    ui64 offset = sizeof(numBuckets);
     ValueType_ = ReadUnaligned<EHistogramValueType>(str + offset);
     Y_ENSURE(ValueType_ != EHistogramValueType::NotSupported, "Unsupported histogram type");
     offset += sizeof(EHistogramValueType);
@@ -29,7 +29,7 @@ TEqWidthHistogram::TEqWidthHistogram(const char* str, size_t size) {
         offset += sizeof(ui8);
     }
     Buckets_ = TVector<ui64>(numBuckets);
-    for (ui32 i = 0; i < numBuckets; ++i) {
+    for (size_t i = 0; i < numBuckets; ++i) {
         Buckets_[i] = ReadUnaligned<ui64>(str + offset);
         offset += sizeof(Buckets_[i]);
     }
@@ -48,13 +48,13 @@ void TEqWidthHistogram::Aggregate(const TEqWidthHistogram& other) {
         default:
             Y_ENSURE(ValueType_ != EHistogramValueType::NotSupported, "Unsupported histogram type");
     }
-    for (ui32 i = 0; i < Buckets_.size(); ++i) {
+    for (size_t i = 0; i < GetNumBuckets(); ++i) {
         Buckets_[i] += other.GetNumElementsInBucket(i);
     }
 }
 
 ui64 TEqWidthHistogram::GetBinarySize(ui32 nBuckets) const {
-    return sizeof(ui32) + sizeof(EHistogramValueType) + sizeof(TDomainRange) + sizeof(ui64) * nBuckets;
+    return sizeof(nBuckets) + sizeof(EHistogramValueType) + sizeof(TDomainRange) + sizeof(ui64) * nBuckets;
 }
 
 // Binary layout:
@@ -62,11 +62,11 @@ ui64 TEqWidthHistogram::GetBinarySize(ui32 nBuckets) const {
 // [8 byte: min value][8 byte: max value]
 // [sizeof(ui64)[0]... sizeof(ui64)[n]].
 TString TEqWidthHistogram::Serialize() const {
-    const ui32 numBuckets = GetNumBuckets();
-    const ui64 binarySize = GetBinarySize(numBuckets);
+    const auto numBuckets = GetNumBuckets();
+    const auto binarySize = GetBinarySize(numBuckets);
     TString result = TString::Uninitialized(binarySize);
     char* out = result.Detach();
-    ui32 offset = 0;
+    ui64 offset = 0;
     // 4 byte - number of buckets.
     WriteUnaligned<ui32>(out + offset, numBuckets);
     offset += sizeof(numBuckets);
@@ -83,7 +83,7 @@ TString TEqWidthHistogram::Serialize() const {
         offset += sizeof(ui8);
     }
     // Buckets.
-    for (ui32 i = 0; i < numBuckets; ++i) {
+    for (size_t i = 0; i < numBuckets; ++i) {
         WriteUnaligned<ui64>(out + offset, Buckets_[i]);
         offset += sizeof(Buckets_[i]);
     }

@@ -4,7 +4,7 @@
 
 Чекпойнт состоит из:
 
-- состояний агрегаций (таких как [MATCH RECOGNIZE](../../../yql/reference/syntax/select/match_recognize) и [GROUP BY HOP](../../../yql/reference/syntax/select/group-by#group-by-hop)),
+- состояний агрегаций (таких как [MATCH_RECOGNIZE](../../../yql/reference/syntax/select/match_recognize) и [GROUP BY HOP](../../../yql/reference/syntax/select/group-by#group-by-hop)),
 - текущих [смещений](../topic#consumer-offset) во входных топиках,
 - текущих [порядковых номеров сообщений](../topic#seqno) в выходных топиках.
 

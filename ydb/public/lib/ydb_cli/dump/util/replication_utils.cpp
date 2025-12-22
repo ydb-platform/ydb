@@ -158,9 +158,7 @@ TString BuildCreateTransferQuery(
     if (!connectionParams.GetDiscoveryEndpoint().empty() && !connectionParams.GetDatabase().empty()) {
         AddConnectionOptions(connectionParams, options);
     }
-    if (!desc.GetConsumerName().empty()) {
-        options.push_back(BuildOption("CONSUMER", Quote(desc.GetConsumerName())));
-    }
+    options.push_back(BuildOption("CONSUMER", Quote(desc.GetConsumerName())));
 
     const auto& batchingSettings = desc.GetBatchingSettings();
     options.push_back(BuildOption("BATCH_SIZE_BYTES", ToString(batchingSettings.SizeBytes)));

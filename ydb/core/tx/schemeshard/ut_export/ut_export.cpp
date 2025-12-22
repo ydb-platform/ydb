@@ -748,6 +748,10 @@ namespace {
             )");
             env.TestWaitNotification(Runtime(), txId);
 
+            auto topic = NDescUT::TSimpleTopic(0, 0);
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
+            env.TestWaitNotification(Runtime(), txId);
+
             TestCreateTransfer(Runtime(), ++txId, "/MyRoot", scheme);
             env.TestWaitNotification(Runtime(), txId);
 
@@ -3497,7 +3501,7 @@ WITH (
             Config {
                 TransferSpecific {
                     Target {
-                        SrcPath: "/MyRoot/Topic"
+                        SrcPath: "/MyRoot/Topic_0"
                         DstPath: "/MyRoot/Table"
                         TransformLambda: "%s"
                     }
@@ -3509,8 +3513,9 @@ WITH (
 $transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
 
 CREATE TRANSFER `Transfer`
-FROM `/MyRoot/Topic` TO `/MyRoot/Table` USING $transformation_lambda
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
 WITH (
+  CONSUMER = '',
   BATCH_SIZE_BYTES = 8388608,
   FLUSH_INTERVAL = Interval('PT60S')
 );)";
@@ -3529,7 +3534,7 @@ WITH (
                 }
                 TransferSpecific {
                     Target {
-                        SrcPath: "/MyRoot/Topic"
+                        SrcPath: "/MyRoot/Topic_0"
                         DstPath: "/MyRoot/Table"
                         TransformLambda: "%s"
                     }
@@ -3541,9 +3546,10 @@ WITH (
 $transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
 
 CREATE TRANSFER `Transfer`
-FROM `/MyRoot/Topic` TO `/MyRoot/Table` USING $transformation_lambda
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
 WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  CONSUMER = '',
   BATCH_SIZE_BYTES = 8388608,
   FLUSH_INTERVAL = Interval('PT60S')
 );)";
@@ -3558,7 +3564,7 @@ WITH (
             Config {
                 TransferSpecific {
                     Target {
-                        SrcPath: "/MyRoot/Topic"
+                        SrcPath: "/MyRoot/Topic_0"
                         DstPath: "/MyRoot/Table"
                         TransformLambda: "%s"
                         ConsumerName: "consumerName"
@@ -3571,7 +3577,7 @@ WITH (
 $transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
 
 CREATE TRANSFER `Transfer`
-FROM `/MyRoot/Topic` TO `/MyRoot/Table` USING $transformation_lambda
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
 WITH (
   CONSUMER = 'consumerName',
   BATCH_SIZE_BYTES = 8388608,

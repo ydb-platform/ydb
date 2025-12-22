@@ -413,9 +413,7 @@ private:
             TDbTupleRef rowKey(KeyColumnTypes.data(), row.data(), keyColumnCount);
 
             if (!skippedBeforeMinKey) {
-                int cmp = CompareTypedCellVectors(MinKey.GetCells().data(), rowKey.Cells().data(),
-                                                  KeyColumnTypes.data(),
-                                                  MinKey.GetCells().size(), rowKey.Cells().size());
+                int cmp = CompareKeys(MinKey.GetCells(), rowKey.Cells(), KeyColumnTypes);
 
                 // Skip rows before MinKey just in case (because currently sys view scan ignores key range)
                 if (cmp > 0 || (cmp == 0 && !MinKeyInclusive)) {

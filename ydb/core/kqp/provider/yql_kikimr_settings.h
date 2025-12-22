@@ -65,6 +65,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseFastChannels;
 
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
+    NCommon::TConfSetting<bool, Static> DqHashCombineUsesBlocks;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
@@ -247,6 +248,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
     bool GetUseDqHashCombine() const;
+    bool GetDqHashCombineUsesBlocks() const;
 };
 
 }

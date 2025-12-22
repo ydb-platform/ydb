@@ -99,6 +99,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseFastChannels);
 
     REGISTER_SETTING(*this, UseDqHashCombine);
+    REGISTER_SETTING(*this, DqHashCombineUsesBlocks);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -236,5 +237,9 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
     return UseDqHashCombine.Get().GetOrElse(EnableDqHashCombineByDefault);
+}
+
+bool TKikimrConfiguration::GetDqHashCombineUsesBlocks() const {
+    return DqHashCombineUsesBlocks.Get().GetOrElse(false);
 }
 }

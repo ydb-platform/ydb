@@ -31,13 +31,17 @@ namespace NKikimr {
             // ... or run a actor
             std::unique_ptr<IActor> ActorActivity;
             bool RunInBatchPool = false;
+            // ... and possibly enter full recovery mode
+            bool EnterFullRecovery = false;
             // ... or/and finish working
             bool Die = false;
 
-            static TSjOutcome Event(const TActorId &to, std::unique_ptr<IEventBase> &&ev) {
+            static TSjOutcome Event(const TActorId &to, std::unique_ptr<IEventBase> &&ev,
+                    bool enterFullRecovery = false) {
                 TSjOutcome outcome;
                 outcome.To = to;
                 outcome.Ev = std::move(ev);
+                outcome.EnterFullRecovery = enterFullRecovery;
                 return outcome;
             }
 
@@ -213,6 +217,8 @@ namespace NKikimr {
             std::shared_ptr<TSjCtx> Ctx;
             // Sublog
             TSublog<> Sublog;
+            // do we enter full recovery mode now
+            bool EnterFullRecovery = false;
         };
 
     } // NSyncer

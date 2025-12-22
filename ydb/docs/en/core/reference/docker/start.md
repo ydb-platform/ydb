@@ -111,9 +111,9 @@ For users who are not experienced with Docker, it's important to understand how 
    docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
    ```
 
-   In this example:
-   - `$(pwd)/ydb_config` - the local directory on your computer with the configuration file
-   - `/ydb_config` - directory inside the container where your local directory will be mounted
-   - `/ydb_config/my-ydb-config.yaml` - path to the configuration file inside the container
+In this example:
+ - `$(pwd)/ydb_config` - the local directory on your computer with the configuration file
+ - `/ydb_config` - directory inside the container where your local directory will be mounted
+ - `/ydb_config/my-ydb-config.yaml` - path to the configuration file inside the container
 
 This way, your local configuration file becomes accessible inside the container at the specified path.

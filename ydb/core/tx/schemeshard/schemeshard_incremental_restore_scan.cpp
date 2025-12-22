@@ -48,6 +48,14 @@ public:
 
         auto& state = stateIt->second;
 
+        // Early exit if already finalizing or completed - no need to do more progress checks
+        if (state.State == TIncrementalRestoreState::EState::Finalizing ||
+            state.State == TIncrementalRestoreState::EState::Completed) {
+            LOG_I("Incremental restore already in state " << static_cast<ui32>(state.State)
+                  << ", skipping progress check for operation: " << OperationId);
+            return true;
+        }
+
         // Persist initial row if missing (idempotent update)
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
@@ -102,9 +110,21 @@ public:
             auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
             Self->Schedule(TDuration::Seconds(1), progressEvent.Release());
         } else {
-            // No operations in progress, start the first incremental backup
-            LOG_I("No operations in progress, starting first incremental backup");
-            ProcessNextIncrementalBackup(state, ctx);
+            // No operations in progress - check if we should start processing
+            if (state.AllIncrementsProcessed()) {
+                // All incrementals already processed but state wasn't set to Finalizing
+                // This shouldn't happen normally, but handle it gracefully
+                LOG_W("All increments processed but state is still Running, triggering finalization");
+                state.State = TIncrementalRestoreState::EState::Finalizing;
+                db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
+                );
+                FinalizeIncrementalRestoreOperation(txc, ctx, state);
+            } else {
+                // Start processing the current incremental backup
+                LOG_I("No operations in progress, starting incremental backup #" << state.CurrentIncrementalIdx);
+                ProcessNextIncrementalBackup(state, ctx);
+            }
         }
         
         return true;

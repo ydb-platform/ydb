@@ -6,6 +6,8 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/cms.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -139,6 +141,7 @@ public:
     TDuration Period;
     bool Sanitize;
     bool CountersOnly;
+    TActorId Pipe;
 
     void SendRequest(ui32 i) {
         ui32 nodeId = Nodes[i].NodeId;
@@ -156,7 +159,7 @@ public:
 #undef request
     }
 
-    void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+    void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext &ctx) {
         Nodes = ev->Get()->Nodes;
         CountersOnly = GetProtoRequest()->counters_only();
         if (!CountersOnly) {
@@ -165,6 +168,7 @@ public:
             RequestBaseConfig();
             RequestStorageConfig();
             RequestStateStorageConfig();
+            RequestSentinelState(ctx);
         }
         NodeReceived.resize(Nodes.size());
         NodeRequested.resize(Nodes.size());
@@ -265,9 +269,24 @@ public:
         Requested++;
     }
 
+    void RequestSentinelState(const TActorContext &ctx) {
+        auto request = std::make_unique<NKikimr::NCms::TEvCms::TEvGetSentinelStateRequest>();
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
+        Pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig));
+
+        NTabletPipe::SendData(ctx, Pipe, request.release());
+        Requested++;
+    }
 
     void HandleResult(NKikimr::NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
         State.MutableStateStorageConfig()->CopyFrom(ev->Get()->Record.GetStateStorageConfig());
+        ++Received;
+        CheckReply();
+    }
+
+    void HandleResult(NKikimr::NCms::TEvCms::TEvGetSentinelStateResponse::TPtr& ev) {
+        State.MutableSentinelState()->CopyFrom(ev->Get()->Record);
         ++Received;
         CheckReply();
     }
@@ -378,12 +397,13 @@ public:
         for (const auto& ni : Nodes) {
             ctx.Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe());
         }
+        NTabletPipe::CloseClient(ctx, Pipe);
         TBase::Die(ctx);
     }
 
     STFUNC(StateRequestedBrowse) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvInterconnect::TEvNodesInfo, HandleBrowse);
+            HFunc(TEvInterconnect::TEvNodesInfo, HandleBrowse);
             cFunc(TEvents::TSystem::Wakeup, Wakeup);
         }
     }
@@ -405,6 +425,7 @@ public:
             cFunc(TEvents::TSystem::Wakeup, Wakeup);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
             hFunc(NKikimr::NStorage::TEvNodeConfigInvokeOnRootResult, HandleResult);
+            hFunc(NKikimr::NCms::TEvCms::TEvGetSentinelStateResponse, HandleResult);
         }
     }
 

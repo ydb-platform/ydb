@@ -1,7 +1,5 @@
 # ALTER STREAMING QUERY
 
-<!-- markdownlint-disable proper-names -->
-
 Вызов `ALTER STREAMING QUERY` изменяет настройки или текст [потоковых запросов](../../../concepts/streaming_query/index.md), а также управляет состоянием запроса (остановкой/запуском).
 
 ```yql

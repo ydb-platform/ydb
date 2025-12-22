@@ -1,7 +1,5 @@
 # CREATE STREAMING QUERY
 
-<!-- markdownlint-disable proper-names -->
-
 Вызов `CREATE STREAMING QUERY` создает [потоковый запрос](../../../concepts/streaming_query/index.md).
 
 ```yql

@@ -52,9 +52,9 @@ class RemoteExecutor:
         return [
             "-o", "StrictHostKeyChecking=no",
             "-o", "UserKnownHostsFile=/dev/null",
-            # "-o", "ControlMaster=auto",
-            # "-o", "ControlPersist=60s",
-            # "-o", f"ControlPath=/tmp/ssh-{os.getuid()}-%r@%h:%p"
+            "-o", "ControlMaster=auto",
+            "-o", "ControlPersist=60s",
+            "-o", f"ControlPath=/tmp/ssh-{os.getuid()}-%r@%h:%p"
         ]
 
     @staticmethod

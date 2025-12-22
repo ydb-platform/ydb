@@ -813,6 +813,19 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
             PQ_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN)("Key", pair.GetKey());
 
+            if (tx.HasStep()) {
+                if (tx.GetStep() > PlanStep) {
+                    PlanStep = tx.GetStep();
+                    PlanTxId = tx.GetTxId();
+                    PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
+                } else if (tx.GetStep() == PlanStep) {
+                    if (tx.GetTxId() > PlanTxId) {
+                        PlanTxId = tx.GetTxId();
+                        PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
+                    }
+                }
+            }
+
             PQ_LOG_TX_I("Restore Tx. " <<
                      "TxId: " << tx.GetTxId() <<
                      ", Step: " << tx.GetStep() <<
@@ -3553,7 +3566,6 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     ProcessWriteTxs(ctx, request->Record);
     ProcessDeleteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
-    ProcessConfigTx(ctx, request.Get());
 
     WriteTxsInProgress = true;
 
@@ -3795,7 +3807,10 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
         // There may be cases when in one iteration of a record we change the state of a transaction and delete it
         auto tx = GetTransaction(ctx, txId);
         if (tx) {
-            PQ_LOG_TX_D("Persist state TxId " << txId);
+            // таблетка PQ сохраняет только после TEvProposeTransaction
+            PQ_ENSURE(state == NKikimrPQ::TTransaction::PREPARED)("TxId", txId)("State", NKikimrPQ::TTransaction_EState_Name(state));
+
+            PQ_LOG_TX_D("Persist state " << NKikimrPQ::TTransaction_EState_Name(state) << " for TxId " << txId);
             tx->AddCmdWrite(request, state);
 
             ChangedTxs.emplace(tx->Step, txId);
@@ -3817,7 +3832,7 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
     }
 
     for (ui64 txId : DeleteTxs) {
-        PQ_LOG_TX_D("delete key for TxId " << txId);
+        PQ_LOG_TX_D("Delete key for TxId " << txId);
         AddCmdDeleteTx(request, txId);
 
         auto tx = GetTransaction(ctx, txId);
@@ -4091,12 +4106,33 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
 void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
                                             TDistributedTransaction& tx)
 {
-    PQ_LOG_T("Commit tx " << tx.TxId);
+    PQ_LOG_T("Commit TxId " << tx.TxId);
+
+    TMaybe<NKikimrPQ::TTransaction> serializedTx = tx.Serialize(NKikimrPQ::TTransaction::EXECUTED);
+    TMaybe<NKikimrPQ::TPQTabletConfig> tabletConfig;
+
+    if (tx.Kind == NKikimrPQ::TTransaction::KIND_CONFIG) {
+        tabletConfig = tx.TabletConfig;
+    }
 
     auto graph = MakePartitionGraph(tx.TabletConfig);
-    for (ui32 partitionId : tx.Partitions) {
+    for (const ui32 partitionId : tx.Partitions) {
         auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId);
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId, explicitMessageGroups);
+
+        if (serializedTx.Defined()) {
+            event->SerializedTx = std::move(*serializedTx);
+
+            serializedTx = Nothing();
+        }
+
+        if (tabletConfig.Defined()) {
+            event->TabletConfig = std::move(*tabletConfig);
+            event->BootstrapConfig = tx.BootstrapConfig;
+            event->PartitionsData = tx.PartitionsData;
+
+            tabletConfig = Nothing();
+        }
 
         auto p = Partitions.find(TPartitionId(partitionId));
         PQ_ENSURE(p != Partitions.end())("partition_id", partitionId)("TxId", tx.TxId);
@@ -4113,15 +4149,24 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
 void TPersQueue::SendEvTxRollbackToPartitions(const TActorContext& ctx,
                                               TDistributedTransaction& tx)
 {
-    PQ_LOG_T("Rollback tx " << tx.TxId);
+    PQ_LOG_T("Rollback TxId " << tx.TxId);
+
+    TMaybe<NKikimrPQ::TTransaction> serializedTx = tx.Serialize(NKikimrPQ::TTransaction::EXECUTED);
 
     for (ui32 partitionId : tx.Partitions) {
         auto event = std::make_unique<TEvPQ::TEvTxRollback>(tx.Step, tx.TxId);
 
-        auto p = Partitions.find(TPartitionId(partitionId));
-        PQ_ENSURE(p != Partitions.end());
+        if (serializedTx.Defined()) {
+            event->SerializedTx = std::move(*serializedTx);
+            serializedTx = Nothing();
+        }
 
-        ctx.Send(p->second.Actor, event.release());
+        auto p = Partitions.find(TPartitionId(partitionId));
+        PQ_ENSURE(p != Partitions.end())("partition_id", partitionId)("TxId", tx.TxId);
+
+        ctx.Send(p->second.Actor, event.release(),
+                 0, 0,
+                 tx.GetExecuteSpanTraceId());
     }
 
     tx.PartitionRepliesCount = 0;
@@ -4383,25 +4428,24 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_ENSURE(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected)("TxId", tx.TxId)
             ("PartitionRepliesCount", tx.PartitionRepliesCount)("PartitionRepliesExpected", tx.PartitionRepliesExpected);
 
-        PQ_LOG_TX_D("Received " << tx.PartitionRepliesCount <<
-                 ", Expected " << tx.PartitionRepliesExpected);
+        PQ_LOG_TX_D("Responses received from the partitions " << tx.PartitionRepliesCount << "/" << tx.PartitionRepliesExpected);
 
-        if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
-            switch (tx.Kind) {
-            case NKikimrPQ::TTransaction::KIND_DATA:
-            case NKikimrPQ::TTransaction::KIND_CONFIG:
-                WriteTx(tx, NKikimrPQ::TTransaction::CALCULATED);
-
-                TryChangeTxState(tx, NKikimrPQ::TTransaction::CALCULATED);
-
-                break;
-
-            case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-                PQ_ENSURE(false);
-            }
+        if (tx.PartitionRepliesCount != tx.PartitionRepliesExpected) {
+            break;
         }
 
-        break;
+        switch (tx.Kind) {
+        case NKikimrPQ::TTransaction::KIND_DATA:
+        case NKikimrPQ::TTransaction::KIND_CONFIG:
+            TryChangeTxState(tx, NKikimrPQ::TTransaction::CALCULATED);
+
+            break;
+
+        case NKikimrPQ::TTransaction::KIND_UNKNOWN:
+            PQ_ENSURE(false);
+        }
+
+        [[fallthrough]];
 
     case NKikimrPQ::TTransaction::CALCULATED:
         PQ_ENSURE(tx.TxId == TxsOrder[tx.State].front())("TxId", tx.TxId)("FrontTxId", TxsOrder[tx.State].front());
@@ -4448,35 +4492,34 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_ENSURE(tx.PartitionRepliesCount <= tx.PartitionRepliesExpected)("TxId", tx.TxId)
             ("PartitionRepliesCount", tx.PartitionRepliesCount)("PartitionRepliesExpected", tx.PartitionRepliesExpected);
 
-        PQ_LOG_TX_D("Received " << tx.PartitionRepliesCount <<
-                 ", Expected " << tx.PartitionRepliesExpected);
+        PQ_LOG_TX_D("Responses received from the partitions " << tx.PartitionRepliesCount << "/" << tx.PartitionRepliesExpected);
 
-        if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
-            tx.EndExecuteSpan();
-
-            SendEvProposeTransactionResult(ctx, tx);
-            PQ_LOG_TX_I("complete TxId " << tx.TxId);
-
-            switch (tx.Kind) {
-            case NKikimrPQ::TTransaction::KIND_DATA:
-                break;
-            case NKikimrPQ::TTransaction::KIND_CONFIG:
-                ApplyNewConfig(tx.TabletConfig, ctx);
-                TabletConfigTx = tx.TabletConfig;
-                BootstrapConfigTx = tx.BootstrapConfig;
-                PartitionsDataConfigTx = tx.PartitionsData;
-
-                break;
-            case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-                PQ_ENSURE(false);
-            }
-
-            WriteTx(tx, NKikimrPQ::TTransaction::EXECUTED);
-
-            TryChangeTxState(tx, NKikimrPQ::TTransaction::EXECUTED);
+        if (tx.PartitionRepliesCount != tx.PartitionRepliesExpected) {
+            break;
         }
 
-        break;
+        tx.EndExecuteSpan();
+
+        SendEvProposeTransactionResult(ctx, tx);
+        PQ_LOG_TX_I("Complete TxId " << tx.TxId);
+
+        switch (tx.Kind) {
+        case NKikimrPQ::TTransaction::KIND_DATA:
+            break;
+        case NKikimrPQ::TTransaction::KIND_CONFIG:
+            ApplyNewConfig(tx.TabletConfig, ctx);
+            TabletConfigTx = tx.TabletConfig;
+            BootstrapConfigTx = tx.BootstrapConfig;
+            PartitionsDataConfigTx = tx.PartitionsData;
+
+            break;
+        case NKikimrPQ::TTransaction::KIND_UNKNOWN:
+            PQ_ENSURE(false);
+        }
+
+        TryChangeTxState(tx, NKikimrPQ::TTransaction::EXECUTED);
+
+        [[fallthrough]];
 
     case NKikimrPQ::TTransaction::EXECUTED:
         PQ_ENSURE(tx.TxId == TxsOrder[tx.State].front())("TxId", tx.TxId)("FrontTxId", TxsOrder[tx.State].front());

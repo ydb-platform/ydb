@@ -126,6 +126,11 @@ static const ui32 MAX_KEYS = 10000;
 static const ui32 MAX_TXS = 1000;
 static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
 
+TEvPQ::TMessageGroupsPtr CreateExplicitMessageGroups(const NKikimrPQ::TBootstrapConfig& bootstrapCfg,
+                                                     const NKikimrPQ::TPartitions& partitionsData,
+                                                     const TPartitionGraph& graph,
+                                                     ui32 partitionId);
+
 TStringBuilder MakeTxWriteErrorMessage(TMaybe<ui64> txId,
                                        TStringBuf topicName, const TPartitionId& partitionId,
                                        TStringBuf sourceId, ui64 seqNo)
@@ -1409,6 +1414,10 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
 
     tx->State = ECommitState::Committed;
     tx->ExplicitMessageGroups = std::move(ev->ExplicitMessageGroups);
+    tx->SerializedTx = std::move(ev->SerializedTx);
+    tx->TabletConfig = std::move(ev->TabletConfig);
+    tx->BootstrapConfig = std::move(ev->BootstrapConfig);
+    tx->PartitionsData = std::move(ev->PartitionsData);
 
     if (!tx->ChangeConfig && !tx->ProposeConfig) {
         tx->CommitSpan = std::move(ev->Span);
@@ -1454,9 +1463,13 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxRollback> ev, c
         txIter = TransactionsInflight.find(ev->TxId);
         PQ_ENSURE(!txIter.IsEnd());
     }
-    PQ_ENSURE(txIter->second->State == ECommitState::Pending);
+    auto& tx = txIter->second;
 
-    txIter->second->State = ECommitState::Aborted;
+    PQ_ENSURE(tx->State == ECommitState::Pending);
+
+    tx->State = ECommitState::Aborted;
+    tx->SerializedTx = std::move(ev->SerializedTx);
+
     ProcessTxsAndUserActs(ctx);
 }
 
@@ -2841,13 +2854,58 @@ bool TPartition::HasPendingCommitsOrPendingWrites() const
     return !UserActionAndTxPendingCommit.empty() || !UserActionAndTxPendingWrite.empty();
 }
 
+void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
+{
+    if (!tx.SerializedTx.Defined()) {
+        return;
+    }
+
+    PQ_ENSURE(PersistRequest);
+    TMaybe<ui64> txId = tx.GetTxId();
+    PQ_ENSURE(txId.Defined());
+
+    TString value;
+    PQ_ENSURE(tx.SerializedTx->SerializeToString(&value));
+
+    auto command = PersistRequest->Record.AddCmdWrite();
+    command->SetKey(GetTxKey(*txId));
+    command->SetValue(value);
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+
+    if (!tx.TabletConfig.Defined()) {
+        return;
+    }
+
+    value.clear();
+    PQ_ENSURE(tx.TabletConfig->SerializeToString(&value));
+
+    command = PersistRequest->Record.AddCmdWrite();
+    command->SetKey("_config");
+    command->SetValue(value);
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+
+    const TActorContext& ctx = ActorContext();
+
+    const auto graph = MakePartitionGraph(*tx.TabletConfig);
+    for (const auto& partition : tx.TabletConfig->GetPartitions()) {
+        const auto explicitMessageGroups = CreateExplicitMessageGroups(*tx.BootstrapConfig, *tx.PartitionsData, graph, partition.GetPartitionId());
+
+        TSourceIdWriter sourceIdWriter(ESourceIdFormat::Proto);
+        for (const auto& [id, mg] : *explicitMessageGroups) {
+            sourceIdWriter.RegisterSourceId(id, mg.SeqNo, 0, ctx.Now(), std::move(mg.KeyRange), false);
+        }
+
+        sourceIdWriter.FillRequest(PersistRequest.Get(), TPartitionId(partition.GetPartitionId()));
+    }
+}
+
 bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t,
                                              TEvKeyValue::TEvRequest*)
 {
     auto span = t->CommitSpan.CreateChild(TWilsonTopic::TopicTopLevel,
                                           "Topic.Partition.Process",
                                           NWilson::EFlags::AUTO_END);
-
+    TryAddCmdWriteForTransaction(*t);
     if (t->ProposeTransaction) {
         ExecImmediateTx(*t);
         return true;

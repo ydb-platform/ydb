@@ -527,7 +527,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
     bool IsExcludedFromExport(const TString& exportPath) {
         const char* path = exportPath.c_str();
-        if (exportPath.StartsWith(CommonSourcePath)) {
+        if (exportPath.StartsWith(CommonSourcePath) && exportPath.size() > CommonSourcePath.size() && exportPath[CommonSourcePath.size()] == '/') {
             path += CommonSourcePath.size() + 1; // prefix + /
         }
         for (const auto& regexp : ExcludeRegexps) {

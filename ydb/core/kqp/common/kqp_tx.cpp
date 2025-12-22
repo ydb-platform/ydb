@@ -157,9 +157,9 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 {
     Y_UNUSED(config);
 
-    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE &&
-        *txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO &&
-        *txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW)
+    if (*txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
+        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO &&
+        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW)
         return false;
 
     if (txCtx.GetSnapshot().IsValid())
@@ -235,7 +235,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         return true;
     }
 
-    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW && hasEffects) {
+    if (*txCtx.EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW && hasEffects) {
         // Avoid acquiring snapshot for WriteOnly transactions.
         // If there are more than one INSERT, we have to acquiring snapshot,
         // because INSERT has output (error or no error).

@@ -64,7 +64,7 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
     operation->SetPayloadFormat(NKikimrDataEvents::FORMAT_ARROW);
     operation->SetPayloadIndex(0);
     operation->MutableTableId()->SetTableId(ImportSession->GetTask().GetRestoreTask().GetTableId());
-    operation->MutableTableId()->SetSchemaVersion(ImportSession->GetTask().GetSchemaVersion().value_or(0)); // TODO: schema version
+    operation->MutableTableId()->SetSchemaVersion(ImportSession->GetTask().GetSchemaVersion().value_or(0));
     operation->SetIsBulk(true);
     Send(TabletActorId, writeEvent.Release());
     SwitchStage(EStage::WaitData, EStage::WaitWriting);

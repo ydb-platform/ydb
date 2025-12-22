@@ -1,6 +1,6 @@
 # Чтение/запись локальных топиков
 
-Эта статья поможет быстро начать работу с [потоковыми запросами](../../concepts/streaming_query/index.md) в {{ ydb-short-name }} на простейшем модельном примере. Мы будем считать количество ошибок по каждому хосту в интервале 10m. Для этого будем читать из входного топика сообщения в формате JSON, фильтровать их, агрегировать и результат записывать в выходной топик.
+Эта статья поможет быстро начать работу с [потоковыми запросами](../../concepts/streaming_query/index.md) в {{ ydb-short-name }} на простейшем модельном примере. Мы будем считать количество ошибок по каждому хосту в интервале 10m. Для этого будем читать из входного [топика](../../concepts/datamodel/topic.md) сообщения в формате JSON, фильтровать их, агрегировать и результат записывать в выходной [топик](../../concepts/datamodel/topic.md).
 
 В статье рассматриваются следующие шаги работы:
 
@@ -48,7 +48,7 @@ CREATE TOPIC output_topic
 
 ## Шаг 2. Создание внешнего источника данных {#step2}
 
-После создания топиков нужно создать внешний источник данных. Это можно сделать с помощью SQL-запроса:
+После создания топиков нужно создать [внешний источник данных](../../concepts/datamodel/external_data_source.md). Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-external-data-source.md):
 
 ```yql
 CREATE EXTERNAL DATA SOURCE ydb_source WITH (
@@ -59,9 +59,11 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 )
 ```
 
+Нужно указать соответствующее вашей базе {{ ydb-short-name }} значения `LOCATION` и `DATABASE_NAME`.
+
 ## Шаг 3. Создание потокового запроса {#step3}
 
-Далее необходимо запустить потоковый запрос. Это можно сделать с помощью SQL-запроса:
+Далее необходимо запустить [потоковый запрос](../../concepts/streaming_query/index.md). Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-streaming-query.md):
 
 ```yql
 CREATE STREAMING QUERY query_example AS
@@ -70,7 +72,7 @@ DO BEGIN
 $number_errors = SELECT
     Host,
     COUNT(*) AS ErrorCount,
-    CAST(HOP_START() AS String) AS Ts
+    CAST(HOP_START() AS String) AS Ts  -- Time of HOP window begin corresponding to aggregation result
 FROM
     ydb_source.input_topic
 WITH (
@@ -84,23 +86,24 @@ WITH (
 WHERE
     Level = "error"
 GROUP BY
-    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),
+    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Count errors on non overlapping 10m windows
     Host;
 
 INSERT INTO
     ydb_source.output_topic
 SELECT
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))  -- Serialize all columns into JSON
 FROM
     $number_errors
 
 END DO
 ```
 
+Подробнее про агрегацию `GROUP BY HOP` можно прочитать в статье [{#T}](../../../yql/reference/syntax/select/group-by#group-by-hop). Подробнее про запись данных в топик можно прочитать в статье [{#T}](../../concepts/streaming_query/formats.md#write_formats).
+
 ## Шаг 4. Просмотр состояния запроса {#step4}
 
-Состояние запроса можно проверить через YDB UI во вкладке диагностики по клику на потоковый запрос или альтернативно через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries).
-Это можно сделать с помощью SQL-запроса:
+Состояние запроса можно проверить через YDB UI во вкладке диагностики по клику на потоковый запрос или альтернативно через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries) с помощью SQL-запроса:
 
 ```yql
 SELECT
@@ -128,12 +131,12 @@ echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-1"
 
 ## Шаг 6. Проверка содержимого выходного топика {#step6}
 
-Данные в выходном топике можно просмотреть через YDB UI (кликнув на иконку `Open Preview` на топике).
+Данные в выходном топике можно просмотреть через {{ ydb-short-name }} UI (кликнув на иконку `Open Preview` на топике).
 
-Также прочитать данные из выходного топика можно через cli (читаем партицию с номером 0 c нулевого смещения):
+Также прочитать данные из выходного топика можно через {{ ydb-short-name }} CLI (читаем партицию с номером 0 c нулевого смещения):
 
 ```bash
-./ydb --profile quickstart topic read output_topic --partition-ids=0 --start-offset 0 --limit 10 --format=newline-delimited
+./ydb --profile quickstart topic read output_topic --partition-ids 0 --start-offset 0 --limit 10 --format newline-delimited
 ```
 
 Ожидаемый результат:
@@ -145,8 +148,13 @@ echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-1"
 
 ## Шаг 7. Удаление запроса {#step7}
 
-Остановить и удалить запрос можно помощью SQL запроса:
+Остановить и удалить запрос можно помощью [SQL запроса](../../yql/reference/syntax/drop-streaming-query.md):
 
 ```yql
 DROP STREAMING QUERY query_example
 ```
+
+## См. также
+
+* [{#T}](../../concepts/streaming_query/index.md)
+* [{#T}](../../concepts/streaming_query/formats.md)

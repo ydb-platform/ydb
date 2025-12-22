@@ -1899,8 +1899,7 @@ private:
                 for (size_t index = 0; index < writeRows.size(); ++index) {
                     const auto& row = writeRows[index];
                     if (isPrimaryKeySubset && existsMask[index]
-                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+                            && OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
                         Error = ConflictWithExistingKeyErrorText;
                         return false;
                     }

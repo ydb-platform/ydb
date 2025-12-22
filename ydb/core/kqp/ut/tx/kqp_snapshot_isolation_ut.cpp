@@ -79,8 +79,8 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
             UNIT_ASSERT(tx1);
 
             result = session2.ExecuteQuery(Q_(R"(
-                UPSERT INTO `/Root/Test` (Group, Name, Comment)
-                VALUES (1U, "Paul", "Changed Other");
+                UPSERT INTO `/Root/Test` (Group, Name, Comment, Amount)
+                VALUES (1U, "Paul", "Changed Other", 100u);
             )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -108,12 +108,26 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                 result = session1.ExecuteQuery(Q_(R"(
                     DELETE FROM `/Root/Test` WHERE Name == "Paul";
                 )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            } else if (WriteOperation == "update") {
+                result = session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Amount = 101u WHERE Name == "Paul";
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            } else if (WriteOperation == "delete_on") {
+                result = session1.ExecuteQuery(Q_(R"(
+                    DELETE FROM `/Root/Test` ON (Group, Name) VALUES (1U, "Paul");
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            } else if (WriteOperation == "update_on") {
+                result = session1.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` ON (Group, Name, Amount) VALUES (1U, "Paul", 101u);
+                )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
             } else {
                 UNIT_ASSERT(false);
             }
 
-            if (WriteOperation == "insert") {
+            if (WriteOperation == "insert" && GetFillTables() && GetIsOlap()) { // olap needs to return aborted too?
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            } else if (!GetFillTables() && (WriteOperation == "delete" || WriteOperation == "update")) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             }
@@ -122,44 +136,17 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                 SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
             )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([[[300u];["Changed Other"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[100u];["Changed Other"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     };
 
-    Y_UNIT_TEST(TConflictWriteOltp) {
-        TConflictWrite tester("upsert_partial");
-        tester.SetIsOlap(false);
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(TConflictWriteOlapInsert) {
-        TConflictWrite tester("insert");
-        tester.SetIsOlap(true);
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(TConflictWriteOlapUpsertPartial) {
-        TConflictWrite tester("upsert_partial");
-        tester.SetIsOlap(true);
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(TConflictWriteOlapUpsertFull) {
-        TConflictWrite tester("upsert_full");
-        tester.SetIsOlap(true);
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(TConflictWriteOlapReplace) {
-        TConflictWrite tester("replace");
-        tester.SetIsOlap(true);
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(TConflictWriteOlapDelete) {
-        TConflictWrite tester("delete");
-        tester.SetIsOlap(true);
-        tester.Execute();
+    Y_UNIT_TEST_QUAD(ConflictWrite, IsOlap, FillTables) {
+        for (const std::string operation : {"insert", "upsert_partial", "upsert_full", "replace", "delete", "update", "delete_on", "update_on"}) {
+            TConflictWrite tester(operation);
+            tester.SetIsOlap(IsOlap);
+            tester.SetFillTables(FillTables);
+            tester.Execute();
+        }
     }
 
     class TConflictReadWrite : public TTableDataModificationTester {
@@ -342,7 +329,152 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.SetIsOlap(true);
         tester.SetDisableSinks(false);
         tester.SetUseRealThreads(false);
-       tester.Execute();
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TSnapshotTwoInsertOltp) {
+        TSnapshotTwoInsert tester;
+        tester.SetIsOlap(false);
+        tester.SetDisableSinks(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    class TSnapshotTwoUpdate : public TTableDataModificationTester {
+    public:
+        bool UpdateAfterInsert = false;
+
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            auto edgeActor = runtime.AllocateEdgeActor();
+
+            const auto& describe = DescribeTable(
+                 &Kikimr->GetTestServer(),
+                edgeActor,
+                "/Root/KV2");
+
+            if (!UpdateAfterInsert) {
+                const TString insertQuery(Q1_(R"(
+                    INSERT INTO `/Root/KV2` (Key, Value) VALUES (4u, "test");
+                )"));
+                auto insetResult = Kikimr->RunCall([&]{
+                    auto txc = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx();
+                    return session2.ExecuteQuery(insertQuery, txc).ExtractValueSync();
+                });
+
+                UNIT_ASSERT_VALUES_EQUAL_C(insetResult.GetStatus(), EStatus::SUCCESS, insetResult.GetIssues().ToString());
+            }
+
+            {
+                const TString updateQuery(Q1_(R"(
+                    UPDATE `/Root/KV2` ON (Key, Value) VALUES (4u, "test2");
+                    UPDATE `/Root/KV` ON (Key, Value) VALUES (4u, "test2");
+                )"));
+
+                std::vector<std::unique_ptr<IEventHandle>> writes;
+                size_t evWriteCounter = 0;
+                size_t evWriteResultCounter = 0;
+
+                auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                    if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                        ++evWriteCounter;
+                        auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                        UNIT_ASSERT(evWrite->Record.OperationsSize() <= 1);
+                        if (evWrite->Record.OperationsSize() == 1) {
+                            if (evWriteCounter <= 2) {
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() == 0);
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() == 0);
+                            }
+
+                            if (evWrite->Record.GetOperations()[0].GetTableId().GetTableId() == describe.GetPathId() && evWriteCounter <= 2) {
+                                writes.emplace_back(ev.Release());
+                                return TTestActorRuntime::EEventAction::DROP;
+                            }
+                        }
+                        
+                    } else if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWriteResult::EventType) {
+                        ++evWriteResultCounter;
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                };
+
+                auto saveObserver = runtime.SetObserverFunc(grab);
+                Y_DEFER {
+                    runtime.SetObserverFunc(saveObserver);
+                };
+
+                auto future = Kikimr->RunInThreadPool([&]{
+                    auto txc = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx();
+                    return session1.ExecuteQuery(updateQuery, txc).ExtractValueSync();
+                });
+
+                {
+                    TDispatchOptions opts;
+                    opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                        return evWriteCounter == 2 && evWriteResultCounter == 1;
+                    });
+                    runtime.DispatchEvents(opts);
+                    UNIT_ASSERT(evWriteCounter == 2);
+                    UNIT_ASSERT(evWriteResultCounter == 1);
+                    UNIT_ASSERT(writes.size() == 1);
+                }
+
+                {
+                    // Another request changes data
+                    const TString insertQuery(Q1_(std::format(R"(
+                        UPSERT INTO `{}` (Key, Value) VALUES (4u, "test");
+                    )", UpdateAfterInsert ? "/Root/KV2" : "/Root/KV")));
+                    auto insetResult = Kikimr->RunCall([&]{
+                        auto txc = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRW()).CommitTx();
+                        return session2.ExecuteQuery(insertQuery, txc).ExtractValueSync();
+                    });
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(insetResult.GetStatus(), EStatus::SUCCESS, insetResult.GetIssues().ToString());
+                }
+
+                UNIT_ASSERT(evWriteCounter == (GetIsOlap() ? 4 : 3));
+                UNIT_ASSERT(writes.size() == 1);
+
+                for(auto& ev: writes) {
+                    runtime.Send(ev.release());
+                }
+
+                auto result = runtime.WaitFuture(future);
+                // Tx was write only, so it is executed with snapshot timestamp = commit timestamp, like serializable.
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    result.GetStatus(),
+                    GetIsOlap()
+                        ? (UpdateAfterInsert ? EStatus::SUCCESS : EStatus::ABORTED)
+                        : EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(TSnapshotTwoUpdateOlap, UpdateAfterInsert) {
+        TSnapshotTwoUpdate tester;
+        tester.SetIsOlap(true);
+        tester.SetDisableSinks(false);
+        tester.SetUseRealThreads(false);
+        tester.SetFillTables(false);
+        tester.UpdateAfterInsert = UpdateAfterInsert;
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST_TWIN(TSnapshotTwoUpdateOltp, UpdateAfterInsert) {
+        TSnapshotTwoUpdate tester;
+        tester.SetIsOlap(false);
+        tester.SetDisableSinks(false);
+        tester.SetUseRealThreads(false);
+        tester.SetFillTables(false);
+        tester.UpdateAfterInsert = UpdateAfterInsert;
+        tester.Execute();
     }
 
     class TReadOwnChanges : public TTableDataModificationTester {

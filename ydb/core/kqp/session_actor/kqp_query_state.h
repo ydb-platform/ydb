@@ -413,12 +413,6 @@ public:
             return false;
         }
 
-        if (TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW) {
-            // ReadWrite snapshot isolation transaction with can only use uncommitted data.
-            // WriteOnly snapshot isolation transaction is executed like serializable transaction.
-            return !TxCtx->HasTableRead;
-        }
-
         if (TxCtx->NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);

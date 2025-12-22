@@ -59,8 +59,7 @@ protected:
 
     THolder<NTable::IScan> CreateScan(
         const ::NKikimrSchemeOp::TRestoreIncrementalBackup& incrBackup,
-        ui64 txId,
-        const TActorContext& ctx)
+        ui64 txId)
     {
         TPathId tablePathId = TPathId::FromProto(incrBackup.GetSrcPathId());
         TPathId dstTablePathId = TPathId::FromProto(incrBackup.GetDstPathId());
@@ -118,7 +117,7 @@ protected:
 
         Y_ENSURE(restoreSrc.HasDstPathId());
 
-        THolder<NTable::IScan> scan{CreateScan(restoreSrc, op->GetTxId(), ctx)};
+        THolder<NTable::IScan> scan{CreateScan(restoreSrc, op->GetTxId())};
 
         auto* appData = AppData();
         const auto& taskName = appData->DataShardConfig.GetRestoreTaskName();

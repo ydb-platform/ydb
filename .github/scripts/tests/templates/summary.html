@@ -1,1034 +1,116 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism-themes/1.9.0/prism-vs.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
-    <style>
-        body {
-            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            width: 100%;
-        }
-        h1 { 
-            font-size: 20px; 
-        }
-        .report-header {
-            background-color: #f6f8fa;
-            border: 1px solid #d0d7de;
-            border-radius: 6px;
-            padding: 16px;
-            margin: 16px 0;
-        }
-        .report-header h2 {
-            margin: 0 0 8px 0;
-            font-size: 16px;
-            font-weight: 600;
-        }
-        .report-header p {
-            margin: 4px 0;
-            font-size: 14px;
-        }
-        .report-header a {
-            color: #0969da;
-            text-decoration: none;
-        }
-        .report-header a:hover {
-            text-decoration: underline;
-        }
-        th {
-            text-transform: uppercase;
-        }
-
-        th, td {
-            padding: 5px;
-            word-break: break-word; /* Allow breaking long words */
-            font-size: 14px;
-            min-width: 80px;
-        }
-        td.test_name{
-            min-width: 72.5vw;
-            max-width: 72.5vw;
-        }
-        td.test_name.with_history{
-            min-width: 62vw;
-            max-width: 62vw;
-        }
-
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            left: 5;
-        }
-
-        span.test_status {
-            font-weight: bold;
-        }
-
-        span.test_fail {
-            color: red;
-        }
-
-        span.test_pass {
-            color: green;
-        }
-
-        span.test_mute {
-            color: blue;
-        }
-        
-        span.test_fail_sanitizer {
-            color: #ff4500;  /* Dark orange to distinguish from regular red */
-            background-color: #fff5ee;  /* Light orange background */
-            padding: 2px 4px;
-            border-radius: 3px;
-            border-left: 3px solid #ff4500;
-        }
-        
-        span.test_error_sanitizer {
-            color: #ff4500;  /* Dark orange to distinguish from regular red */
-            background-color: #fff5ee;  /* Light orange background */
-            padding: 2px 4px;
-            border-radius: 3px;
-            border-left: 3px solid #ff4500;
-        }
-        .svg_passed {
-            fill: green;
-        }
-    
-        .svg_failure {
-            fill: red;
-        }
-    
-        .svg_skipped {
-            fill: gray;
-        }
-    
-        .svg_mute {
-            fill: blue;
-        }
-
-        .issue-button {
-            display: inline-block;
-            background-color: #f6f8fa;
-            border: 1px solid #d0d7de;
-            border-radius: 6px;
-            color: #0969da;
-            padding: 2px 6px;
-            font-size: 11px;
-            font-weight: 500;
-            text-decoration: none;
-            margin-left: 8px;
-            cursor: pointer;
-            transition: background-color 0.2s, border-color 0.2s;
-        }
-
-        .issue-button:hover {
-            background-color: #f3f4f6;
-            border-color: #d0d7de;
-            text-decoration: none;
-        }
-
-        .svg-icon {
-            float: left;
-            width: 14px;
-            height: 14px;
-            padding-left: 1px;
-            padding-right: 1px;
-            margin-right: 0px;
-            border-radius: 50%;
-            position: relative; /* Essential for tooltips */
-            cursor: pointer;
-        }
-        .button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: left;
-            padding: 4px;
-            border: none;
-            background: none;
-            cursor: pointer;
-            position: relative;
-        }
-
-        .button svg {
-            fill: #4b535c;
-            fill-rule: evenodd;
-        }
-
-        .button svg:hover {
-            fill: #0366d6;
-            fill-rule: evenodd;
-        }
-
-        .button-group {
-            display: inline-flex;
-            float: right;
-            align-items: center;
-            position: relative; /* Added for positioning the dropdown */
-            white-space: nowrap;
-        }
-
-        .button-group > button {
-            margin-left: 5px;
-            padding: 4px 8px;
-            border: none;
-            background: none;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-
-        .button-group > button svg {
-            fill: #4b535c;
-            fill-rule: evenodd;
-        }
-
-        .button-group > button svg:hover {
-            fill: #0366d6;
-            fill-rule: evenodd;
-        }
-
-        .button-group  .icon-container .show_history_svg {
-            fill: #ffffff;
-            stroke: #000;
-            stroke-width: 2.5;
-            fill-rule: evenodd;
-         }
-
-        .button-group  .icon-container .show_history_svg:hover {
-            stroke: #0366d6;
-         }
-
-        .button-group .button-text {
-            color: #4b535c;
-        }
-        .button-group .button-text:hover {
-            color: #0366d6;
-        }
-
-        .button-group .dropdown {
-            display: none; /* Hide the dropdown by default */
-            position: absolute;
-            top: 100%;
-            right: 0;
-            background-color: white;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            padding: 8px;
-            z-index: 10; /* Ensure the dropdown is above other content */
-            width: 160;
-        }
-
-        .button-group .dropdown.show {
-            display: block; /* Show the dropdown when active */
-        }
-
-        .button-group .dropdown > button {
-            display: table; /* Make each button in the dropdown take up full width */
-            margin-bottom: 3px; /* Add spacing between dropdown buttons */
-        }
-        .button-group button .icon-container {
-            display: inline-block; /* Align SVG with text */
-            vertical-align: middle; /* Center SVG vertically */
-            margin-right: 3px; /* Add spacing between SVG and text */
-        }
-
-        .button-group button .button-text {
-            margin-left: 5px; /* Add spacing between icon and text */
-            cursor: pointer; /* Make text clickable */
-            
-        }
-        .button-group button::after { /* Target the "Copy" button specifically */
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #7d7d92; /* Same as your tooltip background */
-            color: white;
-            padding: 2px 5px;
-            border-radius: 3px;
-            visibility: hidden; /* Hide by default */
-            opacity: 0;
-            transition: visibility 0.2s, opacity 0.2s;
-        }
-
-        .button-group button:hover::after {
-            visibility: visible;
-            opacity: 1;
-        }
-
-        .tooltip {
-            visibility: hidden;
-            max-width: 340px;
-            min-width: 260px;
-            word-break: break-word;
-            background-color: #7d7d92;
-            color: #fff;
-            text-align: left;
-            border-radius: 5px;
-            padding: 5px;
-            position: absolute;
-            z-index: 3;
-            bottom: 100%; /* Positioned above the svg icon */
-            left: 50%; /* Center the tooltip */
-            margin-left: -95px; /* Use negative margin to actually center the tooltip */
-            opacity: 0;
-            transition: opacity 0.3s;
-            overflow: hidden;
-            white-space: nowrap; /* Don't forget this one */
-            text-overflow: ellipsis;
-        }
-
-        .tooltip::after {
-            content: "";
-            position: absolute;
-            top: 100%; /* Arrow will be positioned at the bottom of the tooltip */
-            left: 50%;
-            margin-left: -5px;
-            border-width: 5px;
-            border-style: solid;
-            border-color: #7d7d92 transparent transparent transparent; /* Arrow color */
-        }
-
-        .tooltip.visible {
-            visibility: visible;
-            opacity: 1;
-        }
-  
-        table > tbody > tr > td:nth-child(2),
-        table > tbody > tr > td:nth-child(3),
-        table > tbody > tr > td:nth-child(4) {
-            text-align: left;
-        }
-    
-        .collapsible-content {
-            display: table-row-group;
-            position: absolute;
-            top: -9999px;
-            left: -9999px;
-            height: 0;
-            overflow: hidden;
-        }
-    
-        .collapsible-content.active {
-            position: relative;
-            top: 0;
-            left: 5;
-            height: auto;
-        }
-
-        .collapsible-header {
-            cursor: pointer;
-            background-color: #f2f2f2;
-            padding: 10px;
-            border: 1px solid #ddd;
-            margin-bottom: 5px;
-        }
-
-        .toggle-visibility-buttons {
-            margin-bottom: 10px;
-            overflow:hidden;
-            float: right;
-        }
-
-        .error-button {
-            border: none;
-            cursor: pointer;
-            background: url("data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjM0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSIzNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOC41OSAxNi4zNGw0LjU4LTQuNTktNC41OC00LjU5TDEwIDUuNzVsNiA2LTYgNnoiLz48L3N2Zz4=") no-repeat 50% 50% / 1em 1em;
-            width: 1em;
-            height: 1em;  
-            content: "";
-            transition: transform .5s;
-        }
-
-        pre>code[class*=language-] {
-            font-size: x-small;
-        }
-
-        .console-frame {
-            font-size: x-small;
-            display: grid;
-            border-radius: 4px;
-            overscroll-behavior: none;
-            background: #ddd;
-            padding: 5px;
-            color: #f1f2f3;
-            overflow-y: auto;
-            font-family: monospace;
-            word-break: keep-all;
-            font-size: x-small;
-        }
-
-        .console-frame::-webkit-scrollbar {
-            width: 10px;
-        }
-
-        .console-frame::-webkit-scrollbar-track {
-            background: #c5c6c8;
-        }
-
-        .console-frame::-webkit-scrollbar-thumb {
-            background: #838485;
-            border-radius: 4px;
-        }
-        pre[class*=language-] {
-            padding: 1em;
-            margin: 0;
-            overflow: auto;
-        }
-
-        /* Стили для модального окна */
-        #errorModal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.5);
-        }
-    
-        .modal-content {
-            background-color: #fefefe;
-            margin: 5% auto;
-            padding: 20px;
-            border: 1px solid #888;
-            width: 80%;
-            border-radius: 5px;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-    
-        .close-modal {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        
-        .modal-header {
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
-            font-size: smaller;
-        }
-        
-        .modal-info {
-            font-size: small;
-            margin-bottom: 15px;
-            line-height: 1.5;
-        }
-        
-        .modal-info-item {
-            margin-bottom: 5px;
-        }
-        
-        .modal-info-label {
-            font-weight: bold;
-            display: inline-block;
-            width: 80px;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Test Summary Report</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;margin:0;padding:0;box-sizing:border-box;width:100%}
+h1{font-size:20px}
+.report-header{background-color:#f6f8fa;border:1px solid #d0d7de;border-radius:6px;padding:16px;margin:16px 0}
+.report-header h2{margin:0 0 8px 0;font-size:16px;font-weight:600}
+.report-header p{margin:4px 0;font-size:14px}
+.report-header a{color:#0969da;text-decoration:none}
+.report-header a:hover{text-decoration:underline}
+th{text-transform:uppercase}
+th,td{padding:5px;word-break:break-word;font-size:14px;min-width:80px}
+td.test_name{min-width:72.5vw;max-width:72.5vw}
+td.test_name.with_history{min-width:62vw;max-width:62vw}
+table{border-collapse:collapse;width:100%;left:5}
+span.test_status{font-weight:bold}
+span.test_fail{color:red}
+span.test_pass{color:green}
+span.test_mute{color:blue}
+span.test_fail_sanitizer,span.test_error_sanitizer{color:#ff4500;background-color:#fff5ee;padding:2px 4px;border-radius:3px;border-left:3px solid #ff4500}
+.svg_passed{fill:green}
+.svg_failure{fill:red}
+.svg_skipped{fill:gray}
+.svg_mute{fill:blue}
+.issue-button{display:inline-block;background-color:#f6f8fa;border:1px solid #d0d7de;border-radius:6px;color:#0969da;padding:2px 6px;font-size:11px;font-weight:500;text-decoration:none;margin-left:8px;cursor:pointer;transition:background-color .2s,border-color .2s}
+.issue-button:hover{background-color:#f3f4f6;border-color:#d0d7de;text-decoration:none}
+.svg-icon{float:left;width:14px;height:14px;padding-left:1px;padding-right:1px;margin-right:0;border-radius:50%;position:relative;cursor:pointer}
+.button{display:inline-flex;align-items:center;justify-content:left;padding:4px;border:none;background:none;cursor:pointer;position:relative}
+.button svg{fill:#4b535c;fill-rule:evenodd}
+.button svg:hover{fill:#0366d6;fill-rule:evenodd}
+.button-group{display:inline-flex;float:right;align-items:center;position:relative;white-space:nowrap}
+.button-group>button{margin-left:5px;padding:4px 8px;border:none;background:none;cursor:pointer;white-space:nowrap}
+.button-group>button svg{fill:#4b535c;fill-rule:evenodd}
+.button-group>button svg:hover{fill:#0366d6;fill-rule:evenodd}
+.button-group .icon-container .show_history_svg{fill:#fff;stroke:#000;stroke-width:2.5;fill-rule:evenodd}
+.button-group .icon-container .show_history_svg:hover{stroke:#0366d6}
+.button-group .button-text{color:#4b535c}
+.button-group .button-text:hover{color:#0366d6}
+.button-group .dropdown{display:none;position:absolute;top:100%;right:0;background-color:#fff;border:1px solid #ddd;border-radius:4px;box-shadow:0 2px 4px rgba(0,0,0,.1);padding:8px;z-index:10;width:160}
+.button-group .dropdown.show{display:block}
+.button-group .dropdown>button{display:table;margin-bottom:3px}
+.button-group button .icon-container{display:inline-block;vertical-align:middle;margin-right:3px}
+.button-group button .button-text{margin-left:5px;cursor:pointer}
+.button-group button::after{position:absolute;top:100%;left:50%;transform:translateX(-50%);background-color:#7d7d92;color:#fff;padding:2px 5px;border-radius:3px;visibility:hidden;opacity:0;transition:visibility .2s,opacity .2s}
+.button-group button:hover::after{visibility:visible;opacity:1}
+.tooltip{visibility:hidden;max-width:340px;min-width:260px;word-break:break-word;background-color:#7d7d92;color:#fff;text-align:left;border-radius:5px;padding:5px;position:absolute;z-index:3;bottom:100%;left:50%;margin-left:-95px;opacity:0;transition:opacity .3s;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tooltip::after{content:"";position:absolute;top:100%;left:50%;margin-left:-5px;border-width:5px;border-style:solid;border-color:#7d7d92 transparent transparent transparent}
+.tooltip.visible{visibility:visible;opacity:1}
+table>tbody>tr>td:nth-child(2),table>tbody>tr>td:nth-child(3),table>tbody>tr>td:nth-child(4){text-align:left}
+.collapsible-content{display:table-row-group;position:absolute;top:-9999px;left:-9999px;height:0;overflow:hidden}
+.collapsible-content.active{position:relative;top:0;left:5;height:auto}
+.collapsible-header{cursor:pointer;background-color:#f2f2f2;padding:10px;border:1px solid #ddd;margin-bottom:5px}
+.toggle-visibility-buttons{margin-bottom:10px;overflow:hidden;float:right}
+.error-button{border:none;cursor:pointer;background:url("data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjM0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSIzNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOC41OSAxNi4zNGw0LjU4LTQuNTktNC41OC00LjU5TDEwIDUuNzVsNiA2LTYgNnoiLz48L3N2Zz4=") no-repeat 50% 50%/1em 1em;width:1em;height:1em;content:"";transition:transform .5s}
+.error-content{display:none}
+.console-frame{font-size:x-small;display:grid;border-radius:4px;overscroll-behavior:none;background:#ddd;padding:5px;color:#f1f2f3;overflow-y:auto;font-family:monospace;word-break:keep-all}
+.console-frame::-webkit-scrollbar{width:10px}
+.console-frame::-webkit-scrollbar-track{background:#c5c6c8}
+.console-frame::-webkit-scrollbar-thumb{background:#838485;border-radius:4px}
+pre[class*=language-]{padding:1em;margin:0;overflow:auto}
+pre>code[class*=language-]{font-size:x-small}
+#errorModal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;overflow:auto;background-color:rgba(0,0,0,.5)}
+.modal-content{background-color:#fefefe;margin:5% auto;padding:20px;border:1px solid #888;width:80%;border-radius:5px;max-height:80vh;overflow-y:auto}
+.close-modal{color:#aaa;float:right;font-size:28px;font-weight:bold;cursor:pointer}
+.modal-header{margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid #eee;font-size:smaller}
+.modal-info{font-size:small;margin-bottom:15px;line-height:1.5}
+.modal-info-item{margin-bottom:5px}
+.modal-info-label{font-weight:bold;display:inline-block;width:80px}
+@media(max-width:768px){
+td.test_name{min-width:90vw;max-width:90vw;font-size:12px}
+td.test_name.with_history{min-width:85vw;max-width:85vw}
+.button-group{display:block;float:none;margin-top:5px}
+.svg-icon{width:12px;height:12px}
+.modal-content{width:95%;margin:2% auto}
+table{font-size:12px}
+th,td{padding:3px;min-width:60px}
+}
+.load-more-btn{display:block;margin:10px auto;padding:10px 20px;background-color:#0969da;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}
+.load-more-btn:hover{background-color:#0550ae}
+.test-row{display:table-row}
+.test-row.hidden{display:none}
 </style>
 <script>
-    function findParentBySelector(elm, selector) {
-        var all = document.querySelectorAll(selector);
-        var cur = elm.parentNode;
-        while(cur && !collectionHas(all, cur)) { //keep going up until you find a match
-            cur = cur.parentNode; //go up
-        }
-        return cur; //will return null if not found
-    }
-
-    function collectionHas(a, b) { //helper function (see below)
-        for(var i = 0, len = a.length; i < len; i ++) {
-            if(a[i] == b) return true;
-        }
-        return false;
-    }
-
-    function copyTestNameToClipboard(text) {
-        const cmdArg = getTestRunCommand(text);
-        if (!cmdArg) return;
-
-        console.log(cmdArg);
-
-        navigator.clipboard.writeText(cmdArg).then(
-            () => {
-                console.log("Copied!");
-                showCopiedTooltip();
-            },
-            () => {
-                console.error("Unable to copy %o to clipboard", cmdArg);
-            }
-        );
-    }
-    function copyTestNameForMuteToClipboard(text) {
-        const parsed = parseTestName(text);
-        if (!parsed) return;
-        
-        const [path, testName] = parsed;
-        const cmdArg = `${path} ${testName}`;
-
-        console.log(cmdArg);
-
-        navigator.clipboard.writeText(cmdArg).then(
-            () => {
-                console.log("Copied!");
-                showCopiedTooltip();
-            },
-            () => {
-                console.error("Unable to copy %o to clipboard", cmdArg);
-            }
-        );
-    }
-
-    // Configuration constants
-    const MAX_URL_LENGTH = 8000; // GitHub URL limit is 8201, stay under 8000 to be safe
-    const GITHUB_ISSUE_BASE_URL = "https://github.com/ydb-platform/ydb/issues/new"; // Base URL for GitHub issues
-
-    // Utility functions
-    function buildGitHubIssueUrl(title, body, labels) {
-        return GITHUB_ISSUE_BASE_URL + "?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
-    }
-
-    // Show tooltip stub to avoid runtime errors (visual feedback provided by icon swap)
-    function showCopiedTooltip() {}
-
-    // Safe percent-encoded truncation helpers
-    function isDecodable(s) {
-        try { decodeURIComponent(s); return true; } catch (e) { return false; }
-    }
-
-    function safeTruncateEncoded(encoded, maxLen) {
-        if (encoded.length <= maxLen) return encoded;
-        let cut = encoded.slice(0, maxLen);
-        // Remove incomplete % sequence at the tail
-        cut = cut.replace(/%(?:[0-9A-Fa-f]{0,2})$/, '');
-        while (cut && !isDecodable(cut)) {
-            if (/%[0-9A-Fa-f]{2}$/.test(cut)) cut = cut.slice(0, -3);
-            else cut = cut.slice(0, -1);
-        }
-        return cut;
-    }
-
-    function parseTestName(full_name) {
-        const trimmed = full_name.trim();
-        let pieces;
-        
-        if (trimmed.includes('.py.')) {
-            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(trimmed);
-        } else {
-            pieces = /(.+)\/([^$]+)$/.exec(trimmed);
-        }
-
-        if (!pieces) {
-            console.error("Unable to split path/test name from %o", trimmed);
-            return null;
-        }
-        
-        return [pieces[1], pieces[2]];
-    }
-
-    function formatTestCommand(path, testName) {
-        const namePieces = testName.split('.');
-
-        if (namePieces.length === 2) {
-            testName = namePieces[0] + '::' + namePieces[1];
-        } else {
-            testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
-        }
-
-        return `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
-    }
-
-    function getTestRunCommand(test) {
-        const parsed = parseTestName(test);
-        if (!parsed) return "";
-        
-        const [path, testName] = parsed;
-        return formatTestCommand(path, testName);
-    }
-
-    function getOwnerAreaLabel(owner) {
-        const ownerMapping = {{ owner_area_mapping | tojson }};
-        return ownerMapping[owner] || "";
-    }
-
-    function buildLabels(issueType, buildPreset, ownerAreaLabel) {
-        let labels = [];
-        
-        if (issueType === 'mute') {
-            labels.push('mute');
-        } else {
-            labels.push('bug');
-            
-            if (issueType === 'sanitizer') {
-                labels.push('sanitizer');
-                
-                if (buildPreset.includes("asan")) {
-                    labels.push("asan");
-                } else if (buildPreset.includes("msan")) {
-                    labels.push("msan");
-                } else if (buildPreset.includes("tsan")) {
-                    labels.push("tsan");
-                }
-            }
-        }
-        
-        if (ownerAreaLabel) {
-            labels.push(ownerAreaLabel);
-        }
-        
-        return labels.join(',');
-    }
-
-    function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText) {
-        let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
-        
-        // Add type-specific header
-        if (issueType === 'sanitizer') {
-            // No header for sanitizer issues as requested
-        } else if (issueType === 'mute') {
-            body += "**Test mute request**%0A%0A";
-        } else {
-            body += "**Test Failure**%0A%0A";
-        }
-        
-        // Build information
-        body += "**Build Information:**%0A";
-        if (commitSha && commitSha !== "") {
-            body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
-        }
-        body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
-        body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
-        
-        // Run command
-        body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
-        
-        // Owner
-        body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
-        
-        // Summary history (only for non-sanitizer issues)
-        if (issueType !== 'sanitizer') {
-            if (success_count + fail_count != 0) {
-                body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
-            } else {
-                body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
-            }
-        }
-        
-        // Always include test run history link
-        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
-        
-        // Always include report link
-        body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
-        
-        return body;
-    }
-
-    function buildBodyWithLengthLimit(baseBody, logUrls, errorText, title, labels, maxUrlLength) {
-        let body = baseBody;
-        
-        // Add logs first
-        if (logUrls && Object.keys(logUrls).length > 0) {
-            let logsSection = "**Logs:**%0A";
-            for (const [logName, logUrl] of Object.entries(logUrls)) {
-                logsSection += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
-            }
-            logsSection += "%0A";
-            body += logsSection;
-        }
-        
-        // Try to add error text, checking actual URL length
-        if (errorText && errorText.trim() !== "") {
-            const errorPrefix = "**Error Summary:**%0A```%0A";
-            const errorSuffix = "%0A```%0A%0A";
-            const truncationMsg = "%0A<TRUNCATED>";
-            
-            const fullErrorText = errorText.trim();
-            const encodedFullError = encodeURIComponent(fullErrorText);
-
-            // Compute minimal overhead URL length (without error content)
-            const minimalSection = errorPrefix + errorSuffix;
-            const minimalUrl = buildGitHubIssueUrl(title, body + minimalSection, labels);
-            if (minimalUrl.length > maxUrlLength) {
-                // Can't include error section at all
-            } else {
-                const allowedDelta = maxUrlLength - minimalUrl.length;
-                if (encodedFullError.length <= allowedDelta) {
-                    body += errorPrefix + encodedFullError + errorSuffix;
-                } else {
-                    const allowedForEncoded = allowedDelta - truncationMsg.length;
-                    if (allowedForEncoded > 0) {
-                        const truncatedEncoded = safeTruncateEncoded(encodedFullError, allowedForEncoded);
-                        if (truncatedEncoded) {
-                            body += errorPrefix + truncatedEncoded + truncationMsg + errorSuffix;
-                        }
-                    }
-                }
-            }
-        }
-        
-        return body;
-    }
-
-    function createIssueGeneric(issueType, test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
-        const parsed = parseTestName(test);
-        if (!parsed) return;
-        
-        const [path, testName] = parsed;
-        
-        // Get build preset and other contextual information
-        const buildPreset = "{{ build_preset }}";
-        const branch = "{{ branch }}";
-        const commitSha = "{{ commit_sha }}";
-        const testRunCommand = getTestRunCommand(test);
-        const ownerAreaLabel = getOwnerAreaLabel(owner);
-        
-        // Determine issue type based on parameters
-        let actualIssueType = issueType;
-        if (is_sanitizer && issueType === 'bug') {
-            actualIssueType = 'sanitizer';
-        }
-        
-        // Create title based on issue type
-        let title;
-        if (actualIssueType === 'sanitizer') {
-            title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
-        } else if (actualIssueType === 'mute') {
-            title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
-        } else {
-            title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
-        }
-        
-        // Build body
-        const body = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText);
-        
-        // Build labels
-        const labels = buildLabels(actualIssueType, buildPreset, ownerAreaLabel);
-        
-        // Build body with exact length limit checking
-        const finalBody = buildBodyWithLengthLimit(body, logUrls, errorText, title, labels, MAX_URL_LENGTH);
-        
-        // Create final URL and open
-        const finalUrl = buildGitHubIssueUrl(title, finalBody, labels);
-        window.open(finalUrl, '_blank');
-    }
-
-    function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
-        createIssueGeneric('bug', test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
-    }
-
-    function createMuteIssue(test, owner, success_count, fail_count, errorText = '', logUrls = {}) {
-        createIssueGeneric('mute', test, owner, success_count, fail_count, false, errorText, logUrls);
-    }
-
-    function openHistory(test) {
-        const full_name = test.trim();
-        const buildPreset = "{{ build_preset }}";
-        const branch = "{{ branch }}";
-        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
-        window.open(url, '_blank');
-    }
-
-    // Функция для отображения информации о тесте в модальном окне
-    function showTestInfo(testInfo) {
-        const modal = document.getElementById('errorModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalStatus = document.getElementById('modalStatus');
-        const modalDate = document.getElementById('modalDate');
-        const modalSha = document.getElementById('modalSha');
-        const modalJob = document.getElementById('modalJob');
-        const modalErrorContent = document.getElementById('modalErrorContent');
-
-        // Заполняем информацию
-        modalTitle.textContent = 'Test details: ' + testInfo.testName;
-        modalStatus.textContent = testInfo.status;
-        modalDate.textContent = testInfo.date;
-        
-        // Обновляем ссылку на запуск
-        const jobLink = document.getElementById('modalJobLink');
-        jobLink.href = `https://github.com/ydb-platform/ydb/actions/runs/${testInfo.job_id}`;
-        jobLink.textContent = testInfo.job_name;
-        // Обновляем ссылку на коммит
-        const shaLink = document.getElementById('modalShaLink');
-        shaLink.href = `https://github.com/ydb-platform/ydb//commit/${testInfo.commit}`;
-        shaLink.textContent = testInfo.commit.substring(0, 8);
-        
-        // Класс для статуса
-        modalStatus.className = '';
-        if (testInfo.status === 'passed') {
-            modalStatus.classList.add('test_pass');
-        } else if (testInfo.status === 'failure') {
-            modalStatus.classList.add('test_fail');
-        } else if (testInfo.status === 'mute') {
-            modalStatus.classList.add('test_mute');
-        }
-        
-        // Обработка текста ошибки
-        if (testInfo.errorText && testInfo.errorText.trim() !== "") {
-            document.getElementById('modalErrorSection').style.display = 'block';
-            modalErrorContent.textContent = testInfo.errorText;
-            
-            // Определяем язык для подсветки синтаксиса
-            modalErrorContent.className = 'language-' + (testInfo.testName.includes('.py') ? 'python' : 'cpp');
-            
-            // Активируем подсветку синтаксиса
-            if (typeof Prism !== 'undefined') {
-                Prism.highlightElement(modalErrorContent);
-            }
-        } else {
-            document.getElementById('modalErrorSection').style.display = 'none';
-        }
-        
-        // Показываем модальное окно
-        modal.style.display = 'block';
-    }
-    
-    function toggleAllTables(action) {
-        const contents = document.querySelectorAll('.collapsible-content');
-        if (action === 'expand') {
-            contents.forEach(content => content.classList.add('active'));
-        } else if (action === 'collapse') {
-            contents.forEach(content => content.classList.remove('active'));
-        }
-    }
-    function ButtonIconsClick(button){
-        button.addEventListener('click', function() {
-                const iconContainer = button.querySelector('.icon-container');
-                const initialIcon = iconContainer.querySelector('svg:first-child');
-                const doneIcon = iconContainer.querySelector('svg:last-child');
-
-                // Swap icon visibility
-                initialIcon.style.display = 'none'; 
-                doneIcon.style.display = 'block';
-
-                // You can add any additional actions here, like:
-                // - Disabling the button
-                // - Changing the button's title
-                // - Triggering other effects
-            });
-         
-    }
-    
-    document.addEventListener("DOMContentLoaded", function() {
-        let openDropdown = null; // Track the currently open dropdown
-
-        const buttonGroups = document.querySelectorAll(".button-group");
-        buttonGroups.forEach(buttonGroup => {
-            const dropdown = buttonGroup.querySelector('.dropdown');
-            const toggleButton = buttonGroup.querySelector('button:first-child'); // The "..." button
-
-            toggleButton.addEventListener('click', function() {
-                // Close any previously open dropdown
-                if (openDropdown && openDropdown !== dropdown) {
-                    openDropdown.classList.remove('show');
-                }
-                dropdown.classList.toggle('show');
-                openDropdown = dropdown.classList.contains('show') ? dropdown : null;
-                const iconContainer = dropdown.querySelectorAll('.icon-container');
-                iconContainer.forEach(element=>{
-                    const initialIcon = element.querySelector('svg:first-child');
-                    const doneIcon = element.querySelector('svg:last-child');
-
-                // Swap icon visibility
-                initialIcon.style.display = 'block'; 
-                doneIcon.style.display = 'none';
-                });
-            });
-            
-            // Close the dropdown when clicking outside of it
-            document.addEventListener('click', function(event) {
-                if (!event.target.closest('.button-group')) {
-                    dropdown.classList.remove('show');
-                    openDropdown = null;
-                }
-            });
-            buttonGroup.querySelectorAll('.button-group .dropdown  .button').forEach(button => {
-                ButtonIconsClick(button)
-            });
-        });
-
-        document.addEventListener('keydown', function(event) {
-            if ((event.ctrlKey && event.keyCode == 70) || (event.metaKey && event.keyCode == 70)) { 
-                toggleAllTables('expand');
-            }    
-        });
-
-        const svgIcons = document.querySelectorAll('.svg-icon');
-        svgIcons.forEach(icon => {
-            icon.addEventListener('click', function(event) {
-                event.stopPropagation();
-                
-                // Получаем данные для модального окна
-                const testName = icon.getAttribute('data-test-name');
-                const status = icon.getAttribute('data-status');
-                const date = icon.getAttribute('data-date');
-                const errorText = icon.getAttribute('data-error');
-                const commit = icon.getAttribute('data-commit');
-                const job_name = icon.getAttribute('data-job-name');
-                const job_id = icon.getAttribute('data-job-id');
-                
-                // Открываем модальное окно с данными
-                showTestInfo({
-                    testName: testName,
-                    status: status,
-                    date: date,
-                    errorText: errorText,
-                    commit: commit,
-                    job_name: job_name,
-                    job_id: job_id
-                });
-            });
-        });
-        
-        const copyButtons = document.querySelectorAll(".copy");
-        copyButtons.forEach(button => {
-            button.addEventListener('click', function(event) {
-                event.preventDefault();
-                copyTestNameToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
-            });
-        });
-        const muteButtons = document.querySelectorAll(".mute");
-        muteButtons.forEach(button => {
-            button.addEventListener('click', function(event) {
-                event.preventDefault();
-                copyTestNameForMuteToClipboard(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
-            });
-        });
-        const historyButton = document.querySelectorAll(".open_history");
-        historyButton.forEach(button => {
-            button.addEventListener('click', function(event) {
-                event.preventDefault();
-                openHistory(findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText);
-            });
-        });
-        const createIssueButton = document.querySelectorAll(".create_issue");
-        createIssueButton.forEach(button => {
-            button.addEventListener('click', function(event) {
-                event.preventDefault();
-                const testRow = findParentBySelector(event.target,'tr');
-                const success_count = testRow.querySelectorAll('.svg_passed').length;
-                const fail_count = testRow.querySelectorAll('.svg_failure').length + testRow.querySelectorAll('.svg_mute').length;
-                const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
-                const owner = testRow.querySelector('.test_owner').innerText;
-                
-                // Check if this is a sanitizer issue by looking for the SANITIZER badge
-                const is_sanitizer = testRow.querySelector('.test_name span[style*="background-color: #ff4500"]') !== null;
-                
-                // Get error text from the test description if available
-                let errorText = '';
-                const errorButton = testRow.querySelector('.error-button');
-                if (errorButton && errorButton.nextElementSibling) {
-                    const errorContent = errorButton.nextElementSibling.querySelector('pre code');
-                    if (errorContent) {
-                        errorText = errorContent.textContent;
-                    }
-                }
-                
-                // Extract log URLs from the test row
-                let logUrls = {};
-                const logCells = testRow.querySelectorAll('td:last-child a');
-                logCells.forEach(link => {
-                    const logName = link.textContent.trim();
-                    const logUrl = link.href;
-                    if (logName && logUrl) {
-                        logUrls[logName] = logUrl;
-                    }
-                });
-
-                createIssue(testName, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
-            });
-        });
-        
-        const createMuteIssueButton = document.querySelectorAll(".create_mute_issue");
-        createMuteIssueButton.forEach(button => {
-            button.addEventListener('click', function(event) {
-                event.preventDefault();
-                const testRow = findParentBySelector(event.target,'tr');
-                const success_count = testRow.querySelectorAll('.svg_passed').length;
-                const fail_count = testRow.querySelectorAll('.svg_failure').length + testRow.querySelectorAll('.svg_mute').length;
-                const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
-                const owner = testRow.querySelector('.test_owner').innerText;
-                
-                // Get error text from the test description if available
-                let errorText = '';
-                const errorButton = testRow.querySelector('.error-button');
-                if (errorButton && errorButton.nextElementSibling) {
-                    const errorContent = errorButton.nextElementSibling.querySelector('pre code');
-                    if (errorContent) {
-                        errorText = errorContent.textContent;
-                    }
-                }
-                
-                // Extract log URLs from the test row
-                let logUrls = {};
-                const logCells = testRow.querySelectorAll('td:last-child a');
-                logCells.forEach(link => {
-                    const logName = link.textContent.trim();
-                    const logUrl = link.href;
-                    if (logName && logUrl) {
-                        logUrls[logName] = logUrl;
-                    }
-                });
-
-                createMuteIssue(testName, owner, success_count, fail_count, errorText, logUrls);
-            });
-        });
-
-
-        const headers = document.querySelectorAll(".collapsible-header");
-        headers.forEach(header => {
-            header.addEventListener('click', function() {
-                const content = this.nextElementSibling;
-                if (content.classList.contains('active')) {
-                    content.classList.remove('active');
-                } else {
-                    content.classList.add('active');
-                }
-            });
-        });
-
-        document.getElementById('expand-all').addEventListener('click', function(event) {
-             toggleAllTables('expand');
-        });
-        document.getElementById('collapse-all').addEventListener('click',  function(event) {
-            toggleAllTables('collapse');
-        });
-        
-        // Обработчик для закрытия модального окна
-        document.querySelector('.close-modal').onclick = function() {
-            document.getElementById('errorModal').style.display = 'none';
-        }
-        
-        // Закрытие при клике вне модального окна
-        window.onclick = function(event) {
-            const modal = document.getElementById('errorModal');
-            if (event.target == modal) {
-                modal.style.display = 'none';
-            }
-        }
-    });
-    function toggleError(button) {
-    const errorContent = button.nextElementSibling;
-    const consoleFrame = errorContent.querySelector('.console-frame');
-    if (errorContent.style.display === 'none') {
-        errorContent.style.display = 'block';
-        consoleFrame.style.display = 'block';
-        button.style.transform = "rotate(90deg)"
-    } else {
-        errorContent.style.display = 'none';
-        consoleFrame.style.display = 'none';
-        button.style.transform = "rotate(0deg)"
-    }
-  }
+const MAX_URL_LENGTH=8000,GITHUB_ISSUE_BASE_URL="https://github.com/ydb-platform/ydb/issues/new";
+function buildGitHubIssueUrl(t,e,o){return GITHUB_ISSUE_BASE_URL+"?title="+t+"&body="+e+"&labels="+o+"&type=Bug"}
+function showCopiedTooltip(){}
+function isDecodable(t){try{return decodeURIComponent(t),!0}catch(t){return!1}}
+function safeTruncateEncoded(t,e){if(t.length<=e)return t;let o=t.slice(0,e);for(o=o.replace(/%(?:[0-9A-Fa-f]{0,2})$/,"");o&&!isDecodable(o);)o=/%[0-9A-Fa-f]{2}$/.test(o)?o.slice(0,-3):o.slice(0,-1);return o}
+function parseTestName(t){const e=t.trim();let o;return o=e.includes(".py.")?/(.+)\/(.*py.*[^\/]+)$/.exec(e):/(.+)\/([^$]+)$/.exec(e),o?[o[1],o[2]]:(console.error("Unable to split path/test name from %o",e),null)}
+function formatTestCommand(t,e){const o=e.split(".");return e=2===o.length?o[0]+"::"+o[1]:o[0]+"."+o[1]+"::"+o.slice(2).join("::"),"./ya make -ttt {{ buid_preset_params }} -F '"+e+"' "+t}
+function getTestRunCommand(t){const e=parseTestName(t);if(!e)return"";const[o,n]=e;return formatTestCommand(o,n)}
+function getOwnerAreaLabel(t){return({{ owner_area_mapping | tojson }})[t]||""}
+function buildLabels(t,e,o){let n=[];return"mute"===t?n.push("mute"):(n.push("bug"),"sanitizer"===t&&(n.push("sanitizer"),e.includes("asan")?n.push("asan"):e.includes("msan")?n.push("msan"):e.includes("tsan")&&n.push("tsan"))),o&&n.push(o),n.join(",")}
+function buildIssueBody(t,e,o,n,s,r,i,a,l,c,d,u){let p=encodeURIComponent(e)+"/"+encodeURIComponent(o)+"%0A%0A";return"sanitizer"===t||"mute"===t?p+="**Test mute request**%0A%0A":p+="**Test Failure**%0A%0A",p+="**Build Information:**%0A",r&&""!==r&&(p+="- Version: "+encodeURIComponent(r)+"%0A"),p+="- Build Preset: "+encodeURIComponent(n)+"%0A",p+="- Branch: "+encodeURIComponent(s)+"%0A%0A",p+="**Run Command:**%0A```%0A"+encodeURIComponent(i)+"%0A```%0A%0A",p+="**Owner:** [TEAM:@ydb-platform/"+a+"](https://github.com/orgs/ydb-platform/teams/"+a+")%0A%0A","sanitizer"!==t&&(p+=0!=a+l?"**Summary history:**%0A Success rate **"+a/(a+l)*100+"%25**%0APass:"+a+" Fail:"+l+"%0A%0A":"**Summary history:**%0APass:"+a+" Fail:"+l+"%0A%0A"),p+="**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch="+encodeURIComponent(s)+"%26full_name="+encodeURIComponent(e+"/"+o)+"%26build_type="+encodeURIComponent(n)+")%0A%0A",p+="More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A",p}
+function buildBodyWithLengthLimit(t,e,o,n,s,r){let i=t;if(e&&Object.keys(e).length>0){let t="**Logs:**%0A";for(const[o,n]of Object.entries(e))t+="- ["+encodeURIComponent(o)+"]("+encodeURIComponent(n)+")%0A";t+="%0A",i+=t}if(o&&""!==o.trim()){const t="**Error Summary:**%0A```%0A",e="%0A```%0A%0A",a="%0A<TRUNCATED>",l=o.trim(),c=encodeURIComponent(l),d=t+e,u=buildGitHubIssueUrl(n,i+d,s);if(!(u.length>r)){const o=r-u.length;if(c.length<=o)i+=t+c+e;else{const n=o-a.length;if(n>0){const o=safeTruncateEncoded(c,n);o&&(i+=t+o+a+e)}}}}return i}
+function createIssueGeneric(t,e,o,n,s,r,i,a={}){const l=parseTestName(e);if(!l)return;const[c,d]=l,u="{{build_preset}}",p="{{branch}}",m="{{commit_sha}}",f=getTestRunCommand(e),h=getOwnerAreaLabel(o);let b=t;r&&"bug"===t&&(b="sanitizer");let y;y="sanitizer"===b?"Sanitizer error in "+encodeURIComponent(c)+"/"+encodeURIComponent(d):"mute"===b?"Mute test "+encodeURIComponent(c)+"/"+encodeURIComponent(d):"Test failure in "+encodeURIComponent(c)+"/"+encodeURIComponent(d);const g=buildIssueBody(b,c,d,u,p,m,f,o,n,s,a,i),A=buildLabels(b,u,h),C=buildBodyWithLengthLimit(g,a,i,y,A,MAX_URL_LENGTH),w=buildGitHubIssueUrl(y,C,A);window.open(w,"_blank")}
+function createIssue(t,e,o,n,s,r,i={}){createIssueGeneric("bug",t,e,o,n,s,r,i)}
+function createMuteIssue(t,e,o,n,s="",r={}){createIssueGeneric("mute",t,e,o,n,!1,s,r)}
+function openHistory(t){const e=t.trim(),o="{{build_preset}}",n="{{branch}}";let s="https://datalens.yandex/34xnbsom67hcq?branch="+encodeURIComponent(n)+"&full_name="+encodeURIComponent(e)+"&build_type="+encodeURIComponent(o);window.open(s,"_blank")}
+function copyTestNameToClipboard(t){const e=getTestRunCommand(t);e&&(console.log(e),navigator.clipboard.writeText(e).then(()=>{console.log("Copied!"),showCopiedTooltip()},()=>{console.error("Unable to copy %o to clipboard",e)}))}
+function copyTestNameForMuteToClipboard(t){const e=parseTestName(t);if(!e)return;const[o,n]=e,s=`${o} ${n}`;console.log(s),navigator.clipboard.writeText(s).then(()=>{console.log("Copied!"),showCopiedTooltip()},()=>{console.error("Unable to copy %o to clipboard",s)})}
+function findParentBySelector(t,e){var o=document.querySelectorAll(e),n=t.parentNode;for(;n&&!collectionHas(o,n);)n=n.parentNode;return n}
+function collectionHas(t,e){for(var o=0,n=t.length;o<n;o++)if(t[o]==e)return!0;return!1}
+function showTestInfo(t){const e=document.getElementById("errorModal"),o=document.getElementById("modalTitle"),n=document.getElementById("modalStatus"),s=document.getElementById("modalDate"),r=document.getElementById("modalSha"),i=document.getElementById("modalJob"),a=document.getElementById("modalErrorContent");o.textContent="Test details: "+t.testName,n.textContent=t.status,s.textContent=t.date;const l=document.getElementById("modalJobLink");l.href=`https://github.com/ydb-platform/ydb/actions/runs/${t.job_id}`,l.textContent=t.job_name;const c=document.getElementById("modalShaLink");c.href=`https://github.com/ydb-platform/ydb//commit/${t.commit}`,c.textContent=t.commit.substring(0,8),n.className="","passed"===t.status?n.classList.add("test_pass"):"failure"===t.status?n.classList.add("test_fail"):"mute"===t.status&&n.classList.add("test_mute"),t.errorText&&""!==t.errorText.trim()?(document.getElementById("modalErrorSection").style.display="block",a.textContent=t.errorText,a.className="language-"+(t.testName.includes(".py")?"python":"cpp")):document.getElementById("modalErrorSection").style.display="none",e.style.display="block"}
+function toggleAllTables(t){const e=document.querySelectorAll(".collapsible-content");"expand"===t?e.forEach(t=>t.classList.add("active")):"collapse"===t&&e.forEach(t=>t.classList.remove("active"))}
+function ButtonIconsClick(t){t.addEventListener("click",function(){const t=this.querySelector(".icon-container"),e=t.querySelector("svg:first-child"),o=t.querySelector("svg:last-child");e.style.display="none",o.style.display="block"})}
+function toggleError(t){const e=t.nextElementSibling,o=e.querySelector(".console-frame"),n=e.querySelector("code");if("none"===e.style.display){if(!n.textContent){const e=t.getAttribute("data-error");e&&(n.textContent=e)}e.style.display="block",o.style.display="block",t.style.transform="rotate(90deg)"}else e.style.display="none",o.style.display="none",t.style.transform="rotate(0deg)"}
+function initPagination(){const t=50;document.querySelectorAll("table tbody").forEach(e=>{const o=Array.from(e.querySelectorAll("tr"));if(o.length>t){o.forEach((e,n)=>{n>=t&&(e.classList.add("hidden"),e.classList.add("test-row"))});const n=document.createElement("tr"),s=document.createElement("td");s.colSpan=100,s.style.textAlign="center";const r=document.createElement("button");r.className="load-more-btn",r.textContent=`Load More (${o.length-t} hidden)`,r.onclick=function(){const n=Array.from(e.querySelectorAll("tr.hidden")).slice(0,t);n.forEach(t=>t.classList.remove("hidden"));const s=e.querySelectorAll("tr.hidden").length;0===s?this.parentElement.parentElement.remove():this.textContent=`Load More (${s} hidden)`},s.appendChild(r),n.appendChild(s),e.appendChild(n)}})}
+document.addEventListener("DOMContentLoaded",function(){let t=null;const e=document.querySelectorAll(".button-group");e.forEach(e=>{const o=e.querySelector(".dropdown"),n=e.querySelector("button:first-child");n.addEventListener("click",function(){t&&t!==o&&t.classList.remove("show"),o.classList.toggle("show"),t=o.classList.contains("show")?o:null;const n=o.querySelectorAll(".icon-container");n.forEach(t=>{const e=t.querySelector("svg:first-child"),o=t.querySelector("svg:last-child");e.style.display="block",o.style.display="none"})}),document.addEventListener("click",function(e){e.target.closest(".button-group")||(o.classList.remove("show"),t=null)}),e.querySelectorAll(".button-group .dropdown  .button").forEach(t=>{ButtonIconsClick(t)})});document.addEventListener("keydown",function(t){(t.ctrlKey&&70==t.keyCode||t.metaKey&&70==t.keyCode)&&toggleAllTables("expand")});const o=document.querySelectorAll(".svg-icon");o.forEach(t=>{t.addEventListener("click",function(t){t.stopPropagation();const e=this.getAttribute("data-test-name"),o=this.getAttribute("data-status"),n=this.getAttribute("data-date"),s=this.getAttribute("data-error"),r=this.getAttribute("data-commit"),i=this.getAttribute("data-job-name"),a=this.getAttribute("data-job-id");showTestInfo({testName:e,status:o,date:n,errorText:s,commit:r,job_name:i,job_id:a})})});const n=document.querySelectorAll(".copy");n.forEach(t=>{t.addEventListener("click",function(t){t.preventDefault(),copyTestNameToClipboard(findParentBySelector(t.target,"tr").querySelector(".test_name").querySelector("span").innerText)})});const s=document.querySelectorAll(".mute");s.forEach(t=>{t.addEventListener("click",function(t){t.preventDefault(),copyTestNameForMuteToClipboard(findParentBySelector(t.target,"tr").querySelector(".test_name").querySelector("span").innerText)})});const r=document.querySelectorAll(".open_history");r.forEach(t=>{t.addEventListener("click",function(t){t.preventDefault(),openHistory(findParentBySelector(t.target,"tr").querySelector(".test_name").querySelector("span").innerText)})});const i=document.querySelectorAll(".create_issue");i.forEach(t=>{t.addEventListener("click",function(t){t.preventDefault();const e=findParentBySelector(t.target,"tr"),o=e.querySelectorAll(".svg_passed").length,n=e.querySelectorAll(".svg_failure").length+e.querySelectorAll(".svg_mute").length,s=e.querySelector(".test_name").querySelector("span").innerText,r=e.querySelector(".test_owner").innerText,i=null!==e.querySelector('.test_name span[style*="background-color: #ff4500"]');let a="";const l=e.querySelector(".error-button");l&&(a=l.getAttribute("data-error")||"");let c={};const d=e.querySelectorAll("td:last-child a");d.forEach(t=>{const e=t.textContent.trim(),o=t.href;e&&o&&(c[e]=o)}),createIssue(s,r,o,n,i,a,c)})});const a=document.querySelectorAll(".create_mute_issue");a.forEach(t=>{t.addEventListener("click",function(t){t.preventDefault();const e=findParentBySelector(t.target,"tr"),o=e.querySelectorAll(".svg_passed").length,n=e.querySelectorAll(".svg_failure").length+e.querySelectorAll(".svg_mute").length,s=e.querySelector(".test_name").querySelector("span").innerText,r=e.querySelector(".test_owner").innerText;let i="";const a=e.querySelector(".error-button");a&&(i=a.getAttribute("data-error")||"");let l={};const c=e.querySelectorAll("td:last-child a");c.forEach(t=>{const e=t.textContent.trim(),o=t.href;e&&o&&(l[e]=o)}),createMuteIssue(s,r,o,n,i,l)})});const l=document.querySelectorAll(".collapsible-header");l.forEach(t=>{t.addEventListener("click",function(){const t=this.nextElementSibling;t.classList.contains("active")?t.classList.remove("active"):t.classList.add("active")})}),document.getElementById("expand-all").addEventListener("click",function(t){toggleAllTables("expand")}),document.getElementById("collapse-all").addEventListener("click",function(t){toggleAllTables("collapse")}),document.querySelector(".close-modal").onclick=function(){document.getElementById("errorModal").style.display="none"},window.onclick=function(t){const e=document.getElementById("errorModal");t.target==e&&(e.style.display="none")},initPagination()});
 </script>
 </head>
 <body>
@@ -1180,10 +262,10 @@
                 </div>
             {% endif %}
             {% if t.status_description %}
-            <button class="error-button" onclick="toggleError(this)"></button>
-            <div style="display: none;" class="error-content">
-                <div class="console-frame" style="display: none;">
-                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}">{{ t.status_description | default("Status description missed") | e }}</code></pre>
+            <button class="error-button" onclick="toggleError(this)" data-error="{{ t.status_description | e }}"></button>
+            <div style="display:none" class="error-content">
+                <div class="console-frame" style="display:none">
+                    <pre><code class="language-{{ 'python' if '.py' in t.full_name else 'cpp'}}"></code></pre>
                 </div>
             </div>
             {% endif %}

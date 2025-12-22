@@ -332,7 +332,12 @@ def render_pm(value, url, diff=None):
 def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflow_run_id=None):
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
-    env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
+    env = Environment(
+        loader=FileSystemLoader(TEMPLATES_PATH),
+        undefined=StrictUndefined,
+        trim_blocks=True,
+        lstrip_blocks=True
+    )
 
     status_test = {}
     last_n_runs = 5
@@ -436,6 +441,14 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         owner_area_mapping=owner_area_mapping,
         commit_sha=github_sha
     )
+    
+    # Minify HTML output to reduce file size
+    # Remove HTML comments (but preserve conditional comments like <!--[if IE]-->)
+    content = re.sub(r'<!--(?!\[if).*?-->', '', content, flags=re.DOTALL)
+    # Remove excessive whitespace between tags
+    content = re.sub(r'>\s+<', '><', content)
+    # Remove leading/trailing whitespace on lines
+    content = '\n'.join(line.strip() for line in content.split('\n') if line.strip())
 
     with open(fn, "w") as fp:
         fp.write(content)

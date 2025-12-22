@@ -6,9 +6,9 @@
 namespace NKikimr {
 namespace NKqp {
 
-bool ISimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool ISimplifiedRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
-    auto output = SimpleTestAndApply(input, ctx, props);
+    auto output = SimpleMatchAndAppy(input, ctx, props);
     if (input != output) {
         input = output;
         return true;
@@ -17,15 +17,15 @@ bool ISimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContex
     }
 }
 
-TRuleBasedStage::TRuleBasedStage(TString stageName, TVector<std::shared_ptr<IRule>> rules) : 
-    IRBOStage(stageName),
-    Rules(rules) {
-    for (auto & r : Rules) {
+TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::shared_ptr<IRule>>&& rules)
+    : IRBOStage(std::move(stageName))
+    , Rules(std::move(rules)) {
+    for (const auto& r : Rules) {
         Props |= r->Props;
     }
 }
 
-void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
+void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
     if (props & ERuleProperties::RequireParents) {
         root.ComputeParents();
     }
@@ -66,7 +66,7 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
             for (auto rule : Rules) {
                 auto op = iter.Current;
 
-                if (rule->TestAndApply(op, ctx, root.PlanProps)) {
+                if (rule->MatchAndAppy(op, ctx, root.PlanProps)) {
                     fired = true;
 
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;

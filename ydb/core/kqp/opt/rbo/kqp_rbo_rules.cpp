@@ -219,7 +219,7 @@ namespace NKqp {
 // Identity map that projects maybe a projection operator and can be removed if it doesn't do any extra
 // projections
 
-std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(ctx);
     Y_UNUSED(props);
@@ -253,7 +253,7 @@ std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleTestAndApply(const std::
 
 // Currently we only extract simple expressions where there is only one variable on either side
 
-bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TExtractJoinExpressionsRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     if (input->Kind != EOperator::Filter) {
         return false;
@@ -374,7 +374,7 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input
 
 // Rewrite a single scalar subplan into a cross-join
 
-bool TInlineScalarSubplanRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TInlineScalarSubplanRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     auto scalarIUs = input->GetScalarSubplanIUs(props);
     if (scalarIUs.empty()) {
         return false;
@@ -428,7 +428,7 @@ bool TInlineScalarSubplanRule::TestAndApply(std::shared_ptr<IOperator> &input, T
 // We only push a non-projecting map operator, and there are some limitations to where we can push:
 //  - we cannot push the right side of left join for example or left side of right join
 
-std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -506,7 +506,7 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_pt
     return output;
 }
 
-std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -529,7 +529,7 @@ std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleTestAndApply(const std:
 }
 
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
-std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(props);
 
@@ -662,7 +662,7 @@ bool IsSuitableToPushPredicateToColumnTables(const std::shared_ptr<IOperator>& i
     return ((maybeRead->Kind == EOperator::Source) && (CastOperator<TOpRead>(maybeRead)->GetTableStorageType() == NYql::EStorageType::ColumnStorage) && filter->GetTypeAnn());
 }
 
-std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
     if (!ctx.KqpCtx.Config->HasOptEnableOlapPushdown()) {
         return input;
@@ -743,7 +743,7 @@ std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleTestAndApply(const std::sh
  * Initially we build CBO only for joins that don't have other joins or CBO trees as arguments
  * There could be an intermediate filter in between, we also check that
  */
-std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -773,7 +773,7 @@ std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleTestAndApply(const st
  * FIXME: Add maybes to make matching look simpler
  * FIXME: Support other joins for filter push-out, refactor into a lambda to apply to both sides
  */
-std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -860,7 +860,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::sha
 /**
  * Convert unoptimized CBOTrees back into normal operators
  */
-std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -875,7 +875,7 @@ std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleTestAndApply(const std::sha
 /**
  * Assign stages and build stage graph in the process
  */
-bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TAssignStagesRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
     auto nodeName = input->ToString(ctx.ExprCtx);
@@ -1025,33 +1025,6 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
 
     return true;
 }
-
-TRuleBasedStage RuleStage1 = TRuleBasedStage("Inline scalar subplans", {std::make_shared<TInlineScalarSubplanRule>()});
-
-TRuleBasedStage RuleStage2 = TRuleBasedStage("Logical rewrites I",
-    {
-        std::make_shared<TRemoveIdenityMapRule>(),
-        std::make_shared<TExtractJoinExpressionsRule>(), 
-        std::make_shared<TPushMapRule>(), 
-        std::make_shared<TPushFilterRule>(),
-        std::make_shared<TPushLimitIntoSortRule>()
-    });
-
-TRuleBasedStage RuleStage3 = TRuleBasedStage("Physical rewrites I", {std::make_shared<TPushOlapFilterRule>()});
-
-TRuleBasedStage RuleStage4 = TRuleBasedStage("Prepare for CBO",
-    {
-        std::make_shared<TBuildInitialCBOTreeRule>(),
-        std::make_shared<TExpandCBOTreeRule>()
-    });
-
-TRuleBasedStage RuleStage5 = TRuleBasedStage("Invoke CBO", {std::make_shared<TOptimizeCBOTreeRule>()});
-
-TRuleBasedStage RuleStage6 = TRuleBasedStage("Clean up after CBO",
-    {std::make_shared<TInlineCBOTreeRule>(),
-    std::make_shared<TPushFilterRule>()});
-
-TRuleBasedStage RuleStage7 = TRuleBasedStage("Assign stages", {std::make_shared<TAssignStagesRule>()});
 
 } // namespace NKqp
 } // namespace NKikimr

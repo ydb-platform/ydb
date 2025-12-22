@@ -37,26 +37,35 @@ TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePt
 
 class TKqpNewRBOTransformer: public TSyncTransformerBase {
 public:
-    TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-                          TTypeAnnotationContext& typeCtx,
-                          TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
-                          TAutoPtr<IGraphTransformer> typeAnnTransformer,
-                          TAutoPtr<IGraphTransformer> peephole,
-                          const NMiniKQL::IFunctionRegistry& funcRegistry)
+    TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
+                          TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole, const NMiniKQL::IFunctionRegistry& funcRegistry)
         : TypeCtx(typeCtx)
         , KqpCtx(*kqpCtx)
-        , RBO(
-              {std::make_shared<TRuleBasedStage>(RuleStage1),
-               std::make_shared<TRenameStage>(),
-               std::make_shared<TConstantFoldingStage>(),
-               std::make_shared<TPruneColumnsStage>(),
-               std::make_shared<TRuleBasedStage>(RuleStage2),
-               std::make_shared<TRuleBasedStage>(RuleStage3),
-               std::make_shared<TRuleBasedStage>(RuleStage4),
-               std::make_shared<TRuleBasedStage>(RuleStage5),
-               std::make_shared<TRuleBasedStage>(RuleStage6),
-               std::make_shared<TRuleBasedStage>(RuleStage7)},
-              kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole, funcRegistry) {
+        , RBO(kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole, funcRegistry) {
+        // Initial stages.
+        TVector<std::shared_ptr<IRule>> inlineScalarSubPlanStageRules{std::make_shared<TInlineScalarSubplanRule>()};
+        RBO.AddStage(std::make_shared<TRuleBasedStage>("Inline scalar subplans", std::move(inlineScalarSubPlanStageRules)));
+        RBO.AddStage(std::make_shared<TRenameStage>());
+        RBO.AddStage(std::make_shared<TConstantFoldingStage>());
+        RBO.AddStage(std::make_shared<TPruneColumnsStage>());
+        // Logical stage.
+        TVector<std::shared_ptr<IRule>> logicalStageRules = {std::make_shared<TRemoveIdenityMapRule>(), std::make_shared<TExtractJoinExpressionsRule>(),
+                                                             std::make_shared<TPushMapRule>(), std::make_shared<TPushFilterRule>(),
+                                                             std::make_shared<TPushLimitIntoSortRule>()};
+        RBO.AddStage(std::make_shared<TRuleBasedStage>("Logical rewrites I", std::move(logicalStageRules)));
+        // Physical stage.
+        TVector<std::shared_ptr<IRule>> physicalStageRules = {std::make_shared<TPushOlapFilterRule>()};
+        RBO.AddStage(std::make_shared<TRuleBasedStage>("Physical rewrites I", std::move(physicalStageRules)));
+        // CBO stages.
+        TVector<std::shared_ptr<IRule>> initialCBOStageRules = {std::make_shared<TBuildInitialCBOTreeRule>(), std::make_shared<TExpandCBOTreeRule>()};
+        RBO.AddStage(std::make_shared<TRuleBasedStage>("Prepare for CBO", std::move(initialCBOStageRules)));
+        TVector<std::shared_ptr<IRule>> cboStageRules = {std::make_shared<TOptimizeCBOTreeRule>()};
+        RBO.AddStage(std::make_shared<TRuleBasedStage>("Invoke CBO", std::move(cboStageRules)));
+        TVector<std::shared_ptr<IRule>> cleanUpCBOStageRules = {std::make_shared<TInlineCBOTreeRule>(), std::make_shared<TPushFilterRule>()};
+        RBO.AddStage(std::make_shared<TRuleBasedStage>("Clean up after CBO", std::move(cleanUpCBOStageRules)));
+        // Assign physical stages.
+        TVector<std::shared_ptr<IRule>> assignPhysicalStageRules = {std::make_shared<TAssignStagesRule>()};
+        RBO.AddStage(std::make_shared<TRuleBasedStage>("Assign stages", std::move(assignPhysicalStageRules)));
     }
 
     // Main method of the transformer

@@ -387,6 +387,12 @@ private:
             return RuntimeError(errorMsg, NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
+<<<<<<< HEAD
+=======
+        if (IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+            YQL_ENSURE(!LockTxId, "SnapshotReadOnly should not take locks");
+        }
+>>>>>>> 8a08300850d (Add DefaultTxMode setting (#30960))
         LookupActorStateSpan.EndOk();
 
         auto& resultSet = ev->Get()->Request->ResultSet;
@@ -849,6 +855,11 @@ private:
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
+<<<<<<< HEAD
+=======
+    NKqpProto::EIsolationLevel IsolationLevel;
+    const TString Database;
+>>>>>>> 8a08300850d (Add DefaultTxMode setting (#30960))
 
     // stats
     ui64 ReadRowsCount = 0;

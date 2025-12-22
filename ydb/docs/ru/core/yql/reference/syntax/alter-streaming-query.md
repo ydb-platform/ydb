@@ -1,58 +1,128 @@
 # ALTER STREAMING QUERY
 
-Вызов `ALTER STREAMING QUERY` изменяет настройки или текст [потоковых запросов](../../../concepts/streaming_query/index.md), а также управляет состоянием запроса (остановкой/запуском).
+`ALTER STREAMING QUERY` изменяет настройки и/или текст [потоковых запросов](../../../concepts/streaming_query/index.md), а также управляет состоянием запроса (остановкой/запуском).
+
+## Синтаксис
 
 ```yql
-ALTER STREAMING QUERY [IF EXISTS] <query name> [SET (
+ALTER STREAMING QUERY [IF EXISTS] <query_name> [SET (
     <key1> = <value1>,
     <key2> = <value2>,
     ...
 )] [AS
 DO BEGIN
-    <query statement1>;
-    <query statement2>;
+    <query_statement1>;
+    <query_statement2>;
     ...
 END DO]
 ```
 
-Настройки SET:
+### Параметры
 
-- `RUN = (TRUE|FALSE)` — запустить или остановить запрос.
-Статус запроса (запущен или остановлен) не изменяется, если явно не указывать настройку `RUN`.
-- `FORCE = (TRUE|FALSE)` — нужно ли разрешать изменение запроса, приводящее к невозможности его загрузки из чекпоинта, по умолчанию FALSE (`TRUE` требуется указывать при изменении текста запроса, приводящем к изменению физического плана исполнения).
+* `IF EXISTS` — не выводить ошибку, если потокового запроса не существует.
+* `query_name` — имя потокового запроса, подлежащего изменению.
+* `SET (<key> = <value>)` — список настроек потокового запроса, которые нужно обновить, опционально.
+* `AS DO BEGIN ... END DO` — новый текст потокового запроса, опционально.
 
-Примеры:
+Нужно указать хотя бы одну из настроек `SET` или новый текст потокового запроса.
 
-- Остановка запроса:
+### Изменение параметров запроса
 
-   ```yql
-   ALTER STREAMING QUERY streaming_query SET (
-       RUN = FALSE
-   )
-   ```
+Команда для изменения параметра потокового запроса выглядит следующим образом:
 
-- Запуск запроса:
+```yql
+ALTER STREAMING QUERY [IF EXISTS] <query_name> SET (<key> = <value>)
+```
 
-   ```yql
-   ALTER STREAMING QUERY streaming_query SET (
-       RUN = TRUE
-   )
-   ```
+Доступные параметры:
 
-- Изменение текста запроса со сбросом чекпоинта:
+* `RUN = (TRUE|FALSE)` — запустить или остановить запрос.
+* `RESOURCE_POOL = <resource_pool_name>` — имя [пула ресурсов](../../../concepts/glossary.md#resource-pool.md), в котором будет выполняться запрос.
 
-   ```yql
-   ALTER STREAMING QUERY streaming_query SET (
-       FORCE = TRUE
-   ) AS
-   DO BEGIN
+При выполнении `SET (RUN = TRUE)` — команды запуска потокового запроса, смещения чтения из топика и состояния агрегационных функций будут восстановлены из [чекпоинта](../../../concepts/streaming_query/checkpoints.md). В случае отсутствия чекпоинта запрос будет читать входной поток начиная с самых свежих данных.
 
-   INSERT INTO
-       ydb_source.output_topic
-   SELECT
-       *
-   FROM
-       ydb_source.input_topic
+Примеры изменения параметров запроса [см. ниже](#изменение-параметров).
 
-   END DO
-   ```
+### Изменение текста запроса
+
+Команда для изменения текста потокового запроса выглядит следующим образом:
+
+```yql
+ALTER STREAMING QUERY [IF EXISTS] <query_name> AS
+DO BEGIN
+    <query_statement>
+END DO
+```
+
+Где `<query_statement>` — новый текст потокового запроса.
+
+{% note info %}
+
+После изменения текста запроса может быть невозможно восстановить состояния агрегационных функций из [чекпоинта](../../../concepts/streaming_query/checkpoints.md), в этом случае команда изменения текста завершится с ошибкой:
+
+```text
+Changing the query text will result in the loss of the checkpoint. Please use FORCE=true to change the request text
+```
+
+Чтобы изменить текст запроса со сбросом чекпоинта, необходимо указать настройку `FORCE = TRUE` в блоке `SET`. После такого изменения запрос при запуске восстановит только смещения чтения из топика.
+
+{% endnote %}
+
+{% note warning %}
+
+Поддержка изменения текста запроса с возможностью полного переноса [чекпоинта](../../../concepts/streaming_query/checkpoints.md) находится в разработке, по этому настройка `FORCE = TRUE` является обязательной при изменении текста.
+
+{% endnote %}
+
+Если не указана явно настройка `RUN` в блоке `SET`, то запрос останется в том же состоянии, в котором он был до изменения текста и будет перезапущен с новым текстом, если был запущен до этого.
+
+Примеры изменения текста запроса [см. ниже](#изменение-текста).
+
+## Разрешения
+
+Требуется [разрешение](./grant.md#permissions-list) `ALTER SCHEMA` на потоковый запрос, пример выдачи такого разрешения для запроса `my_streaming_query`:
+
+```yql
+GRANT ALTER SCHEMA ON my_streaming_query TO `user@domain`
+```
+
+## Примеры
+
+### Изменение параметров
+
+Следующая команда остановит запрос с именем `my_streaming_query`:
+
+```yql
+ALTER STREAMING QUERY my_streaming_query SET (
+    RUN = FALSE
+)
+```
+
+Следующая команда запустит запрос с именем `my_streaming_query` в [пуле ресурсов](../../../concepts/glossary.md#resource-pool.md) `my_resource_pool`:
+
+```yql
+ALTER STREAMING QUERY my_streaming_query SET (
+    RUN = TRUE,
+    RESOURCE_POOL = my_resource_pool
+)
+```
+
+### Изменение текста
+
+Следующая команда измени текст запроса с именем `my_streaming_query`, после запуска из [чекпоинта](../../../concepts/streaming_query/checkpoints.md) запроса будут восстановлены только смещения чтения из топика:
+
+```yql
+ALTER STREAMING QUERY my_streaming_query SET (
+    FORCE = TRUE
+) AS
+DO BEGIN
+
+INSERT INTO
+    ydb_source.output_topic
+SELECT
+    *
+FROM
+    ydb_source.input_topic
+
+END DO
+```

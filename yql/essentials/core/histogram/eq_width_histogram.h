@@ -277,6 +277,7 @@ private:
     // Returns binary size of the histogram.
     ui64 GetBinarySize(ui32 nBuckets) const;
 
+    ui8 VersionNumber_ = 0;
     EHistogramValueType ValueType_;
     TDomainRange DomainRange_;
     TVector<ui64> Buckets_;

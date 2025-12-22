@@ -73,43 +73,40 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
 
 2. Создайте директорию для файлов конфигурации и скопируйте сгенерированный файл конфигурации из контейнера прямо в нее:
 
-  ```bash
-  mkdir ydb_config
-  docker cp ydb-local:/ydb_data/cluster/kikimr_configs/config.yaml ydb_config/my-ydb-config.yaml
-  ```
+   ```bash
+   mkdir ydb_config
+   docker cp ydb-local:/ydb_data/cluster/kikimr_configs/config.yaml ydb_config/my-ydb-config.yaml
 
 3. Остановите контейнер, если он все еще запущен, и удалите созданную директорию данных:
 
-  ```bash
-  docker stop ydb-local
-  rm -rf ydb_data
-  ```
+   ```bash
+   docker stop ydb-local
+   rm -rf ydb_data
 
 4. Отредактируйте скопированный файл конфигурации `ydb_config/my-ydb-config.yaml` по своему усмотрению.
 
 5. При запуске контейнера используйте флаг `-v` для монтирования директории с вашим файлом конфигурации в контейнер:
 
-  ```bash
-  docker_args=(
-      -d
-      --rm
-      --name ydb-local
-      --hostname localhost
-      --platform linux/amd64
-      -p 2135:2135
-      -p 2136:2136
-      -p 8765:8765
-      -v $(pwd)/ydb_certs:/ydb_certs
-      -v $(pwd)/ydb_data:/ydb_data
-      -v $(pwd)/ydb_config:/ydb_config
-      -e GRPC_TLS_PORT=2135
-      -e GRPC_PORT=2136
-      -e MON_PORT=8765
-      {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
-  )
-
-  docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
-  ```
+   ```bash
+   docker_args=(
+       -d
+       --rm
+       --name ydb-local
+       --hostname localhost
+       --platform linux/amd64
+       -p 2135:2135
+       -p 2136:2136
+       -p 8765:8765
+       -v $(pwd)/ydb_certs:/ydb_certs
+       -v $(pwd)/ydb_data:/ydb_data
+       -v $(pwd)/ydb_config:/ydb_config
+       -e GRPC_TLS_PORT=2135
+       -e GRPC_PORT=2136
+       -e MON_PORT=8765
+       {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
+   )
+   
+   docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
 
 В этом примере:
 

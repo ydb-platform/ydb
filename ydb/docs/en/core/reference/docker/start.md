@@ -73,17 +73,15 @@ For users who are not experienced with Docker, it's important to understand how 
 
 2. Create a directory for your configuration files and copy the generated configuration file from the container directly to it:
 
-  ```bash
-  mkdir ydb_config
-  docker cp ydb-local:/ydb_data/cluster/kikimr_configs/config.yaml ydb_config/my-ydb-config.yaml
-  ```
+   ```bash
+   mkdir ydb_config
+   docker cp ydb-local:/ydb_data/cluster/kikimr_configs/config.yaml ydb_config/my-ydb-config.yaml
 
 3. Stop the container if it's still running, and remove the created data directory:
 
-  ```bash
-  docker stop ydb-local
-  rm -rf ydb_data
-  ```
+   ```bash
+   docker stop ydb-local
+   rm -rf ydb_data
 
 4. Edit the copied configuration file `ydb_config/my-ydb-config.yaml` as needed.
 

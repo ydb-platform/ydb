@@ -21,6 +21,7 @@ protected:
     YDB_ACCESSOR(bool, UseRealThreads, true);
     YDB_ACCESSOR(bool, FillTables, true);
 
+    virtual void Setup(TKikimrSettings&) {}
     virtual void DoExecute() = 0;
 public:
     void Execute() {
@@ -31,6 +32,8 @@ public:
         if (FastSnapshotExpiration) {
             settings.SetKeepSnapshotTimeout(TDuration::Seconds(1));
         }
+
+        Setup(settings);
 
         Kikimr = std::make_unique<TKikimrRunner>(settings);
         Tests::NCommon::TLoggerInit(*Kikimr).Initialize();
@@ -94,7 +97,7 @@ public:
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        {
+        if (FillTables) {
             auto result = client.ExecuteQuery(R"(
                 REPLACE INTO `Test` (Group, Name, Amount, Comment) VALUES
                     (1u, "Anna", 3500ul, "None"),

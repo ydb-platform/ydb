@@ -53,14 +53,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.Execute();
     }
 
-    Y_UNIT_TEST(TSimpleOltpNoSink) {
-        return;
-        TSimple tester;
-        tester.SetIsOlap(false);
-        tester.SetDisableSinks(true);
-        tester.Execute();
-    }
-
     Y_UNIT_TEST(TSimpleOlap) {
         TSimple tester;
         tester.SetIsOlap(true);
@@ -140,14 +132,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.Execute();
     }
 
-    Y_UNIT_TEST(TConflictWriteOltpNoSink) {
-        return;
-        TConflictWrite tester("upsert_partial");
-        tester.SetIsOlap(false);
-        tester.SetDisableSinks(true);
-        tester.Execute();
-    }
-
     Y_UNIT_TEST(TConflictWriteOlapInsert) {
         TConflictWrite tester("insert");
         tester.SetIsOlap(true);
@@ -219,14 +203,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.Execute();
     }
 
-    Y_UNIT_TEST(TConflictReadWriteOltpNoSink) {
-        return;
-        TConflictReadWrite tester;
-        tester.SetIsOlap(false);
-        tester.SetDisableSinks(true);
-        tester.Execute();
-    }
-
     Y_UNIT_TEST(TConflictReadWriteOlap) {
         TConflictReadWrite tester;
         tester.SetIsOlap(true);
@@ -272,14 +248,6 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     Y_UNIT_TEST(TReadOnlyOltp) {
         TReadOnly tester;
         tester.SetIsOlap(false);
-        tester.Execute();
-    }
-
-    Y_UNIT_TEST(TReadOnlyOltpNoSink) {
-        return;
-        TReadOnly tester;
-        tester.SetIsOlap(false);
-        tester.SetDisableSinks(true);
         tester.Execute();
     }
 
@@ -420,17 +388,124 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.Execute();
     }
 
-    Y_UNIT_TEST(TReadOwnChangesOltpNoSink) {
-        return;
-        TReadOwnChanges tester;
-        tester.SetIsOlap(false);
-        tester.SetDisableSinks(true);
-        tester.Execute();
-    }
-
     Y_UNIT_TEST(TReadOwnChangesOlap) {
         TReadOwnChanges tester;
         tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    class TPragmaSetting : public TTableDataModificationTester {
+    public:
+        TPragmaSetting(std::string isolation)
+            : Isolation(isolation) {}
+
+    private:
+        std::string Isolation;
+
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto session2 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            {
+                std::vector<std::unique_ptr<IEventHandle>> writes;
+                size_t evWriteCounter = 0;
+
+                auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                    if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                        auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                        UNIT_ASSERT(evWrite->Record.OperationsSize() <= 1);
+                        if (evWrite->Record.OperationsSize() == 1 && evWriteCounter == 0) {
+                            if (Isolation == "SnapshotRW" || GetIsOlap()) {
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() != 0);
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() != 0);
+                            } else {
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() == 0);
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() == 0);
+                            }
+
+                            ++evWriteCounter;
+                            writes.emplace_back(ev.Release());
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                };
+
+                auto saveObserver = runtime.SetObserverFunc(grab);
+                Y_DEFER {
+                    runtime.SetObserverFunc(saveObserver);
+                };
+
+                auto future = Kikimr->RunInThreadPool([&]{
+                    return session1.ExecuteQuery(std::format(R"(
+                        PRAGMA ydb.DefaultTxMode="{}";
+
+                        SELECT * FROM `/Root/KV`;
+
+                        UPSERT INTO `/Root/KV2` (Key, Value)
+                        VALUES (1, "1");
+                    )", Isolation), TTxControl::NoTx()).ExtractValueSync();
+                });
+
+                {
+                    TDispatchOptions opts;
+                    opts.FinalEvents.emplace_back([&](IEventHandle&) {
+                        return evWriteCounter == 1;
+                    });
+                    runtime.DispatchEvents(opts);
+                    UNIT_ASSERT(!GetIsOlap() || evWriteCounter == 1);
+                    UNIT_ASSERT(writes.size() == 1);
+                }
+
+                {
+                    // Another request changes data
+                    auto insetResult = Kikimr->RunCall([&]{
+                        return session2.ExecuteQuery(std::format(R"(
+                            PRAGMA ydb.DefaultTxMode="{}";
+
+                            SELECT * FROM `/Root/KV2`;
+
+                            UPSERT INTO `/Root/KV2` (Key, Value)
+                            VALUES (1, "other");
+                        )", Isolation), TTxControl::NoTx()).ExtractValueSync();
+                    });
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(insetResult.GetStatus(), EStatus::SUCCESS, insetResult.GetIssues().ToString());
+                }
+
+                UNIT_ASSERT(writes.size() == 1);
+
+                for(auto& ev: writes) {
+                    runtime.Send(ev.release());
+                }
+
+                {
+                    auto result = runtime.WaitFuture(future);
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        result.GetStatus(),
+                        Isolation == "SnapshotRW" ? EStatus::ABORTED : EStatus::SUCCESS,
+                        result.GetIssues().ToString());
+                }
+            }
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(TPragmaSettingOltp, IsSnapshotIsolation) {
+        TPragmaSetting tester(IsSnapshotIsolation ? "SnapshotRW" : "SerializableRW");
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST_TWIN(TPragmaSettingOlap, IsSnapshotIsolation) {
+        TPragmaSetting tester(IsSnapshotIsolation ? "SnapshotRW" : "SerializableRW");
+        tester.SetIsOlap(true);
+        tester.SetUseRealThreads(false);
         tester.Execute();
     }
 

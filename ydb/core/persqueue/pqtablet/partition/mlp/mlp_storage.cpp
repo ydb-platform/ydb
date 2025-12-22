@@ -121,11 +121,14 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
             }
 
             ui64 offset = FirstOffset + i;
+            position.FastPosition = offset + 1;
             return DoLock(offset, message, deadline);
         } else if (moveUnlockedOffset) {
             ++FirstUnlockedOffset;
         }
     }
+
+    position.FastPosition = FirstOffset + Messages.size();
 
     return std::nullopt;
 }

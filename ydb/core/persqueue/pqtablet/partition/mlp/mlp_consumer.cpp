@@ -6,6 +6,7 @@
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -411,6 +412,8 @@ void TConsumerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
 }
 
 STFUNC(TConsumerActor::StateInit) {
+    NPersQueue::TCounterTimeKeeper<ui64> keeper(CPUUsageMetric);
+
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPQ::TEvMLPReadRequest, Queue);
         hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
@@ -431,6 +434,8 @@ STFUNC(TConsumerActor::StateInit) {
 }
 
 STFUNC(TConsumerActor::StateWork) {
+    NPersQueue::TCounterTimeKeeper<ui64> keeper(CPUUsageMetric);
+
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPQ::TEvMLPReadRequest, Handle);
         hFunc(TEvPQ::TEvMLPCommitRequest, Handle);
@@ -454,6 +459,8 @@ STFUNC(TConsumerActor::StateWork) {
 }
 
 STFUNC(TConsumerActor::StateWrite) {
+    NPersQueue::TCounterTimeKeeper<ui64> keeper(CPUUsageMetric);
+
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPQ::TEvMLPReadRequest, Queue);
         hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
@@ -855,6 +862,9 @@ void TConsumerActor::UpdateMetrics() {
     counters.SetDeletedByRetentionPolicy(metrics.TotalDeletedByRetentionMessageCount);
     counters.SetDeletedByDeadlinePolicy(metrics.TotalDeletedByDeadlinePolicyMessageCount);
     counters.SetDeletedByMovedToDLQ(metrics.TotalMovedToDLQMessageCount);
+
+    counters.SetCPUUsage(CPUUsageMetric);
+    CPUUsageMetric = 0;
 
     Send(PartitionActorId, new TEvPQ::TEvMLPConsumerState(std::move(counters)));
 }

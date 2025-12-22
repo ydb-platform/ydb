@@ -90,9 +90,11 @@ NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const
 }
 
 void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
-    if (!NeedToDetectConflicts()) {
+    auto alreadyAborted = LockId.has_value() && owner.GetOperationsManager().GetLockOptional(*GetLockId()) == nullptr;
+    if (!NeedToDetectConflicts() || alreadyAborted) {
         return;
     }
+
     const ui64 lock = *GetLockId();
     if (GetBreakLockOnReadFinished()) {
         owner.GetOperationsManager().GetLockVerified(lock).SetBroken();

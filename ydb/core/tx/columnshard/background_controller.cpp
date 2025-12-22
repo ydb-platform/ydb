@@ -1,5 +1,6 @@
 #include "background_controller.h"
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
+#include <ydb/core/tx/columnshard/engines/changes/counters/general.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -13,6 +14,7 @@ void TBackgroundController::FinishCompaction(const TInternalPathId pathId, const
     auto it = ActiveCompactionInfo.find(std::make_pair(pathId, taskId));
     AFL_VERIFY(it != ActiveCompactionInfo.end());
     if (it->second.Finish()) {
+        NOlap::NChanges::TGeneralCompactionCounters::OnCompactionFinished(it->second.GetDuration().MicroSeconds());
         ActiveCompactionInfo.erase(it);
     }
     Counters->OnCompactionFinish(pathId);

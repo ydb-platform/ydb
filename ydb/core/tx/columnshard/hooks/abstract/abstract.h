@@ -250,6 +250,8 @@ public:
     }
     virtual void OnExportFinished() {
     }
+    virtual void OnImportFinished() {
+    }
     virtual void OnActualizationRefreshScheme() {
     }
     virtual void OnActualizationRefreshTiering() {

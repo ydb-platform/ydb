@@ -2363,7 +2363,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::FulltextContains(`Text`, "hallucination")
+            WHERE FullText::Contains(`Text`, "hallucination")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text`
@@ -2385,7 +2385,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::FulltextContains(`Text`, "erasure coding")
+            WHERE FullText::Contains(`Text`, "erasure coding")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text`
@@ -2406,7 +2406,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::FulltextContains(`Text`, "float")
+            WHERE FullText::Contains(`Text`, "float")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2434,7 +2434,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::FulltextContains(`Text`, "поляризация")
+            WHERE FullText::Contains(`Text`, "поляризация")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text`

@@ -11,6 +11,7 @@ Provides classes and functions for:
 import os
 import subprocess
 import logging
+import traceback
 import yatest.common
 import shutil
 import allure
@@ -371,10 +372,10 @@ class RemoteExecutor:
                 return _handle_timeout_error(e, full_cmd, is_local=False)
             except yatest.common.ExecutionError as e:
                 return _handle_execution_error(e, full_cmd, is_local=False)
-            except Exception as e:
+            except Exception:
                 if raise_on_error:
                     raise
-                LOGGER.error(f"Unexpected error executing SSH command on {host}: {e}")
+                LOGGER.error(f"Unexpected error executing SSH command on {host}: {traceback.format_exc()}")
                 return ExecutionResult(
                     stdout="",
                     stderr="",
@@ -392,7 +393,7 @@ class RemoteExecutor:
 # Convenience functions for direct use
 def execute_command(
     host: str, cmd: Union[str, list], raise_on_error: bool = True,
-    timeout: Optional[float] = 10, raise_on_timeout: bool = True
+    timeout: Optional[float] = 60, raise_on_timeout: bool = True
 ) -> ExecutionResult:
     """
     Convenience function for executing a command on a host.

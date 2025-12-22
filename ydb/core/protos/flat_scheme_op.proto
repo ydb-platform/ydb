@@ -955,14 +955,16 @@ message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2;
     optional bool CanLogin = 3 [default = true];
-    optional bool IsHashedPassword = 4 [default = false];
+    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    optional string HashedPassword = 5;
 }
 
 message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2;
     optional bool CanLogin = 3;
-    optional bool IsHashedPassword = 4 [default = false];
+    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    optional string HashedPassword = 5;
 }
 
 message TLoginRemoveUser {

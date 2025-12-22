@@ -1,8 +1,9 @@
 #pragma once
 
-#include <util/system/types.h>
-#include <util/generic/vector.h>
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/system/types.h>
 
 namespace NLogin {
 
@@ -23,9 +24,18 @@ struct THashTypeDescription {
     const ui32 IterationsCount;
     const ui32 SaltSize;
     const ui32 HashSize;
-    const bool IsNullPasswordAllowed;
+    const bool IsEmptyPasswordAllowed;
 };
 
-const extern TVector<THashTypeDescription> HashesRegistry;
+struct THashTypesRegistry {
+
+    THashTypesRegistry();
+
+    static const TVector<THashTypeDescription> HashTypeDescriptions;
+
+    THashMap<EHashType, const THashTypeDescription&> HashTypesMap;
+    THashMap<TStringBuf, const THashTypeDescription&> HashNamesMap;
+
+} const extern HashesRegistry;
 
 } // namespace NLogin

@@ -60,7 +60,7 @@ If any script fails (exits with a non-zero status), the container stops executio
 
 ### Using shell scripts
 
-Create a shell script to configure database settings:
+Create a file `/init.d/01-setup.sh` with the following contents:
 
 ```bash
 #!/bin/bash
@@ -82,7 +82,7 @@ When the container starts, the `test` table will be automatically created using 
 
 ### Using SQL files
 
-Create a SQL file with your table definitions:
+Create a file `/init.d/01-create-tables.sql` with the following contents:
 
 ```sql
 -- /init.d/01-create-tables.sql
@@ -114,7 +114,7 @@ When the container starts, two tables — `users` and `orders` — will be autom
 
 ### Using pre-init scripts
 
-Create a pre-init script to set environment variables:
+Create a file `/preinit.d/01-set-env.sh` with the following contents:
 
 ```bash
 # /preinit.d/01-set-env.sh
@@ -135,7 +135,7 @@ When the container starts, the `YDB_DEFAULT_LOG_LEVEL` environment variable will
 
 ### Restoring from a backup using init scripts
 
-Create a script in the `/init.d` directory to perform the restoration:
+Create a file `/init.d/01-restore-backup.sh` with the following contents:
 
 ```bash
 # /init.d/01-restore-backup.sh

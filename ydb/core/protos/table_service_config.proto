@@ -460,12 +460,14 @@ message TTableServiceConfig {
 
     optional bool EnableFastChannels = 114 [ default = false, (InvalidateCompileCache) = true];
 
-     enum ETxMode {
+    optional bool EnableDiscardSelect = 115 [default = false, (InvalidateCompileCache) = true];
+
+    enum ETxMode {
         SerializableRW = 0;
         SnapshotRW = 1;
         SnapshotRO = 2;
         StaleRO = 3;
     }
 
-    optional ETxMode DefaultTxMode = 115 [default = SerializableRW];
+    optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
 };

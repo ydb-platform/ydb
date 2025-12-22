@@ -3094,19 +3094,21 @@ class TParse: public TBoxedValue {
 public:
     class TFactory: public TBoxedValue {
     public:
-        explicit TFactory(TSourcePosition pos)
+        explicit TFactory(TSourcePosition pos, NYql::TLangVersion currentLangVersion)
             : Pos_(pos)
+            , CurrentLangVersion_(currentLangVersion)
         {
         }
 
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
-            return TUnboxedValuePod(new TParse(args[0], Pos_));
+            return TUnboxedValuePod(new TParse(args[0], Pos_, CurrentLangVersion_));
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
         const TSourcePosition Pos_;
+        const NYql::TLangVersion CurrentLangVersion_;
     };
 
     static const TStringRef& Name() {
@@ -3128,7 +3130,7 @@ public:
         builder.Returns(
             builder.SimpleSignatureType<TOptional<TResource<TResourceName>>(TAutoMap<char*>)>());
         if (!typesOnly) {
-            builder.Implementation(new TParse::TFactory(builder.GetSourcePosition()));
+            builder.Implementation(new TParse::TFactory(builder.GetSourcePosition(), builder.GetCurrentLangVer()));
         }
 
         return true;
@@ -3136,7 +3138,9 @@ public:
 
 private:
     const TSourcePosition Pos_;
+    const NYql::TLangVersion CurrentLangVersion_;
     const TUnboxedValue Format_;
+    TMaybe<i16> TimezoneOffset_;
 
     std::vector<std::function<bool(std::string_view::const_iterator& it, size_t, TUnboxedValuePod&, const IDateBuilder&)>> Scanners_;
 
@@ -3173,7 +3177,7 @@ private:
                 }
             }
 
-            if (buffer.end() != it || !storage.Validate(builder)) {
+            if (buffer.end() != it || !storage.Validate(builder, TimezoneOffset_)) {
                 return TUnboxedValuePod();
             }
             return result;
@@ -3182,13 +3186,17 @@ private:
         }
     }
 
-    TParse(const TUnboxedValuePod& runConfig, TSourcePosition pos)
+    TParse(const TUnboxedValuePod& runConfig, TSourcePosition pos, NYql::TLangVersion currentLangVersion)
         : Pos_(pos)
+        , CurrentLangVersion_(currentLangVersion)
         , Format_(runConfig)
+        , TimezoneOffset_(Nothing())
     {
         const std::string_view formatView(Format_.AsStringRef());
         auto dataStart = formatView.begin();
         size_t dataSize = 0U;
+        bool useTzNameScanner = false;
+        bool useTzOffsetScanner = false;
 
         for (auto ptr = formatView.begin(); formatView.end() != ptr; ++ptr) {
             if (*ptr != '%') {
@@ -3348,7 +3356,70 @@ private:
                     });
                     break;
                 }
+                case 'z':
+                    if (currentLangVersion < NYql::MakeLangVersion(2025, 5)) {
+                        throw yexception() << "%z specfifier is available since 2025.05";
+                    }
+                    if (useTzNameScanner) {
+                        throw yexception() << "%Z specifier is already used for parsing";
+                    }
+                    useTzOffsetScanner = true;
+
+                    static constexpr size_t Size = 2;
+                    Scanners_.emplace_back([this](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod&, const IDateBuilder&) {
+                        i32 negative = 1;
+                        switch (*it) {
+                            case '-':
+                                negative = -1;
+                                [[fallthrough]];
+                            case '+':
+                                it++;
+                                limit--;
+                                break;
+                            case 'Z':
+                                it++;
+                                return true;
+                            default:
+                                return false;
+                        }
+
+                        ui32 hour = 0U;
+                        if (limit < Size || !ParseNDigits<Size>::Do(it, hour) || !ValidateHour(hour)) {
+                            return false;
+                        }
+                        limit -= Size;
+
+                        ui32 minute = 0U;
+                        const auto backtrack = it;
+                        if (limit >= Size) {
+                            if (limit >= Size + 1 && *it == ':') {
+                                it++;
+                                limit--;
+                            }
+                            const auto digits = it;
+                            if (ParseNDigits<Size>::Do(it, minute)) {
+                                if (!ValidateMinute(minute)) {
+                                    return false;
+                                }
+                                limit -= Size;
+                            } else {
+                                if (it > digits) {
+                                    return false;
+                                }
+                                it = backtrack;
+                            }
+                        }
+
+                        this->TimezoneOffset_ = (hour * 60 + minute) * negative;
+                        return true;
+                    });
+                    break;
                 case 'Z':
+                    if (useTzOffsetScanner) {
+                        throw yexception() << "%z specifier is already used for parsing";
+                    }
+                    useTzNameScanner = true;
+
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder& builder) {
                         const auto start = it;
                         while (limit > 0 && (std::isalnum(*it) || *it == '/' || *it == '_' || *it == '-' || *it == '+')) {

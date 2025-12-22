@@ -41,7 +41,7 @@ The storage volume multiplier specified above only applies to the fault toleranc
 
 {% endnote %}
 
-For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../reference/configuration/index.md#domains-blob).
+For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../reference/configuration/domains_config.md#domains-blob).
 
 ### Reduced configurations {#reduced}
 

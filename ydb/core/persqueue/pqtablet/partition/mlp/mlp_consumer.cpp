@@ -412,7 +412,7 @@ void TConsumerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
 }
 
 STFUNC(TConsumerActor::StateInit) {
-    NPersQueue::TCounterTimeKeeper<ui64> keeper(CPUMetric);
+    NPersQueue::TCounterTimeKeeper<ui64> keeper(CPUUsageMetric);
 
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPQ::TEvMLPReadRequest, Queue);
@@ -434,7 +434,7 @@ STFUNC(TConsumerActor::StateInit) {
 }
 
 STFUNC(TConsumerActor::StateWork) {
-    NPersQueue::TCounterTimeKeeper<ui64> keeper(CPUMetric);
+    NPersQueue::TCounterTimeKeeper<ui64> keeper(CPUUsageMetric);
 
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPQ::TEvMLPReadRequest, Handle);
@@ -459,7 +459,7 @@ STFUNC(TConsumerActor::StateWork) {
 }
 
 STFUNC(TConsumerActor::StateWrite) {
-    NPersQueue::TCounterTimeKeeper<ui64> keeper(CPUMetric);
+    NPersQueue::TCounterTimeKeeper<ui64> keeper(CPUUsageMetric);
 
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPQ::TEvMLPReadRequest, Queue);

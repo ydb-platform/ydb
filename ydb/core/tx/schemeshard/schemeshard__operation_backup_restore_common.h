@@ -73,10 +73,6 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TxType);
         Y_ABORT_UNLESS(txState->State == TTxState::ConfigureParts);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   TKind::Name() << " TConfigurePart: txState->Shards.size()# " << txState->Shards.size()
-                       << ", opId: " << OperationId);
-
         txState->ClearShardsInProgress();
         if constexpr (TKind::NeedSnapshotTime()) {
             TKind::ProposeTx(OperationId, *txState, context, GetSnapshotTime(context.SS, txState->TargetPathId));
@@ -501,9 +497,6 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan completed, returning true");
-
         return true;
     }
 
@@ -518,34 +511,12 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TxType);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState: txState->Shards.size()# " << txState->Shards.size()
-                               << ", ShardInfos.size()# " << context.SS->ShardInfos.size());
-
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
             auto idx = shard.Idx;
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint() << " ProgressState: checking shard.Idx# " << idx
-                                   << ", exists in ShardInfos# " << context.SS->ShardInfos.contains(idx));
-            
-            if (!context.SS->ShardInfos.contains(idx)) {
-                LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            DebugHint() << " ProgressState: CRITICAL - shard.Idx# " << idx 
-                                        << " NOT FOUND in ShardInfos!");
-                continue; // Пропускаем невалидный shard
-            }
-            
             auto tablet = context.SS->ShardInfos.at(idx).TabletID;
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint() << " ProgressState: shard.Idx# " << idx 
-                                   << ", TabletID# " << tablet);
             shardSet.insert(tablet);
         }
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState: shardSet.size()# " << shardSet.size()
-                               << ", calling ProposeToCoordinator");
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, shardSet);
         return false;
@@ -617,25 +588,12 @@ class TBackupRestoreOperationBase: public TSubOperation {
     }
 
     void StateDone(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "TBackupRestoreOperationBase StateDone START, opId# " << OperationId 
-                       << ", currentState# " << GetState());
-        
         auto state = NextState(GetState(), context);
         SetState(state);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "TBackupRestoreOperationBase StateDone: newState# " << state 
-                       << ", opId# " << OperationId);
-
         if (state != TTxState::Invalid) {
             context.OnComplete.ActivateTx(OperationId);
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "TBackupRestoreOperationBase StateDone: ActivateTx called");
         }
-        
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "TBackupRestoreOperationBase StateDone END");
     }
 
 public:

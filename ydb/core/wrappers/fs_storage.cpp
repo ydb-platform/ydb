@@ -26,7 +26,6 @@ private:
     }
 
     void EnsureDirectory(const TString& filePath) {
-        // Найти последний слеш в пути
         size_t pos = filePath.find_last_of('/');
         if (pos != TString::npos) {
             TString dirPath = filePath.substr(0, pos);
@@ -130,17 +129,8 @@ public:
             // }
             TFile file(key, flags);
             file.Flock(LOCK_EX);
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                "FS PutObject: writing to file# " << key << ", body# " << body);
             file.Write(body.data(), body.size());
             file.Close();
-            // TString fullPath = MakeFullPath(key);
-            // Y_UNUSED(fullPath);
-            // EnsureDirectory(fullPath);
-            
-            // TFileOutput file(fullPath);
-            // file.Write(body.data(), body.size());
-            // file.Finish();
 
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const std::exception& ex) {
@@ -328,7 +318,6 @@ public:
             file.Write(body.data(), body.size());
             file.Finish();
 
-            // Generate fake ETag (in real S3 it's MD5 hash, but we just use part number)
             TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
             
             Aws::S3::Model::UploadPartResult awsResult;

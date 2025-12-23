@@ -148,7 +148,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         ApplyProxy(*GetS3StorageConfig(), TString(msg.Response->Body));
         ProxyResolved = true;
 
-        const auto& cfg = GetS3StorageConfig()->GetConfig();
         Restart();
     }
 

@@ -16,9 +16,6 @@ namespace NExternalStorage {
 class TS3Wrapper: public TActor<TS3Wrapper> {
     template <typename T>
     void Handle(T& ev) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-            "TS3Wrapper::Handle called, event type# " << ev->GetTypeRewrite() 
-            << ", SelfId# " << SelfId());
         StorageOperator->Execute(ev);
     }
 
@@ -28,8 +25,6 @@ public:
         , StorageOperator(storageOperator)
     {
         Y_ABORT_UNLESS(!!StorageOperator, "not initialized operator. incorrect config.");
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-            "TS3Wrapper created with StorageOperator");
     }
 
     virtual ~TS3Wrapper() = default;

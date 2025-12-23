@@ -66,8 +66,6 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& request = Request->Get()->Record;
 
-        LOG_N("TExport::TTxCreate: DoExecute, txId# " << request.GetTxId() 
-            << ", databaseName# " << request.GetDatabaseName());
         LOG_D("TExport::TTxCreate: DoExecute");
         LOG_T("Message:\n" << request.ShortDebugString());
 
@@ -170,16 +168,12 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             break;
 
         case NKikimrExport::TCreateExportRequest::kExportToFsSettings:
-            LOG_N("TExport::TTxCreate: Processing ExportToFsSettings");
             if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
-                LOG_E("TExport::TTxCreate: EnableFsBackups feature flag is disabled");
                 return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
             }
-            LOG_I("TExport::TTxCreate: Processing FS export settings, items count# " << request.GetRequest().GetExportToFsSettings().items_size());
             if (processExportSettings(request.GetRequest().GetExportToFsSettings(), TExportInfo::EKind::FS, true)) {
                 return true;
             }
-            LOG_I("TExport::TTxCreate: FS export settings processed successfully");
             break;
 
         default:
@@ -193,11 +187,6 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         exportInfo->SanitizedToken = request.GetSanitizedToken();
-
-        LOG_I("TExport::TTxCreate: Persisting export"
-            << ", id# " << id
-            << ", kind# " << (int)exportInfo->Kind
-            << ", items count# " << exportInfo->Items.size());
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistCreateExport(db, *exportInfo);
@@ -213,7 +202,6 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *exportInfo);
 
-        LOG_I("TExport::TTxCreate: Export created successfully, id# " << id);
         Progress = true;
         return Reply(std::move(response));
     }
@@ -223,7 +211,6 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         if (Progress) {
             const ui64 id = Request->Get()->Record.GetTxId();
-            LOG_I("TExport::TTxCreate: DoComplete - scheduling progress for export id# " << id);
             Self->Execute(Self->CreateTxProgressExport(id), ctx);
         }
     }
@@ -262,11 +249,9 @@ private:
 
     template <typename TSettings>
     bool FillItems(TExportInfo& exportInfo, const TSettings& settings, TString& explain) {
-        LOG_I("TExport::TTxCreate::FillItems: items count# " << settings.items().size());
         exportInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const auto& item = settings.items(itemIdx);
-            LOG_I("TExport::TTxCreate::FillItems: item# " << itemIdx << ", source_path# " << item.source_path());
             const TPath path = TPath::Resolve(item.source_path(), Self);
             {
                 TPath::TChecker checks = path.Check();
@@ -279,14 +264,10 @@ private:
 
                 if (!checks) {
                     explain = checks.GetError();
-                    LOG_E("TExport::TTxCreate::FillItems: item check failed, item# " << itemIdx << ", error# " << explain);
                     return false;
                 }
             }
 
-            LOG_I("TExport::TTxCreate::FillItems: adding item# " << itemIdx 
-                << ", pathId# " << path.Base()->PathId 
-                << ", pathType# " << path->PathType);
             exportInfo.Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
             exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
 
@@ -367,31 +348,19 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_D("TExport::TTxProgress: DoExecute"
-            << ", Id# " << Id
-            << ", AllocateResult# " << (AllocateResult ? "yes" : "no")
-            << ", ModifyResult# " << (ModifyResult ? "yes" : "no")
-            << ", SchemeUploadResult# " << (SchemeUploadResult ? "yes" : "no")
-            << ", UploadMetadataResult# " << (UploadMetadataResult ? "yes" : "no")
-            << ", CompletedTxId# " << CompletedTxId);
+        LOG_D("TExport::TTxProgress: DoExecute");
 
         if (AllocateResult) {
-            LOG_I("TExport::TTxProgress: OnAllocateResult path");
             OnAllocateResult();
         } else if (ModifyResult) {
-            LOG_I("TExport::TTxProgress: OnModifyResult path");
             OnModifyResult(txc, ctx);
         } else if (SchemeUploadResult) {
-            LOG_I("TExport::TTxProgress: OnSchemeUploadResult path");
             OnSchemeUploadResult(txc);
         } else if (UploadMetadataResult) {
-            LOG_I("TExport::TTxProgress: OnUploadMetadataResult path");
             OnUploadMetadataResult(txc, ctx);
         } else if (CompletedTxId) {
-            LOG_I("TExport::TTxProgress: OnNotifyResult path");
             OnNotifyResult(txc, ctx);
         } else {
-            LOG_I("TExport::TTxProgress: Resume path");
             Resume(txc, ctx);
         }
 
@@ -431,13 +400,10 @@ private:
             << ": info# " << exportInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId
-            << ", exportKind# " << (int)exportInfo.Kind
-            << ", sourcePathType# " << item.SourcePathType
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
-        LOG_D("TExport::TTxProgress: Sending BackupPropose to SelfId");
     }
 
     void UploadScheme(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
@@ -825,31 +791,14 @@ private:
         Y_ABORT_UNLESS(Self->Exports.contains(Id));
         TExportInfo::TPtr exportInfo = Self->Exports.at(Id);
 
-        LOG_I("TExport::TTxProgress: Resume"
-            << ": id# " << Id
-            << ", state# " << (int)exportInfo->State
-            << ", kind# " << (int)exportInfo->Kind
-            << ", items count# " << exportInfo->Items.size()
-            << ", waitTxId# " << exportInfo->WaitTxId);
+        LOG_D("TExport::TTxProgress: Resume"
+            << ": id# " << Id);
 
         NIceDb::TNiceDb db(txc.DB);
 
         switch (exportInfo->State) {
         case EState::CreateExportDir:
-            LOG_I("TExport::TTxProgress::Resume: CreateExportDir state"
-                << ", exportId# " << exportInfo->Id
-                << ", waitTxId# " << exportInfo->WaitTxId);
-            if (exportInfo->WaitTxId == InvalidTxId) {
-                AllocateTxId(*exportInfo);
-            } else {
-                SubscribeTx(*exportInfo);
-            }
-            break;
-
         case EState::CopyTables:
-            LOG_I("TExport::TTxProgress::Resume: CopyTables state"
-                << ", exportId# " << exportInfo->Id
-                << ", waitTxId# " << exportInfo->WaitTxId);
             if (exportInfo->WaitTxId == InvalidTxId) {
                 AllocateTxId(*exportInfo);
             } else {
@@ -862,37 +811,22 @@ private:
             break;
 
         case EState::Transferring: {
-            LOG_I("TExport::TTxProgress::Resume: Transferring state"
-                << ", exportId# " << exportInfo->Id
-                << ", items count# " << exportInfo->Items.size()
-                << ", exportKind# " << (int)exportInfo->Kind);
             TDeque<ui32> pendingTables;
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 const auto& item = exportInfo->Items.at(itemIdx);
 
-                LOG_D("TExport::TTxProgress::Resume: Processing item# " << itemIdx
-                    << ", WaitTxId# " << item.WaitTxId
-                    << ", State# " << (int)item.State
-                    << ", SubState# " << (int)item.SubState
-                    << ", SourcePathType# " << item.SourcePathType);
-
                 if (item.WaitTxId == InvalidTxId) {
                     if (IsPathTypeTransferrable(item) && item.State <= EState::Transferring) {
-                        LOG_I("TExport::TTxProgress::Resume: Adding item to pendingTables# " << itemIdx);
                         pendingTables.emplace_back(itemIdx);
                     } else {
-                        LOG_I("TExport::TTxProgress::Resume: Uploading scheme for item# " << itemIdx);
                         UploadScheme(*exportInfo, itemIdx, ctx);
                     }
                 } else {
-                    LOG_D("TExport::TTxProgress::Resume: Subscribing to tx for item# " << itemIdx);
                     SubscribeTx(*exportInfo, itemIdx);
                 }
             }
             exportInfo->PendingItems = std::move(pendingTables);
-            LOG_I("TExport::TTxProgress::Resume: Total pending items# " << exportInfo->PendingItems.size());
             for (ui32 itemIdx : exportInfo->PendingItems) {
-                LOG_D("TExport::TTxProgress::Resume: Allocating TxId for item# " << itemIdx);
                 AllocateTxId(*exportInfo, itemIdx);
             }
             break;
@@ -977,7 +911,7 @@ private:
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
         const ui64 id = AllocateResult->Cookie;
 
-        LOG_I("TExport::TTxProgress: OnAllocateResult"
+        LOG_D("TExport::TTxProgress: OnAllocateResult"
             << ": txId# " << txId
             << ", id# " << id);
 
@@ -990,32 +924,20 @@ private:
         TExportInfo::TPtr exportInfo = Self->Exports.at(id);
         ui32 itemIdx = Max<ui32>();
 
-        LOG_I("TExport::TTxProgress::OnAllocateResult: state# " << (int)exportInfo->State
-            << ", kind# " << (int)exportInfo->Kind);
-
         switch (exportInfo->State) {
         case EState::CreateExportDir:
-            LOG_I("TExport::TTxProgress::OnAllocateResult: CreateExportDir, calling MkDir");
             MkDir(*exportInfo, txId);
             break;
 
         case EState::CopyTables:
-            LOG_I("TExport::TTxProgress::OnAllocateResult: CopyTables, calling CopyTables");
             CopyTables(*exportInfo, txId);
             break;
 
         case EState::Transferring:
-            LOG_I("TExport::TTxProgress::OnAllocateResult: Transferring state"
-                << ", exportId# " << id
-                << ", txId# " << txId
-                << ", pendingItems count# " << exportInfo->PendingItems.size());
             if (exportInfo->PendingItems.empty()) {
-                LOG_W("TExport::TTxProgress::OnAllocateResult: No pending items in Transferring state");
                 return;
             }
             itemIdx = PopFront(exportInfo->PendingItems);
-            LOG_I("TExport::TTxProgress::OnAllocateResult: Processing item# " << itemIdx
-                << ", sourcePathType# " << exportInfo->Items.at(itemIdx).SourcePathType);
             if (IsPathTypeTransferrable(exportInfo->Items.at(itemIdx))) {
                 TransferData(*exportInfo, itemIdx, txId);
             } else {
@@ -1507,34 +1429,22 @@ private:
             Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
             auto& item = exportInfo->Items.at(itemIdx);
 
-            LOG_I("TExport::TTxProgress::OnNotifyResult: Transferring completed"
-                << ", exportId# " << exportInfo->Id
-                << ", itemIdx# " << itemIdx
-                << ", txId# " << txId
-                << ", sourcePathType# " << item.SourcePathType);
-
             item.State = EState::Done;
             item.WaitTxId = InvalidTxId;
 
             bool itemHasIssues = false;
             if (IsPathTypeTransferrable(item)) {
-                auto itemPathId = ItemPathId(Self, *exportInfo, itemIdx);
-                LOG_D("TExport::TTxProgress::OnNotifyResult: Checking issues for itemPathId# " << itemPathId);
-                if (const auto issue = GetIssues(itemPathId, txId, item)) {
+                if (const auto issue = GetIssues(ItemPathId(Self, *exportInfo, itemIdx), txId, item)) {
                     item.Issue = *issue;
-                    LOG_E("TExport::TTxProgress::OnNotifyResult: Item has issues# " << *issue);
                     Cancel(*exportInfo, itemIdx, "issues during backing up");
                     itemHasIssues = true;
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                LOG_I("TExport::TTxProgress::OnNotifyResult: All items are done");
                 if (!AppData()->FeatureFlags.GetEnableExportAutoDropping() || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
-                    LOG_I("TExport::TTxProgress::OnNotifyResult: Setting state to Done");
                     exportInfo->State = EState::Done;
                     exportInfo->EndTime = TAppData::TimeProvider->Now();
                 } else {
-                    LOG_I("TExport::TTxProgress::OnNotifyResult: Preparing auto dropping");
                     PrepareAutoDropping(Self, *exportInfo, db);
                 }
             }

@@ -19,7 +19,7 @@
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
-#include <ydb/core/persqueue/pqtablet/quote/read_quoter.h>
+#include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/actors/core/actor.h>

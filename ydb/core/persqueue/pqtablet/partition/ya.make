@@ -35,7 +35,7 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/pqtablet/partition/mirrorer
     ydb/core/persqueue/pqtablet/partition/mlp
-    ydb/core/persqueue/pqtablet/quote
+    ydb/core/persqueue/pqtablet/quota
 )
 
 END()

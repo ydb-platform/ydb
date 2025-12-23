@@ -14,7 +14,7 @@
 
 ## Предварительные условия {#requirements}
 
-* запущенная база {{ ydb-short-name }}, пример запуска [quick start](../../quickstart.md),
+* запущенная база {{ ydb-short-name }}, пример запуска [quick start](../../quickstart.md);
 * включены флаги `enable_external_data_sources` и `enable_streaming_queries`:
 
   * если вы запускаете {{ ydb-short-name }} через docker, то передайте флаги в `docker run`:

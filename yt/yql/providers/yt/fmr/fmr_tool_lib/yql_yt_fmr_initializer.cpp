@@ -41,20 +41,28 @@ TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
     if (fileCacheInfo.HasFileExpirationInterval()) {
         uploadOptions.ExpirationInterval = TDuration::Seconds(fileCacheInfo.GetFileExpirationInterval());
     }
+    TString distCacheYtToken;
     if (fileCacheInfo.HasTokenFile()) {
         TString tokenFile = fileCacheInfo.GetTokenFile();
         YQL_ENSURE(NFs::Exists(tokenFile), "Token file should exist, if it is set in gateways.conf");
-        TString token = StripStringRight(TFileInput(tokenFile).ReadLine());
-        metadataOptions.YtToken = token;
-        uploadOptions.YtToken = token;
+        distCacheYtToken = StripStringRight(TFileInput(tokenFile).ReadLine());
+        metadataOptions.YtToken = distCacheYtToken;
+        uploadOptions.YtToken = distCacheYtToken;
         YQL_CLOG(DEBUG, FastMapReduce) << "Found token for writing to fmr dist cache";
     }
     YQL_CLOG(DEBUG, FastMapReduce) << "Successfully initialized fmr remote file cache with cluster: " << distCacheYtCluster << " and path: " << distCacheYtPath;
 
+    TFmrDistributedCacheSettings fmrDistCacheSettings{
+        .Path = distCacheYtPath,
+        .YtServerName = distCacheYtCluster,
+        .YtToken = distCacheYtToken
+    };
+
     return NFmr::TFmrInitializationOptions {
         .FmrCoordinatorUrl = coordinatorUrl,
         .FmrFileMetadataService =  NFmr::MakeYtFileMetadataService(metadataOptions),
-        .FmrFileUploadService = NFmr::MakeYtFileUploadService(uploadOptions)
+        .FmrFileUploadService = NFmr::MakeYtFileUploadService(uploadOptions),
+        .FmrDistributedCacheSettings = fmrDistCacheSettings
     };
 }
 
@@ -107,7 +115,8 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         auto jobFactory = MakeFmrJobFactory(settings);
         NFmr::TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDefaultRandomProvider(),
             .TimeToSleepBetweenRequests=TDuration::Seconds(1)};
-        worker = MakeFmrWorker(coordinator, jobFactory, workerSettings);
+
+        worker = MakeFmrWorker(coordinator, jobFactory, fmrServices->JobPreparer, workerSettings);
         worker->Start();
     }
     return std::pair<IYtGateway::TPtr, IFmrWorker::TPtr>{CreateYtFmrGateway(slave, coordinator, fmrServices), std::move(worker)};

@@ -29,6 +29,9 @@ struct TStartOperationRequest {
     ui32 NumRetries = 1; // Not supported yet
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections = {};
     TMaybe<NYT::TNode> FmrOperationSpec = Nothing();
+    std::vector<TFileInfo> Files = {};
+    std::vector<TYtResourceInfo> YtResources = {};
+    std::vector<TFmrResourceOperationInfo> FmrResources = {};
 };
 
 struct TStartOperationResponse {

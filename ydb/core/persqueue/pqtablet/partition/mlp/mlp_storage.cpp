@@ -22,10 +22,10 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     , MaxFastMessages(maxMessages - maxMessages / 4)
     , MaxSlowMessages(maxMessages / 4)
     , TimeProvider(timeProvider)
+    , NextVacuumRun(TInstant::Zero())
     , Batch(this)
 {
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
-    NextVacuumRun = timeProvider->Now() - VACUUM_INTERVAL;
     Metrics.MessageLocks.Initialize(MLP_LOCKS_RANGES, std::size(MLP_LOCKS_RANGES), true);
     Metrics.MessageLockingDuration.Initialize(SLOW_LATENCY_RANGES, std::size(SLOW_LATENCY_RANGES), true);
 }

@@ -9,3 +9,4 @@
 * [{#T}](../../reference/observability/tracing/setup.md)
 * [{#T}](system-views.md)
 * [{#T}](alerting.md)
+* [{#T}](diagnostics.md)

@@ -403,11 +403,12 @@ public:
         if (IsLambdaArgument(node)) {
             return true;
         }
-        {
+        if (Settings.IsEnabled(EFlag::PredicateAsExpression)) {
             TPredicateNode predicate(node);
             MarkupPredicates(node, predicate);
             return predicate.CanBePushed;
         }
+        return false;
     }
 
 private:

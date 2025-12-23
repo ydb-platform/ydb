@@ -764,7 +764,7 @@ public:
                 false
             );
 
-            Runner = MakeDqTaskRunner(Alloc, Ctx, settings, nullptr);
+            Runner = MakeDqTaskRunner(Alloc, Ctx, settings, {}, {}, {});
         });
 
         auto guard = Runner->BindAllocator(DqConfiguration->MemoryLimit.Get().GetOrElse(0));

@@ -64,6 +64,10 @@ private:
     using EBlockTrackingMode = NKikimrConfig::TTableServiceConfig::EBlockTrackingMode;
     const EBlockTrackingMode BlockTrackingMode;
 
+    // Counters for channel's buffer size in bytes.
+    NMonitoring::TDynamicCounters::TCounterPtr OutputTotalSizeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr OutputOverLimitSizeCounter;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
@@ -72,7 +76,7 @@ public:
     TKqpScanComputeActor(NScheduler::TSchedulableActorOptions schedulableOptions, const TActorId& executerId, ui64 txId,
         NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
-        TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode);
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode, const TIntrusivePtr<TKqpCounters>& kqpCounters);
 
     ~TKqpScanComputeActor();
 

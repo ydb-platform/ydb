@@ -259,11 +259,20 @@ inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode st
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class TDqTaskRunner : public IDqTaskRunner {
 public:
-    TDqTaskRunner(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings, const TLogFunc& logFunc)
+    TDqTaskRunner(
+        NKikimr::NMiniKQL::TScopedAlloc& alloc,
+        const TDqTaskRunnerContext& context,
+        const TDqTaskRunnerSettings& settings,
+        const TLogFunc& logFunc,
+        const NMonitoring::TDynamicCounters::TCounterPtr& totalSizeCounter,
+        const NMonitoring::TDynamicCounters::TCounterPtr& overLimitSizeCounter
+    )
         : Context(context)
         , Settings(settings)
         , LogFunc(logFunc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>())
+        , OutputTotalSizeCounter(totalSizeCounter)
+        , OutputOverLimitSizeCounter(overLimitSizeCounter)
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
         Stats->CreateTs = TInstant::Now();
@@ -288,12 +297,20 @@ public:
             };
             ComputationLogProvider = NUdf::MakeLogProvider(std::move(logProviderFunc), NUdf::ELogLevel::Debug);
         }
+
+        // Expect both counters to be present or missing.
+        Y_ASSERT(!!OutputTotalSizeCounter == !!OutputOverLimitSizeCounter);
     }
 
     ~TDqTaskRunner() {
         auto guard = Guard(Alloc());
         Stats.reset();
         AllocatedHolder.reset();
+
+        if (OutputOverLimitSizeCounter) {
+            OutputTotalSizeCounter->Sub(LastOutputTotalSize);
+            OutputOverLimitSizeCounter->Sub(LastOutputOverLimitSize);
+        }
     }
 
     bool CollectFull() const {
@@ -1101,6 +1118,13 @@ private:
         }
         bool dataConsumed = false;
         while (AllocatedHolder->Output->GetFillLevel() == NoLimit) {
+            if (OutputOverLimitSizeCounter) {
+                OutputTotalSizeCounter->Sub(LastOutputTotalSize);
+                OutputOverLimitSizeCounter->Sub(LastOutputOverLimitSize);
+                LastOutputTotalSize = 0;
+                LastOutputOverLimitSize = 0;
+            }
+
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus = NUdf::EFetchStatus::Finish;
             if (!AllocatedHolder->ResultStreamFinished) {
@@ -1119,6 +1143,14 @@ private:
                         AllocatedHolder->Output->Consume(std::move(value));
                     }
                     dataConsumed = true;
+
+                    if (OutputOverLimitSizeCounter) {
+                        LastOutputTotalSize = AllocatedHolder->Output->GetTotalSize();
+                        LastOutputOverLimitSize = AllocatedHolder->Output->GetOverLimitSize();
+                        OutputTotalSizeCounter->Add(LastOutputTotalSize);
+                        OutputOverLimitSizeCounter->Add(LastOutputOverLimitSize);
+                    }
+
                     break;
                 }
                 case NUdf::EFetchStatus::Finish: {
@@ -1240,6 +1272,12 @@ private:
     TDqMeteringStats MeteringStats;
     TDuration RunComputeTime;
 
+    // Collected in full-stats mode
+    NMonitoring::TDynamicCounters::TCounterPtr OutputTotalSizeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr OutputOverLimitSizeCounter;
+    size_t LastOutputTotalSize = 0;
+    size_t LastOutputOverLimitSize = 0;
+
 private:
     // statistics support
     std::optional<TInstant> StartWaitInputTime;
@@ -1290,9 +1328,10 @@ private:
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
-    const TLogFunc& logFunc)
+    const TLogFunc& logFunc, const NMonitoring::TDynamicCounters::TCounterPtr& totalSizeCounter,
+    const NMonitoring::TDynamicCounters::TCounterPtr& overLimitSizeCounter)
 {
-    return new TDqTaskRunner(*alloc, ctx, settings, logFunc);
+    return new TDqTaskRunner(*alloc, ctx, settings, logFunc, totalSizeCounter, overLimitSizeCounter);
 }
 
 } // namespace NYql::NDq

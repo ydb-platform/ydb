@@ -19,6 +19,14 @@ public:
         return NoLimit;
     }
 
+    size_t GetTotalSize() const override {
+        return 0;
+    }
+
+    size_t GetOverLimitSize() const override {
+        return 0;
+    }
+
     void Consume(NUdf::TUnboxedValue&& value) final {
         value.Apply(*ApplyCtx);
     }

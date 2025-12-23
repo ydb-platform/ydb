@@ -1070,6 +1070,14 @@ public:
         ythrow yexception() << "unimplemented";
     };
 
+    size_t GetTotalSize() const override {
+        return 0;
+    }
+
+    size_t GetOverLimitSize() const override {
+        return 0;
+    }
+
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {
         Y_ABORT("Unimplemented");
     }
@@ -1319,6 +1327,14 @@ public:
 
     EDqFillLevel UpdateFillLevel() override {
         Y_ABORT("Unimplemented");
+    }
+
+    size_t GetTotalSize() const override {
+        return 0;
+    }
+
+    size_t GetOverLimitSize() const override {
+        return 0;
     }
 
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {

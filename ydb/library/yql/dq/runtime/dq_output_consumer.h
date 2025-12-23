@@ -32,6 +32,10 @@ public:
     virtual TString DebugString() {
         return "";
     }
+
+    // Return sizes of outputs in bytes - for stats
+    virtual size_t GetTotalSize() const = 0;
+    virtual size_t GetOverLimitSize() const = 0;
 };
 
 IDqOutputConsumer::TPtr CreateOutputMultiConsumer(TVector<IDqOutputConsumer::TPtr>&& consumers);

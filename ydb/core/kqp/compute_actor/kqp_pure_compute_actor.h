@@ -33,7 +33,8 @@ public:
         NScheduler::TSchedulableActorOptions schedulableOptions,
         NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-        const TString& database
+        const TString& database,
+        const TIntrusivePtr<TKqpCounters>& kqpCounters
     );
 
     void DoBootstrap();
@@ -77,6 +78,10 @@ private:
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString Database;
+
+    // Counters for channel's buffer size in bytes.
+    NMonitoring::TDynamicCounters::TCounterPtr OutputTotalSizeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr OutputOverLimitSizeCounter;
 };
 
 } // namespace NKikimr::NKqp

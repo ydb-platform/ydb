@@ -43,6 +43,22 @@ public:
         return Aggregator->GetFillLevel();
     }
 
+    size_t GetTotalSize() const override {
+        size_t result = 0;
+        for (const auto& output : Outputs) {
+            result += output->GetTotalSize();
+        }
+        return result;
+    }
+
+    size_t GetOverLimitSize() const override {
+        size_t result = 0;
+        for (const auto& output : Outputs) {
+            result += output->GetOverLimitSize();
+        }
+        return result;
+    }
+
     void Consume(TUnboxedValue&& value) final {
         ui32 partitionIndex = FindKeyPartitionIndex(TypeEnv, value, Partitions, KeyColumnTypes, KeyColumnIndices,
                 [](const auto& partition) { return partition.Range; });

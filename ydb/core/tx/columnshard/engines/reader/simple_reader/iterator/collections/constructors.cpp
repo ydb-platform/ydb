@@ -19,6 +19,10 @@ void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) 
         }
         break;
     }
+    if (TBase::GetConstructorsCount()) {
+        const auto* cursorLocal = VerifyDynamicCast<ISimpleScanCursor*>(cursor.get());
+        TBase::MutableNextConstructor().ValidateCursor(*cursorLocal);
+    }
 }
 
 std::vector<TInsertWriteId> TPortionsSources::GetUncommittedWriteIds() const {

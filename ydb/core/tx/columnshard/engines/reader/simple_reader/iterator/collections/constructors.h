@@ -1,6 +1,7 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 
@@ -30,12 +31,14 @@ public:
         return IsStartedByCursorFlag;
     }
 
-    TSourceConstructor(const std::shared_ptr<TPortionInfo>&& portion, const NReader::ERequestSorting sorting)
+    TSourceConstructor(const std::shared_ptr<TPortionInfo>& portion, const bool isVisible, const NReader::ERequestSorting sorting)
         : NCommon::TDataSourceConstructor(
               TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
                   sorting == NReader::ERequestSorting::DESC),
               TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyStart() : portion->IndexKeyEnd(),
-                  sorting == NReader::ERequestSorting::DESC))
+                  sorting == NReader::ERequestSorting::DESC),
+              isVisible ? std::make_optional<ui64>()
+                        : static_cast<ui64>(VerifyDynamicCast<TWrittenPortionInfo*>(portion.get())->GetInsertWriteId()))
         , Portion(std::move(portion))
         , RecordsCount(portion->GetRecordsCount())
     {
@@ -45,6 +48,11 @@ public:
 
     virtual bool QueryAgnosticLess(const TDataSourceConstructor& rhs) const override {
         return Portion->GetPortionId() < VerifyDynamicCast<const TSourceConstructor*>(&rhs)->GetPortion()->GetPortionId();
+    }
+
+    void ValidateCursor(const ISimpleScanCursor& cursor) const {
+        AFL_VERIFY(cursor.GetPortionId() && GetPortion()->GetPortionId() == *cursor.GetPortionId())("expected", GetPortion()->GetPortionId())(
+                                                                            "cursor", cursor.GetPortionId().value_or(0));
     }
 };
 

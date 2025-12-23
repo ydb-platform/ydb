@@ -11,6 +11,7 @@ class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
     TReplaceKeyAdapter Start;
     TReplaceKeyAdapter Finish;
+    std::optional<ui64> SortingKey;
     ui32 SourceIdx = 0;
     bool SourceIdxInitialized = false;
 
@@ -38,9 +39,10 @@ public:
         return std::move(Finish);
     }
 
-    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish)
+    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const std::optional<ui64>& specialSortingKey)
         : Start(std::move(start))
         , Finish(std::move(finish))
+        , SortingKey(specialSortingKey)
     {
     }
 
@@ -82,6 +84,16 @@ public:
         }
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
+            if (l.SortingKey != r.SortingKey) {
+                if (!!l.SortingKey && !!r.SortingKey) {
+                    return l.SortingKey > r.SortingKey;
+                }
+                if (!!l.SortingKey) {
+                    return true;
+                }
+                AFL_VERIFY(!!r.SortingKey);
+                return false;
+            }
             auto cmp = l.Start.Compare(r.Start);
             if (cmp == std::partial_ordering::less) {
                 return false;

@@ -103,10 +103,10 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const auto& body = ev->Get()->Body;
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        
+
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
             "FS PutObject START: key# " << key << ", size# " << body.size());
-        
+
         if (Verbose) {
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
                 "FS PutObject: key# " << key << ", size# " << body.size());

@@ -103,6 +103,11 @@ public:
     }
 
     template <>
+    static TStorageSettings FromBackupTask<NKikimrSchemeOp::TFSSettings>(const NKikimrSchemeOp::TBackupTask& task) {
+        return TStorageSettings(TStringBuilder() << task.GetFSSettings().GetBasePath() << "/" << task.GetFSSettings().GetPath(), task.GetShardNum(), TEncryptionSettings::FromBackupTask(task));
+    }
+
+    template <>
     static TStorageSettings FromRestoreTask<NKikimrSchemeOp::TS3Settings>(const NKikimrSchemeOp::TRestoreTask& task) {
         return TStorageSettings(task.GetS3Settings().GetObjectKeyPattern(), task.GetShardNum(), TEncryptionSettings::FromRestoreTask(task));
     }

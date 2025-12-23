@@ -1,0 +1,3 @@
+RECURSE(
+    admin_actions
+)

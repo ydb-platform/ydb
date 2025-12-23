@@ -65,7 +65,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , MaxCommonLogChunksSSD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , CommonStaticLogChunks(NPDisk::CommonStaticLogChunks, 1, 1'000'000)
-    , MaxActiveCompactionsPerPDisk(0, 0, 1'000'000)
+    , MaxActiveCompactionsPerPDisk(1, 0, 1'000'000)
     , LongWaitingCompactionThresholdSec(3600, 0, 2592000)
     , LongWorkingCompactionThresholdSec(3600, 0, 2592000)
     , CostMetricsParametersByMedia({

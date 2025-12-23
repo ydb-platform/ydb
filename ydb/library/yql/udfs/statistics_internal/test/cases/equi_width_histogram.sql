@@ -1,11 +1,11 @@
 $get_factory = ($buckets, $min, $max) -> { return AggregationFactory(
         "UDAF",
-        ($item, $parent) -> { return Udf(StatisticsInternal::EquiWidthHistogramCreate, $parent as Depends)($item, $buckets, $min, $max) },
-        ($state, $item, $parent) -> { return Udf(StatisticsInternal::EquiWidthHistogramAddValue, $parent as Depends)($state, $item) },
-        StatisticsInternal::EquiWidthHistogramMerge,
-        StatisticsInternal::EquiWidthHistogramFinalize,
-        StatisticsInternal::EquiWidthHistogramSerialize,
-        StatisticsInternal::EquiWidthHistogramDeserialize,
+        ($item, $parent) -> { return Udf(StatisticsInternal::EWHCreate, $parent as Depends)($item, $buckets, $min, $max) },
+        ($state, $item, $parent) -> { return Udf(StatisticsInternal::EWHAddValue, $parent as Depends)($state, $item) },
+        StatisticsInternal::EWHMerge,
+        StatisticsInternal::EWHFinalize,
+        StatisticsInternal::EWHSerialize,
+        StatisticsInternal::EWHDeserialize,
     )
 };
 

@@ -47,7 +47,7 @@ public:
     size_t EstimateSize() const final { return Width * Depth * sizeof(ui32); }
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
-        Seq = builder.AddUDAFAggregation(columnName, "CountMinSketch", Width, Depth);
+        Seq = builder.AddUDAFAggregation(columnName, "CMS", Width, Depth);
     }
 
     TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const final {
@@ -201,8 +201,7 @@ public:
     size_t EstimateSize() const final { return NumBuckets * sizeof(ui64); }
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
-        Seq = builder.AddUDAFAggregation(
-            columnName, "EquiWidthHistogram", NumBuckets, RangeStart, RangeEnd);
+        Seq = builder.AddUDAFAggregation(columnName, "EWH", NumBuckets, RangeStart, RangeEnd);
     }
 
     TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const final {

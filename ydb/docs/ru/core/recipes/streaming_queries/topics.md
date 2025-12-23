@@ -54,7 +54,7 @@ CREATE TOPIC output_topic
 CREATE EXTERNAL DATA SOURCE ydb_source WITH (
     SOURCE_TYPE = "Ydb",
     LOCATION = "localhost:2136",
-    DATABASE_NAME = "/Root",
+    DATABASE_NAME = "/local",
     AUTH_METHOD = "NONE"
 )
 ```

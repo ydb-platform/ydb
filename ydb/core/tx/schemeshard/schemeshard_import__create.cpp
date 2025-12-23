@@ -600,7 +600,7 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    void RetryCreatedByQueryCreation(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    void RetrySchemeQueryObjectsCreation(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const auto database = GetDatabase(*Self);
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo.Items.size())) {
@@ -618,7 +618,7 @@ private:
             }
         }
         if (!retriedItems.empty()) {
-            importInfo.WaitingViews = std::ssize(retriedItems);
+            importInfo.WaitingSchemeObjeects = std::ssize(retriedItems);
             LOG_D("TImport::TTxProgress: retry view creation"
                 << ": id# " << importInfo.Id
                 << ", retried items# " << JoinSeq(", ", retriedItems)
@@ -1271,11 +1271,11 @@ private:
                 // Cancel the import, or we will end up waiting indefinitely.
                 return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
             } else if (AllDoneOrWaiting(stateCounts)) {
-                if (stateCounts.at(EState::Waiting) == importInfo->WaitingViews) {
+                if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjeects) {
                     // No progress has been made since the last view creation retry.
                     return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
                 }
-                RetryCreatedByQueryCreation(*importInfo, db, ctx);
+                RetrySchemeQueryObjectsCreation(*importInfo, db, ctx);
             }
             return;
         }
@@ -1682,7 +1682,7 @@ private:
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         } else if (AllDoneOrWaiting(stateCounts)) {
-            RetryCreatedByQueryCreation(*importInfo, db, ctx);
+            RetrySchemeQueryObjectsCreation(*importInfo, db, ctx);
         }
 
         Self->PersistImportItemState(db, *importInfo, itemIdx);

@@ -238,7 +238,7 @@ private:
 
     TInstant BaseDeadline;
     TInstant BaseWriteTimestamp;
-    TInstant LastVacuumRun;
+    TInstant NextVacuumRun;
 
     std::deque<TMessage> Messages;
     std::map<ui64, TMessage> SlowMessages;

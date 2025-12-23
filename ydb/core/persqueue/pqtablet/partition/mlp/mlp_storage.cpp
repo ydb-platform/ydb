@@ -25,7 +25,7 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     , Batch(this)
 {
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
-    LastVacuumRun = BaseDeadline;
+    NextVacuumRun = timeProvider->Now() + VACUUM_INTERVAL;
     Metrics.MessageLocks.Initialize(MLP_LOCKS_RANGES, std::size(MLP_LOCKS_RANGES), true);
     Metrics.MessageLockingDuration.Initialize(SLOW_LATENCY_RANGES, std::size(SLOW_LATENCY_RANGES), true);
 }
@@ -180,11 +180,12 @@ TInstant TStorage::GetMessageDeadline(ui64 messageId) {
 
 size_t TStorage::ProccessDeadlines() {
     auto now = TimeProvider->Now();
-    if (now - LastVacuumRun < VACUUM_INTERVAL) {
+
+    if (now < NextVacuumRun) {
         return 0;
     }
+    NextVacuumRun = now + VACUUM_INTERVAL;
 
-    LastVacuumRun = now;
     auto deadlineDelta = (now - BaseDeadline).Seconds();
     size_t count = 0;
 

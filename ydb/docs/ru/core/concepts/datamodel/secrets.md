@@ -15,7 +15,7 @@ CREATE SECRET `MySecretName` WITH (value = `MySecretData`);
 
 ## Управление доступом {#secret_access}
 
-Секреты являются объектами схемы, поэтому права на них выдаются с помощью [команды](../../yql/reference/syntax/grant.md) `GRANT`, а отзываются – с помощью [команды](../../yql/reference/syntax/revoke.md) `REVOKE`. Для использования секрета в запросе, например, при создании [внешнего источника данных](../../yql/reference/syntax/create-external-data-source.md) или [трансфера данных](../../yql/reference/syntax/create-transfer.md), необходимо [право](../../yql/reference/syntax/grant.md) `ydb.granular.select_row`.
+Секреты являются объектами схемы, поэтому права на них выдаются с помощью [команды](../../yql/reference/syntax/grant.md) `GRANT`, а отзываются – с помощью [команды](../../yql/reference/syntax/revoke.md) `REVOKE`. Для использования секрета в запросе, например, при создании [внешнего источника данных](../../yql/reference/syntax/create-external-data-source.md) или [трансфера данных](../../yql/reference/syntax/create-transfer.md), необходимо [право](../../yql/reference/syntax/grant.md#permissions-list) `SELECT ROW`.
 
 ## Устаревший синтаксис
 

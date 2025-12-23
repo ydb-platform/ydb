@@ -1754,6 +1754,7 @@ public:
     TGenerateResult DoGenGetValues(
         const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override
     {
+        // Cerr << "DoGenGetValues; IsAggregate = " << IsAggregator << Endl;
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context); // TUnboxedValue represented as int128
@@ -1846,6 +1847,7 @@ public:
         auto inBuf = CallInst::Create(uvPtrStateMethodType, getInputBufferMethodPtr, {boxedStatePtr}, "dq_hash_call_get_input_buffer", block);
         auto isBufNull = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, inBuf, ConstantPointerNull::get(ptrValueType), "", block);
 
+        const auto blockInputEnd = BasicBlock::Create(context, "dq_hash_input_end", ctx.Func);
         const auto blockBufNull = BasicBlock::Create(context, "", ctx.Func);
         const auto blockBufNotNull = BasicBlock::Create(context, "", ctx.Func);
         BranchInst::Create(blockBufNull, blockBufNotNull, isBufNull, block);
@@ -1853,7 +1855,8 @@ public:
         const auto blockInputOk = BasicBlock::Create(context, "", ctx.Func);
         const auto blockInputYield = BasicBlock::Create(context, "", ctx.Func);
         const auto blockInputFinish = BasicBlock::Create(context, "", ctx.Func);
-        const auto blockInputEnd = BasicBlock::Create(context, "dq_hash_input_end", ctx.Func);
+        // Join block to ensure a single predecessor for the 'OK' path
+        const auto blockInputOkJoin = BasicBlock::Create(context, "dq_hash_input_ok_join", ctx.Func);
 
         block = blockBufNull;
         auto fillStateNull = ConstantInt::get(statusType, static_cast<i32>(EFillState::SourceSkipped));
@@ -1875,7 +1878,8 @@ public:
             new StoreInst(val, storePtr, block);
         }
         auto fillStateOk = ConstantInt::get(statusType, static_cast<i32>(EFillState::ContinueFilling));
-        BranchInst::Create(blockInputEnd, block);
+        // Route through join block to keep PHI predecessors stable
+        BranchInst::Create(blockInputOkJoin, block);
 
         block = blockInputYield;
         auto fillStateYield = ConstantInt::get(statusType, static_cast<i32>(EFillState::Yield));
@@ -1885,10 +1889,14 @@ public:
         auto fillStateFinish = ConstantInt::get(statusType, static_cast<i32>(EFillState::SourceEmpty));
         BranchInst::Create(blockInputEnd, block);
 
+        // Ensure the OK-path join block unconditionally reaches input_end
+        block = blockInputOkJoin;
+        BranchInst::Create(blockInputEnd, block);
+
         block = blockInputEnd;
-        const auto fillState = PHINode::Create(statusType, 4U, "dq_hash_input_state", blockInputEnd);
+        const auto fillState = PHINode::Create(statusType, 4U, "dq_hash_input_state", block);
         fillState->addIncoming(fillStateNull, blockBufNull);
-        fillState->addIncoming(fillStateOk, blockInputOk);
+        fillState->addIncoming(fillStateOk, blockInputOkJoin);
         fillState->addIncoming(fillStateYield, blockInputYield);
         fillState->addIncoming(fillStateFinish, blockInputFinish);
 
@@ -1936,11 +1944,11 @@ public:
 
         const size_t outputColumns = OutputTypes.size();
         for (size_t i = 0; i < outputColumns; ++i) {
-                genResult.second.push_back([i, outputBufferPtr, valueType](const TCodegenContext& ctx, BasicBlock*& block) -> Value* {
+                genResult.second.push_back([i, outputBufferPtr, valueType](const TCodegenContext& ctx, BasicBlock*& subblock) -> Value* {
                     const auto loadPtr = GetElementPtrInst::CreateInBounds(valueType, outputBufferPtr, {
                         ConstantInt::get(Type::getInt32Ty(ctx.Codegen.GetContext()), i)
-                    }, "dq_hash_output_load", block);
-                    return new LoadInst(valueType, loadPtr, "dq_hash_output", block);
+                    }, "dq_hash_output_load", subblock);
+                    return new LoadInst(valueType, loadPtr, "dq_hash_output", subblock);
                 }
             );
         }

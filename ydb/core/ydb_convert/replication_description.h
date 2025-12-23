@@ -21,20 +21,6 @@ namespace NKikimrReplication {
 
 namespace NKikimr {
 
-bool FillReplicationDescription(
-    Ydb::Replication::DescribeReplicationResult& out,
-    const NKikimrSchemeOp::TReplicationDescription inDesc,
-    const NKikimrSchemeOp::TDirEntry& inDirEntry,
-    Ydb::StatusIds_StatusCode& status,
-    TString& error);
-
-bool FillTransferDescription(
-    Ydb::Replication::DescribeTransferResult& out,
-    const NKikimrSchemeOp::TReplicationDescription inDesc,
-    const NKikimrSchemeOp::TDirEntry& inDirEntry,
-    Ydb::StatusIds_StatusCode& status,
-    TString& error);
-
 void FillReplicationDescription(
     Ydb::Replication::DescribeReplicationResult& out,
     const NKikimrReplication::TEvDescribeReplicationResult& inDesc);

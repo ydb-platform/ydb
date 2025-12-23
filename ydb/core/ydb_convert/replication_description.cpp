@@ -19,23 +19,23 @@ TString BuildConnectionString(const NKikimrReplication::TConnectionParams& param
 
 void ConvertStaticCredentials(
     const NKikimrReplication::TStaticCredentials& from,
-    Ydb::Replication::ConnectionParams::StaticCredentials& to) {
-
+    Ydb::Replication::ConnectionParams::StaticCredentials& to)
+{
     to.set_user(from.GetUser());
     to.set_password_secret_name(from.GetPasswordSecretName());
 }
 
 void ConvertOAuth(
     const NKikimrReplication::TOAuthToken& from,
-    Ydb::Replication::ConnectionParams::OAuth& to) {
-
+    Ydb::Replication::ConnectionParams::OAuth& to)
+{
     to.set_token_secret_name(from.GetTokenSecretName());
 }
 
 void ConvertConnectionParams(
     const NKikimrReplication::TConnectionParams& from,
-    Ydb::Replication::ConnectionParams& to) {
-
+    Ydb::Replication::ConnectionParams& to)
+{
     to.set_endpoint(from.GetEndpoint());
     to.set_database(from.GetDatabase());
     to.set_enable_ssl(from.GetEnableSsl());
@@ -53,23 +53,23 @@ void ConvertConnectionParams(
 
 void ConvertRowConsistencySettings(
     const NKikimrReplication::TConsistencySettings::TRowConsistency&,
-    Ydb::Replication::ConsistencyLevelRow&) {
-
+    Ydb::Replication::ConsistencyLevelRow&)
+{
     // nop
 }
 
 void ConvertGlobalConsistencySettings(
     const NKikimrReplication::TConsistencySettings::TGlobalConsistency& from,
-    Ydb::Replication::ConsistencyLevelGlobal& to) {
-
+    Ydb::Replication::ConsistencyLevelGlobal& to)
+{
     *to.mutable_commit_interval() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
         from.GetCommitIntervalMilliSeconds());
 }
 
 void ConvertConsistencySettings(
     const NKikimrReplication::TConsistencySettings& from,
-    Ydb::Replication::DescribeReplicationResult& to) {
-
+    Ydb::Replication::DescribeReplicationResult& to)
+{
     switch (from.GetLevelCase()) {
     case NKikimrReplication::TConsistencySettings::kRow:
         return ConvertRowConsistencySettings(from.GetRow(), *to.mutable_row_consistency());
@@ -82,8 +82,8 @@ void ConvertConsistencySettings(
 
 void ConvertItem(
     const NKikimrReplication::TReplicationConfig::TTargetSpecific::TTarget& from,
-    Ydb::Replication::DescribeReplicationResult::Item& to) {
-
+    Ydb::Replication::DescribeReplicationResult::Item& to)
+{
     to.set_id(from.GetId());
     to.set_source_path(from.GetSrcPath());
     to.set_destination_path(from.GetDstPath());
@@ -101,8 +101,8 @@ void ConvertItem(
 
 void ConvertStats(
     const NKikimrReplication::TReplicationState& from,
-    Ydb::Replication::DescribeReplicationResult& to) {
-
+    Ydb::Replication::DescribeReplicationResult& to)
+{
     if (from.GetStandBy().HasLagMilliSeconds()) {
         *to.mutable_running()->mutable_stats()->mutable_lag() = google::protobuf::util::TimeUtil::MillisecondsToDuration(
             from.GetStandBy().GetLagMilliSeconds());
@@ -114,8 +114,8 @@ void ConvertStats(
 
 void ConvertStats(
     const NKikimrReplication::TReplicationState&,
-    Ydb::Replication::DescribeTransferResult&) {
-
+    Ydb::Replication::DescribeTransferResult&)
+{
     // nop
 }
 
@@ -140,122 +140,12 @@ void ConvertState(const NKikimrReplication::TReplicationState& from, T& to) {
     }
 }
 
-bool CheckReplicationConfig(
-    const NKikimrReplication::TReplicationConfig config,
-    Ydb::StatusIds_StatusCode& status,
-    TString& error) {
-
-    switch (config.GetTargetCase()) {
-        case NKikimrReplication::TReplicationConfig::TargetCase::kSpecific:
-            return true;
-        case NKikimrReplication::TReplicationConfig::TargetCase::kEverything:
-            error = "not implemented";
-            break;
-        case NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific:
-            error = "Replication config was expected, Async Transfer config provided";
-            break;
-        default:
-            error = "unexpected config type";
-            break;
-    }
-
-    status = Ydb::StatusIds::INTERNAL_ERROR;
-    return false;
-}
-
 } // anonymous namespace
-
-bool FillReplicationDescription(
-    Ydb::Replication::DescribeReplicationResult& out,
-    const NKikimrSchemeOp::TReplicationDescription inDesc,
-    const NKikimrSchemeOp::TDirEntry& inDirEntry,
-    Ydb::StatusIds_StatusCode& status,
-    TString& error) {
-
-    const auto& config = inDesc.GetConfig();
-    if (!CheckReplicationConfig(config, status, error)) {
-        return false;
-    }
-
-    ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
-
-    ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
-    ConvertConsistencySettings(config.GetConsistencySettings(), out);
-    ConvertState(inDesc.GetState(), out);
-
-    for (const auto& target : config.GetSpecific().GetTargets()) {
-        ConvertItem(target, *out.add_items());
-    }
-
-    return true;
-}
-
-namespace {
-
-void ConvertTransferSpecific(
-    const NKikimrReplication::TReplicationConfig_TTransferSpecific& from,
-    Ydb::Replication::DescribeTransferResult& to) {
-
-    to.set_source_path(from.GetTarget().GetSrcPath());
-    to.set_destination_path(from.GetTarget().GetDstPath());
-    to.set_consumer_name(from.GetTarget().GetConsumerName());
-    to.set_transformation_lambda(from.GetTarget().GetTransformLambda());
-    to.mutable_batch_settings()->set_size_bytes(from.GetBatching().GetBatchSizeBytes());
-    to.mutable_batch_settings()->mutable_flush_interval()->set_seconds(from.GetBatching().GetFlushIntervalMilliSeconds() / 1000);
-}
-
-bool CheckTransferConfig(
-    const NKikimrReplication::TReplicationConfig config,
-    Ydb::StatusIds_StatusCode& status,
-    TString& error) {
-
-    switch (config.GetTargetCase()) {
-        case NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific:
-            return true;
-        case NKikimrReplication::TReplicationConfig::TargetCase::kEverything:
-            error = "not implemented";
-            break;
-        case NKikimrReplication::TReplicationConfig::TargetCase::kSpecific:
-            error = "Transfer config was expected, Async Replication config provided";
-            break;
-        default:
-            error = "unexpected config type";
-            break;
-    }
-
-    status = Ydb::StatusIds::INTERNAL_ERROR;
-    return false;
-}
-
-} // anonymous namespace
-
-bool FillTransferDescription(
-    Ydb::Replication::DescribeTransferResult& out,
-    const NKikimrSchemeOp::TReplicationDescription inDesc,
-    const NKikimrSchemeOp::TDirEntry& inDirEntry,
-    Ydb::StatusIds_StatusCode& status,
-    TString& error) {
-
-    const auto& config = inDesc.GetConfig();
-    if (!CheckTransferConfig(config, status, error)) {
-        return false;
-    }
-
-    ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
-
-    ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
-    ConvertState(inDesc.GetState(), out);
-
-    const auto& transferSpecific = config.GetTransferSpecific();
-    ConvertTransferSpecific(transferSpecific, out);
-
-    return true;
-}
 
 void FillReplicationDescription(
     Ydb::Replication::DescribeReplicationResult& out,
-    const NKikimrReplication::TEvDescribeReplicationResult& inDesc) {
-
+    const NKikimrReplication::TEvDescribeReplicationResult& inDesc)
+{
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertConsistencySettings(inDesc.GetConsistencySettings(), out);
     ConvertState(inDesc.GetState(), out);
@@ -265,10 +155,26 @@ void FillReplicationDescription(
     }
 }
 
+namespace {
+
+void ConvertTransferSpecific(
+    const NKikimrReplication::TReplicationConfig_TTransferSpecific& from,
+    Ydb::Replication::DescribeTransferResult& to)
+{
+    to.set_source_path(from.GetTarget().GetSrcPath());
+    to.set_destination_path(from.GetTarget().GetDstPath());
+    to.set_consumer_name(from.GetTarget().GetConsumerName());
+    to.set_transformation_lambda(from.GetTarget().GetTransformLambda());
+    to.mutable_batch_settings()->set_size_bytes(from.GetBatching().GetBatchSizeBytes());
+    to.mutable_batch_settings()->mutable_flush_interval()->set_seconds(from.GetBatching().GetFlushIntervalMilliSeconds() / 1000);
+}
+
+} // anonymous namespace
+
 void FillTransferDescription(
     Ydb::Replication::DescribeTransferResult& out,
-    const NKikimrReplication::TEvDescribeReplicationResult& inDesc) {
-
+    const NKikimrReplication::TEvDescribeReplicationResult& inDesc)
+{
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertState(inDesc.GetState(), out);
 

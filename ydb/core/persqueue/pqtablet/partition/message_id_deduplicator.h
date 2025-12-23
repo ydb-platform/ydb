@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/sliding_window/sliding_window.h>
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <deque>
@@ -10,6 +11,8 @@ class TMessageDeduplicationIdWAL;
 }
 
 namespace NKikimr::NPQ {
+
+using TSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;    
 
 class TPartitionId;
 
@@ -29,6 +32,7 @@ public:
     ~TMessageIdDeduplicator();
 
     TDuration GetDeduplicationWindow() const;
+    size_t GetWrittenMessages() const;
 
     std::optional<ui64> AddMessage(const TString& deduplicationId, const ui64 offset);
     size_t Compact();
@@ -65,6 +69,8 @@ private:
         TInstant ExpirationTime;
     };
     std::deque<WALKey> WALKeys;
+
+    TSlidingWindow WriteRateLimiter = TSlidingWindow(TDuration::Seconds(1), 60);
 };
 
 } // namespace NKikimr::NPQ

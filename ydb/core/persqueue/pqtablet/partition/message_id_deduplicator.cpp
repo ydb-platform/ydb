@@ -1,8 +1,6 @@
 #include "message_id_deduplicator.h"
 #include "partition.h"
 
-#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
-
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
@@ -11,10 +9,10 @@ namespace NKikimr::NPQ {
 namespace {
 
 constexpr TDuration MaxDeduplicationWindow = TDuration::Minutes(5);
+constexpr size_t MaxDeduplicationRPS = 1000;
 constexpr TDuration BucketSize = TDuration::Seconds(1);
-constexpr size_t MaxRPS = 1000;
 constexpr size_t MaxBucketCount = MaxDeduplicationWindow.MilliSeconds() / BucketSize.MilliSeconds();
-constexpr ui64 MaxDeduplicationIDs = MaxDeduplicationWindow.Seconds() * MaxRPS;
+constexpr ui64 MaxDeduplicationIDs = MaxDeduplicationWindow.Seconds() * MaxDeduplicationRPS;
 constexpr size_t MaxMessageIdInBucketCount = MaxDeduplicationIDs / MaxBucketCount;
 
 TInstant Trim(TInstant value) {
@@ -36,6 +34,10 @@ TDuration TMessageIdDeduplicator::GetDeduplicationWindow() const {
     return DeduplicationWindow;
 }
 
+size_t TMessageIdDeduplicator::GetWrittenMessages() const {
+    return WriteRateLimiter.GetValue();
+}
+
 std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicationId, const ui64 offset) {
     auto it = Messages.find(deduplicationId);
     if (it != Messages.end()) {
@@ -53,6 +55,8 @@ std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicat
     HasChanges = true;
     Queue.emplace_back(deduplicationId, expirationTime, offset);
     Messages.emplace(deduplicationId, offset);
+
+    WriteRateLimiter.Update(1, now);
 
     return std::nullopt;
 }
@@ -124,6 +128,8 @@ bool TMessageIdDeduplicator::ApplyWAL(TString&& key, NKikimrPQ::TMessageDeduplic
         }
         Queue.emplace_back(message.GetDeduplicationId(), expirationTime, offset);
         Messages[std::move(*message.MutableDeduplicationId())] = offset;
+
+        WriteRateLimiter.Update(1, expirationTime - DeduplicationWindow);
     }
 
     CurrentBucket.LastWrittenMessageIndex = Queue.size();
@@ -234,25 +240,15 @@ std::optional<ui64> TPartition::DeduplicateByMessageId(const TEvPQ::TEvWrite::TM
         return std::nullopt;
     }
 
-    NKikimrPQClient::TDataChunk proto;
-    bool res = proto.ParseFromString(msg.Data);
-    if (!res) {
+    if (!msg.MessageDeduplicationId) {
         return std::nullopt;
     }
 
-    std::optional<TString> deduplicationId;
-    for (auto& attr : *proto.MutableMessageMeta()) {
-        if (attr.key() == NMLP::NMessageConsts::MessageDeduplicationId) {
-            deduplicationId = attr.value();
-            break;
-        }
-    }
+    return MessageIdDeduplicator.AddMessage(*msg.MessageDeduplicationId, offset);
+}
 
-    if (!deduplicationId) {
-        return std::nullopt;
-    }
-
-    return MessageIdDeduplicator.AddMessage(*deduplicationId, offset);
+bool TPartition::WaitingForDeduplicationQuota(const TEvPQ::TEvWrite::TMsg& msg) const {
+    return !msg.MessageDeduplicationId && MessageIdDeduplicator.GetWrittenMessages() > MaxDeduplicationRPS;
 }
 
 } // namespace NKikimr::NPQ

@@ -256,6 +256,8 @@ struct TEvPQ {
             // For Kafka deduplication:
             bool EnableKafkaDeduplication = false;
             TMaybe<i16> ProducerEpoch;
+
+            std::optional<TString> MessageDeduplicationId;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
@@ -266,7 +268,8 @@ struct TEvPQ {
         , Msgs(std::move(msgs))
         , IsDirectWrite(isDirectWrite)
         , InitialSeqNo(initialSeqNo)
-        {}
+        {
+        }
 
         ui64 Cookie;
         ui64 MessageNo;

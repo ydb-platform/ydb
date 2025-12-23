@@ -1581,9 +1581,12 @@ void TPartition::RemoveMessages(TMessageQueue& src, TMessageQueue& dst)
 void TPartition::RemoveMessagesToQueue(TMessageQueue& requests)
 {
     for (auto& r : requests) {
+        if (r.IsWrite() && WaitingForDeduplicationQuota(r.GetWrite().Msg)) {
+            break;
+        }
         UserActionAndTransactionEvents.emplace_back(std::move(r));
+        requests.pop_front();
     }
-    requests.clear();
 }
 
 void TPartition::RemovePendingRequests(TMessageQueue& requests)

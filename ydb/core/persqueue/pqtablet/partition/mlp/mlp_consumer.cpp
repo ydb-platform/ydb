@@ -2,7 +2,7 @@
 #include "mlp_storage.h"
 
 #include <ydb/core/persqueue/common/key.h>
-#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -735,9 +735,9 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         AFL_ENSURE(res)("o", result.GetOffset());
 
         for (auto& attr : *proto.MutableMessageMeta()) {
-            if (attr.key() == MESSAGE_KEY) {
+            if (attr.key() == MESSAGE_ATTRIBUTE_KEY) {
                 messageGroupId = std::move(*attr.mutable_value());
-            } else if (attr.key() == NMessageConsts::DelaySeconds) {
+            } else if (attr.key() == MESSAGE_ATTRIBUTE_DELAY_SECONDS) {
                 delaySeconds = std::stoul(attr.value());
             }
         }

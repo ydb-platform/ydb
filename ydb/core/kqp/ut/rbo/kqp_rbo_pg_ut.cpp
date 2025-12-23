@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         }
     }
 
-    Y_UNIT_TEST(ScalarSubquery) {
+    Y_UNIT_TEST(ExpressionSubquery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -295,13 +295,57 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
-                SELECT bar.id FROM bar where bar.id = (SELECT id FROM foo);
+                SELECT bar.id FROM bar where bar.id = (SELECT id from foo);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT bar.id FROM bar where bar.id IN (SELECT id from foo);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where foo.id NOT IN (SELECT id from bar);
+            )",
+            /*
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where foo.id NOT IN (SELECT id from bar where id <> 0);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where foo.id = 0 AND foo.id NOT IN (SELECT id from bar where id <> 0);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where EXISTS (SELECT id from bar);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where foo.id = 0 AND EXISTS (SELECT id from bar);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where NOT EXISTS (SELECT id from bar where id = 100);
             )"
+            */
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
             R"([["0"]])",
+            R"([["0"]])",
+            R"([])",
+            R"([["0"]])",
+            R"([["0"]])",
+            R"([["0"]])",
+            R"([["0"]])",
+            R"([["0"]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

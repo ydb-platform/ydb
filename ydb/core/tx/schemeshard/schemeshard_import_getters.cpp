@@ -409,7 +409,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ": self# " << SelfId()
             << ", result# " << result);
 
-        const bool canSkip = IndexFillingMode != Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT;
+        const bool canSkip = IndexPopulationMode != Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
         if (canSkip && NoObjectFound(result.GetError().GetErrorType())) {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
@@ -798,10 +798,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Download(PermissionsKey);
     }
 
-    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode) {
+    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode) {
         switch (mode) {
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
             return true;
         default:
             return false;
@@ -915,7 +915,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void StartCheckingMaterializedIndexes() {
         ResetRetries();
-        if (NeedToCheckMaterializedIndexes(IndexFillingMode)) {
+        if (NeedToCheckMaterializedIndexes(IndexPopulationMode)) {
             CheckMaterializedIndexes();
         } else {
             StartDownloadingChangefeeds();
@@ -936,7 +936,7 @@ public:
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
-        , IndexFillingMode(ImportInfo->GetS3Settings().index_filling_mode())
+        , IndexPopulationMode(ImportInfo->GetS3Settings().index_population_mode())
         , NeedDownloadPermissions(!ImportInfo->GetNoAcl())
         , NeedValidateChecksums(!ImportInfo->GetSkipChecksumValidation())
     {
@@ -1023,7 +1023,7 @@ private:
 
     TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
     ui64 IndexCheckedMaterializedIndexImplTable = 0;
-    Ydb::Import::ImportFromS3Settings::IndexFillingMode IndexFillingMode;
+    Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode;
 
     bool NeedDownloadPermissions = true;
     bool NeedValidateChecksums = true;

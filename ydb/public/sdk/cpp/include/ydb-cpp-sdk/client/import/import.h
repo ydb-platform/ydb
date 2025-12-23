@@ -28,7 +28,7 @@ enum class EImportProgress {
     Unknown = std::numeric_limits<int>::max(),
 };
 
-enum class EIndexFillingMode {
+enum class EIndexPopulationMode {
     Build = 0,
     Import = 1,
     Auto = 2,
@@ -71,7 +71,7 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
     FLUENT_SETTING_OPTIONAL(std::string, SourcePrefix);
     FLUENT_SETTING_OPTIONAL(std::string, DestinationPath);
     FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
-    FLUENT_SETTING_DEFAULT(EIndexFillingMode, IndexFillingMode, EIndexFillingMode::Build);
+    FLUENT_SETTING_DEFAULT(EIndexPopulationMode, IndexPopulationMode, EIndexPopulationMode::Build);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 };
 

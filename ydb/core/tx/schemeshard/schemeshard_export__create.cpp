@@ -37,8 +37,8 @@ bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& it
 }
 
 template <typename T>
-concept HasMaterializeIndexes = requires(const T& t) {
-    { t.materialize_indexes() } -> std::same_as<bool>;
+concept HasIncludeIndexData = requires(const T& t) {
+    { t.include_index_data() } -> std::same_as<bool>;
 };
 
 }
@@ -123,8 +123,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         auto processExportSettings = [&]<typename TSettings>(const TSettings& settings, TExportInfo::EKind kind, bool enableFeatureFlags) -> bool {
             exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());
-            if constexpr (HasMaterializeIndexes<TSettings>) {
-                exportInfo->MaterializeIndexes = settings.materialize_indexes();
+            if constexpr (HasIncludeIndexData<TSettings>) {
+                exportInfo->IncludeIndexData = settings.include_index_data();
             }
             if (enableFeatureFlags) {
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
@@ -154,7 +154,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 if (!settings.scheme()) {
                     settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
                 }
-                if (settings.materialize_indexes() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
+                if (settings.include_index_data() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
                     return Reply(
                         std::move(response),
                         Ydb::StatusIds::PRECONDITION_FAILED,
@@ -271,7 +271,7 @@ private:
             exportInfo.Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
             exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
 
-            if (exportInfo.MaterializeIndexes && path.Base()->IsTable()) {
+            if (exportInfo.IncludeIndexData && path.Base()->IsTable()) {
                 for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
                     TVector<TString> childParts;
                     childParts.push_back(childName);

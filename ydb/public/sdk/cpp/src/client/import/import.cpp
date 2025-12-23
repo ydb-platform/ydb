@@ -77,7 +77,7 @@ TImportFromS3Response::TImportFromS3Response(TStatus&& status, Ydb::Operations::
 
     Metadata_.Settings.Description(metadata.settings().description());
     Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
-    Metadata_.Settings.IndexFillingMode(TProtoAccessor::FromProto(metadata.settings().index_filling_mode()));
+    Metadata_.Settings.IndexPopulationMode(TProtoAccessor::FromProto(metadata.settings().index_population_mode()));
 
     // progress
     Metadata_.Progress = TProtoAccessor::FromProto(metadata.progress());
@@ -316,7 +316,7 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
         settingsProto.set_destination_path(settings.DestinationPath_.value());
     }
 
-    settingsProto.set_index_filling_mode(TProtoAccessor::GetProto(settings.IndexFillingMode_));
+    settingsProto.set_index_population_mode(TProtoAccessor::GetProto(settings.IndexPopulationMode_));
 
     for (const std::string& excludeRegexp : settings.ExcludeRegexp_) {
         settingsProto.add_exclude_regexps(excludeRegexp);

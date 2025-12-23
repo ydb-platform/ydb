@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             TStringStream ssLog;
             ssLog << "SESSION " << sessionId;
             if (startTimestamp.has_value()) {
-                ssLog << " " << startTimestamp->MicroSeconds() << " (" << *startTimestamp << ")";
+                ssLog << " " << startTimestamp->MilliSeconds() << " ms (" << *startTimestamp << ")";
             }
 
             size_t early = 0;
@@ -144,13 +144,13 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
                 const auto& m = messages[i];
                 TMaybe<i64> writeDiff;
                 if (startTimestamp.has_value()) {
-                    writeDiff = (i64)m.GetWriteTime().MicroSeconds() - (i64)startTimestamp->MicroSeconds();
+                    writeDiff = (i64)m.GetWriteTime().MilliSeconds() - (i64)startTimestamp->MilliSeconds();
                 }
-                ssLog << "    " << i << ":{create:" << m.GetCreateTime().MicroSeconds() << ",write:" << m.GetWriteTime().MicroSeconds();
+                ssLog << "    " << i << ":{create_ms:" << m.GetCreateTime().MilliSeconds() << ", write_ms:" << m.GetWriteTime().MilliSeconds() << "";
                 if (writeDiff) {
-                    ssLog << ",write-start:" << *writeDiff;
+                    ssLog << ", write_ms-start_ms:" << *writeDiff;
                 }
-                ssLog << "},\n ";
+                ssLog << "},\n";
             }
             ssLog << "]\n";
             Cerr << ssLog.Str() << Endl;

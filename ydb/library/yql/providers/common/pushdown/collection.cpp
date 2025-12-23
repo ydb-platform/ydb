@@ -29,7 +29,7 @@ public:
         , Ctx(ctx)
     {}
 
-    void MarkupPredicates(const TExprBase& predicate, TPredicateNode& predicateTree) {
+    void MarkupPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, bool nested = false) {
         if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
             if (Settings.IsEnabled(EFlag::JustPassthroughOperators)) {
                 CollectChildrenPredicates(predicate, predicateTree);
@@ -66,7 +66,7 @@ public:
             predicateTree.CanBePushed = IsDistinctCanBePushed(predicate);
         } else if (auto apply = predicate.Maybe<TCoApply>()) {
             predicateTree.CanBePushed = ApplyCanBePushed(apply.Cast());
-        } else if (Settings.IsEnabled(EFlag::ExpressionAsPredicate)) {
+        } else if (Settings.IsEnabled(EFlag::ExpressionAsPredicate) && !nested) {
             predicateTree.CanBePushed = CheckExpressionNodeForPushdown(predicate);
         } else {
             predicateTree.CanBePushed = false;
@@ -405,7 +405,7 @@ public:
         }
         if (Settings.IsEnabled(EFlag::PredicateAsExpression)) {
             TPredicateNode predicate(node);
-            MarkupPredicates(node, predicate);
+            MarkupPredicates(node, predicate, true);
             return predicate.CanBePushed;
         }
         return false;

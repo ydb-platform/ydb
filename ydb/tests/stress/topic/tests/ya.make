@@ -7,8 +7,7 @@ TEST_SRCS(
     test_workload_topic.py
 )
 
-SIZE(LARGE)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+SIZE(MEDIUM)
 REQUIREMENTS(ram:32 cpu:4)
 
 IF (SANITIZER_TYPE)

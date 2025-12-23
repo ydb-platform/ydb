@@ -12,8 +12,7 @@ TEST_SRCS(
 
 REQUIREMENTS(ram:32 cpu:4)
 
-SIZE(LARGE)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+SIZE(MEDIUM)
 
 DEPENDS(
     ydb/tests/stress/kv

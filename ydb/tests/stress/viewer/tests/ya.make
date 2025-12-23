@@ -10,8 +10,7 @@ IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:32)
 ENDIF()
 
-SIZE(LARGE)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+SIZE(MEDIUM)
 
 DEPENDS(
     ydb/tests/stress/viewer

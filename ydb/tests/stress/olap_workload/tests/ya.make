@@ -7,10 +7,9 @@ TEST_SRCS(
     test_workload.py
 )
 
-REQUIREMENTS(ram:32 cpu:4)
+REQUIREMENTS(cpu:all)
 
-SIZE(LARGE)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+SIZE(MEDIUM)
 
 DEPENDS(
     ydb/tests/stress/olap_workload

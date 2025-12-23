@@ -10,8 +10,7 @@ REQUIREMENTS(ram:32 cpu:4)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
-SIZE(LARGE)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+SIZE(MEDIUM)
 
 DEPENDS(
     ydb/tests/stress/s3_backups

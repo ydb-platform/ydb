@@ -13341,8 +13341,12 @@ END DO)",
         }
     }
 
-    Y_UNIT_TEST(SecretsDisabledByDefault) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST(SecretsDisabled) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(false);
+        const auto settings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -13369,12 +13373,8 @@ END DO)",
         }
     }
 
-    Y_UNIT_TEST(SecretsEnabled) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSchemaSecrets(true);
-        const auto settings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags);
-        TKikimrRunner kikimr(settings);
+    Y_UNIT_TEST(SecretsEnabledByDefault) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

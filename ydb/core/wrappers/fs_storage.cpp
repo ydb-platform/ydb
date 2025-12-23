@@ -103,35 +103,13 @@ public:
         const auto& body = ev->Get()->Body;
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-            "FS PutObject START: key# " << key << ", size# " << body.size());
-
         if (Verbose) {
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
                 "FS PutObject: key# " << key << ", size# " << body.size());
         }
 
         try {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                "FS PutObject: creating TFsPath for key# " << key);
-            TFsPath fsPath(key);
-            
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                "FS PutObject: fsPath.GetPath()# " << fsPath.GetPath() << ", Parent()# " << fsPath.Parent().GetPath());
-            
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                "FS PutObject: calling MkDirs() on parent# " << fsPath.Parent().GetPath());
-            fsPath.Parent().MkDirs();
-
-            auto flags = CreateAlways | WrOnly;
-            // if (isAppend) {
-            //     flags = OpenAlways | WrOnly | ForAppend;
-            // }
-            TFile file(key, flags);
-            file.Flock(LOCK_EX);
-            file.Write(body.data(), body.size());
-            file.Close();
-
+            WriteFile(key, body);
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
@@ -141,70 +119,15 @@ public:
     }
 
     void Handle(TEvGetObjectRequest::TPtr& ev) {
-        const auto& request = ev->Get()->GetRequest();
-        const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        
-        if (Verbose) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                "FS GetObject: key# " << key);
-        }
-
-        try {
-            TString fullPath = MakeFullPath(key);
-            
-            if (!TFsPath(fullPath).Exists()) {
-                std::pair<ui64, ui64> range(0, 0);
-                Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome;
-                TString emptyBody;
-                auto response = std::make_unique<TEvGetObjectResponse>(key, range, std::move(outcome), std::move(emptyBody));
-                ReplyAdapter.Reply(ev->Sender, std::move(response));
-                return;
-            }
-
-            TFileInput file(fullPath);
-            TString body = file.ReadAll();
-
-            Aws::S3::Model::GetObjectResult awsResult;
-            Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
-            
-            std::pair<ui64, ui64> range(0, body.size() > 0 ? body.size() - 1 : 0);
-            auto response = std::make_unique<TEvGetObjectResponse>(key, range, std::move(outcome), std::move(body));
-            ReplyAdapter.Reply(ev->Sender, std::move(response));
-
-        } catch (const std::exception& ex) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                "FS GetObject failed: key# " << key << ", error# " << ex.what());
-            std::pair<ui64, ui64> range(0, 0);
-            Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome;
-            TString emptyBody;
-            auto response = std::make_unique<TEvGetObjectResponse>(key, range, std::move(outcome), std::move(emptyBody));
-            ReplyAdapter.Reply(ev->Sender, std::move(response));
-        }
+        Y_UNUSED(ev);
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+            "FS GetObjects: not implemented yet");
     }
 
     void Handle(TEvHeadObjectRequest::TPtr& ev) {
-        const auto& request = ev->Get()->GetRequest();
-        const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        
-        if (Verbose) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                "FS HeadObject: key# " << key);
-        }
-
-        try {
-            TString fullPath = MakeFullPath(key);
-            
-            if (!TFsPath(fullPath).Exists()) {
-                ReplyError<TEvHeadObjectResponse>(ev->Sender, key, "File not found");
-                return;
-            }
-
-            ReplySuccess<TEvHeadObjectResponse>(ev->Sender, key);
-        } catch (const std::exception& ex) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                "FS HeadObject failed: key# " << key << ", error# " << ex.what());
-            ReplyError<TEvHeadObjectResponse>(ev->Sender, key, ex.what());
-        }
+        Y_UNUSED(ev);
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+            "FS HeadObject: not implemented");
     }
 
     void Handle(TEvDeleteObjectRequest::TPtr& ev) {
@@ -280,11 +203,6 @@ public:
         try {
             TString uploadId = TStringBuilder() << key << "_" << TInstant::Now().MicroSeconds();
             
-            if (Verbose) {
-                LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                    "FS CreateMultipartUpload: generated uploadId# " << uploadId);
-            }
-            
             Aws::S3::Model::CreateMultipartUploadResult awsResult;
             awsResult.SetUploadId(uploadId.c_str());
             awsResult.SetKey(request.GetKey());
@@ -311,12 +229,7 @@ public:
         }
 
         try {
-            TString partPath = TStringBuilder() << MakeFullPath(key) << ".part" << partNumber;
-            EnsureDirectory(partPath);
-            
-            TFileOutput file(partPath);
-            file.Write(body.data(), body.size());
-            file.Finish();
+            WriteFile(key, body, true);
 
             TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
             
@@ -344,39 +257,6 @@ public:
         }
 
         try {
-            TString finalPath = MakeFullPath(key);
-            EnsureDirectory(finalPath);
-            TFileOutput finalFile(finalPath);
-
-            int partNumber = 1;
-            int totalParts = 0;
-            while (true) {
-                TString partPath = TStringBuilder() << finalPath << ".part" << partNumber;
-                if (!TFsPath(partPath).Exists()) {
-                    break;
-                }
-
-                TFileInput partFile(partPath);
-                TString partData = partFile.ReadAll();
-                finalFile.Write(partData.data(), partData.size());
-
-                if (Verbose) {
-                    LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                        "FS CompleteMultipartUpload: merged part# " << partNumber << ", size# " << partData.size());
-                }
-
-                NFs::Remove(partPath);
-                ++partNumber;
-                ++totalParts;
-            }
-
-            finalFile.Finish();
-            
-            if (Verbose) {
-                LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                    "FS CompleteMultipartUpload: completed, total parts# " << totalParts);
-            }
-            
             Aws::S3::Model::CompleteMultipartUploadResult awsResult;
             awsResult.SetKey(request.GetKey());
             TString etag = "\"completed\"";
@@ -400,32 +280,28 @@ public:
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
                 "FS AbortMultipartUpload: key# " << key);
         }
-
-        try {
-            TString basePath = MakeFullPath(key);
-            
-            int partNumber = 1;
-            while (true) {
-                TString partPath = TStringBuilder() << basePath << ".part" << partNumber;
-                if (!TFsPath(partPath).Exists()) {
-                    break;
-                }
-                NFs::Remove(partPath);
-                ++partNumber;
-            }
-
-            ReplySuccess<TEvAbortMultipartUploadResponse>(ev->Sender, key);
-        } catch (const std::exception& ex) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-                "FS AbortMultipartUpload failed: key# " << key << ", error# " << ex.what());
-            ReplyError<TEvAbortMultipartUploadResponse>(ev->Sender, key, ex.what());
-        }
+        ReplySuccess<TEvAbortMultipartUploadResponse>(ev->Sender, key);
     }
 
     void Handle(TEvUploadPartCopyRequest::TPtr& ev) {
         Y_UNUSED(ev);
         LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
-            "FS UploadPartCopy: not implemented yet");
+            "FS UploadPartCopy: not implemented");
+    }
+
+private:
+    void WriteFile(const TString& path, const TStringBuf& data, bool isAppend = false) {
+        TFsPath fsPath(path);
+        fsPath.Parent().MkDirs();
+
+        auto flags = CreateAlways | WrOnly;
+        if (isAppend) {
+            flags = OpenAlways | WrOnly | ForAppend;
+        }
+        TFile file(path, flags);
+        file.Flock(LOCK_EX);
+        file.Write(data.data(), data.size());
+        file.Close();
     }
 };
 

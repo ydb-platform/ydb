@@ -1,7 +1,8 @@
 #pragma once
 
 #include "kqp_compute.h"
-#include "ydb/core/tx/datashard/datashard_kqp_compute.h"
+#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/tx/datashard/datashard_kqp_compute.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 
 namespace NKikimr {
@@ -19,7 +20,7 @@ public:
     TKqpTasksRunner(google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>&& tasks,
                     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
                     const NYql::NDq::TDqTaskRunnerContext& execCtx, const NYql::NDq::TDqTaskRunnerSettings& settings,
-                    const NYql::NDq::TLogFunc& logFunc);
+                    const NYql::NDq::TLogFunc& logFunc, const TIntrusivePtr<TKqpCounters>& kqpCounters);
 
     ~TKqpTasksRunner();
 
@@ -76,7 +77,7 @@ private:
 TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask>&& tasks,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const NYql::NDq::TDqTaskRunnerContext& execCtx, const NYql::NDq::TDqTaskRunnerSettings& settings,
-    const NYql::NDq::TLogFunc& logFunc);
+    const NYql::NDq::TLogFunc& logFunc, const TIntrusivePtr<TKqpCounters>& kqpCounters);
 
 } // namespace NKqp
 } // namespace NKikimr

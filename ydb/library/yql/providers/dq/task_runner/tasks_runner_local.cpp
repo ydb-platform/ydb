@@ -268,7 +268,7 @@ public:
             };
         }
         ctx.FuncProvider = TaskTransformFactory({settings.TaskParams, settings.ReadRanges}, ctx.FuncRegistry);
-        return MakeDqTaskRunner(alloc, ctx, settings, logger);
+        return MakeDqTaskRunner(alloc, ctx, settings, logger, {}, {});
     }
 
 private:

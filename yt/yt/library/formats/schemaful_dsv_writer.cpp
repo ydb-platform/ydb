@@ -154,9 +154,9 @@ private:
                 }
             }
             WriteRaw(Config_->RecordSeparator);
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
-        TryFlushBuffer(true);
+        MaybeFlushBuffer(/*force*/ true);
     }
 
     void WriteRaw(TStringBuf str)

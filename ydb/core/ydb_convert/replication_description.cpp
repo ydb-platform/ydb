@@ -177,9 +177,7 @@ void FillTransferDescription(
 {
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertState(inDesc.GetState(), out);
-
-    const auto& transferSpecific = inDesc.GetTransferSpecific();
-    ConvertTransferSpecific(transferSpecific, out);
+    ConvertTransferSpecific(inDesc.GetTransferSpecific(), out);
 }
 
 } // namespace NKikimr

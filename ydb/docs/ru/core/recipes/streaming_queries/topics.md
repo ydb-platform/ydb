@@ -86,7 +86,7 @@ WITH (
 WHERE
     Level = "error"
 GROUP BY
-    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Число ошибок на не перекрывающихся окнах длиной 10 минут
+    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Число ошибок на неперекрывающихся окнах длиной 10 минут
     Host;
 
 INSERT INTO

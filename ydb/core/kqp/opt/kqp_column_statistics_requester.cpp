@@ -69,99 +69,134 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
         }
     );
 
-    if (ColumnsByTableName.empty()) {
-        return IGraphTransformer::TStatus::Ok;
-    }
+    std::vector<TFuture<TColumnStatisticsResponse>> futures;
 
-    struct TTableMeta {
-        TString TableName;
-        THashMap<ui32, TString> ColumnNameByTag;
-    };
-    THashMap<TPathId, TTableMeta> tableMetaByPathId;
+    auto addStatRequest = [&](
+            NStat::EStatType type,
+            const THashMap<TString, THashSet<TString>>& columnsByTableName,
+            auto alreadyHasStatistics) {
+        struct TTableMeta {
+            TString TableName;
+            THashMap<ui32, TString> ColumnNameByTag;
+        };
 
-    auto getStatisticsRequestCM = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
-    getStatisticsRequestCM->Database = Database;
-    getStatisticsRequestCM->StatType = NKikimr::NStat::EStatType::COUNT_MIN_SKETCH;
+        THashMap<TPathId, TTableMeta> tableMetaByPathId;
+        std::vector<NKikimr::NStat::TRequest> statRequests;
+        for (const auto& [table, columns]: columnsByTableName) {
+            auto tableMeta = Tables.GetTable(Cluster, table).Metadata;
+            auto& columnsMeta = tableMeta->Columns;
 
-    auto getStatisticsRequestHist = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
-    getStatisticsRequestHist->Database = Database;
-    getStatisticsRequestHist->StatType = NKikimr::NStat::EStatType::EQ_WIDTH_HISTOGRAM;
+            auto pathId = TPathId(tableMeta->PathId.OwnerId(), tableMeta->PathId.TableId());
 
+            auto statsTableIt = TypesCtx.ColumnStatisticsByTableName.find(table);
+            for (const auto& column: columns) {
+                if (statsTableIt != TypesCtx.ColumnStatisticsByTableName.end()) {
+                    auto statsColumnIt = statsTableIt->second->Data.find(column);
+                    if (statsColumnIt != statsTableIt->second->Data.end()) {
+                        if (alreadyHasStatistics(statsColumnIt->second)) {
+                            continue;
+                        }
+                    }
+                }
 
-    for (const auto& [table, columns]: ColumnsByTableName) {
-        auto tableMeta = Tables.GetTable(Cluster, table).Metadata;
-        auto& columnsMeta = tableMeta->Columns;
+                if (!columnsMeta.contains(column)) {
+                    YQL_CLOG(DEBUG, ProviderKikimr) << "Table: " + table + " doesn't contain " + column + " to request for column statistics";
+                    continue;
+                }
 
-        auto pathId = TPathId(tableMeta->PathId.OwnerId(), tableMeta->PathId.TableId());
-        for (const auto& column: columns) {
-            if (TypesCtx.ColumnStatisticsByTableName.contains(table) && TypesCtx.ColumnStatisticsByTableName[table]->Data.contains(column)) {
-                continue;
+                NKikimr::NStat::TRequest req;
+                req.ColumnTag = columnsMeta[column].Id;
+                req.PathId = pathId;
+                statRequests.push_back(req);
+
+                tableMetaByPathId[pathId].TableName = table;
+                tableMetaByPathId[pathId].ColumnNameByTag[req.ColumnTag.value()] = column;
             }
-
-            if (!columnsMeta.contains(column)) {
-                YQL_CLOG(DEBUG, ProviderKikimr) << "Table: " + table + " doesn't contain " + column + " to request for column statistics";
-                continue;
-            }
-
-            NKikimr::NStat::TRequest req;
-            req.ColumnTag = columnsMeta[column].Id;
-            req.PathId = pathId;
-            getStatisticsRequestCM->StatRequests.push_back(req);
-            getStatisticsRequestHist->StatRequests.push_back(req);
-
-            tableMetaByPathId[pathId].TableName = table;
-            tableMetaByPathId[pathId].ColumnNameByTag[req.ColumnTag.value()] = column;
         }
-    }
 
-    if (getStatisticsRequestCM->StatRequests.empty() && getStatisticsRequestHist->StatRequests.empty()) {
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    using TRequest = NStat::TEvStatistics::TEvGetStatistics;
-    using TResponse = NStat::TEvStatistics::TEvGetStatisticsResult;
-
-    AsyncReadiness = NewPromise<void>();
-    auto promiseCM = NewPromise<TColumnStatisticsResponse>();
-    auto promiseHist = NewPromise<TColumnStatisticsResponse>();
-
-    auto callback = [tableMetaByPathId = std::move(tableMetaByPathId)]
-    (TPromise<TColumnStatisticsResponse> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response) mutable {
-        if (!response.Success) {
-            promise.SetValue(NYql::NCommon::ResultFromError<TColumnStatisticsResponse>("can't get column statistics!"));
+        if (statRequests.empty()) {
             return;
         }
 
-        THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
+        auto request = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+        request->Database = Database;
+        request->StatType = type;
+        request->StatRequests = std::move(statRequests);
 
-        for (auto&& stat: response.StatResponses) {
-            auto meta = tableMetaByPathId[stat.Req.PathId];
-            auto columnName = meta.ColumnNameByTag[stat.Req.ColumnTag.value()];
-            auto& columnStatistics = columnStatisticsByTableName[meta.TableName].Data[columnName];
-            if (stat.CountMinSketch.CountMin) {
-                columnStatistics.CountMinSketch = std::move(stat.CountMinSketch.CountMin);
+        auto callback = [tableMetaByPathId = std::move(tableMetaByPathId)]
+    (TPromise<TColumnStatisticsResponse> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response) mutable {
+            if (!response.Success) {
+                promise.SetValue(NYql::NCommon::ResultFromError<TColumnStatisticsResponse>("can't get column statistics!"));
+                return;
             }
-            if (stat.EqWidthHistogram.Data) {
-                columnStatistics.EqWidthHistogramEstimator = std::make_shared<NKikimr::TEqWidthHistogramEstimator>(stat.EqWidthHistogram.Data);
+
+            THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
+
+            for (auto&& stat: response.StatResponses) {
+                auto meta = tableMetaByPathId[stat.Req.PathId];
+                auto columnName = meta.ColumnNameByTag[stat.Req.ColumnTag.value()];
+                auto& columnStatistics = columnStatisticsByTableName[meta.TableName].Data[columnName];
+                if (stat.CountMinSketch.CountMin) {
+                    columnStatistics.CountMinSketch = std::move(stat.CountMinSketch.CountMin);
+                }
+                if (stat.EqWidthHistogram.Data) {
+                    columnStatistics.EqWidthHistogramEstimator = std::make_shared<NKikimr::TEqWidthHistogramEstimator>(stat.EqWidthHistogram.Data);
+                }
+            }
+
+            promise.SetValue(TColumnStatisticsResponse{.ColumnStatisticsByTableName = std::move(columnStatisticsByTableName)});
+        };
+
+        using TRequest = NStat::TEvStatistics::TEvGetStatistics;
+        using TResponse = NStat::TEvStatistics::TEvGetStatisticsResult;
+
+        auto promise = NewPromise<TColumnStatisticsResponse>();
+
+        auto statServiceId = NStat::MakeStatServiceID(ActorSystem->NodeId);
+        IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, request.Release(), promise, callback);
+        ActorSystem->Register(requestHandler, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+
+        futures.push_back(promise.GetFuture());
+    };
+
+    addStatRequest(
+        NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
+        [](const TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+    addStatRequest(
+        NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
+        [](const TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+
+    if (futures.empty()) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    AsyncReadiness = NewPromise<void>();
+
+    NThreading::WaitAll(futures).Subscribe([this, futures](auto) mutable {
+        for (auto& fut : futures) {
+            auto newStats = fut.ExtractValue();
+            if (!ColumnStatisticsResponse) {
+                ColumnStatisticsResponse = std::move(newStats);
+            } else {
+                // merge statistics
+                for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
+                    auto& oldColumn2Stat = ColumnStatisticsResponse->ColumnStatisticsByTableName[table];
+                    for (const auto& [column, newStat] : column2Stat.Data) {
+                        auto& oldStat = oldColumn2Stat.Data[column];
+                        if (newStat.CountMinSketch) {
+                            oldStat.CountMinSketch = newStat.CountMinSketch;
+                        }
+                        if (newStat.EqWidthHistogramEstimator) {
+                            oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                        }
+                    }
+                }
             }
         }
 
-        promise.SetValue(TColumnStatisticsResponse{.ColumnStatisticsByTableName = std::move(columnStatisticsByTableName)});
-    };
-    auto statServiceId = NStat::MakeStatServiceID(ActorSystem->NodeId);
-    IActor* requestHandlerCM =
-        new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, getStatisticsRequestCM.Release(), promiseCM, callback);
-    ActorSystem
-        ->Register(requestHandlerCM, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+        AsyncReadiness.SetValue();
+    });
 
-    promiseCM.GetFuture().Subscribe([this](auto result){ ColumnStatisticsResponse = result.ExtractValue(); AsyncReadiness.SetValue(); });
-
-    IActor* requestHandlerHist =
-        new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, getStatisticsRequestHist.Release(), promiseHist, callback);
-    ActorSystem
-        ->Register(requestHandlerHist, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-
-    promiseHist.GetFuture().Subscribe([this](auto result){ ColumnStatisticsResponse = result.ExtractValue(); AsyncReadiness.SetValue(); });
     return TStatus::Async;
 }
 
@@ -250,7 +285,15 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
         for (const auto& item: columnStatsUsedMembers.Data) {
             if (auto maybeTableAndColumn = GetTableAndColumnNames(item.Member)) {
                 const auto& [table, column] = *maybeTableAndColumn;
-                ColumnsByTableName[table].insert(std::move(column));
+                using TColumnStatisticsUsedMember = NDq::TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
+                switch (item.PredicateType) {
+                case TColumnStatisticsUsedMember::EEquality:
+                    CMColumnsByTableName[table].insert(std::move(column));
+                    break;
+                case TColumnStatisticsUsedMember::EInequality:
+                    HistColumnsByTableName[table].insert(std::move(column));
+                    break;
+                }
             }
         }
 

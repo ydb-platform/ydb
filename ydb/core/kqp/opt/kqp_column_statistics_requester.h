@@ -63,7 +63,8 @@ private:
 
 private:
     THashMap<TExprNode::TPtr, TExprNode::TPtr> KqpTableByExprNode;
-    THashMap<TString, THashSet<TString>> ColumnsByTableName;
+    THashMap<TString, THashSet<TString>> CMColumnsByTableName;
+    THashMap<TString, THashSet<TString>> HistColumnsByTableName;
 
     //////////////////////////////////////////////////////////////
     /* for waiting response with column statistics */

@@ -45,10 +45,10 @@ public:
 
 protected:
 
-    uint64_t PartitionSessionId;
+    uint64_t PartitionSessionId = 0;
     std::string TopicPath;
     std::string ReadSessionId;
-    uint64_t PartitionId;
+    uint64_t PartitionId = 0;
     std::optional<TPartitionLocation> Location;
     /*TDirectReadId*/ std::int64_t NextDirectReadId = 1;
     std::optional</*TDirectReadId*/ std::int64_t> LastDirectReadId;

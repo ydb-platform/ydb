@@ -20,6 +20,7 @@ protected:
     }
 
     bool HasWorkers() const;
+    bool HasWorker(ui64 id) const;
     void RemoveWorkers(const TActorContext& ctx);
 
 public:

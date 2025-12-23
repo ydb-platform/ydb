@@ -1,5 +1,6 @@
 #include "logging.h"
 #include "service.h"
+#include "transfer_reader_stats.h"
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
@@ -7,6 +8,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/protos/counters_replication.pb.h>
+#include <ydb/core/transfer/transfer_writer.h>
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
@@ -75,9 +78,22 @@ TEvWorker::TEvStatus::TEvStatus(TDuration lag)
 {
 }
 
+TEvWorker::TEvStatus::TEvStatus(std::unique_ptr<TWorkerDetailedStats>&& detailedStats)
+    : Lag(TDuration::Zero())
+    , DetailedStats(std::move(detailedStats))
+{
+}
+
+TEvWorker::TEvStatus* TEvWorker::TEvStatus::FromOperation(EWorkerOperation operation) {
+    auto detailedStats = std::make_unique<TWorkerDetailedStats>();
+    detailedStats->CurrentOperation = operation;
+    return new TEvStatus(std::move(detailedStats));
+}
+
 TString TEvWorker::TEvStatus::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " Lag: " << Lag
+        << " HasStats: " << (DetailedStats != nullptr)
     << " }";
 }
 
@@ -238,6 +254,10 @@ class TWorker: public TActorBootstrapped<TWorker> {
         Y_ABORT_UNLESS(!InFlightData);
         InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->PartitionId, ev->Get()->Source, ev->Get()->Records);
 
+        if (ev->Get()->Stats) {
+            Send(Parent, MakeEvStatusFromReaderStats(std::move(ev->Get()->Stats)));
+        }
+
         if (Writer) {
             Send(ev->Forward(Writer));
         }
@@ -277,7 +297,29 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     }
 
+    void Handle(TEvWorker::TEvStatus::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+        if (!ev->Get()->DetailedStats) {
+            LOG_W("Unexpected TEvWorker::TEvStatus with no stats, ignored. Sender# " << ev->Sender);
+            return;
+        }
+        ev->Sender = SelfId();
+        Send(ev->Forward(Parent));
+        // ToDo: Update host and worker counters
+    }
+
+    TEvWorker::TEvStatus* MakeEvStatusFromReaderStats(std::unique_ptr<TWorkerDetailedStats>&& stats) const {
+        Y_ENSURE(stats->ReaderStats);
+        auto* ev = TEvWorker::TEvStatus::FromOperation(EWorkerOperation::NONE);
+        ev->DetailedStats->ReaderStats = std::move(stats->ReaderStats);
+        ev->DetailedStats->RestartsCount = RestartsCount;
+        RestartsCount = 0;
+        return ev;
+    }
+
     void MaybeRecreateActor(TEvWorker::TEvGone::TPtr& ev, TActorInfo& info) {
+        StartTime = Now();
+        RestartsCount++;
         switch (ev->Get()->Status) {
         case TEvWorker::TEvGone::UNAVAILABLE:
             if (info.GetCreateAttempt() < MaxAttempts) {
@@ -371,6 +413,7 @@ public:
             hFunc(TEvWorker::TEvDataEnd, Forward);
             hFunc(TEvWorker::TEvGone, Handle);
             hFunc(TEvWorker::TEvTerminateWriter, Handle);
+            hFunc(TEvWorker::TEvStatus, Handle);
             hFunc(TEvService::TEvGetTxId, Forward);
             hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(TEvService::TEvHeartbeat, Forward);
@@ -390,6 +433,8 @@ private:
     THolder<TEvWorker::TEvData> InFlightData;
     THolder<TEvWorker::TEvTerminateWriter> TerminateWriter;
     TDuration Lag;
+    TInstant StartTime = TInstant::Zero();
+    mutable ui64 RestartsCount = 0;
 };
 
 IActor* CreateWorker(
@@ -399,5 +444,4 @@ IActor* CreateWorker(
 {
     return new TWorker(parent, std::move(createReaderFn), std::move(createWriterFn));
 }
-
 }

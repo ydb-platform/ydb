@@ -22,6 +22,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     const TString& srcStreamConsumerName,
     const TPathId& dstPathId,
     const NKikimrReplication::TBatchingSettings& batchingSettings,
-    const TString& database);
-
+    const TString& database,
+    NKikimrReplication::TReplicationConfig::TMetricsConfig::EMetricsLevel metricsLevel,
+    const TString& replicationName);
 }

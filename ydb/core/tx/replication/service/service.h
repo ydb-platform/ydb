@@ -1,5 +1,6 @@
 #pragma once
 
+#include <google/protobuf/timestamp.pb.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/row_version.h>
@@ -74,6 +75,21 @@ struct TEvService {
             Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
             Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_INFO);
             Record.SetLagMilliSeconds(lag.MilliSeconds());
+        }
+
+        explicit TEvWorkerStatus(const TWorkerId& id , TInstant startTime, TVector<std::pair<ui64, i64>>&& statsValues) {
+            id.Serialize(*Record.MutableWorker());
+            Record.SetStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+            Record.SetReason(NKikimrReplication::TEvWorkerStatus::REASON_STATS);
+            auto* stats = Record.MutableStats();
+            if (startTime) {
+                stats->MutableStartTime()->set_seconds(startTime.Seconds());
+            }
+            for (auto [k, v] : statsValues) {
+                auto* val = stats->AddValues();
+                val->SetKey(k);
+                val->SetValue(v);
+            }
         }
     };
 

@@ -15,6 +15,8 @@
 
 namespace NKikimrReplication {
     class TReplicationConfig;
+    class TWorkerStats;
+    class TEvDescribeReplicationResult;
 }
 
 namespace NKikimr::NReplication::NController {
@@ -53,6 +55,12 @@ public:
         Removing,
         Removed,
         Error = 255
+    };
+
+    class ITargetStats {
+    public:
+        virtual void FillToProto(NKikimrReplication::TEvDescribeReplicationResult& destination, bool includeDetailed) const = 0;
+        virtual ~ITargetStats() = default;
     };
 
     class ITarget {
@@ -99,6 +107,9 @@ public:
         virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
         virtual const TMaybe<TDuration> GetLag() const = 0;
+
+        virtual void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats, NMonitoring::TDynamicCounterPtr counters) = 0;
+        virtual const ITargetStats* GetStats() const = 0;
 
         virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
@@ -147,6 +158,7 @@ public:
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
     const TMaybe<TDuration> GetLag() const;
+    const TString& GetName() const;
 
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;

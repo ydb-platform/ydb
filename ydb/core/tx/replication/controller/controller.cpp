@@ -462,6 +462,8 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
             StopQueue.emplace(id, nodeId);
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_INFO) {
             UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
+        } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_STATS) {
+            UpdateStats(id, record.GetStats());
         }
         break;
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
@@ -504,6 +506,20 @@ void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
     if (const auto lag = replication->GetLag()) {
         TabletCounters->Simple()[COUNTER_DATA_LAG] = lag->MilliSeconds();
     }
+}
+
+void TController::UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats) {
+    auto replication = Find(id.ReplicationId());
+    if (!replication) {
+        return;
+    }
+
+    auto* target = replication->FindTarget(id.TargetId());
+    if (!target) {
+        return;
+    }
+
+    target->UpdateStats(id.WorkerId(), stats, AppData()->Counters);
 }
 
 void TController::Handle(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx) {

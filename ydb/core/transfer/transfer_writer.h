@@ -5,11 +5,22 @@
 
 #include <util/generic/string.h>
 
-namespace NKikimr::NReplication::NTransfer {
+namespace NKikimr::NReplication {
+
+struct TTransferWriteStats {
+    TDuration ProcessingCpu;
+    TDuration WriteDuration;
+    ui64 WriteBytes;
+    ui64 WriteRows;
+    ui64 WriteErrors = 0;
+};
+
+namespace NTransfer {
 
 class TTransferWriterFactory : public NKikimr::NReplication::NService::ITransferWriterFactory {
 public:
     IActor* Create(const Parameters& p) const override;
 };
 
-}
+} // namespace NTransfer
+} // namespace NKikimr::NReplication

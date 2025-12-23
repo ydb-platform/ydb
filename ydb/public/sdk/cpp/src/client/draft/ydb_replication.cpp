@@ -309,6 +309,10 @@ const TPausedState& TTransferDescription::GetPausedState() const {
     return std::get<TPausedState>(State_);
 }
 
+const Ydb::Replication::DescribeTransferResult_Stats& TDescribeTransferResult::GetStats() const {
+    return Proto_->stats();
+}
+
 TDescribeTransferResult::TDescribeTransferResult(TStatus&& status, Ydb::Replication::DescribeTransferResult&& desc)
     : NScheme::TDescribePathResult(std::move(status), desc.self())
     , TransferDescription_(desc)

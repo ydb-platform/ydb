@@ -2413,6 +2413,35 @@ Y_UNIT_TEST(SelectWithFulltextRelevance) {
         }
     }
 
+    /*for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+        TString query = Sprintf(R"sql(
+            SELECT Key, Text, FullText::Relevance(Text, "%s") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql", term.c_str());
+
+        Cerr << "Query: " << query << Endl;
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_C(resultSet.RowsCount() == expectedKeys.size(), "Expected " + std::to_string(expectedKeys.size()) + " rows with " + term + " content");
+
+        // Verify that all returned rows actually contain the search term
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
+            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            UNIT_ASSERT_C(bodyValue, "Body should not be null");
+            Cerr << "Key: " << key << Endl;
+            UNIT_ASSERT_C(
+                IsIn(expectedKeys, key),
+                "All returned rows should contain search term related text"
+            );
+        }
+    }*/
+
     {
         TString query = R"sql(
             SELECT Key, Text FROM `/Root/Texts`

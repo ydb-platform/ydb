@@ -31,6 +31,8 @@
 
 #include <util/string/escape.h>
 
+#include <cmath>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -44,8 +46,9 @@ using namespace NKikimr::NTableIndex::NFulltext;
 static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(10);
 using TDocumentId = const TConstArrayRef<TCell>;
 
-//constexpr double K1_FACTOR = 1.2;
-//constexpr double B_FACTOR = 0.75;
+// replace with parameters from settings
+constexpr double K1_FACTOR = 1.2;
+constexpr double B_FACTOR = 0.75;
 
 class TDocumentIdPointer;
 
@@ -80,6 +83,10 @@ public:
         , ResultColumnTypes(resultColumnTypes)
         , ResultColumnIds(resultColumnIds)
     {}
+
+    bool HasPartitioning() const {
+        return (bool)PartitionInfo;
+    }
 
     void SetPartitionInfo(std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> partitionInfo) {
         PartitionInfo = partitionInfo;
@@ -234,29 +241,32 @@ class TDocumentInfo : public TAtomicRefCount<TDocumentInfo> {
     TIntrusivePtr<TTableReader> MainTableReader;
     TIntrusivePtr<TTableReader> DocsTableReader;
     TDocumentId DocumentId;
-    std::vector<ui64> ContainingWords;
+    std::vector<std::pair<ui64, ui64>> ContainingWords;
     size_t NumContainingWords = 0;
     ui64 DocumentLength = 0;
+
+    bool NeedFullTextRelevance = false;
 
 public:
     ui64 DocumentNumId = 0;
 
-    TDocumentInfo(TOwnedCellVec&& keyCells, const TConstArrayRef<NScheme::TTypeInfo> documentKeyColumnTypes, TIntrusivePtr<TTableReader> mainTableReader, TIntrusivePtr<TTableReader> docsTableReader, size_t numWords)
+    TDocumentInfo(TOwnedCellVec&& keyCells, const TConstArrayRef<NScheme::TTypeInfo> documentKeyColumnTypes, TIntrusivePtr<TTableReader> mainTableReader, TIntrusivePtr<TTableReader> docsTableReader, bool needFullTextRelevance, size_t numWords)
         : KeyCells(std::move(keyCells))
         , DocumentKeyColumnTypes(documentKeyColumnTypes)
         , MainTableReader(mainTableReader)
         , DocsTableReader(docsTableReader)
         , DocumentId(KeyCells)
-        , ContainingWords(numWords, false)
+        , ContainingWords(numWords)
+        , NeedFullTextRelevance(needFullTextRelevance)
     {}
 
     bool AllWordsContained() const {
         return NumContainingWords == ContainingWords.size();
     }
 
-    void AddContainingWord(size_t wordIndex, ui64 freq) {
-        if (!ContainingWords[wordIndex] && freq > 0) {
-            ContainingWords[wordIndex] = freq;
+    void AddContainingWord(size_t wordIndex, ui64 docFreq, ui64 termFreq) {
+        if (!ContainingWords[wordIndex].first) {
+            ContainingWords[wordIndex] = std::make_pair(docFreq, termFreq);
             NumContainingWords++;
         }
     }
@@ -269,8 +279,24 @@ public:
         return DocumentKeyColumnTypes;
     }
 
-    double GetBM25Score() const {
-        return DocumentLength / (NumContainingWords + 0.5) * (0.5 + 0.5 * NumContainingWords / DocumentLength);
+    double GetBM25Score(ui64 totalDocLength, ui64 docCount) const {
+        double score = 0;
+        double avgDocLength = 0;
+        if (docCount > 0) {
+            avgDocLength = static_cast<double>(totalDocLength) / docCount;
+        }
+
+        for(size_t i = 0; i < ContainingWords.size(); ++i) {
+            auto [docFreq, termFreq] = ContainingWords[i];
+            double idf = std::log((docCount - termFreq + 0.5) / (termFreq + 0.5) + 1);
+            double tf = 0;
+            if (docFreq > 0) {
+                tf = (docFreq * (K1_FACTOR + 1)) / (docFreq + K1_FACTOR * (1 - B_FACTOR + B_FACTOR * DocumentLength / avgDocLength));
+            }
+
+            score += idf * tf;
+        }
+        return score;
     }
 
     void AddRow(const TConstArrayRef<TCell>& row) {
@@ -295,15 +321,21 @@ public:
         return std::make_pair(shardId, MainTableReader->GetReadRequest(readId, shardId, range));
     }
 
-    NUdf::TUnboxedValue GetRow(const NKikimr::NMiniKQL::THolderFactory& holderFactory, i64& computeBytes) const {
+    NUdf::TUnboxedValue GetRow(const NKikimr::NMiniKQL::THolderFactory& holderFactory, ui64 totalDocLength, ui64 docCount, i64& computeBytes) const {
         NUdf::TUnboxedValue* rowItems = nullptr;
         const auto& resultRowTypes = MainTableReader->GetResultColumnTypes();
         auto row = holderFactory.CreateDirectArrayHolder(
-            resultRowTypes.size(), rowItems);
+            resultRowTypes.size() + (NeedFullTextRelevance ? 1 : 0), rowItems);
         for(size_t i = 0; i < RowCells.size(); ++i) {
             rowItems[i] = NMiniKQL::GetCellValue(RowCells[i], resultRowTypes[i]);
             computeBytes += NMiniKQL::GetUnboxedValueSize(rowItems[i], resultRowTypes[i]).AllocatedBytes;
         }
+
+        if (NeedFullTextRelevance) {
+            rowItems[resultRowTypes.size()] = NUdf::TUnboxedValuePod(GetBM25Score(totalDocLength, docCount));
+            computeBytes += 8;
+        }
+
         return row;
     }
 
@@ -363,6 +395,7 @@ public:
     // pending ranges
     TIntrusivePtr<TTableReader> Reader;
     std::deque<std::pair<ui64, TOwnedTableRange>> RangesToRead;
+    ui32 Frequency = 0;
 
     explicit TWordReadState(ui64 wordIndex, const TString& word, const TIntrusivePtr<TTableReader>& reader)
         : WordIndex(wordIndex)
@@ -523,7 +556,7 @@ public:
         }
     }
 
-    std::pair<ui32, TIntrusivePtr<TDocumentInfo>> BuildDocumentInfo(TIntrusivePtr<TTableReader> mainTableReader, TIntrusivePtr<TTableReader> docsTableReader, size_t wordCount, const TConstArrayRef<TCell>& row) {
+    std::pair<ui32, TIntrusivePtr<TDocumentInfo>> BuildDocumentInfo(TIntrusivePtr<TTableReader> mainTableReader, TIntrusivePtr<TTableReader> docsTableReader, bool needFullTextRelevance, size_t wordCount, const TConstArrayRef<TCell>& row) {
         if (Layout == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
             YQL_ENSURE(row.size() == GetResultColumnTypes().size());
             // at least it contains document id (which is at least 1 column) and frequency (which is at least 1 column)
@@ -531,10 +564,10 @@ public:
         }
 
         TConstArrayRef<TCell> docId = GetDocumentId( row);
-        ui32 freq = GetFrequency( row);
+        ui32 freq = GetFrequency(row);
         TConstArrayRef<NScheme::TTypeInfo> documentKeyColumnTypes = GetDocumentKeyColumnTypes();
         auto docInfo = MakeIntrusive<TDocumentInfo>(
-            TOwnedCellVec(docId), documentKeyColumnTypes, mainTableReader, docsTableReader, wordCount);
+            TOwnedCellVec(docId), documentKeyColumnTypes, mainTableReader, docsTableReader, needFullTextRelevance, wordCount);
 
         return std::make_pair(freq, std::move(docInfo));
     }
@@ -618,6 +651,118 @@ public:
     }
 };
 
+class TStatsTableReader : public TTableReader {
+    Ydb::Table::FulltextIndexSettings::Layout Layout;
+public:
+    TStatsTableReader(const Ydb::Table::FulltextIndexSettings::Layout& layout,
+        const TIntrusivePtr<TKqpCounters>& counters,
+        const TString& database,
+        const TTableId& tableId,
+        const IKqpGateway::TKqpSnapshot& snapshot,
+        const TString& logPrefix,
+        const TVector<NScheme::TTypeInfo>& keyColumnTypes,
+        const TVector<NScheme::TTypeInfo>& resultColumnTypes,
+        const TVector<i32>& resultColumnIds)
+        : TTableReader(counters, database, tableId, snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        , Layout(layout)
+    {}
+
+    static TIntrusivePtr<TStatsTableReader> FromNavigateRequest(
+        const TIntrusivePtr<TKqpCounters>& counters,
+        const TString& database,
+        const IKqpGateway::TKqpSnapshot& snapshot,
+        const TString& logPrefix,
+        const NKikimrSchemeOp::TFulltextIndexDescription& indexDescription,
+        const NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry& entry)
+    {
+        TVector<NScheme::TTypeInfo> keyColumnTypes;
+        TVector<NScheme::TTypeInfo> resultKeyColumnTypes;
+        TVector<i32> resultKeyColumnIds;
+
+        TMap<i32, ui32> keyPositionToIndex;
+
+        i32 statsColumnIndex = -1;
+        NScheme::TTypeInfo statsColumnType;
+
+        i32 sumDocLengthColumnIndex = -1;
+        NScheme::TTypeInfo sumDocLengthColumnType;
+
+        for (const auto& [index, columnInfo] : entry.Columns) {
+            if (columnInfo.KeyOrder != -1) {
+                AFL_ENSURE(columnInfo.KeyOrder >= 0);
+                keyPositionToIndex[columnInfo.KeyOrder] = index;
+            }
+
+            if (columnInfo.Name == DocCountColumn) {
+                statsColumnIndex = index;
+                statsColumnType = columnInfo.PType;
+            }
+
+            if (columnInfo.Name == SumDocLengthColumn) {
+                sumDocLengthColumnIndex = index;
+                sumDocLengthColumnType = columnInfo.PType;
+            }
+        }
+
+        for (const auto& [_, index] : keyPositionToIndex) {
+            const auto columnInfo = entry.Columns.FindPtr(index);
+            YQL_ENSURE(columnInfo);
+            keyColumnTypes.push_back(columnInfo->PType);
+        }
+
+
+
+        YQL_ENSURE(statsColumnIndex != -1);
+        resultKeyColumnTypes.push_back(statsColumnType);
+        resultKeyColumnIds.push_back(statsColumnIndex);
+
+        YQL_ENSURE(sumDocLengthColumnIndex != -1);
+        resultKeyColumnTypes.push_back(sumDocLengthColumnType);
+        resultKeyColumnIds.push_back(sumDocLengthColumnIndex);
+
+        return MakeIntrusive<TStatsTableReader>(
+            indexDescription.GetSettings().layout(), counters, database,
+            entry.TableId, snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+    }
+
+    ui64 GetDocCount(const TConstArrayRef<TCell>& row) const {
+        switch (Layout) {
+            case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+                return row[0].AsValue<ui64>();
+            default:
+                return 0;
+        }
+    }
+
+    std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> GetTotalStatsRequest(ui64 readId) {
+        TCell tokenCell = TCell::Make<ui32>(0);
+        std::vector <TCell> fromCells;
+        fromCells.insert(fromCells.begin(), tokenCell);
+
+        TCell maxCell = TCell::Make<ui32>(std::numeric_limits<ui32>::max());
+        std::vector <TCell> toCells;
+        toCells.insert(toCells.begin(), maxCell);
+
+        bool fromInclusive = true;
+        bool toInclusive = false;
+        auto tcellVector = TOwnedTableRange(fromCells, fromInclusive, toCells, toInclusive);
+
+        auto partitioning = GetRangePartitioning(tcellVector);
+        YQL_ENSURE(partitioning.size() == 1);
+        auto [shardId, range] = partitioning[0];
+        return std::make_pair(shardId, GetReadRequest(readId, shardId, range));
+    }
+
+    ui64 GetSumDocLength(const TConstArrayRef<TCell>& row) const {
+        switch (Layout) {
+            case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+                return row[1].AsValue<ui64>();
+            default:
+                return 0;
+        }
+    }
+};
+
 class TDictTableReader : public TTableReader {
     Ydb::Table::FulltextIndexSettings::Layout Layout;
 public:
@@ -678,10 +823,22 @@ public:
             entry.TableId, snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
-    ui32 GetFrequency(const TConstArrayRef<TCell>& row) const {
+    std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> GetWordReadRequest(ui64 readId, TString token) {
+        TVector<TCell> keyCells;
+        TCell cell(token.data(), token.size());
+        keyCells.insert(keyCells.end(), cell);
+        TOwnedTableRange range(keyCells);
+        YQL_ENSURE(range.Point);
+        auto points = GetRangePartitioning(range);
+        YQL_ENSURE(points.size() == 1);
+        auto [shardId, point] = points[0];
+        return std::make_pair(shardId, GetReadRequest(readId, shardId, point));
+    }
+
+    ui64 GetWordFrequency(const TConstArrayRef<TCell>& row) const {
         switch (Layout) {
             case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
-                return row[GetResultColumnTypes().size() - 1].AsValue<ui32>();
+                return row[GetResultColumnTypes().size() - 1].AsValue<ui64>();
             default:
                 return 0;
         }
@@ -702,6 +859,7 @@ enum EReadKind : ui32 {
     EReadKind_WordStats = 1,
     EReadKind_DocumentStats = 2,
     EReadKind_Document = 3,
+    EReadKind_TotalStats = 4,
 };
 
 struct TReadInfo {
@@ -755,11 +913,15 @@ private:
     TIntrusivePtr<TTableReader> MainTableReader;
     TIntrusivePtr<TDocsTableReader> DocsTableReader;
     TIntrusivePtr<TDictTableReader> DictTableReader;
+    TIntrusivePtr<TStatsTableReader> StatsTableReader;
 
     TVector<TWordReadState> Words; // Tokenized words from expression
     absl::flat_hash_map<ui64, TReadInfo> Reads;
 
+    absl::flat_hash_map<ui64, TIntrusivePtr<TDocumentInfo>> DocumentById;
     absl::flat_hash_map<TDocumentId, TIntrusivePtr<TDocumentInfo>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> DocumentInfos;
+
+    bool NeedFullTextRelevance = false;
 
     bool ResolveInProgress = true;
     bool NavigateIndexInProgress = false;
@@ -768,6 +930,9 @@ private:
     std::priority_queue<TDocumentIdPointer, TVector<TDocumentIdPointer>> MergeQueue;
     std::deque<TIntrusivePtr<TDocumentInfo>> ResultQueue;
     TActorId PipeCacheId;
+
+    ui64 DocCount = 0;
+    ui64 SumDocLength = 0;
 
     // Helper to bind allocator
     TGuard<NMiniKQL::TScopedAlloc> BindAllocator() {
@@ -798,19 +963,46 @@ private:
         YQL_ENSURE(!Words.empty(), "Expression must produce at least one word after tokenization");
     }
 
+    void FetchDocumentStats(TIntrusivePtr<TDocumentInfo> docInfo) {
+        ui64 readId = NextReadId++;
+        auto [shardId, request] = docInfo->GetReadDocumentStatsRequest(readId);
+        SendEvRead(shardId, request);
+        Reads[readId] = TReadInfo{EReadKind_DocumentStats, docInfo->DocumentNumId, shardId};
+    }
+
+    void FetchDocumentDetails(TIntrusivePtr<TDocumentInfo> docInfo) {
+        ui64 readId = NextReadId++;
+        auto [shardId, request] = docInfo->GetReadRequest(readId);
+        SendEvRead(shardId, request);
+        Reads[readId] = TReadInfo{EReadKind_Document, docInfo->DocumentNumId, shardId};
+    }
+
     void ContinueWordRead(TWordReadState& word) {
         ui64 readId = NextReadId++;
         auto [shardId, ev] = word.ScheduleNextRead(readId);
         if (ev) {
             SendEvRead(shardId, ev);
-            Reads[readId] = TReadInfo{ EReadKind_Word, word.WordIndex, shardId};
+            Reads[readId] = TReadInfo{EReadKind_Word, word.WordIndex, shardId};
+        }
+    }
+
+    void EnrichWordInfo(TWordReadState& word) {
+        ui64 readId = NextReadId++;
+        auto [shardId, ev] = DictTableReader->GetWordReadRequest(readId, word.Word);
+        if (ev) {
+            SendEvRead(shardId, ev);
+            Reads[readId] = TReadInfo{EReadKind_WordStats, word.WordIndex, shardId};
         }
     }
 
     void StartWordReads() {
         // Initialize read states for each word
         for (auto& word : Words) {
-            ContinueWordRead(word);
+            if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+                EnrichWordInfo(word);
+            } else {
+                ContinueWordRead(word);
+            }
         }
     }
 
@@ -823,6 +1015,8 @@ private:
 
         if (NavigateIndexInProgress) {
             auto& resultSet = ev->Get()->Request->ResultSet;
+            YQL_ENSURE(resultSet.size() >= 1);
+
             {
                 const auto& entry = resultSet[0];
                 IndexTableReader = TIndexTableImplReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, entry);
@@ -830,6 +1024,8 @@ private:
             }
 
             if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+                YQL_ENSURE(resultSet.size() >= 4);
+
                 {
                     const auto& entry = resultSet[1];
                     DictTableReader = TDictTableReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, entry);
@@ -841,6 +1037,13 @@ private:
                     DocsTableReader = TDocsTableReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, entry);
                     ResolveTablePartitioning(DocsTableReader);
                 }
+
+                {
+                    const auto& entry = resultSet[3];
+                    StatsTableReader = TStatsTableReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, entry);
+                    ResolveTablePartitioning(StatsTableReader);
+                }
+
             }
 
             return;
@@ -872,6 +1075,16 @@ private:
 
         for(const auto& column : Settings->GetColumns()) {
             const auto it = columnNameToIndex.find(column.GetName());
+
+            if (NeedFullTextRelevance) {
+                YQL_ENSURE(false, "unexpected columns order, relevance is reported a last column, but " << column.GetName() << " found.");
+            }
+
+            if (column.GetName() == "_yql_full_text_relevance") {
+                NeedFullTextRelevance = true;
+                continue;
+            }
+
             YQL_ENSURE(it != columnNameToIndex.end(), "Column " << column.GetName() << " not found in table " << tablePath);
             const auto columnInfo = entry.Columns.FindPtr(it->second);
             YQL_ENSURE(columnInfo);
@@ -895,7 +1108,6 @@ private:
             for(const auto& index : entry.Indexes) {
                 if (index.GetName() == Settings->GetIndex()) {
 
-                    Cerr << index.ShortUtf8DebugString() << Endl;
                     IndexDescription.CopyFrom(index.GetFulltextIndexDescription());
                     NYql::TIndexDescription indexDescription(index);
                     indexImplTable = index.GetName();
@@ -1063,7 +1275,7 @@ public:
             TIntrusivePtr<TDocumentInfo> documentInfo = ResultQueue.front();
             ResultQueue.pop_front();
 
-            auto row = documentInfo->GetRow(HolderFactory, computeBytes);
+            auto row = documentInfo->GetRow(HolderFactory, DocCount, SumDocLength, computeBytes);
             resultBatch.emplace_back(std::move(row));
             ReadBytes += documentInfo->GetRowStorageSize();
             ReadRows++;
@@ -1134,43 +1346,185 @@ public:
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
 
-        if (IndexTableReader && resultSet[0].KeyDescription->TableId == IndexTableReader->GetTableId()) {
-            IndexTableReader->SetPartitionInfo(resultSet[0].KeyDescription->Partitioning);
-            ExtractAndTokenizeExpression();
-            StartWordReads();
-            return;
+        int mask = 0;
+        for (const auto& entry : resultSet) {
+            if (IndexTableReader && entry.KeyDescription->TableId == IndexTableReader->GetTableId()) {
+                IndexTableReader->SetPartitionInfo(entry.KeyDescription->Partitioning);
+            }
+
+            if (MainTableReader && entry.KeyDescription->TableId == MainTableReader->GetTableId()) {
+                MainTableReader->SetPartitionInfo(entry.KeyDescription->Partitioning);
+            }
+
+            if (DocsTableReader && entry.KeyDescription->TableId == DocsTableReader->GetTableId()) {
+                DocsTableReader->SetPartitionInfo(entry.KeyDescription->Partitioning);
+            }
+
+            if (DictTableReader && entry.KeyDescription->TableId == DictTableReader->GetTableId()) {
+                DictTableReader->SetPartitionInfo(entry.KeyDescription->Partitioning);
+            }
+
+            if (StatsTableReader && entry.KeyDescription->TableId == StatsTableReader->GetTableId()) {
+                StatsTableReader->SetPartitionInfo(entry.KeyDescription->Partitioning);
+            }
+
+            if (IndexTableReader && IndexTableReader->HasPartitioning()) {
+                mask |= 1;
+            }
+
+            if (MainTableReader && MainTableReader->HasPartitioning()) {
+                mask |= 2;
+            }
+
+            if (DictTableReader && DictTableReader->HasPartitioning()) {
+                mask |= 4;
+            }
+
+            if (DocsTableReader && DocsTableReader->HasPartitioning()) {
+                mask |= 8;
+            }
+
+            if (StatsTableReader && StatsTableReader->HasPartitioning()) {
+                mask |= 16;
+            }
         }
 
-        if (MainTableReader && resultSet[0].KeyDescription->TableId == MainTableReader->GetTableId()) {
-            MainTableReader->SetPartitionInfo(resultSet[0].KeyDescription->Partitioning);
-            return;
-        }
+        CA_LOG_E("Mask: " << mask);
 
-        if (DocsTableReader && resultSet[0].KeyDescription->TableId == DocsTableReader->GetTableId()) {
-            DocsTableReader->SetPartitionInfo(resultSet[0].KeyDescription->Partitioning);
-            return;
+        if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+            if (mask == 31) {
+                // only if all tables are resolved and we have partitioning of all tables
+                ExtractAndTokenizeExpression();
+                ReadTotalStats();
+            }
+        } else {
+            if ((mask & 3) == 3) {
+                ExtractAndTokenizeExpression();
+                StartWordReads();
+            }
         }
-
-        if (DictTableReader && resultSet[0].KeyDescription->TableId == DictTableReader->GetTableId()) {
-            DictTableReader->SetPartitionInfo(resultSet[0].KeyDescription->Partitioning);
-            return;
-        }
-
-        YQL_ENSURE(false, "Unexpected table id");
     }
 
-    void FetchDocumentStats(TIntrusivePtr<TDocumentInfo> docInfo) {
+    void ReadTotalStats() {
         ui64 readId = NextReadId++;
-        auto [shardId, request] = docInfo->GetReadDocumentStatsRequest(readId);
+        auto [shardId, request] = StatsTableReader->GetTotalStatsRequest(readId);
+        Reads[readId] = TReadInfo{.ReadKind = EReadKind_TotalStats, .Cookie = readId, .ShardId = shardId};
         SendEvRead(shardId, request);
-        Reads[readId] = TReadInfo{ EReadKind_DocumentStats, docInfo->DocumentNumId, shardId};
     }
 
-    void FetchDocumentDetails(TIntrusivePtr<TDocumentInfo> docInfo) {
-        ui64 readId = NextReadId++;
-        auto [shardId, request] = docInfo->GetReadRequest(readId);
-        SendEvRead(shardId, request);
-        Reads[readId] = TReadInfo{ EReadKind_Document, docInfo->DocumentNumId, shardId};
+    void DocumentDetailsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 docNumId) {
+        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+            const auto& row = msg.GetCells(i);
+            auto it = DocumentById.find(docNumId);
+            if (it == DocumentById.end()) {
+                continue;
+            }
+            CA_LOG_E("Adding row info about docnumid: " << it->second->DocumentNumId);
+            it->second->AddRow(row);
+            ResultQueue.push_back(it->second);
+        }
+
+        NotifyCA();
+    }
+
+    void DocumentStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 docNumId) {
+        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+            const auto& row = msg.GetCells(i);
+            auto it = DocumentById.find(docNumId);
+            if (it == DocumentById.end()) {
+                continue;
+            }
+            CA_LOG_E("Setting document length for document: " << it->second->DocumentNumId << ", length: " << DocsTableReader->GetDocumentLength(row));
+            it->second->SetDocumentLength(DocsTableReader->GetDocumentLength(row));
+            FetchDocumentDetails(it->second);
+        }
+    }
+
+    void HandleTotalStatsResult(TEvDataShard::TEvReadResult& msg) {
+        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+            const auto& row = msg.GetCells(i);
+            DocCount = StatsTableReader->GetDocCount(row);
+            SumDocLength = StatsTableReader->GetSumDocLength(row);
+            CA_LOG_E("Total stats: doc count: " << DocCount << ", sum doc length: " << SumDocLength);
+        }
+
+        StartWordReads();
+    }
+
+    void WordStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 wordIndex) {
+        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+            const auto& row = msg.GetCells(i);
+            auto& word = Words[wordIndex];
+            word.Frequency = DictTableReader->GetWordFrequency(row);
+            CA_LOG_E("Setting word frequency for word: " << wordIndex << ", frequency: " << word.Frequency);
+            ContinueWordRead(word);
+        }
+    }
+
+    void WordResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 wordIndex, bool finished) {
+        YQL_ENSURE(wordIndex < Words.size());
+        auto& wordInfo = Words[wordIndex];
+
+        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
+            const auto& row = msg.GetCells(i);
+            YQL_ENSURE(IndexTableReader);
+            auto [freq, docInfo] = IndexTableReader->BuildDocumentInfo(MainTableReader, DocsTableReader, NeedFullTextRelevance, Words.size(), row);
+            const auto docId = docInfo->GetDocumentId();
+            auto [it, success] = DocumentInfos.emplace(docId, std::move(docInfo));
+            if (success) {
+                it->second->DocumentNumId = DocumentNumId++;
+                DocumentById[it->second->DocumentNumId] = it->second;
+            }
+
+            CA_LOG_E("Adding containing word: " << wordIndex << ", freq: " << freq);
+            it->second->AddContainingWord(wordIndex, freq, wordInfo.Frequency);
+            wordInfo.PendingDocuments.push_back(it->second);
+            if (wordInfo.HasDocumentIdPointer() && wordInfo.PendingDocuments.size() == 1) {
+                MergeQueue.push(wordInfo.GetDocumentIdPointer());
+            }
+        }
+
+        while (MergeQueue.size() == Words.size()) {
+            CA_LOG_E("MergeQueue size = " << MergeQueue.size());
+
+            const auto& documentIdPointer = MergeQueue.top();
+            if (documentIdPointer.Finished) {
+                break;
+            }
+
+            YQL_ENSURE(documentIdPointer.DocumentInfo);
+            TIntrusivePtr<TDocumentInfo> documentInfo = documentIdPointer.DocumentInfo;
+            if (documentInfo->AllWordsContained()) {
+                if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+                    FetchDocumentStats(documentInfo);
+                } else {
+                    FetchDocumentDetails(documentInfo);
+                }
+            }
+
+            std::vector<ui64> wordIndexes;
+            while (!MergeQueue.empty() && MergeQueue.top().DocumentInfo->DocumentNumId == documentInfo->DocumentNumId) {
+                auto wordIndex = MergeQueue.top().WordIndex;
+                wordIndexes.push_back(wordIndex);
+                YQL_ENSURE(wordIndex < Words.size());
+                auto& word = Words[wordIndex];
+                word.PendingDocuments.pop_front();
+                MergeQueue.pop();
+            }
+
+            for(auto wordIndex : wordIndexes) {
+                auto& word = Words[wordIndex];
+                if (word.HasDocumentIdPointer()) {
+                    MergeQueue.push(word.GetDocumentIdPointer());
+                }
+            }
+        }
+
+        NotifyCA();
+
+        if (finished) {
+            ContinueWordRead(wordInfo);
+        }
     }
 
     void HandleReadResult(TEvDataShard::TEvReadResult::TPtr& ev) {
@@ -1215,113 +1569,32 @@ public:
         }
 
         auto& msg = *ev->Get();
-
-        if (it->second.ReadKind == EReadKind_Document) {
-            YQL_ENSURE(record.GetFinished());
-
-            for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
-                const auto& row = msg.GetCells(i);
-                const auto& docId = IndexTableReader->GetDocumentId(row);
-                auto it = DocumentInfos.find(docId);
-                if (it == DocumentInfos.end()) {
-                    continue;
-                }
-                CA_LOG_E("Adding row info about docnumid: " << it->second->DocumentNumId);
-                it->second->AddRow(row);
-                ResultQueue.push_back(it->second);
-            }
-
-            Reads.erase(readId);
-            NotifyCA();
-            return;
-        }
-
-        if (it->second.ReadKind == EReadKind_DocumentStats) {
-            YQL_ENSURE(record.GetFinished());
-            Reads.erase(readId);
-
-            for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
-                const auto& row = msg.GetCells(i);
-                const auto& docId = IndexTableReader->GetDocumentId(row);
-                auto it = DocumentInfos.find(docId);
-                if (it == DocumentInfos.end()) {
-                    continue;
-                }
-                CA_LOG_E("Setting document length for document: " << it->second->DocumentNumId << ", length: " << DocsTableReader->GetDocumentLength(row));
-                it->second->SetDocumentLength(DocsTableReader->GetDocumentLength(row));
-                FetchDocumentDetails(it->second);
-            }
-
-            return;
-        }
-
-        auto wordIndex = it->second.Cookie;
-        YQL_ENSURE(wordIndex < Words.size());
-        auto& wordInfo = Words[wordIndex];
-
-        for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
-            const auto& row = msg.GetCells(i);
-            YQL_ENSURE(IndexTableReader);
-            auto [freq, docInfo] = IndexTableReader->BuildDocumentInfo(MainTableReader, DocsTableReader, Words.size(), row);
-            const auto docId = docInfo->GetDocumentId();
-            auto [it, success] = DocumentInfos.emplace(docId, std::move(docInfo));
-            if (success) {
-                it->second->DocumentNumId = DocumentNumId++;
-            }
-
-            CA_LOG_E("Adding containing word: " << wordIndex << ", freq: " << freq);
-            it->second->AddContainingWord(wordIndex, freq);
-            wordInfo.PendingDocuments.push_back(it->second);
-            if (wordInfo.HasDocumentIdPointer() && wordInfo.PendingDocuments.size() == 1) {
-                MergeQueue.push(wordInfo.GetDocumentIdPointer());
-            }
-        }
-
-        while (MergeQueue.size() == Words.size()) {
-            CA_LOG_E("MergeQueue size = " << MergeQueue.size());
-
-            const auto& documentIdPointer = MergeQueue.top();
-            if (documentIdPointer.Finished) {
-                break;
-            }
-
-            YQL_ENSURE(documentIdPointer.DocumentInfo);
-            TIntrusivePtr<TDocumentInfo> documentInfo = documentIdPointer.DocumentInfo;
-            if (documentInfo->AllWordsContained()) {
-                if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-                    FetchDocumentStats(documentInfo);
-                } else {
-                    FetchDocumentDetails(documentInfo);
-                }
-            }
-
-            std::vector<ui64> wordIndexes;
-            while (!MergeQueue.empty() && MergeQueue.top().DocumentInfo->DocumentNumId == documentInfo->DocumentNumId) {
-                auto wordIndex = MergeQueue.top().WordIndex;
-                wordIndexes.push_back(wordIndex);
-                YQL_ENSURE(wordIndex < Words.size());
-                auto& word = Words[wordIndex];
-                word.PendingDocuments.pop_front();
-                MergeQueue.pop();
-            }
-
-            for(auto wordIndex : wordIndexes) {
-                auto& word = Words[wordIndex];
-                if (word.HasDocumentIdPointer()) {
-                    MergeQueue.push(word.GetDocumentIdPointer());
-                }
-            }
-        }
+        ui64 cookie = it->second.Cookie;
+        auto readKind = it->second.ReadKind;
 
         if (record.GetFinished()) {
             Reads.erase(readId);
-            ContinueWordRead(wordInfo);
         } else {
             AckRead(readId, record.GetSeqNo());
         }
 
-        CA_LOG_E("ResultQueue size = " << ResultQueue.size());
-        NotifyCA();
+        switch (readKind) {
+            case EReadKind_Document:
+                DocumentDetailsResult(msg, cookie);
+                break;
+            case EReadKind_DocumentStats:
+                DocumentStatsResult(msg, cookie);
+                break;
+            case EReadKind_WordStats:
+                WordStatsResult(msg, cookie);
+                break;
+            case EReadKind_Word:
+                WordResult(msg, cookie, record.GetFinished());
+                break;
+            case EReadKind_TotalStats:
+                HandleTotalStatsResult(msg);
+                break;
+        }
     }
 
 private:

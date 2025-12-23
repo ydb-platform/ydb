@@ -343,6 +343,14 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
             columnId = systemColumn->second.ColumnId;
         }
 
+
+        if (columnName == "_yql_full_text_relevance") {
+            auto& columnProto = *opProto.AddColumns();
+            // columnProto.SetId(columnId);
+            columnProto.SetName(columnName);
+            continue;
+        }
+
         YQL_ENSURE(columnId, "Unknown column: " << columnName);
         auto& columnProto = *opProto.AddColumns();
         columnProto.SetId(columnId);

@@ -45,12 +45,6 @@ bool RewriteCreateAsyncReplicationQuery(
     const TString& dbPath,
     NYql::TIssues& issues);
 
-bool RewriteCreateTransferQueryNoSecrets(
-    TString& query,
-    const TString& dbRestoreRoot,
-    const TString& dbPath,
-    NYql::TIssues& issues);
-
 bool RewriteCreateTransferQuery(
     TString& query,
     const TString& dbRestoreRoot,

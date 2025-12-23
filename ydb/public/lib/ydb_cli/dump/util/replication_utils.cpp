@@ -224,18 +224,6 @@ bool RewriteCreateAsyncReplicationQuery(
     return RewriteCreateAsyncReplicationQueryNoSecrets(query, dbRestoreRoot, dbPath, issues);
 }
 
-bool RewriteCreateTransferQueryNoSecrets(
-    TString& query,
-    const TString& dbRestoreRoot,
-    const TString& dbPath,
-    NYql::TIssues& issues) {
-
-    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
-        return false;
-    }
-    return RewriteCreateQuery(query, "CREATE TRANSFER `{}`", dbPath, issues);
-}
-
 bool RewriteCreateTransferQuery(
     TString& query,
     const TString& dbRestoreRoot,

@@ -274,12 +274,7 @@ message TKqpReadRangesSourceSettings {
     optional bool IsBatch = 22 [default = false];
 
     optional bool IsTableImmutable = 23 [default = false];
-<<<<<<< HEAD
-=======
     optional NKqpProto.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
-
-    optional string Database = 25;
->>>>>>> 8a08300850d (Add DefaultTxMode setting (#30960))
 
     // Vector top-K pushdown for brute force vector search
     optional NKikimrKqp.TReadVectorTopK VectorTopK = 26;

@@ -225,7 +225,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         return true;
     }
 
-<<<<<<< HEAD
     YQL_ENSURE(!hasSinkWrite || hasEffects);
 
     // We need snapshot for stream lookup, besause it's used for dependent reads
@@ -252,13 +251,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         // so in presence of other reads we have to acquire snapshot.
         // This is unique to INSERT operation, because it can fail.
         return true;
-=======
-    if (*txCtx.EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW && hasEffects) {
-        // Avoid acquiring snapshot for WriteOnly transactions.
-        // If there are more than one INSERT, we have to acquiring snapshot,
-        // because INSERT has output (error or no error).
-        return hasInsert ? readPhases > 1 : readPhases > 0;
->>>>>>> 8a08300850d (Add DefaultTxMode setting (#30960))
     }
 
     // We need snapshot when there are multiple table read phases, most

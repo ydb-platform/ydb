@@ -214,10 +214,10 @@ public:
         Y_ABORT_UNLESS(!pathPtr->Dropped());
         pathPtr->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
-        context.SS->PersistRemoveBackupCollection(db, pathId);
+        // context.SS->PersistRemoveBackupCollection(db, pathId);
 
         // Clean up incremental restore state for this backup collection
-        CleanupIncrementalRestoreState(pathId, context, db);
+        // CleanupIncrementalRestoreState(pathId, context, db);
 
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside(context.SS);
@@ -234,7 +234,7 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
         }
 
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        context.SS->ChangeTxState(db, OperationId, TTxState::DeleteParts);
         return true;
     }
 
@@ -247,6 +247,140 @@ private:
     const TOperationId OperationId;
 };
 
+// class TWaitCleanup : public TSubOperationState {
+// public:
+//     explicit TWaitCleanup(TOperationId id)
+//         : OperationId(std::move(id))
+//     {
+//         IgnoreMessages(DebugHint(), {TEvPrivate::TEvOperationPlan::EventType});
+//     }
+
+//     bool ProgressState(TOperationContext& context) override {
+//         LOG_I(DebugHint() << "ProgressState");
+
+//         auto op = context.SS->Operations.Value(OperationId.GetTxId(), nullptr);
+//         if (!op) return false;
+        
+//         if (op->DoneParts.size() < op->Parts.size() - 1) {
+            // LOG_I(DebugHint() << "waiting for children cleanup " 
+            //     << op->DoneParts.size() << "   " << op->Parts.size());
+
+//             // context.OnComplete.ActivateTx(OperationId);
+
+//             // context.Ctx.Schedule(
+//             //     TDuration::MilliSeconds(10), 
+//             //     new TEvPrivate::TEvProgressOperation(
+//             //         ui64(OperationId.GetTxId()),
+//             //         ui32(OperationId.GetSubTxId())
+//             //     )
+//             // );
+
+//             for (ui32 i = 0; i < op->Parts.size(); ++i) {
+//                 if (!op->DoneParts.contains(i)) {
+//                     context.Ctx.Schedule(
+//                         TDuration::MilliSeconds(10),
+//                         new TEvPrivate::TEvProgressOperation(
+//                             ui64(OperationId.GetTxId()), 
+//                             ui32(i)
+//                         )
+//                     );
+//                 }
+//             }
+            
+//             return false;
+//         }
+
+//         LOG_I(DebugHint() << "children done");
+
+//         const auto* txState = context.SS->FindTx(OperationId);
+//         Y_ABORT_UNLESS(txState);
+
+//         NIceDb::TNiceDb db(context.GetDB());
+        
+//         context.SS->PersistRemoveBackupCollection(db, txState->TargetPathId);
+
+//         CleanupIncrementalRestoreState(txState->TargetPathId, context, db);
+
+//         context.OnComplete.DoneOperation(OperationId);
+//         return true;
+//     }
+
+// private:
+//     TString DebugHint() const override {
+//         return TStringBuilder() << "TDropBackupCollection TWaitCleanup, operationId: " << OperationId << ", ";
+//     }
+
+//     const TOperationId OperationId;
+// };
+
+class TWaitCleanup : public TSubOperationState {
+    bool BarrierPassed = false;
+
+public:
+    explicit TWaitCleanup(TOperationId id)
+        : OperationId(std::move(id))
+    {
+        IgnoreMessages(DebugHint(), {TEvPrivate::TEvOperationPlan::EventType});
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_I(DebugHint() << "ProgressState. BarrierPassed: " << (BarrierPassed ? "true" : "false"));
+
+        auto op = context.SS->Operations.Value(OperationId.GetTxId(), nullptr);
+        if (!op) return false;
+
+        if (!BarrierPassed) {
+            LOG_I(DebugHint() << "reg barrier 'RenamePathBarrier' to unblock children");
+            op->RegisterBarrier(OperationId.GetSubTxId(), "RenamePathBarrier");
+            return false;
+        }
+
+        if (op->DoneParts.size() < op->Parts.size() - 1) {
+            LOG_I(DebugHint() << "waiting for children cleanup " 
+                << op->DoneParts.size() << "   " << op->Parts.size());
+
+            // на всякий случай пингую детей
+            for (ui32 i = 0; i < op->Parts.size(); ++i) {
+                if (!op->DoneParts.contains(i)) {
+                    context.Ctx.Schedule(
+                        TDuration::MilliSeconds(10), 
+                        new TEvPrivate::TEvProgressOperation(
+                            ui64(OperationId.GetTxId()), 
+                            ui32(i)
+                        )
+                    );
+                }
+            }
+            return false;
+        }
+
+        LOG_I(DebugHint() << "children done");
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        const TPathId& pathId = txState->TargetPathId;
+        NIceDb::TNiceDb db(context.GetDB());
+
+        context.SS->PersistRemoveBackupCollection(db, pathId);
+        CleanupIncrementalRestoreState(pathId, context, db);
+
+        context.OnComplete.DoneOperation(OperationId);
+        return true;
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
+        LOG_I(DebugHint() << "Barrier 'RenamePathBarrier' passed");
+        BarrierPassed = true;
+        return true;
+    }
+
+private:
+    TString DebugHint() const override {
+        return TStringBuilder() << "TDropBackupCollection TWaitCleanup operationId: " << OperationId;
+    }
+
+    const TOperationId OperationId;
+};
+
 class TDropBackupCollection : public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
@@ -255,6 +389,8 @@ class TDropBackupCollection : public TSubOperation {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Propose:
+            return TTxState::DeleteParts; 
+        case TTxState::DeleteParts:
             return TTxState::Done;
         default:
             return TTxState::Invalid;
@@ -265,6 +401,8 @@ class TDropBackupCollection : public TSubOperation {
         switch (state) {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
+        case TTxState::DeleteParts:
+            return MakeHolder<TWaitCleanup>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -579,7 +717,8 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
     
     // Check for active incremental restore operations in IncrementalRestoreStates
     for (const auto& [opId, restoreState] : context.SS->IncrementalRestoreStates) {
-        if (restoreState.BackupCollectionPathId == pathId) {
+        if (restoreState.BackupCollectionPathId == pathId &&
+            restoreState.State != TIncrementalRestoreState::EState::Completed) {
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
                 "Cannot drop backup collection while incremental restore operations are active. Please wait for them to complete.")};
         }

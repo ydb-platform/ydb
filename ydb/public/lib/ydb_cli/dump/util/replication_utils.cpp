@@ -178,7 +178,7 @@ TString BuildCreateTransferQuery(
         "CREATE TRANSFER `{}`\n"
         "FROM `{}` TO `{}` USING {}\n"
         "WITH (\n"
-        "  {}\n"
+        "{}\n"
         ");",
         db.c_str(),
         backupRoot.c_str(),

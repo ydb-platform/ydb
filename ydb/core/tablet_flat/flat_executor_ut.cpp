@@ -7351,7 +7351,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         }, /* followerId */ 1);
-        env->SimulateSleep(TDuration::MilliSeconds(1000));
         followerAttach.Wait(TDuration::Seconds(5));
 
         Cerr << "... stopping leader" << Endl;

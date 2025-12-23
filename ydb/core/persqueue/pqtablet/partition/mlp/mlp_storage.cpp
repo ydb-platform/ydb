@@ -382,7 +382,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         .ProcessingCount = 0,
         .DeadlineDelta = deadlineDelta,
         .HasMessageGroupId = hasMessagegroup,
-        .MessageGroupIdHash = messageGroupIdHash,
+        .MessageGroupIdHash = messageGroupIdHash & 0x7FFFFFFFu, // hash is 31 bits
         .WriteTimestampDelta = static_cast<ui32>((writeTimestamp - BaseWriteTimestamp).Seconds())
     });
 

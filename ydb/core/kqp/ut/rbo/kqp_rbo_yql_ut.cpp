@@ -454,6 +454,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 select count(*) from t1 group by t1.b + 1 order by t1.b + 1;
             )"
             */
+             R"(
+                PRAGMA YqlSelect = 'force';
+                select
+                       sum(case when t1.b > 0
+                            then 1
+                            else 0 end) as count1,
+                       sum(case when t1.b < 0
+                            then 1
+                            else 0 end) count2 from `/Root/t1` as t1 group by t1.b order by count1, count2;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -486,7 +496,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[5u]])",
             R"([[[1];2u];[[2];3u]])",
             R"([[2u];[3u]])",
-            R"([[2u];[3u]])",
+            //R"([[2u];[3u]])",
+            R"([[2;0];[3;0]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

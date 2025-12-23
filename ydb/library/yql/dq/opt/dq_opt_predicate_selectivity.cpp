@@ -449,28 +449,28 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
-        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Less, !underNot && collectMembers);
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Less, collectMembers);
     }
 
     else if (auto less = input.Maybe<TCoCmpGreater>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
-        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Greater, !underNot && collectMembers);
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Greater,  сollectMembers);
     }
 
     else if (auto less = input.Maybe<TCoCmpLessOrEqual>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
-        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::LessOrEqual, !underNot && collectMembers);
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::LessOrEqual, collectMembers);
     }
 
     else if (auto less = input.Maybe<TCoCmpGreaterOrEqual>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
-        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::GreaterOrEqual, !underNot && collectMembers);
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::GreaterOrEqual, collectMembers);
     }
 
     else if (input.Ptr()->IsCallable("PgResolvedOp") && input.Ptr()->ChildPtr(0)->Content()=="=") {
@@ -509,7 +509,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
         resSelectivity =
-            ComputeInequalitySelectivity(left, right, StringToInequalityPredicateMap[input.Ptr()->ChildPtr(0)->Content()], underNot && collectMembers);
+            ComputeInequalitySelectivity(left, right, StringToInequalityPredicateMap[input.Ptr()->ChildPtr(0)->Content()], collectMembers);
     }
 
     // Process SqlIn

@@ -6,9 +6,10 @@
 
 namespace NKikimr::NStat::NAggFuncs {
 
+// UDAF to calculate count-min sketch column statistic.
 class TCMSAggFunc {
 public:
-    static constexpr std::string_view GetName() { return "CountMinSketch"; }
+    static constexpr std::string_view GetName() { return "CMS"; }
 
     using TState = std::unique_ptr<NKikimr::TCountMinSketch>;
 

@@ -6,9 +6,10 @@
 
 namespace NKikimr::NStat::NAggFuncs {
 
+// UDAF to calculate equi-width histogram column statistic.
 class TEWHAggFunc {
 public:
-    static constexpr std::string_view GetName() { return "EquiWidthHistogram"; }
+    static constexpr std::string_view GetName() { return "EWH"; }
 
     using TState = NKikimr::TEqWidthHistogram;
 

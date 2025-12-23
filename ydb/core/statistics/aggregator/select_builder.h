@@ -3,6 +3,7 @@
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NStat {
 

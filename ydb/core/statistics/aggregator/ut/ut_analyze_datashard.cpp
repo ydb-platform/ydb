@@ -14,7 +14,7 @@ namespace {
 
 void PrepareTable(TTestEnv& env, const TString& tableName) {
     CreateUniformTable(env, "Database", tableName);
-    InsertDataIntoTable(env, "Database", tableName, RowsWithFewDistinctValues(1000));
+    InsertDataIntoTable(env, "Database", tableName, 1000);
 }
 
 void ValidateCountMinSketch(TTestActorRuntime& runtime, const TPathId& pathId) {

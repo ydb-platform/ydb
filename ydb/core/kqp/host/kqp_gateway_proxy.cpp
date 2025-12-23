@@ -402,6 +402,55 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
     return true;
 }
 
+bool FillSerializer(
+    const TMaybe<TColumnCompression>& from, const std::string& name,
+    NKikimrSchemeOp::TOlapColumnDescription& to,
+    TString& error, Ydb::StatusIds::StatusCode& code) {
+
+    if (!from)
+        return true;
+
+    auto serializer = to.MutableSerializer();
+    TString algoName;
+    if (from->Algorithm) {
+        NKikimrSchemeOp::EColumnCodec codec;
+        algoName = to_lower(from->Algorithm.GetRef());
+        if (algoName == "off") {
+            codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
+        } else if (algoName == "zstd") {
+            codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
+        } else if (algoName == "lz4") {
+            codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
+        } else {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unknown compression algorithm '" << algoName << "' for a column " << name;
+            return false;
+        }
+        serializer->SetClassName("ARROW_SERIALIZER");
+        serializer->MutableArrowCompression()->SetCodec(codec);
+    }
+    if (from->Level) {
+        const auto level = *from->Level;
+        if (!from->Algorithm) {
+            error = TStringBuilder() << "Compression level " << level <<" for a column `" << name << "` specified without an algorithm";
+            return false;
+        }
+
+        const auto codec = NArrow::CompressionFromProto(serializer->GetArrowCompression().GetCodec());
+
+        if (!NArrow::SupportsCompressionLevel(codec.value())) {
+            error = TStringBuilder()
+                << "Column `" << name << "`: algorithm `" << algoName
+                << "` does not support compression level";
+            return false;
+        }
+
+        serializer->MutableArrowCompression()->SetLevel(level);
+    }
+
+    return true;
+}
+
 template <typename T>
 bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata, Ydb::StatusIds::StatusCode& code, TString& error) {
     Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
@@ -438,44 +487,8 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             *columnDesc.MutableTypeInfo() = *columnType.TypeInfo;
         }
 
-        if (columnIt->second.Compression) {
-            auto serializer = columnDesc.MutableSerializer();
-            TString algoName;
-            if (columnIt->second.Compression->Algorithm) {
-                NKikimrSchemeOp::EColumnCodec codec;
-                algoName = to_lower(columnIt->second.Compression->Algorithm.GetRef());
-                if (algoName == "off") {
-                    codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
-                } else if (algoName == "zstd") {
-                    codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
-                } else if (algoName == "lz4") {
-                    codec = NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
-                } else {
-                    code = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << "Unknown compression algorithm '" << algoName << "' for a column " << name;
-                    return false;
-                }
-                serializer->SetClassName("ARROW_SERIALIZER");
-                serializer->MutableArrowCompression()->SetCodec(codec);
-            }
-            if (columnIt->second.Compression->Level) {
-                const auto level = *columnIt->second.Compression->Level;
-                if (!columnIt->second.Compression->Algorithm) {
-                    error = TStringBuilder() << "Compression level " << level <<" for a column `" << name << "` specified without an algorithm";
-                    return false;
-                }
-
-                const auto codec = NArrow::CompressionFromProto(columnDesc.GetSerializer().GetArrowCompression().GetCodec());
-
-                if (!NArrow::SupportsCompressionLevel(codec.value())) {
-                    error = TStringBuilder()
-                        << "Column `" << name << "`: algorithm `" << algoName
-                        << "` does not support compression level";
-                    return false;
-                }
-
-                serializer->MutableArrowCompression()->SetLevel(level);
-            }
+        if (!FillSerializer(columnIt->second.Compression, name, columnDesc, error, code)) {
+            return false;
         }
     }
 

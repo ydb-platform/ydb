@@ -2441,9 +2441,9 @@ void THive::EnqueueUpdateMetrics(TTabletInfo* tablet) {
     if (std::exchange(tablet->UpdateMetricsEnqueued, true)) {
         return;
     }
-    ProcessMetricsQueue.push(tablet->GetFullTabletId());
-    if (!std::exchange(ProcessMetricsScheduled, true)) {
-        Schedule(TDuration::MilliSeconds(5), new TEvPrivate::TEvProcessMetrics);
+    ProcessTabletMetricsQueue.push(tablet->GetFullTabletId());
+    if (!std::exchange(ProcessTabletMetricsScheduled, true)) {
+        Send(SelfId(), new TEvPrivate::TEvProcessTabletMetrics);
     }
 }
 
@@ -3262,7 +3262,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvUpdateBalanceCounters, Handle);
         hFunc(TEvHive::TEvSetDown, Handle);
         hFunc(TEvHive::TEvRequestDrainInfo, Handle);
-        hFunc(TEvPrivate::TEvProcessMetrics, Handle);
+        hFunc(TEvPrivate::TEvProcessTabletMetrics, Handle);
     }
 }
 
@@ -3377,7 +3377,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvUpdateBalanceCounters::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestDrainInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvSetDown::EventType, EnqueueIncomingEvent);
-        fFunc(TEvPrivate::TEvProcessMetrics::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessTabletMetrics::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3757,8 +3757,8 @@ void THive::Handle(TEvHive::TEvSetDown::TPtr& ev) {
     Execute(CreateSetDown(ev));
 }
 
-void THive::Handle(TEvPrivate::TEvProcessMetrics::TPtr&) {
-    Execute(CreateProcessMetrics());
+void THive::Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr&) {
+    Execute(CreateProcessTabletMetrics());
 }
 
 void THive::MakeScaleRecommendation() {

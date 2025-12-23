@@ -4,24 +4,24 @@
 namespace NKikimr {
 namespace NHive {
 
-class TTxProcessMetrics : public TTransactionBase<THive> {
+class TTxProcessTabletMetrics : public TTransactionBase<THive> {
     TSideEffects SideEffects;
 
     static constexpr size_t MAX_UPDATES_PROCESSED = 200;
 public:
-    TTxProcessMetrics(THive* hive)
+    TTxProcessTabletMetrics(THive* hive)
         : TBase(hive)
     {}
 
-    TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_METRICS; }
+    TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_TABLET_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxProcessMetrics::Execute()");
+        BLOG_D("TTxProcessTabletMetrics::Execute()");
         NIceDb::TNiceDb db(txc.DB);
         SideEffects.Reset(Self->SelfId());
-        for (size_t i = 0; !Self->ProcessMetricsQueue.empty() && i < MAX_UPDATES_PROCESSED; ++i) {
-            auto tabletId = Self->ProcessMetricsQueue.front();
-            Self->ProcessMetricsQueue.pop();
+        for (size_t i = 0; !Self->ProcessTabletMetricsQueue.empty() && i < MAX_UPDATES_PROCESSED; ++i) {
+            auto tabletId = Self->ProcessTabletMetricsQueue.front();
+            Self->ProcessTabletMetricsQueue.pop();
             auto* tablet = Self->FindTablet(tabletId);
             if (tablet == nullptr) {
                 continue;
@@ -34,10 +34,10 @@ public:
             db.Table<Schema::Metrics>().Key(tabletId).Update<Schema::Metrics::MaximumMemory>(tablet->GetResourceMetricsAggregates().MaximumMemory);
             db.Table<Schema::Metrics>().Key(tabletId).Update<Schema::Metrics::MaximumNetwork>(tablet->GetResourceMetricsAggregates().MaximumNetwork);
         }
-        if (Self->ProcessMetricsQueue.empty()) {
-            Self->ProcessMetricsScheduled = false;
+        if (Self->ProcessTabletMetricsQueue.empty()) {
+            Self->ProcessTabletMetricsScheduled = false;
         } else {
-            SideEffects.Send(Self->SelfId(), new TEvPrivate::TEvProcessMetrics);
+            SideEffects.Send(Self->SelfId(), new TEvPrivate::TEvProcessTabletMetrics);
         }
         return true;
     }
@@ -47,8 +47,8 @@ public:
     }
 };
 
-ITransaction* THive::CreateProcessMetrics() {
-    return new TTxProcessMetrics(this);
+ITransaction* THive::CreateProcessTabletMetrics() {
+    return new TTxProcessTabletMetrics(this);
 }
 
 } // NHive

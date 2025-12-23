@@ -354,7 +354,8 @@ private:
                      const TActorContext& ctx);
     void TryWriteTxs(const TActorContext& ctx);
 
-    void ProcessProposeTransactionQueue(const TActorContext& ctx);
+    void ProcessProposeTransactionQueue(const TActorContext& ctx,
+                                        NKikimrClient::TKeyValueRequest& request);
     void ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& ev,
                          const TActorContext& ctx);
     void ProcessWriteTxs(const TActorContext& ctx,
@@ -503,7 +504,6 @@ private:
 
     bool CanProcessProposeTransactionQueue() const;
     bool CanProcessWriteTxs() const;
-    bool CanProcessDeleteTxs() const;
     bool CanProcessTxWrites() const;
 
     ui64 GetGeneration();

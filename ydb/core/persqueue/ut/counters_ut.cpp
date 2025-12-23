@@ -129,17 +129,35 @@ Y_UNIT_TEST(Partition) {
     }
 }
 
+struct TPartitionLevelMetricsTestParameters {
+    bool EnableMetricsLevel;
+    bool FirstClassCitizen;
+    std::optional<TString> MonitoringProjectId;
+};
 
-void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TString referenceDir) {
+
+void PartitionLevelMetrics(TPartitionLevelMetricsTestParameters p) {
+    Cerr << (TStringBuilder() << "Run PartitionLevelMetrics(EnableMetricsLevel=" << p.EnableMetricsLevel << ", "
+                                                           "FirstClassCitizen=" << p.FirstClassCitizen << ", "
+                                                           "MonitoringProjectId=" << p.MonitoringProjectId << ")\n");
+    TString referenceDir = p.FirstClassCitizen ? "first_class_citizen" : "federation";
+    if (p.MonitoringProjectId.has_value() && !p.MonitoringProjectId->empty()) {
+        referenceDir += "_with_monitoring_project_id";
+    }
     TTestContext tc;
     TFinalizer finalizer(tc);
     bool activeZone{false};
-    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, firstClassCitizen, true);
+    tc.Prepare("", [](TTestActorRuntime&) {}, activeZone, p.FirstClassCitizen, true);
     tc.Runtime->SetScheduledLimit(100);
 
-    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(featureFlagEnabled);
+    tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(p.EnableMetricsLevel);
 
-    PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_OBJECT }, {}, tc);
+    TTabletPreparationParameters parameters{
+        .metricsLevel = METRICS_LEVEL_OBJECT,
+        .monitoringProjectId = p.MonitoringProjectId,
+    };
+
+    PQTabletPrepare(parameters, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
@@ -179,7 +197,8 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
     {
         // Turn on per partition counters, check counters.
 
-        PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_DETAILED }, {}, tc);
+        parameters.metricsLevel = METRICS_LEVEL_DETAILED;
+        PQTabletPrepare(parameters, {}, tc);
 
         // partition, sourceId, data, text
         CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
@@ -194,8 +213,9 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
         Cerr << "after write: " << counters << "\n";
         Cerr << "after write zeroed: " << zeroUnreliableValues(counters) << "\n";
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_after_write.html");
-        counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
-        UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
+        Cerr << "referenceCounters: " << referenceCounters << "\n";
+        counters = zeroUnreliableValues(counters) + (p.EnableMetricsLevel ? "\n" : "");
+        UNIT_ASSERT_VALUES_EQUAL(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS);
     }
 
     {
@@ -240,33 +260,38 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
             UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
         }
 
-        TString counters = getCountersHtml("topics_per_partition");
+        TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_after_read.html");
-        counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
+        counters = zeroUnreliableValues(counters) + (p.EnableMetricsLevel ? "\n" : "");
         Cerr << "XXXXX after read: " << counters << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
+        UNIT_ASSERT_VALUES_EQUAL(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS);
     }
 
     {
         // Disable per partition counters, the counters should be empty.
 
-        PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_OBJECT }, {}, tc);
+        parameters.metricsLevel = METRICS_LEVEL_OBJECT;
+        PQTabletPrepare(parameters, {}, tc);
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
-        counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
+        counters = zeroUnreliableValues(counters) + (p.EnableMetricsLevel ? "\n" : "");
         Cerr << "XXXXX after read counters disabled: " << counters << "\n";
-        UNIT_ASSERT_VALUES_EQUAL(counters, featureFlagEnabled ? referenceCounters : EMPTY_COUNTERS);
+        UNIT_ASSERT_VALUES_EQUAL(counters, p.EnableMetricsLevel ? referenceCounters : EMPTY_COUNTERS);
     }
 }
 
-Y_UNIT_TEST(PartitionLevelCounters_Federation) {
-    PartitionLevelCounters(false, false, "federation");
-    PartitionLevelCounters(true, false, "federation");
-}
-
-Y_UNIT_TEST(PartitionLevelCounters_FirstClassCitizen) {
-    PartitionLevelCounters(false, true, "first_class_citizen");
-    PartitionLevelCounters(true, true, "first_class_citizen");
+Y_UNIT_TEST(PartitionLevelMetrics) {
+    for (bool enableMetricsLevel : {false, true}) {
+        for (bool firstClassCitizen : {false, true}) {
+            for (std::optional<TString> monitoringProjectId : TVector<std::optional<TString>>{std::nullopt, "", "first-monitoring-project-id"}) {
+                PartitionLevelMetrics({
+                    .EnableMetricsLevel = enableMetricsLevel,
+                    .FirstClassCitizen = firstClassCitizen,
+                    .MonitoringProjectId = monitoringProjectId,
+                });
+            }
+        }
+    }
 }
 
 Y_UNIT_TEST(PartitionWriteQuota) {

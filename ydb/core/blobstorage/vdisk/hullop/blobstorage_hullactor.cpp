@@ -672,7 +672,7 @@ namespace NKikimr {
                 using E = decltype(msg->Mode);
 
                 case E::FULL:
-                    FullCompactionState.FullCompactionTask(confirmedLsn, ctx.Now(), msg->Type, msg->RequestId, ev->Sender,
+                    FullCompactionState.FullCompactionTask(confirmedLsn, AppData()->TimeProvider->Now(), msg->Type, msg->RequestId, ev->Sender,
                         std::move(msg->TablesToCompact), msg->Force);
                     ScheduleCompaction(ctx);
                     break;

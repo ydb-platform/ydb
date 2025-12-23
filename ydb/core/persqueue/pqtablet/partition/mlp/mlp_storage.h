@@ -18,6 +18,7 @@ class TStorage {
     static constexpr size_t MAX_MESSAGES = 48000;
     static constexpr size_t MIN_MESSAGES = 100;
     static constexpr size_t MAX_PROCESSING_COUNT = 1023;
+    static constexpr TDuration VACUUM_INTERVAL = TDuration::MilliSeconds(100);
 
 public:
     // The maximum number of messages per flight. If a larger number is required, then you need
@@ -237,6 +238,7 @@ private:
 
     TInstant BaseDeadline;
     TInstant BaseWriteTimestamp;
+    TInstant LastVacuumRun;
 
     std::deque<TMessage> Messages;
     std::map<ui64, TMessage> SlowMessages;

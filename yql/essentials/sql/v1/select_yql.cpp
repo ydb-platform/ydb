@@ -43,6 +43,10 @@ private:
     }
 
     TNodePtr BuildKey() const {
+        if (IsAnonymous) {
+            return Y("TempTable", Q(Key));
+        }
+
         return Y("Key", Q(Y(Q("table"), Y("String", Q(Key)))));
     }
 

@@ -18,8 +18,9 @@ SRCS(
     block_race.cpp
     bsc_cache.cpp
     cancellation.cpp
-    counting_events.cpp
     corrupted_reads.cpp
+    counting_events.cpp
+    data_corruption.cpp
     deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp

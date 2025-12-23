@@ -1,3 +1,7 @@
+RECURSE(
+    ut_truncate_table
+)
+
 RECURSE_FOR_TESTS(
     ut_auditsettings
     ut_background_cleaning
@@ -397,6 +401,8 @@ PEERDIR(
     ydb/core/tx/columnshard/bg_tasks/manager
     ydb/core/tx/tiering/tier
 )
+
+
 
 YQL_LAST_ABI_VERSION()
 

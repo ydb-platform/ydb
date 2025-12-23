@@ -4,6 +4,7 @@
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr {
 namespace NKqp {

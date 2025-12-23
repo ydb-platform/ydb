@@ -393,6 +393,11 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         .MessageGroupIdHash = messageGroupIdHash,
         .WriteTimestampDelta = static_cast<ui32>((writeTimestamp - BaseWriteTimestamp).Seconds())
     });
+    
+    auto deadline = TimeProvider->Now() + TDuration::Seconds(deadlineDelta);
+    if (deadline < NextVacuumRun) {
+        NextVacuumRun = deadline;
+    }
 
     Batch.AddNewMessage(offset);
 

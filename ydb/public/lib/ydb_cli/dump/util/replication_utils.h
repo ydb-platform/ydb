@@ -5,7 +5,7 @@
 namespace NYdb::inline Dev::NReplication {
     class TReplicationDescription;
     class TTransferDescription;
-} // namespace NYdb::NReplication
+}
 
 namespace NYql {
     class TIssues;

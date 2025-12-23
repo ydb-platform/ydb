@@ -430,13 +430,13 @@ class TestWorkloadManagerClickbenchComputeSchedulerP1T4(WorkloadManagerClickbenc
 class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     threads = 1
     tpcc_process: yatest.common.process._Execution = None
-    tpcc_warehouses: int = 1000
-    tpcc_threads: int = 2
+    tpcc_warehouses: int = 4500
+    tpcc_threads: int = 4
 
     @classmethod
     def get_tpcc_path(cls):
         root = get_external_param(f'table-path-{cls.suite()}', 'tpcc')
-        return f'{root}/w{cls.tpcc_warehouses}'
+        return f'{root}/w10000'
 
     @classmethod
     def run_tpcc(cls, time: float, user: str):
@@ -516,7 +516,7 @@ class TestWorkloadManagerOltpTpch20s100(WorkloadManagerOltpTpch20Base):
 
 class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):
     workload_type = WorkloadType.EXTERNAL
-    iterations = 1200
+    iterations = 100
     threads = 5
 
     @classmethod

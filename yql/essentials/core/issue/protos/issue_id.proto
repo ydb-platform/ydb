@@ -23,6 +23,7 @@ message TIssuesIds {
         CORE_PARAM_EVALUATION = 1080;
         CORE_EXPR_EVALUATION = 1081;
         CORE_POST_TYPE_ANN = 1090;
+        CORE_PARTIAL_TYPE_ANN = 1021;
 
 // core warnings
         CORE_CAST_YSON_JSON_BYTES = 1100;

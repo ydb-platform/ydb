@@ -138,15 +138,27 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             << ", body# " << (msg.Response ? msg.Response->Body : "null"));
 
         if (!msg.Response || !msg.Response->Status.StartsWith("200")) {
+            EXPORT_LOG_E("Error at 'GetProxy'"
+                << ": self# " << this->SelfId()
+                << ", error# " << msg.GetError());
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
         }
 
         if (msg.Response->Body.find('<') != TStringBuf::npos) {
+            EXPORT_LOG_E("Error at 'GetProxy'"
+                << ": self# " << this->SelfId()
+                << ", error# " << "invalid body"
+                << ", body# " << msg.Response->Body);
             return RetryOrFinish(Aws::S3::S3Error({Aws::S3::S3Errors::SERVICE_UNAVAILABLE, true}));
         }
 
         ApplyProxy(*GetS3StorageConfig(), TString(msg.Response->Body));
         ProxyResolved = true;
+
+        const auto& cfg = GetS3StorageConfig()->GetConfig();
+        EXPORT_LOG_N("Using proxy: "
+            << (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")
+            << cfg.proxyHost << ":" << cfg.proxyPort);
 
         Restart();
     }
@@ -225,7 +237,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (!Scheme) {
             return Finish(false, "Cannot infer scheme");
         }
-        
         PutScheme(Scheme.GetRef());
     }
 
@@ -239,7 +250,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (!Permissions) {
             return Finish(false, "Cannot infer permissions");
         }
-        
         PutPermissions(Permissions.GetRef());
     }
 
@@ -447,7 +457,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         const bool permissionsDone = !EnablePermissions || PermissionsUploaded;
-        
         if (ProxyResolved && SchemeUploaded && MetadataUploaded && permissionsDone && ChangefeedsUploaded) {
             this->Send(Scanner, new TEvExportScan::TEvFeed());
         }
@@ -582,8 +591,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             return;
         }
 
-        const auto uploadId = result.GetResult().GetUploadId().c_str();
-        this->Send(DataShard, new TEvDataShard::TEvStoreS3UploadId(this->SelfId(), TxId, uploadId));
+        this->Send(DataShard, new TEvDataShard::TEvStoreS3UploadId(this->SelfId(), TxId, result.GetResult().GetUploadId().c_str()));
     }
 
     void Handle(TEvExternalStorage::TEvUploadPartResponse::TPtr& ev) {
@@ -597,8 +605,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             return;
         }
 
-        const auto etag = result.GetResult().GetETag().c_str();
-        Parts.push_back(etag);
+        Parts.push_back(result.GetResult().GetETag().c_str());
 
         if (Last) {
             auto nextStep = [this]() {
@@ -630,7 +637,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         const auto& error = result.GetError();
-        
         if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
             return PassAway();
         }
@@ -656,7 +662,6 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         const auto& error = result.GetError();
-        
         if (CanRetry(error)) {
             UploadId.Clear(); // force getting info after restart
             Retry();
@@ -702,6 +707,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
+        EXPORT_LOG_I("Finish"
+            << ": self# " << this->SelfId()
+            << ", success# " << success
+            << ", error# " << error
+            << ", multipart# " << MultiPart
+            << ", uploadId# " << UploadId);
+
         if (!success) {
             Error = error;
         }
@@ -781,6 +793,10 @@ public:
     }
 
     void Bootstrap() {
+        EXPORT_LOG_D("Bootstrap"
+            << ": self# " << this->SelfId()
+            << ", attempt# " << Attempt);
+
         ProxyResolved = !HttpResolverConfig.Defined() || std::is_same<TSettings, NKikimrSchemeOp::TFSSettings>::value;
         
         if (!ProxyResolved) {

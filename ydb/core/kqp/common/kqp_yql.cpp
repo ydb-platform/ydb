@@ -674,6 +674,8 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
                 break;
             case EStreamLookupStrategyType::LookupRows:
                 return LookupStrategyName;
+            case EStreamLookupStrategyType::LookupUniqueRows:
+                return LookupUniqueStrategyName;
             case EStreamLookupStrategyType::LookupJoinRows:
                 return LookupJoinStrategyName;
             case EStreamLookupStrategyType::LookupSemiJoinRows:
@@ -767,6 +769,8 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
     auto getLookupStrategyType = [](const TStringBuf& type) {
         if (type == LookupStrategyName) {
             return EStreamLookupStrategyType::LookupRows;
+        } else if (type == LookupUniqueStrategyName) {
+            return EStreamLookupStrategyType::LookupUniqueRows;
         } else if (type == LookupJoinStrategyName) {
             return EStreamLookupStrategyType::LookupJoinRows;
         } else if (type == LookupSemiJoinStrategyName) {

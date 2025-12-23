@@ -640,6 +640,109 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         tester.SetUseRealThreads(false);
         tester.Execute();
     }
+
+    class TUniqueSecondaryIndex : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            {
+                auto client = Kikimr->GetTableClient();
+                auto session = client.CreateSession().GetValueSync().GetSession();
+
+                auto tableBuilder = client.GetTableBuilder();
+                tableBuilder
+                    .AddNullableColumn("Key", EPrimitiveType::String)
+                    .AddNullableColumn("Value", EPrimitiveType::String);
+                tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+                tableBuilder.AddUniqueSecondaryIndex("IndexUniq", {"Value"});
+                auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            }
+
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            auto result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/TestTable`;
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+
+            result = session2.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Value)
+                VALUES ("key", "value");
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = session1.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Value)
+                VALUES ("other key", "value");
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(TUniqueSecondaryIndexOltp) {
+        TUniqueSecondaryIndex tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(false);
+        tester.Execute();
+    }
+
+    class TUniqueSecondaryWriteIndex : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            {
+                auto client = Kikimr->GetTableClient();
+                auto session = client.CreateSession().GetValueSync().GetSession();
+
+                auto tableBuilder = client.GetTableBuilder();
+                tableBuilder
+                    .AddNullableColumn("Key", EPrimitiveType::String)
+                    .AddNullableColumn("Value", EPrimitiveType::String);
+                tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+                tableBuilder.AddUniqueSecondaryIndex("IndexUniq", {"Value"});
+                auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            }
+
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            auto result = session1.ExecuteQuery(Q_(R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                UPSERT INTO `/Root/TestTable` (Key, Value)
+                VALUES ("other key", "value");
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+
+            result = session2.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, Value)
+                VALUES ("key", "value");
+            )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = session1.ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/TestTable`;
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(TUniqueSecondaryWriteIndexOltp) {
+        TUniqueSecondaryWriteIndex tester;
+        tester.SetIsOlap(false);
+        tester.SetFillTables(false);
+        tester.Execute();
+    }
 }
 
 } // namespace NKqp

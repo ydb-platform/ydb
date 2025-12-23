@@ -428,8 +428,8 @@ private:
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                               NKikimrPQ::TError::EKind kind,
                               const TString& reason);
-    void ScheduleReplyCommitDone(ui64 step, ui64 txId,
-                                 NWilson::TSpan&& commitSpan);
+    void ScheduleReplyTxDone(ui64 step, ui64 txId,
+                             NWilson::TSpan&& commitSpan);
     void ScheduleDropPartitionLabeledCounters(const TString& group);
     void SchedulePartitionConfigChanged();
 
@@ -462,7 +462,7 @@ private:
                                                                         NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                                                                         NKikimrPQ::TError::EKind kind,
                                                                         const TString& reason);
-    THolder<TEvPQ::TEvTxCommitDone> MakeCommitDone(ui64 step, ui64 txId);
+    THolder<TEvPQ::TEvTxDone> MakeTxDone(ui64 step, ui64 txId) const;
 
     bool BeginTransactionConfig();
 

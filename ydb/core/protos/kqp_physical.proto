@@ -312,6 +312,7 @@ enum EStreamLookupStrategy {
     LOOKUP = 1;
     JOIN = 2;
     SEMI_JOIN = 3;
+    UNIQUE = 4;
 };
 
 message TKqpPhyVectorTopK {

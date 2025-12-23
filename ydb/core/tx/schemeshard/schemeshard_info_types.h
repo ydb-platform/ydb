@@ -156,6 +156,7 @@ struct TColumnFamiliesMerger {
     bool Has(ui32 familyId) const;
     NKikimrSchemeOp::TFamilyDescription* Get(ui32 familyId, TString &errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(ui32 familyId, TString& errDescr);
+    NKikimrSchemeOp::TFamilyDescription* Get(const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* Get(ui32 familyId, const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(ui32 familyId, const TString&  familyName, TString& errDescr);
@@ -179,11 +180,13 @@ struct TPartitionConfigMerger {
     static bool ApplyChanges(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
+        const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
         const TAppData* appData, const bool isServerlessDomain, TString& errDescr);
 
     static bool ApplyChangesInColumnFamilies(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
+        const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
         const bool isServerlessDomain, TString& errDescr);
 
     static THashMap<ui32, size_t> DeduplicateColumnFamiliesById(NKikimrSchemeOp::TPartitionConfig& config);

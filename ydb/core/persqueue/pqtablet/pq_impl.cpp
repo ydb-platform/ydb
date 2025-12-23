@@ -3473,11 +3473,11 @@ void TPersQueue::Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const 
     TryWriteTxs(ctx);
 }
 
-void TPersQueue::Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(TEvPQ::TEvTxDone::TPtr& ev, const TActorContext& ctx)
 {
-    const TEvPQ::TEvTxCommitDone& event = *ev->Get();
+    const TEvPQ::TEvTxDone& event = *ev->Get();
 
-    PQ_LOG_TX_I("Handle TEvPQ::TEvTxCommitDone" <<
+    PQ_LOG_TX_I("Handle TEvPQ::TEvTxDone" <<
              " Step " << event.Step <<
              ", TxId " << event.TxId <<
              ", Partition " << event.Partition);
@@ -3487,9 +3487,9 @@ void TPersQueue::Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& c
         return;
     }
 
-    PQ_ENSURE(tx->State == NKikimrPQ::TTransaction::EXECUTING);
+    PQ_ENSURE(tx->State == NKikimrPQ::TTransaction::EXECUTING)("State", NKikimrPQ::TTransaction_EState_Name(tx->State));
 
-    tx->OnTxCommitDone(event);
+    tx->OnTxDone(event);
 
     TryExecuteTxs(ctx, *tx);
 
@@ -4170,7 +4170,7 @@ void TPersQueue::SendEvTxRollbackToPartitions(const TActorContext& ctx,
     }
 
     tx.PartitionRepliesCount = 0;
-    tx.PartitionRepliesExpected = 0;
+    tx.PartitionRepliesExpected = tx.Partitions.size();
 }
 
 void TPersQueue::SendEvProposeTransactionResult(const TActorContext& ctx,
@@ -5413,7 +5413,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvTxProcessing::TEvReadSetAck, Handle);
         HFuncTraced(TEvPQ::TEvTxCalcPredicateResult, Handle);
         HFuncTraced(TEvPQ::TEvProposePartitionConfigResult, Handle);
-        HFuncTraced(TEvPQ::TEvTxCommitDone, Handle);
+        HFuncTraced(TEvPQ::TEvTxDone, Handle);
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);

@@ -50,6 +50,7 @@ constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
 enum class EStreamLookupStrategyType {
     Unspecified,
     LookupRows,
+    LookupUniqueRows,
     LookupJoinRows,
     LookupSemiJoinRows,
 };
@@ -65,6 +66,7 @@ struct TKqpStreamLookupSettings {
 
     // stream lookup strategy types
     static constexpr std::string_view LookupStrategyName = "LookupRows"sv;
+    static constexpr std::string_view LookupUniqueStrategyName = "LookupUniqueRows"sv;
     static constexpr std::string_view LookupJoinStrategyName = "LookupJoinRows"sv;
     static constexpr std::string_view LookupSemiJoinStrategyName = "LookupSemiJoinRows"sv;
 

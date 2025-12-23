@@ -537,7 +537,9 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
         << KqpExprToPrettyString(lookupKeys, ctx));
 
     TKqpStreamLookupSettings settings;
-    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    settings.Strategy = lookupTable.IsUnique()
+        ? EStreamLookupStrategyType::LookupUniqueRows
+        : EStreamLookupStrategyType::LookupRows;
     TNodeOnNodeOwnedMap replaceMap;
     TVector<TExprBase> newInputs;
     TVector<TCoArgument> newArgs;

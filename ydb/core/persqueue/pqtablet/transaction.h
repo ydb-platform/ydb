@@ -35,7 +35,7 @@ struct TDistributedTransaction {
                    std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack);
     void OnReadSetAck(const NKikimrTx::TEvReadSetAck& event);
     void OnReadSetAck(ui64 tabletId);
-    void OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event);
+    void OnTxDone(const TEvPQ::TEvTxDone& event);
 
     void SendPlanStepAcksAfterCompletion(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event);
 

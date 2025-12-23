@@ -7,7 +7,6 @@
 #include "partition_init.h"
 #include "partition_sourcemanager.h"
 #include "partition_types.h"
-#include "read_quoter.h"
 #include "sourceid.h"
 #include "subscriber.h"
 #include "user_info.h"
@@ -20,6 +19,7 @@
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
+#include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/actors/core/actor.h>

@@ -140,7 +140,7 @@ void TestOneRead(TString value, TString expectedTrace) {
 
 Y_UNIT_TEST_SUITE(TKeyValueTracingTest) {
     const TString SmallValue = "value";
-    const TString HugeValue = TString(1 << 20, 'v');
+    const TString HugeValue = TString(1 << 20, 'v'); // Trigger CI
 
 
 std::string DSProxyPutBlobTemplate =

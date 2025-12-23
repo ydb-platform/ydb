@@ -18,6 +18,7 @@ protected:
     YDB_ACCESSOR(bool, IsOlap, false);
     YDB_ACCESSOR(bool, FastSnapshotExpiration, false);
     YDB_ACCESSOR(bool, DisableSinks, false);
+    YDB_ACCESSOR(bool, FillTables, true);
 
     virtual void Setup(TKikimrSettings&) {}
     virtual void DoExecute() = 0;

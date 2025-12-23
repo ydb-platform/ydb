@@ -396,8 +396,8 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
 }
 
  void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
-    Y_VERIFY_DEBUG((ssize_t)ActivePartitionCount + active >= 0);
-    Y_VERIFY_DEBUG((ssize_t)InactivePartitionCount + inactive >= 0);
+    Y_VERIFY_DEBUG((ssize_t)ActivePartitionCount + active >= 0, "ActivePartitionCount: %lu, active: %ld", ActivePartitionCount, active);
+    Y_VERIFY_DEBUG((ssize_t)InactivePartitionCount + inactive >= 0, "InactivePartitionCount: %lu, inactive: %ld", InactivePartitionCount, inactive);
 
     ActivePartitionCount += active;
     InactivePartitionCount += inactive;
@@ -1140,12 +1140,13 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
 
     auto& partition = Partitions[partitionId];
 
-    if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset())) {
+    const bool wasInactive = partition.IsInactive();
+    if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset()) || wasInactive) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER,
                     GetPrefix() << "Reading of the partition " << partitionId << " was finished by " << r.GetConsumer()
                     << ", firstMessage=" << r.GetStartedReadingFromEndOffset() << ", " << GetSdkDebugString0(r.GetScaleAwareSDK()));
 
-        if (ProccessReadingFinished(partitionId, false, ctx)) {
+        if (ProccessReadingFinished(partitionId, wasInactive, ctx)) {
             ScheduleBalance(ctx);
         }
     } else if (!partition.IsInactive()) {

@@ -72,7 +72,7 @@ DO BEGIN
 $number_errors = SELECT
     Host,
     COUNT(*) AS ErrorCount,
-    CAST(HOP_START() AS String) AS Ts  -- Time of HOP window begin corresponding to aggregation result
+    CAST(HOP_START() AS String) AS Ts  -- Время начала окна HOP соответствующего результату агрегации
 FROM
     ydb_source.input_topic
 WITH (
@@ -86,7 +86,7 @@ WITH (
 WHERE
     Level = "error"
 GROUP BY
-    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Count errors on non overlapping 10m windows
+    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Число ошибок на не перекрывающихся окнах длиной 10 минут
     Host;
 
 INSERT INTO

@@ -215,7 +215,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Write some data to the table
         WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "row1");
         WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 2, "row2");
         WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 3, "row3");
@@ -233,7 +232,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
 
         TestExport(runtime, ++txId, "/MyRoot", requestStr);
 
-        // Wait for export completion
         env.TestWaitNotification(runtime, txId);
 
         auto desc = TestGetExport(runtime, txId, "/MyRoot");

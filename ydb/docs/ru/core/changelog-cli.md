@@ -10,8 +10,6 @@
 * Добавлена поддержка переменной окружения `NO_COLOR` для отключения ANSI-цветов в {{ ydb-short-name }} CLI (см. [no-color.org](https://no-color.org/)).
 * Добавлен простой прогресс-бар для неинтерактивного stderr.
 * Добавлено свойство `omit-indexes` в опцию `--item` [команды](./reference/ydb-cli/tools-copy.md) `{{ ydb-cli }} tools copy`, позволяющее копировать таблицы без индексов.
-* Добавлена опция `--materialize-indexes` в [команду](./reference/ydb-cli/export-import/export-s3.md) `{{ ydb-cli }} export s3`, включающая материализацию индексов при экспорте.
-* Добавлена опция `--index-filling-mode` в [команду](./reference/ydb-cli/export-import/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая выбрать режим заполнения индексов (например, построить или импортировать материализованный индекс).
 * Добавлены новые опции в [команду](./reference/ydb-cli/topic-consumer-add.md) `{{ ydb-cli }} topic consumer add` для настройки DLQ и политики максимального количества повторных попыток.
 * Добавлена подкоманда `import files` в [команду](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload vector` для заполнения таблицы из CSV или Parquet файлов.
 * Добавлена подкоманда `import generate` в [команду](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload vector` для заполнения таблицы случайными данными.

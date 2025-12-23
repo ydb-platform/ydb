@@ -10,8 +10,6 @@ Released on December 19, 2025. To update to version **2.28.0**, select the [Down
 * Added `NO_COLOR` environment variable support to disable ANSI colors in {{ ydb-short-name }} CLI (see [no-color.org](https://no-color.org/)).
 * Added a simple progress bar for non-interactive stderr.
 * Added the `omit-indexes` property to the `--item` option of the `{{ ydb-cli }} tools copy` [command](./reference/ydb-cli/tools-copy.md), allowing tables to be copied without their indexes.
-* Added the `--materialize-indexes` option to the `{{ ydb-cli }} export s3` [command](./reference/ydb-cli/export-import/export-s3.md), enabling index materialization during export.
-* Added the `--index-filling-mode` option to the `{{ ydb-cli }} import s3` [command](./reference/ydb-cli/export-import/import-s3.md), allowing selection of the index filling mode (e.g., build or import a materialized index).
 * Added new options for shared consumers to the `{{ ydb-cli }} topic consumer add` [command](./reference/ydb-cli/topic-consumer-add.md) to configure DLQ and max attempts policy.
 * Added the `import files` subcommand to the `{{ ydb-cli }} workload vector` [command](./reference/ydb-cli/commands/workload/index.md) to populate the table from CSV or Parquet files.
 * Added the `import generate` subcommand to the `{{ ydb-cli }} workload vector` [command](./reference/ydb-cli/commands/workload/index.md) to populate the table with random data.

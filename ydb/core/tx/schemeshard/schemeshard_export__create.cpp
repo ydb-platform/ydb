@@ -737,7 +737,6 @@ private:
     TMaybe<TString> GetIssues(const TExportInfo& exportInfo, TTxId backupTxId, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items[itemIdx];
-        auto itemPathId= ItemPathId(Self, exportInfo, itemIdx);
         if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
             if (!Self->ColumnTables.contains(item.SourcePathId)) {
                 return TStringBuilder() << "Cannot find table: " << item.SourcePathId;
@@ -747,6 +746,7 @@ private:
             return GetIssues(table, item.SourcePathId, backupTxId);
         }
 
+        auto itemPathId = ItemPathId(Self, exportInfo, itemIdx);
         if (!Self->Tables.contains(itemPathId)) {
             return TStringBuilder() << "Cannot find table: " << itemPathId;
         }

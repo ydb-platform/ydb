@@ -76,7 +76,7 @@ private:
         while (!DataForDeserialize.empty()) {
             auto& data = DataForDeserialize.front();
             std::visit(TOverloaded {
-                [this](TDqSerializedBatch data) {
+                [this](TDqSerializedBatch& data) {
                     PushImpl(std::move(data));
                 },
                 [this](TInstant watermark) {

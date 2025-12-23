@@ -202,7 +202,10 @@
         {
             "Name": "TKqpLookupTable",
             "Base": "TKqlLookupTableBase",
-            "Match": {"Type": "Callable", "Name": "KqpLookupTable"}
+            "Match": {"Type": "Callable", "Name": "KqpLookupTable"},
+            "Children": [
+                {"Index": 3, "Name": "IsUnique", "Type": "TCoAtom", "Optional": true}
+            ]
         },
         {
             "Name": "TKqlStreamLookupTable",

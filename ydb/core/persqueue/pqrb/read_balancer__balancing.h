@@ -16,7 +16,7 @@ struct TConsumer;
 class TBalancer;
 
 struct TPartition {
-    // Client had commited rad offset equals EndOffset of the partition
+    // Client had commited read offset equals EndOffset of the partition
     bool Commited = false;
     // ReadSession reach EndOffset of the partition
     bool ReadingFinished = false;

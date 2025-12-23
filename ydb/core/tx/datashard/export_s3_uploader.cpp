@@ -698,8 +698,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void RetryOrFinish(const Aws::S3::S3Error& error) {
-        const bool canRetry = CanRetry(error);
-        if (canRetry) {
+        if (CanRetry(error)) {
             Retry();
         } else {
             Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());

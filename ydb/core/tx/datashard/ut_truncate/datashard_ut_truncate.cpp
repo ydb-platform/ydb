@@ -14,7 +14,7 @@ private:
     TActorId EdgeSender;
 
 public:
-    TServerHelper() {
+    TServerHelper(bool enableDebugLogs = false) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -23,6 +23,12 @@ public:
         Server = new TServer(serverSettings);
         Runtime = Server->GetRuntime();
         Runtime->GetAppData(0).FeatureFlags.SetEnableTruncateTable(true);
+
+        if (enableDebugLogs) {
+            Runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+            Runtime->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        }
+
         EdgeSender = Runtime->AllocateEdgeActor();
 
         InitRoot(Server, EdgeSender);
@@ -193,6 +199,41 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
             SELECT key, value FROM `/Root/test_table`;
         )"));
         UNIT_ASSERT_VALUES_EQUAL(selectResult, "{ items { uint32_value: 1 } items { uint32_value: 100 } }");
+
+        ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
+        WaitTxNotification(server, edgeSender, truncateTxId);
+
+        auto commitResult = KqpSimpleCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
+
+        auto afterResult = ReadTable(server, shards, tableId);
+        UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
+    }
+
+    Y_UNIT_TEST(TruncateTableDuringUpsert) {
+        auto serverHelper = TServerHelper(true);
+        auto [server, runtime, edgeSender] = serverHelper.GetObjects();
+
+        auto opts = TShardedTableOptions()
+            .EnableOutOfOrder(false)
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+                {"value2", "Uint32", false, false}
+            });
+
+        auto [shards, tableId] = CreateShardedTable(server, edgeSender, "/Root", "test_table", opts);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/test_table` (key, value) VALUES (1, 100);
+        )");
+
+        TString sessionId, txId;
+
+        KqpSimpleBegin(*runtime, sessionId, txId, Q_(R"(
+            UPSERT INTO `/Root/test_table` (key, value, value2) VALUES (2, 200, 300);
+        )"));
 
         ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
         WaitTxNotification(server, edgeSender, truncateTxId);

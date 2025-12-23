@@ -838,7 +838,7 @@ public:
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
-                    NYql::TIssuesIds::KIKIMR_STATUS_DISK_GROUP_OUT_OF_SPACE,
+                    NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
                     TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. Table `"
                         << TablePath << "`.",
                     getIssues());
@@ -4093,7 +4093,7 @@ public:
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             ReplyError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
-                NYql::TIssuesIds::KIKIMR_STATUS_DISK_GROUP_OUT_OF_SPACE,
+                NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
                 TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. "
                     << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());

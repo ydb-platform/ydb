@@ -335,7 +335,7 @@ Y_UNIT_TEST(ProposeErrorEvWrite) {
 
     test(NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
          Ydb::StatusIds::UNAVAILABLE,
-         NYql::TIssuesIds::KIKIMR_STATUS_DISK_GROUP_OUT_OF_SPACE,
+         NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
          "out of space.");
 }
 

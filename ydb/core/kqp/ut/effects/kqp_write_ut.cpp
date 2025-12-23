@@ -518,7 +518,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
 
             auto result = runtime.WaitFuture(future);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
-            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_STATUS_DISK_GROUP_OUT_OF_SPACE));
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE));
         }
     }
 }

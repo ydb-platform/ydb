@@ -1,0 +1,47 @@
+name: Auto Cherry-pick Suggest
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
+jobs:
+  suggest-cherry-pick:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            .github
+
+      - name: install packages
+        shell: bash
+        run: |
+          pip install PyGithub==2.5.0
+
+      - name: suggest cherry-pick
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ env.GH_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: "${{ github.event.pull_request.title }}"
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          ./.github/scripts/auto_cherry_pick_suggest.py \
+            --pr-number="${PR_NUMBER}" \
+            --pr-title="${PR_TITLE}" \
+            --pr-author="${PR_AUTHOR}" \
+            --merge-commit-sha="${MERGE_COMMIT_SHA}"

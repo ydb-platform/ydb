@@ -301,24 +301,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
 
         std::vector<std::string> queries = {
-            // sum, min, max
             R"(
                 PRAGMA YqlSelect = 'force';
                 select t1.b, sum(t1.c) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
-            /*
             R"(
                 PRAGMA YqlSelect = 'force';
                 select t1.b, sum(t1.c) from `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a group by t1.b order by t1.b;
-            )",
-            */
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                select sum(t1.c) as sum from t1 group by t1.b
-                union all
-                select sum(t1.b) as sum from t1
-                order by sum;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
@@ -332,12 +321,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select t1.b, count(t1.a) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
-            // FIXME: type should be: List<Struct<'column1':Int64?,'maxb':Int64?>>,
-            //             but it is: List<Struct<'column1':Int64 ,'maxb':Int64?>>
-            // R"(
-            //     PRAGMA YqlSelect = 'force';
-            //     select max(t1.b) maxb, min(t1.a) from `/Root/t1` as t1 order by maxb;
-            // )",
+            R"(
+                 PRAGMA YqlSelect = 'force';
+                 select max(t1.b) maxb, min(t1.a) from `/Root/t1` as t1 order by maxb;
+            )",
             R"(
                 PRAGMA YqlSelect = 'force';
                 select sum(t1.a) as suma from `/Root/t1` as t1 group by t1.b, t1.c order by suma;
@@ -346,14 +333,69 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select sum(t1.c), t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
-            // FIXME: type should be: List<Struct<'column1':Int64?,'maxa':Int64?,'min_b':Int64?>>,
-            //             but it is: List<Struct<'column1':Int64,'maxa':Int64,'min_b':Int64?>>
-            // R"(
-            //     PRAGMA YqlSelect = 'force';
-            //     select max(t1.a) as maxa, min(t1.a), min(t1.b) as min_b from `/Root/t1` as t1 order by maxa;
-            // )",
-            // distinct all
-            /*
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select max(t1.a) as maxa, min(t1.a), min(t1.b) as min_b from `/Root/t1` as t1 order by maxa;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(t1.a + 1 + t1.c) as sumExpr0, sum(t1.c + 2) as sumExpr1 from `/Root/t1` as t1 group by t1.b order by sumExpr0;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(distinct t1.b) as sum, t1.a from `/Root/t1` as t1 group by t1.a order by sum, t1.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(t1.a) + 1, t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(distinct t1.a), t1.b from `/Root/t1` as t1 group by t1.b, t1.c order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select avg(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select avg(t1.a) as avgA, avg(t1.c) as avgC from `/Root/t1` as t1 group by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(t1.b) as sumb from `/Root/t1` as t1 group by t1.b order by sumb;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(*), sum(t1.a) as result from `/Root/t1` as t1 order by result;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(*) as result from `/Root/t1` as t1 order by result;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t1.b, count(*) from `/Root/t1` as t1 group by t1.b order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(*) from `/Root/t1` as t1 group by t1.b order by t1.b;
+            )",
+           R"(
+                PRAGMA YqlSelect = 'force';
+                select
+                       sum(case when t1.b > 0
+                            then 1
+                            else 0 end) as count1,
+                       sum(case when t1.b < 0
+                            then 1
+                            else 0 end) count2 from `/Root/t1` as t1 group by t1.b order by count1, count2;
+            )",
+            /* NOT SUPPORTED IN YQLSELECT
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(*) from `/Root/t1` as t1 group by t1.b + 1 order by t1.b + 1;
+            )",
             R"(
                 PRAGMA YqlSelect = 'force';
                 select distinct t1.a, t1.b from `/Root/t1` as t1 order by t1.a;
@@ -366,13 +408,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select distinct min(t1.a) as min_a, max(t1.a) as max_a from `/Root/t1` as t1 group by t1.b order by min_a;
             )",
-            */
-            // aggregation on expressions and group by with expressions
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select sum(t1.a + 1 + t1.c) as sumExpr0, sum(t1.c + 2) as sumExpr1 from `/Root/t1` as t1 group by t1.b order by sumExpr0;
-            )",
-            /*
             R"(
                 PRAGMA YqlSelect = 'force';
                 select sum(t1.c) as sum0, sum(t1.a + 3) as sum1 from `/Root/t1` as t1 group by t1.b + 1 order by sum0;
@@ -384,15 +419,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 PRAGMA YqlSelect = 'force';
                 select sum(t1.c + 2) as sum0 from `/Root/t1` as t1 group by t1.b + t1.a order by sum0;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select sum(distinct t1.b) as sum, t1.a from `/Root/t1` as t1 group by t1.a order by sum, t1.a;
-            )",
-            // expressions on aggregations
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select sum(t1.a) + 1, t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
@@ -411,94 +437,35 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
-                select count(distinct t1.a), t1.b from `/Root/t1` as t1 group by t1.b, t1.c order by t1.b;
+                select sum(t1.c) as sum from `/Root/t1` as t1 group by t1.b
+                union all
+                select sum(t1.b) as sum from `/Root/t1` as t1
+                order by sum;
             )",
             */
-            // avg
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select avg(t1.b) from `/Root/t1` as t1;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select avg(t1.a) as avgA, avg(t1.c) as avgC from `/Root/t1` as t1 group by t1.b;
-            )",
-            // self aggregation
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select sum(t1.b) as sumb from `/Root/t1` as t1 group by t1.b order by sumb;
-            )",
-            // count(*)
-            // FIXME: type should be: List<Struct<'column0':Uint64,'result':Int64?>>,
-            //             but it is: List<Struct<'column0':Uint64,'result':Int64>>
-            // R"(
-            //     PRAGMA YqlSelect = 'force';
-            //     select count(*), sum(t1.a) as result from `/Root/t1` as t1 order by result;
-            // )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select count(*) as result from `/Root/t1` as t1 order by result;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select t1.b, count(*) from `/Root/t1` as t1 group by t1.b order by t1.b;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select count(*) from `/Root/t1` as t1 group by t1.b order by t1.b;
-            )",
-            /*
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                select count(*) from t1 group by t1.b + 1 order by t1.b + 1;
-            )"
-            */
-             R"(
-                PRAGMA YqlSelect = 'force';
-                select
-                       sum(case when t1.b > 0
-                            then 1
-                            else 0 end) as count1,
-                       sum(case when t1.b < 0
-                            then 1
-                            else 0 end) count2 from `/Root/t1` as t1 group by t1.b order by count1, count2;
-            )",
         };
 
-        std::vector<std::string> results = {
-            R"([[[1];[4]];[[2];[6]]])",
-            //R"([["1";"4"];["2";"6"]])",
-            R"([["4"];["6"];["8"]])",
-            R"([[[1];1];[[2];0]])",
-            R"([[[1];3];[[2];4]])",
-            R"([[[1];2u];[[2];3u]])",
-            // R"([[[2];0]])", /* FIXME */
-            R"([[4];[6]])",
-            R"([[[4];[1]];[[6];[2]]])",
-            // R"([[4;0;[1]]])", /* FIXME */
-            //R"([["0";"2"];["1";"1"];["2";"2"];["3";"1"];["4";"2"]])",
-            //R"([["4";"4"];["6";"6"]])",
-            //R"([["0";"4"];["1";"3"]])",
-            R"([[[10];[8]];[[15];[12]]])",
-            //R"([["4";"10"];["6";"15"]])",
-            //R"([["4";"2";"4"];["6";"3";"4"]])",
-            //R"([["4"];["8"];["8"]])",
-            //R"([["1";"1"];["1";"3"];["2";"0"];["2";"2"];["2";"4"]])",
-            //R"([["5";"1"];["7";"2"]])",
-            //R"([["3";"4";"3"];["3";"6";"4"]])",
-            //R"([["1"];["2"]])",
-            //R"([["2";"1"];["3";"2"]])",
-            R"([[[1.6]]])",
-            R"([[2.;[2.]];[2.;[2.]]])",
-            R"([[[2]];[[6]]])",
-            // R"([[5u;10]])", /* FIXME */
-            R"([[5u]])",
-            R"([[[1];2u];[[2];3u]])",
-            R"([[2u];[3u]])",
-            //R"([[2u];[3u]])",
-            R"([[2;0];[3;0]])"
-        };
+        std::vector<std::string> results = {R"([[[1];[4]];[[2];[6]]])",
+                                            R"([[[1];[4]];[[2];[6]]])",
+                                            R"([[[1];1];[[2];0]])",
+                                            R"([[[1];3];[[2];4]])",
+                                            R"([[[1];2u];[[2];3u]])",
+                                            R"([[[2];[0]]])",
+                                            R"([[4];[6]])",
+                                            R"([[[4];[1]];[[6];[2]]])",
+                                            R"([[[4];[0];[1]]])",
+                                            R"([[[10];[8]];[[15];[12]]])",
+                                            R"([[[1];1];[[1];3];[[2];0];[[2];2];[[2];4]])",
+                                            R"([[5;[1]];[7;[2]]])",
+                                            R"([[2u;[1]];[3u;[2]]])",
+                                            R"([[[1.6]]])",
+                                            R"([[2.;[2.]];[2.;[2.]]])",
+                                            R"([[[2]];[[6]]])",
+                                            R"([[5u;[10]]])",
+                                            R"([[5u]])",
+                                            R"([[[1];2u];[[2];3u]])",
+                                            R"([[2u];[3u]])",
+                                            R"([[2;0];[3;0]])"};
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];

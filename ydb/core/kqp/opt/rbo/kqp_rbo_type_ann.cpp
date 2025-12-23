@@ -237,10 +237,10 @@ TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
 TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    THashMap<TString, TString> aggTraitsMap;
+    THashMap<TString, std::pair<TString, bool>> aggTraitsMap;
     for (const auto& aggTraits : aggregate->AggregationTraitsList) {
         const auto originalColName = aggTraits.OriginalColName.GetFullName();
-        aggTraitsMap[originalColName] = aggTraits.AggFunction;
+        aggTraitsMap[originalColName] = {aggTraits.AggFunction, aggTraits.ForceOptional};
     }
 
     THashSet<TString> keyColumns;
@@ -254,7 +254,8 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
         const auto itemName = itemType->GetName();
         if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
             const auto& colName = it->first;
-            const auto& aggFunction = it->second;
+            const auto& aggFunction = it->second.first;
+            const bool forceOptional = it->second.second;
             Y_ENSURE(SupportedAggregationFunctions.count(aggFunction), "Unsupported aggregation function " + aggFunction);
             TPositionHandle dummyPos;
 
@@ -268,6 +269,11 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
                 Y_ENSURE(GetAvgResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
                          "Unsupported type for avg aggregation function");
             }
+
+            if (!aggFieldType->IsOptionalOrNull() && forceOptional) {
+                aggFieldType = ctx.ExprCtx.MakeType<TOptionalExprType>(aggFieldType);
+            }
+
             newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(colName, aggFieldType));
         } else if (keyColumns.contains(itemName)) {
             newItemTypes.push_back(itemType);

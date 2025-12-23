@@ -98,14 +98,16 @@ ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) cons
     TMaybe<ui64> estimatedOffset2 = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp);
     TMaybe<ui64> estimatedOffset3 = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp);
     TMaybe<ui64> estimatedOffset4 = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
-    ss << "found stage1=" << estimatedOffset1.Defined() << ", stage2=" << estimatedOffset2.Defined() << ", stage3=" << estimatedOffset3.Defined() << ", stage4=" << estimatedOffset4.Defined() << "\n";
+    ss << "found stage1=" << estimatedOffset1 << ", stage2=" << estimatedOffset2 << ", stage3=" << estimatedOffset3 << ", stage4=" << estimatedOffset4 << "\n";
     TMaybe<ui64> estimatedOffset = estimatedOffset1.OrElse(estimatedOffset2).OrElse(estimatedOffset3).OrElse(estimatedOffset4);
 
     if (TString coLog = CheckOrder(CompactionBlobEncoder.DataKeysBody, CompactionBlobEncoder.HeadKeys, BlobEncoder.DataKeysBody); !coLog.empty()) {
         ss << coLog;
     }
 
-    return Max(*estimatedOffset, offset);
+    ui64 result  = Max(*estimatedOffset, offset);
+    ss << "result_offset=" << result << "\n";
+    return result;
 }
 
 void TPartition::SendReadingFinished(const TString& consumer) {

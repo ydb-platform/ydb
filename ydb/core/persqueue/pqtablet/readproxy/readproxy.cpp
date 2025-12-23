@@ -49,6 +49,22 @@ private:
     {
         AFL_ENSURE(Response);
         const auto& record = ev->Get()->Record;
+        {
+            auto rc = record;
+            if (rc.GetPartitionResponse().HasCmdReadResult()) {
+                auto& readResult = *rc.MutablePartitionResponse()->MutableCmdReadResult();
+
+                auto hide = [](auto& str) {
+                    if (str.size() > 0 || 1) {
+                        str = TStringBuilder() << "...data size = " << str.size() << "...";
+                    }
+                };
+                for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+                    hide(*readResult.MutableResult(i)->MutableData());
+                }
+            }
+            LOG_W("ReadProxy incomming: \n" << rc.Utf8DebugString() << "\n");
+        }
         auto isDirectRead = DirectReadKey.ReadId != 0;
         if (!record.HasPartitionResponse()
             || !record.GetPartitionResponse().HasCmdReadResult()
@@ -89,6 +105,7 @@ private:
             readRes->SetBlobsFromCache(readRes->GetBlobsFromCache() + readResult.GetBlobsFromCache());
             if (AppData(ctx)->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
                 readRes->SetReadFromTimestampMs(readFromTimestampMs);
+                LOG_W("Read proxy SetReadFromTimestampMs = " << readFromTimestampMs);
             }
         }
         if (record.GetPartitionResponse().HasCookie())
@@ -109,7 +126,9 @@ private:
                 return;
             auto& back = partResp->GetResult(partResp->ResultSize() - 1);
             if (back.GetPartNo() + 1 < back.GetTotalParts()) {
+                LOG_W("Remove last " << LabeledOutput(back.GetPartNo(), back.GetTotalParts()));
                 partResp->MutableResult()->RemoveLast();
+
             }
         };
 
@@ -172,6 +191,7 @@ private:
                     }
                 }
                 if (currentReadResult.GetWriteTimestampMS() < readFromTimestampMs && AppData(ctx)->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+                    LOG_W("Set LastSkipOffset to " << currentReadResult.GetOffset() << " from " << LastSkipOffset << " " << LabeledOutput(currentReadResult.GetWriteTimestampMS(), readFromTimestampMs));
                     LastSkipOffset = currentReadResult.GetOffset();
                     continue;
                 }
@@ -212,6 +232,8 @@ private:
             // Check if we did actually skip anything so we don't request the same offset again.
             && (ui64)Request.GetPartitionRequest().GetCmdRead().GetOffset() < *LastSkipOffset
         ) {
+            LOG_W("We got no data during initial request - possibly skipped all the data due to compactification.\n"
+                  "Try another read. Set TMP_MARKER so that response is redirected to proxy, but here we will treat is as \"initial\" response still.");
             //Try another read. Set TMP_MARKER so that response is redirected to proxy, but here we will treat is as "initial" response still.
             Request.SetRequestId(TMP_REQUEST_MARKER);
             Request.MutablePartitionRequest()->MutableCmdRead()->SetOffset(*LastSkipOffset + 1);
@@ -224,6 +246,7 @@ private:
         if (!partResp->GetResult().empty()) {
             const auto& lastRes = partResp->GetResult(partResp->GetResult().size() - 1);
             if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) {
+                LOG_W("Need more data to complete the big message. Send followup read request (and switch to non-initial request state");
                 // Need more data to complete the big message. Send followup read request (and switch to non-initial request state)
                 Request.SetRequestId(TMP_REQUEST_MARKER);
 
@@ -279,6 +302,24 @@ private:
             );
             ctx.Send(Sender, Response.Release());
         } else {
+            {
+                auto rc = Response->Record;
+                if (rc.GetPartitionResponse().HasCmdReadResult()) {
+                    auto& readResult = *rc.MutablePartitionResponse()->MutableCmdReadResult();
+
+                    auto hide = [](auto& str) {
+                        if (str.size() > 0 || 1) {
+                            str = TStringBuilder() << "...data size = " << str.size() << "...";
+                        }
+                    };
+                    for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+                        hide(*readResult.MutableResult(i)->MutableData());
+                    }
+                }
+                LOG_W("ReadProxy response: \n"
+                      << rc.Utf8DebugString() << "\n");
+            }
+
             ctx.Send(Sender, Response.Release());
         }
         Die(ctx);

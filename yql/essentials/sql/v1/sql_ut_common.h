@@ -11846,6 +11846,25 @@ Y_UNIT_TEST(ImplicitCrossJoinColumnName) {
     });
 }
 
+Y_UNIT_TEST(ImplicitCrossJoinColumnNameRename) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiImplicitCrossJoin;
+        USE plato;
+        SELECT x.a AS b FROM x, y;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlResultItem", "YqlColumnRef"};
+    VerifyProgram(res, stat, [](const TString&, const TString& line) {
+        UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlResultItem 'b)");
+        UNIT_ASSERT_STRING_CONTAINS(line, R"(YqlColumnRef 'x '"a")");
+    });
+}
+
 Y_UNIT_TEST(ExplicitCrossJoin) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();

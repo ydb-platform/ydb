@@ -661,6 +661,14 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
             return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Unit"), pool);
         }
 
+        case ETypeAnnotationKind::Universal: {
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Universal"), pool);
+        }
+
+        case ETypeAnnotationKind::UniversalStruct: {
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("UniversalStruct"), pool);
+        }
+
         case ETypeAnnotationKind::Tuple: {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tuple"), pool);
             TSmallVec<TAstNode*> children;
@@ -3567,6 +3575,14 @@ const TUnitExprType* TMakeTypeImpl<TUnitExprType>::Make(TExprContext& ctx) {
     return MakeSinglethonType<TUnitExprType>(ctx);
 }
 
+const TUniversalExprType* TMakeTypeImpl<TUniversalExprType>::Make(TExprContext& ctx) {
+    return MakeSinglethonType<TUniversalExprType>(ctx);
+}
+
+const TUniversalStructExprType* TMakeTypeImpl<TUniversalStructExprType>::Make(TExprContext& ctx) {
+    return MakeSinglethonType<TUniversalStructExprType>(ctx);
+}
+
 const TWorldExprType* TMakeTypeImpl<TWorldExprType>::Make(TExprContext& ctx) {
     return MakeSinglethonType<TWorldExprType>(ctx);
 }
@@ -3998,6 +4014,14 @@ const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type) {
 }
 
 void TDefaultTypeAnnotationVisitor::Visit(const TUnitExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TUniversalExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TUniversalStructExprType& type) {
     Y_UNUSED(type);
 }
 

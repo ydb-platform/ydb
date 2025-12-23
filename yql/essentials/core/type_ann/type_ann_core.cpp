@@ -533,6 +533,8 @@ namespace NTypeAnnImpl {
         }
 
         case ETypeAnnotationKind::Unit:
+        case ETypeAnnotationKind::Universal:
+        case ETypeAnnotationKind::UniversalStruct:
         case ETypeAnnotationKind::World:
         case ETypeAnnotationKind::Callable:
         case ETypeAnnotationKind::Item:
@@ -1108,10 +1110,19 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         const TStructExprType* structType;
         bool isOptional;
         if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
             auto itemType = input->Head().GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
+            if (itemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!EnsureStructType(input->Head().Pos(), *itemType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -1120,16 +1131,18 @@ namespace NTypeAnnImpl {
             isOptional = true;
         }
         else {
+            if (input->Head().GetTypeAnn() &&
+                input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!EnsureStructType(input->Head(), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
             structType = input->Head().GetTypeAnn()->Cast<TStructExprType>();
             isOptional = false;
-        }
-
-        if (!EnsureAtom(input->Tail(), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
         }
 
         auto memberName = input->Tail().Content();
@@ -10650,7 +10663,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
 
-        if (!EnsureStructType(input->Head().Pos(), *itemType, ctx.Expr)) {
+        if (itemType->GetKind() != ETypeAnnotationKind::UniversalStruct &&
+            !EnsureStructType(input->Head().Pos(), *itemType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -10713,14 +10727,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TVector<TStringBuf> transparentFields;
-        for (auto& inputItem : itemType->Cast<TStructExprType>()->GetItems()) {
-            if (!inputItem->GetName().StartsWith("_yql_sys_tsp_") ||
-                addedInProjectionFields.contains(inputItem->GetName()))
-            {
-                continue;
-            }
+        if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
+            for (auto& inputItem : itemType->Cast<TStructExprType>()->GetItems()) {
+                if (!inputItem->GetName().StartsWith("_yql_sys_tsp_") ||
+                    addedInProjectionFields.contains(inputItem->GetName()))
+                {
+                    continue;
+                }
 
-            transparentFields.push_back(inputItem->GetName());
+                transparentFields.push_back(inputItem->GetName());
+            }
         }
 
         if (!transparentFields.empty()) {
@@ -10800,7 +10816,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         YQL_ENSURE(itemType);
-        if (!EnsureStructType(input->Head().Pos(), *itemType, ctx.Expr)) {
+        if (itemType->GetKind() != ETypeAnnotationKind::UniversalStruct
+            && !EnsureStructType(input->Head().Pos(), *itemType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -13616,6 +13633,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Error"] = &ErrorWrapper;
         ExtFunctions["VoidType"] = &TypeWrapper<ETypeAnnotationKind::Void>;
         ExtFunctions["UnitType"] = &TypeWrapper<ETypeAnnotationKind::Unit>;
+        ExtFunctions["UniversalType"] = &TypeWrapper<ETypeAnnotationKind::Universal>;
+        ExtFunctions["UniversalStructType"] = &TypeWrapper<ETypeAnnotationKind::UniversalStruct>;
         ExtFunctions["NullType"] = &TypeWrapper<ETypeAnnotationKind::Null>;
         ExtFunctions["EmptyListType"] = &TypeWrapper<ETypeAnnotationKind::EmptyList>;
         ExtFunctions["EmptyDictType"] = &TypeWrapper<ETypeAnnotationKind::EmptyDict>;

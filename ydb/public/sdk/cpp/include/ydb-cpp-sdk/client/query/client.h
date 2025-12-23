@@ -215,6 +215,7 @@ public:
         return TTxControl(settings);
     }
 
+    // Do not explicitly set the transaction mode. YDB determines the behavior automatically
     static TTxControl NoTx() {
         return TTxControl();
     }

@@ -177,8 +177,6 @@ TLargeColumnarStatistics& TLargeColumnarStatistics::operator+=(const TLargeColum
 
 TColumnarStatistics& TColumnarStatistics::operator+=(const TColumnarStatistics& other)
 {
-    ReadDataSizeEstimate.reset();
-
     if (GetColumnCount() == 0) {
         Resize(other.GetColumnCount(), other.HasValueStatistics(), other.HasLargeStatistics());
     }
@@ -229,6 +227,13 @@ TColumnarStatistics& TColumnarStatistics::operator+=(const TColumnarStatistics& 
         } else {
             LargeStatistics.Clear();
         }
+    }
+
+    if (ReadDataSizeEstimate.has_value() || other.ReadDataSizeEstimate.has_value()) {
+        if (!ReadDataSizeEstimate.has_value()) {
+            ReadDataSizeEstimate = 0;
+        }
+        *ReadDataSizeEstimate += other.ReadDataSizeEstimate.value_or(0);
     }
 
     return *this;

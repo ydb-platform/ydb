@@ -232,4 +232,37 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
         });
     }
 
+    Y_UNIT_TEST(AlterSequence) {
+        TTestWithReboots t(false);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestCreateSequence(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "seq"
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestAlterSequence(runtime, ++t.TxId, "/MyRoot", R"(
+                Name: "seq"
+                Increment: 2
+                MaxValue: 5
+                MinValue: 2
+                Cache: 1
+                StartValue: 2
+                Cycle: true
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestLs(runtime, "/MyRoot/seq", false, NLs::PathExist);
+            }
+        });
+    }
+
 } // Y_UNIT_TEST_SUITE(TSequenceReboots)

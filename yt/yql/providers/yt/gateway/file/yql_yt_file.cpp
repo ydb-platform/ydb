@@ -1644,6 +1644,9 @@ private:
         return MakeFuture<IYtGateway::TLayersSnapshotResult>();
     }
 
+    NThreading::TFuture<IYtGateway::TDownloadTableResult> DownloadTable(TDownloadTableOptions&&) override {
+        return MakeFuture<IYtGateway::TDownloadTableResult>();
+    }
 
 private:
     TYtFileServices::TPtr Services_;

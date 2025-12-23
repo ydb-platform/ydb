@@ -217,6 +217,7 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
 
 NApi::TDistributedWriteSessionStartOptions SerializeOptionsForStartDistributedTableSession(
     TMutationId& mutationId,
+    const TTransactionId& transactionId,
     i64 cookieCount,
     const TStartDistributedWriteTableOptions& options);
 
@@ -226,6 +227,7 @@ NApi::TDistributedWriteSessionFinishOptions SerializeOptionsForFinishDistributed
 
 NApi::TDistributedWriteFileSessionStartOptions SerializeOptionsForStartDistributedFileSession(
     TMutationId& mutationId,
+    const TTransactionId& transactionId,
     i64 cookieCount,
     const TStartDistributedWriteFileOptions& options);
 

@@ -4,6 +4,7 @@ PY_SRCS(
     vector_index.py
     insert_delete_all_types.py
     select_partition.py
+    secondary_index.py
 )
 
 PEERDIR(

@@ -62,11 +62,11 @@ int TWorkloadCommandBuildIndex::DoRun() {
             );
         )_",
         Params.DbPath.c_str(),
-        Params.TableName.c_str(),
+        Params.TableOpts.Name.c_str(),
         Params.IndexName.c_str(),
         Params.Distance.c_str(),
-        Params.VectorType.c_str(),
-        Params.VectorDimension,
+        Params.VectorOpts.VectorType.c_str(),
+        Params.VectorOpts.VectorDimension,
         Params.KmeansTreeLevels,
         Params.KmeansTreeClusters
     );
@@ -94,7 +94,7 @@ int TWorkloadCommandDropIndex::DoRun() {
             DROP INDEX `{2}`;
         )_",
         Params.DbPath.c_str(),
-        Params.TableName.c_str(),
+        Params.TableOpts.Name.c_str(),
         Params.IndexName.c_str()
     );
 

@@ -66,18 +66,7 @@ TFuture<void> TAsyncReaderWriterLock::TImpl::AcquireReader()
 
 void TAsyncReaderWriterLock::TImpl::ReleaseReader()
 {
-    auto guard = Guard(SpinLock_);
-
-    YT_VERIFY(ActiveReaderCount_ > 0);
-
-    --ActiveReaderCount_;
-    if (ActiveReaderCount_ == 0 && !WriterPromiseQueue_.empty()) {
-        auto promise = WriterPromiseQueue_.front();
-        WriterPromiseQueue_.pop();
-        HasActiveWriter_ = true;
-        guard.Release();
-        promise.Set();
-    }
+    ReleaseReaders(1);
 }
 
 TFuture<void> TAsyncReaderWriterLock::TImpl::AcquireWriter()
@@ -99,28 +88,65 @@ void TAsyncReaderWriterLock::TImpl::ReleaseWriter()
     auto guard = Guard(SpinLock_);
 
     YT_VERIFY(HasActiveWriter_);
-
     HasActiveWriter_ = false;
-    if (WriterPromiseQueue_.empty()) {
-        // Run all readers.
-        if (!ReaderPromiseQueue_.empty()) {
-            std::vector<TPromise<void>> readerPromiseQueue;
-            readerPromiseQueue.swap(ReaderPromiseQueue_);
-            ActiveReaderCount_ += readerPromiseQueue.size();
-            guard.Release();
 
-            // Promise subscribers must be synchronous to avoid hanging on some reader.
-            TForbidContextSwitchGuard contextSwitchGuard;
-            for (auto& promise : readerPromiseQueue) {
-                promise.Set();
+    WakeNext(guard);
+}
+
+void TAsyncReaderWriterLock::TImpl::WakeNext(TGuard<NThreading::TSpinLock>& guard)
+{
+    YT_ASSERT_SPINLOCK_AFFINITY(*guard.GetMutex());
+
+    while (!WriterPromiseQueue_.empty()) {
+        auto promise = std::move(WriterPromiseQueue_.front());
+        WriterPromiseQueue_.pop();
+        YT_VERIFY(!HasActiveWriter_);
+        HasActiveWriter_ = true;
+        {
+            auto unguard = Unguard(*guard.GetMutex());
+            promise.Set();
+            if (!promise.IsCanceled()) {
+                return;
             }
         }
-    } else {
-        auto promise = WriterPromiseQueue_.front();
-        WriterPromiseQueue_.pop();
-        HasActiveWriter_ = true;
+        YT_VERIFY(HasActiveWriter_);
+        HasActiveWriter_ = false;
+    }
+
+    if (!ReaderPromiseQueue_.empty()) {
+        std::vector<TPromise<void>> readerPromiseQueue = std::move(ReaderPromiseQueue_);
+        ReaderPromiseQueue_.clear();
+
+        ActiveReaderCount_ += readerPromiseQueue.size();
         guard.Release();
-        promise.Set();
+
+        int canceledReaders = 0;
+
+        // Promise subscribers must be synchronous to avoid hanging on some reader.
+        TForbidContextSwitchGuard contextSwitchGuard;
+        for (auto& promise : readerPromiseQueue) {
+            promise.Set();
+            if (promise.IsCanceled()) {
+                canceledReaders++;
+            }
+        }
+
+        if (canceledReaders > 0) {
+            ReleaseReaders(canceledReaders);
+        }
+    }
+}
+
+void TAsyncReaderWriterLock::TImpl::ReleaseReaders(int amount)
+{
+    auto guard = Guard(SpinLock_);
+
+    YT_VERIFY(!HasActiveWriter_);
+    YT_VERIFY(ActiveReaderCount_ >= amount);
+
+    ActiveReaderCount_ -= amount;
+    if (ActiveReaderCount_ == 0) {
+        WakeNext(guard);
     }
 }
 

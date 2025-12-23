@@ -9,6 +9,7 @@ YQL_ABI_VERSION(
 SRCS(
     all_agg_funcs.cpp
     all_agg_funcs.h
+    common.h
     udf.cpp
 )
 

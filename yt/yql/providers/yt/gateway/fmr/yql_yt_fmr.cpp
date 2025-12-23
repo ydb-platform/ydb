@@ -13,6 +13,7 @@
 #include <yt/yql/providers/yt/fmr/process/yql_yt_job_fmr.h>
 #include <yt/yql/providers/yt/lib/lambda_builder/lambda_builder.h>
 #include <yt/yql/providers/yt/lib/schema/schema.h>
+#include <yt/yql/providers/yt/lib/url_mapper/yql_yt_url_mapper.h>
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 
 #include <yql/essentials/core/yql_type_helpers.h>
@@ -30,13 +31,6 @@ using namespace NThreading;
 using namespace NYql::NNodes;
 
 namespace NYql::NFmr {
-
-enum class ETablePresenceStatus {
-    Undefined,
-    OnlyInYt,
-    OnlyInFmr,
-    Both
-};
 
 namespace {
 
@@ -64,6 +58,7 @@ public:
     {
         if (fmrServices->Config) {
             Clusters_ = MakeIntrusive<TConfigClusters>(*FmrServices_->Config);
+            UrlMapper_ = std::make_shared<TYtUrlMapper>(*FmrServices_->Config);
         }
 
         auto getOperationStatusesFunc = [this] {
@@ -635,7 +630,7 @@ public:
         Coordinator_->OpenSession(openRequest).GetValueSync();
 
         with_lock(Mutex_) {
-            Sessions_[sessionId] = MakeIntrusive<TFmrSession>(sessionId, options.UserName(), options.RandomProvider());
+            Sessions_[sessionId] = MakeIntrusive<TFmrSession>(sessionId, options.UserName(), options.RandomProvider(), options.TimeProvider(), options.OperationOptions(), options.ProgressWriter());
         }
         YQL_CLOG(INFO, FastMapReduce) << "Registered session " << sessionId << " with coordinator";
 
@@ -1028,7 +1023,7 @@ private:
 
 
         TFmrUserJob mapJob;
-        TMapJobBuilder mapJobBuilder("Fmr");
+        TMapJobBuilder mapJobBuilder;
 
         mapJobBuilder.SetInputType(&mapJob, map);
         mapJobBuilder.SetBlockInput(&mapJob, map);
@@ -1082,7 +1077,7 @@ private:
     {
         TFmrSession::TPtr session = Sessions_[sessionId];
 
-        auto ctx = MakeIntrusive<TExecContextSimple<TOptions>>(FmrServices_, Clusters_, MkqlCompiler_, std::move(options), cluster, session);
+        auto ctx = MakeIntrusive<TExecContextSimple<TOptions>>(TIntrusivePtr<TFmrYtGateway>(this), FmrServices_, Clusters_, MkqlCompiler_, std::move(options), UrlMapper_, cluster, session);
         return ctx;
     }
 
@@ -1121,6 +1116,7 @@ private:
     TConfigClusters::TPtr Clusters_;
     TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> MkqlCompiler_;
     IYtJobService::TPtr YtJobService_;
+    std::shared_ptr<TYtUrlMapper> UrlMapper_;
 };
 
 } // namespace
@@ -1130,25 +1126,3 @@ IYtGateway::TPtr CreateYtFmrGateway(IYtGateway::TPtr slave, IFmrCoordinator::TPt
 }
 
 } // namespace NYql::NFmr
-
-template<>
-void Out<NYql::NFmr::ETablePresenceStatus>(IOutputStream& out, NYql::NFmr::ETablePresenceStatus status) {
-    switch (status) {
-        case NYql::NFmr::ETablePresenceStatus::Undefined: {
-            out << "UNDEFINED";
-            return;
-        }
-        case NYql::NFmr::ETablePresenceStatus::Both: {
-            out << "BOTH";
-            return;
-        }
-        case NYql::NFmr::ETablePresenceStatus::OnlyInFmr: {
-            out << "ONLY IN FMR";
-            return;
-        }
-        case NYql::NFmr::ETablePresenceStatus::OnlyInYt: {
-            out << "ONLY IN YT";
-            return;
-        }
-    }
-}

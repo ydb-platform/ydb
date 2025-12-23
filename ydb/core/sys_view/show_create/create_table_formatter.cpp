@@ -626,6 +626,16 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             del = ", ";
         }
 
+        if (kMeansTreeSettings->overlap_clusters() != 0) {
+            Stream << del << "overlap_clusters=" << kMeansTreeSettings->overlap_clusters();
+            del = ", ";
+        }
+
+        if (kMeansTreeSettings->overlap_ratio() != 0) {
+            Stream << del << "overlap_ratio=\"" << kMeansTreeSettings->overlap_ratio() << "\"";
+            del = ", ";
+        }
+
         Stream << ")";
     }
 

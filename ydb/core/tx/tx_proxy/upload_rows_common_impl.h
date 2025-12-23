@@ -385,6 +385,8 @@ private:
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
 
+        bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
+
         for (const auto& [_, colInfo] : entry.Columns) {
             ui32 id = colInfo.Id;
             auto& name = colInfo.Name;
@@ -446,6 +448,10 @@ private:
             const ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
+            if (ci.IsBuildInProgress && !fillBuildInProgressColumns) {
+                return TConclusionStatus::Fail(Sprintf("Column %s is under build operation", name.c_str()));
+            }
+
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
@@ -461,41 +467,41 @@ private:
 
             TString inTypeName = NScheme::TypeName(typeInRequest, typeInRequest.GetPgTypeMod(ci.PTypeMod));
 
-                if (typeInProto.has_type_id()) {
-                    bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
+            if (typeInProto.has_type_id()) {
+                bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
                 bool ok = SameOrConvertableDstType(typeInRequest, ci.PType, sourceIsArrow); // TODO
-                    if (!ok) {
+                if (!ok) {
                     return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
                         inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
-                    }
-                    if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
-                        ColumnsToConvertInplace[name] = ci.PType;
-                    }
-                } else if (typeInProto.has_decimal_type()) {
-                    if (typeInRequest != ci.PType) {
-                    return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
-                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
-                    }
-                } else if (typeInProto.has_pg_type()) {
-                    bool ok = SameDstType(typeInRequest, ci.PType, false);
-                    if (!ok) {
-                    return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
-                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
-                    }
-                    if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {
-                        if (inTypeInfoMod.TypeMod != ci.PTypeMod) {
-                            return TConclusionStatus::Fail(Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
-                                inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), ci.PTypeMod.c_str()));
-                        }
-
-                        const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, typeInRequest.GetPgTypeDesc());
-                        if (result.Error) {
-                            return TConclusionStatus::Fail(Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
-                                inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str()));
-                        }
-                        pgTypeMod = result.Typmod;
-                    }
                 }
+                if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
+                    ColumnsToConvertInplace[name] = ci.PType;
+                }
+            } else if (typeInProto.has_decimal_type()) {
+                if (typeInRequest != ci.PType) {
+                return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                    inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
+                }
+            } else if (typeInProto.has_pg_type()) {
+                bool ok = SameDstType(typeInRequest, ci.PType, false);
+                if (!ok) {
+                return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                    inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
+                }
+                if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {
+                    if (inTypeInfoMod.TypeMod != ci.PTypeMod) {
+                        return TConclusionStatus::Fail(Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
+                            inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), ci.PTypeMod.c_str()));
+                    }
+
+                    const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, typeInRequest.GetPgTypeDesc());
+                    if (result.Error) {
+                        return TConclusionStatus::Fail(Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
+                            inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str()));
+                    }
+                    pgTypeMod = result.Typmod;
+                }
+            }
 
             bool notNull = entry.NotNullColumns.contains(ci.Name);
             if (notNull) {

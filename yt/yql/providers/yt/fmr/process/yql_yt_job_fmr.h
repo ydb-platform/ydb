@@ -64,8 +64,6 @@ protected:
 
     TIntrusivePtr<NYT::IReaderImplBase> MakeMkqlJobReader() override;
 
-    TString GetJobFactoryPrefix() const override;
-
 private:
     void FillQueueFromInputTables();
 

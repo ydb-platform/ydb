@@ -1,812 +1,957 @@
 {
-  "sensors": [
-    {
-      "labels": {
-        "name": "api.grpc.topic.stream_read.bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "api.grpc.topic.stream_read.messages",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "api.grpc.topic.stream_write.bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "api.grpc.topic.stream_write.messages",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "0",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 5,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "1",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "10",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "100",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "1000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "10000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "20",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "2500",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "5",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "50",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "500",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "5000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.partition_throttled_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "999999",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "100",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 5,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "1000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "10000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "180000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "200",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "2000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "30000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "500",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "5000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "60000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "999999",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 50,
-      "kind": "RATE"
-    },
-    {
-      "kind":"RATE",
-      "labels":  {
-        "cloud_id":"cloud4",
-        "database":"/Root",
-        "database_id":"database4",
-        "folder_id":"folder4",
-        "name":"topic.write.discarded_bytes",
-        "topic":"test-counters-stream"
-      },
-      "value":0
-    },
-    {
-      "kind":"RATE",
-      "labels": {
-        "cloud_id":"cloud4",
-        "database":"/Root",
-        "database_id":"database4",
-        "folder_id":"folder4",
-        "name":"topic.write.discarded_messages",
-        "topic":"test-counters-stream"
-      },
-      "value":0
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "1024",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 5,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "10240",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "102400",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "1048576",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "10485760",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "20480",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "204800",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "2097152",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "5120",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "51200",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "524288",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "5242880",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "67108864",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.message_size_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "99999999",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 0,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.messages",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 5,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.write.uncompressed_bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      },
-      "value": 25,
-      "kind": "RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.read.bytes",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-        },
-        "value":245,
-        "kind":"RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.read.messages",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-        },
-        "value":5,
-        "kind":"RATE"
-    },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "100",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 5,
-      "kind":"RATE"
-     },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "200",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 0,
-      "kind":"RATE"
-     },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "500",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 0,
-      "kind":"RATE"
-     },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "1000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 0,
-      "kind":"RATE"
-     },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "2000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 0,
-      "kind":"RATE"
-     },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "5000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 0,
-      "kind":"RATE"
-     },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "10000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 0,
-      "kind":"RATE"
-     },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "30000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 0,
-      "kind":"RATE"
-     },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "60000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 0,
-      "kind":"RATE"
-     },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "180000",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 0,
-      "kind":"RATE"
-     },
-    {
-      "labels": {
-        "name": "topic.read.lag_milliseconds",
-        "topic": "test-counters-stream",
-        "cloud_id": "cloud4",
-        "bin": "999999",
-        "database_id": "database4",
-        "folder_id": "folder4",
-        "database": "/Root"
-      }
-      ,"value": 0,
-      "kind":"RATE"
-     },
-    {
-        "kind":"GAUGE",
+  "sensors":
+    [
+      {
+        "kind":"RATE",
         "labels":
-        {
+          {
             "cloud_id":"cloud4",
             "database":"/Root",
             "database_id":"database4",
             "folder_id":"folder4",
-            "name":"topic.partition.blobs.uncompacted_count_max",
+            "name":"api.grpc.topic.stream_read.bytes",
             "topic":"test-counters-stream"
-        },
+          },
         "value":0
-    },
-    {
-        "kind":"GAUGE",
+      },
+      {
+        "kind":"RATE",
         "labels":
-        {
+          {
             "cloud_id":"cloud4",
             "database":"/Root",
             "database_id":"database4",
             "folder_id":"folder4",
-            "name":"topic.partition.blobs.uncompacted_bytes_max",
+            "name":"api.grpc.topic.stream_read.messages",
             "topic":"test-counters-stream"
-        },
+          },
         "value":0
-    },
-    {
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"api.grpc.topic.stream_write.bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"api.grpc.topic.stream_write.messages",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
         "kind":"GAUGE",
         "labels":
-        {
+          {
             "cloud_id":"cloud4",
             "database":"/Root",
             "database_id":"database4",
             "folder_id":"folder4",
             "name":"topic.partition.blobs.compaction_lag_milliseconds_max",
             "topic":"test-counters-stream"
-        },
+          },
         "value":0
-    }
-  ]
+      },
+      {
+        "kind":"GAUGE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.partition.blobs.uncompacted_bytes_max",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"GAUGE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.partition.blobs.uncompacted_count_max",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":245
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"10",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":5
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"100",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"1000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"10000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"180000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"20",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"200",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"2000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"30000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"50",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"500",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"5000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"60000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"9999999",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.read.messages",
+            "topic":"test-counters-stream"
+          },
+        "value":5
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":50
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.discarded_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.discarded_messages",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"10",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":5
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"100",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"1000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"10000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"180000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"20",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"200",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"2000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"30000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"50",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"500",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"5000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"60000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"9999999",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.lag_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"1024",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":5
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"10240",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"102400",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"1048576",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"10485760",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"20480",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"204800",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"2097152",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"5120",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"51200",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"524288",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"5242880",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"67108864",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"999999999",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.message_size_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.messages",
+            "topic":"test-counters-stream"
+          },
+        "value":5
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"0",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":5
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"1",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"10",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"100",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"1000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"10000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"20",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"2500",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"5",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"50",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"500",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"5000",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "bin":"9999999",
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.partition_throttled_milliseconds",
+            "topic":"test-counters-stream"
+          },
+        "value":0
+      },
+      {
+        "kind":"RATE",
+        "labels":
+          {
+            "cloud_id":"cloud4",
+            "database":"/Root",
+            "database_id":"database4",
+            "folder_id":"folder4",
+            "name":"topic.write.uncompressed_bytes",
+            "topic":"test-counters-stream"
+          },
+        "value":25
+      }
+    ]
 }

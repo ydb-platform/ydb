@@ -290,7 +290,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             recordsCountBase *= 2;
         }
     } else {
-        size *= ((recordsCount <= RecordsCount) ? 1.0 : (1.0 * recordsCount / RecordsCount));
+        size = std::bit_ceil(size * ((recordsCount + RecordsCount - 1)  / RecordsCount));
     }
     size = std::max<ui32>(16, size);
     const auto doFillFilter = [&](auto& inserter) {

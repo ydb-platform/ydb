@@ -10,6 +10,30 @@
 namespace NKikimr {
 namespace NStat {
 
+namespace {
+
+void PrepareTable(TTestEnv& env, const TString& tableName) {
+    CreateUniformTable(env, "Database", tableName);
+    InsertDataIntoTable(env, "Database", tableName, RowsWithFewDistinctValues(1000));
+}
+
+void ValidateCountMinSketch(TTestActorRuntime& runtime, const TPathId& pathId) {
+    std::vector<TCountMinSketchProbes> expected = {
+        {
+            .Tag = 1, // Key column
+            .Probes = std::nullopt,
+        },
+        {
+            .Tag = 2, // Value column
+            .Probes = { { {"1", 100}, {"2", 100}, {"10", 0} } }
+        }
+    };
+
+    CheckCountMinSketch(runtime, pathId, expected);
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
     Y_UNIT_TEST(AnalyzeOneTable) {
@@ -18,14 +42,14 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-        CreateUniformTable(env, "Database", "Table");
+        PrepareTable(env, "Table");
 
         ui64 saTabletId;
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
 
         Analyze(runtime, saTabletId, {{pathId}});
 
-        ValidateCountMinDatashard(runtime, pathId);
+        ValidateCountMinSketch(runtime, pathId);
     }
 
     Y_UNIT_TEST(AnalyzeTwoTables) {
@@ -34,8 +58,8 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-        CreateUniformTable(env, "Database", "Table1");
-        CreateUniformTable(env, "Database", "Table2");
+        PrepareTable(env, "Table1");
+        PrepareTable(env, "Table2");
 
         ui64 saTabletId1;
         auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &saTabletId1);
@@ -43,8 +67,8 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
 
         Analyze(runtime, saTabletId1, {pathId1, pathId2});
 
-        ValidateCountMinDatashard(runtime, pathId1);
-        ValidateCountMinDatashard(runtime, pathId2);
+        ValidateCountMinSketch(runtime, pathId1);
+        ValidateCountMinSketch(runtime, pathId2);
     }
 
     Y_UNIT_TEST(DropTableNavigateError) {
@@ -53,7 +77,7 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-        CreateUniformTable(env, "Database", "Table");
+        PrepareTable(env, "Table");
 
         ui64 saTabletId = 0;
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
@@ -64,7 +88,11 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
             runtime, saTabletId, {pathId},
             "operationId", {}, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
 
-        ValidateCountMinAbsence(runtime, pathId);
+        std::vector<TCountMinSketchProbes> expected = {
+            { .Tag = 1, .Probes = std::nullopt },
+            { .Tag = 2, .Probes = std::nullopt },
+        };
+        CheckCountMinSketch(runtime, pathId, expected);
     }
 }
 

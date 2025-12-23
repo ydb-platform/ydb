@@ -191,11 +191,8 @@ class TFairShareHierarchicalSlotQueue;
 template <typename TTag>
 using TFairShareHierarchicalSlotQueuePtr = TIntrusivePtr<TFairShareHierarchicalSlotQueue<TTag>>;
 
+DECLARE_REFCOUNTED_STRUCT(IAdaptiveHedgingManager)
 DECLARE_REFCOUNTED_STRUCT(TAdaptiveHedgingManagerConfig)
-DECLARE_REFCOUNTED_STRUCT(IHedgingManager)
-
-DECLARE_REFCOUNTED_STRUCT(INewHedgingManager)
-DECLARE_REFCOUNTED_STRUCT(ISecondaryRequestGenerator)
 
 ////////////////////////////////////////////////////////////////////////////////
 

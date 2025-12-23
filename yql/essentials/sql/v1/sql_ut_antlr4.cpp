@@ -22,7 +22,7 @@ TParsedTokenList Tokenize(const TString& query) {
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
 
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, false, true);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, /*ansi=*/false);
     TParsedTokenList tokens;
     NYql::TIssues issues;
     UNIT_ASSERT_C(Tokenize(*lexer, query, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS),
@@ -68,7 +68,6 @@ Y_UNIT_TEST(Simple) {
 
     NSQLTranslation::TTranslationSettings settings;
     settings.AnsiLexer = false;
-    settings.Antlr4Parser = true;
     settings.Arena = &Arena;
 
     TVector<TString> statements;

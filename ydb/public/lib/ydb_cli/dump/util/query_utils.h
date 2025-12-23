@@ -15,6 +15,11 @@ namespace NSQLv1Generated {
 
 namespace NYdb::NDump {
 
+struct TSecretSetting {
+    TString Name;
+    TString Value;
+};
+
 bool SqlToProtoAst(const TString& queryStr, NSQLv1Generated::TRule_sql_query& queryProto, NYql::TIssues& issues);
 bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues);
 
@@ -27,6 +32,6 @@ bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::str
 
 TString GetBackupRoot(const TString& query);
 TString GetDatabase(const TString& query);
-TString GetSecretName(const TString& query);
+TVector<TSecretSetting> GetSecretSettings(const TString& query);
 
 } // NYdb::NDump

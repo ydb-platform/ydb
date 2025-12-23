@@ -354,8 +354,24 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()))
         : Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
 
+    // Save CPU resources when potential split will certainly be immediately rejected by Self->IgniteOperation()
+    TString inflightLimitErrStr;
+    if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxPartitionHistogram Do not process detailed partition statistics: " << inflightLimitErrStr
+            << " at tablet " << Self->SelfTabletId()
+            << " from datashard " << datashardId
+            << " from follower ID " << rec.GetFollowerId()
+            << " for pathId " << tableId
+            << ", state " << DatashardStateName(rec.GetShardState())
+            << ", data size buckets " << rec.GetTableStats().GetDataSizeHistogram().GetBuckets().size()
+            << ", key access buckets " << rec.GetTableStats().GetKeyAccessSample().GetBuckets().size()
+        );
+        return true;
+    }
+
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TTxPartitionHistogram Execute processing detailed partition statistics"
+        "TTxPartitionHistogram Process detailed partition statistics"
             << " at tablet " << Self->SelfTabletId()
             << " from datashard " << datashardId
             << " from follower ID " << rec.GetFollowerId()

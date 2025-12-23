@@ -1991,7 +1991,7 @@ namespace NSchemeShardUT_Private {
                        const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, dataColumns
+            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, dataColumns, {}
         });
     }
 
@@ -1999,7 +1999,7 @@ namespace NSchemeShardUT_Private {
                        const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, dataColumns
+            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, dataColumns, {}
         });
     }
 
@@ -2007,7 +2007,7 @@ namespace NSchemeShardUT_Private {
                               const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, std::move(dataColumns)
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, std::move(dataColumns), {}
         });
     }
 
@@ -2067,7 +2067,7 @@ namespace NSchemeShardUT_Private {
                        Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}, {}
         }, expectedStatus);
     }
 
@@ -2076,7 +2076,7 @@ namespace NSchemeShardUT_Private {
                            Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, {}, {}
         }, expectedStatus);
     }
 
@@ -2085,7 +2085,7 @@ namespace NSchemeShardUT_Private {
                               Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, {}, {}
         }, expectedStatus);
     }
 

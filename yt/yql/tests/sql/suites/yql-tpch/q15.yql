@@ -1,0 +1,39 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: no viable alternative at input */
+--ignore runonopt plan diff
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+WITH revenue_STREAM_ID (supplier_no, total_revenue) as
+    select
+        l_suppkey,
+        Sum(l_extendedprice * (1 - l_discount))
+    from
+        plato.lineitem
+    where
+        l_shipdate >= date '1996-01-01'
+        and l_shipdate < date '1996-01-01' + interval '3' month
+    group by
+        l_suppkey
+SELECT
+    s_suppkey,
+    s_name,
+    s_address,
+    s_phone,
+    total_revenue
+FROM
+    plato.supplier
+,
+    revenue_STREAM_ID
+WHERE
+    s_suppkey == supplier_no
+    AND total_revenue == (
+        SELECT
+            Max(total_revenue)
+        FROM
+            revenue_STREAM_ID
+    )
+ORDER BY
+    s_suppkey
+;

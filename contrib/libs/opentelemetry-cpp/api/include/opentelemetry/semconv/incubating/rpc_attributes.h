@@ -123,22 +123,12 @@ static constexpr const char *kRpcMessageType = "rpc.message.type";
 static constexpr const char *kRpcMessageUncompressedSize = "rpc.message.uncompressed_size";
 
 /**
-  The name of the (logical) method being called, must be equal to the $method part in the span name.
-  <p>
-  This is the logical name of the method from the RPC interface perspective, which can be different
-  from the name of any implementing method/function. The @code code.function.name @endcode attribute
-  may be used to store the latter (e.g., method actually executing the call on the server side, RPC
-  client stub method on the client side).
+  This is the logical name of the method from the RPC interface perspective.
  */
 static constexpr const char *kRpcMethod = "rpc.method";
 
 /**
   The full (logical) name of the service being called, including its package name, if applicable.
-  <p>
-  This is the logical name of the service from the RPC interface perspective, which can be different
-  from the name of any implementing class. The @code code.namespace @endcode attribute may be used
-  to store the latter (despite the attribute name, it may include a class name; e.g., class with
-  method actually executing the call on the server side, RPC client stub class on the client side).
  */
 static constexpr const char *kRpcService = "rpc.service";
 
@@ -308,6 +298,16 @@ static constexpr const char *kApacheDubbo = "apache_dubbo";
   Connect RPC
  */
 static constexpr const char *kConnectRpc = "connect_rpc";
+
+/**
+  <a href="https://datatracker.ietf.org/doc/html/rfc5531">ONC RPC (Sun RPC)</a>
+ */
+static constexpr const char *kOncRpc = "onc_rpc";
+
+/**
+  JSON-RPC
+ */
+static constexpr const char *kJsonrpc = "jsonrpc";
 
 }  // namespace RpcSystemValues
 

@@ -27,7 +27,8 @@ struct IActorFactory : public TThrRefBase {
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
-        ui64 maxBufferSize) const = 0;
+        ui64 maxBufferSize,
+        bool enableStreamingQueriesCounters) const = 0;
 };
 
 IActorFactory::TPtr CreateActorFactory();

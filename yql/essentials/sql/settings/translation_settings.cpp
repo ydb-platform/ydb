@@ -125,9 +125,7 @@ bool ParseTranslationSettings(const TString& query, TTranslationSettings& settin
         } else if (value == "ansi_lexer") {
             settings.AnsiLexer = true;
         } else if (value == "antlr4_parser") {
-            settings.Antlr4Parser = true;
-        } else if (value == "antlr3_parser") {
-            settings.Antlr4Parser = false;
+            // Is always turned on
         } else if (value == "syntax_pg") {
             settings.PgParser = true;
         } else {

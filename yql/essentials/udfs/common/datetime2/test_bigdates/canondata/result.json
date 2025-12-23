@@ -9,6 +9,11 @@
             "uri": "file://test.test_EndOf_/results.txt"
         }
     ],
+    "test.test[FormatWriteOffsetWithColon]": [
+        {
+            "uri": "file://test.test_FormatWriteOffsetWithColon_/results.txt"
+        }
+    ],
     "test.test[From]": [
         {
             "uri": "file://test.test_From_/results.txt"
@@ -17,6 +22,21 @@
     "test.test[Get]": [
         {
             "uri": "file://test.test_Get_/results.txt"
+        }
+    ],
+    "test.test[Parse64TzNameVsTzOffset]": [
+        {
+            "uri": "file://test.test_Parse64TzNameVsTzOffset_/extracted"
+        }
+    ],
+    "test.test[Parse64TzOffsetVsTzName]": [
+        {
+            "uri": "file://test.test_Parse64TzOffsetVsTzName_/extracted"
+        }
+    ],
+    "test.test[Parse64TzOffset]": [
+        {
+            "uri": "file://test.test_Parse64TzOffset_/results.txt"
         }
     ],
     "test.test[Parse64]": [

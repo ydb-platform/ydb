@@ -158,7 +158,7 @@ public:
         TKqpSnapshot Snapshot = TKqpSnapshot();
         std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
         std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
-        NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
+        NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
         bool NeedTxId = true;
         bool UseImmediateEffects = false;

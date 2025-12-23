@@ -75,14 +75,14 @@ TPasswordChecker::TPasswordChecker(const TPasswordComplexity& passwordComplexity
     : PasswordComplexity(passwordComplexity)
 {}
 
-TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const TString& password) const {
+TPasswordChecker::TResult TPasswordChecker::Check(const std::string& username, const std::string& password) const {
     if (password.empty() && PasswordComplexity.MinLength == 0) {
         return {.Success = true};
     }
     if (password.length() < PasswordComplexity.MinLength) {
         return {.Success = false, .Error = "Password is too short"};
     }
-    if (!PasswordComplexity.CanContainUsername && password.Contains(username)) {
+    if (!PasswordComplexity.CanContainUsername && password.contains(username)) {
         return {.Success = false, .Error = "Password must not contain user name"};
     }
 

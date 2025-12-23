@@ -72,7 +72,7 @@ bool TDuplicateManager::IsExclusiveInterval(const NArrow::TSimpleRow& begin, con
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     auto constructor = std::make_shared<TFilterAccumulator>(ev);
-    TPortionInfo::TConstPtr mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetSourceId());
+    TPortionInfo::TConstPtr mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetPortionId());
     if (IsExclusiveInterval(mainPortion->IndexKeyStart(), mainPortion->IndexKeyEnd())) {
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, mainPortion->GetRecordsCount());
@@ -94,14 +94,14 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
 
 TIntervalsIterator TDuplicateManager::StartIntervalProcessing(
     const THashSet<ui64>& intersectingPortions, const std::shared_ptr<TFilterAccumulator>& constructor) {
-    const std::shared_ptr<const TPortionInfo>& mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetSourceId());
+    const std::shared_ptr<const TPortionInfo>& mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetPortionId());
     THashMap<ui64, TSortableBorders> materializedBorders;
     for (const auto& portionId : intersectingPortions) {
         materializedBorders.emplace(portionId, GetBorders(portionId));
     }
     TColumnDataSplitter splitter(materializedBorders);
     LOCAL_LOG_TRACE("event", "split_portion")
-    ("source", constructor->GetRequest()->Get()->GetSourceId())("splitter", splitter.DebugString())(
+    ("source", constructor->GetRequest()->Get()->GetPortionId())("splitter", splitter.DebugString())(
         "intersection_portions", intersectingPortions.size());
     THashMap<ui32, NArrow::TColumnFilter> readyFilters;
     std::vector<ui32> intervalsToBuild;
@@ -142,7 +142,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     auto requestGuard = ev->Get()->ExtractRequestGuard();
 
     THashSet<ui64> intersectingPortions;
-    const std::shared_ptr<const TPortionInfo>& mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetSourceId());
+    const std::shared_ptr<const TPortionInfo>& mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetPortionId());
     {
         const auto collector = [&intersectingPortions](
                                    const TPortionIntervalTree::TRange& /*interval*/, const std::shared_ptr<TPortionInfo>& portion) {
@@ -156,7 +156,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     ExpectedIntersectionCount = intersectingPortions.size();
 
     LOCAL_LOG_TRACE("event", "request_filter")
-    ("source", constructor->GetRequest()->Get()->GetSourceId())("intersecting_portions", intersectingPortions.size());
+    ("source", constructor->GetRequest()->Get()->GetPortionId())("intersecting_portions", intersectingPortions.size());
     AFL_VERIFY(intersectingPortions.size());
 
     TIntervalsIterator intervalsIterator = StartIntervalProcessing(intersectingPortions, constructor);
@@ -196,7 +196,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr
     AFL_VERIFY(ev->Get()->GetConclusion().GetResult().size());
     for (auto&& [mapInfo, filter] : ev->Get()->ExtractResult()) {
         if (auto findInterval = IntervalsInFlight.find(mapInfo.GetInterval()); findInterval != IntervalsInFlight.end()) {
-            findInterval->second.OnFilterReady(mapInfo.GetSourceId(), filter);
+            findInterval->second.OnFilterReady(mapInfo.GetPortionId(), filter);
             if (findInterval->second.IsDone()) {
                 IntervalsInFlight.erase(findInterval);
             }

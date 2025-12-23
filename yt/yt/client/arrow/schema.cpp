@@ -72,9 +72,13 @@ NTableClient::TLogicalTypePtr GetLogicalTypeFromArrowType(const std::shared_ptr<
             members.reserve(structType->num_fields());
             for (auto fieldIndex = 0; fieldIndex < structType->num_fields(); ++fieldIndex) {
                 auto field = structType->field(fieldIndex);
-                members.push_back({field->name(), GetLogicalTypeFromArrowType(field)});
+                members.push_back(TStructField{
+                    .Name = field->name(),
+                    .StableName = field->name(),
+                    .Type = GetLogicalTypeFromArrowType(field),
+                });
             }
-            return StructLogicalType(std::move(members));
+            return StructLogicalType(std::move(members), /*removedFieldStableNames*/ {});
         }
         // Currently YT supports only Decimal128 with precision <= 35. Thus, we represent short enough arrow decimal types
         // as the corresponding YT decimals, and longer arrow decimal types as strings in decimal form.

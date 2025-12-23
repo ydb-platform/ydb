@@ -2,72 +2,7 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <util/string/cast.h>
 
-namespace NKikimr::NStat {
-
-namespace {
-
-template<typename TAggFunc>
-class TUpdateWithValue {
-    using TState = TAggFunc::TState;
-    using TVal = NUdf::TUnboxedValuePod;
-    std::function<void(TState&, const TVal& val)> Updater;
-
-    template<typename T, typename TUpdater>
-    static void UpdateWithPrimitiveType(
-            const TUpdater& updater, TState& state, const TVal& val) {
-        updater(state, TCell::Make(val.Get<T>()));
-    }
-
-    template<typename TUpdater>
-    static void UpdateWithDecimal(
-            const TUpdater& updater, TState& state, const TVal& val) {
-        const auto v = val.GetInt128();
-        updater(state, TCell(reinterpret_cast<const char*>(&v), sizeof(v)));
-    }
-
-    template<typename TUpdater>
-    static void UpdateWithString(
-            const TUpdater& updater, TState& state, const TVal& val) {
-        auto str = val.AsStringRef();
-        updater(state, TCell(str.Data(), str.Size()));
-    }
-
-    TUpdateWithValue(auto updater) : Updater(std::move(updater)) {}
-
-public:
-    static TUpdateWithValue<TAggFunc> Create(NYql::NUdf::TDataTypeId typeId) {
-        using namespace NYql;
-        auto updater = TAggFunc::CreateStateUpdater();
-        switch (typeId) {
-#define MAKE_PRIMITIVE_TYPE_UPDATER(type, layout)                                 \
-        case NUdf::TDataType<type>::Id:                                           \
-            return [updater=std::move(updater)](TState& state, const TVal& val) { \
-                UpdateWithPrimitiveType<layout>(updater, state, val);             \
-            };
-
-        KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_UPDATER)
-#undef MAKE_PRIMITIVE_TYPE_UPDATER
-
-        case NUdf::TDataType<NUdf::TDecimal>::Id:
-            return [updater=std::move(updater)](TState& state, const TVal& val) {
-                UpdateWithDecimal(updater, state, val);
-            };
-        default:
-            return [updater=std::move(updater)](TState& state, const TVal& val) {
-                UpdateWithString(updater, state, val);
-            };
-        // TODO: Pg types
-        // TODO: UUID
-        // TODO: JsonDocument?
-        }
-    }
-
-    void operator()(TState& state, const TVal& val) const {
-        Updater(state, val);
-    }
-};
-
-} // anonymous namespace
+namespace NKikimr::NStat::NAggFuncs {
 
 extern const char RESOURCE_NAME[] = "StatisticsInternal.StatisticState";
 
@@ -76,10 +11,12 @@ using TResource = NYql::NUdf::TBoxedResource<typename TAggFunc::TState, RESOURCE
 
 template<typename TAggFunc>
 class TCreateFunc : public NYql::NUdf::TBoxedValue {
-    TUpdateWithValue<TAggFunc> Updater;
+    TTypeId ColumnTypeId;
+    decltype(TAggFunc::CreateStateUpdater(ColumnTypeId)) Updater;
 public:
     explicit TCreateFunc(NYql::NUdf::TDataTypeId typeId)
-        : Updater(TUpdateWithValue<TAggFunc>::Create(typeId))
+        : ColumnTypeId(typeId)
+        , Updater(TAggFunc::CreateStateUpdater(typeId))
     {}
 
     static NYql::NUdf::TStringRef Name() {
@@ -140,11 +77,9 @@ public:
 private:
     NYql::NUdf::TUnboxedValue
     Run(const NYql::NUdf::IValueBuilder*, const NYql::NUdf::TUnboxedValuePod* args) const override {
-        std::array<ui64, TAggFunc::ParamsCount> params;
-        for (size_t i = 0; i < TAggFunc::ParamsCount; ++i) {
-            params[i] = args[i + 1].Get<ui64>();
-        }
-        auto state = TAggFunc::CreateState(params);
+        std::span<const TValue, TAggFunc::ParamsCount> params(
+            args + 1, TAggFunc::ParamsCount);
+        auto state = TAggFunc::CreateState(ColumnTypeId, params);
         Updater(state, args[0]);
         return NYql::NUdf::TUnboxedValuePod(new TResource<TAggFunc>(std::move(state)));
     }
@@ -152,10 +87,12 @@ private:
 
 template<typename TAggFunc>
 class TAddValueFunc : public NYql::NUdf::TBoxedValue {
-    TUpdateWithValue<TAggFunc> Updater;
+    TTypeId ColumnTypeId;
+    decltype(TAggFunc::CreateStateUpdater(ColumnTypeId)) Updater;
 public:
     explicit TAddValueFunc(NYql::NUdf::TDataTypeId typeId)
-        : Updater(TUpdateWithValue<TAggFunc>::Create(typeId))
+        : ColumnTypeId(typeId)
+        , Updater(TAggFunc::CreateStateUpdater(typeId))
     {}
 
     static NYql::NUdf::TStringRef Name() {
@@ -445,8 +382,8 @@ public:
     }
 };
 
-using TStatisticsInternalModule = TStatisticsInternalModuleImpl<NAggFuncs::TAllAggFuncsList>;
+using TStatisticsInternalModule = TStatisticsInternalModuleImpl<TAllAggFuncsList>;
 
 REGISTER_MODULES(TStatisticsInternalModule)
 
-} // NKikimr::NStat
+} // NKikimr::NStat::NAggFuncs

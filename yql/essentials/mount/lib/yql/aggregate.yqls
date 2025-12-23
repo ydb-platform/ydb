@@ -1018,7 +1018,7 @@
 
 (let random_value_factory (lambda '(list_type extractor)
     (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type)
-        (Apply flatten_traits_factory_parent list_type (lambda '(list_type)
+        (Apply optional_traits_factory_parent list_type (lambda '(list_type)
             (Apply reservoir_sampling_factory_raw list_type extractor (Uint64 '1) (Null) (lambda '(state get_value get_list) (
                 Apply get_value state
             )))))))))

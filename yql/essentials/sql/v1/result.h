@@ -7,20 +7,35 @@
 
 namespace NSQLTranslationV1 {
 
+class TContext;
+
+template <class TPtr>
+class TNullable final: public TPtr {
+public:
+    TNullable(TPtr ptr)
+        : TPtr(std::move(ptr))
+    {
+    }
+};
+
 template <class TPtr>
 class TNonNull final: public TPtr {
 public:
     explicit TNonNull(TPtr ptr)
         : TPtr(std::move(ptr))
     {
-        YQL_ENSURE(*this);
+        YQL_ENSURE(*static_cast<TPtr*>(this));
     }
+
+    operator bool() = delete;
 };
 
 enum class ESQLError {
     Basic,
     UnsupportedYqlSelect,
 };
+
+std::unexpected<ESQLError> UnsupportedYqlSelect(TContext& ctx, TStringBuf message);
 
 template <class T>
 using TSQLResult = std::expected<T, ESQLError>;

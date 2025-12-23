@@ -2,8 +2,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path_element.h"
-#include "schemeshard_utils.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -17,37 +15,63 @@ namespace {
 
 ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard) {
     TPath implTable = index.Child(name);
+    {
+        // To safely fill the TransactionTemplate below, we need to check if the table is valid.
+        const auto checks = implTable.Check();
+        checks
+            .NotEmpty()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .IsInsideTableIndexPath()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return CreateReject(partId, checks.GetStatus(), checks.GetError());
+        }
+    }
+
     Y_ABORT_UNLESS(implTable->PathId == pathId);
     Y_ABORT_UNLESS(implTable.LeafName() == name);
+
     TTableInfo::TPtr table = context.SS->Tables.at(pathId);
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
+
     auto operation = transaction.MutableAlterTable();
     operation->SetName(name);
     operation->MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(table->PartitionConfig().GetCompactionPolicy());
     operation->MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
     operation->MutablePartitionConfig()->SetShadowData(false);
+
     if (implTable.IsLocked()) { // implTables for some type of indexes may be locked during build
         *transaction.MutableLockGuard() = lockGuard;
     }
+
     return CreateFinalizeBuildIndexImplTable(partId, transaction);
 }
 
 ISubOperation::TPtr DropIndexImplTable(const TPath& index, const TOperationId& nextId, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard, bool& rejected) {
     TPath implTable = index.Child(name);
+    {
+        const auto checks = implTable.Check();
+        checks.NotEmpty()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .IsInsideTableIndexPath()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            rejected = true;
+            return CreateReject(nextId, checks.GetStatus(), checks.GetError());
+        }
+    }
+
     Y_ABORT_UNLESS(implTable->PathId == pathId);
     Y_ABORT_UNLESS(implTable.LeafName() == name);
-    auto checks = implTable.Check();
-    checks.NotEmpty()
-        .IsResolved()
-        .NotDeleted()
-        .IsTable()
-        .IsInsideTableIndexPath()
-        .NotUnderDeleting()
-        .NotUnderOperation();
-    if (!checks) {
-        rejected = true;
-        return CreateReject(nextId, checks.GetStatus(), checks.GetError());
-    }
+
     rejected = false;
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
     if (implTable.IsLocked()) {
@@ -70,6 +94,23 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
     TString indexName = config.GetIndexName();
 
     TPath table = TPath::Resolve(tablePath, context.SS);
+    {
+        // To safely fill the TransactionTemplate below, we need to check if the table is valid.
+        const auto checks = table.Check();
+        checks
+            .IsAtLocalSchemeShard()
+            .NotEmpty()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        }
+    }
+
     TVector<ISubOperation::TPtr> result;
     {
         auto finalize = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
@@ -86,6 +127,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
     }
 
+    // IsBuildIndex()
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
         auto tableIndexAltering = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
@@ -97,6 +139,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         result.push_back(CreateAlterTableIndex(NextPartId(nextId, result), tableIndexAltering));
     }
 
+    // IsBuildIndex()
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
         Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
@@ -127,6 +170,22 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
     TString indexName = config.GetIndexName();
 
     TPath table = TPath::Resolve(tablePath, context.SS);
+    {
+        // To safely fill the TransactionTemplate below, we need to check if the table is valid.
+        const auto checks = table.Check();
+        checks
+            .IsAtLocalSchemeShard()
+            .NotEmpty()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        }
+    }
 
     TVector<ISubOperation::TPtr> result;
 
@@ -139,6 +198,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         op->SetSnapshotTxId(config.GetSnapshotTxId());
         op->SetBuildIndexId(config.GetBuildIndexId());
 
+        // IsBuildIndex()
         if (!indexName.empty()) {
             TPath index = table.Child(indexName);
             index.Base()->PathId.ToProto(op->MutableOutcome()->MutableCancel()->MutableIndexPathId());
@@ -147,6 +207,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
     }
 
+    // IsBuildIndex()
     if (!indexName.empty()) {
         TPath index = table.Child(indexName);
         auto tableIndexDropping = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
@@ -174,14 +235,31 @@ ISubOperation::TPtr DropBuildColumn(TOperationId id, const TTxTransaction& tx, T
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild);
 
     auto config = tx.GetDropColumnBuild();
-    TString tablePath = config.GetSettings().GetTable();
 
-    TPath table = TPath::Resolve(tablePath, context.SS);
+    const TPath tablePath = TPath::Resolve(config.GetSettings().GetTable(), context.SS);
+    {
+        // To safely fill the TransactionTemplate below, we need to check if the table is valid.
+        const auto checks = tablePath.Check();
+        checks
+            .IsAtLocalSchemeShard()
+            .NotEmpty()
+            .IsResolved()
+            .NotDeleted()
+            .IsTable()
+            .NotUnderDeleting()
+            .NotUnderOperation()
+            .IsCommonSensePath();
 
-    auto mainTableAlter = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        if (!checks) {
+            return CreateReject(id, checks.GetStatus(), checks.GetError());
+        }
+    }
+
+    auto mainTableAlter = TransactionTemplate(tablePath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
     *mainTableAlter.MutableLockGuard() = tx.GetLockGuard();
+
     auto op = mainTableAlter.MutableAlterTable();
-    op->SetName(table.LeafName());
+    op->SetName(tablePath.LeafName());
 
     for (const auto& col : config.GetSettings().Getcolumn()) {
         auto colInfo = op->AddDropColumns();

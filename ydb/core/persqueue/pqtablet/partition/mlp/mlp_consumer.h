@@ -81,6 +81,8 @@ private:
     size_t RequiredToFetchMessageCount() const;
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 
+    void UpdateMetrics();
+
 private:
     const TString Database;
     const ui32 PartitionId;
@@ -111,6 +113,8 @@ private:
     bool HasSnapshot = false;
 
     bool FirstPipeCacheRequest = true;
+
+    ui64 CPUUsageMetric = 0;
 };
 
 }

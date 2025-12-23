@@ -40,8 +40,7 @@ static constexpr const char *kEnduserPseudoId = "enduser.pseudo.id";
   Deprecated, use @code user.roles @endcode instead.
 
   @deprecated
-  {"note": "Replaced by @code user.roles @endcode.", "reason": "renamed", "renamed_to":
-  "user.roles"}
+  {"note": "Use @code user.roles @endcode instead.", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kEnduserRole = "enduser.role";
 

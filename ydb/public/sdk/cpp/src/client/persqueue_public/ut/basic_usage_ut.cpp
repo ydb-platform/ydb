@@ -562,5 +562,32 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_VALUES_EQUAL(descr.TopicSettings().ReadRules().at(0).ConsumerName(), setup->GetTestConsumer());
         }
     }
+    Y_UNIT_TEST(CreateTopicWithCustomMetricsLevel) {
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto& client = setup->GetPersQueueClient();
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        const TString path = setup->GetServer().ServerSettings.PQConfig.GetRoot() + "/" +  ::NPersQueue::BuildFullTopicName(name, setup->GetLocalCluster());
+        {
+            NPersQueue::TCreateTopicSettings settings{};
+            const auto creat = client.CreateTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(creat.IsSuccess(), creat.GetIssues().ToOneLineString());
+        }
+        {
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_C(!descr.TopicSettings().MetricsLevel().has_value(), descr.GetIssues().ToOneLineString());
+        }
+        for (const ui32 metricsLevel : {3, 4}) {
+            NPersQueue::TAlterTopicSettings settings{};
+            settings.MetricsLevel(metricsLevel);
+            const auto alter = client.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(alter.IsSuccess(), alter.GetIssues().ToOneLineString());
+
+            const auto descr = client.DescribeTopic(path).GetValueSync();
+            UNIT_ASSERT_C(descr.IsSuccess(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_C(descr.TopicSettings().MetricsLevel().has_value(), descr.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL_C(descr.TopicSettings().MetricsLevel().value(), metricsLevel, descr.GetIssues().ToOneLineString());
+        }
+    }
 }
 } // namespace NYdb::NPersQueue::NTests

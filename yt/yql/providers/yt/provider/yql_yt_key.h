@@ -21,6 +21,7 @@ public:
         Folder,
         WalkFolders,
         WalkFoldersImpl,
+        View
     };
 
     struct TRange {

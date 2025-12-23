@@ -87,12 +87,12 @@ TEST(TArrowSchemaConverterTest, ConvertComplexTypes)
     const auto expected = TTableSchema({
         TColumnSchema("f_array", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int32))),
         TColumnSchema("f_struct", StructLogicalType({
-            TStructField("nested_num", SimpleLogicalType(ESimpleLogicalValueType::Int32)),
-            TStructField("nested_struct", StructLogicalType({
-                TStructField("inner_list", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int32))),
-                TStructField("inner_num", SimpleLogicalType(ESimpleLogicalValueType::Int32))
-            })),
-        })),
+            TStructField("nested_num", "nested_num", SimpleLogicalType(ESimpleLogicalValueType::Int32)),
+            TStructField("nested_struct", "nested_struct", StructLogicalType({
+                TStructField("inner_list", "inner_list", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int32))),
+                TStructField("inner_num", "inner_num", SimpleLogicalType(ESimpleLogicalValueType::Int32))
+            }, /*removedFieldStableNames*/ {})),
+        }, /*removedFieldStableNames*/ {})),
         TColumnSchema("f_map", DictLogicalType(
             SimpleLogicalType(ESimpleLogicalValueType::String),
             OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Uint64))

@@ -1,0 +1,22 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: List<Struct<'promo_revenue':Double>>, but it is: List<Struct<'promo_revenue':Double?>> */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    100.00 * Sum(
+        CASE
+            WHEN p_type LIKE 'PROMO%' THEN l_extendedprice * (1 - l_discount)
+            ELSE 0
+        END
+    ) / (Sum(l_extendedprice * (1 - l_discount)) + 1e-12) AS promo_revenue
+FROM
+    `/Root/lineitem` as lineitem
+,
+    `/Root/part` as part
+WHERE
+    l_partkey == p_partkey
+    AND l_shipdate >= Date('1995-09-01')
+    AND l_shipdate < DateTime::MakeDate(DateTime::ShiftYears(Date('1995-09-01'), 1))
+;

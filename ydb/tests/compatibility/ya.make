@@ -58,4 +58,5 @@ RECURSE(
     s3_backups
     olap
     streaming
+    result_set_format
 )

@@ -134,7 +134,7 @@ TEST(TCompositeCompareTest, TruncateYsonValue)
     checkTruncatedYson("[please; [take; [me; ha;];];]", "[please; [take; [me; haha; too; late]]]", 34);
     // The actual size of the resulting yson is only 4 bytes, but during truncation it is too hard to account for the fact that longer strings
     // take up more bytes for their length, since it is represented as a varint.
-    checkTruncatedYson("aa", TString(1000, 'a'), 5);
+    checkTruncatedYson("aa", std::string(1000, 'a'), 5);
     checkTruncatedYson("\"\"", "erase-me", 2);
 
     checkTruncatedYson("[[5; 7]; [1; 5; 4; 3]; [];]", "[[5; 7]; [1; 5; 4; 3]; [{hello=darkness}; 0; 0; 7]]", 10000);

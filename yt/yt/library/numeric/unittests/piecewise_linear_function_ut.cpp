@@ -162,7 +162,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestInterpolationProperties)
 TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
 {
     struct TTestCase {
-        TString Name;
+        std::string Name;
         std::vector<double> Input;
         int ExpectedNumberOfPivots;
         std::vector<double> ExpectedOutput;
@@ -313,7 +313,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
 TEST_F(TPiecewiseLinearFunctionTest, TestSum)
 {
     struct TTestCase {
-        TString Name;
+        std::string Name;
         std::vector<TPiecewiseLinearFunction<double>> Functions;
         double ExpectedLeftBound;
         double ExpectedRightBound;
@@ -506,7 +506,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSum)
 TEST_F(TPiecewiseLinearFunctionTest, TestPointwiseMin)
 {
     struct TTestCase {
-        TString Name;
+        std::string Name;
         std::vector<TPiecewiseLinearFunction<double>> Functions;
         double ExpectedLeftBound;
         double ExpectedRightBound;
@@ -755,7 +755,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPointwiseMin)
 TEST_F(TPiecewiseLinearFunctionTest, TestCompose)
 {
     struct TTestCase {
-        TString Name;
+        std::string Name;
         TPiecewiseLinearFunction<double> Lhs;
         TPiecewiseLinearFunction<double> Rhs;
         std::vector<TSample> Samples;
@@ -1015,7 +1015,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestCompose)
 TEST_F(TPiecewiseLinearFunctionTest, TestTransformations)
 {
     struct TTestCase {
-        TString Name;
+        std::string Name;
         TPiecewiseLinearFunction<double> Function;
         TPiecewiseLinearFunction<double> ExpectedTransposedFunction;
     };
@@ -1062,7 +1062,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
     };
 
     struct TTestCase {
-        TString Name;
+        std::string Name;
         TPiecewiseSegment<double> Segment;
         std::pair<double, double> ExpectedBounds;
         std::pair<double, double> ExpectedValues;
@@ -1241,7 +1241,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentTransformationsScalar)
     };
 
     struct TTestCase {
-        TString Name;
+        std::string Name;
         TPiecewiseSegment<double> Segment;
         TPiecewiseSegment<double> ExpectedTransposedSegment;
         std::vector<TScaledSegment> ExpectedScaledSegments;

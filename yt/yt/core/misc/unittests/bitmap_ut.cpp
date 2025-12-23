@@ -7,37 +7,55 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const auto BitmapTestValues = ::testing::Values(
+    std::tuple(3, std::set{1}),
+    std::tuple(10, std::set{0, 1, 2, 5, 7}),
+    std::tuple(62, std::set{0, 1, 2, 59, 60, 61}),
+    std::tuple(63, std::set{0, 1, 2, 60, 61, 62}),
+    std::tuple(64, std::set{0, 1, 2, 60, 61, 62, 63}),
+    std::tuple(5000, std::set{0, 1, 15, 62, 63, 64, 65, 180, 4999}));
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillBitmap(auto& bitmap, std::set<int> values)
+{
+    for (int key : values) {
+        bitmap.Set(key);
+    }
+}
+
+void ExpectBitmapEqualsSet(auto& bitmap, int size, std::set<int> data)
+{
+    for (int i = 0; i < size; ++i) {
+        EXPECT_EQ(data.contains(i), bitmap[i]);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TCompactBitmapTest
     : public ::testing::Test
     , public ::testing::WithParamInterface<std::tuple<
         int,
         std::set<int>
     >>
-{ };
-
-auto MakeBitmap(int bitSize, const std::set<int>& values)
 {
-    TCompactBitmap bitmap;
-    bitmap.Initialize(bitSize);
-    for (int key : values) {
-        bitmap.Set(key);
+public:
+    auto MakeBitmap(int bitSize, const std::set<int>& values)
+    {
+        TCompactBitmap bitmap;
+        bitmap.Initialize(bitSize);
+        FillBitmap(bitmap, values);
+        return bitmap;
     }
-    return bitmap;
-}
+};
 
 TEST_P(TCompactBitmapTest, TestBase)
 {
     auto [size, data] = GetParam();
 
     auto bitmap = MakeBitmap(size, data);
-
-    for (int i = 0; i < size; ++i) {
-        if (data.contains(i)) {
-            EXPECT_TRUE(bitmap[i]);
-        } else {
-            EXPECT_FALSE(bitmap[i]);
-        }
-    }
+    ExpectBitmapEqualsSet(bitmap, size, data);
 }
 
 TEST_P(TCompactBitmapTest, TestCopy)
@@ -135,16 +153,50 @@ TEST(TCompactBitmapTest, CopyUninitialized)
     b.CopyFrom(a, 13123);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    TCompactBitmapTest,
-    TCompactBitmapTest,
-    ::testing::Values(
-        std::tuple(10, std::set{0, 1, 2, 5, 7}),
-        std::tuple(62, std::set{0, 1, 2, 59, 60, 61}),
-        std::tuple(63, std::set{0, 1, 2, 60, 61, 62}),
-        std::tuple(64, std::set{0, 1, 2, 60, 61, 62, 63}),
-        std::tuple(5000, std::set{0, 1, 15, 62, 63, 64, 65, 180, 4999})
-));
+INSTANTIATE_TEST_SUITE_P(TCompactBitmapTest, TCompactBitmapTest, BitmapTestValues);
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TBitmapOutputTest
+    : public ::testing::Test
+    , public ::testing::WithParamInterface<std::tuple<
+        int,
+        std::set<int>
+    >>
+{
+public:
+    auto MakeBitmap(int bitSize, const std::set<int>& values)
+    {
+        TBitmapOutput bitmap(bitSize);
+        FillBitmap(bitmap, values);
+        return bitmap;
+    }
+};
+
+TEST_P(TBitmapOutputTest, TestBase)
+{
+    auto [capacity, data] = GetParam();
+
+    auto bitmap = MakeBitmap(capacity, data);
+    ExpectBitmapEqualsSet(bitmap, bitmap.GetBitSize(), data);
+}
+
+TEST_P(TBitmapOutputTest, TestAppend)
+{
+    auto [capacity, data] = GetParam();
+
+    TBitmapOutput bitmap(capacity);
+
+    int expectedSize = data.empty() ? 0 : *data.rbegin() + 1;
+    for (int i = 0; i < expectedSize; ++i) {
+        bitmap.Append(data.contains(i));
+    }
+
+    ASSERT_EQ(static_cast<int>(bitmap.GetBitSize()), expectedSize);
+    ExpectBitmapEqualsSet(bitmap, bitmap.GetBitSize(), data);
+}
+
+INSTANTIATE_TEST_SUITE_P(TBitmapOutputTest, TBitmapOutputTest, BitmapTestValues);
 
 ////////////////////////////////////////////////////////////////////////////////
 

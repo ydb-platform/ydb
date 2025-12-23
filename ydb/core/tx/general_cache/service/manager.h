@@ -189,7 +189,9 @@ public:
     void FailObjects(THashMap<TAddress, TString>&& failed, const TMonotonic now) {
         for (auto&& i : failed) {
             auto it = RequestedObjects.find(i.first);
-            AFL_VERIFY(it != RequestedObjects.end());
+            if (it == RequestedObjects.end()) {
+                continue;
+            }
             for (auto&& r : it->second) {
                 Counters->FailedObject->Inc();
                 if (r->AddError(i.first, i.second)) {

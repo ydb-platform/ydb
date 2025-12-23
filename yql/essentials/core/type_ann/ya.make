@@ -23,6 +23,7 @@ SRCS(
     type_ann_types.h
     type_ann_wide.cpp
     type_ann_wide.h
+    type_ann_yql.cpp
     type_ann_match_recognize.cpp
 )
 

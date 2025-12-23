@@ -25,8 +25,19 @@ namespace NYdb::NTPCC {
 //-----------------------------------------------------------------------------
 
 class TTerminalStats {
+    static constexpr uint64_t DefaultResolution = 4096;
+    static constexpr uint64_t HighResolution = 16384;
+    static constexpr uint64_t MaxResolution = 32768;
+
 public:
     struct TTransactionStats {
+        explicit TTransactionStats(uint64_t histogramResolution = DefaultResolution)
+            : LatencyHistogramMs(histogramResolution, MaxResolution)
+            , LatencyHistogramFullMs(histogramResolution, MaxResolution)
+            , LatencyHistogramPure(histogramResolution, MaxResolution)
+        {
+        }
+
         // assumes that dst doesn't requre lock
         void Collect(TTransactionStats& dst) const {
             dst.OK.fetch_add(OK.load(std::memory_order_relaxed), std::memory_order_relaxed);
@@ -60,18 +71,27 @@ public:
 
         // Transaction latency observed by the terminal, i.e., includes both session acquisition,
         // inflight waiting and retries performed by the SDK
-        THistogram LatencyHistogramMs{4096, 32768};
+        THistogram LatencyHistogramMs;
 
         // As LatencyHistogramMs plus inflight wait time in the terminal
-        THistogram LatencyHistogramFullMs{4096, 32768};
+        THistogram LatencyHistogramFullMs;
 
         // Latency of a successful transaction measured directly in the transaction code,
         // when there is nothing to wait for except the queries
-        THistogram LatencyHistogramPure{4096, 32768};
+        THistogram LatencyHistogramPure;
     };
 
 public:
-    TTerminalStats() = default;
+    TTerminalStats(bool highResHistogram = false) {
+        if (highResHistogram) {
+            uint64_t histogramResolution = HighResolution;
+            for (auto& stats : PerTransactionTypeStats) {
+                stats.LatencyHistogramMs = THistogram(histogramResolution, MaxResolution);
+                stats.LatencyHistogramFullMs = THistogram(histogramResolution, MaxResolution);
+                stats.LatencyHistogramPure = THistogram(histogramResolution, MaxResolution);
+            }
+        }
+    }
 
     const TTransactionStats& GetStats(ETransactionType type) const {
         return PerTransactionTypeStats[static_cast<size_t>(type)];

@@ -61,6 +61,19 @@ namespace TEvKeyValue {
     struct TEvReadResponse : public TEventPB<TEvReadResponse,
             NKikimrKeyValue::ReadResult, EvReadResponse> {
         TEvReadResponse() { }
+
+        void SetBuffer(TRope&& buffer) {
+            ui32 id = AddPayload(std::move(buffer));
+            Record.set_payload_id(id);
+        }
+
+        bool IsPayload() const {
+            return Record.has_payload_id();
+        }
+
+        TRope GetBuffer() const {
+            return GetPayload(Record.payload_id());
+        }
     };
 
     struct TEvReadRangeResponse;
@@ -75,6 +88,19 @@ namespace TEvKeyValue {
     struct TEvReadRangeResponse : public TEventPB<TEvReadRangeResponse,
             NKikimrKeyValue::ReadRangeResult, EvReadRangeResponse> {
         TEvReadRangeResponse() { }
+
+        void SetBuffer(TRope&& buffer, ui32 itemIdx) {
+            ui32 id = AddPayload(std::move(buffer));
+            Record.mutable_pair(itemIdx)->set_payload_id(id);
+        }
+
+        bool IsPayload(ui32 itemIdx) const {
+            return Record.pair(itemIdx).has_payload_id();
+        }
+
+        TRope GetBuffer(ui32 itemIdx) const {
+            return GetPayload(Record.pair(itemIdx).payload_id());
+        }
     };
 
     struct TEvExecuteTransactionResponse;

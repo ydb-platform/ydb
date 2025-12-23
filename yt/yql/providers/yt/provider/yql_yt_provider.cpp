@@ -548,6 +548,8 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtTouch::CallableName());
         Names.insert(TYtCreateTable::CallableName());
         Names.insert(TYtDropTable::CallableName());
+        Names.insert(TYtCreateView::CallableName());
+        Names.insert(TYtDropView::CallableName());
         Names.insert(TCoCommit::CallableName());
         Names.insert(TYtPublish::CallableName());
         Names.insert(TYtEquiJoin::CallableName());

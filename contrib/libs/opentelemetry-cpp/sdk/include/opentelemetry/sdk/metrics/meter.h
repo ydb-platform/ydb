@@ -131,6 +131,14 @@ public:
   std::vector<MetricData> Collect(CollectorHandle *collector,
                                   opentelemetry::common::SystemTimestamp collect_ts) noexcept;
 
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+  uintptr_t RegisterCallback(
+      opentelemetry::metrics::MultiObservableCallbackPtr callback,
+      void *state,
+      nostd::span<opentelemetry::metrics::ObservableInstrument *> instruments) noexcept override;
+
+  void DeregisterCallback(uintptr_t callback_id) noexcept override;
+#endif
 private:
   // order of declaration is important here - instrumentation scope should destroy after
   // meter-context.

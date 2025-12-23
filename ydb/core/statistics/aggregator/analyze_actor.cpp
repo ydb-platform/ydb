@@ -1,132 +1,90 @@
-#include <ydb/core/statistics/aggregator/analyze_actor.h>
+#include "analyze_actor.h"
+#include "select_builder.h"
 
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
+#include <util/generic/size_literals.h>
 #include <util/string/vector.h>
 
-#include <format>
+#include <numbers>
 
 namespace NKikimr::NStat {
 
-class TSelectBuilder {
+class TCMSEval : public IColumnStatisticEval {
+    ui64 Width;
+    ui64 Depth = DEFAULT_DEPTH;
+    std::optional<ui32> Seq;
+
+    static constexpr ui64 MIN_WIDTH = 256;
+    static constexpr ui64 DEFAULT_DEPTH = 8;
+
+    TCMSEval(ui64 width) : Width(width) {}
 public:
-    ui32 AddBuiltinAggregation(std::optional<TString> columnName, TString aggName) {
-        auto column = TAggColumn{
-            .Seq = static_cast<ui32>(Columns.size()),
-            .ColumnName = std::move(columnName),
-            .AggName = std::move(aggName),
-        };
-        Columns.push_back(std::move(column));
-        return Columns.back().Seq;
-    }
-
-    template<typename... TArgs>
-    ui32 AddUDAFAggregation(TString columnName, const TStringBuf& udafName, TArgs&&... params) {
-        auto factory = AddFactory(udafName);
-
-        // TODO: parameters escaping/binding
-        TString paramsStr = Join(',', params...);
-
-        auto column = TAggColumn{
-            .Seq = static_cast<ui32>(Columns.size()),
-            .ColumnName = std::move(columnName),
-            .UdafFactory = factory,
-            .Params = std::move(paramsStr),
-        };
-        Columns.push_back(std::move(column));
-        return Columns.back().Seq;
-    }
-
-    TString Build(const TStringBuf& table) const {
-        TStringBuilder res;
-        for (const auto& [udaf, factory] : Udaf2Factory) {
-            TStringBuilder paramsStr;
-            for (size_t i = 0; i < factory.ParamCount; ++i) {
-                if (i > 0) {
-                    paramsStr << ",";
-                }
-                paramsStr << "$p" << i;
-            }
-
-            res << std::format(R"($f{0} = ({2}) -> {{ return AggregationFactory(
-        "UDAF",
-        ($item,$parent) -> {{ return Udf(StatisticsInternal::{1}Create, $parent as Depends)($item,{2}) }},
-        ($state,$item,$parent) -> {{ return Udf(StatisticsInternal::{1}AddValue, $parent as Depends)($state, $item) }},
-        StatisticsInternal::{1}Merge,
-        StatisticsInternal::{1}Finalize,
-        StatisticsInternal::{1}Serialize,
-        StatisticsInternal::{1}Deserialize,
-    )
-}};
-)",
-                factory.Id, std::string_view(factory.Udaf), std::string_view(paramsStr));
+    static std::optional<TCMSEval> MaybeCreate(
+            const NKikimrStat::TSimpleColumnStatistics& simpleStats,
+            const NScheme::TTypeInfo&) {
+        if (simpleStats.GetCount() == 0 || simpleStats.GetCountDistinct() == 0) {
+            // Empty table
+            return std::nullopt;
         }
 
-        res << "SELECT ";
-        bool first = true;
-        for (const auto& agg : Columns ) {
-            if (first) {
-                first = false;
-            } else {
-                res << ",";
-            }
-            if (agg.UdafFactory) {
-                Y_ABORT_UNLESS(agg.ColumnName);
-                res << "AGGREGATE_BY(" << agg.ColumnName
-                    << "," << "$f" << *agg.UdafFactory << "(" << agg.Params << "))";
-            } else {
-                Y_ABORT_UNLESS(agg.AggName);
-                res << *agg.AggName;
-                if (agg.ColumnName) {
-                    res << "(" << *agg.ColumnName << ")";
-                } else {
-                    res << "(*)";
-                }
-            }
+        const double n = simpleStats.GetCount();
+        const double ndv = simpleStats.GetCountDistinct();
+
+        if (ndv >= 0.8 * n) {
+            return std::nullopt;
         }
 
-        res << " FROM `" << table << "`";
-        return res;
+        const double c = 10;
+        const double eps = (c - 1) * (1 + std::log10(n / ndv)) / ndv;
+        const ui64 cmsWidth = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
+        return TCMSEval(cmsWidth);
     }
 
-    size_t ColumnCount() const {
-        return Columns.size();
+    EStatType GetType() const final { return EStatType::COUNT_MIN_SKETCH; }
+
+    size_t EstimateSize() const final { return Width * Depth * sizeof(ui32); }
+
+    void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
+        Seq = builder.AddUDAFAggregation(columnName, "CountMinSketch", Width, Depth);
     }
 
-private:
-    ui32 AddFactory(const TStringBuf& udafName) {
-        // TODO: check UDAF existence, determine paramcount
-        ui32 curId = Udaf2Factory.size();
-        size_t paramCount = 2;
-        auto [it, emplaced] = Udaf2Factory.try_emplace(udafName, curId, udafName, paramCount);
-        return it->second.Id;
+    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const final {
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        if (!val.IsNull()) {
+            const auto& bytes = val.GetBytes();
+            return TString(bytes.data(), bytes.size());
+        } else {
+            auto defaultVal = std::unique_ptr<TCountMinSketch>(
+                TCountMinSketch::Create(Width, Depth));
+            auto bytes = defaultVal->AsStringBuf();
+            return TString(bytes.data(), bytes.size());
+        }
     }
-
-private:
-    struct TFactory {
-        TFactory(ui32 id, const TStringBuf& udaf, size_t paramCount)
-        : Id(id), Udaf(udaf), ParamCount(paramCount)
-        {}
-
-        ui32 Id = 0;
-        TString Udaf;
-        size_t ParamCount = 0;
-    };
-
-    THashMap<TString, TFactory> Udaf2Factory;
-
-    struct TAggColumn {
-        ui32 Seq = 0;
-        std::optional<TString> ColumnName;
-        std::optional<TString> AggName;
-        std::optional<ui32> UdafFactory;
-        TString Params;
-    };
-
-    TVector<TAggColumn> Columns;
 };
 
+TVector<EStatType> IColumnStatisticEval::SupportedTypes() {
+    return { EStatType::COUNT_MIN_SKETCH };
+}
+
+IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
+        EStatType statType,
+        const NKikimrStat::TSimpleColumnStatistics& simpleStats,
+        const NScheme::TTypeInfo& columnType) {
+    switch (statType) {
+    case EStatType::COUNT_MIN_SKETCH: {
+        auto maybeEval = TCMSEval::MaybeCreate(simpleStats, columnType);
+        if (!maybeEval) {
+            return TPtr{};
+        }
+        return std::make_unique<TCMSEval>(std::move(*maybeEval));
+    }
+    default:
+        return TPtr{};
+    }
+}
 
 class TAnalyzeActor::TScanActor : public TQueryBase {
 public:
@@ -190,9 +148,6 @@ private:
     bool ResponseSent = false;
 };
 
-static constexpr ui64 CMS_WIDTH = 256;
-static constexpr ui64 CMS_DEPTH = 8;
-
 void TAnalyzeActor::Bootstrap() {
     Become(&TThis::StateNavigate);
 
@@ -215,7 +170,6 @@ void TAnalyzeActor::FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus
     PassAway();
 }
 
-
 void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     const auto& request = *ev->Get()->Request;
     Y_ABORT_UNLESS(request.ResultSet.size() == 1);
@@ -235,72 +189,128 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     }
 
     // TODO: escape table path
-    auto table = "/" + JoinVectorIntoString(entry.Path, "/");
+    TableName = "/" + JoinVectorIntoString(entry.Path, "/");
 
-    THashMap<ui32, TString> columnNames;
+    THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
     for (const auto& col : entry.Columns) {
-        columnNames[col.second.Id] = col.second.Name;
+        tag2Column[col.second.Id] = col.second;
     }
 
-    TSelectBuilder builder;
+    TSelectBuilder stage1Builder;
 
-    // TODO: many statistics types
-    builder.AddBuiltinAggregation({}, "count");
-    if (!ColumnTags.empty()) {
-        for (const auto& colTag : ColumnTags) {
-            auto colIt = columnNames.find(colTag);
-            if (colIt == columnNames.end()) {
-                // Column probably already deleted, skip it.
+    CountSeq = stage1Builder.AddBuiltinAggregation({}, "count");
+
+    auto addColumn = [&](const TSysTables::TTableColumnInfo& colInfo) {
+        Columns.emplace_back(colInfo.Id, colInfo.PType, colInfo.Name);
+        // TODO: escape column names
+        Columns.back().CountDistinctSeq = stage1Builder.AddBuiltinAggregation(
+            colInfo.Name, "HLL");
+    };
+    if (!RequestedColumnTags.empty()) {
+        for (const auto& colTag : RequestedColumnTags) {
+            auto colIt = tag2Column.find(colTag);
+            if (colIt == tag2Column.end()) {
+                // Column probably already dropped, skip it.
                 continue;
             }
-
-            // TODO: escape column names
-            Columns.emplace_back(
-                colTag,
-                builder.AddUDAFAggregation(colIt->second, "CountMinSketch", CMS_WIDTH, CMS_DEPTH));
+            addColumn(colIt->second);
         }
     } else {
-        for (const auto& [tag, name] : columnNames) {
-            Columns.emplace_back(
-                tag,
-                builder.AddUDAFAggregation(name, "CountMinSketch", CMS_WIDTH, CMS_DEPTH));
+        for (const auto& [tag, info] : tag2Column) {
+            addColumn(info);
         }
     }
 
-    Become(&TThis::StateQuery);
+    if (Columns.empty()) {
+        // All requested columns were already dropped. Send empty response right away.
+        auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(Results));
+        Send(Parent, response.release());
+        PassAway();
+        return;
+    }
+
+    Become(&TThis::StateQueryStage1);
     auto actor = std::make_unique<TScanActor>(
-        SelfId(), DatabaseName, builder.Build(table), builder.ColumnCount());
+        SelfId(), DatabaseName, stage1Builder.Build(TableName), stage1Builder.ColumnCount());
     Register(actor.release());
 }
 
-void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
+NKikimrStat::TSimpleColumnStatistics TAnalyzeActor::TColumnDesc::ExtractSimpleStats(
+        ui64 count, const TVector<NYdb::TValue>& aggColumns) const {
+    NKikimrStat::TSimpleColumnStatistics result;
+    result.SetCount(count);
+
+    NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
+    ui64 countDistinct = hllVal.GetOptionalUint64().value_or(0);
+    result.SetCountDistinct(countDistinct);
+
+    return result;
+}
+
+void TAnalyzeActor::HandleStage1(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     const auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
         FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus::InternalError);
         return;
     }
 
-    auto response = std::make_unique<TEvStatistics::TEvAggregateStatisticsResponse>();
-    auto& record = response->Record;
-    for (const auto& col : Columns) {
-        auto* column = record.AddColumns();
-        column->SetTag(col.Tag);
+    NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
+    ui64 rowCount = val.GetUint64();
 
-        auto* stat = column->AddStatistics();
-        stat->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
-        NYdb::TValueParser val(result.AggColumns.at(col.Seq));
-        val.OpenOptional();
-        if (!val.IsNull()) {
-            const auto& bytes = val.GetBytes();
-            stat->SetData(bytes.data(), bytes.size());
-        } else {
-            auto defaultVal = std::unique_ptr<TCountMinSketch>(
-                TCountMinSketch::Create(CMS_WIDTH, CMS_DEPTH));
-            auto bytes = defaultVal->AsStringBuf();
-            stat->SetData(bytes.data(), bytes.size());
+    auto supportedStatTypes = IColumnStatisticEval::SupportedTypes();
+
+    TSelectBuilder stage2Builder;
+    for (auto& col : Columns) {
+        auto simpleStats = col.ExtractSimpleStats(rowCount, result.AggColumns);
+        Results.emplace_back(
+            col.Tag,
+            NKikimr::NStat::SIMPLE_COLUMN,
+            simpleStats.SerializeAsString());
+
+        for (auto type : supportedStatTypes) {
+            auto statEval = IColumnStatisticEval::MaybeCreate(type, simpleStats, col.Type);
+            if (!statEval) {
+                continue;
+            }
+            if (statEval->EstimateSize() >= 4_MB) {
+                continue;
+            }
+            statEval->AddAggregations(col.Name, stage2Builder);
+            col.Statistics.push_back(std::move(statEval));
         }
     }
 
+    if (stage2Builder.ColumnCount() == 0) {
+        // Second stage is not needed, return results right away.
+        auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(Results));
+        Send(Parent, response.release());
+        PassAway();
+        return;
+    }
+
+    Become(&TThis::StateQueryStage2);
+    auto actor = std::make_unique<TScanActor>(
+        SelfId(), DatabaseName, stage2Builder.Build(TableName), stage2Builder.ColumnCount());
+    Register(actor.release());
+}
+
+void TAnalyzeActor::HandleStage2(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
+    const auto& result = *ev->Get();
+    if (result.Status != Ydb::StatusIds::SUCCESS) {
+        FinishWithFailure(TEvStatistics::TEvFinishTraversal::EStatus::InternalError);
+        return;
+    }
+
+    for (const auto& col : Columns) {
+        for (const auto& statEval : col.Statistics) {
+            Results.emplace_back(
+                col.Tag,
+                statEval->GetType(),
+                statEval->ExtractData(result.AggColumns));
+        }
+    }
+
+    auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(Results));
     Send(Parent, response.release());
     PassAway();
 }

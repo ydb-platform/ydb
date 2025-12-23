@@ -39,6 +39,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize,
-    const IPqGateway::TPtr& pqGateway);
+    const IPqGateway::TPtr& pqGateway,
+    bool enableStreamingQueriesCounters);
 
 } // namespace NYql::NDq

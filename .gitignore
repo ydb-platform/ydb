@@ -9,6 +9,7 @@
 !**/canondata/**
 # Allow docker files
 !Dockerfile
+!.github/docker/files/**
 
 /canonization_show_res.log
 
@@ -99,3 +100,9 @@ path.bash.inc
 
 # Editor config
 /.editorconfig
+
+# Cursor ignore
+.cursorignore
+
+# Harness local cluster working directory
+.ydbd_working_dir/

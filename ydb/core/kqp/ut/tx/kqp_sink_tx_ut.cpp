@@ -4,6 +4,7 @@
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -385,6 +386,128 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         TSnapshotROInteractive2 tester;
         tester.SetIsOlap(true);
         tester.Execute();
+    }
+
+    class TIsolationSetting : public TTableDataModificationTester {
+    public:
+        TIsolationSetting(std::string isolation, bool usePragma)
+            : Isolation(isolation)
+            , UsePragma(usePragma) {}
+
+    private:
+        std::string Isolation;
+        bool UsePragma;
+
+    protected:
+        void Setup(TKikimrSettings& settings) override {   
+            if (!UsePragma) {
+                settings.AppConfig.MutableTableServiceConfig()->SetDefaultTxMode([&]() {
+                    if (Isolation == "SerializableRW") {
+                        return NKikimrConfig::TTableServiceConfig::SerializableRW;
+                    } else if (Isolation == "SnapshotRW") {
+                        return NKikimrConfig::TTableServiceConfig::SnapshotRW;
+                    } else if (Isolation == "SnapshotRO") {
+                        return NKikimrConfig::TTableServiceConfig::SnapshotRO;
+                    } else if (Isolation == "StaleRO") {
+                        return NKikimrConfig::TTableServiceConfig::StaleRO;
+                    } else {
+                        ythrow yexception() << "unknonw isolation: " << Isolation;
+                    }
+                }());     
+            }
+        }
+
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session1 = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+
+            {
+                std::vector<std::unique_ptr<IEventHandle>> writes;
+                size_t evWriteCounter = 0;
+
+                auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                    if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                        auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                        UNIT_ASSERT(evWrite->Record.OperationsSize() <= 1);
+                        if (evWrite->Record.OperationsSize() == 1 ) {
+                            ++evWriteCounter;
+                            if (Isolation == "SnapshotRW" || GetIsOlap()) {
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() != 0);
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() != 0);
+                            } else {
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetStep() == 0);
+                                UNIT_ASSERT(evWrite->Record.GetMvccSnapshot().GetTxId() == 0);
+                            }
+                        }
+                    }
+
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                };
+
+                auto saveObserver = runtime.SetObserverFunc(grab);
+                Y_DEFER {
+                    runtime.SetObserverFunc(saveObserver);
+                };
+
+                auto future = Kikimr->RunInThreadPool([&]{
+                    return session1.ExecuteQuery(std::format(R"(
+                        {}
+
+                        SELECT * FROM `/Root/KV` WHERE Key = 1;
+
+                        UPSERT INTO `/Root/KV2` (Key, Value)
+                        VALUES (1, "1");
+                    )", UsePragma
+                        ? std::format(R"(PRAGMA ydb.DefaultTxMode="{}";)", Isolation)
+                        : std::string{}),
+                    TTxControl::NoTx()).ExtractValueSync();
+                });
+
+                auto result = runtime.WaitFuture(future);
+                if (Isolation == "SerializableRW" || Isolation == "SnapshotRW") {
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        result.GetStatus(),
+                        EStatus::SUCCESS,
+                        result.GetIssues().ToString());
+
+                    UNIT_ASSERT(evWriteCounter == 1);
+                } else if (Isolation == "SnapshotRO" || (!GetIsOlap() && Isolation == "StaleRO")) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        result.GetStatus(),
+                        EStatus::GENERIC_ERROR,
+                        result.GetIssues().ToString());
+                    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "can't be performed in read only transaction");
+                } else if (GetIsOlap() && Isolation == "StaleRO") {
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        result.GetStatus(),
+                        EStatus::PRECONDITION_FAILED,
+                        result.GetIssues().ToString());
+                    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes");
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        result.GetStatus(),
+                        EStatus::GENERIC_ERROR,
+                        result.GetIssues().ToString());
+                    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown DefaultTxMode");
+                }
+            }
+        }
+    };
+
+    Y_UNIT_TEST_QUAD(TIsolationSettingTest, IsOlap, UsePragma) {
+        for (const std::string isolation : {"SerializableRW", "SnapshotRW", "SnapshotRO", "StaleRO", "OnlineRO"}) {
+            if (isolation == "OnlineRO" && !UsePragma) {
+                continue;
+            }
+
+            TIsolationSetting tester(isolation, UsePragma);
+            tester.SetIsOlap(IsOlap);
+            tester.SetFillTables(false);
+            tester.SetUseRealThreads(false);
+            tester.Execute();
+        }
     }
 }
 

@@ -350,13 +350,13 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     }
 
     void VGet(TTestActorRuntime &runtime, TActorId &sender, ui32 groupId, ui32 nodeId, TLogoBlobID logoBlobId,
-            TString data, EExpected expected) {
+            TString data, EExpected expected, ui32 generation = 1) {
         VERBOSE_COUT(" Sending TEvVGet");
         ui64 cookie = 6543210;
         ui32 pDiskId = 1000;
         ui32 vDiskSlotId = 1000;
         TActorId vDiskActor = MakeBlobStorageVDiskID(nodeId, pDiskId, vDiskSlotId);
-        TVDiskID vDiskId(groupId, 1, 0, 0 , 0); // GroupID: 1040187392 GroupGeneration: 1 Ring: 0 Domain: 1 VDisk: 0 }}
+        TVDiskID vDiskId(groupId, generation, 0, 0 , 0);
         TLogoBlobID id(logoBlobId, 1);
         auto x = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vDiskId,
                 TInstant::Max(),
@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         Put(runtime, sender0, groupId, TLogoBlobID(100, 0, 0, 0, 3, 0), "xxx");
         Get(runtime, sender0, groupId, TLogoBlobID(100, 0, 0, 0, 3, 0), "xxx");
         VGet(runtime, sender0, groupId, runtime.GetNodeId(0), TLogoBlobID(100, 0, 0, 0, 3, 0), "xxx",
-                EExpectedDifferentData);
+                EExpectedDifferentData, 2);
 
         // TODO: the proxy just should not be there, check that instead!
         TActorId proxy = MakeBlobStorageProxyID(groupId);

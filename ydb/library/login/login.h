@@ -7,7 +7,6 @@
 #include <util/generic/string.h>
 #include <ydb/library/login/protos/login.pb.h>
 #include <ydb/library/login/password_checker/password_checker.h>
-#include <ydb/library/login/password_checker/hash_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
 #include <ydb/library/login/cache/lru.h>
 
@@ -21,9 +20,6 @@ public:
     static constexpr size_t MAX_CLIENT_KEYS = 100000;
     static constexpr auto KEYS_ROTATION_PERIOD = std::chrono::hours(6);
     static constexpr auto KEY_EXPIRE_TIME = std::chrono::hours(24);
-
-    static constexpr size_t SALT_SIZE = THashChecker::SALT_SIZE;
-    static constexpr size_t HASH_SIZE = THashChecker::HASH_SIZE;
 
     static constexpr const char* GROUPS_CLAIM_NAME = "https://ydb.tech/groups";
     static constexpr const char* EXTERNAL_AUTH_CLAIM_NAME = "external_authentication";
@@ -281,7 +277,6 @@ private:
     THolder<TImpl> Impl;
 
     TPasswordChecker PasswordChecker;
-    THashChecker HashChecker;
     TAccountLockout AccountLockout;
 };
 

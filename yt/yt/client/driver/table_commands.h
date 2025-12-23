@@ -126,6 +126,7 @@ private:
     NTableClient::EColumnarStatisticsFetcherMode FetcherMode;
     std::optional<int> MaxChunksPerNodeFetch;
     bool EnableEarlyFinish;
+    bool EnableReadSizeEstimation;
 
     void DoExecute(ICommandContextPtr context) override;
 };

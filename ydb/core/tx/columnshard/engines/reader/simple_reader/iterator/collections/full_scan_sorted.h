@@ -25,7 +25,7 @@ private:
     }
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
         return std::make_shared<TSimpleScanCursor>(
-            std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
+            std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetSourceIdx(), readyRecords);
     }
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override {
         return SourcesConstructor->TryExtractNext(Context, GetMaxInFlight());

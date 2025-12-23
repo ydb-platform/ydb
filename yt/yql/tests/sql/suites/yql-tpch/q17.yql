@@ -1,0 +1,26 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: List<Struct<'avg_yearly':Double>>, but it is: List<Struct<'avg_yearly':Double?>> */
+--ignore runonopt plan diff
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    Sum(l_extendedprice) / 7.0 AS avg_yearly
+FROM
+    plato.lineitem
+,
+    plato.part
+WHERE
+    p_partkey == l_partkey
+    AND p_brand == 'Brand#23'
+    AND p_container == 'MED BOX'
+    AND l_quantity < (
+        SELECT
+            0.2 * Avg(l_quantity)
+        FROM
+            plato.lineitem
+        WHERE
+            l_partkey == p_partkey
+    )
+;

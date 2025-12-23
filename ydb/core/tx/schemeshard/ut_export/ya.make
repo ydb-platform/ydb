@@ -28,6 +28,7 @@ IF (NOT OS_WINDOWS)
     )
     SRCS(
         ut_export.cpp
+        ut_export_fs.cpp
     )
 ENDIF()
 

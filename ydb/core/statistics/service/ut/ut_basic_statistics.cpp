@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         TTestEnv env(1, 1);
 
         CreateDatabase(env, "Database");
-        CreateUniformTable(env, "Database", "Table");
+        PrepareUniformTable(env, "Database", "Table");
 
         TestNotFullStatistics(env, /*shardCount=*/ 4, /*expectedRowCount=*/ 4);
     }

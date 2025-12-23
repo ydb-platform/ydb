@@ -766,6 +766,24 @@ public:
         }
     }
 
+    TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) override {
+        CHECK_PREPARED_DDL(TruncateTable);
+
+        Y_UNUSED(settings);
+        if (cluster != SessionCtx->GetCluster()) {
+            return InvalidCluster<TGenericResult>(cluster);
+        }
+
+        auto tablePromise = NewPromise<TGenericResult>();
+        auto code = Ydb::StatusIds::BAD_REQUEST;
+        auto error = TStringBuilder() << "Truncate table not supported yet";
+        IKqpGateway::TGenericResult errResult;
+        errResult.AddIssue(NYql::TIssue(error));
+        errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+        tablePromise.SetValue(errResult);
+        return tablePromise.GetFuture();
+    }
+
     TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
         Y_UNUSED(replaceIfExists);
         CHECK_PREPARED_DDL(CreateTable);
@@ -1489,7 +1507,7 @@ public:
 
             auto& op = *tx.MutableDrop();
             op.SetName(settings.Name);
-            
+
             auto& dropBackupOp = *tx.MutableDropBackupCollection();
             dropBackupOp.SetName(settings.Name);
 
@@ -1658,11 +1676,8 @@ public:
             auto& createUser = *schemeTx.MutableAlterLogin()->MutableCreateUser();
 
             createUser.SetUser(settings.UserName);
-            if (settings.Password) {
-                createUser.SetPassword(settings.Password);
-                createUser.SetIsHashedPassword(settings.IsHashedPassword);
-            }
-
+            createUser.SetPassword(settings.Password);
+            createUser.SetHashedPassword(settings.HashedPassword);
             createUser.SetCanLogin(settings.CanLogin);
 
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -1700,7 +1715,10 @@ public:
 
             if (settings.Password.has_value()) {
                 alterUser.SetPassword(settings.Password.value());
-                alterUser.SetIsHashedPassword(settings.IsHashedPassword);
+            }
+
+            if (settings.HashedPassword.has_value()) {
+                alterUser.SetHashedPassword(settings.HashedPassword.value());
             }
 
             if (settings.CanLogin.has_value()) {

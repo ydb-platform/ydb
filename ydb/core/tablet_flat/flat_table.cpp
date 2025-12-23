@@ -1540,8 +1540,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         lastEpoch = Mutable->Epoch;
         if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
-                if (auto rowVersion = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
-                    return augment(*rowVersion);
+                if (auto info = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                    return augment(info);
                 }
             }
         }
@@ -1555,8 +1555,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             lastEpoch = MutableBackup->Epoch;
             if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
                 if (it->IsValid()) {
-                    if (auto rowVersion = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
-                        return augment(*rowVersion);
+                    if (auto info = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                        return augment(info);
                     }
                 }
             }
@@ -1569,8 +1569,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             lastEpoch = memTable->Epoch;
             if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
                 if (it->IsValid()) {
-                    if (auto rowVersion = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
-                        return augment(*rowVersion);
+                    if (auto info = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                        return augment(info);
                     }
                 }
             }
@@ -1590,8 +1590,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
                     if (res == EReady::Data && ready) {
                         Y_ENSURE(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
                         lastEpoch = part->Epoch;
-                        if (auto rowVersion = it.SkipToCommitted(committed, observer, lockMode, lockTxId)) {
-                            return augment(*rowVersion);
+                        if (auto info = it.SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                            return augment(info);
                         }
                     }
                     ready = ready && bool(res);

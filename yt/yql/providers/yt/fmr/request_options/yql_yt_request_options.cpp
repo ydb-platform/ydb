@@ -191,6 +191,17 @@ void TFmrTableId::Load(IInputStream* buffer) {
     ::Load(buffer, Id);
 }
 
+void TSortedChunkStats::Save(IOutputStream* buffer) const {
+    ::SaveMany(buffer, IsSorted,
+               NYT::NodeToYsonString(FirstRowKeys));
+}
+
+void TSortedChunkStats::Load(IInputStream* buffer) {
+    TString FirstRowKeysStr;
+    ::LoadMany(buffer, IsSorted, FirstRowKeysStr);
+    FirstRowKeys = NYT::NodeFromYsonString(FirstRowKeysStr);
+}
+
 // helper functions for rich path
 
 TString SerializeRichPath(const NYT::TRichYPath& richPath) {

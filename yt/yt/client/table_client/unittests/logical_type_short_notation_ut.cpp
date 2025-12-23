@@ -107,14 +107,16 @@ TEST(TParseDataTypesTest, TestVariant)
         }),
         *ParseType("Variant<Bool, Interval>"));
 
-    auto variantStructType = VariantStructLogicalType(std::vector<TStructField>{
-        {
-            "Am",
-            SimpleLogicalType(ESimpleLogicalValueType::Interval64),
+    auto variantStructType = VariantStructLogicalType({
+        TStructField{
+            .Name = "Am",
+            .StableName = "Am",
+            .Type = SimpleLogicalType(ESimpleLogicalValueType::Interval64),
         },
-        {
-            "Cmaj7",
-            SimpleLogicalType(ESimpleLogicalValueType::Void),
+        TStructField{
+            .Name = "Cmaj7",
+            .StableName = "Cmaj7",
+            .Type = SimpleLogicalType(ESimpleLogicalValueType::Void),
         },
     });
 
@@ -168,15 +170,17 @@ TEST(TParseDataTypesTest, TestTagged)
 TEST(TParseDataTypesTest, TestStruct)
 {
     auto structType = StructLogicalType(std::vector<TStructField>{
-        {
-            "Am",
-            SimpleLogicalType(ESimpleLogicalValueType::Utf8),
+        TStructField{
+            .Name = "Am",
+            .StableName = "Am",
+            .Type = SimpleLogicalType(ESimpleLogicalValueType::Utf8),
         },
-        {
-            "Cmaj7",
-            SimpleLogicalType(ESimpleLogicalValueType::Null),
+        TStructField{
+            .Name = "Cmaj7",
+            .StableName = "Cmaj7",
+            .Type = SimpleLogicalType(ESimpleLogicalValueType::Null),
         },
-    });
+    }, /*removedFieldStableNames*/ {});
 
     EXPECT_EQ(*structType, *ParseType("Struct<Am:Utf8,Cmaj7:Null>"));
 }
@@ -204,21 +208,23 @@ TEST(TPrintDataTypesTest, TestVarious)
             SimpleLogicalType(ESimpleLogicalValueType::String),
         }),
         VariantStructLogicalType(std::vector<TStructField>{
-            {
-                "Am",
-                SimpleLogicalType(ESimpleLogicalValueType::Boolean),
+            TStructField{
+                .Name = "Am",
+                .StableName = "Am",
+                .Type = SimpleLogicalType(ESimpleLogicalValueType::Boolean),
             },
-            {
-                "Cmaj7",
-                SimpleLogicalType(ESimpleLogicalValueType::String),
+            TStructField{
+                .Name = "Cmaj7",
+                .StableName = "Cmaj7",
+                .Type = SimpleLogicalType(ESimpleLogicalValueType::String),
             }
         }),
         DecimalLogicalType(2, 1),
         StructLogicalType({
-            {"number",  SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-            {"english", SimpleLogicalType(ESimpleLogicalValueType::String)},
-            {"russian", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
-        }),
+            {"number", "number",  SimpleLogicalType(ESimpleLogicalValueType::Int64)},
+            {"english", "english", SimpleLogicalType(ESimpleLogicalValueType::String)},
+            {"russian", "russian", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::String))},
+        }, /*removedFieldStableNames*/ {}),
         ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64)),
         TupleLogicalType({
             SimpleLogicalType(ESimpleLogicalValueType::Int64),
@@ -239,7 +245,7 @@ TEST(TPrintDataTypesTest, TestEscape)
 {
     auto taggedType = TaggedLogicalType("'quote_and_single_slash\\", SimpleLogicalType(ESimpleLogicalValueType::Interval));
     auto typeString = ToString(*taggedType);
-    auto expected = TString("Tagged<Interval,'\\\'quote_and_single_slash\\\\'>");
+    auto expected = TStringBuf("Tagged<Interval,'\\\'quote_and_single_slash\\\\'>");
 
     EXPECT_EQ(typeString, expected);
 }

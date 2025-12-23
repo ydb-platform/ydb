@@ -229,6 +229,18 @@ public:
     return nostd::shared_ptr<ObservableInstrument>(
         new NoopObservableInstrument(name, description, unit));
   }
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+  uintptr_t RegisterCallback(
+      MultiObservableCallbackPtr /* callback */,
+      void * /* state */,
+      nostd::span<ObservableInstrument *> /* instruments */) noexcept override
+  {
+    return 0;
+  }
+
+  void DeregisterCallback(uintptr_t /* callback_id */) noexcept override {}
+#endif
 };
 
 /**

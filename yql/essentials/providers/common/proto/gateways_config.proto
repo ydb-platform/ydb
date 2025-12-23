@@ -2,6 +2,7 @@ package NYql;
 option java_package = "ru.yandex.yql.proto";
 
 import "yql/essentials/protos/clickhouse.proto";
+import "yql/essentials/protos/fmr.proto";
 import "yql/essentials/utils/fetch/proto/fetch_config.proto";
 
 
@@ -741,7 +742,7 @@ message TYdbDataSourceOptions {
     // EQueryDataFormat determines the format of the data returned by the YDB server
     enum EQueryDataFormat {
         QUERY_DATA_FORMAT_UNSPECIFIED = 0;
-        ARROW = 1; 
+        ARROW = 1;
     }
 
     optional EQueryDataFormat query_data_format = 1;
@@ -938,16 +939,20 @@ message TYtflowGatewayConfig {
 
 ///////////////////////////// Fmr /////////////////////////////
 
-message TFmrConfig {
+message TFmrInstance {
     optional string Name = 1;
     optional string CoordinatorUrl = 2;
     repeated string AllowedGroups = 3;
     optional bool EnableAuth = 4 [default = false];
+    optional string FileRemoteCacheName = 5;
 }
 
 message TFmrGatewayConfig {
-    repeated TFmrConfig FmrConfigurations = 1;
+    repeated TFmrInstance FmrConfigurations = 1;
+    repeated TFmrFileRemoteCache FileCacheConfigurations = 2;
 }
+
+/////////////////////////////// Layers ///////////////////////////////
 
 message TLayersConfig {
     optional string FetchUrl = 1;
@@ -982,5 +987,5 @@ message TGatewaysConfig {
     optional TDbResolverConfig DbResolver = 23;
     optional TYtflowGatewayConfig Ytflow = 24;
     optional TFmrGatewayConfig Fmr = 25;
-    optional TLayersConfig Layers = 26; 
+    optional TLayersConfig Layers = 26;
 }

@@ -108,6 +108,8 @@ private:
     }
 };
 
+NKikimr::NMiniKQL::EJoinKind GetJoinKind(const TExprNode& owner, const std::string_view& content);
+
 NKikimr::NMiniKQL::TRuntimeNode CombineByKeyImpl(const TExprNode& node, TMkqlBuildContext& ctx);
 NKikimr::NMiniKQL::TRuntimeNode MkqlBuildExpr(const TExprNode& node, TMkqlBuildContext& ctx);
 NKikimr::NMiniKQL::TRuntimeNode MkqlBuildLambda(const TExprNode& lambda, TMkqlBuildContext& ctx, const NKikimr::NMiniKQL::TRuntimeNode::TList& args);

@@ -31,6 +31,10 @@
 #    define AWS_OS_LINUX
 #endif
 
+#if defined(__ANDROID__)
+#    define AWS_OS_ANDROID
+#endif
+
 #if defined(_POSIX_VERSION)
 #    define AWS_OS_POSIX
 #endif

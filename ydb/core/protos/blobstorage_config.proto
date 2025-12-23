@@ -264,6 +264,10 @@ message TProposeStoragePools {
 message TQueryBaseConfig {
     bool RetrieveDevices = 1;
     bool VirtualGroupsOnly = 2;
+    bool SuppressPDisks = 3;
+    bool SuppressVSlots = 4;
+    bool SuppressGroups = 5;
+    bool SuppressNodes = 6;
 }
 
 message TReadSettings {

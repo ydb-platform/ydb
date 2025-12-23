@@ -59,7 +59,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
 
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
-    for (auto t : structItemTypes) {
+    for (const auto* t : structItemTypes) {
         TString columnName = TString(t->GetName());
         auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
         auto columnIndex = std::distance(read->Columns.begin(), it);
@@ -82,13 +82,13 @@ TStatus ComputeTypes(std::shared_ptr<TOpEmptySource> emptySource, TRBOContext & 
     return TStatus::Ok;
 }
 
-const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<TInfoUnit> scalarContextIUs, TRBOContext & ctx, TPlanProps& props) {
+const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<TInfoUnit> scalarContextIUs, TRBOContext& ctx, TPlanProps& props) {
     TVector<const TItemExprType*> structItemTypes;
-    for (auto t : itemType->GetItems()) {
-        structItemTypes.push_back(t);
+    for (const auto *item : itemType->GetItems()) {
+        structItemTypes.push_back(item);
     }
 
-    for (auto iu : scalarContextIUs) {
+    for (const auto& iu : scalarContextIUs) {
         auto subplan = props.ScalarSubplans.PlanMap.at(iu);
         auto subplanType = subplan->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         auto scalarExprType = subplanType->GetItems()[0];
@@ -100,7 +100,7 @@ const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<T
     return ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes);
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext & ctx, TPlanProps& props) {
+TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanProps& props) {
     const TTypeAnnotationNode* inputType = filter->GetInput()->Type;
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, inputType: " << *inputType;
 
@@ -109,8 +109,8 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext & ctx, TPlan
 
     auto filterIUs = filter->GetFilterIUs(props);
     TVector<TInfoUnit> scalarContextIUs;
-    for (auto iu : filterIUs ) {
-        if (iu.ScalarContext) {
+    for (const auto& iu : filterIUs) {
+        if (iu.IsScalarContext()) {
             scalarContextIUs.push_back(iu);
         }
     }
@@ -175,8 +175,8 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
         const TTypeAnnotationNode* inputType = map->GetInput()->Type;
         auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
-        for (auto t : structType->GetItems()) {
-            resStructItemTypes.push_back(t);
+        for (const auto* item : structType->GetItems()) {
+            resStructItemTypes.push_back(item);
         }
     }
 
@@ -196,7 +196,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
             resStructItemTypes.push_back(renameType);
         }
         else {
-            auto & lambda = std::get<TExprNode::TPtr>(mapEl.second);
+            auto& lambda = std::get<TExprNode::TPtr>(mapEl.second);
             if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -288,7 +288,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
 
     TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
 
-    for (auto item : rightItemType->Cast<TStructExprType>()->GetItems()){
+    for (const auto* item : rightItemType->Cast<TStructExprType>()->GetItems()){
         structItemTypes.push_back(item);
     }
 
@@ -304,6 +304,26 @@ TStatus ComputeTypes(std::shared_ptr<TOpLimit> limit, TRBOContext & ctx) {
     auto inputType = limit->GetInput()->Type;
     // TODO: Add sanity checks.
     limit->Type = inputType;
+    return TStatus::Ok;
+}
+
+TStatus ComputeTypes(std::shared_ptr<TOpSort> sort, TRBOContext & ctx) {
+    Y_UNUSED(ctx);
+    auto inputType = sort->GetInput()->Type;
+    // TODO: Add sanity checks.
+    sort->Type = inputType;
+    return TStatus::Ok;
+}
+
+TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProps& props);
+
+TStatus ComputeTypes(std::shared_ptr<TOpCBOTree> cboTree, TRBOContext &ctx, TPlanProps& props) {
+    for (auto op : cboTree->TreeNodes) {
+        if (auto status = ComputeTypes(op, ctx, props); status != TStatus::Ok) {
+            return status;
+        }
+    }
+    cboTree->Type = cboTree->TreeRoot->Type;
     return TStatus::Ok;
 }
 
@@ -329,8 +349,14 @@ TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProp
     else if(MatchOperator<TOpLimit>(op)) {
         return ComputeTypes(CastOperator<TOpLimit>(op), ctx);
     }
+    else if (MatchOperator<TOpSort>(op)) {
+        return ComputeTypes(CastOperator<TOpSort>(op), ctx);
+    }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);
+    }
+    else if (MatchOperator<TOpCBOTree>(op)) {
+        return ComputeTypes(CastOperator<TOpCBOTree>(op), ctx, props);
     }
     else {
         Y_ENSURE(false, "Invalid operator type in RBO type inference");

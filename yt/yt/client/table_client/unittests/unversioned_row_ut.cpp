@@ -21,11 +21,11 @@ TEST(TUnversionedOwningValueTest, DefaultCtor)
 
 TEST(TUnversionedOwningValueTest, String)
 {
-    TString string = "Hello world!";
+    std::string string = "Hello world!";
     TUnversionedOwningValue owningValue(MakeUnversionedStringValue(string));
     TUnversionedValue value = owningValue;
     ASSERT_EQ(owningValue.Type(), EValueType::String);
-    ASSERT_EQ(TString(value.Data.String, value.Length), string);
+    ASSERT_EQ(TStringBuf(value.Data.String, value.Length), string);
     ASSERT_EQ(owningValue.GetStringRef().ToStringBuf(), string);
 }
 

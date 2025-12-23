@@ -5,6 +5,7 @@ RECURSE(
     fqrun
     idx_test
     kqprun
+    local_cluster
     mdb_mock
     nemesis
     pq_read

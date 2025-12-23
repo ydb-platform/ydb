@@ -17,7 +17,7 @@ namespace NSyncLog {
 class TPhantomFlagStorageBuilderActor : public TActorBootstrapped<TPhantomFlagStorageBuilderActor> {
 public:
     TPhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-            const TActorId& keeperId, const TSyncLogSnapshotPtr& snapshot)
+            const TActorId& keeperId, TSyncLogSnapshotPtr snapshot)
         : TActorBootstrapped<TPhantomFlagStorageBuilderActor>()
         , SlCtx(slCtx)
         , KeeperId(keeperId)
@@ -38,7 +38,9 @@ private:
         using TIndexForwardIterator = TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob>::TIndexForwardIterator;
         TIndexForwardIterator it(ev->Get()->Snap.HullCtx, &ev->Get()->Snap.LogoBlobsSnap);
         for (it.Seek(TLogoBlobID(0, 0, 0)); it.Valid(); it.Next()) {
-            Thresholds.AddBlob(it.GetCurKey().LogoBlobID());
+            if (it.GetMemRec().GetIngress().IsKeep(SlCtx->VCtx->Top->GType)) {
+                Thresholds.AddBlob(it.GetCurKey().LogoBlobID());
+            }
         }
         // to release snapshots
         ev.Reset();
@@ -152,7 +154,7 @@ private:
 
 
 NActors::IActor* CreatePhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-    const TActorId& keeperId, const TSyncLogSnapshotPtr& snapshot) {
+    const TActorId& keeperId, TSyncLogSnapshotPtr snapshot) {
     return new TPhantomFlagStorageBuilderActor(slCtx, keeperId, snapshot);
 }
 

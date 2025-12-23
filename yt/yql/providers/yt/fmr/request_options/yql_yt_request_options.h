@@ -165,9 +165,20 @@ struct TTableStats {
     bool operator == (const TTableStats&) const = default;
 };
 
+struct TSortedChunkStats {
+    bool IsSorted = false;
+    NYT::TNode FirstRowKeys;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+
+    bool operator == (const TSortedChunkStats&) const = default;
+};
+
 struct TChunkStats {
     ui64 Rows = 0;
     ui64 DataWeight = 0;
+    TSortedChunkStats SortedChunkStats = TSortedChunkStats();
     bool operator == (const TChunkStats&) const = default;
 };
 

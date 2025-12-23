@@ -419,6 +419,8 @@ message TTenant {
     optional NKikimrMemory.TMemoryStats MemoryStats = 51;
     float NetworkUtilization = 52;
     uint64 NetworkWriteThroughput = 53;
+    uint64 GrpcRequestBytes = 54;
+    uint64 GrpcResponseBytes = 55;
 }
 
 message TTenants {
@@ -484,6 +486,11 @@ message TStorageGroupInfo {
     optional uint64 LatencyPutUserData = 21;
     optional uint64 LatencyGetFast = 22;
     string PileName = 23;
+    optional double MaxPDiskUsage = 24;
+    optional double MaxVDiskSlotUsage = 25;
+    optional double MaxVDiskRawUsage = 26;
+    optional double MaxNormalizedOccupancy = 27;
+    optional string CapacityAlert = 28;
     repeated TStorageVDisk VDisks = 30;
 }
 
@@ -574,6 +581,11 @@ message TNodeInfo {
     optional uint64 PingTimeMinUs = 41;
     optional uint64 PingTimeMaxUs = 42;
     optional uint64 ReversePingTimeUs = 43; // Avg
+    optional double MaxPDiskUsage = 44;
+    optional double MaxVDiskSlotUsage = 45;
+    optional double MaxVDiskRawUsage = 46;
+    optional string CapacityAlert = 47; // the highest across VDisks on this node
+    optional double MaxNormalizedOccupancy = 48;
     NKikimrWhiteboard.TSystemStateInfo SystemState = 50;
     repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 51;
     repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 52;
@@ -914,3 +926,36 @@ message TTopicDataResponse {
     bool Truncated = 4;
 }
 
+message TDatabaseStats {
+    // common
+    repeated string Problems = 10;
+
+    // grpc
+    optional uint64 GrpcRequestBytes = 101;
+    optional uint64 GrpcResponseBytes = 102;
+    
+    // database nodes
+    optional uint32 DatabaseNodes = 201;
+    optional float DatabaseCpuUsage = 202;
+    optional float DatabaseMemoryUsage = 203;
+    optional uint64 DatabaseNetwork = 204;
+
+    // database to storage
+    optional uint64 StorageNetworkRead = 301;
+    optional uint64 StorageNetworkWrite = 302;
+
+    // storage nodes
+    optional uint32 StorageNodes = 401;
+    optional float StorageCpuUsage = 402;
+    optional float StorageMemoryUsage = 403;
+    optional uint64 StorageNetwork = 404;
+
+    // storage to disk
+    optional uint64 DiskRead = 501;
+    optional uint64 DiskWrite = 502;
+
+    // disk
+    optional uint32 StorageGroups = 601;
+    optional uint64 StorageTotal = 602;
+    optional uint64 StorageConsumed = 603;
+}

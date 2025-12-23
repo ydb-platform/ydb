@@ -768,10 +768,14 @@ struct TAlterDatabaseSettings {
     std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
 };
 
+struct TTruncateTableSettings {
+    TString TablePath;
+};
+
 struct TCreateUserSettings {
     TString UserName;
     TString Password;
-    bool IsHashedPassword = false;
+    TString HashedPassword;
     bool CanLogin;
 };
 
@@ -791,7 +795,7 @@ struct TModifyPermissionsSettings {
 struct TAlterUserSettings {
     TString UserName;
     std::optional<TString> Password;
-    bool IsHashedPassword = false;
+    std::optional<TString> HashedPassword;
     std::optional<bool> CanLogin;
 };
 
@@ -1277,6 +1281,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 

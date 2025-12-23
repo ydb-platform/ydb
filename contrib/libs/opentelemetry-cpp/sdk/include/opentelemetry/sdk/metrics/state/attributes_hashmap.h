@@ -188,7 +188,7 @@ public:
   /**
    * Iterate the hash to yield key and value stored in hash.
    */
-  bool GetAllEnteries(
+  bool GetAllEntries(
       nostd::function_ref<bool(const MetricAttributes &, Aggregation &)> callback) const
   {
     for (auto &kv : hash_map_)

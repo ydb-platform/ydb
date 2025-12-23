@@ -237,12 +237,9 @@ namespace NKikimr::NStorage {
                                         out << "<pre>" << yaml << "</pre>";
                                     }
                                 }
-                                if (config->HasCompressedStorageYaml()) {
-                                    TStringInput ss(config->GetCompressedStorageYaml());
-                                    TZstdDecompress zstd(&ss);
-                                    TString yaml = zstd.ReadAll();
-                                    out << "<strong>storage.yaml (size " << yaml.size() << ")</strong><br/><pre>"
-                                        << yaml << "</pre>";
+                                if (auto yaml = GetStorageYaml(*config)) {
+                                    out << "<strong>storage.yaml (size " << yaml->size() << ")</strong><br/><pre>"
+                                        << *yaml << "</pre>";
                                 }
                             } else {
                                 out << "not defined";

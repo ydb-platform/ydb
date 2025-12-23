@@ -52,6 +52,12 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     if (Tx.GetLockTxId())
         EngineBay.SetLockTxId(Tx.GetLockTxId(), Tx.GetLockNodeId());
 
+    if (Tx.GetLockMode() != NKikimrDataEvents::OPTIMISTIC) {
+        ErrCode = NKikimrTxDataShard::TError::BAD_ARGUMENT;
+        ErrStr = TStringBuilder() << "Only OPTIMISTIC lock mode is supported in data transactions.";
+        return;
+    }
+
     if (Tx.GetImmediate())
         EngineBay.SetIsImmediateTx();
 

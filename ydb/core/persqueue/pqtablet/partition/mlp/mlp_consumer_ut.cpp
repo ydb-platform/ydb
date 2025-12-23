@@ -143,6 +143,159 @@ Y_UNIT_TEST(AlterConsumer) {
     }
 }
 
+Y_UNIT_TEST(RecreateConsumer) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(TDuration::Seconds(3))
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(13))
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(1000)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()).GetValueSync();
+
+    Cerr << ">>>>> Write many messages for creating WAL (if message count is small every will create the snapshot)" << Endl;
+    for (size_t i = 0; i < 50; ++i) {
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {
+                    .Index = 0,
+                    .MessageBody = "message_body",
+                    .MessageGroupId = TStringBuilder() << "message_group_id_" << i
+                },
+            }
+        });
+
+        auto response = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    }
+
+    Cerr << ">>>>> many iteration for creating many WAL records" << Endl;
+    for (size_t i = 0; i < 50; ++i) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+        GetReadResponse(runtime);
+
+        CreateUnlockerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) }
+        });
+        GetChangeResponse(runtime);
+    }
+
+    Cerr << ">>>>> Commit message" << Endl;
+    {
+        CreateCommitterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) }
+        });
+
+        auto result = GetChangeResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    Cerr << ">>>>> drop consumer" << Endl;
+    auto result = client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
+            .SetRetentionPeriod(TDuration::Seconds(103))
+            .AppendDropConsumers("mlp-consumer")
+        ).GetValueSync();
+
+    Cerr << ">>>>> add consumer" << Endl;
+    client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
+            .SetRetentionPeriod(TDuration::Seconds(103))
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(13))
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(17)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()
+        ).GetValueSync();
+
+    Cerr << ">>>>> read message (write snapshot)" << Endl;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+
+        auto result = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
+    }
+
+    Cerr << ">>>>> read message (write WAL)" << Endl;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+        
+        auto result = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 1);
+    }
+
+    Cerr << ">>>>> reload pq tablet" << Endl;
+    ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
+
+    Cerr << ">>>>> read message after reload" << Endl;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1
+        });
+        
+        auto result = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 2);
+    }
+}
+
 Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
@@ -228,7 +381,7 @@ Y_UNIT_TEST(RetentionStorage) {
             .RetentionStorageMb(8)
             .BeginAddSharedConsumer("mlp-consumer")
                 .KeepMessagesOrder(false)
-            .EndAddConsumer());
+            .EndAddConsumer()).GetValueSync();
 
     Sleep(TDuration::Seconds(1));
 
@@ -262,7 +415,7 @@ Y_UNIT_TEST(RetentionStorageAfterReload) {
             .RetentionStorageMb(8)
             .BeginAddSharedConsumer("mlp-consumer")
                 .KeepMessagesOrder(false)
-            .EndAddConsumer());
+            .EndAddConsumer()).GetValueSync();
 
     Sleep(TDuration::Seconds(1));
 

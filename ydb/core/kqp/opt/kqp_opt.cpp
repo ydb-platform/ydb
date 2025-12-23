@@ -72,6 +72,11 @@ bool IsKqpPureInputs(const TExprList& inputs) {
             if (source.Cast().Settings().Maybe<TKqpReadRangesSourceSettings>()) {
                 return true;
             }
+
+            if (source.Cast().Settings().Maybe<TKqpReadTableFullTextIndexSourceSettings>()) {
+                return true;
+            }
+
         }
 
         return false;

@@ -83,6 +83,7 @@ SRCS(
     flat_scheme_op.proto
     flat_tx_scheme.proto
     follower_group.proto
+    fs_settings.proto
     grpc.proto
     grpc_pq_old.proto
     grpc_status_proxy.proto
@@ -120,6 +121,7 @@ SRCS(
     pqconfig.proto
     profiler.proto
     query_stats.proto
+    recoveryshard_config.proto
     replication.proto
     resource_broker.proto
     s3_settings.proto

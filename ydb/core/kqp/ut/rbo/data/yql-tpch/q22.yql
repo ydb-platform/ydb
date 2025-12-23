@@ -1,0 +1,43 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    cntrycode,
+    Count(*) AS numcust,
+    Sum(c_acctbal) AS totacctbal
+FROM (
+    SELECT
+        Substring(CAST(c_phone AS String), 0u, 2u) AS cntrycode,
+        c_acctbal
+    FROM
+        `/Root/customer` as customer
+    WHERE
+        Substring(CAST(c_phone AS String), 0u, 2u) IN (
+            '13', '31', '23', '29', '30', '18', '17'
+        )
+        AND c_acctbal > (
+            SELECT
+                Avg(c_acctbal)
+            FROM
+                `/Root/customer` as customer
+            WHERE
+                c_acctbal > 0.00
+                AND Substring(CAST(c_phone AS String), 0u, 2u) IN (
+                    '13', '31', '23', '29', '30', '18', '17'
+                )
+        )
+        AND NOT EXISTS (
+            SELECT
+                *
+            FROM
+                `/Root/orders` as orders
+            WHERE
+                o_custkey == c_custkey
+        )
+) AS custsale
+GROUP BY
+    cntrycode
+ORDER BY
+    cntrycode
+;

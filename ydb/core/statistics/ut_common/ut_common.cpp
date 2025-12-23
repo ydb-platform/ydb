@@ -248,11 +248,15 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
     ExecuteYqlScript(env, Sprintf(R"(
         CREATE TABLE `Root/%s/%s` (
             Key Uint64,
-            Value Uint64,
+            Value String,
             PRIMARY KEY (Key)
         )
         WITH ( UNIFORM_PARTITIONS = 4 );
     )", databaseName.c_str(), tableName.c_str()));
+}
+
+void PrepareUniformTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
+    CreateUniformTable(env, databaseName, tableName);
 
     TStringBuilder replace;
     replace << Sprintf("REPLACE INTO `Root/%s/%s` (Key, Value) VALUES ",
@@ -262,13 +266,13 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
             replace << ", ";
         }
         ui64 value = 4000000000000000000ull * (i + 1);
-        replace << Sprintf("(%" PRIu64 "ul, %" PRIu64 "ul)", value, value);
+        replace << Sprintf("(%" PRIu64 "ul, \"%" PRIu64 "\")", value, value);
     }
     replace << ";";
     ExecuteYqlScript(env, replace);
 }
 
-void CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
+TTableInfo CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
     int shardCount)
 {
     auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
@@ -277,7 +281,7 @@ void CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString
     ExecuteYqlScript(env, Sprintf(R"(
         CREATE TABLE `%s` (
             Key Uint64 NOT NULL,
-            Value Uint64,
+            Value String,
             PRIMARY KEY (Key)
         )
         PARTITION BY HASH(Key)
@@ -287,12 +291,68 @@ void CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString
         );
     )", fullTableName.c_str(), shardCount));
     runtime.SimulateSleep(TDuration::Seconds(1));
+
+    TTableInfo tableInfo;
+    tableInfo.Path = Sprintf("/Root/%s/%s", databaseName.c_str(), tableName.c_str());
+    tableInfo.ShardIds = GetColumnTableShards(runtime, runtime.AllocateEdgeActor(), tableInfo.Path);
+    tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+    return tableInfo;
 }
 
-void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
+void InsertDataIntoTable(
+        TTestEnv& env, const TString& databaseName, const TString& tableName,
+        std::vector<TInsertedRow> insertedRows) {
+    auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
+    auto& runtime = *env.GetServer().GetRuntime();
+
+    using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<
+        Ydb::Table::BulkUpsertRequest,
+        Ydb::Table::BulkUpsertResponse>;
+
+    Ydb::Table::BulkUpsertRequest request;
+    request.set_table(fullTableName);
+    auto* rows = request.mutable_rows();
+    auto* reqRowType = rows->mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
+    auto* reqKeyType = reqRowType->add_members();
+    reqKeyType->set_name("Key");
+    reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT64);
+    auto* reqValueType = reqRowType->add_members();
+    reqValueType->set_name("Value");
+    reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
+
+    auto* reqRows = rows->mutable_value();
+    for (const auto& inserted : insertedRows) {
+        auto* row = reqRows->add_items();
+        row->add_items()->set_uint64_value(inserted.Key);
+        row->add_items()->set_bytes_value(inserted.Value);
+    }
+
+    auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
+        std::move(request), "", "", runtime.GetActorSystem(0));
+    auto response = runtime.WaitFuture(std::move(future));
+
+    UNIT_ASSERT(response.operation().ready());
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+    env.GetController()->WaitActualization(TDuration::Seconds(1));
+}
+
+TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
     int shardCount)
 {
-    CreateColumnTable(env, databaseName, tableName, shardCount);
+    auto info = CreateColumnTable(env, databaseName, tableName, shardCount);
+
+    std::vector<TInsertedRow> rows;
+    for (size_t i = 0; i < ColumnTableRowsNumber; ++i) {
+        rows.push_back(TInsertedRow{.Key = i, .Value = ToString(i)});
+    }
+    InsertDataIntoTable(env, databaseName, tableName, rows);
+    return info;
+}
+
+TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseName, const TString& tableName,
+    int shardCount)
+{
+    auto info = CreateColumnTable(env, databaseName, tableName, shardCount);
 
     auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
     auto& runtime = *env.GetServer().GetRuntime();
@@ -332,66 +392,34 @@ void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TStrin
         reqKeyType->mutable_type()->set_type_id(Ydb::Type::UINT64);
         auto* reqValueType = reqRowType->add_members();
         reqValueType->set_name("Value");
-        reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT64);
+        reqValueType->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::STRING);
 
         auto* reqRows = rows->mutable_value();
         for (size_t j = 0; j < rowsInBlock && i < ColumnTableRowsNumber; ++i, ++j) {
             auto* row = reqRows->add_items();
             row->add_items()->set_uint64_value(i);
-            row->add_items()->set_uint64_value(i);
+            row->add_items()->set_bytes_value(ToString(i));
         }
         i -= overlap;
         auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(
             std::move(request), "", "", runtime.GetActorSystem(0));
         auto response = runtime.WaitFuture(std::move(future));
-    
+
         UNIT_ASSERT(response.operation().ready());
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
     }
 
     env.GetController()->WaitActualization(TDuration::Seconds(1));
+
+    return info;
 }
 
-std::vector<TTableInfo> GatherColumnTablesInfo(TTestEnv& env, const TString& fullDbName, ui8 tableCount) {
-    auto& runtime = *env.GetServer().GetRuntime();
-    auto sender = runtime.AllocateEdgeActor();
-
-    std::vector<TTableInfo> ret;
-    for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-        TTableInfo tableInfo;
-        tableInfo.Path = Sprintf("%s/Table%u", fullDbName.c_str(), tableId);
-        tableInfo.ShardIds = GetColumnTableShards(runtime, sender, tableInfo.Path);
-        tableInfo.PathId = ResolvePathId(runtime, tableInfo.Path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
-        ret.emplace_back(tableInfo);
+std::vector<TInsertedRow> RowsWithFewDistinctValues(size_t count) {
+    std::vector<TInsertedRow> rows;
+    for (size_t i = 0; i < count; ++i) {
+        rows.push_back(TInsertedRow{.Key = i, .Value = ToString(i % 10)});
     }
-    return ret;
-}
-
-TDatabaseInfo PrepareDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
-    auto fullDbName = CreateDatabase(env, "Database");
-
-    for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-        PrepareColumnTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
-    }
-
-    return {
-        .FullDatabaseName = fullDbName,
-        .Tables = GatherColumnTablesInfo(env, fullDbName, tableCount)
-    };
-}
-
-TDatabaseInfo PrepareServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
-    auto fullServerlessDbName = CreateDatabase(env, "Shared", 1, true);
-    auto fullDbName = CreateServerlessDatabase(env, "Database", "/Root/Shared");
-
-    for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-        PrepareColumnTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
-    }
-
-    return {
-        .FullDatabaseName = fullServerlessDbName,
-        .Tables = GatherColumnTablesInfo(env, fullDbName, tableCount)
-    };
+    return rows;
 }
 
 void DropTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
@@ -427,45 +455,45 @@ std::shared_ptr<TCountMinSketch> ExtractCountMin(TTestActorRuntime& runtime, con
     return stat.CountMin;
 }
 
-void ValidateCountMinColumnshard(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expectedProbe) {
-    auto countMin = ExtractCountMin(runtime, pathId);
-
-    ui32 value = 1;
-    auto actualProbe = countMin->Probe((const char *)&value, sizeof(value));
-    UNIT_ASSERT_VALUES_EQUAL(actualProbe, expectedProbe);
-}
-
-void ValidateCountMinDatashard(TTestActorRuntime& runtime, TPathId pathId) {
-    auto countMin = ExtractCountMin(runtime, pathId);
-
-    for (ui32 i = 0; i < 4; ++i) {
-        ui64 value = 4000000000000000000ull * (i + 1);
-        auto probe = countMin->Probe((const char *)&value, sizeof(ui64));
-        UNIT_ASSERT_VALUES_EQUAL(probe, 1);
-    }
-}
-
-void ValidateCountMinAbsence(TTestActorRuntime& runtime, TPathId pathId) {
-    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(1));
-
-    NStat::TRequest req;
-    req.PathId = pathId;
-    req.ColumnTag = 1;
-
+void CheckCountMinSketch(
+        TTestActorRuntime& runtime, const TPathId& pathId,
+        const std::vector<TCountMinSketchProbes>& expected) {
     auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
     evGet->StatType = NStat::EStatType::COUNT_MIN_SKETCH;
-    evGet->StatRequests.push_back(req);
 
-    auto sender = runtime.AllocateEdgeActor(1);
-    runtime.Send(statServiceId, sender, evGet.release(), 1, true);
-    auto evResult = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
+    for (auto item : expected) {
+        NStat::TRequest req;
+        req.PathId = pathId;
+        req.ColumnTag = item.Tag;
+        evGet->StatRequests.push_back(req);
+    }
 
-    UNIT_ASSERT(evResult);
-    UNIT_ASSERT(evResult->Get());
-    UNIT_ASSERT(evResult->Get()->StatResponses.size() == 1);
+    auto sender = runtime.AllocateEdgeActor();
+    auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(0));
+    runtime.Send(statServiceId, sender, evGet.release(), 0, true);
 
-    auto rsp = evResult->Get()->StatResponses[0];
-    UNIT_ASSERT(!rsp.Success);
+    auto res = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
+    auto msg = res->Get();
+
+    UNIT_ASSERT_VALUES_EQUAL(msg->StatResponses.size(), expected.size());
+
+    for (size_t i = 0; i < msg->StatResponses.size(); ++i) {
+        const auto& stat = msg->StatResponses[i];
+        const auto& probes = expected[i].Probes;
+        if (probes) {
+            UNIT_ASSERT(stat.Success);
+
+            auto countMin = stat.CountMinSketch.CountMin.get();
+            UNIT_ASSERT(countMin != nullptr);
+
+            for (const auto& item : *probes) {
+                auto probe = countMin->Probe(item.Value.data(), item.Value.size());
+                UNIT_ASSERT_VALUES_EQUAL(item.Expected, probe);
+            }
+        } else {
+            UNIT_ASSERT(!stat.Success);
+        }
+    }
 }
 
 TAnalyzedTable::TAnalyzedTable(const TPathId& pathId)

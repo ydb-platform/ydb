@@ -949,8 +949,6 @@ public:
 
     };
 
-    TMap<ui32, TSet<ui32>> NodesAwaitingKeysForGroup;
-
     struct THostConfigInfo {
         struct TDriveKey {
             Schema::HostConfigDrive::HostConfigId::Type HostConfigId;
@@ -1978,7 +1976,6 @@ private:
 
     void UpdateWaitingGroups(const THashSet<TGroupId>& groupIds);
 
-    void NotifyNodesAwaitingKeysForGroups(ui32 groupId);
     ITransaction* CreateTxInitScheme();
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();

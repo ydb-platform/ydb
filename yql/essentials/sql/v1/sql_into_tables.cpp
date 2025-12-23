@@ -232,23 +232,10 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
     const bool isStat = serviceName == StatProviderName;
 
     if (!isKikimr) {
-        if (mode == ESQLWriteColumnMode::UpsertInto && !isStat && isMapReduce)
-        {
-            // Upsert in MapReduce is available only from 2025.4
-            auto requiredLangVer = MakeLangVersion(2025, 4);
-            if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
-                auto str = FormatLangVersion(requiredLangVer);
-                YQL_ENSURE(str);
-                Ctx_.Error(pos) << "UPSERT is not available before language version " << *str;
-                Ctx_.IncrementMonCounter("sql_errors", TStringBuilder() << "UPSERT is not available before language version " << *str);
-                return false;
-            }
-        }
-
         if (mode == ESQLWriteColumnMode::InsertOrAbortInto ||
             mode == ESQLWriteColumnMode::InsertOrIgnoreInto ||
             mode == ESQLWriteColumnMode::InsertOrRevertInto ||
-            mode == ESQLWriteColumnMode::UpsertInto && !isStat && !isMapReduce)
+            mode == ESQLWriteColumnMode::UpsertInto && !isStat)
         {
             Ctx_.Error(pos) << SqlIntoUserModeStr_ << " is not supported for " << serviceName << " tables";
             Ctx_.IncrementMonCounter("sql_errors", TStringBuilder() << SqlIntoUserModeStr_ << "UnsupportedFor" << serviceName);
@@ -258,9 +245,11 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
 
     if (isMapReduce) {
         if (mode == ESQLWriteColumnMode::ReplaceInto) {
-            Ctx_.Error(pos) << "Meaning of REPLACE INTO has been changed, now you should use INSERT INTO <table> WITH TRUNCATE ... for " << serviceName;
-            Ctx_.IncrementMonCounter("sql_errors", "ReplaceIntoConflictUsage");
-            return false;
+            auto requiredLangVer = MakeLangVersion(2025, 4);
+            if (!IsBackwardCompatibleFeatureAvailable(requiredLangVer)) {
+                Ctx_.Error(pos) << "REPLACE is not available before language version " << FormatLangVersion(requiredLangVer);
+                return false;
+            }
         }
     } else if (isKikimr) {
         if (mode == ESQLWriteColumnMode::InsertIntoWithTruncate) {

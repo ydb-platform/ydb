@@ -198,3 +198,8 @@ message TEvAggregateStatisticsResponse {
     }
     repeated TFailedTablet FailedTablets = 3;
 }
+
+message TSimpleColumnStatistics {
+    optional uint64 Count = 1;
+    optional uint64 CountDistinct = 2;
+};

@@ -85,7 +85,10 @@ message ReadResult {
     string requested_key = 1;
     uint64 requested_offset = 2;
     uint64 requested_size = 3;
-    bytes value = 4;
+    oneof buffer {
+        bytes value = 4;
+        uint32 payload_id = 9;
+    }
     string msg = 5;
     Statuses.ReplyStatus status = 6;
     uint64 cookie = 7;
@@ -108,7 +111,10 @@ message ReadRangeRequest {
 message ReadRangeResult {
     message KeyValuePair {
         string key = 1;
-        bytes value = 2;
+        oneof buffer {
+            bytes value = 2;
+            uint32 payload_id = 7;
+        }
         uint32 value_size = 3;
 
         // Unix time of the creation of the key-value pair (in ms).

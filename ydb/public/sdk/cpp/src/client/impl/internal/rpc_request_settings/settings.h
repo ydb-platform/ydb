@@ -19,6 +19,7 @@ struct TRpcRequestSettings {
     } EndpointPolicy = TEndpointPolicy::UsePreferredEndpointOptionally;
     bool UseAuth = true;
     NYdb::TDeadline Deadline = NYdb::TDeadline::Max();
+    std::string TraceParent;
 
     template <typename TRequestSettings>
     static TRpcRequestSettings Make(const TRequestSettings& settings, const TEndpointKey& preferredEndpoint = {}, TEndpointPolicy endpointPolicy = TEndpointPolicy::UsePreferredEndpointOptionally) {
@@ -26,11 +27,7 @@ struct TRpcRequestSettings {
         rpcSettings.TraceId = settings.TraceId_;
         rpcSettings.RequestType = settings.RequestType_;
         rpcSettings.Header = settings.Header_;
-
-        if (!settings.TraceParent_.empty()) {
-            rpcSettings.Header.emplace_back("traceparent", settings.TraceParent_);
-        }
-
+        rpcSettings.TraceParent = settings.TraceParent_;
         rpcSettings.PreferredEndpoint = preferredEndpoint;
         rpcSettings.EndpointPolicy = endpointPolicy;
         rpcSettings.UseAuth = true;

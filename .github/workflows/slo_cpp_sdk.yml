@@ -3,16 +3,29 @@ name: SLO CPP SDK
 on:
   workflow_dispatch:
     inputs:
-      github_pull_request_number:
+      github_issue:
+        description: "GitHub issue number where the SLO results will be reported"
         required: true
+      baseline_ref:
+        description: "Baseline commit/branch/tag to compare against (leave empty to auto-detect merge-base with main)"
+        required: false
       slo_workload_duration_seconds:
-        default: '600'
+        description: "Duration of the SLO workload in seconds"
         required: false
+        default: "600"
       slo_workload_read_max_rps:
-        default: '1000'
+        description: "Maximum read RPS for the SLO workload"
         required: false
+        default: "1000"
       slo_workload_write_max_rps:
-        default: '100'
+        description: "Maximum write RPS for the SLO workload"
+        required: false
+        default: "100"
+      fork_repository:
+        description: "Fork repository (e.g., username/ydb). Leave empty to use current repository"
+        required: false
+      fork_ref:
+        description: "Fork branch/ref to test. Leave empty to use current branch"
         required: false
 
 jobs:
@@ -24,59 +37,246 @@ jobs:
       matrix:
         include:
           - workload: table
-            global-args: --connection-string grpc://localhost:2136/?database=/Root/testdb
-            run-args: |
-              --metrics-push-url http://localhost:9090/api/v1/otlp/v1/metrics \
-              --time ${{inputs.slo_workload_duration_seconds || 600}} \
-              --read-rps ${{inputs.slo_workload_read_max_rps || 1000}} \
-              --write-rps ${{inputs.slo_workload_write_max_rps || 100}} \
-              --read-timeout 1000 \
-              --write-timeout 1000
 
     concurrency:
       group: slo-${{ github.ref }}
       cancel-in-progress: true
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          YQ_VERSION=v4.48.2
+          BUILDX_VERSION=0.30.1
+          COMPOSE_VERSION=2.40.3
+
+          sudo curl -L https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64 -o /usr/local/bin/yq && \
+            sudo chmod +x /usr/local/bin/yq
+
+          echo "Updating Docker plugins..."
+          sudo mkdir -p /usr/local/lib/docker/cli-plugins
+
+          echo "Installing Docker Buildx ${BUILDX_VERSION}..."
+          sudo curl -fLo /usr/local/lib/docker/cli-plugins/docker-buildx \
+            "https://github.com/docker/buildx/releases/download/v${BUILDX_VERSION}/buildx-v${BUILDX_VERSION}.linux-amd64"
+          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+
+          echo "Installing Docker Compose ${COMPOSE_VERSION}..."
+          sudo curl -fLo /usr/local/lib/docker/cli-plugins/docker-compose \
+            "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-x86_64"
+          sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+          echo "Installed versions:"
+          yq --version
+          docker --version
+          docker buildx version
+          docker compose version
+
+      - name: Checkout current version
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ inputs.fork_repository || github.repository }}
+          ref: ${{ inputs.fork_ref || github.ref }}
+          path: current
+          fetch-depth: 0
 
       - name: Configure git
-        uses: ./.github/actions/configure_git
+        uses: ./current/.github/actions/configure_git
 
-      - name: Build SLO Workload Binary
+      - name: Determine baseline commit
+        id: baseline
         run: |
-          ./ya make ydb/public/sdk/cpp/tests/slo_workloads/key_value -r
+          cd current
+          if [[ -n "${{ inputs.baseline_ref }}" ]]; then
+            BASELINE="${{ inputs.baseline_ref }}"
+          else
+            BASELINE=$(git merge-base HEAD origin/main)
+          fi
+          echo "sha=$BASELINE" >> $GITHUB_OUTPUT
+
+          # Try to determine a human-readable ref name for baseline
+          # Check if baseline is on main
+          if git merge-base --is-ancestor $BASELINE origin/main && \
+             [ "$(git rev-parse origin/main)" = "$BASELINE" ]; then
+            BASELINE_REF="main"
+          else
+            # Try to find a branch containing this commit
+            BRANCH=$(git branch -r --contains $BASELINE | grep -v HEAD | head -1 | sed 's/.*\///' || echo "")
+            if [ -n "$BRANCH" ]; then
+              BASELINE_REF="${BRANCH}@${BASELINE:0:7}"
+            else
+              BASELINE_REF="${BASELINE:0:7}"
+            fi
+          fi
+          echo "ref=$BASELINE_REF" >> $GITHUB_OUTPUT
+
+      - name: Checkout baseline version
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.baseline.outputs.sha }}
+          path: baseline
+          fetch-depth: 1
+
+      - name: Build Workload Image
+        run: |
+          echo "Cleaning up Docker system before builds..."
+          docker system prune -af --volumes
+          docker builder prune -af
+          df -h
+
+          # Build current version
+          if [ -f "$GITHUB_WORKSPACE/current/ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile" ]; then
+            echo "Building current app image..."
+            cd "$GITHUB_WORKSPACE/current"
+
+            # Use SLO-specific .dockerignore
+            cp ydb/public/sdk/cpp/tests/slo_workloads/.dockerignore .dockerignore
+
+            docker build -t ydb-app-current \
+              --build-arg SRC_PATH=key_value \
+              --build-arg BINARY_NAME=key_value \
+              --build-arg REF="${{ inputs.fork_ref || github.head_ref || github.ref_name }}" \
+              -f ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile .
+
+            # Clean up .dockerignore
+            rm -f .dockerignore
+          else
+            echo "No current app Dockerfile found"
+            exit 1
+          fi
+
+          docker system prune -f --volumes
+          docker builder prune -af
+
+          # Build baseline version
+          if [ -f "$GITHUB_WORKSPACE/baseline/ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile" ]; then
+            echo "Building baseline app image..."
+            cd "$GITHUB_WORKSPACE/baseline"
+
+            # Use SLO-specific .dockerignore
+            cp ydb/public/sdk/cpp/tests/slo_workloads/.dockerignore .dockerignore
+
+            docker build -t ydb-app-baseline \
+              --build-arg SRC_PATH=key_value \
+              --build-arg BINARY_NAME=key_value \
+              --build-arg REF="${{ steps.baseline.outputs.ref }}" \
+              -f ydb/public/sdk/cpp/tests/slo_workloads/Dockerfile .
+
+            # Clean up .dockerignore
+            rm -f .dockerignore
+          else
+            echo "No baseline app Dockerfile found"
+            exit 1
+          fi
+
+          docker system prune -f --volumes
+          docker builder prune -af
+
+          echo "Final disk space after builds:"
+          df -h
 
       - name: Initialize YDB SLO
         uses: ydb-platform/ydb-slo-action/init@main
         with:
-          github_pull_request_number: ${{ github.event.inputs.github_pull_request_number }}
+          github_issue: ${{ github.event.inputs.github_issue }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workload_name: ${{ matrix.workload }}
-          ydb_database_node_count: 5
+          workload_current_ref: ${{ inputs.fork_ref || github.head_ref || github.ref_name }}
+          workload_baseline_ref: ${{ steps.baseline.outputs.ref }}
 
       - name: Prepare SLO Database
         run: |
-          ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.global-args }} create
+          echo "Preparing SLO database..."
+          docker run --rm --network ydb_ydb-net \
+            --add-host "ydb:172.28.0.11" \
+            --add-host "ydb:172.28.0.12" \
+            --add-host "ydb:172.28.0.13" \
+            --add-host "ydb:172.28.0.99" \
+            ydb-app-current --connection-string grpc://ydb:2136/?database=/Root/testdb create --dont-push
 
-      - name: Run SLO Tests
+      - name: Run SLO Tests (parallel)
+        timeout-minutes: 15
         run: |
-          ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.global-args }} run ${{ matrix.run-args }}
+          DURATION=${{ inputs.slo_workload_duration_seconds || 600 }}
+          READ_RPS=${{ inputs.slo_workload_read_max_rps || 1000 }}
+          WRITE_RPS=${{ inputs.slo_workload_write_max_rps || 100 }}
+
+          ARGS="--connection-string grpc://ydb:2136/?database=/Root/testdb run \
+            --metrics-push-url http://prometheus:9090/api/v1/otlp/v1/metrics \
+            --time $DURATION \
+            --read-rps $READ_RPS \
+            --write-rps $WRITE_RPS \
+            --read-timeout 100 \
+            --write-timeout 100"
+
+          echo "Starting ydb-app-current..."
+          docker run -d \
+            --name ydb-app-current \
+            --network ydb_ydb-net \
+            --add-host "ydb:172.28.0.11" \
+            --add-host "ydb:172.28.0.12" \
+            --add-host "ydb:172.28.0.13" \
+            --add-host "ydb:172.28.0.99" \
+            ydb-app-current $ARGS
+
+          echo "Starting ydb-app-baseline..."
+          docker run -d \
+            --name ydb-app-baseline \
+            --network ydb_ydb-net \
+            --add-host "ydb:172.28.0.11" \
+            --add-host "ydb:172.28.0.12" \
+            --add-host "ydb:172.28.0.13" \
+            --add-host "ydb:172.28.0.99" \
+            ydb-app-baseline $ARGS
+
+          # Show initial logs
+          echo ""
+          echo "==================== INITIAL CURRENT LOGS ===================="
+          docker logs -n 15 ydb-app-current 2>&1 || echo "No current container"
+          echo ""
+          echo "==================== INITIAL BASELINE LOGS ===================="
+          docker logs -n 15 ydb-app-baseline 2>&1 || echo "No baseline container"
+          echo ""
+
+          # Wait for workloads to complete
+          echo "Waiting for workloads to complete (${DURATION}s)..."
+          sleep ${DURATION}
+
+          # Stop containers after workload duration and wait for graceful shutdown
+          echo "Stopping containers after ${DURATION}s..."
+          docker stop --timeout=30 ydb-app-current ydb-app-baseline 2>&1 || true
+
+          # Force kill if still running
+          docker kill ydb-app-current ydb-app-baseline 2>&1 || true
+
+          # Check exit codes
+          CURRENT_EXIT=$(docker inspect ydb-app-current --format='{{.State.ExitCode}}' 2>/dev/null || echo "1")
+          BASELINE_EXIT=$(docker inspect ydb-app-baseline --format='{{.State.ExitCode}}' 2>/dev/null || echo "0")
+
+          echo "Current container exit code: $CURRENT_EXIT"
+          echo "Baseline container exit code: $BASELINE_EXIT"
+
+          # Show final logs
+          echo ""
+          echo "==================== FINAL CURRENT LOGS ===================="
+          docker logs -n 15 ydb-app-current 2>&1 || echo "No current container"
+          echo ""
+          echo "==================== FINAL BASELINE LOGS ===================="
+          docker logs -n 15 ydb-app-baseline 2>&1 || echo "No baseline container"
+          echo ""
+
+          echo "SUCCESS: Workloads completed successfully"
 
       - if: always()
-        name: Store ydb chaos testing logs
+        name: Store logs
         run: |
-          docker logs ydb-chaos > chaos-ydb.log
+          docker logs ydb-app-current > current.log 2>&1 || echo "No current container"
+          docker logs ydb-app-baseline > baseline.log 2>&1 || echo "No baseline container"
 
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.workload }}-chaos-ydb.log
-          path: ./chaos-ydb.log
+          name: ${{matrix.workload}}-slo-cpp-sdk-logs
+          path: |
+            ./current.log
+            ./baseline.log
           retention-days: 1
-
-      - if: always()
-        name: Cleanup SLO Database
-        run: |
-          ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.global-args }} cleanup

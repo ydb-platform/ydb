@@ -8,6 +8,7 @@
 #include "type_ann_wide.h"
 #include "type_ann_types.h"
 #include "type_ann_pg.h"
+#include "type_ann_yql.h"
 #include "type_ann_match_recognize.h"
 
 #include <yql/essentials/core/sql_types/yql_atom_enums.h>
@@ -140,6 +141,48 @@ namespace NTypeAnnImpl {
             return ToString(value) + "," + ToString(*NKikimr::NMiniKQL::FindTimezoneIANAName(tzId));
         }
         return {};
+    }
+
+    bool EnsureNoItemTypeConflicts(
+        TStringBuf name,
+        const TExprNode::TPtr& container,
+        TExprContext& ctx)
+    {
+        YQL_ENSURE(container->ChildrenSize() != 0);
+
+        size_t lhsIndex = 0;
+        const TTypeAnnotationNode* lhsType = container->Child(lhsIndex)->GetTypeAnn();
+
+        size_t rhsIndex = 1;
+        const TTypeAnnotationNode* rhsType = lhsType;
+
+        for (; rhsIndex < container->ChildrenSize(); ++rhsIndex) {
+            rhsType = container->Child(rhsIndex)->GetTypeAnn();
+            if (lhsType != rhsType) {
+                break;
+            }
+        }
+
+        if (lhsType == rhsType) {
+            return true;
+        }
+
+        TIssue issue(
+            container->Head().Pos(ctx),
+            TStringBuilder()
+                << name << " items types isn't same: "
+                << *lhsType << " and " << *rhsType);
+
+        issue.AddSubIssue(new TIssue(
+            container->Child(lhsIndex)->Pos(ctx),
+            TStringBuilder() << "Type at " << lhsIndex << " is " << *lhsType));
+
+        issue.AddSubIssue(new TIssue(
+            container->Child(rhsIndex)->Pos(ctx),
+            TStringBuilder() << "Type at " << rhsIndex << " is " << *rhsType));
+
+        ctx.AddError(std::move(issue));
+        return false;
     }
 
     template <typename T>
@@ -3614,11 +3657,7 @@ namespace NTypeAnnImpl {
         }
 
         if constexpr (IsStrict) {
-            std::set<const TTypeAnnotationNode*> set;
-            input->ForEachChild([&](const TExprNode& item) { set.emplace(item.GetTypeAnn()); });
-            if (1U != set.size()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
-                "List items types isn't same: " << **set.cbegin() << " and " << **set.crbegin()));
+            if (!EnsureNoItemTypeConflicts("List", input, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -3626,8 +3665,9 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         } else if (const auto commonItemType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
             if (const auto status = ConvertChildrenToType(input, commonItemType, ctx.Expr, ctx.Types);
-                status != IGraphTransformer::TStatus::Ok)
+                status != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
         } else {
             return IGraphTransformer::TStatus::Error;
         }
@@ -6165,11 +6205,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if constexpr (IsStrict) {
-            std::set<const TTypeAnnotationNode*> set;
-            input->ForEachChild([&](const TExprNode& item) { set.emplace(item.GetTypeAnn()); });
-            if (1U != set.size()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
-                "Dict items types isn't same: " << **set.crbegin() << " and " << **set.cbegin()));
+            if (!EnsureNoItemTypeConflicts("Dict", input, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -6177,8 +6213,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Repeat;
         } else if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, warn)) {
             if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types);
-                status != IGraphTransformer::TStatus::Ok)
+                status != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
 
             if (warn) {
                 return IGraphTransformer::TStatus::Repeat;
@@ -14048,6 +14085,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["YqlStar"] = &PgStarWrapper;
         Functions["YqlWhere"] = &PgWhereWrapper;
         Functions["YqlSort"] = &PgSortWrapper;
+        Functions["YqlGroup"] = &PgWhereWrapper;
+        Functions["YqlGroupRef"] = &PgGroupRefWrapper;
+        Functions["YqlGrouping"] = &PgGroupingWrapper;
+        Functions["YqlGroupingSet"] = &PgGroupingSetWrapper;
+        ExtFunctions["YqlAggFactory"] = &YqlAggFactoryWrapper;
+        ExtFunctions["YqlAgg"] = &YqlAggWrapper;
+        Functions["YqlReplaceUnknown"] = &PgReplaceUnknownWrapper;
 
         for (ui32 i = 0; i < NKikimr::NUdf::DataSlotCount; ++i) {
             auto name = TString(NKikimr::NUdf::GetDataTypeInfo((EDataSlot)i).Name);

@@ -265,7 +265,7 @@ TEST_F(XdcRdmaTest, SerializeToRope) {
         totalXdcSize += len;
     }
 
-    auto mempool = NInterconnect::NRdma::CreateSlotMemPool(nullptr);
+    auto mempool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
 
     auto serializedRope = ev->SerializeToRope(mempool.get());
 
@@ -284,7 +284,7 @@ TEST_F(XdcRdmaTest, SerializeToRope) {
         }
     }
 
-    auto serializationInfo = ev->CreateSerializationInfo();
+    auto serializationInfo = ev->CreateSerializationInfo(false);
     auto parsedEventHandle = std::make_unique<IEventHandle>(
         TActorId(),
         ev->Type(),
@@ -351,7 +351,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithRegionOffset) {
 
 TEST_F(XdcRdmaTest, SendRdmaWithGlueWithRegionOffset) {
     TTestICCluster cluster(2);
-    auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr);
+    auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
     auto* ev = MakeTestEvent(123, memPool.get(), true, true);
 
     auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
@@ -377,7 +377,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithGlueWithRegionOffset) {
 
 TEST_F(XdcRdmaTest, SendRdmaWithGlue) {
     TTestICCluster cluster(2);
-    auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr);
+    auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
     auto* ev = MakeTestEvent(123, memPool.get(), true, false);
 
     auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
@@ -401,7 +401,7 @@ TEST_F(XdcRdmaTest, SendRdmaWithGlue) {
 
 TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
     TTestICCluster cluster(2);
-    auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr);
+    auto memPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
     auto* ev = MakeMultuGlueTestEvent(123, memPool.get());
 
     auto recieverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {

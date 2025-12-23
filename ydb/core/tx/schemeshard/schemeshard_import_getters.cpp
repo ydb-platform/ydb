@@ -3,23 +3,25 @@
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
 
-#include <ydb/public/api/protos/ydb_import.pb.h>
-#include <ydb/public/lib/ydb_cli/dump/files/files.h>
-
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <library/cpp/json/json_reader.h>
 
 #include <google/protobuf/text_format.h>
 
+#include <util/stream/file.h>
+#include <util/system/fs.h>
+#include <util/folder/path.h>
 #include <util/string/subst.h>
 
 #include <algorithm>
@@ -44,10 +46,11 @@ struct TGetterSettings {
 
     static TGetterSettings FromImportInfo(const TImportInfo::TPtr& importInfo, TMaybe<NBackup::TEncryptionIV> iv) {
         TGetterSettings settings;
-        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->Settings));
-        settings.Retries = importInfo->Settings.number_of_retries();
-        if (importInfo->Settings.has_encryption_settings()) {
-            settings.Key = NBackup::TEncryptionKey(importInfo->Settings.encryption_settings().symmetric_key().key());
+        Y_ABORT_UNLESS(importInfo->Kind == TImportInfo::EKind::S3);
+        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->GetS3Settings()));
+        settings.Retries = importInfo->GetS3Settings().number_of_retries();
+        if (importInfo->GetS3Settings().has_encryption_settings()) {
+            settings.Key = NBackup::TEncryptionKey(importInfo->GetS3Settings().encryption_settings().symmetric_key().key());
         }
         settings.IV = std::move(iv);
         return settings;
@@ -300,6 +303,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/permissions.pb";
     }
 
+    static TString MaterializedIndexSchemeKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& indexImplTablePrefix) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << indexImplTablePrefix << "/scheme.pb";
+    }
+
     static TString ChangefeedDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedPrefix) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
         return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedPrefix << "/changefeed_description.pb";
@@ -382,7 +390,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
             if (!item.Metadata.HasEnablePermissions()) {
-                StartDownloadingChangefeeds(); // permissions are optional if we don't know if they were created during export
+                return StartCheckingMaterializedIndexes(); // permissions are optional if we don't know if they were created during export
             } else {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "No permissions file found");
             }
@@ -392,6 +400,28 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         GetObject(PermissionsKey, result.GetResult().GetContentLength());
+    }
+
+    void HandleIndex(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        LOG_D("HandleIndex TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        const bool canSkip = IndexFillingMode != Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT;
+        if (canSkip && NoObjectFound(result.GetError().GetErrorType())) {
+            Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+            auto& item = ImportInfo->Items.at(ItemIdx);
+            item.MaterializedIndexes.clear();
+            return StartDownloadingChangefeeds();
+        } else if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+
+        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+        GetObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
+            IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix), result.GetResult().GetContentLength());
     }
 
     void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -447,8 +477,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         LOG_T("Trying to parse metadata"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
-
-        item.Metadata = NBackup::TMetadata::Deserialize(content);
+        try {
+            item.Metadata = NBackup::TMetadata::Deserialize(content);
+        } catch (const std::exception& e) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed to parse metadata: " << e.what());
+        }
 
         if (item.Metadata.HasVersion() && item.Metadata.GetVersion() == 0) {
             NeedValidateChecksums = false;
@@ -516,7 +549,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             if (NeedDownloadPermissions) {
                 StartDownloadingPermissions();
             } else {
-                StartDownloadingChangefeeds();
+                StartCheckingMaterializedIndexes();
             }
         };
 
@@ -558,11 +591,62 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         item.Permissions = std::move(permissions);
 
         auto nextStep = [this]() {
-            StartDownloadingChangefeeds();
+            StartCheckingMaterializedIndexes();
         };
 
         if (NeedValidateChecksums) {
             StartValidatingChecksum(PermissionsKey, content, nextStep);
+        } else {
+            nextStep();
+        }
+    }
+
+    void HandleIndex(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandleIndex TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        TString content;
+        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableSchema, IndexCheckedMaterializedIndexImplTable)) {
+            return;
+        }
+
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& item = ImportInfo->Items.at(ItemIdx);
+
+        LOG_T("Trying to parse index"
+            << ": self# " << SelfId()
+            << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
+
+        Ydb::Table::CreateTableRequest request;
+        if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse index");
+        }
+
+        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+        const auto& indexImplTablePrefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable];
+        item.MaterializedIndexes.emplace_back(indexImplTablePrefix, std::move(request));
+
+        auto nextStep = [this]() {
+            if (++IndexCheckedMaterializedIndexImplTable >= IndexImplTablePrefixes.size()) {
+                StartDownloadingChangefeeds();
+            } else {
+                Become(&TThis::StateCheckIndexes);
+                HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
+                    IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
+            }
+        };
+
+        if (NeedValidateChecksums) {
+            StartValidatingChecksum(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
+                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix), content, nextStep);
         } else {
             nextStep();
         }
@@ -714,6 +798,77 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Download(PermissionsKey);
     }
 
+    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode) {
+        switch (mode) {
+        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
+        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    void CheckMaterializedIndexes() {
+        Become(&TThis::StateCheckIndexes);
+
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& item = ImportInfo->Items.at(ItemIdx);
+
+        IndexImplTablePrefixes.clear();
+        IndexCheckedMaterializedIndexImplTable = 0;
+        item.MaterializedIndexes.clear();
+
+        if (const auto& indexes = item.Metadata.GetIndexes()) {
+            IndexImplTablePrefixes.reserve(indexes->size());
+            for (const auto& index : *indexes) {
+                IndexImplTablePrefixes.push_back(index);
+            }
+
+            DownloadMaterializedIndexes();
+        } else {
+            if (!Key) { // not encrypted
+                if (item.Table) {
+                    IndexImplTablePrefixes.reserve(item.Table->indexes_size());
+
+                    for (const auto& index : item.Table->indexes()) {
+                        const auto indexType = NTableIndex::TryConvertIndexType(index.type_case());
+                        if (!indexType) {
+                            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unsupported index"
+                                << ": name# " << index.name()
+                                << ": type# " << static_cast<int>(index.type_case()));
+                        }
+
+                        const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
+                        std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout;
+                        if (*indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext) {
+                            const auto& settings = index.global_fulltext_index().fulltext_settings();
+                            layout = settings.has_layout() ? settings.layout() : Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
+                        }
+
+                        for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns, layout)) {
+                            const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
+                            IndexImplTablePrefixes.push_back({implTablePrefix, implTablePrefix});
+                        }
+                    }
+                }
+
+                DownloadMaterializedIndexes();
+            } else {
+                Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "No indexes described in table metadata");
+            }
+        }
+    }
+
+    void DownloadMaterializedIndexes() {
+        if (!IndexImplTablePrefixes.empty()) {
+            Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+            HeadObject(MaterializedIndexSchemeKeyFromSettings(*ImportInfo, ItemIdx,
+                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
+        } else {
+            StartDownloadingChangefeeds();
+        }
+    }
+
     void DownloadChangefeeds() {
         Become(&TThis::StateDownloadChangefeeds);
         if (const auto& maybeChangefeeds = ImportInfo->Items[ItemIdx].Metadata.GetChangefeeds()) {
@@ -758,6 +913,15 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Become(&TThis::StateDownloadPermissions);
     }
 
+    void StartCheckingMaterializedIndexes() {
+        ResetRetries();
+        if (NeedToCheckMaterializedIndexes(IndexFillingMode)) {
+            CheckMaterializedIndexes();
+        } else {
+            StartDownloadingChangefeeds();
+        }
+    }
+
     void StartDownloadingChangefeeds() {
         ResetRetries();
         DownloadChangefeeds();
@@ -772,8 +936,9 @@ public:
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
-        , NeedDownloadPermissions(!ImportInfo->Settings.no_acl())
-        , NeedValidateChecksums(!ImportInfo->Settings.skip_checksum_validation())
+        , IndexFillingMode(ImportInfo->GetS3Settings().index_filling_mode())
+        , NeedDownloadPermissions(!ImportInfo->GetNoAcl())
+        , NeedValidateChecksums(!ImportInfo->GetSkipChecksumValidation())
     {
     }
 
@@ -812,6 +977,16 @@ public:
         }
     }
 
+    STATEFN(StateCheckIndexes) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleIndex);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleIndex);
+
+            sFunc(TEvents::TEvWakeup, CheckMaterializedIndexes);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
     STATEFN(StateDownloadChangefeeds) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvListObjectsResponse, HandleChangefeeds);
@@ -842,24 +1017,30 @@ private:
     TString SchemeKey;
     NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
+
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;
 
+    TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
+    ui64 IndexCheckedMaterializedIndexImplTable = 0;
+    Ydb::Import::ImportFromS3Settings::IndexFillingMode IndexFillingMode;
+
     bool NeedDownloadPermissions = true;
     bool NeedValidateChecksums = true;
+
 }; // TSchemeGetter
 
 class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     static TString MetadataKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.Settings.source_prefix() << "/metadata.json";
+        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/metadata.json";
     }
 
     static TString SchemaMappingKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.Settings.source_prefix() << "/SchemaMapping/mapping.json";
+        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/SchemaMapping/mapping.json";
     }
 
     static TString SchemaMappingMetadataKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.Settings.source_prefix() << "/SchemaMapping/metadata.json";
+        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/SchemaMapping/metadata.json";
     }
 
     void HandleMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -1402,8 +1583,153 @@ private:
     TPathFilter PathFilter;
 };
 
+class TFSHelper {
+public:
+    static TString GetFullPath(const TString& basePath, const TString& relativePath) {
+        if (basePath.empty()) {
+            return TStringBuilder() << "/" << relativePath;
+        }
+        return TFsPath(basePath) / relativePath;
+    }
+
+    static bool ReadFile(const TString& path, TString& content, TString& error) {
+        try {
+            if (!NFs::Exists(path)) {
+                error = TStringBuilder() << "File does not exist: " << path;
+                return false;
+            }
+
+            TFileInput file(path);
+            content = file.ReadAll();
+            return true;
+        } catch (const std::exception& e) {
+            error = TStringBuilder() << "Failed to read file " << path << ": " << e.what();
+            return false;
+        }
+    }
+};
+
+class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
+
+    bool ProcessMetadata(const TString& content, TString& error) {
+        try {
+            ImportInfo->Items[ItemIdx].Metadata = NBackup::TMetadata::Deserialize(content);
+            return true;
+        } catch (const std::exception& e) {
+            error = TStringBuilder() << "Failed to parse metadata: " << e.what();
+            return false;
+        }
+    }
+
+    bool ProcessScheme(const TString& content, TString& error) {
+        auto& item = ImportInfo->Items[ItemIdx];
+
+        Ydb::Table::CreateTableRequest table;
+        if (table.ParseFromString(content)) {
+            item.Table = table;
+            return true;
+        }
+
+        error = "Failed to parse scheme as table";
+        return false;
+    }
+
+    void ProcessPermissions(const TString& content) {
+        auto& item = ImportInfo->Items[ItemIdx];
+        Ydb::Scheme::ModifyPermissionsRequest permissions;
+        if (permissions.ParseFromString(content)) {
+            item.Permissions = permissions;
+        }
+    }
+
+    void Reply(bool success, const TString& errorMessage = {}) {
+        LOG_I("TSchemeGetterFS: Reply"
+            << ": self# " << SelfId()
+            << ", importId# " << ImportInfo->Id
+            << ", itemIdx# " << ItemIdx
+            << ", success# " << success
+            << ", error# " << errorMessage);
+
+        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, success, errorMessage));
+        PassAway();
+    }
+
+public:
+    explicit TSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
+        : ReplyTo(replyTo)
+        , ImportInfo(std::move(importInfo))
+        , ItemIdx(itemIdx)
+    {
+        Y_ABORT_UNLESS(ImportInfo->Kind == TImportInfo::EKind::FS);
+    }
+
+    void Bootstrap() {
+        const auto settings = ImportInfo->GetFsSettings();
+        const TString basePath = settings.base_path();
+        
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& item = ImportInfo->Items[ItemIdx];
+        
+        TString sourcePath = item.SrcPath;
+        if (sourcePath.empty()) {
+            Reply(false, "Source path is empty for import item");
+            return;
+        }
+
+        const TFsPath itemPath = TFsPath(basePath) / sourcePath;
+        TString error;
+
+        const TString metadataPath = itemPath / "metadata.json";
+        TString metadataContent;
+        
+        if (!TFSHelper::ReadFile(metadataPath, metadataContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        if (!ProcessMetadata(metadataContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        const TString schemeFileName = NYdb::NDump::NFiles::TableScheme().FileName;
+        const TString schemePath = itemPath / schemeFileName;
+        TString schemeContent;
+        
+        if (!TFSHelper::ReadFile(schemePath, schemeContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        if (!ProcessScheme(schemeContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        if (!ImportInfo->GetNoAcl()) {
+            const TString permissionsPath = itemPath / "permissions.pb";
+            TString permissionsContent;
+            
+            if (TFSHelper::ReadFile(permissionsPath, permissionsContent, error)) {
+                ProcessPermissions(permissionsContent);
+            }
+        }
+
+        Reply(true);
+    }
+
+private:
+    const TActorId ReplyTo;
+    TImportInfo::TPtr ImportInfo;
+    const ui32 ItemIdx;
+};
+
 IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv) {
     return new TSchemeGetter(replyTo, std::move(importInfo), itemIdx, std::move(iv));
+}
+
+IActor* CreateSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx) {
+    return new TSchemeGetterFS(replyTo, std::move(importInfo), itemIdx);
 }
 
 IActor* CreateSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo) {

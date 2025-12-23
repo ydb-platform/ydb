@@ -6,6 +6,7 @@ import threading
 from ydb.tests.stress.oltp_workload.workload.type.vector_index import WorkloadVectorIndex
 from ydb.tests.stress.oltp_workload.workload.type.insert_delete_all_types import WorkloadInsertDeleteAllTypes
 from ydb.tests.stress.oltp_workload.workload.type.select_partition import WorkloadSelectPartition
+from ydb.tests.stress.oltp_workload.workload.type.secondary_index import WorkloadSecondaryIndex
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -35,7 +36,8 @@ class WorkloadRunner:
         workloads = [
             WorkloadInsertDeleteAllTypes(self.client, self.name, stop),
             WorkloadVectorIndex(self.client, self.name, stop),
-            WorkloadSelectPartition(self.client, self.name, stop)
+            WorkloadSelectPartition(self.client, self.name, stop),
+            WorkloadSecondaryIndex(self.client, self.name, stop)
         ]
 
         for w in workloads:

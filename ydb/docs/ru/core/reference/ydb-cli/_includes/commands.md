@@ -142,10 +142,10 @@ workload mixed run insert | Вставка случайных строк в [т�
 workload mixed run upsert | Обновление случайных строк в [таблице](../../../concepts/glossary.md#table) около текущего времени с помощью команды `UPSERT` в `Mixed` нагрузке
 workload mixed run select | Выборка случайных строк из [таблицы](../../../concepts/glossary.md#table) в `Mixed` нагрузке
 workload mixed clean | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Mixed` нагрузки
-workload query init | Инициализация [таблиц](../../../concepts/glossary.md#table) и их конфигураций для `Query` нагрузки
-workload query import | Заполнение [таблиц](../../../concepts/glossary.md#table) данными для `Query` нагрузки
-workload query run | Запуск нагрузочного тестирования `Query` нагрузки
-workload query clean | Удаление [таблиц](../../../concepts/glossary.md#table), используемых для `Query` нагрузки
+[workload query init](../workload-query.md#init) | Инициализация [таблиц](../../../concepts/glossary.md#table) и их конфигураций для `Query` нагрузки
+[workload query import](../workload-query.md#load) | Заполнение [таблиц](../../../concepts/glossary.md#table) данными для `Query` нагрузки
+[workload query run](../workload-query.md#run) | Запуск нагрузочного тестирования `Query` нагрузки
+[workload query clean](../workload-query.md#cleanup) | Удаление [таблиц](../../../concepts/glossary.md#table), используемых для `Query` нагрузки
 [workload stock init](../commands/workload/stock.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Stock` нагрузки
 [workload stock run add-rand-order](../commands/workload/stock.md#insert-random-order) | Вставка заказов со случайным ID без их обработки в `Stock` нагрузке
 [workload stock run put-rand-order](../commands/workload/stock.md#submit-random-order) | Отправка случайных заказов с обработкой в `Stock` нагрузке

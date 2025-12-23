@@ -412,15 +412,15 @@ TExprNode::TPtr BuildDqGraceJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExpr
     TVector<TCoAtom> rightKeyColumnNames;
 
     for (const auto &p : join.JoinKeys) {
-        TString leftFullName = "_alias_" + p.first.Alias + "." + p.first.ColumnName;
-        TString rightFullName = "_alias_" + p.second.Alias + "." + p.second.ColumnName;
+        TString leftFullName = p.first.GetFullName();
+        TString rightFullName = p.second.GetFullName();
 
         // clang-format off
         joinKeys.push_back(Build<TDqJoinKeyTuple>(ctx, pos)
-            .LeftLabel().Value("_alias_" + p.first.Alias).Build()
-            .LeftColumn().Value(p.first.ColumnName).Build()
-            .RightLabel().Value("_alias_" + p.second.Alias).Build()
-            .RightColumn().Value(p.second.ColumnName).Build()
+            .LeftLabel().Value(p.first.GetAlias()).Build()
+            .LeftColumn().Value(p.first.GetColumnName()).Build()
+            .RightLabel().Value(p.second.GetAlias()).Build()
+            .RightColumn().Value(p.second.GetColumnName()).Build()
         .Done());
 
         leftKeyColumnNames.push_back(Build<TCoAtom>(ctx, pos).Value(leftFullName).Done());
@@ -450,6 +450,7 @@ TExprNode::TPtr BuildDqGraceJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExpr
      // clang-format on
 }
 
+[[maybe_unused]]
 TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer & enforcer, TExprContext &ctx, TPositionHandle pos) {
     if (enforcer.Action != EOrderEnforcerAction::REQUIRE) {
         return input;
@@ -1215,8 +1216,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                 columns.push_back(ctx.NewAtom(op->Pos, c));
             }
 
-            switch (opSource->SourceType) {
-                case ETableSourceType::Row: {
+            switch (opSource->GetTableStorageType()) {
+                case NYql::EStorageType::RowStorage: {
                     // clang-format off
                     currentStageBody = Build<TDqSource>(ctx, op->Pos)
                         .DataSource(source)
@@ -1231,7 +1232,18 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                     // clang-format on
                     break;
                 }
-                case ETableSourceType::Column: {
+                case NYql::EStorageType::ColumnStorage: {
+                    // clang-format off
+                    auto processLambda = Build<TCoLambda>(ctx, op->Pos)
+                        .Args({"arg"})
+                        .Body("arg")
+                    .Done().Ptr();
+                    // clang-format on
+
+                    if (opSource->OlapFilterLambda) {
+                        processLambda = opSource->OlapFilterLambda;
+                    }
+
                     // clang-format off
                     auto olapRead = Build<TKqpBlockReadOlapTableRanges>(ctx, op->Pos)
                             .Table(opSource->TableCallable)
@@ -1239,10 +1251,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                             .Columns().Add(columns).Build()
                             .Settings<TCoNameValueTupleList>().Build()
                             .ExplainPrompt<TCoNameValueTupleList>().Build()
-                            .Process()
-                            .Args({"row"})
-                                .Body("row")
-                            .Build()
+                            .Process(processLambda)
                     .Done().Ptr();
 
                     auto flowNonBlockRead = Build<TCoToFlow>(ctx, op->Pos)
@@ -1267,11 +1276,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                     Y_ENSURE(false, "Unsupported table source type");
             }
 
-            // If we need to remap columns or perform a sort, we need to create a new stage
-            if (opSource->Props.OrderEnforcer.has_value()) {
-                Y_ENSURE(false, "Sorting over read operator not supported");
-            }
-
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Read " << opStageId;
@@ -1283,10 +1287,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
             }
 
             auto filter = CastOperator<TOpFilter>(op);
-
-            if (filter->GetInput()->Props.OrderEnforcer.has_value()) {
-                currentStageBody = BuildSort(currentStageBody, *filter->GetInput()->Props.OrderEnforcer, ctx, filter->GetInput()->Pos);
-            }
 
             auto filterBody = TCoLambda(filter->FilterLambda).Body();
             auto filter_arg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
@@ -1345,10 +1345,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
             }
 
             auto map = CastOperator<TOpMap>(op);
-
-            if (map->GetInput()->Props.OrderEnforcer.has_value()) {
-                currentStageBody = BuildSort(currentStageBody, *map->GetInput()->Props.OrderEnforcer, ctx, map->GetInput()->Pos);
-            }
 
             auto arg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
 
@@ -1432,10 +1428,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
 
             auto limit = CastOperator<TOpLimit>(op);
 
-            if (limit->GetInput()->Props.OrderEnforcer.has_value()) {
-                currentStageBody = BuildSort(currentStageBody, *limit->GetInput()->Props.OrderEnforcer, ctx, limit->GetInput()->Pos);
-            }
-
             // clang-format off
             currentStageBody = Build<TCoTake>(ctx, op->Pos)
                 .Input(TExprBase(currentStageBody))
@@ -1446,6 +1438,46 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Limit " << opStageId;
+        } else if (op->Kind == EOperator::Sort) {
+            if (!currentStageBody) {
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *op->Children[0]->Props.StageId);
+                stageArgs[opStageId].push_back(stageArg);
+                currentStageBody = stageInput;
+            }
+
+            auto sort = CastOperator<TOpSort>(op);
+            auto [selector, dirs] = BuildSortKeySelector(sort->SortElements, ctx, sort->Pos);
+
+            TExprNode::TPtr dirList;
+            if (dirs.size()==1){
+                dirList = dirs[0];
+            } else {
+                dirList = Build<TExprList>(ctx, sort->Pos).Add(dirs).Done().Ptr();
+            }
+
+            if (sort->LimitCond) {
+                // clang-format off
+                currentStageBody = Build<TCoTopSort>(ctx, sort->Pos)
+                    .Input(currentStageBody)
+                    .Count(sort->LimitCond)
+                    .SortDirections(dirList)
+                    .KeySelectorLambda(selector)
+                    .Done().Ptr();
+                // clang-format on
+            }
+            else {
+                // clang-format off
+                currentStageBody = Build<TCoSort>(ctx, sort->Pos)
+                    .Input(currentStageBody)
+                    .SortDirections(dirList)
+                    .KeySelectorLambda(selector)
+                    .Done().Ptr();
+                // clang-format on
+            }
+
+            stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
+            YQL_CLOG(TRACE, CoreDq) << "Converted Sort " << opStageId;
         } else if (op->Kind == EOperator::Join) {
             auto join = CastOperator<TOpJoin>(op);
 

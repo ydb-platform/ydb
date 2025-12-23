@@ -46,6 +46,7 @@ PEERDIR(
     yt/yql/providers/yt/job
     yt/yql/providers/yt/lib/dump_helpers
     yt/yql/providers/yt/lib/expr_traits
+    yt/yql/providers/yt/lib/hash
     yt/yql/providers/yt/lib/infer_schema
     yt/yql/providers/yt/lib/lambda_builder
     yt/yql/providers/yt/lib/log
@@ -56,6 +57,7 @@ PEERDIR(
     yt/yql/providers/yt/lib/skiff
     yt/yql/providers/yt/lib/url_mapper
     yt/yql/providers/yt/lib/yson_helpers
+    yt/yql/providers/yt/lib/yt_file_download
     yt/yql/providers/yt/lib/init_yt_api
     yt/yql/providers/yt/lib/config_clusters
     yt/yql/providers/yt/provider

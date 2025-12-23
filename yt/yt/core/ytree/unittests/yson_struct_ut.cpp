@@ -4544,5 +4544,14 @@ TEST(TestYsonStruct, Visitor)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TestYsonStruct, MetaStructType)
+{
+    EXPECT_EQ(
+        TypeName(TYsonStructRegistry::Get()->GetMeta<TTestConfig>()->GetStructType()),
+        TypeName(*New<TTestConfig>()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NYTree

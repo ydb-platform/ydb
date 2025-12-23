@@ -38,6 +38,18 @@ public:
     ITransactionPtr StartTransaction(
         const TStartTransactionOptions& options) override;
 
+    // distributed write API
+
+    TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteFileOptions& options = {}) override;
+
+    TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteTableOptions& options = {}) override;
+
     // cypress
 
     TNodeId Create(
@@ -526,11 +538,6 @@ public:
         const TOperationId& operationId,
         const TResumeOperationOptions& options) override;
 
-    TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
-        const TRichYPath& richPath,
-        i64 cookieCount,
-        const TStartDistributedWriteTableOptions& options = {}) override;
-
     void PingDistributedWriteTableSession(
         const TDistributedWriteTableSession& session,
         const TPingDistributedWriteTableOptions& options = {}) override;
@@ -539,11 +546,6 @@ public:
         const TDistributedWriteTableSession& session,
         const TVector<TWriteTableFragmentResult>& results,
         const TFinishDistributedWriteTableOptions& options = {}) override;
-
-    TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
-        const TRichYPath& richPath,
-        i64 cookieCount,
-        const TStartDistributedWriteFileOptions& options = {}) override;
 
     void PingDistributedWriteFileSession(
         const TDistributedWriteFileSession& session,

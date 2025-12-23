@@ -598,6 +598,135 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         RunBenches(ctx, config, args);
     }
 
+    struct CustomQuery {
+        std::string Query;
+        std::string CreateSchema;
+        std::string DropSchema;
+        std::string Stats;
+    };
+
+    CustomQuery CreateCustomQuery(TRNG& rng, const std::string& query) {
+        std::uniform_int_distribution distribution(7, 10);
+
+        std::regex tableAttributeRegex("([A-Z]+[A-Z0-9_]*)\\.([a-z]+[a-z0-9]*)");
+        auto it = std::sregex_iterator(query.begin(), query.end(), tableAttributeRegex);
+
+        std::string updatedQuery;
+        std::map<std::string, std::set<std::string>> tables;
+
+        auto getAttributeName = [](std::string relationName, std::string name) {
+            std::string lowerName = relationName;
+            std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(),
+                           [](unsigned char symbol){ return std::tolower(symbol); });
+
+            return lowerName + "_" + name;
+        };
+
+        size_t lastPosition = 0;
+        for (auto end = std::sregex_iterator(); it != end; ++ it) {
+            std::string relationName = (*it)[1];
+            std::string rowName = getAttributeName(relationName, (*it)[2].str());
+            tables[relationName].insert(rowName);
+
+            updatedQuery += it->prefix().str() + relationName + "." + rowName;
+            lastPosition = it->position() + it->length();
+        }
+
+        updatedQuery += query.substr(lastPosition);
+
+        std::regex relationRegex("[A-Z]+[A-Z0-9_]*");
+        for (auto end = std::sregex_iterator(),
+                  it = std::sregex_iterator(query.begin(), query.end(), relationRegex);
+             it != end; ++ it) {
+
+            std::string relationName = (*it)[0].str();
+            if (tables[relationName].empty()) {
+                tables[relationName].insert(getAttributeName(relationName, "a"));
+            }
+        }
+
+        std::regex joinClauseRegex(
+            "(from|(((left|right|full)\\s+)?((outer|inner)\\s+)?((semi|anti)\\s+)?|cross\\s+)?join)");
+        updatedQuery = std::regex_replace(updatedQuery, joinClauseRegex, "\n$0");
+
+        std::string createSchema;
+        std::string dropSchema;
+        std::stringstream stats;
+
+        bool isFirst = true;
+
+        stats << "{\n";
+        for (auto& [name, rows] : tables) {
+            std::string tablePath = "/Root/" + name;
+
+            dropSchema += "drop table `" + tablePath + "`;\n";
+            createSchema += "create table `" + tablePath + "` (\n";
+
+            if (!isFirst) {
+                stats << ",\n";
+            }
+
+            isFirst = false;
+
+            stats << "    \"" << tablePath << "\": {\n";
+            stats << "        \"" << "n_rows" << "\": " << std::pow(10, distribution(rng)) << ",\n";
+            stats << "        \"" << "byte_size" << "\": " << 64 * std::pow(10, distribution(rng)) << "\n";
+            stats << "    }";
+
+            std::string pk;
+            for (const std::string& row : rows) {
+                std::string attribute = row;
+                if (pk.empty()) {
+                    pk = attribute;
+                }
+
+                createSchema += "    " + attribute + " int32 not null,\n";
+            }
+
+            createSchema += "    primary key (" + pk + ")\n";
+            createSchema += ") with (store = column);\n";
+        }
+        stats << "\n}\n";
+
+        return {std::move(updatedQuery), std::move(createSchema), std::move(dropSchema), stats.str()};
+    }
+
+
+    Y_UNIT_TEST(CustomBenchmark) {
+        std::string query = GetTestParam("QUERY");
+        if (query.empty()) {
+            return;
+        }
+
+        std::random_device randomDevice;
+        TRNG rng(randomDevice() % UINT32_MAX);
+        auto customQuery = CreateCustomQuery(rng, query);
+
+        Cout <<   "--------------------------- (1) Stats:\n" << customQuery.Stats << "\n";
+
+        auto kikimr = GetCBOTestsYDB(TString(customQuery.Stats), TDuration::Seconds(10));
+        auto db = kikimr->GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        std::string benchArgs = GetTestParam("BENCHMARK");
+        auto config = GetBenchmarkConfig(TArgs{benchArgs});
+        DumpBenchmarkConfig(Cout, config);
+
+        Cout << "\n--------------------------- (2) Create schema:\n" << customQuery.CreateSchema;
+        ExecuteQuery(session, customQuery.CreateSchema);
+
+        Cout << "\n--------------------------- (3) Passed query:\n" << query << "\n";
+        Cout << "\n--------------------------- (4) Substituted query:\n" << customQuery.Query << "\n";
+        std::string configuredQuery = ConfigureQuery(customQuery.Query, /*enableShuffleElimination=*/true, /*optLevel=*/2);
+        Cout << "\n--------------------------- (5) Processed query:\n" << configuredQuery << "\n";
+
+        Cout << "\n";
+        BenchmarkExplain(config, session, TString(configuredQuery));
+
+        Cout << "\n--------------------------- (6) Drop schema:\n" << customQuery.DropSchema;
+        ExecuteQuery(session, customQuery.DropSchema);
+    }
+
 } // Y_UNIT_TEST_SUITE(KqpJoinTopology)
 
 } // namespace NKikimr::NKqp

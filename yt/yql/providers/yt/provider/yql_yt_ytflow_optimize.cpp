@@ -15,7 +15,7 @@ namespace NYql {
 using namespace NNodes;
 
 
-class TYtYtflowOptimization: public IYtflowOptimization {
+class TYtYtflowOptimization: public TEmptyYtflowOptimization {
 public:
     TYtYtflowOptimization(TYtState::TWeakPtr state)
         : State_(state)

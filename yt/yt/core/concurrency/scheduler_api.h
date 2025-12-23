@@ -59,18 +59,6 @@ template <CFuture TFuture>
 TErrorOr<typename TFuture::TValueType> WaitForFast(
     TFuture future);
 
-//! Similar to #WaitFor but extracts the value from #future via |GetUnique|.
-// TODO(babenko): deprecated, see YT-26319
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUnique(
-    TFuture<T> future,
-    IInvokerPtr invoker = GetCurrentInvoker());
-
-//! From the authors of #WaitForUnique and #WaitForFast.
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUniqueFast(
-    TFuture<T> future);
-
 //! A possibly blocking version of #WaitFor.
 template <CFuture TFuture>
 TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(

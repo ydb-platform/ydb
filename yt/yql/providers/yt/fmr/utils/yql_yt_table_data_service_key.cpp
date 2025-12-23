@@ -15,4 +15,9 @@ TString GetTableDataServiceChunkId(ui64 chunkNum, const TString& columnGroupName
     return TStringBuilder() << columnGroupName << "_" << chunkNum;
 }
 
+TString GetTableDataServiceMetaChunkId(ui64 chunkNum) {
+    return TStringBuilder() << "__meta_" << chunkNum << "__";
+}
+
+
 } // namespace NYql::NFmr

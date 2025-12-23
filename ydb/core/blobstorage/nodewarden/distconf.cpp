@@ -104,16 +104,7 @@ namespace NKikimr::NStorage {
             }
 
             // now extract the additional storage section
-            StorageConfigYaml.reset();
-            if (config.HasCompressedStorageYaml()) {
-                try {
-                    TStringInput ss(config.GetCompressedStorageYaml());
-                    TZstdDecompress zstd(&ss);
-                    StorageConfigYaml.emplace(zstd.ReadAll());
-                } catch (const std::exception& ex) {
-                    Y_ABORT("CompressedStorageYaml format incorrect: %s", ex.what());
-                }
-            }
+            StorageConfigYaml = GetStorageYaml(config);
 
             SelfManagementEnabled = (!IsSelfStatic || BaseConfig->GetSelfManagementConfig().GetEnabled()) &&
                 config.GetSelfManagementConfig().GetEnabled() &&
@@ -527,6 +518,18 @@ namespace NKikimr::NStorage {
             return ex.what();
         }
         return std::nullopt;
+    }
+
+    std::optional<TString> GetStorageYaml(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (!config.HasCompressedStorageYaml()) {
+            return std::nullopt;
+        }
+        try {
+            TStringInput s(config.GetCompressedStorageYaml());
+            return TZstdDecompress(&s).ReadAll();
+        } catch (const std::exception& ex) {
+            Y_ABORT("CompressedStorageYaml format incorrect: %s", ex.what());
+        }
     }
 
     TBridgeInfo::TPtr TDistributedConfigKeeper::GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config) {

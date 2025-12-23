@@ -16,6 +16,7 @@ SRCS(
     blobstorage.h
     blobstorage.cpp
     blobstorage_grouptype.cpp
+    blobstorage_relevance.cpp
     boot_type.h
     boot_type.cpp
     channel_profiles.h

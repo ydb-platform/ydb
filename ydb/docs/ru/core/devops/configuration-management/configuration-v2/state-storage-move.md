@@ -2,7 +2,7 @@
 
 {% cut "Статья находится в разработке" %}
 
-{% include [new](_includes/new.md) %}
+{% include [_](../_includes/experimental_v2.md) %}
 
 Если нужно вывести из эксплуатации узел кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../reference/configuration/index.md#domains-state), необходимо переместить её на другой узел.
 

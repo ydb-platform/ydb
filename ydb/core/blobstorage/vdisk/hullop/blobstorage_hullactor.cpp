@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_selector.h>
 #include <ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_fullsyncsst_add.h>
 
 namespace NKikimr {
 
@@ -163,6 +164,8 @@ namespace NKikimr {
         typedef ::NKikimr::TAsyncFreshCommitter<TKey, TMemRec> TAsyncFreshCommitter;
         typedef ::NKikimr::TAsyncAdvanceLsnCommitter<TKey, TMemRec> TAsyncAdvanceLsnCommitter;
         typedef ::NKikimr::TAsyncReplSstCommitter<TKey, TMemRec> TAsyncReplSstCommitter;
+        typedef ::NKikimr::TAsyncSyncSstCommitter<TKey, TMemRec> TAsyncSyncSstCommitter;
+        typedef ::NKikimr::TEvAddFullSyncSsts<TKey, TMemRec> TEvAddFullSyncSsts;
 
         using TRunTimeCtx = TLevelIndexRunTimeCtx<TKey, TMemRec>;
         using THullOpUtil = ::NKikimr::THullOpUtil<TKey, TMemRec>;
@@ -586,6 +589,27 @@ namespace NKikimr {
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
+        void Handle(TEvAddFullSyncSsts::TPtr& ev, const TActorContext& ctx) {
+            auto *msg = ev->Get();
+
+            // put ssts into zero level
+            for (auto& seg : msg->LevelSegments) {
+                RTCtx->LevelIndex->InsertSstAtLevel0(seg, HullDs->HullCtx);
+            }
+
+            // run full sync sst committer
+            auto committer = std::make_unique<TAsyncSyncSstCommitter>(
+                    HullLogCtx,
+                    HullDbCommitterCtx,
+                    RTCtx->LevelIndex,
+                    ctx.SelfID,
+                    msg->SstWriterId,
+                    std::move(msg->CommitChunks));
+
+            auto aid = ctx.RegisterWithSameMailbox(committer.release());
+            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+        }
+
         void Handle(THullCommitFinished::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             switch (ev->Get()->Type) {
@@ -606,6 +630,8 @@ namespace NKikimr {
                     AdvanceCommitInProgress = false;
                     break;
                 case THullCommitFinished::CommitReplSst:
+                    break;
+                case THullCommitFinished::CommitSyncSst:
                     break;
                 default:
                     Y_ABORT("Unexpected case");
@@ -678,7 +704,7 @@ namespace NKikimr {
                 using E = decltype(msg->Mode);
 
                 case E::FULL:
-                    FullCompactionState.FullCompactionTask(confirmedLsn, ctx.Now(), msg->Type, msg->RequestId, ev->Sender,
+                    FullCompactionState.FullCompactionTask(confirmedLsn, AppData()->TimeProvider->Now(), msg->Type, msg->RequestId, ev->Sender,
                         std::move(msg->TablesToCompact), msg->Force);
                     ScheduleCompaction(ctx);
                     break;
@@ -723,6 +749,7 @@ namespace NKikimr {
             HTemplFunc(THullChange, Handle)
             HTemplFunc(TFreshAppendixCompactionDone, Handle)
             HTemplFunc(TEvAddBulkSst, Handle)
+            HTemplFunc(TEvAddFullSyncSsts, Handle)
             HTemplFunc(TSelected, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             CFunc(TEvBlobStorage::EvPermitGarbageCollection, HandlePermitGarbageCollection)

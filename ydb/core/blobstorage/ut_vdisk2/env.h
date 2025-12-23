@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+
 namespace NKikimr {
 
     class TTestEnv : TNonCopyable {
@@ -90,6 +92,19 @@ namespace NKikimr {
 
         TIntrusivePtr<TPDiskMockState> GetPDiskMockState() {
             return PDiskMockState;
+        }
+
+        ::NMonitoring::TDynamicCounterPtr GetCounters() {
+            return Counters;
+        }
+
+        void Compact(bool freshOnly = false) {
+            const TActorId& edge = Runtime->AllocateEdgeActor(NodeId);
+            TEvCompactVDisk* ev = TEvCompactVDisk::Create(EHullDbType::LogoBlobs, freshOnly ? TEvCompactVDisk::EMode::FRESH_ONLY : TEvCompactVDisk::EMode::FULL, true);
+            Runtime->Send(new IEventHandle(VDiskServiceId, edge, ev), NodeId);
+            auto res = Runtime->WaitForEdgeActorEvent({edge});
+            Runtime->DestroyActor(edge);
+            Y_VERIFY(res->GetTypeRewrite() == TEvBlobStorage::EvCompactVDiskResult);
         }
 
         NKikimrBlobStorage::TEvVPutResult Put(const TLogoBlobID& id, TString buffer,

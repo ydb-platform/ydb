@@ -41,7 +41,8 @@ uint64_t CalculateThreshold(double ratio) noexcept
   // For probabilities >= 1-(2^-54), the product wraps to zero!
   // Instead, calculate the high and low 32 bits separately.
   const double product = UINT32_MAX * ratio;
-  double hi_bits, lo_bits = ldexp(modf(product, &hi_bits), 32) + product;
+  double hi_bits{};
+  double lo_bits = ldexp(modf(product, &hi_bits), 32) + product;
   return (static_cast<uint64_t>(hi_bits) << 32) + static_cast<uint64_t>(lo_bits);
 }
 

@@ -931,20 +931,17 @@ T DeserializeStartWriteSessionResponse(TNode node)
 
 TDistributedWriteTableSessionWithCookies THttpRawClient::StartDistributedWriteTableSession(
     TMutationId& mutationId,
+    const TTransactionId& transactionId,
     const TRichYPath& richPath,
     i64 cookieCount,
-    const TStartDistributedWriteTableOptions& /*options*/)
+    const TStartDistributedWriteTableOptions& options)
 {
     // NB(achains): C++ client by default uses v3 api while v4 is not fully supported.
     // Explicit command path is needed until v4 is not default version.
     THttpHeader header("GET", "api/v4/start_distributed_write_session", /*isApi*/ false);
     header.AddMutationId();
 
-    TNode parameters;
-    parameters["path"] = PathToNode(richPath);
-    parameters["cookie_count"] = cookieCount;
-
-    header.MergeParameters(parameters);
+    header.MergeParameters(NRawClient::SerializeParamsForStartDistributedTableSession(transactionId, richPath, cookieCount, options));
 
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
 
@@ -1014,20 +1011,17 @@ std::unique_ptr<IOutputStreamWithResponse> THttpRawClient::WriteTableFragment(
 
 TDistributedWriteFileSessionWithCookies THttpRawClient::StartDistributedWriteFileSession(
     TMutationId& mutationId,
+    const TTransactionId& transactionId,
     const TRichYPath& richPath,
     i64 cookieCount,
-    const TStartDistributedWriteFileOptions& /*options*/)
+    const TStartDistributedWriteFileOptions& options)
 {
     // NB(achains): C++ client by default uses v3 api while v4 is not fully supported.
     // Explicit command path is needed until v4 is not default version.
     THttpHeader header("GET", "api/v4/start_distributed_write_file_session", /*isApi*/ false);
     header.AddMutationId();
 
-    TNode parameters;
-    parameters["path"] = PathToNode(richPath);
-    parameters["cookie_count"] = cookieCount;
-
-    header.MergeParameters(parameters);
+    header.MergeParameters(NRawClient::SerializeParamsForStartDistributedFileSession(transactionId, richPath, cookieCount, options));
 
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
 

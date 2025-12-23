@@ -288,6 +288,8 @@ public:
     TVectorIndexSettings Settings;
     uint32_t Clusters = 0;
     uint32_t Levels = 0;
+    uint32_t OverlapClusters = 0;
+    double OverlapRatio = 0;
 
     static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
 

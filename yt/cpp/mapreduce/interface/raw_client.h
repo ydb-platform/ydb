@@ -338,6 +338,7 @@ public:
 
     virtual TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
         TMutationId& mutationId,
+        const TTransactionId& transactionId,
         const TRichYPath& richPath,
         i64 cookieCount,
         const TStartDistributedWriteTableOptions& options = {}) = 0;
@@ -359,6 +360,7 @@ public:
 
     virtual TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
         TMutationId& mutationId,
+        const TTransactionId& transactionId,
         const TRichYPath& richPath,
         i64 cookieCount,
         const TStartDistributedWriteFileOptions& options = {}) = 0;

@@ -9,6 +9,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
+#include <library/cpp/streams/bzip2/bzip2.h>
 
 namespace NKikimr::NCountersInfo {
 
@@ -34,7 +35,12 @@ public:
         Counters->Accept(TString(), TString(), *encoder);
         THolder<TEvCountersInfoResponse> response = MakeHolder<TEvCountersInfoResponse>();
         auto& record = response->Record;
-        record.SetResponse(out);
+        TString dataPack;
+        TStringOutput output(dataPack);
+        TBZipCompress compress(&output);
+        compress.Write(out);
+        compress.Finish();
+        record.SetResponse(dataPack);
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 

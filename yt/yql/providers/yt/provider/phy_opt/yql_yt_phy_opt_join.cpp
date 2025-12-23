@@ -482,26 +482,52 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AddPruneKeys(TExprBase 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBase node, TExprContext& ctx) const {
     auto equiJoin = node.Cast<TYtEquiJoin>();
 
+    const size_t allInputs = equiJoin.Input().Size();
     const bool tryReorder = State_->Types->CostBasedOptimizer != ECostBasedOptimizerType::Disable
-        && equiJoin.Input().Size() > 2
+        && allInputs > 2
         && !HasSetting(equiJoin.JoinOptions().Ref(), "cbo_passed");
 
-    const bool waitAllInputs = State_->Configuration->JoinWaitAllInputs.Get().GetOrElse(false) || tryReorder;
-    if (waitAllInputs && !AreJoinInputsReady(equiJoin)) {
+    const size_t reorderPartialLimit = tryReorder ? State_->Configuration->CostBasedOptimizerPartial.Get().GetOrElse(0) : 0;
+    const bool fullReorder = tryReorder && (reorderPartialLimit == 0 || reorderPartialLimit >= allInputs);
+    const bool waitAllInputs = State_->Configuration->JoinWaitAllInputs.Get().GetOrElse(false) || fullReorder;
+    const bool allInputsReady = AreJoinInputsReady(equiJoin);
+    if (waitAllInputs && !allInputsReady) {
         return node;
     }
 
     const auto tree = ImportYtEquiJoin(equiJoin, ctx);
     if (tryReorder) {
-        YQL_CLOG(INFO, ProviderYt) << "Collecting cbo stats for equiJoin";
-        auto collectStatus = CollectCboStats(*tree, State_, ctx);
-        if (collectStatus == TStatus::Repeat) {
-            return ExportYtEquiJoin(equiJoin, *tree, ctx, State_);
+        const TOrderJoinsParams orderJoinsParams(tree, /*limit*/ 3);
+        if (allInputsReady)  {
+            YQL_ENSURE(orderJoinsParams.SuitableTrees.size() == 1);
+            YQL_ENSURE(orderJoinsParams.MaxLeaves == allInputs);
+            YQL_ENSURE(!orderJoinsParams.NotReadyLeaves);
+        } else {
+            YQL_ENSURE(reorderPartialLimit);
+            YQL_ENSURE(reorderPartialLimit < allInputs);
+            YQL_ENSURE(orderJoinsParams.MaxLeaves < allInputs);
+            YQL_ENSURE(orderJoinsParams.NotReadyLeaves);
+            if (reorderPartialLimit > 2 && orderJoinsParams.MaxLeaves < reorderPartialLimit) {
+                // Wait for more inputs.
+                return node;
+            }
         }
 
-        const auto optimizedTree = OrderJoins(tree, State_, ctx);
-        if (optimizedTree != tree) {
-            return ExportYtEquiJoin(equiJoin, *optimizedTree, ctx, State_);
+        if (!orderJoinsParams.SuitableTrees.empty()) {
+            YQL_CLOG(INFO, ProviderYt) << "Collecting cbo stats for EquiJoin";
+            const auto collectStatus = CollectCboStats(*tree, State_, ctx);
+            if (collectStatus == TStatus::Repeat) {
+                return ExportYtEquiJoin(equiJoin, *tree, ctx, State_);
+            }
+
+            YQL_CLOG(INFO, ProviderYt)
+                << "Run cbo: SuitableTrees.size=" << orderJoinsParams.SuitableTrees.size()
+                << ", MaxLeaves=" << orderJoinsParams.MaxLeaves
+                << ", NotReadyLeaves=" << orderJoinsParams.NotReadyLeaves;
+            const auto optimizedTree = OrderJoins(orderJoinsParams, State_, ctx);
+            if (optimizedTree != tree) {
+                return ExportYtEquiJoin(equiJoin, *optimizedTree, ctx, State_);
+            }
         }
     }
     const auto rewriteStatus = RewriteYtEquiJoin(equiJoin, *tree, State_, ctx);

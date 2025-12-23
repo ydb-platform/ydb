@@ -915,7 +915,7 @@ private:
         return TStatus::Ok;
     }
 
-virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
+    virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
         TString cluster = TString(create.DataSink().Cluster());
         TString table = TString(create.Table());
         TString tableType = TString(create.TableType());
@@ -2038,6 +2038,18 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
+    virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) override {
+        // there is will be checking on feature flag
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+
+        if (!node.TablePath().Value()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.TablePath().Pos()), "TablePath can't be empty."));
+            return TStatus::Error;
+        }
+
+        return TStatus::Ok;
+    }
+
     virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) override {
         if (!SessionCtx->Config().FeatureFlags.GetEnableAlterDatabase()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
@@ -2046,7 +2058,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         }
 
         if (!node.DatabasePath().Value()) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.DatabasePath().Pos()), "DatabasePath can't be empty."));
+            ctx.AddError(TIssue(ctx.GetPosition(node.DatabasePath().Pos()), "DatabasePath can't be empty."));
             return TStatus::Error;
         }
 

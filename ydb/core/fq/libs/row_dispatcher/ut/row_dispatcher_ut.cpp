@@ -43,7 +43,8 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
         const NYql::IPqGateway::TPtr& /*pqGateway*/,
-        ui64 /*maxBufferSize*/) const override {
+        ui64 /*maxBufferSize*/,
+        bool /*enableStreamingQueriesCounters*/) const override {
         auto actorId  = Runtime.AllocateEdgeActor();
         ActorIds.push(actorId);
         return actorId;

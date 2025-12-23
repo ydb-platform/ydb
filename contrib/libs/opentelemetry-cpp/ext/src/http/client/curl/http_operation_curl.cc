@@ -575,7 +575,7 @@ static long parse_max_ssl_version(const std::string &version)
 
 const char *HttpOperation::GetCurlErrorMessage(CURLcode code)
 {
-  const char *message;
+  const char *message{nullptr};
 
   if (curl_error_message_[0] != '\0')
   {
@@ -593,8 +593,6 @@ const char *HttpOperation::GetCurlErrorMessage(CURLcode code)
 
 CURLcode HttpOperation::SetCurlPtrOption(CURLoption option, void *value)
 {
-  CURLcode rc;
-
   /*
     curl_easy_setopt() is a macro with variadic arguments, type unsafe.
     Various SetCurlXxxOption() helpers ensure it is called with a pointer,
@@ -603,7 +601,7 @@ CURLcode HttpOperation::SetCurlPtrOption(CURLoption option, void *value)
     - a blob (struct curl_blob*)
     - a headers chunk (curl_slist *)
   */
-  rc = curl_easy_setopt(curl_resource_.easy_handle, option, value);
+  const CURLcode rc = curl_easy_setopt(curl_resource_.easy_handle, option, value);
 
   if (rc != CURLE_OK)
   {
@@ -618,13 +616,11 @@ CURLcode HttpOperation::SetCurlPtrOption(CURLoption option, void *value)
 // NOLINTNEXTLINE(google-runtime-int)
 CURLcode HttpOperation::SetCurlLongOption(CURLoption option, long value)
 {
-  CURLcode rc;
-
   /*
     curl_easy_setopt() is a macro with variadic arguments, type unsafe.
     SetCurlLongOption() ensures it is called with a long.
   */
-  rc = curl_easy_setopt(curl_resource_.easy_handle, option, value);
+  const CURLcode rc = curl_easy_setopt(curl_resource_.easy_handle, option, value);
 
   if (rc != CURLE_OK)
   {
@@ -638,13 +634,11 @@ CURLcode HttpOperation::SetCurlLongOption(CURLoption option, long value)
 
 CURLcode HttpOperation::SetCurlOffOption(CURLoption option, curl_off_t value)
 {
-  CURLcode rc;
-
   /*
     curl_easy_setopt() is a macro with variadic arguments, type unsafe.
     SetCurlOffOption() ensures it is called with a curl_off_t.
   */
-  rc = curl_easy_setopt(curl_resource_.easy_handle, option, value);
+  const CURLcode rc = curl_easy_setopt(curl_resource_.easy_handle, option, value);
 
   if (rc != CURLE_OK)
   {
@@ -732,21 +726,20 @@ CURLcode HttpOperation::Setup()
     return CURLE_FAILED_INIT;
   }
 
-  CURLcode rc;
-
   curl_error_message_[0] = '\0';
   curl_easy_setopt(curl_resource_.easy_handle, CURLOPT_ERRORBUFFER, curl_error_message_);
 
 // Support for custom debug function callback was added in version 7.9.6 so we guard against
 // exposing the default CURL output by keeping verbosity always disabled in lower versions.
 #if LIBCURL_VERSION_NUM < CURL_VERSION_BITS(7, 9, 6)
-  rc = SetCurlLongOption(CURLOPT_VERBOSE, 0L);
+  CURLcode rc = SetCurlLongOption(CURLOPT_VERBOSE, 0L);
   if (rc != CURLE_OK)
   {
     return rc;
   }
 #else
-  rc = SetCurlLongOption(CURLOPT_VERBOSE, (is_log_enabled_ && kEnableCurlLogging) ? 1L : 0L);
+  CURLcode rc =
+      SetCurlLongOption(CURLOPT_VERBOSE, (is_log_enabled_ && kEnableCurlLogging) ? 1L : 0L);
   if (rc != CURLE_OK)
   {
     return rc;

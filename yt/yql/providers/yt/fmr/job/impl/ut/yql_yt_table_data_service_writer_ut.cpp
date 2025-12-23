@@ -1,8 +1,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/join.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.h>
 #include <yt/yql/providers/yt/fmr/test_tools/yson/yql_yt_yson_helpers.h>
+#include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
 
 namespace NYql::NFmr {
 
@@ -52,11 +54,19 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
         auto stats = WriteDataToTableDataSerice(tableDataService, TableYsonRows, chunkSize);
         UNIT_ASSERT_VALUES_EQUAL(stats.PartId, "partId");
         std::vector<TChunkStats> gottenPartIdChunkStats = stats.PartIdChunkStats;
-        std::vector<TChunkStats> expectedChunkStats = {
-            TChunkStats{.Rows = 2, .DataWeight = firstPartSize},
-            TChunkStats{.Rows = 2, .DataWeight = secPartSize}
-        };
-        UNIT_ASSERT(gottenPartIdChunkStats == expectedChunkStats);
+
+        // Проверяем количество чанков
+        UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats.size(), 2);
+
+        // Проверяем первый чанк
+        UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[0].Rows, 2);
+        UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[0].DataWeight, firstPartSize);
+        UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[0].SortedChunkStats.IsSorted, false);
+
+        // Проверяем второй чанк
+        UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].Rows, 2);
+        UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].DataWeight, secPartSize);
+        UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].SortedChunkStats.IsSorted, false);
 
         TString expectedFirstChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin(), TableYsonRows.begin() + 2);
         TString expectedSecondChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin() + 2, TableYsonRows.end());
@@ -78,6 +88,63 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
             yexception,
             expectedErrorMessage
         );
+    }
+
+    Y_UNIT_TEST(SortingWriterBoundaryKeys) {
+        std::vector<TString> textYsonRows = {
+            "{\"key\"=20;\"subkey\"=\"a\";\"value\"=\"x\"}",
+            "{\"key\"=50;\"subkey\"=\"b\";\"value\"=\"y\"}",
+            "{\"key\"=75;\"subkey\"=\"c\";\"value\"=\"z\"}",
+            "{\"key\"=150;\"subkey\"=\"d\";\"value\"=\"w\"}"
+        };
+
+        std::vector<TString> binaryYsonRows;
+        for (const auto& row : textYsonRows) {
+            TString binaryRow = GetBinaryYson(row);
+            binaryYsonRows.push_back(std::move(binaryRow));
+        }
+
+        // Set chunk size to trigger split after 2nd row (before 3rd row)
+        ui64 sizeOfFirstTwoRows = binaryYsonRows[0].size() + binaryYsonRows[1].size();
+        ui64 chunkSize = sizeOfFirstTwoRows;
+        ITableDataService::TPtr tableDataService = MakeLocalTableDataService();
+
+        TFmrWriterSettings settings{.ChunkSize = chunkSize};
+        TSortingColumns sortingColumns;
+        sortingColumns.Columns = {"key", "subkey"};
+        sortingColumns.SortOrders = {ESortOrder::Ascending, ESortOrder::Ascending};
+
+        TFmrTableDataServiceSortedWriter outputWriter(
+            "tableId",
+            "partId",
+            tableDataService,
+            TString(),
+            settings,
+            sortingColumns
+        );
+
+        for (const auto& row : binaryYsonRows) {
+            outputWriter.Write(row.data(), row.size());
+            outputWriter.NotifyRowEnd();
+        }
+        outputWriter.Flush();
+
+        auto stats = outputWriter.GetStats();
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.PartIdChunkStats.size(), 2);
+
+        auto& chunk1Stats = stats.PartIdChunkStats[0];
+        UNIT_ASSERT_VALUES_EQUAL(chunk1Stats.Rows, 2);
+        UNIT_ASSERT(chunk1Stats.SortedChunkStats.IsSorted);
+
+        UNIT_ASSERT(chunk1Stats.SortedChunkStats.FirstRowKeys.IsMap());
+        UNIT_ASSERT_VALUES_EQUAL(chunk1Stats.SortedChunkStats.FirstRowKeys["key"].AsInt64(), 20);
+
+        auto& chunk2Stats = stats.PartIdChunkStats[1];
+        UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.Rows, 2);
+        UNIT_ASSERT(chunk2Stats.SortedChunkStats.IsSorted);
+
+        UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.SortedChunkStats.FirstRowKeys["key"].AsInt64(), 75);
     }
 }
 

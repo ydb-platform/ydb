@@ -99,6 +99,7 @@ namespace NCloudEvents {
             TString jsonEv;
             google::protobuf::util::JsonPrintOptions printOpts;
             printOpts.preserve_proto_field_names = true;
+            printOpts.always_print_primitive_fields = true;
             auto status = google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
             Y_ASSERT(status.ok());
             writer->Write(jsonEv);

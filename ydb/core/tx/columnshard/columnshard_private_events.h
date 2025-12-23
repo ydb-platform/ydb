@@ -87,6 +87,9 @@ struct TEvPrivate {
         EvBackupExportRecordBatchResult,
         EvBackupExportState,
         EvBackupExportError,
+        
+        EvBackupImportRecordBatch,
+        EvBackupImportRecordBatchResult,
 
         EvEnd
     };
@@ -385,7 +388,7 @@ struct TEvPrivate {
         TString ScanIteratorDiagnostics;
     };
 
-    // *** Backup ***
+    // *** Backup (Export) ***
     /*
     1. TEvBackupExportRecordBatch -> Uploader
     2. TEvBackupExportRecordBatchResult | TEvBackupExportError <- Uploader
@@ -424,6 +427,27 @@ struct TEvPrivate {
         }
 
         TString ErrorMessage;
+    };
+    
+    // *** Backup (Import) ***
+    /*
+    1. TEvBackupImportRecordBatch <- Downloader
+    2. TEvBackupImportRecordBatchResult -> Downloader
+    */
+    
+    struct TEvBackupImportRecordBatch: public TEventLocal<TEvBackupImportRecordBatch, EvBackupImportRecordBatch> {
+        explicit TEvBackupImportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast)
+            : Data(data)
+            , IsLast(isLast) {
+        }
+
+        std::shared_ptr<arrow::RecordBatch> Data;
+        bool IsLast;
+        TString Error;
+    };
+
+    struct TEvBackupImportRecordBatchResult: public TEventLocal<TEvBackupImportRecordBatchResult, EvBackupImportRecordBatchResult> {
+        explicit TEvBackupImportRecordBatchResult() = default;
     };
 };
 

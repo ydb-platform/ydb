@@ -20,6 +20,10 @@ enum class ELexerFlavor {
 };
 
 NSQLTranslation::ILexer::TPtr MakeLexer(
+    const TLexers& lexers, bool ansi, ELexerFlavor flavor = ELexerFlavor::Default);
+
+// TODO(YQL-19017): remove.
+NSQLTranslation::ILexer::TPtr MakeLexer(
     const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor = ELexerFlavor::Default);
 
 // "Probably" because YQL keyword can be an identifier

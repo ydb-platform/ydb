@@ -48,7 +48,7 @@ private:
     }
 
     size_t CurrentMemUsage() const {
-        return Buffer.Size() * sizeof(TUnboxedValue);
+        return Buffer.Capacity() * sizeof(TUnboxedValue);
     }
 
     const TStringBuf ResourceTag;
@@ -56,7 +56,6 @@ private:
     size_t BufferBytes;
 };
 
-class TQueueResource;
 class TQueueResourceUser {
 public:
     TQueueResourceUser(TStringBuf&& tag, IComputationNode* resource);
@@ -253,7 +252,7 @@ public:
             , CompCtx(compCtx)
             , Queue(queue)
             , Begin(begin)
-            , End(std::min(end, CheckAndGetBuffer(Queue).UsedSize()))
+            , End(std::min(end, CheckAndGetBuffer(Queue).Size()))
             , Generation(CheckAndGetBuffer(Queue).Generation())
         {
         }
@@ -325,7 +324,7 @@ public:
         , Queue(std::move(queue))
         , OutpaceGoal(outpace)
         , Buffer(CheckAndGetBuffer(Queue))
-        , FrontIndex(Buffer.UsedSize())
+        , FrontIndex(Buffer.Size())
     {
     }
 

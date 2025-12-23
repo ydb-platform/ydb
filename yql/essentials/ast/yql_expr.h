@@ -1939,12 +1939,16 @@ public:
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
         if (!--RefCount_) {
-            Result_.Reset();
-            WorldLinks_.reset();
-            Children_.clear();
+            DestroyPtrs();
             Constraints_.Clear();
             MarkDead();
         }
+    }
+
+    void DecRef() {
+        ENSURE_NOT_DELETED
+        ENSURE_NOT_FROZEN
+        --RefCount_;
     }
 
     ui32 UseCount() const {
@@ -2367,9 +2371,14 @@ public:
                        UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
         Y_ABORT_UNLESS(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
                        UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
+        DestroyPtrs();
     }
 
 private:
+    static void DestroyNode(TExprNode::TPtr& node, TExprNode*& root);
+    void DestroyPtrs();
+    void VisitNodePtrs(TExprNode*& root);
+
     static TPtr Make(TPositionHandle position, EType type, TListType&& children, const TStringBuf& content, ui32 flags, ui64 uniqueId) {
         Y_ENSURE(flags <= TNodeFlags::FlagsMask);
         Y_ENSURE(children.size() <= Max<ui32>());
@@ -2444,7 +2453,10 @@ private:
     ui64 Bloom_ = 0ULL;
 
     const ui64 UniqueId_;
-    const TTypeAnnotationNode* TypeAnnotation_ = nullptr;
+    union {
+        const TTypeAnnotationNode* TypeAnnotation_ = nullptr; // NOLINT(readability-identifier-naming)
+        TExprNode* Link_;                                     // NOLINT(readability-identifier-naming)
+    };
 
     const TPositionHandle Position_;
     ui32 RefCount_ = 0U;

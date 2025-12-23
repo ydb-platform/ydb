@@ -173,7 +173,7 @@ namespace NPQ {
             TVector<TRequestedBlob>& outBlobs = kvReq.Blobs;
 
             ui32 cachedCount = std::accumulate(outBlobs.begin(), outBlobs.end(), 0u, [](ui32 sum, const TRequestedBlob& blob) {
-                                                                                    return sum + (blob.Value.empty() ? 0 : 1);
+                                                                                    return sum + (blob.Empty() ? 0 : 1);
                                                                                 });
             LOG_D("Got results. " << resp.ReadResultSize() << " of " << outBlobs.size() << " from KV. Status " << resp.GetStatus());
 
@@ -200,7 +200,7 @@ namespace NPQ {
                         AFL_ENSURE(r->HasValue() && r->GetValue().size());
 
                         // skip cached blobs, find position for the next value
-                        while (pos < outBlobs.size() && outBlobs[pos].Value) {
+                        while (pos < outBlobs.size() && !outBlobs[pos].Empty()) {
                             ++pos;
                         }
 
@@ -208,8 +208,8 @@ namespace NPQ {
                             ("pos", pos)("outBlobs.size()", outBlobs.size());
                         kvBlobs[pos] = true;
 
-                        AFL_ENSURE(outBlobs[pos].Value.empty());
-                        outBlobs[pos].Value = r->GetValue();
+                        AFL_ENSURE(outBlobs[pos].Empty());
+                        outBlobs[pos].RawValue = r->GetValue();
                         outBlobs[pos].CreationUnixTime = r->GetCreationUnixTime();
                     } else {
                         LOG_E("Got Error response " << r->GetStatus()
@@ -237,7 +237,7 @@ namespace NPQ {
             UpdateCounters(ctx);
         }
 
-        void OnKvWriteResult(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx, const TKvRequest& kvReq)
+        void OnKvWriteResult(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx, TKvRequest& kvReq)
         {
             auto& resp = ev->Get()->Record;
             if (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) {
@@ -399,7 +399,7 @@ namespace NPQ {
                                     TABLED() {out << c.first.Partition;}
                                     TABLED() {out << c.first.Offset;}
                                     TABLED() {out << c.first.Count;}
-                                    TABLED() {out << data->GetValue().size();}
+                                    TABLED() {out << data->GetDataSize();}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(data->GetAccessTime());}
                                 }
                             }

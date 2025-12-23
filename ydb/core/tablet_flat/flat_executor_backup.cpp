@@ -1,3 +1,4 @@
+#include "flat_backup.h"
 #include "flat_boot_cookie.h"
 #include "flat_dbase_apply.h"
 #include "flat_dbase_scheme.h"
@@ -8,6 +9,7 @@
 #include "flat_update_op.h"
 #include "util_deref.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -15,6 +17,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <yql/essentials/types/binary_json/read.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/util.h>
@@ -45,6 +48,12 @@ EScanStatus ToScanStatus(EStatus status) {
             return EScanStatus::Exception;
     }
     return EScanStatus::InProgress;
+}
+
+void WriteJson(TStringBuf in, NJsonWriter::TBuf& out) {
+    NJson::TJsonValue value;
+    Y_ENSURE(NJson::ReadJsonTree(in, &value));
+    out.WriteJsonValue(&value);
 }
 
 void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
@@ -90,13 +99,13 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
         writer.WriteKey(columnName).WriteFloat(columnData.AsValue<float>());
         break;
     case NScheme::NTypeIds::Date:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui16>());
+        writer.WriteKey(columnName).WriteString(TInstant::Days(columnData.AsValue<ui16>()).ToString());
         break;
     case NScheme::NTypeIds::Datetime:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui32>());
+        writer.WriteKey(columnName).WriteString(TInstant::Seconds(columnData.AsValue<ui32>()).ToString());
         break;
     case NScheme::NTypeIds::Timestamp:
-        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui64>());
+        writer.WriteKey(columnName).WriteString(TInstant::MicroSeconds(columnData.AsValue<ui64>()).ToString());
         break;
     case NScheme::NTypeIds::Interval:
         writer.WriteKey(columnName).WriteLongLong(columnData.AsValue<i64>());
@@ -110,11 +119,15 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
         writer.WriteKey(columnName).WriteLongLong(columnData.AsValue<i64>());
         break;
     case NScheme::NTypeIds::Utf8:
-    case NScheme::NTypeIds::Json:
         writer.WriteKey(columnName).WriteString(columnData.AsBuf());
         break;
+    case NScheme::NTypeIds::Json:
+        writer.WriteKey(columnName);
+        WriteJson(columnData.AsBuf(), writer);
+        break;
     case NScheme::NTypeIds::JsonDocument:
-        writer.WriteKey(columnName).WriteString(Base64Encode(NBinaryJson::SerializeToJson(columnData.AsBuf())));
+        writer.WriteKey(columnName);
+        WriteJson(NBinaryJson::SerializeToJson(columnData.AsBuf()), writer);
         break;
     case NScheme::NTypeIds::PairUi64Ui64: {
         auto pair = columnData.AsValue<std::pair<ui64, ui64>>();
@@ -130,13 +143,30 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
         writer.WriteKey(columnName).WriteString(actorId.ToString());
         break;
     }
+    case NScheme::NTypeIds::String:
     default:
         writer.WriteKey(columnName).WriteString(Base64Encode(columnData.AsBuf()));
         break;
     }
 }
 
+TFsPath CreateBackupPath(TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step) {
+    TString tabletTypeName = TTabletTypes::EType_Name(tabletType);
+    NProtobufJson::ToSnakeCaseDense(&tabletTypeName);
+    TString timestamp = TlsActivationContext->AsActorContext().Now().FormatGmTime("%Y%m%d%H%M%SZ");
+
+    auto path = TFsPath(tabletTypeName)
+        .Child(ToString(tabletId))
+        .Child(TStringBuilder() << "backup_" << timestamp << "_g" << generation << "_s" << step);
+
+    return path;
 }
+
+ui64 NewBackupChangelogMinBytes() {
+    return AppData()->SystemTabletBackupConfig.GetNewBackupChangelogMinBytes();
+}
+
+} // anonymous namespace
 
 class TSnapshotWriter : public TActorBootstrapped<TSnapshotWriter> {
 public:
@@ -149,10 +179,11 @@ public:
 
     TSnapshotWriter(TActorId owner, const TFsPath& path,
                     const THashMap<ui32, TScheme::TTableInfo>& tables,
-                    TAutoPtr<TSchemeChanges> schema)
+                    TAutoPtr<TSchemeChanges> schema, TIntrusiveConstPtr<TBackupExclusion> exclusion)
         : Owner(owner)
         , SnapshotPath(path.Child("snapshot"))
         , Schema(schema)
+        , Exclusion(exclusion)
     {
         for (const auto& [tableId, table] : tables) {
             Tables.emplace(tableId, TTableFile(table.Name, {}));
@@ -171,12 +202,14 @@ public:
         auto schemaPath = SnapshotPath.Child("schema.json");
         try {
             SchemaFile = TFile(schemaPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
-            TUnbufferedFileOutput schemaOut(SchemaFile);
-            NProtobufJson::Proto2Json(*Schema, schemaOut, {
+            TStringStream stringOut;
+            NProtobufJson::Proto2Json(*Schema, stringOut, {
                 .EnumMode = NProtobufJson::TProto2JsonConfig::EnumName,
                 .FieldNameMode = NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense,
                 .MapAsObject = true,
             });
+            SchemaFile.Write(stringOut.Data(), stringOut.Size());
+            WrittenBytes += stringOut.Size();
         } catch (const TIoException& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
@@ -185,12 +218,16 @@ public:
             return ReplyAndDie();
         }
 
-        for (auto& [_, table] : Tables) {
+        for (auto& [tableId, table] : Tables) {
             auto tablePath = SnapshotPath.Child(table.Name + ".json");
             try {
                 table.File = TFile(tablePath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
             } catch (const TIoException& e) {
                 return ReplyAndDie(false, TStringBuilder() << "Failed to create table snapshot file " << tablePath << ": " << e.what());
+            }
+
+            if (Exclusion && Exclusion->HasTable(tableId)) {
+                ScanDone(tableId); // empty table, no scan here
             }
         }
 
@@ -198,7 +235,12 @@ public:
     }
 
     void ReplyAndDie(bool success = true, const TString& error = "") {
-        Send(Owner, new TEvSnapshotCompleted(success, error));
+        if (success) {
+            Send(Owner, new TEvSnapshotCompleted(WrittenBytes));
+        } else {
+            Send(Owner, new TEvSnapshotCompleted(error));
+        }
+
         PassAway();
     }
 
@@ -220,6 +262,7 @@ public:
         if (!msg->SnapshotData.Empty()) {
             try {
                 it->second.File.Write(msg->SnapshotData.Data(), msg->SnapshotData.Size());
+                WrittenBytes += msg->SnapshotData.Size();
             } catch (const TIoException& e) {
                 return ReplyAndDie(false, TStringBuilder() << "Failed to write snapshot table data " << it->second.File.GetName() << ": " << e.what());
             }
@@ -280,15 +323,21 @@ private:
 
     TFile SchemaFile;
     TAutoPtr<TSchemeChanges> Schema;
+
+    TIntrusiveConstPtr<TBackupExclusion> Exclusion;
+
+    ui64 WrittenBytes = 0;
 };
 
 class TBackupSnapshotScan : public IScan, public TActor<TBackupSnapshotScan> {
 public:
-    TBackupSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, TColumn>& columns)
+    TBackupSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, TColumn>& columns,
+                        TIntrusiveConstPtr<TBackupExclusion> exclusion)
         : TActor(&TThis::StateWork)
         , SnapshotWriter(snapshotWriter)
         , TableId(tableId)
         , Columns(columns)
+        , Exclusion(exclusion)
     {}
 
     void Describe(IOutputStream& o) const override {
@@ -316,8 +365,12 @@ public:
         b.BeginObject();
 
         for (const auto& info : Scheme->Cols) {
-            const auto& cell = row.Get(info.Pos);
             const auto& column = Columns.at(info.Tag);
+            if (Exclusion && Exclusion->HasColumn(TableId, column.Id)) {
+                continue;
+            }
+
+            const auto& cell = row.Get(info.Pos);
             WriteColumnToJson(column.Name, column.PType.GetTypeId(), cell, b);
         }
 
@@ -372,6 +425,7 @@ private:
     TActorId SnapshotWriter;
     ui32 TableId;
     THashMap<ui32, TColumn> Columns;
+    TIntrusiveConstPtr<TBackupExclusion> Exclusion;
 
     TBuffer Buffer;
     bool InFlight = false;
@@ -382,9 +436,13 @@ public:
     using TKeys = TArrayRef<const TRawTypeValue>;
     using TOps = TArrayRef<const TUpdateOp>;
 
-    TChangelogSerializer(NJsonWriter::TBuf& writer, TScheme& schema)
+    TChangelogSerializer(NJsonWriter::TBuf& writer, const TScheme& schema,
+                         TIntrusiveConstPtr<TBackupExclusion> exclusion,
+                         const std::function<void()>& beginCommit)
         : Writer(writer)
         , Schema(schema)
+        , Exclusion(exclusion)
+        , BeginCommit(beginCommit)
     {}
 
     bool NeedIn(ui32) noexcept
@@ -402,20 +460,40 @@ public:
         Y_TABLET_ERROR("Annex is unsupported");
     }
 
-    void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion)
-    {
+    void BeginChanges() {
         if (!HasChanges) {
             HasChanges = true;
             Writer.WriteKey("data_changes");
             Writer.BeginList();
         }
+    }
 
+    bool NoOps(ui32 tid, TOps ops) const {
+        for (const auto& op : ops) {
+            if (!Exclusion || !Exclusion->HasColumn(tid, op.Tag)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion)
+    {
+        if (Exclusion && Exclusion->HasTable(tid)) {
+            return;
+        }
+
+        if (NoOps(tid, ops) && !TCellOp::HaveNoOps(rop)) {
+            return; // ignore data changes that contain only excluded columns
+        }
+
+        BeginCommit();
+        BeginChanges();
         Writer.BeginObject();
 
+        const auto& table = Schema.Tables.at(tid);
         Writer.WriteKey("table");
-
-        auto* table = Schema.GetTableInfo(tid);
-        Writer.WriteString(table->Name);
+        Writer.WriteString(table.Name);
 
         Writer.WriteKey("op");
         switch (rop) {
@@ -433,14 +511,19 @@ public:
                 break;
         }
 
-        for (size_t i = 0; i < table->KeyColumns.size(); ++i) {
-            ui32 columnId = table->KeyColumns[i];
-            const auto& column = table->Columns.at(columnId);
+        for (size_t i = 0; i < table.KeyColumns.size(); ++i) {
+            ui32 columnId = table.KeyColumns[i];
+            const auto& column = table.Columns.at(columnId);
             WriteColumnToJson(column.Name, column.PType.GetTypeId(), key[i].AsRef(), Writer);
         }
 
         for (const auto& op : ops) {
-            const auto& column = table->Columns.at(op.Tag);
+            const ui32 columnId = op.Tag;
+            if (Exclusion && Exclusion->HasColumn(table.Id, columnId)) {
+                continue;
+            }
+
+            const auto& column = table.Columns.at(columnId);
             switch (ECellOp(op.Op)) {
                 case ECellOp::Empty:
                     Y_TABLET_ERROR("Cell op is empty");
@@ -492,8 +575,11 @@ public:
 
 private:
     NJsonWriter::TBuf& Writer;
-    TScheme& Schema;
+    const TScheme& Schema;
+    TIntrusiveConstPtr<TBackupExclusion> Exclusion;
+
     bool HasChanges = false;
+    std::function<void()> BeginCommit;
 };
 
 class TChangelogWriter : public TActorBootstrapped<TChangelogWriter> {
@@ -516,10 +602,12 @@ class TChangelogWriter : public TActorBootstrapped<TChangelogWriter> {
         };
     };
 public:
-    TChangelogWriter(TActorId owner, const TFsPath& path, const TScheme& schema)
+    TChangelogWriter(TActorId owner, const TFsPath& path, const TScheme& schema,
+                     TIntrusiveConstPtr<TBackupExclusion> exclusion)
         : Owner(owner)
         , ChangelogPath(path.Child("changelog.json"))
         , Schema(schema)
+        , Exclusion(exclusion)
     {}
 
     void Bootstrap() {
@@ -542,6 +630,7 @@ public:
             hFunc(TEvPrivate::TEvFlush, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, CleanMailbox);
             cFunc(TEvPrivate::TEvMailboxCleaned::EventType, FlushAndDie);
+            hFunc(TEvSnapshotCompleted, Handle);
         }
     }
 
@@ -590,15 +679,20 @@ public:
             }
         }
 
-        if (schemeUpdate.empty() && dataUpdate.empty()) {
-            return;
-        }
-
-        b.BeginObject();
-        b.WriteKey("step");
-        b.WriteULongLong(msg->Step);
+        // Commit could be not included in backup
+        bool hasCommit = false;
+        auto beginCommit = [&](){
+            if (!hasCommit) {
+                hasCommit = true;
+                b.BeginObject();
+                b.WriteKey("step");
+                b.WriteULongLong(msg->Step);
+            }
+        };
 
         if (schemeUpdate) {
+            beginCommit();
+
             TSchemeChanges changes;
             bool parseOk = ParseFromStringNoSizeLimit(changes, schemeUpdate);
             if (!parseOk) {
@@ -626,7 +720,7 @@ public:
         if (dataUpdate) {
             try {
                 dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
-                TChangelogSerializer serializer(b, Schema);
+                TChangelogSerializer serializer(b, Schema, Exclusion, beginCommit);
                 NRedo::TPlayer<TChangelogSerializer> redoPlayer(serializer);
                 redoPlayer.Replay(dataUpdate);
                 serializer.Finalize();
@@ -635,11 +729,21 @@ public:
             }
         }
 
-        b.EndObject();
-        out << '\n';
+        if (hasCommit) {
+            b.EndObject();
+            out << '\n';
+        }
 
         if (Buffer.Size() >= 1_MB) {
             Flush();
+        }
+    }
+
+    void Handle(TEvSnapshotCompleted::TPtr& ev) {
+        if (ev->Get()->Success) {
+            SnapshotWrittenBytes = ev->Get()->WrittenBytes;
+        } else {
+            PassAway();
         }
     }
 
@@ -651,20 +755,36 @@ public:
         }
     }
 
+    bool NeedNewBackup() const {
+        return SnapshotWrittenBytes.has_value()
+            && WrittenBytes >= SnapshotWrittenBytes
+            && WrittenBytes >= NewBackupChangelogMinBytes();
+    }
+
     void Flush() {
         if (!Buffer.Empty()) {
             try {
                 ChangelogFile.Write(Buffer.data(), Buffer.size());
                 ChangelogFile.Flush(); // TODO(pixcc): fsync on parent folder?
+                WrittenBytes += Buffer.size();
             } catch (const TIoException& e) {
                 return ReplyAndDie(TStringBuilder() << "Failed to write changelog data " << ChangelogFile.GetName() << ": " << e.what());
             }
             Buffer.Clear();
+
+            if (Dying) {
+                return;
+            }
+
+            if (NeedNewBackup()) {
+                Send(Owner, new TEvStartNewBackup);
+            }
         }
         Schedule(TDuration::Seconds(5), new TEvPrivate::TEvFlush(++ExpectedFlushCookie));
     }
 
     void CleanMailbox() {
+        Dying = true;
         Send(SelfId(), new TEvPrivate::TEvMailboxCleaned());
     }
 
@@ -685,47 +805,44 @@ private:
     TFile ChangelogFile;
 
     TScheme Schema;
+    TIntrusiveConstPtr<TBackupExclusion> Exclusion;
 
     TBuffer Buffer;
     ui64 ExpectedFlushCookie = 0;
+
+    bool Dying = false;
+    ui64 WrittenBytes = 0;
+    std::optional<ui64> SnapshotWrittenBytes;
 };
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, TScheme::TTableInfo>& tables,
-                             TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
-                             TAutoPtr<TSchemeChanges> schema)
+                             TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,
+                             TAutoPtr<TSchemeChanges> schema, TIntrusiveConstPtr<TBackupExclusion> exclusion)
 {
     if (config.HasFilesystem()) {
-        TString tabletTypeName = TTabletTypes::EType_Name(tabletType);
-        NProtobufJson::ToSnakeCaseDense(&tabletTypeName);
-
         auto path = TFsPath(config.GetFilesystem().GetPath())
-            .Child(tabletTypeName)
-            .Child(ToString(tabletId))
-            .Child("gen_" + ToString(generation));
-        return new TSnapshotWriter(owner, path, tables, schema);
+            .Child(CreateBackupPath(tabletType, tabletId, generation, step));
+        return new TSnapshotWriter(owner, path, tables, schema, exclusion);
     } else {
         return nullptr;
     }
 }
 
-IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, TColumn>& columns) {
-    return new TBackupSnapshotScan(snapshotWriter, tableId, columns);
+IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, TColumn>& columns,
+                          TIntrusiveConstPtr<TBackupExclusion> exclusion)
+{
+    return new TBackupSnapshotScan(snapshotWriter, tableId, columns, exclusion);
 }
 
 IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
-                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation,
-                              const TScheme& schema)
+                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,
+                              const TScheme& schema, TIntrusiveConstPtr<TBackupExclusion> exclusion)
 {
     if (config.HasFilesystem()) {
-        TString tabletTypeName = TTabletTypes::EType_Name(tabletType);
-        NProtobufJson::ToSnakeCaseDense(&tabletTypeName);
-
         auto path = TFsPath(config.GetFilesystem().GetPath())
-            .Child(tabletTypeName)
-            .Child(ToString(tabletId))
-            .Child("gen_" + ToString(generation));
-        return new TChangelogWriter(owner, path, schema);
+            .Child(CreateBackupPath(tabletType, tabletId, generation, step));
+        return new TChangelogWriter(owner, path, schema, exclusion);
     } else {
         return nullptr;
     }

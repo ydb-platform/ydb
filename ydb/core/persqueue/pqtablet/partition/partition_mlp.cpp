@@ -66,6 +66,21 @@ void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     ForwardToMLPConsumer(ev->Get()->Consumer, ev);
 }
 
+void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
+    auto& metrics = ev->Get()->Metrics;
+
+    LOG_D("Handle TEvPQ::TEvMLPConsumerState " << metrics.ShortDebugString());
+    auto it = MLPConsumers.find(metrics.GetConsumer());
+    if (it == MLPConsumers.end()) {
+        return;
+    }
+
+    TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE] += metrics.GetCPUUsage();
+
+    auto& consumerInfo = it->second;
+    consumerInfo.Metrics = std::move(metrics);
+}
+
 void TPartition::ProcessMLPPendingEvents() {
     LOG_D("Process MLP pending events. Count " << MLPPendingEvents.size());
 
@@ -141,6 +156,21 @@ void TPartition::InitializeMLPConsumers() {
         ));
         MLPConsumers.emplace(consumer.GetName(), actorId);
     }
+}
+
+void TPartition::DropDataOfMLPConsumer(NKikimrClient::TKeyValueRequest& request, const TString& consumer) {
+    auto snapshotKey = NMLP::MakeSnapshotKey(Partition.OriginalPartitionId, consumer);
+    auto snapshot = request.AddCmdDeleteRange()->MutableRange();
+    snapshot->SetFrom(snapshotKey);
+    snapshot->SetIncludeFrom(true);
+    snapshot->SetTo(std::move(snapshotKey));
+    snapshot->SetIncludeTo(true);
+
+    auto wal = request.AddCmdDeleteRange()->MutableRange();
+    wal->SetFrom(NMLP::MinWALKey(Partition.OriginalPartitionId, consumer));
+    wal->SetIncludeFrom(true);
+    wal->SetTo(NMLP::MaxWALKey(Partition.OriginalPartitionId, consumer));
+    wal->SetIncludeTo(true);
 }
 
 void TPartition::NotifyEndOffsetChanged() {

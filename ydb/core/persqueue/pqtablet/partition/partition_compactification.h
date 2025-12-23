@@ -26,8 +26,6 @@ struct TBlobInfo {
 
 };
 
-using TPartitionKeyCompactionCounters = TProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>;
-
 struct TKeyCompactionCounters {
     ui64 UncompactedSize = 0;
     ui64 CompactedSize = 0;

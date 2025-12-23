@@ -64,7 +64,8 @@ public:
     }
 
     TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> BuildRecordBatch(const TColumnLoader& loader) const;
-    std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildDeserializeChunk(const std::shared_ptr<TColumnLoader>& loader, ui64 portionId, const TString& internalPathId) const;
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> BuildDeserializeChunk(
+        const std::shared_ptr<TColumnLoader>& loader, const TString& internalPathId) const;
 };
 
 class TPreparedColumn {
@@ -91,7 +92,7 @@ public:
         AFL_VERIFY(Loader);
     }
 
-    std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess(ui64 portionId, const TString& internalPathId) const;
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> AssembleForSeqAccess(const TString& internalPathId) const;
     TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> AssembleAccessor() const;
 };
 
@@ -152,7 +153,8 @@ public:
         , RowsCount(rowsCount) {
     }
 
-    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds, ui64 portionId, const TString& internalPathId) const;
+    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(
+        const std::set<ui32>& sequentialColumnIds, const TString& internalPathId) const;
 };
 
 class TColumnAssemblingInfo {

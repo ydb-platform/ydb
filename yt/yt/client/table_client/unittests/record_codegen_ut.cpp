@@ -12,7 +12,7 @@ using namespace NYson;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRecordCodegenTypeV3Test
-    : public ::testing::TestWithParam<std::pair<TString, TLogicalTypePtr>>
+    : public ::testing::TestWithParam<std::pair<std::string, TLogicalTypePtr>>
 { };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -32,12 +32,12 @@ INSTANTIATE_TEST_SUITE_P(
     TRecordCodegenTypeV3Test,
     ::testing::Values(
         std::pair{
-            TString(R"({"type_name": "optional", "item": {"type_name": "list", "item": "string"}})"),
-            ConvertTo<TLogicalTypePtr>(TYsonString(TString("{type_name=optional;item={type_name=list;item=string}}")))
+            std::string(R"({"type_name": "optional", "item": {"type_name": "list", "item": "string"}})"),
+            ConvertTo<TLogicalTypePtr>(TYsonString(TStringBuf("{type_name=optional;item={type_name=list;item=string}}")))
         },
         std::pair{
-            TString(R"({"type_name": "int64"})"),
-            ConvertTo<TLogicalTypePtr>(TYsonString(TString("{type_name=\"int64\"}")))
+            std::string(R"({"type_name": "int64"})"),
+            ConvertTo<TLogicalTypePtr>(TYsonString(TStringBuf("{type_name=\"int64\"}")))
         }));
 
 ////////////////////////////////////////////////////////////////////////////////

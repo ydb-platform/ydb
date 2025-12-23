@@ -106,6 +106,17 @@ Y_UNIT_TEST(Partition) {
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy.html"));
 
+        // FILE* ofs = fopen("~/counters_pqproxy.html.actual", "w");
+        // if (ofs) {
+        //     fwrite(countersStr.Str().data(), 1, countersStr.Str().size(), ofs);
+        //     fputs("\n", ofs);
+        //     fclose(ofs);
+        // } else {
+        //     Cerr << "Failed to open output file for writing: counters_pqproxy.html.actual" << Endl;
+        // }
+
+        Cerr << "ACTUAL:" << Endl << countersStr.Str() << Endl << "END" << Endl;
+
         UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
@@ -334,7 +345,9 @@ Y_UNIT_TEST(PartitionFirstClass) {
         dbGroup->OutputHtml(countersStr);
         TString referenceCounters = NResource::Find(TStringBuf("counters_pqproxy_firstclass.html"));
 
-        UNIT_ASSERT_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        Cerr << "COUNTERS: " << countersStr.Str() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }
 
     {
@@ -343,6 +356,7 @@ Y_UNIT_TEST(PartitionFirstClass) {
 
         TStringStream countersStr;
         dbGroup->OutputHtml(countersStr);
+
         const TString referenceCounters = NResource::Find(TStringBuf("counters_datastreams.html"));
         UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
     }

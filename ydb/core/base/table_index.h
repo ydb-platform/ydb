@@ -10,6 +10,7 @@
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -19,6 +20,7 @@ namespace NKikimrTxDataShard {
     class TEvRecomputeKMeansResponse;
     class TEvSampleKResponse;
     class TEvValidateUniqueIndexResponse;
+    class TEvFilterKMeansResponse;
 }
 
 namespace NKikimr {
@@ -46,8 +48,13 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType);
 
 NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation);
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType);
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
+NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type);
 
-std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys);
+std::span<const std::string_view> GetImplTables(
+    NKikimrSchemeOp::EIndexType indexType,
+    std::span<const TString> indexKeys,
+    std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout = std::nullopt);
 std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout);
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
@@ -71,12 +78,20 @@ inline constexpr const char* PostingTable = "indexImplPostingTable";
 
 inline constexpr const char* BuildSuffix0 = "0build";
 inline constexpr const char* BuildSuffix1 = "1build";
+inline constexpr auto IsForeignType = Ydb::Type::BOOL;
+inline constexpr auto IsForeignTypeName = "Bool";
+inline constexpr const char* IsForeignColumn = "__ydb_foreign";
+inline constexpr auto DistanceType = Ydb::Type::DOUBLE;
+inline constexpr auto DistanceTypeName = "Double";
+inline constexpr const char* DistanceColumn = "__ydb_distance";
 
 // Prefix table
 inline constexpr const char* PrefixTable = "indexImplPrefixTable";
 inline constexpr const char* IdColumnSequence = "__ydb_id_sequence";
 
 inline constexpr const int DefaultKMeansRounds = 3;
+inline constexpr const int DefaultOverlapClusters = 1;
+inline constexpr const double DefaultOverlapRatio = 0;
 
 inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
 
@@ -116,6 +131,7 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexResponse& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvFilterKMeansResponse& record);
 
 }
 }

@@ -323,6 +323,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
         Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
+        Partition()->MessageIdDeduplicator.NextMessageIdDeduplicatorWAL = meta.GetNextMessageIdDeduplicatorWAL();
         if (Partition()->IsSupportive()) {
             const auto& counterData = meta.GetCounterData();
             Partition()->BytesWrittenGrpc.SetSavedValue(counterData.GetBytesWrittenGrpc());
@@ -855,10 +856,10 @@ TInitMessageDeduplicatorStep::TInitMessageDeduplicatorStep(TInitializer* initial
 }
 
 void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
-    if (Partition()->Partition.IsSupportivePartition()) {
+    if (MirroringEnabled(Partition()->Config) || Partition()->Partition.IsSupportivePartition()) {
         return Done(ctx);
     }
-    auto firstKey = MakeDeduplicatorWALKey(Partition()->Partition.OriginalPartitionId, TInstant::Now() - Partition()->MessageIdDeduplicator.GetDeduplicationWindow());
+    auto firstKey = MakeDeduplicatorWALKey(Partition()->Partition.OriginalPartitionId, 0);
     RequestDeduplicatorRange(ctx, Partition()->TabletActorId, PartitionId(), firstKey);
 }
 
@@ -868,29 +869,24 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
 
-    auto& range = response.GetReadRangeResult(0);
+    auto* range = response.MutableReadRangeResult(0);
 
-    PQ_INIT_ENSURE(range.HasStatus());
-    switch(range.GetStatus()) {
+    PQ_INIT_ENSURE(range->HasStatus());
+    switch(range->GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
-            for (auto& w : range.GetPair()) {
+            for (auto& w : *range->MutablePair()) {
                 NKikimrPQ::TMessageDeduplicationIdWAL wal;
                 auto r = wal.ParseFromString(w.GetValue());
                 AFL_ENSURE(r)("key", w.key());
 
-                if (wal.GetExpirationTimestampMilliseconds() < TInstant::Now().MilliSeconds()) {
-                    PQ_LOG_D("tablet " << Partition()->TabletId << " Initializing of message id deduplicator expired: " << w.key());
-                    continue;
-                }
-
-                auto a = Partition()->MessageIdDeduplicator.ApplyWAL(std::move(wal));
+                auto a = Partition()->MessageIdDeduplicator.ApplyWAL(std::move(*w.MutableKey()), std::move(wal));
                 AFL_ENSURE(a)("key", w.key());
             }
 
-            if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
-                PQ_INIT_ENSURE(range.PairSize());
-                RequestDeduplicatorRange(ctx, Partition()->TabletActorId, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
+            if (range->GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
+                PQ_INIT_ENSURE(range->PairSize());
+                RequestDeduplicatorRange(ctx, Partition()->TabletActorId, PartitionId(), range->GetPair(range->PairSize() - 1).GetKey());
                 return;
             }
 
@@ -899,7 +895,7 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
             Done(ctx);
             break;
         default:
-            AFL_ENSURE("bad status")("status", range.GetStatus());
+            AFL_ENSURE(false && "bad status")("status", range->GetStatus());
     };
 }
 
@@ -1109,17 +1105,22 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     if (!IsSupportive()) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
+            PartitionCountersLabeled = CreateProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>(
+                                                                         EscapeBadChars(TopicName()),
                                                                          Partition.InternalPartitionId,
-                                                                         Config.GetYdbDatabasePath()));
+                                                                         Config.GetYdbDatabasePath());
 
-            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(EscapeBadChars(TopicName()),
+            PartitionCountersExtended = CreateProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>(
+                                                                                  EscapeBadChars(TopicName()),
                                                                                   Partition.InternalPartitionId,
-                                                                                  Config.GetYdbDatabasePath()));
+                                                                                  Config.GetYdbDatabasePath());
         } else {
-            PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
-            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(TopicName(),
-                                                                                  Partition.InternalPartitionId));
+            PartitionCountersLabeled = CreateProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>(
+                                                                        TopicName(),
+                                                                        Partition.InternalPartitionId);
+            PartitionCountersExtended = CreateProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>(
+                                                                        TopicName(),
+                                                                        Partition.InternalPartitionId);
         }
     }
 
@@ -1393,7 +1394,7 @@ void TPartition::CreateCompacter() {
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         }
         Compacter.Reset();
-        PartitionCompactionCounters.Reset();
+        PartitionKeyCompactionCounters.reset();
         return;
     }
     if (Compacter) {
@@ -1406,12 +1407,16 @@ void TPartition::CreateCompacter() {
 
     //Init compacter counters
     if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        PartitionCompactionCounters.Reset(new TPartitionKeyCompactionCounters(EscapeBadChars(TopicName()),
-                                                                           Partition.OriginalPartitionId,
-                                                                           Config.GetYdbDatabasePath()));
+        PartitionKeyCompactionCounters = CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(
+                                            EscapeBadChars(TopicName()),
+                                            Partition.OriginalPartitionId,
+                                            Config.GetYdbDatabasePath()
+                                        );
     } else {
-        PartitionCompactionCounters.Reset(new TPartitionKeyCompactionCounters(TopicName(),
-                                                                           Partition.OriginalPartitionId));
+        PartitionKeyCompactionCounters = CreateProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>(
+                                            TopicName(),
+                                            Partition.OriginalPartitionId
+                                        );
     }
     Compacter->TryCompactionIfPossible();
 }

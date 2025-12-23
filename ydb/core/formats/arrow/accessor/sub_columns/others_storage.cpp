@@ -246,10 +246,25 @@ TOthersData TOthersData::BuildEmpty() {
     return result;
 }
 
-std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_view path, const ui32 recordsCount) const {
-    auto idx = Stats.GetKeyIndexOptional(path);
+TConclusion<std::shared_ptr<TJsonPathAccessor>> TOthersData::GetPathAccessor(const std::string_view path, const ui32 recordsCount) const {
+    auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
+    for (ui32 i = 0; i < Stats.GetColumnsCount(); ++i) {
+        auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(Stats.GetColumnName(i)), nullptr, i);
+        AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
+    }
+    auto accessorResult = jsonPathAccessorTrie->GetAccessor(path);
+    if (accessorResult.IsFail()) {
+        return accessorResult;
+    }
+
+    auto accessor = accessorResult.DetachResult();
+    if (!accessor) {
+        return std::shared_ptr<TJsonPathAccessor>{};
+    }
+
+    auto idx = accessor->GetCookie();
     if (!idx) {
-        return std::make_shared<TSparsedArray>(nullptr, arrow::binary(), recordsCount);
+        return std::shared_ptr<TJsonPathAccessor>{};
     }
     TColumnFilter filter = TColumnFilter::BuildAllowFilter();
     for (TIterator it(Records); it.IsValid(); it.Next()) {
@@ -262,7 +277,7 @@ std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_vi
     TSparsedArray::TBuilder builder(nullptr, arrow::binary());
     auto batch = ToBatch(table);
     builder.AddChunk(recordsCount, batch->GetColumnByName("record_idx"), batch->GetColumnByName("value"));
-    return builder.Finish();
+    return std::make_shared<TJsonPathAccessor>(builder.Finish(), accessor->GetRemainingPath());
 }
 
 NArrow::NAccessor::TBinaryJsonValueView TOthersData::TIterator::GetValue() const {

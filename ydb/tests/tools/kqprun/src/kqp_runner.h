@@ -19,11 +19,15 @@ public:
 
     void ExecuteQueryAsync(const TRequestOptions& query) const;
 
+    bool ExecuteStreaming(const TRequestOptions& query, const TString& queryName, TDuration& duration) const;
+
     void FinalizeRunner() const;
 
     bool FetchScriptResults(const TString& userSID);
 
     bool ForgetExecutionOperation(const TString& userSID);
+
+    bool ForgetStreamingQuery(const TString& userSID);
 
     void PrintScriptResults() const;
 

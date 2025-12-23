@@ -64,7 +64,7 @@ std::string MakeSelect(const TVectorWorkloadParams& params, const TString& index
     if (params.PrefixColumn)
         ret << "DECLARE $PrefixValue as " << params.PrefixType << ";" << "\n";
     ret << "pragma ydb.KMeansTreeSearchTopSize=\"" << params.KmeansTreeSearchClusters << "\";" << "\n";
-    ret << "SELECT " << MakeKeyExpression(params, "") << " AS id FROM " << params.TableName << "\n";
+    ret << "SELECT " << MakeKeyExpression(params, "") << " AS id FROM " << params.TableOpts.Name << "\n";
     if (!indexName.empty())
         ret << "VIEW " << indexName << "\n";
     if (params.PrefixColumn)

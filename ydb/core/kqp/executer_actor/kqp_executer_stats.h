@@ -375,6 +375,9 @@ public:
     void AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats);
     void AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats);
 
+    ui64 LocksBrokenAsBreaker = 0;
+    ui64 LocksBrokenAsVictim = 0;
+
     void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);

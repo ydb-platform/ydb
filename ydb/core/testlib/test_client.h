@@ -708,7 +708,8 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
 
-        TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query);
+        template <typename... TArgs>
+        TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs&&... args);
         TString MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up);
         TString KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx);
         bool WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout);

@@ -70,7 +70,7 @@ private:
         auto sessionIter = ServerSessions.find(key);
         if (sessionIter.IsEnd()) {
             PQ_CPROXY_LOG_D("unknown session id '" << key.SessionId << "', close session");
-            CloseSession(ev->Sender, Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST, "Unknown session");
+            CloseSession(ev->Sender, key.SessionId, Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST, "Unknown session");
             return;
         }
 
@@ -338,7 +338,7 @@ private:
         if (nextData == sessionIter->second.Reads.end()) {
             return false;
         }
-        auto result = SendData(sessionIter->first.PartitionSessionId, client, nextData->first, nextData->second);
+        auto result = SendData(sessionIter->first.SessionId, sessionIter->first.PartitionSessionId, client, nextData->first, nextData->second);
         ChangeCounterValue("SendDataRate", 1, false, true);
         if (!result) {
             //ToDo: for discuss. Error in parsing partition response - shall we kill the entire session or just the partition session?
@@ -350,7 +350,7 @@ private:
     }
 
     [[nodiscard]] bool SendData(
-            ui64 partSessionId, TCacheClientContext& proxyClient, ui64 readId, const std::shared_ptr<NKikimrClient::TResponse>& response
+            const TString& sessionId, ui64 partSessionId, TCacheClientContext& proxyClient, ui64 readId, const std::shared_ptr<NKikimrClient::TResponse>& response
     ) {
         const auto& ctx = ActorContext();
         auto message = std::make_shared<StreamDirectReadMessage::FromServer>();
@@ -359,7 +359,7 @@ private:
         directReadMessage->set_partition_session_id(partSessionId);
         directReadMessage->set_bytes_size(response->GetPartitionResponse().GetCmdPrepareReadResult().GetBytesSizeEstimate());
 
-        auto ok = VaildatePartitionResponse(proxyClient, *response);
+        auto ok = VaildatePartitionResponse(sessionId, proxyClient, * response);
         if (!ok) {
             return false;
         }
@@ -368,7 +368,7 @@ private:
                         partSessionId);
         message->set_status(Ydb::StatusIds::SUCCESS);
 
-        PQ_CPROXY_LOG_D("send data to client. AssignId: " << partSessionId << ", readId: " << readId);
+        PQ_CPROXY_LOG_D("send data to client " << sessionId << ", assignId: " << partSessionId << ", readId: " << readId);
 
         ctx.Send(proxyClient.ProxyId, new TEvPQProxy::TEvDirectReadSendClientData(std::move(message)));
         return true;
@@ -376,12 +376,13 @@ private:
 
     void CloseSession(
             const TActorId& proxyId,
+            const TString& sessionId,
             Ydb::PersQueue::ErrorCode::ErrorCode code,
             const TString& reason
     ) {
         const auto& ctx = ActorContext();
         ctx.Send(proxyId, new TEvPQProxy::TEvDirectReadCloseSession(code, reason));
-        PQ_CPROXY_LOG_D("close session for proxy " << proxyId.ToString());
+        PQ_CPROXY_LOG_D("close session for proxy " << proxyId.ToString() << ", sessionId: " << sessionId);
     }
 
     bool DestroyPartitionSession(
@@ -395,7 +396,7 @@ private:
         ctx.Send(
                 sessionIter->second.Client->ProxyId, new TEvPQProxy::TEvDirectReadDestroyPartitionSession(sessionIter->first, code, reason)
         );
-        PQ_CPROXY_LOG_D("close session for proxy " << sessionIter->second.Client->ProxyId.ToString());
+        PQ_CPROXY_LOG_D("DestroyPartitionSession, sessionId: " << sessionIter->first.SessionId << ", proxy: " << sessionIter->second.Client->ProxyId.ToString());
         return true;
     }
 
@@ -412,11 +413,12 @@ private:
     }
 
     bool VaildatePartitionResponse(
-            TCacheClientContext& proxyClient, NKikimrClient::TResponse& response
+            const TString& sessionId, TCacheClientContext& proxyClient, NKikimrClient::TResponse& response
     ) {
         if (response.HasErrorCode() && response.GetErrorCode() != NPersQueue::NErrorCode::OK) {
             CloseSession(
                     proxyClient.ProxyId,
+                    sessionId,
                     NGRpcProxy::V1::ConvertOldCode(response.GetErrorCode()),
                     "Status is not ok: " + response.GetErrorReason()
             );
@@ -426,6 +428,7 @@ private:
         if (response.GetStatus() != NKikimr::NMsgBusProxy::MSTATUS_OK) { //this is incorrect answer, die
             CloseSession(
                     proxyClient.ProxyId,
+                    sessionId,
                     Ydb::PersQueue::ErrorCode::ERROR,
                     "Status is not ok: " + response.GetErrorReason()
             );
@@ -434,6 +437,7 @@ private:
         if (!response.HasPartitionResponse()) { //this is incorrect answer, die
             CloseSession(
                     proxyClient.ProxyId,
+                    sessionId,
                     Ydb::PersQueue::ErrorCode::ERROR,
                     "Direct read cache got empty partition response"
             );
@@ -444,6 +448,7 @@ private:
         if (!partResponse.HasCmdReadResult()) { //this is incorrect answer, die
             CloseSession(
                     proxyClient.ProxyId,
+                    sessionId,
                     Ydb::PersQueue::ErrorCode::ERROR,
                     "Malformed response from partition"
             );

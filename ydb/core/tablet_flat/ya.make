@@ -2,6 +2,8 @@ LIBRARY()
 
 SRCS(
     defs.h
+    flat_backup.cpp
+    flat_backup.h
     flat_boot_lease.cpp
     flat_boot_misc.cpp
     flat_comp.cpp

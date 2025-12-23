@@ -11,6 +11,7 @@ import functools
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
+from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
@@ -95,7 +96,9 @@ class DistConfKiKiMRTest(object):
         if not cls.protected_mode:
             cms.request_increase_ratio_limit(cls.cluster.client)
         host = cls.cluster.nodes[1].host
+        grpc_port = cls.cluster.nodes[1].grpc_port
         cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
+        cls.dynconfig_client = DynConfigClient(host, grpc_port)
 
     @classmethod
     def teardown_class(cls):
@@ -372,7 +375,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         try:
             pdisk_info = self.swagger_client.pdisk_info(new_node.node_id)
 
-            pdisks_list = pdisk_info['PDiskStateInfo']
+            pdisks_list = pdisk_info.get('PDiskStateInfo', [])
 
             found_pdisk_in_viewer = False
             for pdisk_entry in pdisks_list:
@@ -414,6 +417,13 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
+
+    def test_v1_blocked_when_v2_is_enabled(self):
+        fetched_config = fetch_config(self.cluster.config_client)
+        replace_config_response = self.dynconfig_client.replace_config(fetched_config)
+        assert_that(replace_config_response.operation.status == StatusIds.BAD_REQUEST)
+        assert_that(replace_config_response.operation.issues[0].message == "Dynamic Config V1 is disabled. Use V2 API.")
+        logger.debug(replace_config_response.operation)
 
 
 class TestDistConfBootstrapValidation:

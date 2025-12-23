@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/string.h>
-#include <util/stream/str.h>
+#include <util/generic/vector.h>
 
 namespace NSQLTranslationV1 {
     struct TLexers;
@@ -27,17 +27,25 @@ struct TViewQuerySplit {
 
 bool SplitViewQuery(const TString& query, TViewQuerySplit& split, NYql::TIssues& issues);
 bool SplitViewQuery(
-    const TString& query, const NSQLTranslationV1::TLexers& lexers, const NSQLTranslation::TTranslationSettings& translationSettings,
-    TViewQuerySplit& split, NYql::TIssues& issues
-);
+    const TString& query,
+    const NSQLTranslationV1::TLexers& lexers,
+    const NSQLTranslation::TTranslationSettings& translationSettings,
+    TViewQuerySplit& split,
+    NYql::TIssues& issues);
 
 TString BuildCreateViewQuery(
-    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& database, const TString& backupRoot,
-    NYql::TIssues& issues
-);
+    const TString& name,
+    const TString& dbPath,
+    const TString& viewQuery,
+    const TString& database,
+    const TString& backupRoot,
+    NYql::TIssues& issues);
 
-bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool restoreRootIsDatabase,
-    const TString& dbPath, NYql::TIssues& issues
-);
+bool RewriteCreateViewQuery(
+    TString& query,
+    const TString& restoreRoot,
+    bool restoreRootIsDatabase,
+    const TString& dbPath,
+    NYql::TIssues& issues);
 
 } // NYdb::NDump

@@ -196,28 +196,28 @@ class TDuplicateMapInfo {
 private:
     TSnapshot MaxVersion;
     TIntervalBordersView Interval;
-    YDB_READONLY_DEF(ui64, SourceId);
+    YDB_READONLY_DEF(ui64, PortionId);
 
 public:
-    TDuplicateMapInfo(const TSnapshot& maxVersion, const TIntervalBordersView& interval, const ui64 sourceId)
+    TDuplicateMapInfo(const TSnapshot& maxVersion, const TIntervalBordersView& interval, const ui64 portionId)
         : MaxVersion(maxVersion)
         , Interval(interval)
-        , SourceId(sourceId)
+        , PortionId(portionId)
     {
     }
 
     operator size_t() const {
         size_t h = (size_t)MaxVersion;
         h = CombineHashes(h, (size_t)Interval);
-        h = CombineHashes(h, SourceId);
+        h = CombineHashes(h, PortionId);
         return h;
     }
     bool operator==(const TDuplicateMapInfo& other) const {
-        return std::tie(MaxVersion, Interval, SourceId) == std::tie(other.MaxVersion, other.Interval, other.SourceId);
+        return std::tie(MaxVersion, Interval, PortionId) == std::tie(other.MaxVersion, other.Interval, other.PortionId);
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "MaxVersion=" << MaxVersion.DebugString() << ";SourceId=" << SourceId;
+        return TStringBuilder() << "MaxVersion=" << MaxVersion.DebugString() << ";PortionId=" << PortionId;
     }
 
     const TIntervalBordersView& GetInterval() const {

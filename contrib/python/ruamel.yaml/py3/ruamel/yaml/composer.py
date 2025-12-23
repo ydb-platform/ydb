@@ -1,4 +1,5 @@
-# coding: utf-8
+
+from __future__ import annotations
 
 import warnings
 
@@ -17,7 +18,8 @@ from ruamel.yaml.events import (
 )
 from ruamel.yaml.nodes import MappingNode, ScalarNode, SequenceNode
 
-from typing import Any, Dict, Optional, List  # NOQA
+if False:  # MYPY
+    from typing import Any, Dict, Optional, List  # NOQA
 
 __all__ = ['Composer', 'ComposerError']
 
@@ -85,6 +87,7 @@ class Composer:
         return document
 
     def compose_document(self: Any) -> Any:
+        self.anchors = {}
         # Drop the DOCUMENT-START event.
         self.parser.get_event()
 
@@ -94,7 +97,6 @@ class Composer:
         # Drop the DOCUMENT-END event.
         self.parser.get_event()
 
-        self.anchors = {}
         return node
 
     def return_alias(self, a: Any) -> Any:
@@ -175,7 +177,8 @@ class Composer:
             if node.comment is not None:
                 x = node.flow_style
                 nprint(
-                    f'Warning: unexpected end_event commment in sequence node {x}',
+                    f'Warning: unexpected end_event commment in sequence node {x}\n',
+                    '    if possible, please report an issue with reproducable data/code',
                 )
             node.comment = end_event.comment
         node.end_mark = end_event.end_mark

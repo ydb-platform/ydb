@@ -223,6 +223,7 @@ public:
                 SetUnfinishedTaskStatus(taskId, taskStatus, requestTaskState->TaskErrorMessage);
                 isTaskToDelete = (TaskToDeleteIds_.contains(taskId) && Tasks_[taskId].TaskStatus != ETaskStatus::InProgress);
                 auto statistics = requestTaskState->Stats;
+
                 YQL_CLOG(TRACE, FastMapReduce) << " Task with id " << taskId << " has current status " << taskStatus << Endl;
                 bool isOperationCompleted = (GetOperationStatus(operationId) == EOperationStatus::Completed);
                 for (auto& [fmrTableId, tableStats]: statistics.OutputTables) {

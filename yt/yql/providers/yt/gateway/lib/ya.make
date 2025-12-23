@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    downloader.cpp
+    downloader.h
     exec_ctx.h
     exec_ctx.cpp
     map_builder.h
@@ -9,10 +11,10 @@ SRCS(
     query_cache.h
     session.h
     session.cpp
-    temp_files.cpp
-    temp_files.h
     transaction_cache.cpp
     transaction_cache.h
+    transform.cpp
+    transform.h
     qb2.cpp
     qb2.h
     user_files.cpp

@@ -245,8 +245,8 @@ class PnpmLockfile(BaseLockfile):
         :rtype: list of LockfilePackageMeta
         """
         packages = self.data.get("packages", {})
-
-        return map(lambda x: _parse_package_meta(*x), packages.items())
+        mapped = map(lambda x: _parse_package_meta(*x), packages.items())
+        return filter(lambda x: x is not None, mapped)
 
     def update_tarball_resolutions(self, fn):
         """
@@ -256,7 +256,10 @@ class PnpmLockfile(BaseLockfile):
         packages = self.data.get("packages", {})
 
         for key, meta in packages.items():
-            meta["resolution"]["tarball"] = fn(_parse_package_meta(key, meta, allow_file_protocol=True))
+            parsed_meta = _parse_package_meta(key, meta, allow_file_protocol=True)
+            if not parsed_meta:
+                continue
+            meta["resolution"]["tarball"] = fn(parsed_meta)
             packages[key] = meta
 
     def get_importers(self):
@@ -362,6 +365,10 @@ def _parse_package_meta(key, meta, allow_file_protocol=False):
     :rtype: LockfilePackageMetaInvalidError
     """
     try:
+        # inject-workspace-packages case
+        if meta["resolution"].get("type") == "directory":
+            return None
+
         tarball_url = _parse_tarball_url(meta["resolution"]["tarball"], allow_file_protocol)
         sky_id = _parse_sky_id_from_tarball_url(meta["resolution"]["tarball"])
         integrity_algorithm, integrity = _parse_package_integrity(meta["resolution"]["integrity"])

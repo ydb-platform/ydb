@@ -200,7 +200,8 @@ public:
     using TPtr = std::shared_ptr<IExternalStorageConfig>;
     virtual ~IExternalStorageConfig() = default;
     IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = true) const;
-    static IExternalStorageConfig::TPtr Construct(const NKikimrSchemeOp::TS3Settings& settings);
+    template <typename TSettings>
+    static IExternalStorageConfig::TPtr Construct(const TSettings& settings);
 };
 } // NExternalStorage
 

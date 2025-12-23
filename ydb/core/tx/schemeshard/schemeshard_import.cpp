@@ -1,6 +1,7 @@
 #include "schemeshard_import.h"
 
 #include "schemeshard_impl.h"
+#include "schemeshard_index_build_info.h"
 #include "schemeshard_import_getters.h"
 #include "schemeshard_import_helpers.h"
 
@@ -221,11 +222,18 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     }
 
     switch (importInfo.Kind) {
-    case TImportInfo::EKind::S3:
-        import.MutableImportFromS3Settings()->CopyFrom(importInfo.Settings);
+    case TImportInfo::EKind::S3: {
+        Ydb::Import::ImportFromS3Settings settings = importInfo.GetS3Settings();
+        import.MutableImportFromS3Settings()->CopyFrom(settings);
         import.MutableImportFromS3Settings()->clear_access_key();
         import.MutableImportFromS3Settings()->clear_secret_key();
         break;
+    }
+    case TImportInfo::EKind::FS: {
+        Ydb::Import::ImportFromFsSettings settings = importInfo.GetFsSettings();
+        import.MutableImportFromFsSettings()->CopyFrom(settings);
+        break;
+    }
     }
 }
 
@@ -233,7 +241,7 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& i
     db.Table<Schema::Imports>().Key(importInfo.Id).Update(
         NIceDb::TUpdate<Schema::Imports::Uid>(importInfo.Uid),
         NIceDb::TUpdate<Schema::Imports::Kind>(static_cast<ui8>(importInfo.Kind)),
-        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.Settings.SerializeAsString()),
+        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.SettingsSerialized),
         NIceDb::TUpdate<Schema::Imports::DomainPathOwnerId>(importInfo.DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::Imports::DomainPathLocalId>(importInfo.DomainPathId.LocalPathId),
         NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size()),
@@ -248,15 +256,21 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& i
     }
 
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
-        const auto& item = importInfo.Items.at(itemIdx);
-
-        db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
-            NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
-            NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
-            NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix),
-            NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath)
-        );
+        PersistNewImportItem(db, importInfo, itemIdx);
     }
+}
+
+void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx) {
+    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+    const auto& item = importInfo.Items.at(itemIdx);
+
+    db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
+        NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
+        NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
+        NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix),
+        NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath),
+        NIceDb::TUpdate<Schema::ImportItems::ParentIndex>(item.ParentIdx)
+    );
 }
 
 void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
@@ -326,16 +340,19 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
             NIceDb::TUpdate<Schema::ImportItems::Topic>(item.Topic->SerializeAsString())
         );
     }
+
     if (!item.CreationQuery.empty()) {
         record.Update(
             NIceDb::TUpdate<Schema::ImportItems::CreationQuery>(item.CreationQuery)
         );
     }
+
     if (item.Permissions.Defined()) {
         record.Update(
             NIceDb::TUpdate<Schema::ImportItems::Permissions>(item.Permissions->SerializeAsString())
         );
     }
+
     db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize())
     );
@@ -427,6 +444,25 @@ void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* 
     auto waiters = std::move(TableProfilesWaiters);
     for (const auto& [importId, itemIdx] : waiters) {
         Execute(CreateTxProgressImport(importId, itemIdx), ctx);
+    }
+}
+
+bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
+    if (importInfo.Kind != TImportInfo::EKind::S3) {
+        return true;
+    }
+    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+    auto& item = importInfo.Items.at(itemIdx);
+
+    switch (importInfo.GetS3Settings().index_filling_mode()) {
+        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD:
+            return true;
+        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+            return item.ChildItems.empty();
+        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
+            return false;
+        default:
+            return true;
     }
 }
 

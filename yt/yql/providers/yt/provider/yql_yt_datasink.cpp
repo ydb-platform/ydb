@@ -239,8 +239,10 @@ public:
     void FillModifyCallables(THashSet<TStringBuf>& callables) override {
         callables.insert(TYtWriteTable::CallableName());
         callables.insert(TYtDropTable::CallableName());
+        callables.insert(TYtDropView::CallableName());
         callables.insert(TYtConfigure::CallableName());
         callables.insert(TYtCreateTable::CallableName());
+        callables.insert(TYtCreateView::CallableName());
     }
 
     bool IsWrite(const TExprNode& node) override {
@@ -263,6 +265,16 @@ public:
             TExprNode::TListType children = node->ChildrenList();
             children.resize(3);
             return ctx.NewCallable(node->Pos(), TYtDropTable::CallableName(), std::move(children));
+        } else if (mode && *mode == EYtWriteMode::DropObject) {
+            if (!node->Child(3)->IsCallable("Void")) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()), TStringBuilder()
+                    << "Expected Void, but got: " << node->Child(3)->Content()));
+                return {};
+            }
+
+            auto children = node->ChildrenList();
+            children.resize(3);
+            return ctx.NewCallable(node->Pos(), TYtDropView::CallableName(), std::move(children));
         } else if (mode && *mode == EYtWriteMode::Create) {
             if (!node->Child(3U)->IsCallable("Void")) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(3U)->Pos()), TStringBuilder()
@@ -279,6 +291,39 @@ public:
             children[4U] = keys ? keys->TailPtr() : ctx.NewList(node->Pos(), {});
             children.back() = NYql::RemoveSettings(*settings, EYtSettingType::Columns | EYtSettingType::OrderBy | EYtSettingType::Mode, ctx);
             return ctx.NewCallable(node->Pos(), TYtCreateTable::CallableName(), std::move(children));
+        } else if (mode && *mode == EYtWriteMode::CreateObject) {
+            if (!node->Child(3U)->IsCallable("Void")) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(3U)->Pos()), TStringBuilder()
+                    << "Expected Void, but got: " << node->Child(3U)->Content()));
+                return {};
+            }
+
+            auto children = node->ChildrenList();
+            children.resize(6U);
+
+            const auto settings = node->Child(4U);
+            if (const auto features = NYql::GetSetting(*settings, EYtSettingType::Features)) {
+                for (auto i = 0U; i < features->Tail().ChildrenSize(); ++i) {
+                    if (const auto feature = features->Tail().Child(i); feature->IsList()) {
+                        if (feature->Head().IsAtom({"query_text", "__query_text"}))
+                            children[3U] = feature->TailPtr();
+                        else if (feature->Head().IsAtom({"query_ast", "__query_ast"}))
+                            children[4U] = feature->TailPtr();
+                        else {
+                            ctx.AddError(TIssue(ctx.GetPosition(feature->Pos()), "Unexpected feature."));
+                            return {};
+                        }
+                    }
+                }
+            }
+
+            if (!(children[3U] && children[4U])) {
+                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()),  "The view does not contain a query."));
+                return {};
+            }
+
+            children.back() = NYql::RemoveSettings(*settings, EYtSettingType::Mode | EYtSettingType::Features, ctx);
+            return ctx.NewCallable(node->Pos(), TYtCreateView::CallableName(), std::move(children));
         } else {
             auto res = ctx.RenameNode(*node, TYtWriteTable::CallableName());
             if ((!mode || *mode == EYtWriteMode::Renew) && NYql::HasSetting(*node->Child(4), EYtSettingType::KeepMeta)) {

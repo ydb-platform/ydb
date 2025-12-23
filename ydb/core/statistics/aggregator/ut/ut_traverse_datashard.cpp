@@ -19,6 +19,14 @@ TTestEnv CreateTestEnv() {
     });
 }
 
+void ValidateCountMinAbsence(TTestActorRuntime& runtime, TPathId pathId) {
+    std::vector<TCountMinSketchProbes> expected = {
+        { .Tag = 1, .Probes = std::nullopt },
+        { .Tag = 2, .Probes = std::nullopt },
+    };
+    CheckCountMinSketch(runtime, pathId, expected);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(TraverseDatashard) {
@@ -28,7 +36,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-        CreateUniformTable(env, "Database", "Table");
+        PrepareUniformTable(env, "Database", "Table");
 
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
         ValidateCountMinAbsence(runtime, pathId);
@@ -39,8 +47,8 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-        CreateUniformTable(env, "Database", "Table1");
-        CreateUniformTable(env, "Database", "Table2");
+        PrepareUniformTable(env, "Database", "Table1");
+        PrepareUniformTable(env, "Database", "Table2");
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Database/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Database/Table2");
@@ -54,7 +62,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
 
         CreateDatabase(env, "Shared", 1, true);
         CreateServerlessDatabase(env, "Serverless", "/Root/Shared");
-        CreateUniformTable(env, "Serverless", "Table");
+        PrepareUniformTable(env, "Serverless", "Table");
 
         auto pathId = ResolvePathId(runtime, "/Root/Serverless/Table");
         ValidateCountMinAbsence(runtime, pathId);
@@ -66,8 +74,8 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
 
         CreateDatabase(env, "Shared", 1, true);
         CreateServerlessDatabase(env, "Serverless", "/Root/Shared");
-        CreateUniformTable(env, "Serverless", "Table1");
-        CreateUniformTable(env, "Serverless", "Table2");
+        PrepareUniformTable(env, "Serverless", "Table1");
+        PrepareUniformTable(env, "Serverless", "Table2");
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Serverless/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless/Table2");
@@ -82,8 +90,8 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
         CreateDatabase(env, "Shared", 1, true);
         CreateServerlessDatabase(env, "Serverless1", "/Root/Shared");
         CreateServerlessDatabase(env, "Serverless2", "/Root/Shared");
-        CreateUniformTable(env, "Serverless1", "Table1");
-        CreateUniformTable(env, "Serverless2", "Table2");
+        PrepareUniformTable(env, "Serverless1", "Table1");
+        PrepareUniformTable(env, "Serverless2", "Table2");
 
         auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1");
         auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");

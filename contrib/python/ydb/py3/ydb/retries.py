@@ -1,4 +1,6 @@
 import asyncio
+import functools
+import inspect
 import random
 import time
 
@@ -161,3 +163,64 @@ async def retry_operation_async(callee, retry_settings=None, *args, **kwargs):  
                 return await next_opt.result
             except BaseException as e:  # pylint: disable=W0703
                 next_opt.set_exception(e)
+
+
+def ydb_retry(
+    max_retries=10,
+    max_session_acquire_timeout=None,
+    on_ydb_error_callback=None,
+    backoff_ceiling=6,
+    backoff_slot_duration=1,
+    get_session_client_timeout=5,
+    fast_backoff_settings=None,
+    slow_backoff_settings=None,
+    idempotent=False,
+    retry_cancelled=False,
+):
+    """
+    Decorator for automatic function retry in case of YDB errors.
+
+    Supports both synchronous and asynchronous functions.
+
+    :param max_retries: Maximum number of retries (default: 10)
+    :param max_session_acquire_timeout: Maximum session acquisition timeout (default: None)
+    :param on_ydb_error_callback: Callback for handling YDB errors (default: None)
+    :param backoff_ceiling: Ceiling for backoff algorithm (default: 6)
+    :param backoff_slot_duration: Slot duration for backoff (default: 1)
+    :param get_session_client_timeout: Session client timeout (default: 5)
+    :param fast_backoff_settings: Fast backoff settings (default: None)
+    :param slow_backoff_settings: Slow backoff settings (default: None)
+    :param idempotent: Whether the operation is idempotent (default: False)
+    :param retry_cancelled: Whether to retry cancelled operations (default: False)
+    """
+
+    def decorator(func):
+        retry_settings = RetrySettings(
+            max_retries=max_retries,
+            max_session_acquire_timeout=max_session_acquire_timeout,
+            on_ydb_error_callback=on_ydb_error_callback,
+            backoff_ceiling=backoff_ceiling,
+            backoff_slot_duration=backoff_slot_duration,
+            get_session_client_timeout=get_session_client_timeout,
+            fast_backoff_settings=fast_backoff_settings,
+            slow_backoff_settings=slow_backoff_settings,
+            idempotent=idempotent,
+            retry_cancelled=retry_cancelled,
+        )
+
+        if inspect.iscoroutinefunction(func):
+
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                return await retry_operation_async(func, retry_settings, *args, **kwargs)
+
+            return async_wrapper
+        else:
+
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                return retry_operation_sync(func, retry_settings, *args, **kwargs)
+
+            return sync_wrapper
+
+    return decorator

@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
                 auto indexColumns = TVector<TString>{"text"};
                 auto sender = runtime.AllocateEdgeActor();
                 auto request = CreateBuildIndexRequest(buildIndexId, "/MyRoot", "/MyRoot/texts", TBuildIndexConfig{
-                    "index1", NKikimrSchemeOp::EIndexTypeGlobalFulltext, indexColumns, {"data"}
+                    "index1", NKikimrSchemeOp::EIndexTypeGlobalFulltext, indexColumns, {"data"}, {}
                 });
                 auto& fulltext = *request->Record.MutableSettings()->mutable_index()->mutable_global_fulltext_index()->mutable_fulltext_settings();
                 fulltext.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);

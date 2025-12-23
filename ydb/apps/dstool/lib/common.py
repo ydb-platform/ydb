@@ -394,7 +394,7 @@ def retry_query_with_endpoints(query, endpoints, request_type, query_name, max_r
             if isinstance(e, urllib.error.URLError):
                 bad_hosts.add(endpoint.host_with_port)
             if not connection_params.quiet:
-                print(f'WARNING: failed to fetch data from host {endpoint.host_with_port} in {query_name}: {e}', file=sys.stderr)
+                print(f'WARNING: failed to fetch data from host {endpoint.host_with_port} in {query_name}: {e} ({type(e).__module__}.{type(e).__name__})', file=sys.stderr)
                 if request_type == 'http' and try_index == max_retries:
                     print('HINT: consider trying different protocol for endpoints when experiencing massive fetch failures from different hosts', file=sys.stderr)
             if try_index == max_retries:

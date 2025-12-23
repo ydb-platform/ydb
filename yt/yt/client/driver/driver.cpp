@@ -299,6 +299,7 @@ public:
 
         REGISTER    (TTransferAccountResourcesCommand,     "transfer_account_resources",      Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TTransferPoolResourcesCommand,        "transfer_pool_resources",         Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TTransferBundleResourcesCommand,      "transfer_bundle_resources",       Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER    (TWriteJournalCommand,                 "write_journal",                   Tabular,    Null,       true,  true,  ApiVersion3);
         REGISTER    (TWriteJournalCommand,                 "write_journal",                   Tabular,    Structured, true,  true,  ApiVersion4);

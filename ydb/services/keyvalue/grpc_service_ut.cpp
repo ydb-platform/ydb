@@ -1,4 +1,5 @@
-#include "grpc_service.h"
+#include "grpc_service_v1.h"
+#include "grpc_service_v2.h"
 
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -22,12 +23,131 @@
 #include <util/string/builder.h>
 
 
+#define UNIT_ASSERT_STATUS_EQUALS(got, exp) \
+    UNIT_ASSERT_C((got) == (exp), "exp# " << Ydb::StatusIds::StatusCode_Name(exp) \
+            << " got# " << Ydb::StatusIds::StatusCode_Name(got)) \
+// UNIT_ASSERT_STATUS_EQUALS
+
 #define UNIT_ASSERT_CHECK_STATUS(got, exp) \
     UNIT_ASSERT_C(got.status() == exp, "exp# " << Ydb::StatusIds::StatusCode_Name(exp) \
             << " got# " << Ydb::StatusIds::StatusCode_Name(got.status()) << " issues# "  << got.issues()) \
 // UNIT_ASSERT_CHECK_STATUS
 
+
 namespace NKikimr::NGRpcService {
+
+
+namespace {
+    enum class Version {
+        V1,
+        V2
+    };
+
+    enum class MetaType {
+        Request,
+        Result,
+        Response
+    };
+
+    template <Version StubVersion>
+    using Stub = std::conditional_t<StubVersion == Version::V1, Ydb::KeyValue::V1::KeyValueService::Stub, Ydb::KeyValue::V2::KeyValueService::Stub>;
+
+    template <Version StubVersion>
+    using AcquireLockResultType = Ydb::KeyValue::AcquireLockResult;
+    template <Version StubVersion>
+    using AcquireLockResponseType = std::conditional_t<StubVersion == Version::V1, Ydb::KeyValue::AcquireLockResponse, Ydb::KeyValue::AcquireLockResult>;
+
+    template <typename Type>
+    struct TypeHolder {
+        using type = Type;
+    };
+
+    template <Version StubVersion>
+    struct VersionHolder {
+        static constexpr Version version = StubVersion;
+    };
+    
+    template <Version StubVersion, typename Request>
+    struct RequestToResponse {
+        static_assert(false);
+    };
+    template <Version StubVersion, typename Response>
+    struct ResponseToResult {
+        static_assert(false);
+    };
+
+    template <typename Response>
+    struct ResponseToVersion {
+        static_assert(false);
+    };
+
+    // ResponseToResult V1
+    template<> struct ResponseToResult<Version::V1, Ydb::KeyValue::AcquireLockResponse> : TypeHolder<Ydb::KeyValue::AcquireLockResult> {};
+    template<> struct ResponseToResult<Version::V1, Ydb::KeyValue::ExecuteTransactionResponse> : TypeHolder<Ydb::KeyValue::ExecuteTransactionResult> {};
+    template<> struct ResponseToResult<Version::V1, Ydb::KeyValue::ReadResponse> : TypeHolder<Ydb::KeyValue::ReadResult> {};
+    template<> struct ResponseToResult<Version::V1, Ydb::KeyValue::ReadRangeResponse> : TypeHolder<Ydb::KeyValue::ReadRangeResult> {};
+    template<> struct ResponseToResult<Version::V1, Ydb::KeyValue::ListRangeResponse> : TypeHolder<Ydb::KeyValue::ListRangeResult> {};
+    template<> struct ResponseToResult<Version::V1, Ydb::KeyValue::GetStorageChannelStatusResponse> : TypeHolder<Ydb::KeyValue::GetStorageChannelStatusResult> {};
+    // ResponseToResult V2
+    template <typename Response> struct ResponseToResult<Version::V2, Response> : TypeHolder<Response> {};
+
+    // RequestToResponse V1
+    template<> struct RequestToResponse<Version::V1, Ydb::KeyValue::AcquireLockRequest> : TypeHolder<Ydb::KeyValue::AcquireLockResponse> {};
+    template<> struct RequestToResponse<Version::V1, Ydb::KeyValue::ExecuteTransactionRequest> : TypeHolder<Ydb::KeyValue::ExecuteTransactionResponse> {};
+    template<> struct RequestToResponse<Version::V1, Ydb::KeyValue::ReadRequest> : TypeHolder<Ydb::KeyValue::ReadResponse> {};
+    template<> struct RequestToResponse<Version::V1, Ydb::KeyValue::ReadRangeRequest> : TypeHolder<Ydb::KeyValue::ReadRangeResponse> {};
+    template<> struct RequestToResponse<Version::V1, Ydb::KeyValue::ListRangeRequest> : TypeHolder<Ydb::KeyValue::ListRangeResponse> {};
+    template<> struct RequestToResponse<Version::V1, Ydb::KeyValue::GetStorageChannelStatusRequest> : TypeHolder<Ydb::KeyValue::GetStorageChannelStatusResponse> {};
+    // RequestToResponse V2
+    template<> struct RequestToResponse<Version::V2, Ydb::KeyValue::AcquireLockRequest> : TypeHolder<Ydb::KeyValue::AcquireLockResult> {};
+    template<> struct RequestToResponse<Version::V2, Ydb::KeyValue::ExecuteTransactionRequest> : TypeHolder<Ydb::KeyValue::ExecuteTransactionResult> {};
+    template<> struct RequestToResponse<Version::V2, Ydb::KeyValue::ReadRequest> : TypeHolder<Ydb::KeyValue::ReadResult> {};
+    template<> struct RequestToResponse<Version::V2, Ydb::KeyValue::ReadRangeRequest> : TypeHolder<Ydb::KeyValue::ReadRangeResult> {};
+    template<> struct RequestToResponse<Version::V2, Ydb::KeyValue::ListRangeRequest> : TypeHolder<Ydb::KeyValue::ListRangeResult> {};
+    template<> struct RequestToResponse<Version::V2, Ydb::KeyValue::GetStorageChannelStatusRequest> : TypeHolder<Ydb::KeyValue::GetStorageChannelStatusResult> {};
+
+    // ResponseToVersion V1
+    template<> struct ResponseToVersion<Ydb::KeyValue::AcquireLockResponse> : VersionHolder<Version::V1> {};
+    template<> struct ResponseToVersion<Ydb::KeyValue::ExecuteTransactionResponse> : VersionHolder<Version::V1> {};
+    template<> struct ResponseToVersion<Ydb::KeyValue::ReadResponse> : VersionHolder<Version::V1> {};
+    template<> struct ResponseToVersion<Ydb::KeyValue::ReadRangeResponse> : VersionHolder<Version::V1> {};
+    template<> struct ResponseToVersion<Ydb::KeyValue::ListRangeResponse> : VersionHolder<Version::V1> {};
+    template<> struct ResponseToVersion<Ydb::KeyValue::GetStorageChannelStatusResponse> : VersionHolder<Version::V1> {};
+    // ResponseToVersion V2
+    template<> struct ResponseToVersion<Ydb::KeyValue::AcquireLockResult> : VersionHolder<Version::V2> {};
+    template<> struct ResponseToVersion<Ydb::KeyValue::ExecuteTransactionResult> : VersionHolder<Version::V2> {};
+    template<> struct ResponseToVersion<Ydb::KeyValue::ReadResult> : VersionHolder<Version::V2> {};
+    template<> struct ResponseToVersion<Ydb::KeyValue::ReadRangeResult> : VersionHolder<Version::V2> {};
+    template<> struct ResponseToVersion<Ydb::KeyValue::ListRangeResult> : VersionHolder<Version::V2> {};
+    template<> struct ResponseToVersion<Ydb::KeyValue::GetStorageChannelStatusResult> : VersionHolder<Version::V2> {};
+
+    template <Version StubVersion, typename Request>
+    struct RequestToResult : ResponseToResult<StubVersion, typename RequestToResponse<StubVersion, Request>::type> {};
+
+    template <Version StubVersion>
+    struct StubHelper {
+        template <typename TResponse>
+        static auto GetResult(const TResponse &response) {
+            if constexpr (StubVersion == Version::V1) {
+                using TResult = typename ResponseToResult<StubVersion, TResponse>::type;
+                TResult result;
+                response.operation().result().UnpackTo(&result);
+                return result;
+            } else {
+                return response;
+            }
+        }
+
+        template <typename TResponse>
+        static Ydb::StatusIds::StatusCode GetStatus(const TResponse &response) {
+            if constexpr (StubVersion == Version::V1) {
+                return response.operation().status();
+            } else {
+                return response.status();
+            }
+        }
+    };
+}
 
 
 
@@ -51,7 +171,8 @@ public:
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->FeatureFlags = appConfig.GetFeatureFlags();
         ServerSettings->FeatureFlags.SetAllowUpdateChannelsBindingOfSolomonPartitions(true);
-        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcService>("keyvalue");
+        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcServiceV1>("keyvalue");
+        ServerSettings->RegisterGrpcService<NKikimr::NGRpcService::TKeyValueGRpcServiceV2>("keyvalue");
 
         Server_.Reset(new Tests::TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));
@@ -60,12 +181,12 @@ public:
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NActors::NLog::PRI_TRACE);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_POPULATOR, NActors::NLog::PRI_DEBUG);
-        Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
         Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
         Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY, NActors::NLog::PRI_DEBUG);
         Server_->GetRuntime()->SetLogPriority(NKikimrServices::KEYVALUE, NActors::NLog::PRI_DEBUG);
-        Server_->GetRuntime()->SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::STATESTORAGE, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SAUSAGE_BIO, NActors::NLog::PRI_DEBUG);
@@ -328,8 +449,9 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         }
     }
 
+    template <Version StubVersion>
     void MakeSimpleTest(const TString &tablePath,
-            std::function<void(const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub>&)> func)
+            std::function<void(const std::unique_ptr<Stub<StubVersion>>&)> func)
     {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -338,7 +460,6 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         ////////////////////////////////////////////////////////////////////////
 
         std::shared_ptr<grpc::Channel> channel;
-        std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> stub;
         channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
         MakeDirectory(channel, "/Root/mydb");
         MakeTable(channel, tablePath);
@@ -348,90 +469,169 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.children(0).name(), pr.back());
 
         WaitTableCreation(server, tablePath);
-        stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
-        func(stub);
+        if constexpr (StubVersion == Version::V1) {
+            std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> stub;
+            stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+            func(stub);
+        } else {
+            std::unique_ptr<Ydb::KeyValue::V2::KeyValueService::Stub> stub;
+            stub = Ydb::KeyValue::V2::KeyValueService::NewStub(channel);
+            func(stub);
+        }
     }
 
-    Y_UNIT_TEST(SimpleAcquireLock) {
-        TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
-            Ydb::KeyValue::AcquireLockRequest request;
-            request.set_path(tablePath);
-            request.set_partition_id(0);
-            Ydb::KeyValue::AcquireLockResponse response;
-            Ydb::KeyValue::AcquireLockResult result;
+    template <typename TFunc>
+    auto WithRetry(ui64 count, TFunc func) {
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::UNAVAILABLE;
+        std::decay_t<decltype(func())> response;
+        for (ui32 i = 0; i < count && status == Ydb::StatusIds::UNAVAILABLE; ++i) {
+            response = func();
+            status = StubHelper<ResponseToVersion<decltype(response)>::version>::GetStatus(response);
+        }
+        return response;
+    }
 
-            grpc::ClientContext ctx1;
-            AdjustCtxForDB(ctx1);
-            stub->AcquireLock(&ctx1, request, &response);
-            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
-            response.operation().result().UnpackTo(&result);
-            UNIT_ASSERT(result.lock_generation() == 1);
-
-            grpc::ClientContext ctx2;
-            AdjustCtxForDB(ctx2);
-            stub->AcquireLock(&ctx2, request, &response);
-            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
-            response.operation().result().UnpackTo(&result);
-            UNIT_ASSERT(result.lock_generation() == 2);
+    template <Version StubVersion, Ydb::StatusIds::StatusCode ExpectedCode = Ydb::StatusIds::SUCCESS>
+    Ydb::KeyValue::AcquireLockResult AcquireLock(const Ydb::KeyValue::AcquireLockRequest &acquireLockRequest, const std::unique_ptr<Stub<StubVersion>> &stub) {
+        auto response = WithRetry(5, [&] {
+            using TResponse = RequestToResponse<StubVersion, Ydb::KeyValue::AcquireLockRequest>::type;
+            TResponse response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            grpc::Status status = stub->AcquireLock(&ctx, acquireLockRequest, &response);
+            UNIT_ASSERT_C(status.ok(), status.error_code());
+            return response;
         });
+        UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), ExpectedCode);
+        return StubHelper<StubVersion>::GetResult(response);
     }
 
-    Y_UNIT_TEST(SimpleExecuteTransaction) {
+    template <Version StubVersion, Ydb::StatusIds::StatusCode ExpectedCode = Ydb::StatusIds::SUCCESS>
+    Ydb::KeyValue::ExecuteTransactionResult ExecuteTransaction(const Ydb::KeyValue::ExecuteTransactionRequest &request, const std::unique_ptr<Stub<StubVersion>> &stub)
+    {
+        auto response = WithRetry(5, [&] {
+            using TResponse = RequestToResponse<StubVersion, Ydb::KeyValue::ExecuteTransactionRequest>::type;
+            TResponse response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            grpc::Status status = stub->ExecuteTransaction(&ctx, request, &response);
+            UNIT_ASSERT_C(status.ok(), status.error_code());
+            return response;
+        });
+        UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), ExpectedCode);
+        return StubHelper<StubVersion>::GetResult(response);
+    }
+
+    template <Version StubVersion, Ydb::StatusIds::StatusCode ExpectedCode = Ydb::StatusIds::SUCCESS>
+    Ydb::KeyValue::ReadResult Read(const Ydb::KeyValue::ReadRequest &request, const std::unique_ptr<Stub<StubVersion>> &stub)
+    {
+        auto response = WithRetry(5, [&] {
+            using TResponse = RequestToResponse<StubVersion, Ydb::KeyValue::ReadRequest>::type;
+            TResponse response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            grpc::Status status = stub->Read(&ctx, request, &response);
+            UNIT_ASSERT_C(status.ok(), status.error_code());
+            return response;
+        });
+        UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), ExpectedCode);
+        return StubHelper<StubVersion>::GetResult(response);
+    }
+
+    template <Version StubVersion, Ydb::StatusIds::StatusCode ExpectedCode = Ydb::StatusIds::SUCCESS>
+    Ydb::KeyValue::ReadRangeResult ReadRange(const Ydb::KeyValue::ReadRangeRequest &request, const std::unique_ptr<Stub<StubVersion>> &stub)
+    {
+        auto response = WithRetry(5, [&] {
+            using TResponse = RequestToResponse<StubVersion, Ydb::KeyValue::ReadRangeRequest>::type;
+            TResponse response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            grpc::Status status = stub->ReadRange(&ctx, request, &response);
+            UNIT_ASSERT_C(status.ok(), status.error_code());
+            return response;
+        });
+        UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), ExpectedCode);
+        return StubHelper<StubVersion>::GetResult(response);
+    }
+
+    template <Version StubVersion, Ydb::StatusIds::StatusCode ExpectedCode = Ydb::StatusIds::SUCCESS>
+    Ydb::KeyValue::ListRangeResult ListRange(const Ydb::KeyValue::ListRangeRequest &request, const std::unique_ptr<Stub<StubVersion>> &stub)
+    {
+        auto response = WithRetry(5, [&] {
+            using TResponse = RequestToResponse<StubVersion, Ydb::KeyValue::ListRangeRequest>::type;
+            TResponse response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            grpc::Status status = stub->ListRange(&ctx, request, &response);
+            UNIT_ASSERT_C(status.ok(), status.error_code());
+            return response;
+        });
+        UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), ExpectedCode);
+        return StubHelper<StubVersion>::GetResult(response);
+    }
+
+    template <Version StubVersion, Ydb::StatusIds::StatusCode ExpectedCode = Ydb::StatusIds::SUCCESS>
+    Ydb::KeyValue::GetStorageChannelStatusResult GetStorageChannelStatus(const Ydb::KeyValue::GetStorageChannelStatusRequest &request, const std::unique_ptr<Stub<StubVersion>> &stub)
+    {
+        auto response = WithRetry(5, [&] {
+            using TResponse = RequestToResponse<StubVersion, Ydb::KeyValue::GetStorageChannelStatusRequest>::type;
+            TResponse response;
+            grpc::ClientContext ctx;
+            AdjustCtxForDB(ctx);
+            grpc::Status status = stub->GetStorageChannelStatus(&ctx, request, &response);
+            UNIT_ASSERT_C(status.ok(), status.error_code());
+            return response;
+        });
+        UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), ExpectedCode);
+        return StubHelper<StubVersion>::GetResult(response);
+    }
+
+#define Y_UNIT_TEST_BOTH_VERSION(Name) \
+    template <Version StubVersion> void Test ## Name (); \
+    Y_UNIT_TEST(Name ## V1) { Test ## Name <Version::V1>(); } \
+    Y_UNIT_TEST(Name ## V2) { Test ## Name <Version::V2>(); } \
+    template <Version StubVersion> void Test ## Name ()
+// Y_UNIT_TEST_BOTH_VERSION
+
+    Y_UNIT_TEST_BOTH_VERSION(TestSimpleExecuteTransaction) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
             Ydb::KeyValue::ExecuteTransactionRequest request;
             request.set_path(tablePath);
             request.set_partition_id(0);
-            Ydb::KeyValue::ExecuteTransactionResponse response;
-
-            grpc::ClientContext ctx;
-            AdjustCtxForDB(ctx);
-            stub->ExecuteTransaction(&ctx, request, &response);
-            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+            ExecuteTransaction<StubVersion>(request, stub);
         });
     }
 
-    Y_UNIT_TEST(SimpleExecuteTransactionWithWrongGeneration) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleExecuteTransactionWithWrongGeneration) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
             Ydb::KeyValue::ExecuteTransactionRequest request;
             request.set_path(tablePath);
             request.set_partition_id(0);
             request.set_lock_generation(42);
-            Ydb::KeyValue::ExecuteTransactionResponse response;
-
-            grpc::ClientContext ctx;
-            AdjustCtxForDB(ctx);
-            stub->ExecuteTransaction(&ctx, request, &response);
-            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::PRECONDITION_FAILED);
+            ExecuteTransaction<StubVersion, Ydb::StatusIds::PRECONDITION_FAILED>(request, stub);
         });
     }
 
+    template <Version StubVersion>
     Ydb::KeyValue::ExecuteTransactionResult Write(const TString &path, ui64 partitionId, const TString &key, const TString &value, ui64 storageChannel,
-            const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub)
+            const std::unique_ptr<Stub<StubVersion>> &stub)
     {
-        Ydb::KeyValue::ExecuteTransactionRequest writeRequest;
-        writeRequest.set_path(path);
-        writeRequest.set_partition_id(partitionId);
-        auto *cmd = writeRequest.add_commands();
+        Ydb::KeyValue::ExecuteTransactionRequest request;
+        request.set_path(path);
+        request.set_partition_id(partitionId);
+        auto *cmd = request.add_commands();
         auto *write = cmd->mutable_write();
         write->set_key(key);
         write->set_value(value);
         write->set_storage_channel(storageChannel);
-        Ydb::KeyValue::ExecuteTransactionResponse writeResponse;
-
-        grpc::ClientContext writeCtx;
-        AdjustCtxForDB(writeCtx);
-        stub->ExecuteTransaction(&writeCtx, writeRequest, &writeResponse);
-        UNIT_ASSERT_CHECK_STATUS(writeResponse.operation(), Ydb::StatusIds::SUCCESS);
-        Ydb::KeyValue::ExecuteTransactionResult writeResult;
-        writeResponse.operation().result().UnpackTo(&writeResult);
-        return writeResult;
+        return ExecuteTransaction<StubVersion>(request, stub);
     }
 
-    void Rename(const TString &path, ui64 partitionId, const TString &oldKey, const TString &newKey,
-            const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub)
+    template <Version StubVersion>
+    Ydb::KeyValue::ExecuteTransactionResult Rename(const TString &path, ui64 partitionId, const TString &oldKey, const TString &newKey,
+            const std::unique_ptr<Stub<StubVersion>> &stub)
     {
         Ydb::KeyValue::ExecuteTransactionRequest request;
         request.set_path(path);
@@ -440,18 +640,28 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         auto *rename = cmd->mutable_rename();
         rename->set_old_key(oldKey);
         rename->set_new_key(newKey);
-        Ydb::KeyValue::ExecuteTransactionResponse response;
-
-        grpc::ClientContext ctx;
-        AdjustCtxForDB(ctx);
-        stub->ExecuteTransaction(&ctx, request, &response);
-        UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+        return ExecuteTransaction<StubVersion>(request, stub);
     }
 
-
-    Y_UNIT_TEST(SimpleRenameUnexistedKey) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleAcquireLock) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
+            Ydb::KeyValue::AcquireLockRequest request;
+            request.set_path(tablePath);
+            request.set_partition_id(0);
+
+            auto result1 = AcquireLock<StubVersion>(request, stub);
+            UNIT_ASSERT(result1.lock_generation() == 1);
+
+            auto result2 = AcquireLock<StubVersion>(request, stub);
+            UNIT_ASSERT(result2.lock_generation() == 2);
+        });
+    };
+
+
+    Y_UNIT_TEST_BOTH_VERSION(SimpleRenameUnexistedKey) {
+        TString tablePath = "/Root/mydb/kvtable";
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
             Ydb::KeyValue::ExecuteTransactionRequest request;
             request.set_path(tablePath);
             request.set_partition_id(0);
@@ -459,18 +669,13 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             auto *rename = cmd->mutable_rename();
             rename->set_old_key("key1");
             rename->set_new_key("key2");
-            Ydb::KeyValue::ExecuteTransactionResponse response;
-
-            grpc::ClientContext ctx;
-            AdjustCtxForDB(ctx);
-            stub->ExecuteTransaction(&ctx, request, &response);
-            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::NOT_FOUND);
+            ExecuteTransaction<StubVersion, Ydb::StatusIds::NOT_FOUND>(request, stub);
         });
     }
 
-    Y_UNIT_TEST(SimpleConcatUnexistedKey) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleConcatUnexistedKey) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
             Ydb::KeyValue::ExecuteTransactionRequest request;
             request.set_path(tablePath);
             request.set_partition_id(0);
@@ -480,17 +685,13 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             concat->add_input_keys("key2");
             concat->set_output_key("key3");
             Ydb::KeyValue::ExecuteTransactionResponse response;
-
-            grpc::ClientContext ctx;
-            AdjustCtxForDB(ctx);
-            stub->ExecuteTransaction(&ctx, request, &response);
-            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::NOT_FOUND);
+            ExecuteTransaction<StubVersion, Ydb::StatusIds::NOT_FOUND>(request, stub);
         });
     }
 
-    Y_UNIT_TEST(SimpleCopyUnexistedKey) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleCopyUnexistedKey) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
             Ydb::KeyValue::ExecuteTransactionRequest request;
             request.set_path(tablePath);
             request.set_partition_id(0);
@@ -500,32 +701,21 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             range->set_from_key_inclusive("key1");
             range->set_to_key_inclusive("key2");
             rename->set_prefix_to_add("A");
-            Ydb::KeyValue::ExecuteTransactionResponse response;
-
-            grpc::ClientContext ctx;
-            AdjustCtxForDB(ctx);
-            stub->ExecuteTransaction(&ctx, request, &response);
-            UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
+            ExecuteTransaction<StubVersion>(request, stub);
         });
     }
 
-    Y_UNIT_TEST(SimpleWriteRead) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleWriteRead) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
-            Write(tablePath, 0, "key", "value", 0, stub);
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
+            Write<StubVersion>(tablePath, 0, "key", "value", 0, stub);
 
             Ydb::KeyValue::ReadRequest readRequest;
             readRequest.set_path(tablePath);
             readRequest.set_partition_id(0);
             readRequest.set_key("key");
-            Ydb::KeyValue::ReadResponse readResponse;
-            Ydb::KeyValue::ReadResult readResult;
+            Ydb::KeyValue::ReadResult readResult = Read<StubVersion>(readRequest, stub);
 
-            grpc::ClientContext readCtx;
-            AdjustCtxForDB(readCtx);
-            stub->Read(&readCtx, readRequest, &readResponse);
-            UNIT_ASSERT_CHECK_STATUS(readResponse.operation(), Ydb::StatusIds::SUCCESS);
-            readResponse.operation().result().UnpackTo(&readResult);
             UNIT_ASSERT(!readResult.is_overrun());
             UNIT_ASSERT_VALUES_EQUAL(readResult.requested_key(), "key");
             UNIT_ASSERT_VALUES_EQUAL(readResult.value(), "value");
@@ -534,148 +724,121 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         });
     }
 
-    Y_UNIT_TEST(SimpleWriteReadWithIncorreectPath) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleWriteReadWithIncorreectPath) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
-            Write(tablePath, 0, "key", "value", 0, stub);
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
+            Write<StubVersion>(tablePath, 0, "key", "value", 0, stub);
 
             Ydb::KeyValue::ReadRequest readRequest;
             readRequest.set_path("/Root/mydb/table");
             readRequest.set_partition_id(0);
             readRequest.set_key("key");
-            Ydb::KeyValue::ReadResponse readResponse;
-            Ydb::KeyValue::ReadResult readResult;
 
-            grpc::ClientContext readCtx;
-            AdjustCtxForDB(readCtx);
-            stub->Read(&readCtx, readRequest, &readResponse);
-            UNIT_ASSERT_CHECK_STATUS(readResponse.operation(), Ydb::StatusIds::SCHEME_ERROR);
+            Read<StubVersion, Ydb::StatusIds::SCHEME_ERROR>(readRequest, stub);
         });
     }
 
-    Y_UNIT_TEST(SimpleWriteReadWithoutToken) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleWriteReadWithoutToken) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
             return;
-            Write(tablePath, 0, "key", "value", 0, stub);
+            Write<StubVersion>(tablePath, 0, "key", "value", 0, stub);
 
             Ydb::KeyValue::ReadRequest readRequest;
             readRequest.set_path("/Root/mydb/kvtable");
             readRequest.set_partition_id(0);
             readRequest.set_key("key");
-            Ydb::KeyValue::ReadResponse readResponse;
-            Ydb::KeyValue::ReadResult readResult;
+            using TResponse = RequestToResponse<StubVersion, Ydb::KeyValue::ReadRequest>::type;
+            TResponse readResponse;
 
             grpc::ClientContext readCtx;
             //AdjustCtxForDB(readCtx);
             stub->Read(&readCtx, readRequest, &readResponse);
-            UNIT_ASSERT_CHECK_STATUS(readResponse.operation(), Ydb::StatusIds::SCHEME_ERROR);
+            UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(readResponse), Ydb::StatusIds::SCHEME_ERROR);
         });
     }
 
-    Y_UNIT_TEST(SimpleWriteReadWithoutLockGeneration1) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleWriteReadWithoutLockGeneration1) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
-            AcquireLock(tablePath, 0, stub);
-            Write(tablePath, 0, "key", "value", 0, stub);
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
+            Ydb::KeyValue::AcquireLockRequest lockReq;
+            lockReq.set_path(tablePath);
+            lockReq.set_partition_id(0);
+            AcquireLock<StubVersion>(lockReq, stub);
+
+            Write<StubVersion>(tablePath, 0, "key", "value", 0, stub);
+
             Ydb::KeyValue::ReadRequest readRequest;
             readRequest.set_path(tablePath);
             readRequest.set_partition_id(0);
             readRequest.set_key("key");
-            Ydb::KeyValue::ReadResponse readResponse;
-            Ydb::KeyValue::ReadResult readResult;
-
-            grpc::ClientContext readCtx;
-            AdjustCtxForDB(readCtx);
-            stub->Read(&readCtx, readRequest, &readResponse);
-            UNIT_ASSERT_CHECK_STATUS(readResponse.operation(), Ydb::StatusIds::SUCCESS);
+            Read<StubVersion>(readRequest, stub);
         });
     }
 
-    Y_UNIT_TEST(SimpleWriteReadWithoutLockGeneration2) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleWriteReadWithoutLockGeneration2) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
-            Write(tablePath, 0, "key", "value", 0, stub);
-            AcquireLock(tablePath, 0, stub);
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
+            Write<StubVersion>(tablePath, 0, "key", "value", 0, stub);
+
+            Ydb::KeyValue::AcquireLockRequest lockReq;
+            lockReq.set_path(tablePath);
+            lockReq.set_partition_id(0);
+            AcquireLock<StubVersion>(lockReq, stub);
+
             Ydb::KeyValue::ReadRequest readRequest;
             readRequest.set_path(tablePath);
             readRequest.set_partition_id(0);
             readRequest.set_key("key");
-            Ydb::KeyValue::ReadResponse readResponse;
-            Ydb::KeyValue::ReadResult readResult;
-
-            grpc::ClientContext readCtx;
-            AdjustCtxForDB(readCtx);
-            stub->Read(&readCtx, readRequest, &readResponse);
-            UNIT_ASSERT_CHECK_STATUS(readResponse.operation(), Ydb::StatusIds::SUCCESS);
+            Read<StubVersion>(readRequest, stub);
         });
     }
 
-    Y_UNIT_TEST(SimpleWriteReadWithGetChannelStatus) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleWriteReadWithGetChannelStatus) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
             Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest;
             getStatusRequest.set_path(tablePath);
             getStatusRequest.add_storage_channel(0);
             getStatusRequest.add_storage_channel(1);
             getStatusRequest.add_storage_channel(2);
-            Ydb::KeyValue::GetStorageChannelStatusResponse getStatusResponse;
-            grpc::ClientContext getStatusCtx;
-            AdjustCtxForDB(getStatusCtx);
-            stub->GetStorageChannelStatus(&getStatusCtx, getStatusRequest, &getStatusResponse);
-            UNIT_ASSERT_CHECK_STATUS(getStatusResponse.operation(), Ydb::StatusIds::SUCCESS);
+            GetStorageChannelStatus<StubVersion>(getStatusRequest, stub);
 
-            Write(tablePath, 0, "key", "value", 0, stub);
+            Write<StubVersion>(tablePath, 0, "key", "value", 0, stub);
 
             Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest2;
             getStatusRequest2.set_path(tablePath);
             getStatusRequest2.add_storage_channel(0);
             getStatusRequest2.add_storage_channel(1);
             getStatusRequest2.add_storage_channel(2);
-            Ydb::KeyValue::GetStorageChannelStatusResponse getStatusResponse2;
-            grpc::ClientContext getStatusCtx2;
-            AdjustCtxForDB(getStatusCtx2);
-            stub->GetStorageChannelStatus(&getStatusCtx2, getStatusRequest2, &getStatusResponse2);
-            UNIT_ASSERT_CHECK_STATUS(getStatusResponse2.operation(), Ydb::StatusIds::SUCCESS);
+            GetStorageChannelStatus<StubVersion>(getStatusRequest2, stub);
 
             Ydb::KeyValue::ReadRequest readRequest;
             readRequest.set_path(tablePath);
             readRequest.set_partition_id(0);
             readRequest.set_key("key");
-            Ydb::KeyValue::ReadResponse readResponse;
-            Ydb::KeyValue::ReadResult readResult;
-
-            grpc::ClientContext readCtx;
-            AdjustCtxForDB(readCtx);
-            stub->Read(&readCtx, readRequest, &readResponse);
-            UNIT_ASSERT_CHECK_STATUS(readResponse.operation(), Ydb::StatusIds::SUCCESS);
+            Read<StubVersion>(readRequest, stub);
         });
     }
 
-    Y_UNIT_TEST(SimpleWriteReadOverrun) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleWriteReadOverrun) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
-            Write(tablePath, 0, "key", "value", 0, stub);
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
+            Write<StubVersion>(tablePath, 0, "key", "value", 0, stub);
 
             Ydb::KeyValue::ReadRequest readRequest;
             readRequest.set_path(tablePath);
             readRequest.set_partition_id(0);
             readRequest.set_key("key");
-            ui64 limitBytes = 1 + 5 + 3 // Key id, length
-                    + 1 + 5 + 1 // Value id, length, value
-                    + 1 + 8 // Offset id, value
-                    + 1 + 8 // Size id, value
-                    + 1 + 1 // Status id, value
+            ui64 limitBytes = 1 + 5 + 3
+                    + 1 + 5 + 1
+                    + 1 + 8
+                    + 1 + 8
+                    + 1 + 1
                     ;
             readRequest.set_limit_bytes(limitBytes);
-            Ydb::KeyValue::ReadResponse readResponse;
-            Ydb::KeyValue::ReadResult readResult;
 
-            grpc::ClientContext readCtx;
-            AdjustCtxForDB(readCtx);
-            stub->Read(&readCtx, readRequest, &readResponse);
-            UNIT_ASSERT_CHECK_STATUS(readResponse.operation(), Ydb::StatusIds::SUCCESS);
-            readResponse.operation().result().UnpackTo(&readResult);
+            Ydb::KeyValue::ReadResult readResult = Read<StubVersion>(readRequest, stub);
             UNIT_ASSERT(readResult.is_overrun());
             UNIT_ASSERT_VALUES_EQUAL(readResult.requested_key(), "key");
             UNIT_ASSERT_VALUES_EQUAL(readResult.value(), "v");
@@ -684,11 +847,11 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         });
     }
 
-    Y_UNIT_TEST(SimpleWriteReadRange) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleWriteReadRange) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
-            Write(tablePath, 0, "key1", "value1", 1, stub);
-            Write(tablePath, 0, "key2", "value12", 2, stub);
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
+            Write<StubVersion>(tablePath, 0, "key1", "value1", 1, stub);
+            Write<StubVersion>(tablePath, 0, "key2", "value12", 2, stub);
 
             Ydb::KeyValue::ReadRangeRequest readRangeRequest;
             readRangeRequest.set_path(tablePath);
@@ -696,14 +859,8 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             auto *r = readRangeRequest.mutable_range();
             r->set_from_key_inclusive("key1");
             r->set_to_key_inclusive("key3");
-            Ydb::KeyValue::ReadRangeResponse readRangeResponse;
-            Ydb::KeyValue::ReadRangeResult readRangeResult;
 
-            grpc::ClientContext readRangeCtx;
-            AdjustCtxForDB(readRangeCtx);
-            stub->ReadRange(&readRangeCtx, readRangeRequest, &readRangeResponse);
-            UNIT_ASSERT_CHECK_STATUS(readRangeResponse.operation(), Ydb::StatusIds::SUCCESS);
-            readRangeResponse.operation().result().UnpackTo(&readRangeResult);
+            Ydb::KeyValue::ReadRangeResult readRangeResult = ReadRange<StubVersion>(readRangeRequest, stub);
 
             UNIT_ASSERT_VALUES_EQUAL(readRangeResult.pair(0).key(), "key1");
             UNIT_ASSERT_VALUES_EQUAL(readRangeResult.pair(1).key(), "key2");
@@ -717,11 +874,11 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
     }
 
 
-    Y_UNIT_TEST(SimpleWriteListRange) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleWriteListRange) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
-            Write(tablePath, 0, "key1", "value1", 1, stub);
-            Write(tablePath, 0, "key2", "value12", 2, stub);
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
+            Write<StubVersion>(tablePath, 0, "key1", "value1", 1, stub);
+            Write<StubVersion>(tablePath, 0, "key2", "value12", 2, stub);
 
             Ydb::KeyValue::ListRangeRequest listRangeRequest;
             listRangeRequest.set_path(tablePath);
@@ -729,14 +886,8 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             auto *r = listRangeRequest.mutable_range();
             r->set_from_key_inclusive("key1");
             r->set_to_key_inclusive("key3");
-            Ydb::KeyValue::ListRangeResponse listRangeResponse;
-            Ydb::KeyValue::ListRangeResult listRangeResult;
 
-            grpc::ClientContext listRangeCtx;
-            AdjustCtxForDB(listRangeCtx);
-            stub->ListRange(&listRangeCtx, listRangeRequest, &listRangeResponse);
-            UNIT_ASSERT_CHECK_STATUS(listRangeResponse.operation(), Ydb::StatusIds::SUCCESS);
-            listRangeResponse.operation().result().UnpackTo(&listRangeResult);
+            Ydb::KeyValue::ListRangeResult listRangeResult = ListRange<StubVersion>(listRangeRequest, stub);
 
             UNIT_ASSERT_VALUES_EQUAL(listRangeResult.key(0).key(), "key1");
             UNIT_ASSERT_VALUES_EQUAL(listRangeResult.key(1).key(), "key2");
@@ -750,23 +901,17 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
     }
 
 
-    Y_UNIT_TEST(SimpleGetStorageChannelStatus) {
+    Y_UNIT_TEST_BOTH_VERSION(SimpleGetStorageChannelStatus) {
         TString tablePath = "/Root/mydb/kvtable";
-        MakeSimpleTest(tablePath, [tablePath](const std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> &stub){
+        MakeSimpleTest<StubVersion>(tablePath, [tablePath](const std::unique_ptr<Stub<StubVersion>> &stub){
             Ydb::KeyValue::GetStorageChannelStatusRequest getStatusRequest;
             getStatusRequest.set_path(tablePath);
             getStatusRequest.set_partition_id(0);
             getStatusRequest.add_storage_channel(1);
             getStatusRequest.add_storage_channel(2);
             getStatusRequest.add_storage_channel(3);
-            Ydb::KeyValue::GetStorageChannelStatusResponse getStatusResponse;
-            Ydb::KeyValue::GetStorageChannelStatusResult getStatusResult;
 
-            grpc::ClientContext getStatusCtx;
-            AdjustCtxForDB(getStatusCtx);
-            stub->GetStorageChannelStatus(&getStatusCtx, getStatusRequest, &getStatusResponse);
-            UNIT_ASSERT_CHECK_STATUS(getStatusResponse.operation(), Ydb::StatusIds::SUCCESS);
-            getStatusResponse.operation().result().UnpackTo(&getStatusResult);
+            Ydb::KeyValue::GetStorageChannelStatusResult getStatusResult = GetStorageChannelStatus<StubVersion>(getStatusRequest, stub);
             UNIT_ASSERT_VALUES_EQUAL(getStatusResult.storage_channel_info_size(), 3);
         });
     }
@@ -846,7 +991,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         std::unique_ptr<Ydb::KeyValue::V1::KeyValueService::Stub> stub;
         stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
-        Write(tablePath, 0, "key1", "value1", 1, stub);
+        Write<Version::V1>(tablePath, 0, "key1", "value1", 1, stub);
 
         Ydb::KeyValue::ListLocalPartitionsRequest enumerateRequest;
         enumerateRequest.set_path(tablePath);
@@ -863,7 +1008,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         eumerateResponse.operation().result().UnpackTo(&enumerateResult);
         UNIT_ASSERT_VALUES_EQUAL(enumerateResult.partition_ids_size(), 1);
 
-        auto writeRes = Write(tablePath, enumerateResult.partition_ids(0), "key2", "value2", 1, stub);
+        auto writeRes = Write<Version::V1>(tablePath, enumerateResult.partition_ids(0), "key2", "value2", 1, stub);
         UNIT_ASSERT_VALUES_EQUAL(writeRes.node_id(), 2);
     }
 

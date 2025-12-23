@@ -4,17 +4,20 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
-#define LOG(level, stream) LOG_LOG_S (*NActors::TlsActivationContext, level, Service, LogBuilder() << GetLogPrefix() << stream)
-#define LOG_T(stream) LOG_TRACE_S (*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S (*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() << stream)
-#define LOG_I(stream) LOG_INFO_S  (*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() << stream)
-#define LOG_W(stream) LOG_WARN_S  (*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S (*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() << stream)
-#define LOG_C(stream) LOG_CRIT_S  (*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() << stream)
-#define LOG_A(stream) LOG_ALERT_S (*NActors::TlsActivationContext, Service, LogBuilder() << GetLogPrefix() << stream)
+#define NPQ_LOG_PREFIX LogBuilder() << GetLogPrefix()
+#define LOG(level, stream) LOG_LOG_S (*NActors::TlsActivationContext, level, Service, NPQ_LOG_PREFIX << stream)
+#define LOG_T(stream) LOG_TRACE_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
+#define LOG_D(stream) LOG_DEBUG_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
+#define LOG_I(stream) LOG_INFO_S  (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
+#define LOG_N(stream) LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
+#define LOG_W(stream) LOG_WARN_S  (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
+#define LOG_E(stream) LOG_ERROR_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
+#define LOG_C(stream) LOG_CRIT_S  (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
+#define LOG_A(stream) LOG_ALERT_S (*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << stream)
 
 namespace NKikimr::NPQ {
+
+void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStringBuf prefix, const std::exception& exc);
 
 namespace NPrivate {
     class ILogPrefixBase {
@@ -40,9 +43,8 @@ public:
     {
     }
 
-    bool OnUnhandledException(const std::exception& exc) override  {
-        LOG_C("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-                << TBackTrace::FromCurrentException().PrintToString());
+    bool OnUnhandledException(const std::exception& exc) override {
+        DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
 
         NPrivate::IncrementUnhandledExceptionCounter(this->ActorContext());
         this->PassAway();

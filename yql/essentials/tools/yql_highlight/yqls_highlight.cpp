@@ -52,6 +52,7 @@ THighlighting MakeYQLsHighlighting() {
                         {"override_library"},
                         {"package"},
                         {"set_package_version"},
+                        {"bind"},
                     }),
                 },
             },

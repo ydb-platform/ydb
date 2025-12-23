@@ -424,30 +424,30 @@ private:
             }
         }
 
-        // sort files to get older files first
-        Sort(files, [](const TFileObject& f1, const TFileObject& f2) {
-            if (f1.MTime == f2.MTime) {
-                return f1.Name.compare(f2.Name) < 0;
-            }
-            return f1.MTime < f2.MTime;
-        });
+        if (actualFiles > MaxFiles_ || actualSize > MaxSize_) {
+            // sort files to get older files first
+            Sort(files, [](const TFileObject& f1, const TFileObject& f2) {
+                if (f1.MTime == f2.MTime) {
+                    return f1.Name.compare(f2.Name) < 0;
+                }
+                return f1.MTime < f2.MTime;
+            });
 
-        ui64 filesThreshold = MaxFiles_ / 2;
-        ui64 sizeThreshold = MaxSize_ / 2;
+            for (const TFileObject& f : files) {
+                if (actualFiles <= MaxFiles_ && actualSize <= MaxSize_) {
+                    break;
+                }
 
-        for (const TFileObject& f : files) {
-            if (actualFiles <= filesThreshold && actualSize <= sizeThreshold) {
-                break;
-            }
-
-            YQL_LOG(INFO) << "Removing file from cache (name: " << f.Name
-                          << ", size: " << f.Size
-                          << ", mtime: " << f.MTime << ")";
-            if (!NFs::Remove(StorageDir_ / f.Name)) {
-                YQL_LOG(WARN) << "Failed to remove file " << f.Name.Quote() << ": " << LastSystemErrorText();
-            } else {
-                --actualFiles;
-                actualSize -= f.Size;
+                YQL_LOG(INFO) << "Removing file from cache (name: " << f.Name
+                              << ", size: " << f.Size
+                              << ", mtime: " << f.MTime << ")";
+                if (!NFs::Remove(StorageDir_ / f.Name)) {
+                    YQL_LOG(WARN) << "Failed to remove file " << f.Name.Quote() << ": " << LastSystemErrorText();
+                } else {
+                    --actualFiles;
+                    Y_ENSURE(actualSize >= f.Size);
+                    actualSize -= f.Size;
+                }
             }
         }
 

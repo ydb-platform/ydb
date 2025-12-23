@@ -8,7 +8,7 @@ import logging
 from enum import Enum
 
 from ydb.tests.stress.common.common import WorkloadBase
-from ydb.tests.stress.common.common import YdbClient
+from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +306,7 @@ class WorkloadRunner:
     config_name = "StateStorage"
 
     def __init__(self, grpc_endpoint, http_endpoint, database, path, duration, config_name):
-        self.client = YdbClient(grpc_endpoint, database, True)
+        self.client = InstrumentedYdbClient(grpc_endpoint, database, True)
         self.client.wait_connection()
         self.grpc_endpoint = grpc_endpoint
         self.http_endpoint = http_endpoint

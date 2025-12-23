@@ -2,8 +2,8 @@
 /* kikimr can not */
 /* dqfile can not - missing langver support */
 /* hybridfile can not - missing langver support */
-/* custom error:Setting compression_codec is not supported for dynamic tables*/
+/* custom error: Setting compression_codec is not supported for dynamic tables*/
 use plato;
 
-upsert into Output with compression_codec=lz4
+replace into Output with compression_codec=lz4
 select "x" as key;

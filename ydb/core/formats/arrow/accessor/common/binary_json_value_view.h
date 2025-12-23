@@ -12,6 +12,8 @@ public:
 
     std::optional<TStringBuf> GetScalarOptional() const;
 
+    static std::optional<TString> JsonNumberToString(double jsonNumber);
+
 private:
     TStringBuf RawValue;
     mutable TString ScalarHolder;

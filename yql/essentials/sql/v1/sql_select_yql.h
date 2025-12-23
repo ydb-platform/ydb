@@ -9,6 +9,8 @@
 
 namespace NSQLTranslationV1 {
 
+NYql::TLangVersion YqlSelectLangVersion();
+
 std::unexpected<ESQLError> YqlSelectUnsupported(TContext& ctx, TStringBuf message);
 
 TNodeResult BuildYqlSelect(

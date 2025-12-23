@@ -334,6 +334,7 @@ public:
 
     TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
         TMutationId& mutationId,
+        const TTransactionId& transactionId,
         const TRichYPath& richPath,
         i64 cookieCount,
         const TStartDistributedWriteTableOptions& options = {}) override;
@@ -355,6 +356,7 @@ public:
 
     TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
         TMutationId& mutationId,
+        const TTransactionId& transactionId,
         const TRichYPath& richPath,
         i64 cookieCount,
         const TStartDistributedWriteFileOptions& options = {}) override;

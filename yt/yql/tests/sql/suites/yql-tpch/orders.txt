@@ -1,0 +1,1 @@
+{"o_orderkey"=1;"o_orderstatus"="O";"o_comment"="nstructions sleep furiously among ";"o_totalprice"=173665.47;"o_clerk"="Clerk#000000951";"o_custkey"=36901;"o_orderpriority"="5-LOW";"o_orderdate"=9497u;"o_shippriority"=0;};

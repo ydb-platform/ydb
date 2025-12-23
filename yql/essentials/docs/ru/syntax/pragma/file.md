@@ -35,13 +35,13 @@
 | Один или два аргумента &mdash; имя файла и опциональный URL | — | Статическая |
 
 Интерпретировать указанный приложенный файл как библиотеку, из которой можно делать [IMPORT](../export_import.md). Тип синтаксиса библиотеки определяется по расширению файла:
-* `.sql` для YQL диалекта SQL <span style="color: green;">(рекомендуется)</span>;
+* `.yql` для YQL диалекта SQL <span style="color: green;">(рекомендуется)</span>;
 * `.yqls` для [s-expressions](/docs/s_expressions).
 
 Пример с приложенным файлом к запросу:
 
 ```yql
-PRAGMA library("a.sql");
+PRAGMA library("a.yql");
 IMPORT a SYMBOLS $x;
 SELECT $x;
 ```
@@ -49,7 +49,7 @@ SELECT $x;
 В случае указания URL библиотека скачивается с него, а не с предварительного приложенного файла, как в следующем примере:
 
 ```yql
-PRAGMA library("a.sql","http://intranet.site/5618566/text");
+PRAGMA library("a.yql","http://intranet.site/5618566/text");
 IMPORT a SYMBOLS $x;
 SELECT $x;
 ```
@@ -58,7 +58,7 @@ SELECT $x;
 
 ```yql
 DECLARE $_ver AS STRING; -- "5618566"
-PRAGMA library("a.sql","http://intranet.site/{$_ver}/text");
+PRAGMA library("a.yql","http://intranet.site/{$_ver}/text");
 IMPORT a SYMBOLS $x;
 SELECT $x;
 ```
@@ -73,7 +73,7 @@ SELECT $x;
 
 Имя пакета ожидается в формате ``project_name.package_name``; из библиотек пакета в дальнейшем можно делать [IMPORT](../export_import.md) с именем модуля вида ``pkg.project_name.package_name.maybe.nested.module.name``.
 
-Пример для пакета с плоской иерархией, состоящего из двух библиотек &mdash; foo.sql и bar.sql:
+Пример для пакета с плоской иерархией, состоящего из двух библиотек &mdash; foo.yql и bar.yql:
 
 ```yql
 PRAGMA package("project.package", "http://intranet.site/path/to/package");
@@ -106,7 +106,7 @@ SELECT $foo, $bar;
 
 ```yql
 PRAGMA package("project.package", "http://intranet.site/path/to/package");
-PRAGMA override_library("project/package/maybe/nested/module/name.sql");
+PRAGMA override_library("project/package/maybe/nested/module/name.yql");
 
 IMPORT pkg.project.package.foo SYMBOLS $foo;
 SELECT $foo;

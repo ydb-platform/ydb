@@ -1,3 +1,6 @@
+[console_scripts]
+incremental = incremental.update:_main
+
 [distutils.setup_keywords]
 use_incremental = incremental:_get_distutils_version
 

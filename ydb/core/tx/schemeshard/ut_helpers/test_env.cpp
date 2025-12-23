@@ -494,7 +494,7 @@ private:
         TAllocChunkSerializer serializer;
         const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_ABORT_UNLESS(success);
-        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo());
+        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo(false));
         return TPreSerializedMessage(message->Type(), data);
     }
 
@@ -624,6 +624,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
     app.FeatureFlags.SetEnableAlterDatabase(opts.EnableAlterDatabase_);
     app.SetEnableAccessToIndexImplTables(opts.EnableAccessToIndexImplTables_);
+    app.SetEnableIndexMaterialization(opts.EnableIndexMaterialization_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -1193,8 +1194,8 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::functio
         },
         Max<ui32>(),
         Max<ui64>(),
-        0,
-        0,
+        Bucket,
+        TotalBuckets,
         KillOnCommit
     );
 }

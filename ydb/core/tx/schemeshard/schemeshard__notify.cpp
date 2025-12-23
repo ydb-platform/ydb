@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_index_build_info.h"
 
 #include <ydb/core/base/appdata.h>
 
@@ -101,7 +102,7 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
                             << " index build in-flight"
                             << ", txId: " << txId
                             << ", at schemeshard: " << Self->TabletID());
-            auto& indexInfo = *indexInfoPtr->Get();
+            auto& indexInfo = *indexInfoPtr->get();
             if (indexInfo.IsFinished()) {
                 LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "NotifyTxCompletion"

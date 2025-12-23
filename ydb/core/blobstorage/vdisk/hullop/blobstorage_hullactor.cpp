@@ -197,11 +197,11 @@ namespace NKikimr {
         ui32 MinHugeBlobInBytes;
 
         enum class ECompactionTokenState {
-            NotNeeded,          // токены не используются (fresh compaction actor или disabled)
-            Idle,               // токены используются, но компакция не запланирована
-            Requested,          // токен запрошен, ждем ответа
-            Acquired,           // токен получен, но компакция еще не запущена
-            InProgress,         // компакция запущена с токеном
+            NotNeeded,
+            Idle,
+            Requested,
+            Acquired,
+            InProgress,
         };
 
         ECompactionTokenState CompactionTokenState = ECompactionTokenState::NotNeeded;
@@ -808,7 +808,6 @@ namespace NKikimr {
 
         void HandlePoison(const TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
-            // Release token if we have one (either acquired or in progress)
             if (CompactionTokenState == ECompactionTokenState::Acquired || 
                 CompactionTokenState == ECompactionTokenState::InProgress) {
                 Y_VERIFY_S(CompactionToken != 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
@@ -898,7 +897,7 @@ namespace NKikimr {
             std::shared_ptr<TLevelIndexRunTimeCtx<TKeyLogoBlob, TMemRecLogoBlob>> rtCtx,
             std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep) {
         return new TLevelIndexActor<TKeyLogoBlob, TMemRecLogoBlob>(config, hullDs, hullLogCtx, std::move(hugeBlobCtx),
-            minHugeBlobInBytes, loggerId, rtCtx,syncLogFirstLsnToKeep, true);
+            minHugeBlobInBytes, loggerId, rtCtx, syncLogFirstLsnToKeep, true);
     }
 
     NActors::IActor* CreateBlocksActor(

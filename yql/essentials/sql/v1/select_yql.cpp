@@ -273,6 +273,22 @@ public:
         return OrderBy.Defined();
     }
 
+    TMaybe<TVector<TString>> Columns() const {
+        return std::visit(
+            TOverloaded{
+                [&](const TVector<TNodePtr>& terms) -> TMaybe<TVector<TString>> {
+                    TVector<TString> columns(Reserve(terms.size()));
+                    for (const auto& term : terms) {
+                        columns.emplace_back(term->GetLabel());
+                    }
+                    return columns;
+                },
+                [](const TPlainAsterisk&) -> TMaybe<TVector<TString>> {
+                    return Nothing();
+                },
+            }, Projection);
+    }
+
 private:
     bool InitProjection(TContext& ctx, ISource* src) const {
         return std::visit(
@@ -540,6 +556,15 @@ public:
                 options->Add(Q(Y(Q("unordered"))));
             }
 
+            if (auto columns = Columns()) {
+                TNodePtr list = Y();
+                for (auto& column : *columns) {
+                    list = L(std::move(list), Q(std::move(column)));
+                }
+
+                options->Add(Q(Y(Q("columns"), Q(std::move(list)))));
+            }
+
             block->Add(Y("let", "world",
                          Y("Write!", "world", "result_sink", Y("Key"), "output", Q(options))));
 
@@ -564,7 +589,16 @@ private:
         if (const auto* select = dynamic_cast<const TYqlSelectNode*>(Source_.Get())) {
             return select->IsOrdered();
         }
+
         return false;
+    }
+
+    TMaybe<TVector<TString>> Columns() const {
+        if (const auto* select = dynamic_cast<const TYqlSelectNode*>(Source_.Get())) {
+            return select->Columns();
+        }
+
+        return Nothing();
     }
 
     TNodePtr Source_;

@@ -1582,7 +1582,7 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes = record.MutableCostSettings()->GetMinHugeBlobInBytes();
                 // We account header size here, since DSProxy doesn't know about it
                 // and can try to send smaller blobs (which VDisk would consider huge) in a MultiPut request.
-                ui32 onVDiskMinHugeBlobInBytes = minHugeBlobInBytes > TDiskBlob::MaxHeaderSize ? (minHugeBlobInBytes - TDiskBlob::MaxHeaderSize) : 0;
+                ui32 onVDiskMinHugeBlobInBytes = minHugeBlobInBytes > TDiskBlob::HeaderSize ? (minHugeBlobInBytes - TDiskBlob::HeaderSize) : 0;
                 record.MutableCostSettings()->SetMinHugeBlobInBytes(onVDiskMinHugeBlobInBytes);
             }
             ctx.Send(ev->Sender, res.release(), flags, ev->Cookie);

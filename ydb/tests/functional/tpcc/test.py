@@ -10,7 +10,7 @@ encoder.FLOAT_REPR = lambda o: format(o, '{:e}')
 WH_COUNT = "2"
 RUN_TIME = "65s"
 
-
+                           
 def ydb_bin():
     if os.getenv("YDB_CLI_BINARY"):
         return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))

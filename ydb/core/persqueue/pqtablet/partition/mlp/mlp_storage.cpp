@@ -184,7 +184,7 @@ size_t TStorage::ProccessDeadlines() {
     if (now < NextVacuumRun) {
         return 0;
     }
-    NextVacuumRun = now + VACUUM_INTERVAL;
+    NextVacuumRun = TrimToSeconds(now, false) + VACUUM_INTERVAL;
 
     auto deadlineDelta = (now - BaseDeadline).Seconds();
     size_t count = 0;
@@ -393,11 +393,6 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         .MessageGroupIdHash = messageGroupIdHash,
         .WriteTimestampDelta = static_cast<ui32>((writeTimestamp - BaseWriteTimestamp).Seconds())
     });
-    
-    auto deadline = TimeProvider->Now() + TDuration::Seconds(deadlineDelta);
-    if (deadline < NextVacuumRun) {
-        NextVacuumRun = deadline;
-    }
 
     Batch.AddNewMessage(offset);
 

@@ -1041,9 +1041,9 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_TO_PROTO(protoJob, pool_tree, job.PoolTree);
     YT_OPTIONAL_TO_PROTO(protoJob, pool, job.Pool);
     YT_OPTIONAL_SET_PROTO(protoJob, job_cookie, job.JobCookie);
-    YT_OPTIONAL_SET_PROTO(protoJob, distributed_group_job_index, job.DistributedGroupJobIndex);
-    if (job.DistributedGroupMainJobId) {
-        ToProto(protoJob->mutable_distributed_group_main_job_id(), job.DistributedGroupMainJobId);
+    YT_OPTIONAL_SET_PROTO(protoJob, collective_member_rank, job.CollectiveMemberRank);
+    if (job.CollectiveId) {
+        ToProto(protoJob->mutable_collective_id(), job.CollectiveId);
     }
     if (job.ArchiveFeatures) {
         protoJob->set_archive_features(ToProto(job.ArchiveFeatures));
@@ -1114,10 +1114,10 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->CoreInfos = TYsonString();
     }
-    if (protoJob.has_distributed_group_main_job_id()) {
-        FromProto(&job->DistributedGroupMainJobId, protoJob.distributed_group_main_job_id());
+    if (protoJob.has_collective_id()) {
+        FromProto(&job->CollectiveId, protoJob.collective_id());
     } else {
-        job->DistributedGroupMainJobId = {};
+        job->CollectiveId = {};
     }
     if (protoJob.has_job_competition_id()) {
         FromProto(&job->JobCompetitionId, protoJob.job_competition_id());
@@ -1148,7 +1148,7 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     job->PoolTree = YT_OPTIONAL_FROM_PROTO(protoJob, pool_tree);
     job->Pool = YT_OPTIONAL_FROM_PROTO(protoJob, pool);
     job->JobCookie = YT_OPTIONAL_FROM_PROTO(protoJob, job_cookie);
-    job->DistributedGroupJobIndex = YT_OPTIONAL_FROM_PROTO(protoJob, distributed_group_job_index);
+    job->CollectiveMemberRank = YT_OPTIONAL_FROM_PROTO(protoJob, collective_member_rank);
     if (protoJob.has_archive_features()) {
         job->ArchiveFeatures = TYsonString(protoJob.archive_features());
     } else {

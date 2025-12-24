@@ -282,11 +282,35 @@ struct TClusterConnection {
     void Load(IInputStream* buffer);
 };
 
+struct TFileInfo {
+    TString LocalPath; // Path to local file, filled in worker.
+    TString Md5Key; // hash of file content, used key in dist cache.
+    TString Alias;
+};
+
+struct TYtResourceInfo {
+    NYT::TRichYPath RichPath; // Path to resource in cypress, can be either file, or table which we need to download as file (MapJoin)
+    TString YtServerName;
+    TString Token;
+    TString LocalPath; // Path to local file, filled in worker.
+};
+
+struct TFmrResourceOperationInfo {
+    TFmrTableRef FmrTable;
+    TString Alias;
+};
+
+struct TFmrResourceTaskInfo {
+    std::vector<TFmrTableInputRef> FmrResourceTasks; // List of tasks corresponding to single fmr table which we want to download as files for MapJoin.
+    TString LocalPath; // Path to local file, filled in worker.
+    TString Alias;
+};
+
 struct TTask: public TThrRefBase {
     TTask() = default;
 
-    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections, const TMaybe<NYT::TNode> & jobSettings = Nothing(), ui32 numRetries = 1)
-        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnections(clusterConnections), JobSettings(jobSettings), NumRetries(numRetries)
+    TTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections, const std::vector<TFileInfo>& files, const std::vector<TYtResourceInfo>& ytResources, const std::vector<TFmrResourceTaskInfo>& fmrResources, const TMaybe<NYT::TNode> & jobSettings = Nothing(), ui32 numRetries = 1)
+        : TaskType(taskType), TaskId(taskId), TaskParams(taskParams), SessionId(sessionId), ClusterConnections(clusterConnections), Files(files), YtResources(ytResources), FmrResources(fmrResources), JobSettings(jobSettings), NumRetries(numRetries)
     {
     }
 
@@ -294,8 +318,12 @@ struct TTask: public TThrRefBase {
     TString TaskId;
     TTaskParams TaskParams;
     TString SessionId;
-    std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections = {};
-    TMaybe<NYT::TNode> JobSettings = {};
+    std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections;
+    std::vector<TFileInfo> Files; // Udfs and user files from distributed cache.
+    std::vector<TYtResourceInfo> YtResources; // Yt tables and files to download.
+    std::vector<TFmrResourceTaskInfo> FmrResources; // Fmr tables (passed as tasks) which we want to download as files for MapJoin.
+    TMaybe<TString> JobEnvironmentDir;
+    TMaybe<NYT::TNode> JobSettings;
     ui32 NumRetries; // Not supported yet
 
     using TPtr = TIntrusivePtr<TTask>;
@@ -316,7 +344,7 @@ struct TTaskState: public TThrRefBase {
 
     using TPtr = TIntrusivePtr<TTaskState>;
 };
-TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
+TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, const std::vector<TFileInfo>& files = {}, const std::vector<TYtResourceInfo>& ytResources = {}, const std::vector<TFmrResourceTaskInfo>& fmrResources = {}, const TMaybe<NYT::TNode>& jobSettings = Nothing());
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage = Nothing(), const TStatistics& stats = TStatistics());
 

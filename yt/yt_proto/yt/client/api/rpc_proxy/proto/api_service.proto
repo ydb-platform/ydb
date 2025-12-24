@@ -2614,7 +2614,7 @@ message TReqListJobs
 
     optional string monitoring_descriptor = 28;
 
-    optional NYT.NProto.TGuid distributed_group_main_job_id = 29;
+    optional NYT.NProto.TGuid collective_id = 29;
 
     optional TMasterReadOptions master_read_options = 102;
 }
@@ -3476,8 +3476,8 @@ message TJob
     optional bytes events = 34; // YSON
     optional bytes statistics = 35; // YSON
     optional int64 gang_rank = 36;
-    optional uint64 distributed_group_job_index = 37;
-    optional NYT.NProto.TGuid distributed_group_main_job_id = 38;
+    optional uint64 collective_member_rank = 37;
+    optional NYT.NProto.TGuid collective_id = 38;
 }
 
 message TListJobsStatistics

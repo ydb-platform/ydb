@@ -137,7 +137,14 @@ private:
         return TNetworkAddress(address, parsedUrl.Port.value_or(GetDefaultPort(parsedUrl)));
     }
 
-    std::pair<THttpOutputPtr, THttpInputPtr> Connect(const TUrlRef& urlRef)
+    struct TRequestData
+    {
+        IConnectionPtr Conection;
+        THttpOutputPtr Request;
+        THttpInputPtr Response;
+    };
+
+    TRequestData Connect(const TUrlRef& urlRef)
     {
         auto context = New<TDialerContext>();
         context->Host = urlRef.Host;
@@ -161,7 +168,7 @@ private:
                 EMessageType::Request,
                 Config_);
 
-            return {std::move(output), std::move(input)};
+            return {std::move(connection), std::move(output), std::move(input)};
         } else {
             auto connection = WaitFor(ConnectionPool_->Connect(address, std::move(context)))
                 .ValueOrThrow();
@@ -182,7 +189,7 @@ private:
                 Config_);
             output->SetReusableState(reusableState);
 
-            return {std::move(output), std::move(input)};
+            return {std::move(connection), std::move(output), std::move(input)};
         }
     }
 
@@ -207,61 +214,59 @@ private:
     {
     public:
         TActiveRequest(
-            THttpOutputPtr request,
-            THttpInputPtr response,
             TIntrusivePtr<TClient> client,
+            TRequestData data,
             TString url)
-            : Request_(std::move(request))
-            , Response_(std::move(response))
-            , Client_(std::move(client))
+            : Client_(std::move(client))
+            , Data_(std::move(data))
             , Url_(std::move(url))
         { }
 
         TFuture<IResponsePtr> Finish() override
         {
-            return Client_->WrapError(Url_, BIND([this, this_ = MakeStrong(this)] {
-                WaitFor(Request_->Close())
+            return Client_->WrapError(Url_, BIND([this, this_ = MakeStrong(this)] () -> IResponsePtr {
+                WaitFor(Data_.Request->Close())
                     .ThrowOnError();
 
                 // Waits for response headers internally.
-                Response_->GetStatusCode();
+                Data_.Response->GetStatusCode();
 
-                return IResponsePtr(Response_);
+                return Data_.Response;
             }));
         }
 
-        NConcurrency::IAsyncOutputStreamPtr GetRequestStream() override
+        TFuture<void> Abort() override
         {
-            return Request_;
+            return Data_.Conection->Abort();
+        }
+
+        IAsyncOutputStreamPtr GetRequestStream() override
+        {
+            return Data_.Request;
         }
 
         IResponsePtr GetResponse() override
         {
-            return Response_;
+            return Data_.Response;
         }
 
     private:
-        const THttpOutputPtr Request_;
-        const THttpInputPtr Response_;
         const TIntrusivePtr<TClient> Client_;
+        const TRequestData Data_;
         const TString Url_;
     };
 
-    std::pair<THttpOutputPtr, THttpInputPtr> StartAndWriteHeaders(
+    TRequestData StartAndWriteHeaders(
         EMethod method,
         const TString& url,
         const THeadersPtr& headers)
     {
-        THttpOutputPtr request;
-        THttpInputPtr response;
-
         auto urlRef = ParseUrl(url);
+        auto requestData = Connect(urlRef);
 
-        std::tie(request, response) = Connect(urlRef);
-
-        request->SetHost(urlRef.Host, urlRef.PortStr);
+        requestData.Request->SetHost(urlRef.Host, urlRef.PortStr);
         if (headers) {
-            request->SetHeaders(headers);
+            requestData.Request->SetHeaders(headers);
         }
 
         auto urlPath = TString(urlRef.Path);
@@ -271,9 +276,9 @@ private:
         auto requestPath = (urlRef.RawQuery.empty() && Config_->OmitQuestionMarkForEmptyQuery)
             ? urlPath
             : Format("%v?%v", urlPath, urlRef.RawQuery);
-        request->WriteRequest(method, requestPath);
+        requestData.Request->WriteRequest(method, requestPath);
 
-        return {std::move(request), std::move(response)};
+        return requestData;
     }
 
     TFuture<IActiveRequestPtr> StartRequest(
@@ -281,9 +286,9 @@ private:
         const TString& url,
         const THeadersPtr& headers)
     {
-        return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] {
-            auto [request, response] = StartAndWriteHeaders(method, url, headers);
-            return IActiveRequestPtr(New<TActiveRequest>(request, response, this_, url));
+        return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] () mutable -> IActiveRequestPtr {
+            auto requestData = StartAndWriteHeaders(method, url, headers);
+            return New<TActiveRequest>(std::move(this_), std::move(requestData), url);
         }));
     }
 
@@ -294,29 +299,29 @@ private:
         const THeadersPtr& headers,
         int redirectCount = 0)
     {
-        auto [request, response] = StartAndWriteHeaders(method, url, headers);
+        auto requestData = StartAndWriteHeaders(method, url, headers);
 
         if (body) {
-            WaitFor(request->WriteBody(*body))
+            WaitFor(requestData.Request->WriteBody(*body))
                 .ThrowOnError();
         } else {
-            WaitFor(request->Close())
+            WaitFor(requestData.Request->Close())
                 .ThrowOnError();
         }
 
         if (Config_->IgnoreContinueResponses) {
-            while (response->GetStatusCode() == EStatusCode::Continue) {
-                response->Reset();
+            while (requestData.Response->GetStatusCode() == EStatusCode::Continue) {
+                requestData.Response->Reset();
             }
         }
 
         // Waits for response headers internally.
-        auto redirectUrl = response->TryGetRedirectUrl();
+        auto redirectUrl = requestData.Response->TryGetRedirectUrl();
         if (redirectUrl && redirectCount < Config_->MaxRedirectCount) {
             return DoRequest(method, *redirectUrl, body, headers, redirectCount + 1);
         }
 
-        return response;
+        return requestData.Response;
     }
 };
 

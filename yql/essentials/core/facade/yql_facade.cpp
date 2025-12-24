@@ -950,6 +950,17 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     return FillParseResult(SqlToYql(translators, SourceCode_, *currentSettings, &warningRules), &warningRules);
 }
 
+TProgram::TStatus TProgram::TestPartialTypecheck() {
+    YQL_PROFILE_FUNC(TRACE);
+
+    Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
+
+    TIssues issues;
+    auto ret = PartialAnnonateTypes(AstRoot_, LangVer_, issues) ? TProgram::TStatus::Ok : TProgram::TStatus::Error;
+    ExprCtx_->IssueManager.AddIssues(issues);
+    return ret;
+}
+
 bool TProgram::Compile(const TString& username, bool skipLibraries) {
     YQL_PROFILE_FUNC(TRACE);
 

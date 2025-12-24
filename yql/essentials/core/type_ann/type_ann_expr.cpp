@@ -798,6 +798,30 @@ TAutoPtr<IGraphTransformer> CreatePartialTypeAnnotationTransformer(
     return new TPartialTypeAnnotationTransformer(callableTransformer, types);
 }
 
+bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issues) {
+    TExprContext ctx;
+    TExprNode::TPtr exprRoot;
+    if (!CompileExpr(*astRoot, exprRoot, ctx, /* resolver= */ nullptr, /* urlListerManager */ nullptr,
+                        /* hasAnnotations= */ false, /* typeAnnotationIndex= */ Max<ui32>(), /* syntaxVersion= */ 1)) {
+        issues.AddIssues(ctx.IssueManager.GetCompletedIssues());
+        return false;
+    }
+
+    TTypeAnnotationContext typeCtx;
+    typeCtx.LangVer = langver;
+    auto callableTypeAnnTransformer = CreateExtCallableTypeAnnotationTransformer(typeCtx);
+    TVector<TTransformStage> transformers;
+    transformers.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply),
+                                            "ExpandApply", TIssuesIds::CORE_PRE_TYPE_ANN));
+    transformers.push_back(TTransformStage(
+        CreatePartialTypeAnnotationTransformer(std::move(callableTypeAnnTransformer), typeCtx),
+        "PartialTypeAnn", TIssuesIds::CORE_PARTIAL_TYPE_ANN));
+    auto transformer = CreateCompositeGraphTransformer(transformers, /* useIssueScopes= */ true);
+    auto status = InstantTransform(*transformer, exprRoot, ctx);
+    issues.AddIssues(ctx.IssueManager.GetCompletedIssues());
+    return status == IGraphTransformer::TStatus::Ok;
+}
+
 void CheckFatalTypeError(IGraphTransformer::TStatus status) {
     if (status == IGraphTransformer::TStatus::Error) {
         throw yexception() << "Detected a type error after initial validation";

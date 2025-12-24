@@ -4,6 +4,8 @@
 
 namespace NYql::NFmr {
 
+namespace {
+
 class TFmrJobFactory: public IFmrJobFactory {
 public:
     TFmrJobFactory(const TFmrJobFactorySettings& settings)
@@ -61,6 +63,8 @@ private:
     std::function<TJobResult(TTask::TPtr, std::shared_ptr<std::atomic<bool>>)> Function_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
 };
+
+} // namespace
 
 TFmrJobFactory::TPtr MakeFmrJobFactory(const TFmrJobFactorySettings& settings) {
     return MakeIntrusive<TFmrJobFactory>(settings);

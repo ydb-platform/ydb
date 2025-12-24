@@ -7,6 +7,8 @@
 #include <string>
 #include <ydb/public/sdk/cpp/src/client/impl/stats/stats.h>
 
+class TLog;
+
 namespace NYdb::inline Dev {
 
 struct TEndpointRecord {
@@ -83,7 +85,7 @@ public:
 class TEndpointObj;
 class TEndpointElectorSafe {
 public:
-    TEndpointElectorSafe() = default;
+    TEndpointElectorSafe(const TLog& log);
 
     // Sets new endpoints, returns removed
     std::vector<std::string> SetNewState(std::vector<TEndpointRecord>&& records);
@@ -127,6 +129,7 @@ private:
     NSdkStats::TAtomicCounter<::NMonitoring::TIntGauge> EndpointCountGauge_;
     NSdkStats::TAtomicCounter<::NMonitoring::TIntGauge> PessimizationRatioGauge_;
     NSdkStats::TAtomicCounter<::NMonitoring::TIntGauge> EndpointActiveGauge_;
+    const TLog& Log_;
 };
 
 // Used to track object

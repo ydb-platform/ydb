@@ -1,6 +1,12 @@
 #include "endpoints.h"
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <library/cpp/monlib/metrics/metric_registry.h>
+#include <library/cpp/logger/log.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/random/random.h>
@@ -70,6 +76,10 @@ static std::int32_t GetBestK(const std::vector<TEndpointRecord>& records) {
     return pos - 1;
 }
 
+TEndpointElectorSafe::TEndpointElectorSafe(const TLog& log)
+    : Log_(log)
+{}
+
 std::vector<std::string> TEndpointElectorSafe::SetNewState(std::vector<TEndpointRecord>&& records) {
     std::unordered_set<std::string> index;
     std::vector<TEndpointRecord> uniqRec;
@@ -89,6 +99,7 @@ std::vector<std::string> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
 
     {
         std::unique_lock guard(Mutex_);
+        size_t remainedEndpoints = 0;
         // Find endpoins which were removed
         for (const auto& record : Records_) {
             if (index.find(record.Endpoint) == index.end()) {
@@ -105,6 +116,8 @@ std::vector<std::string> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
                     }
                     KnownEndpointsByNodeId_.erase(nodeIdIt);
                 }
+            } else {
+                ++remainedEndpoints;
             }
         }
         // Find endpoints which were added
@@ -119,6 +132,17 @@ std::vector<std::string> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
         BestK_ = bestK;
         PessimizationRatio_.store(0);
         PessimizationRatioGauge_.SetValue(0);
+
+        auto newSize = Records_.size();
+        auto added = newSize - remainedEndpoints;
+        auto bestPriority = (bestK >= 0) ? Records_[0].Priority : 0;
+        LOG_LAZY(Log_, TLOG_INFO,
+            TStringBuilder() << "[Driver] Endpoints updated: total=" << newSize
+                << ", added=" << added
+                << ", remained=" << remainedEndpoints
+                << ", removed=" << removed.size()
+                << ", best_k=" << BestK_
+                << ", best_priority=" << bestPriority);
     }
 
     for (auto& obj : notifyRemoved) {
@@ -161,6 +185,7 @@ TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TEndpointKey& preferredE
 // TODO: Suboptimal, but should not be used often
 void TEndpointElectorSafe::PessimizeEndpoint(const std::string& endpoint) {
     std::unique_lock guard(Mutex_);
+    size_t activeCount = 0;
     for (auto& r : Records_) {
         if (r.Endpoint == endpoint && r.Priority != std::numeric_limits<std::int32_t>::max()) {
             int pessimizationRatio = PessimizationRatio_.load();
@@ -175,9 +200,15 @@ void TEndpointElectorSafe::PessimizeEndpoint(const std::string& endpoint) {
                 it->second.Priority = std::numeric_limits<std::int32_t>::max();
             }
         }
+        if (r.Priority != std::numeric_limits<std::int32_t>::max()) {
+            ++activeCount;
+        }
     }
     Sort(Records_.begin(), Records_.end());
     BestK_ = GetBestK(Records_);
+    LOG_LAZY(Log_, TLOG_INFO,
+        TStringBuilder() << "[Driver] Endpoint pessimized: endpoint=" << endpoint
+            << ", active_endpoints=" << activeCount);
 }
 
 // % of endpoints which was pessimized

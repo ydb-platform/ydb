@@ -2,7 +2,10 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/counters.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
-#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 

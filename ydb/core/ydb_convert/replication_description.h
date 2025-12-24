@@ -36,4 +36,11 @@ void FillTransferDescription(
     Ydb::Replication::DescribeTransferResult& out,
     const NKikimrReplication::TEvDescribeReplicationResult& inDesc);
 
+bool FillTransferDescription(
+    Ydb::Replication::DescribeTransferResult& out,
+    const NKikimrSchemeOp::TReplicationDescription& inDesc,
+    const NKikimrSchemeOp::TDirEntry& inDirEntry,
+    Ydb::StatusIds_StatusCode& status,
+    TString& error);
+
 } // namespace NKikimr

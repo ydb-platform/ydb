@@ -1799,12 +1799,12 @@ TStatus AnnotateSequencer(const TExprNode::TPtr& node, TExprContext& ctx, const 
     return TStatus::Ok;
 }
 
-TStatus AnnotateKqpOlapPredicateClosure(const TExprNode::TPtr& node, TExprContext& ctx) {
+TStatus AnnotateKqpPredicateClosure(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 2, ctx)) {
         return TStatus::Error;
     }
 
-    auto* argsType = node->Child(TKqpOlapPredicateClosure::idx_ArgsType);
+    auto* argsType = node->Child(TKqpPredicateClosure::idx_ArgsType);
 
     if (!EnsureType(*argsType, ctx)) {
         return TStatus::Error;
@@ -1826,7 +1826,7 @@ TStatus AnnotateKqpOlapPredicateClosure(const TExprNode::TPtr& node, TExprContex
         argTypes.push_back(argTypeRaw);
     }
 
-    auto& lambda = node->ChildRef(TKqpOlapPredicateClosure::idx_Lambda);
+    auto& lambda = node->ChildRef(TKqpPredicateClosure::idx_Lambda);
     if (!EnsureLambda(*lambda, ctx)) {
         return TStatus::Error;
     }
@@ -2826,8 +2826,8 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateOlapProjections(input, ctx);
             }
 
-            if (TKqpOlapPredicateClosure::Match(input.Get())) {
-                return AnnotateKqpOlapPredicateClosure(input, ctx);
+            if (TKqpPredicateClosure::Match(input.Get())) {
+                return AnnotateKqpPredicateClosure(input, ctx);
             }
 
             if (TKqpOlapFilter::Match(input.Get())) {

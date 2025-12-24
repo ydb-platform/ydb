@@ -76,6 +76,16 @@ class TPushFilterRule : public ISimplifiedRule {
 };
 
 /**
+ * Peephole predicate.
+ */
+class TPeepholePredicate : public ISimplifiedRule {
+  public:
+      TPeepholePredicate() : ISimplifiedRule("Peephole predicate", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+
+      virtual std::shared_ptr<IOperator> SimpleMatchAndAppy(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Push down filter to olap read.
  */
 class TPushOlapFilterRule : public ISimplifiedRule {

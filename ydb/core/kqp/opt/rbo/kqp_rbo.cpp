@@ -104,7 +104,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
         YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
     }
 
-    auto context = TRBOContext(KqpCtx, ctx, TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
+    auto context = TRBOContext(KqpCtx, ctx, TypeCtx, std::move(RBOTypeAnnTransformer), std::move(PeepholeTypeAnnTransformer), FuncRegistry);
 
     for (size_t idx = 0; idx < Stages.size(); idx++) {
         auto stage = Stages[idx];
@@ -127,7 +127,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
     }
 
-    return ConvertToPhysical(root, context, TypeAnnTransformer, PeepholeTransformer);
+    return ConvertToPhysical(root, context);
 }
 } // namespace NKqp
 } // namespace NKikimr

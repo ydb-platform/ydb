@@ -319,6 +319,7 @@ public:
         REGISTER_ALL(TListJobsCommand,                     "list_jobs",                       Null,       Structured, false, false);
         REGISTER_ALL(TGetJobCommand,                       "get_job",                         Null,       Structured, false, false);
         REGISTER_ALL(TPollJobShellCommand,                 "poll_job_shell",                  Null,       Structured, true,  false);
+        REGISTER_ALL(TRunJobShellCommandCommand,           "run_job_shell_command",           Null,       Binary,     true,  true );
         REGISTER_ALL(TGetOperationCommand,                 "get_operation",                   Null,       Structured, false, false);
 
         REGISTER    (TDumpJobContextCommand,               "dump_job_context",                Null,       Null,       true,  false, ApiVersion3);

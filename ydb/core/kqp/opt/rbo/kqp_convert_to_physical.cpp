@@ -15,12 +15,12 @@ using namespace NKikimr::NKqp;
 THashMap<TString, TString> AggregationFunctionToAggregationCallable{{"sum", "AggrAdd"}, {"min", "AggrMin"}, {"max", "AggrMax"}};
 
 struct TAggregationField {
-    TAggregationField(const TString& aggFieldName, const TString& aggFunc, const TString& stateFieldName, bool isOptional)
-        : AggFieldName(aggFieldName), AggFunc(aggFunc), StateFieldName(stateFieldName), IsOptional(isOptional) {}
+    TAggregationField(const TString& aggFieldName, const TString& aggFunc, const TString& stateFieldName, const TTypeAnnotationNode* itemType)
+        : AggFieldName(aggFieldName), AggFunc(aggFunc), StateFieldName(stateFieldName), ItemType(itemType) {}
     TString AggFieldName;
     TString AggFunc;
     TString StateFieldName;
-    bool IsOptional{false};
+    const TTypeAnnotationNode *ItemType;
 };
 
 TString GetValidJoinKind(const TString& joinKind) {
@@ -552,6 +552,40 @@ TExprNode::TPtr BuildAvgAggregationInitialStateForOptionalType(TExprNode::TPtr a
     // clang-format on
 }
 
+TString GetTypeToSafeCastForSumAggregation(const TTypeAnnotationNode* itemType) {
+    Y_ENSURE(itemType);
+    const auto* type = itemType;
+    if (itemType->IsOptionalOrNull()) {
+        type = itemType->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    Y_ENSURE(type->GetKind() == ETypeAnnotationKind::Data);
+    const auto typeName = TString(type->Cast<TDataExprType>()->GetName());
+    if (typeName.StartsWith("Int")) {
+        return "Int64";
+    } else if (typeName.StartsWith("Uint")) {
+        return "Uint64";
+    }
+
+    return typeName;
+}
+
+TExprNode::TPtr BuildSumAggregationInitialState(TExprNode::TPtr asStruct, const TString& colName, const TTypeAnnotationNode* itemType, TExprContext& ctx,
+                                                TPositionHandle pos) {
+    // clang-format off
+    return ctx.Builder(pos)
+        .Callable("SafeCast")
+            .Callable(0, "Member")
+                .Add(0, asStruct)
+                .Atom(1, colName)
+            .Seal()
+            .Callable(1, "DataType")
+                .Atom(0, GetTypeToSafeCastForSumAggregation(itemType))
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
 TExprNode::TPtr BuildCountAggregationUpdateStateForOptionalType(TExprNode::TPtr asStructStateColumns, TExprNode::TPtr asStructInputColumns,
                                                                 const TString& stateColumn, const TString& columnName, TExprContext& ctx,
                                                                 TPositionHandle pos) {
@@ -662,6 +696,29 @@ TExprNode::TPtr BuildAvgAggregationUpdateState(TExprNode::TPtr asStructStateColu
                         .Atom(1, stateColumn)
                     .Seal()
                     .Atom(1, "1")
+                .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildSumAggregationUpdateState(TExprNode::TPtr asStructStateColumns, TExprNode::TPtr asStrcutInputColumns,
+                                               const TString& stateColumn, const TString& columnName, const TTypeAnnotationNode* itemType, TExprContext& ctx,
+                                               TPositionHandle pos){
+    // clang-format off
+    return ctx.Builder(pos)
+        .Callable("AggrAdd")
+            .Callable(0, "Member")
+                .Add(0, asStructStateColumns)
+                .Atom(1, stateColumn)
+            .Seal()
+            .Callable(1, "SafeCast")
+                .Callable(0, "Member")
+                    .Add(0, asStrcutInputColumns)
+                    .Atom(1, columnName)
+                .Seal()
+                .Callable(1, "DataType")
+                    .Atom(0, GetTypeToSafeCastForSumAggregation(itemType))
                 .Seal()
             .Seal()
         .Seal().Build();
@@ -797,19 +854,20 @@ TExprNode::TPtr BuildInitHandlerLambda(const TVector<TString>& keyFields, const 
     // clang-format on
 
     TVector<TExprNode::TPtr> lambdaResults;
-    for (ui32 i = 0; i < aggFields.size(); ++i) {
-        const auto& aggFunction = aggFields[i].AggFunc;
-        const auto& aggName = aggFields[i].AggFieldName;
-        const auto isOptional = aggFields[i].IsOptional;
+    for (const auto& aggField : aggFields) {
+        const auto& aggFunction = aggField.AggFunc;
+        const auto& aggName = aggField.AggFieldName;
+        const auto isOptional = aggField.ItemType->IsOptionalOrNull();
 
         TExprNode::TPtr initState;
         if (aggFunction == "count") {
-            initState = isOptional ? BuildCountAggregationInitialStateForOptionalType(asStruct, aggName, ctx, pos)
-                                   : BuildCountAggregationInitialState(ctx, pos);
-
+            initState =
+                isOptional ? BuildCountAggregationInitialStateForOptionalType(asStruct, aggName, ctx, pos) : BuildCountAggregationInitialState(ctx, pos);
         } else if (aggFunction == "avg") {
             initState = isOptional ? BuildAvgAggregationInitialStateForOptionalType(asStruct, aggName, ctx, pos)
                                    : BuildAvgAggregationInitialState(asStruct, aggName, ctx, pos);
+        } else if (aggFunction == "sum") {
+            initState = BuildSumAggregationInitialState(asStruct, aggName, aggField.ItemType, ctx, pos);
         } else {
             // clang-format off
             initState = ctx.Builder(pos)
@@ -880,16 +938,15 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
     // clang-format on
 
     TVector<TExprNode::TPtr> lambdaResults;
-    for (const auto &aggField : aggFields) {
-        const auto &aggFunction = aggField.AggFunc;
-        const auto &columnName = aggField.AggFieldName;
-        const auto &stateName = aggField.StateFieldName;
-        const bool isOptional = aggField.IsOptional;
+    for (const auto& aggField : aggFields) {
+        const auto& aggFunction = aggField.AggFunc;
+        const auto& columnName = aggField.AggFieldName;
+        const auto& stateName = aggField.StateFieldName;
+        const bool isOptional = aggField.ItemType->IsOptionalOrNull();
         TExprNode::TPtr aggFunc;
 
         if (aggFunction == "count") {
-            aggFunc = isOptional ? BuildCountAggregationUpdateStateForOptionalType(asStructStateColumns, asStructInputColumns, stateName,
-                                                                                   columnName, ctx, pos)
+            aggFunc = isOptional ? BuildCountAggregationUpdateStateForOptionalType(asStructStateColumns, asStructInputColumns, stateName, columnName, ctx, pos)
                                  : BuildCountAggregationUpdateState(asStructStateColumns, stateName, ctx, pos);
         } else if (aggFunction == "distinct") {
             // clang-format off
@@ -900,10 +957,10 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
                 .Seal().Build();
             // clang-format on
         } else if (aggFunction == "avg") {
-            aggFunc = isOptional
-                          ? BuildAvgAggregationUpdateStateForOptionalType(asStructStateColumns, asStructInputColumns, stateName, columnName,
-                                                                          ctx, pos)
-                          : BuildAvgAggregationUpdateState(asStructStateColumns, asStructInputColumns, stateName, columnName, ctx, pos);
+            aggFunc = isOptional ? BuildAvgAggregationUpdateStateForOptionalType(asStructStateColumns, asStructInputColumns, stateName, columnName, ctx, pos)
+                                 : BuildAvgAggregationUpdateState(asStructStateColumns, asStructInputColumns, stateName, columnName, ctx, pos);
+        } else if (aggFunction == "sum") {
+            aggFunc = BuildSumAggregationUpdateState(asStructStateColumns, asStructInputColumns, stateName, columnName, aggField.ItemType, ctx, pos);
         } else {
             // clang-format off
             aggFunc = ctx.Builder(pos)
@@ -987,10 +1044,10 @@ TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, cons
         }
     }
 
-    for (ui32 i = 0; i < aggFields.size(); ++i) {
-        const TString& aggFuncName = aggFields[i].AggFunc;
-        const TString& stateName = aggFields[i].StateFieldName;
-        const bool isOptional = aggFields[i].IsOptional;
+    for (const auto& aggField : aggFields) {
+        const TString& aggFuncName = aggField.AggFunc;
+        const TString& stateName = aggField.StateFieldName;
+        const bool isOptional = aggField.ItemType->IsOptionalOrNull();
         TExprNode::TPtr result;
 
         if (aggFuncName == "avg") {
@@ -1124,12 +1181,12 @@ void GetAggregationFields(const TVector<TString>& inputColumns, const TVector<TO
                           THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode *aggType) {
     Y_ENSURE(aggType);
     const auto* structType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    THashMap<TString, std::pair<TString, bool>> aggColumns;
+    THashMap<TString, std::pair<TString, const TTypeAnnotationNode*>> aggColumns;
     for (const auto& aggregationTraits : aggregationTraitsList) {
         const TString colName = aggregationTraits.OriginalColName.GetFullName();
         const auto *itemType = structType->FindItemType(colName);
         Y_ENSURE(itemType, "Cannot find type for item");
-        aggColumns[colName] = {aggregationTraits.AggFunction, itemType->IsOptionalOrNull()};
+        aggColumns[colName] = {aggregationTraits.AggFunction, itemType};
     }
 
     for (ui32 i = 0; i < inputColumns.size(); ++i) {
@@ -1137,7 +1194,6 @@ void GetAggregationFields(const TVector<TString>& inputColumns, const TVector<TO
         if (auto it = aggColumns.find(fullName); it != aggColumns.end()) {
             auto aggName = "_kqp_agg_" + ToString(i);
             const auto& aggFunction = it->second.first;
-            bool isOptional = it->second.second;
             auto stateName = aggName + "_" + aggFunction;
 
             // No renames for distinct, we want to process only keys.
@@ -1147,7 +1203,7 @@ void GetAggregationFields(const TVector<TString>& inputColumns, const TVector<TO
             }
 
             inputFields.push_back(aggName);
-            aggFields.push_back(TAggregationField(aggName, aggFunction, stateName, isOptional));
+            aggFields.push_back(TAggregationField(aggName, aggFunction, stateName, it->second.second));
             // Map agg state name to result name.
             projectionMap[stateName] = it->first;
         } else {

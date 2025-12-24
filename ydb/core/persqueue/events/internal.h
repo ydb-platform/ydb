@@ -221,6 +221,7 @@ struct TEvPQ {
         EvMLPDLQMoverResponse,
         EvEndOffsetChanged,
         EvMLPConsumerState,
+        EvTxDone,
         EvEnd
     };
 
@@ -967,21 +968,6 @@ struct TEvPQ {
         NWilson::TSpan Span;
     };
 
-    struct TEvTxCommitDone : public TEventLocal<TEvTxCommitDone, EvTxCommitDone> {
-        TEvTxCommitDone(ui64 step, ui64 txId, const NPQ::TPartitionId& partition) :
-            Step(step),
-            TxId(txId),
-            Partition(partition)
-        {
-        }
-
-        ui64 Step;
-        ui64 TxId;
-        NPQ::TPartitionId Partition;
-
-        NWilson::TSpan Span;
-    };
-
     struct TEvTxRollback : public TEventLocal<TEvTxRollback, EvTxRollback> {
         TEvTxRollback(ui64 step, ui64 txId) :
             Step(step),
@@ -992,6 +978,21 @@ struct TEvPQ {
         ui64 Step;
         ui64 TxId;
         TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+
+        NWilson::TSpan Span;
+    };
+
+    struct TEvTxDone : public TEventLocal<TEvTxDone, EvTxDone> {
+        TEvTxDone(ui64 step, ui64 txId, const NPQ::TPartitionId& partition) :
+            Step(step),
+            TxId(txId),
+            Partition(partition)
+        {
+        }
+
+        ui64 Step;
+        ui64 TxId;
+        NPQ::TPartitionId Partition;
 
         NWilson::TSpan Span;
     };

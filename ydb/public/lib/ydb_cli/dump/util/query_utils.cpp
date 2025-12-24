@@ -382,4 +382,13 @@ bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::str
     return false;
 }
 
+std::string KeyValueToString(std::string_view key, std::string_view value) {
+    // indented to follow the default YQL formatting
+    return std::format("  {} = '{}'", key, value);
+}
+
+bool IsSchemaSecret(TStringBuf secretName) {
+    return secretName.StartsWith('/');
+}
+
 } // NYdb::NDump

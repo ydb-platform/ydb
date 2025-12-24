@@ -568,6 +568,30 @@ namespace NTypeAnnImpl {
     }
 
     template <>
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Universal>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto universalType = ctx.Expr.MakeType<TUniversalExprType>();
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(universalType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::UniversalStruct>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto universalStructType = ctx.Expr.MakeType<TUniversalStructExprType>();
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(universalStructType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
     IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::EmptyList>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 0, ctx.Expr)) {

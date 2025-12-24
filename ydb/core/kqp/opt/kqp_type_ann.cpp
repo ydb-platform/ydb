@@ -556,7 +556,7 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
         return TStatus::Error;
     }
 
-    if (!isStreamLookup && !EnsureArgsCount(*node, 3, ctx)) {
+    if (!isStreamLookup && !EnsureMinMaxArgsCount(*node, 3, 4, ctx)) {
         return TStatus::Error;
     }
 
@@ -2016,7 +2016,9 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
 
     TCoNameValueTupleList settingsNode{node->ChildPtr(TKqpCnStreamLookup::idx_Settings)};
     auto settings = TKqpStreamLookupSettings::Parse(settingsNode);
-    if (settings.Strategy == EStreamLookupStrategyType::LookupRows) {
+    if (settings.Strategy == EStreamLookupStrategyType::LookupRows
+        || settings.Strategy == EStreamLookupStrategyType::LookupUniqueRows) {
+
         if (!EnsureStructType(node->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }

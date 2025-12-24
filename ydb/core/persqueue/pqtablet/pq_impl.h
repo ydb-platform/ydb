@@ -51,7 +51,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvTxDone::TPtr& ev, const TActorContext& ctx);
 
     void InitResponseBuilder(const ui64 responseCookie, const ui32 count, const ui32 counterId);
     void Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext&);

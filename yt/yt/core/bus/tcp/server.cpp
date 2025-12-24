@@ -22,7 +22,6 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
@@ -100,7 +99,20 @@ public:
         UnarmPoller();
 
         return Poller_->Unregister(this).Apply(BIND([this, this_ = MakeStrong(this)] {
-            YT_LOG_INFO("Bus server stopped");
+            {
+                auto guard = Guard(ConnectionsSpinLock_);
+                YT_ASSERT(!AllConnectionsTerminated_);
+                AllConnectionsTerminated_ = NewPromise<void>();
+
+                if (Connections_.empty()) {
+                    guard.Release();
+                    AllConnectionsTerminated_.Set();
+                }
+            }
+
+            return AllConnectionsTerminated_.ToFuture().Apply(BIND([this, this_ = std::move(this_)] {
+                YT_LOG_INFO("Bus server stopped");
+            }));
         }));
     }
 
@@ -124,8 +136,8 @@ public:
 
         decltype(Connections_) connections;
         {
-            auto guard = WriterGuard(ConnectionsSpinLock_);
-            std::swap(connections, Connections_);
+            auto guard = Guard(ConnectionsSpinLock_);
+            connections = Connections_;
         }
 
         for (const auto& connection : connections) {
@@ -148,8 +160,9 @@ protected:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ControlSpinLock_);
     SOCKET ServerSocket_ = INVALID_SOCKET;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ConnectionsSpinLock_);
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConnectionsSpinLock_);
     THashSet<TTcpConnectionPtr> Connections_;
+    TPromise<void> AllConnectionsTerminated_;
 
     virtual void CreateServerSocket() = 0;
     virtual void InitClientSocket(SOCKET clientSocket) = 0;
@@ -168,9 +181,12 @@ protected:
 
     void OnConnectionTerminated(const TTcpConnectionPtr& connection, const TError& /*error*/)
     {
-        auto guard = WriterGuard(ConnectionsSpinLock_);
-        // NB: Connection could be missing, see OnShutdown.
-        Connections_.erase(connection);
+        auto guard = Guard(ConnectionsSpinLock_);
+        EraseOrCrash(Connections_, connection);
+        if (Connections_.empty() && AllConnectionsTerminated_) {
+            guard.Release();
+            AllConnectionsTerminated_.Set();
+        }
     }
 
     void OpenServerSocket()
@@ -288,7 +304,8 @@ protected:
                 DynamicConfig_.Acquire()->RejectConnectionOnMemoryOvercommit);
 
             {
-                auto guard = WriterGuard(ConnectionsSpinLock_);
+                auto guard = Guard(ConnectionsSpinLock_);
+                YT_ASSERT(!AllConnectionsTerminated_);
                 EmplaceOrCrash(Connections_, connection);
             }
 
@@ -807,4 +824,3 @@ IBusServerPtr CreateBusServer(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NBus
-

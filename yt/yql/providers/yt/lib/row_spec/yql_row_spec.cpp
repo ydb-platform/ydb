@@ -103,6 +103,8 @@ ui64 GetNativeYtTypeFlagsImpl(const TTypeAnnotationNode* itemType) {
             return NTCF_COMPLEX;
         case ETypeAnnotationKind::World:
         case ETypeAnnotationKind::Unit:
+        case ETypeAnnotationKind::Universal:
+        case ETypeAnnotationKind::UniversalStruct:
         case ETypeAnnotationKind::Item:
         case ETypeAnnotationKind::Callable:
         case ETypeAnnotationKind::Generic:

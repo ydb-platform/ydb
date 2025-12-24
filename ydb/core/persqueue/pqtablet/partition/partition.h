@@ -7,7 +7,6 @@
 #include "partition_init.h"
 #include "partition_sourcemanager.h"
 #include "partition_types.h"
-#include "read_quoter.h"
 #include "sourceid.h"
 #include "subscriber.h"
 #include "user_info.h"
@@ -20,6 +19,7 @@
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
+#include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/actors/core/actor.h>
@@ -429,8 +429,8 @@ private:
                               NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                               NKikimrPQ::TError::EKind kind,
                               const TString& reason);
-    void ScheduleReplyCommitDone(ui64 step, ui64 txId,
-                                 NWilson::TSpan&& commitSpan);
+    void ScheduleReplyTxDone(ui64 step, ui64 txId,
+                             NWilson::TSpan&& commitSpan);
     void ScheduleDropPartitionLabeledCounters(const TString& group);
     void SchedulePartitionConfigChanged();
 
@@ -463,7 +463,7 @@ private:
                                                                         NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                                                                         NKikimrPQ::TError::EKind kind,
                                                                         const TString& reason);
-    THolder<TEvPQ::TEvTxCommitDone> MakeCommitDone(ui64 step, ui64 txId);
+    THolder<TEvPQ::TEvTxDone> MakeTxDone(ui64 step, ui64 txId) const;
 
     bool BeginTransactionConfig();
 

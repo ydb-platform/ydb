@@ -188,12 +188,12 @@ ydb_custom_init_scripts() {
                 ;;
             *.sql)
                 log init "Executing queries from $f"
-                /ydb --no-discovery sql -f "$f" < /dev/null 1> >(log_stream init_sql_stdout) 2> >(log_stream init_sql_stderr)
+                /ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -f "$f" < /dev/null 1> >(log_stream init_sql_stdout) 2> >(log_stream init_sql_stderr)
                 status=$?
                 ;;
             *.sql.gz)
                 log init "Executing compressed queries from $f"
-                gunzip -c "$f" | /ydb --no-discovery sql -f - 1> >(log_stream init_sql_stdout) 2> >(log_stream init_sql_stderr)
+                gunzip -c "$f" | /ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -f - 1> >(log_stream init_sql_stdout) 2> >(log_stream init_sql_stderr)
                 status=$?
                 ;;
             *)

@@ -27,8 +27,6 @@ using namespace NConcurrency;
 using namespace NProfiling;
 using namespace NNet;
 
-constinit const auto Logger = HttpLogger;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TCallbackHandler::TCallbackHandler(TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
@@ -66,6 +64,7 @@ public:
         IRequestPathMatcherPtr requestPathMatcher,
         bool ownPoller = false)
         : Config_(std::move(config))
+        , Logger(HttpLogger().WithTag("ServerName: %v", Config_->ServerName))
         , Listener_(std::move(listener))
         , Poller_(std::move(poller))
         , Acceptor_(std::move(acceptor))
@@ -210,6 +209,7 @@ private:
     };
 
     const TServerConfigPtr Config_;
+    const NLogging::TLogger Logger;
     IListenerPtr Listener_;
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
@@ -360,7 +360,7 @@ private:
     void HandleConnection(const IConnectionPtr& connection)
     {
         try {
-            connection->SubscribePeerDisconnect(BIND([config = Config_, canceler = GetCurrentFiberCanceler(), connectionId = connection->GetId()] {
+            connection->SubscribePeerDisconnect(BIND([Logger = Logger, config = Config_, canceler = GetCurrentFiberCanceler(), connectionId = connection->GetId()] {
                 YT_LOG_DEBUG("Client closed TCP socket (ConnectionId: %v)", connectionId);
 
                 if (config->CancelFiberOnConnectionClose.value_or(false)) {

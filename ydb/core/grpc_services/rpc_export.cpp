@@ -233,7 +233,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         for (const auto& item : TTraits::GetItems(settings)) {
             TString userSpecifiedPath = CanonizePath(item.source_path());
             TString fullPath;
-            if (userSpecifiedPath.size() > CommonSourcePath.size() && userSpecifiedPath.StartsWith(CommonSourcePath) && userSpecifiedPath[CommonSourcePath.size()] == '/') {
+            if (HasCommonSourcePathPrefix(userSpecifiedPath)) {
                 fullPath = userSpecifiedPath; // Full path
             } else {
                 fullPath = CommonSourcePath + userSpecifiedPath; // Relative path
@@ -525,9 +525,13 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         }
     }
 
+    bool HasCommonSourcePathPrefix(const TStringBuf path) const {
+        return path.StartsWith(CommonSourcePath) && path.size() > CommonSourcePath.size() && path[CommonSourcePath.size()] == '/';
+    }
+
     bool IsExcludedFromExport(const TString& exportPath) {
         const char* path = exportPath.c_str();
-        if (exportPath.StartsWith(CommonSourcePath) && exportPath.size() > CommonSourcePath.size() && exportPath[CommonSourcePath.size()] == '/') {
+        if (HasCommonSourcePathPrefix(exportPath)) {
             path += CommonSourcePath.size() + 1; // prefix + /
         }
         for (const auto& regexp : ExcludeRegexps) {

@@ -1,4 +1,4 @@
-#include "time.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
 
 namespace NYdb::inline Dev {
 

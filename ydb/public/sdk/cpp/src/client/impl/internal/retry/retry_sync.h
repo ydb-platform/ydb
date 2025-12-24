@@ -1,8 +1,10 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
+
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 
 namespace NYdb::inline Dev::NRetry::Sync {
 
@@ -87,12 +89,14 @@ class TRetryWithSession : public TRetryContext<TClient, TStatusType> {
 
 private:
     const TOperation& Operation_;
+    const TDeadline Deadline_;
     std::optional<TSession> Session_;
 
 public:
     TRetryWithSession(TClient& client, const TOperation& operation, const TRetryOperationSettings& settings)
         : TRetryContext<TClient, TStatusType>(client, settings)
         , Operation_(operation)
+        , Deadline_(TDeadline::AfterDuration(this->Settings_.MaxTimeout_))
     {}
 
 protected:
@@ -100,7 +104,11 @@ protected:
         std::optional<TStatusType> status;
 
         if (!Session_) {
-            auto settings = TCreateSessionSettings().ClientTimeout(this->Settings_.GetSessionClientTimeout_);
+            auto settings = TCreateSessionSettings()
+                .ClientTimeout(this->Settings_.GetSessionClientTimeout_)
+                .Deadline(Deadline_)
+                .PropagatedDeadline(Deadline_);
+
             auto sessionResult = this->Client_.GetSession(settings).GetValueSync();
             if (sessionResult.IsSuccess()) {
                 Session_ = sessionResult.GetSession();

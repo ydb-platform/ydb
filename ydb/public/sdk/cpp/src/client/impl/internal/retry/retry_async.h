@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
+
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 
 #include <util/generic/function.h>
@@ -120,20 +122,26 @@ class TRetryWithSession : public TRetryContext<TClient, TAsyncStatusType> {
     using TAsyncCreateSessionResult = typename TClient::TAsyncCreateSessionResult;
 
 private:
-    TOperation Operation_;
+    const TOperation Operation_;
+    const TDeadline Deadline_;
     std::optional<TSession> Session_;
 
 public:
     explicit TRetryWithSession(
         const TClient& client, TOperation&& operation, const TRetryOperationSettings& settings)
         : TRetryContextAsync(client, settings)
-        , Operation_(operation)
+        , Operation_(std::move(operation))
+        , Deadline_(TDeadline::AfterDuration(this->Settings_.MaxTimeout_))
     {}
 
     void Retry() override {
         TIntrusivePtr<TRetryWithSession> self(this);
         if (!Session_) {
-            auto settings = TCreateSessionSettings().ClientTimeout(this->Settings_.GetSessionClientTimeout_);
+            auto settings = TCreateSessionSettings()
+                .ClientTimeout(this->Settings_.GetSessionClientTimeout_)
+                .Deadline(Deadline_)
+                .PropagatedDeadline(Deadline_);
+
             this->Client_.GetSession(settings).Subscribe(
                 [self](const TAsyncCreateSessionResult& resultFuture) {
                     try {

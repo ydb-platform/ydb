@@ -62,7 +62,33 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
             stats->Merge(accessor.GetSerializationStat(*resultFiltered, true));
         }
 
-        std::vector<TReadPortionInfoWithBlobs> portions = TReadPortionInfoWithBlobs::RestorePortions(accessors, Blobs, context.SchemaVersions);
+        {
+            for (auto&& accessor : accessors) {
+                auto portionSchema = accessor.GetPortionInfo().GetSchema(context.SchemaVersions);
+                const auto& idxInfo = portionSchema->GetIndexInfo();
+                for (auto&& rec : accessor.GetRecordsVerified()) {
+                    if (!idxInfo.HasColumnId(rec.GetColumnId())) {
+                        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "compaction_missing_column")
+                            ("portion_id", accessor.GetPortionInfo().GetPortionId())("column_id", rec.GetColumnId());
+                        return TConclusionStatus::Fail(TStringBuilder() << "missing column id " << rec.GetColumnId() << " in portion schema");
+                    }
+                }
+                for (auto&& idxChunk : accessor.GetIndexesVerified()) {
+                    if (!idxInfo.HasIndexId(idxChunk.GetIndexId())) {
+                        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "compaction_missing_index")
+                            ("portion_id", accessor.GetPortionInfo().GetPortionId())("index_id", idxChunk.GetIndexId());
+                        return TConclusionStatus::Fail(TStringBuilder() << "missing index id " << idxChunk.GetIndexId() << " in portion schema");
+                    }
+                }
+            }
+        }
+
+        auto portionsOrError = TReadPortionInfoWithBlobs::TryRestorePortions(accessors, Blobs, context.SchemaVersions);
+        if (!portionsOrError) {
+            return portionsOrError;
+        }
+
+        std::vector<TReadPortionInfoWithBlobs> portions = portionsOrError.DetachResult();
         THashSet<ui64> usedPortionIds;
         std::vector<std::shared_ptr<ISubsetToMerge>> currentToMerge;
         for (auto&& i : portions) {

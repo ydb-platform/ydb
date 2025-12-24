@@ -2,6 +2,7 @@
 #include "base_with_blobs.h"
 #include "common.h"
 #include "portion_info.h"
+#include "data_accessor.h"
 
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
@@ -35,6 +36,9 @@ private:
 
 public:
     static std::vector<TReadPortionInfoWithBlobs> RestorePortions(
+        const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
+        const TVersionedIndex& tables);
+    static TConclusion<std::vector<TReadPortionInfoWithBlobs>> TryRestorePortions(
         const std::vector<TPortionDataAccessor>& portions, NBlobOperations::NRead::TCompositeReadBlobs& blobs,
         const TVersionedIndex& tables);
     static TReadPortionInfoWithBlobs RestorePortion(

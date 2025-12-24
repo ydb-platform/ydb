@@ -630,6 +630,10 @@ public:
                 inputs.emplace_back(source);
                 if (inputDesc.GetSource().GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
                     inputUsesWatermarks = true;
+                    if (transform && WatermarksTracker) {
+                        transform->WatermarksTracker.emplace(/*logPrefix=*/"");
+                        transform->WatermarksTracker->RegisterAsyncInput(i/*TODO: , idleTimeout */);
+                    }
                 }
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
@@ -661,7 +665,17 @@ public:
                     inputs.emplace_back(inputChannel);
                     if (inputChannelDesc.GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
                         inputUsesWatermarks = true;
+                        if (transform && WatermarksTracker) {
+                            WatermarksTracker->UnregisterInputChannel(channelId);
+                            if (!transform->WatermarksTracker) {
+                                transform->WatermarksTracker.emplace(/*logPrefix=*/"");
+                            }
+                            transform->WatermarksTracker->RegisterInputChannel(channelId/*TODO: , idleTimeout */);
+                        }
                     }
+                }
+                if (inputUsesWatermarks && transform && WatermarksTracker) {
+                    WatermarksTracker->RegisterAsyncInput(i/*TODO: , idleTimeout */);
                 }
             }
 
@@ -677,8 +691,8 @@ public:
                         Stats->StartTs,
                         InputConsumed,
                         PgBuilder_.get(),
-                        &Watermark,
-                        inputUsesWatermarks ? WatermarksTracker : nullptr
+                        &transform->Watermark,
+                        transform->WatermarksTracker ? &*transform->WatermarksTracker : nullptr
                     );
                     inputs.clear();
                     inputs.emplace_back(transform->TransformOutput);
@@ -975,6 +989,15 @@ public:
         }
     }
 
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) override {
+        if (auto ptr = AllocatedHolder->InputTransforms.FindPtr(inputId)) {
+            return ptr->WatermarksTracker ? &*ptr->WatermarksTracker : nullptr;
+        } else {
+            return nullptr;
+        }
+    }
+
+
     std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) override {
         auto ptr = AllocatedHolder->OutputTransforms.FindPtr(outputIndex);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have output index: " << outputIndex << " or such transform");
@@ -1130,6 +1153,8 @@ private:
         IDqAsyncInputBuffer::TPtr TransformOutput;
         TType* TransformInputType = nullptr;
         TType* TransformOutputType = nullptr;
+        std::optional<TDqComputeActorWatermarks> WatermarksTracker;
+        NKikimr::NMiniKQL::TWatermark Watermark;
     };
 
     struct TOutputTransformInfo {

@@ -1295,6 +1295,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     map<string, TCreateCdcStream> IndexImplTableCdcStreams = 9;
     // additionally dropes cdc stream on src table consistently with taking snapshot
     optional TDropCdcStream DropSrcCdcStream = 10;
+    map<string, TDropCdcStream> IndexImplTableDropCdcStreams = 11;
 }
 
 message TConsistentTableCopyingConfig {

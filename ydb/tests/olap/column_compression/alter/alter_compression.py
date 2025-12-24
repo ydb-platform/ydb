@@ -109,7 +109,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         table = ColumnTableHelper(self.ydb_client, self.table_path)
 
         koef: float = 1
-        for _ in range(99):
+        for _ in range(9):
             volumes: tuple[int, int] = table.get_volumes_column("value")
             koef = self.volumes_without_compression[1] / volumes[1]
             logging.info(

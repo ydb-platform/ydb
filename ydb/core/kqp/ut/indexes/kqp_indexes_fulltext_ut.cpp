@@ -2236,13 +2236,13 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
 
     { // Create table with fulltext index
         TString query = R"sql(
-            CREATE TABLE `/Root/table` (
+            CREATE TABLE `/Root/Texts` (
                 Key Uint64,
-                body String,
+                Text String,
                 PRIMARY KEY (Key),
-                INDEX index_fulltext
+                INDEX fulltext_idx
                     GLOBAL USING fulltext
-                    ON (body)
+                    ON (Text)
                     WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true)
             );
         )sql";
@@ -2252,7 +2252,112 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
 
     { // Insert data with Russian text about machine learning
         TString query = R"sql(
-            UPSERT INTO `/Root/table` (Key, body) VALUES
+            UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+                (1, "Машинное обучение - это важная область искусственного интеллекта"),
+                (2, "Глубокое обучение является подмножеством машинного обучения"),
+                (3, "Нейронные сети используются в машинном обучении"),
+                (4, "Машинное обучение помогает решать сложные задачи"),
+                (5, "Алгоритмы машинного обучения обрабатывают большие данные"),
+                (6, "Обучение моделей требует много вычислительных ресурсов"),
+                (7, "Машинное обучение применяется в различных областях"),
+                (8, "Современные методы машинного обучения очень эффективны"),
+                (9, "Исследования в области машинного обучения продолжаются"),
+                (10, "Практическое применение машинного обучения растет"),
+                (11, "Коты любят играть"),
+                (12, "Собаки любят бегать")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    std::vector<std::pair<std::string, std::vector<ui64>>> searchingTerms = {
+        {"машинное обучение", {1, 4, 7}},
+        {"моделей", {6}},
+        {"собаки любят ", {12}},
+        {"коты любят", {11}},
+        {"тигры", {}},
+    };
+
+    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+        TString query = Sprintf(R"sql(
+            SELECT Key, Text FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(Text, "%s")
+            ORDER BY Key
+        )sql", term.c_str());
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_C(resultSet.RowsCount() == expectedKeys.size(), "Expected " + std::to_string(expectedKeys.size()) + " rows with " + term + " content");
+
+        // Verify that all returned rows actually contain the search term
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
+            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            UNIT_ASSERT_C(bodyValue, "Text should not be null");
+            Cerr << "Key: " << key << Endl;
+            UNIT_ASSERT_C(
+                IsIn(expectedKeys, key),
+                "All returned rows should contain search term related text"
+            );
+        }
+    }
+
+    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+        TString query = Sprintf(R"sql(
+            SELECT Key FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(Text, "%s")
+            ORDER BY Key
+        )sql", term.c_str());
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_C(resultSet.RowsCount() == expectedKeys.size(), "Expected " + std::to_string(expectedKeys.size()) + " rows with " + term + " content");
+
+        // Verify that all returned rows actually contain the search term
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            Cerr << "Key: " << key << Endl;
+            UNIT_ASSERT_C(
+                IsIn(expectedKeys, key),
+                "All returned rows should contain machine learning related text"
+            );
+        }
+    }
+
+    {
+        TString query = R"sql(
+            SELECT Key, Text FROM `/Root/Texts`
+            WHERE FullText::Contains(Text, "машинное обучение")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST(SelectWithFulltextRelevance) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with fulltext index
+        TString query = R"sql(
+            CREATE TABLE `/Root/Texts` (
+                Key Uint64,
+                Text String,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Insert data with Russian text about machine learning
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (Key, Text) VALUES
                 (1, "Машинное обучение - это важная область искусственного интеллекта"),
                 (2, "Глубокое обучение является подмножеством машинного обучения"),
                 (3, "Нейронные сети используются в машинном обучении"),
@@ -2277,12 +2382,17 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
         {"коты любят", {11}}
     };
 
+    AddIndex(db, "flat_relevance");
+
     for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
         TString query = Sprintf(R"sql(
-            SELECT Key, body FROM `/Root/table` VIEW `index_fulltext`
-            WHERE FullText::Contains(body, "%s")
-            ORDER BY Key
+            SELECT Key, Text FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY FullText::Relevance(Text, "%s") DESC
+            LIMIT 10
         )sql", term.c_str());
+
+        Cerr << "Query: " << query << Endl;
+
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -2292,23 +2402,26 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
         // Verify that all returned rows actually contain the search term
         NYdb::TResultSetParser parser(resultSet);
         while (parser.TryNextRow()) {
-            auto bodyValue = parser.ColumnParser("body").GetOptionalString();
+            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
             ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
             UNIT_ASSERT_C(bodyValue, "Body should not be null");
             Cerr << "Key: " << key << Endl;
             UNIT_ASSERT_C(
                 IsIn(expectedKeys, key),
-                "All returned rows should contain machine learning related text"
+                "All returned rows should contain search term related text"
             );
         }
     }
 
-    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+    /*for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
         TString query = Sprintf(R"sql(
-            SELECT Key FROM `/Root/table` VIEW `index_fulltext`
-            WHERE FullText::Contains(body, "%s")
-            ORDER BY Key
+            SELECT Key, Text, FullText::Relevance(Text, "%s") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+            LIMIT 10
         )sql", term.c_str());
+
+        Cerr << "Query: " << query << Endl;
+
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -2318,19 +2431,21 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
         // Verify that all returned rows actually contain the search term
         NYdb::TResultSetParser parser(resultSet);
         while (parser.TryNextRow()) {
+            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
             ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            UNIT_ASSERT_C(bodyValue, "Body should not be null");
             Cerr << "Key: " << key << Endl;
             UNIT_ASSERT_C(
                 IsIn(expectedKeys, key),
-                "All returned rows should contain machine learning related text"
+                "All returned rows should contain search term related text"
             );
         }
-    }
+    }*/
 
     {
         TString query = R"sql(
-            SELECT Key, body FROM `/Root/table`
-            WHERE FullText::Contains(body, "машинное обучение")
+            SELECT Key, Text FROM `/Root/Texts`
+            ORDER BY FullText::Relevance(Text, "машинное обучение") DESC
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;

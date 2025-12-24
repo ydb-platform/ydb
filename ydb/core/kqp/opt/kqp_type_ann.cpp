@@ -295,6 +295,58 @@ TStatus AnnotateReadTable(const TExprNode::TPtr& node, TExprContext& ctx, const 
     return TStatus::Ok;
 }
 
+const TTypeAnnotationNode* GetReadTableRowTypeFullText(TExprContext& ctx, const TKikimrTablesData& tablesData,
+    const TString& cluster, const TString& table, TCoAtomList select, bool withSystemColumns)
+{
+    auto tableDesc = tablesData.EnsureTableExists(cluster, table, select.Pos(), ctx);
+    if (!tableDesc) {
+        return nullptr;
+    }
+
+    TVector<const TItemExprType*> resultItems;
+    for (auto item : select) {
+        if (item.Value() == "_yql_full_text_relevance") {
+            auto itemType = ctx.MakeType<TItemExprType>(TString(item.Value()), ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Double));
+            resultItems.push_back(itemType);
+            YQL_ENSURE(itemType->Validate(select.Pos(), ctx));
+            if (!itemType->Validate(select.Pos(), ctx)) {
+                return nullptr;
+            }
+            continue;
+        }
+
+        auto column = tableDesc->Metadata->Columns.FindPtr(item.Value());
+        TString columnName;
+        if (column) {
+            columnName = column->Name;
+        } else {
+            if (withSystemColumns && IsKikimrSystemColumn(item.Value())) {
+                columnName = TString(item.Value());
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(select.Pos()), TStringBuilder()
+                    << "Column not found: " << item.Value()));
+                return nullptr;
+            }
+        }
+
+        auto type = tableDesc->GetColumnType(columnName);
+        YQL_ENSURE(type, "No such column: " << columnName);
+
+        auto itemType = ctx.MakeType<TItemExprType>(columnName, type);
+        if (!itemType->Validate(select.Pos(), ctx)) {
+            return nullptr;
+        }
+        resultItems.push_back(itemType);
+    }
+
+    auto resultType = ctx.MakeType<TStructExprType>(resultItems);
+    if (!resultType->Validate(select.Pos(), ctx)) {
+        return nullptr;
+    }
+
+    return resultType;
+}
+
 TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, const TKikimrTablesData& tablesData) {
     if (!EnsureArgsCount(*node, 5, ctx)) {
         return TStatus::Error;
@@ -332,7 +384,7 @@ TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node
         return TStatus::Error;
     }
 
-    auto rowType = GetReadTableRowType(
+    auto rowType = GetReadTableRowTypeFullText(
         ctx, tablesData, cluster, table.first, TCoAtomList(resultColumns), false);
 
     node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
@@ -496,6 +548,8 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
     return TStatus::Ok;
 }
 
+
+
 TStatus AnnotateReadTableFullTextIndex(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster, const TKikimrTablesData& tablesData) {
     if (!EnsureArgsCount(*node, 5, ctx)) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Expected 3 arguments for FullTextContains"));
@@ -536,7 +590,7 @@ TStatus AnnotateReadTableFullTextIndex(const TExprNode::TPtr& node, TExprContext
         return TStatus::Error;
     }
 
-    auto rowType = GetReadTableRowType(
+    auto rowType = GetReadTableRowTypeFullText(
         ctx, tablesData, cluster, table.first, TCoAtomList(resultColumns), false);
 
     if (isPhysical) {

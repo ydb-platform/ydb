@@ -272,6 +272,7 @@ private:
         TFile file(path, flags);
         file.Flock(LOCK_EX);
         file.Write(data.data(), data.size());
+        file.Flush();
         file.Close();
     }
 };

@@ -166,6 +166,7 @@ public:
     TNodeFilter NodeFilter;
     bool InWaitQueue = false;
     double UsageImpact = 0;
+    bool UpdateMetricsEnqueued = false;
 
     TTabletInfo(ETabletRole role, THive& hive);
     TTabletInfo(const TTabletInfo&) = delete;

@@ -248,6 +248,7 @@ protected:
     friend class TTxMonEvent_StopDomain;
     friend class TTxUpdatePiles;
     friend class TTxSetDown;
+    friend class TTxProcessTabletMetrics;
 
     friend class TDeleteTabletActor;
 
@@ -318,6 +319,7 @@ protected:
     ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
     ITransaction* CreateUpdatePiles();
     ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
+    ITransaction* CreateProcessTabletMetrics();
 
 public:
     TDomainsView DomainsView;
@@ -420,6 +422,7 @@ protected:
     bool LogTabletMovesScheduled = false;
     bool ProcessStorageBalancerScheduled = false;
     bool ProcessFollowerUpdatesScheduled = false;
+    bool ProcessTabletMetricsScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -441,6 +444,7 @@ protected:
     std::queue<TTabletId> StopTenantTabletsQueue;
     std::queue<TTabletId> ResumeTenantTabletsQueue;
     bool NotEnoughResources = false;
+    std::queue<TFullTabletId> ProcessTabletMetricsQueue;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -615,6 +619,7 @@ protected:
     void Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr& ev);
     void Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev);
     void Handle(TEvHive::TEvSetDown::TPtr& ev);
+    void Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

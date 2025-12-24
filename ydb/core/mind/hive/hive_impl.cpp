@@ -2437,6 +2437,16 @@ std::optional<EResourceToBalance> THive::CheckScatter(const TResourceNormalizedV
     return std::nullopt;
 }
 
+void THive::EnqueueUpdateMetrics(TTabletInfo* tablet) {
+    if (std::exchange(tablet->UpdateMetricsEnqueued, true)) {
+        return;
+    }
+    ProcessTabletMetricsQueue.push(tablet->GetFullTabletId());
+    if (!std::exchange(ProcessTabletMetricsScheduled, true)) {
+        Send(SelfId(), new TEvPrivate::TEvProcessTabletMetrics);
+    }
+}
+
 void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     BLOG_W("Received TEvProcessTabletBalancer while in StateInit");
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessTabletBalancer());
@@ -2712,7 +2722,6 @@ static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMe
     i64 newValue = oldValue + delta;
     Y_ENSURE_LOG(newValue >= 0, "tablet " << tabletId << " name=" << name << " oldValue=" << oldValue << " delta=" << delta << " newValue=" << newValue);
     newValue = Max(newValue, (i64)0);
-    //BLOG_D("AggregateDiff: " << name << " -> " << newValue);
     aggregate.*field = newValue;
 }
 
@@ -3253,6 +3262,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvUpdateBalanceCounters, Handle);
         hFunc(TEvHive::TEvSetDown, Handle);
         hFunc(TEvHive::TEvRequestDrainInfo, Handle);
+        hFunc(TEvPrivate::TEvProcessTabletMetrics, Handle);
     }
 }
 
@@ -3367,6 +3377,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvUpdateBalanceCounters::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestDrainInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvSetDown::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessTabletMetrics::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3744,6 +3755,10 @@ void THive::Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr&) {
 
 void THive::Handle(TEvHive::TEvSetDown::TPtr& ev) {
     Execute(CreateSetDown(ev));
+}
+
+void THive::Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr&) {
+    Execute(CreateProcessTabletMetrics());
 }
 
 void THive::MakeScaleRecommendation() {

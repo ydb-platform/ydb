@@ -17,7 +17,7 @@ from ydb.tests.datashard.lib.types_of_variables import (
     index_three_sync_not_Bool,
     index_four_sync,
     index_zero_sync,
-    primitive_type,
+    string_to_ydb_type,
 )
 
 # https://github.com/ydb-platform/ydb/issues/17178
@@ -303,9 +303,9 @@ class TestParametrizedQueries(TestBase):
         if "Decimal" in type_name:
             return key[type_name](value)
         if type_name == "String" or type_name == "Yson":
-            return ydb.TypedValue(key[type_name](value).encode(), primitive_type[type_name])
+            return ydb.TypedValue(key[type_name](value).encode(), string_to_ydb_type[type_name])
         if type_name == "DyNumber":
-            return ydb.TypedValue(str(key[type_name](value)), primitive_type[type_name])
+            return ydb.TypedValue(str(key[type_name](value)), string_to_ydb_type[type_name])
         if type_name == "Datetime64" or type_name == "Datetime":
-            return ydb.TypedValue(int(datetime.timestamp(key[type_name](value))), primitive_type[type_name])
-        return ydb.TypedValue(key[type_name](value), primitive_type[type_name])
+            return ydb.TypedValue(int(datetime.timestamp(key[type_name](value))), string_to_ydb_type[type_name])
+        return ydb.TypedValue(key[type_name](value), string_to_ydb_type[type_name])

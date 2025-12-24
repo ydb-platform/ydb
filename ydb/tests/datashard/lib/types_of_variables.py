@@ -261,7 +261,7 @@ non_comparable_types = {
     "JsonDocument",
 }
 
-primitive_type = {
+string_to_ydb_type = {
     "Int64": ydb.PrimitiveType.Int64,
     "Uint64": ydb.PrimitiveType.Uint64,
     "Int32": ydb.PrimitiveType.Int32,
@@ -288,6 +288,9 @@ primitive_type = {
     "Datetime64": ydb.PrimitiveType.Datetime64,
     "Timestamp64": ydb.PrimitiveType.Timestamp64,
     "Interval64": ydb.PrimitiveType.Interval64,
+    "Decimal(15,0)": ydb.DecimalType(15, 0),
+    "Decimal(22,9)": ydb.DecimalType(22, 9),
+    "Decimal(35,10)": ydb.DecimalType(35, 10),
 }
 
 type_to_literal_lambda = {

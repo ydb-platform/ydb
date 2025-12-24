@@ -703,9 +703,23 @@ void TRichYPath::SetClusters(const std::vector<std::string>& value)
     Attributes().Set("clusters", value);
 }
 
-bool TRichYPath::GetCreate() const
+std::variant<bool, NYTree::IAttributeDictionaryPtr> TRichYPath::GetCreate() const
 {
-    return GetAttribute<bool>(*this, "create", false);
+    auto yson = Attributes().FindYson("create");
+    if (!yson) {
+        return false;
+    }
+
+    auto node = ConvertTo<INodePtr>(yson);
+    switch (node->GetType()) {
+        case ENodeType::Boolean:
+        case ENodeType::String:
+            return ConvertTo<bool>(node);
+        case ENodeType::Map:
+            return NYTree::IAttributeDictionary::FromMap(node->AsMap());
+        default:
+            THROW_ERROR_EXCEPTION("Create of type %qv is not supported", node->GetType());
+    }
 }
 
 TVersionedReadOptions TRichYPath::GetVersionedReadOptions() const

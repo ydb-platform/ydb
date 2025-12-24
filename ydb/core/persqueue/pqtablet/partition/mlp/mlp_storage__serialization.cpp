@@ -376,13 +376,18 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         TDeserializer<TSnapshotMessage> deserializer(snapshot.GetMessages());
         TSnapshotMessage snapshot;
         for (size_t i = 0; deserializer.Next(snapshot); ++i) {
+            auto message = fromSnapshot(snapshot);
             if (i < Messages.size()) {
-                Messages[i] = fromSnapshot(snapshot);
+                Messages[i] = message;
             } else {
-                Messages.push_back(fromSnapshot(snapshot));
+                Messages.push_back(message);
             }
 
-            const auto& messageStatus = Messages[i].GetStatus();
+            if (message.GetStatus() == EMessageStatus::Locked && KeepMessageOrder && message.HasMessageGroupId) {
+                LockedMessageGroupsId.insert(message.MessageGroupIdHash);
+            }
+
+            const auto& messageStatus = message.GetStatus();
             if (messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::Delayed && moveUnlockedOffset) {
                 ++FirstUnlockedOffset;
                 moveUnlockedOffset = false;
@@ -399,9 +404,10 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         ui64 offset;
         TSnapshotMessage snapshot;
         while (deserializer.Next(offset, snapshot)) {
-            SlowMessages[offset] = fromSnapshot(snapshot);
-            if (KeepMessageOrder && SlowMessages[offset].HasMessageGroupId) {
-                LockedMessageGroupsId.insert(SlowMessages[offset].MessageGroupIdHash);
+            auto message = fromSnapshot(snapshot);
+            SlowMessages[offset] = message;
+            if (message.GetStatus() == EMessageStatus::Locked && KeepMessageOrder && message.HasMessageGroupId) {
+                LockedMessageGroupsId.insert(message.MessageGroupIdHash);
             }
         }
     }

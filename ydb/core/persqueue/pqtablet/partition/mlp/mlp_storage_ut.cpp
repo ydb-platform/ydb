@@ -98,13 +98,14 @@ struct TUtils {
             TUtils utils;
             utils.LoadSnapshot(BeginSnapshot);
             utils.LoadWAL(WAL);
+            utils.Storage.InitMetrics();
 
             utils.AssertEquals(*this);
         }
         {
             TUtils utils;
             utils.LoadSnapshot(EndSnapshot);
-
+            utils.Storage.InitMetrics();
             utils.AssertEquals(*this);
         }
     }
@@ -135,7 +136,6 @@ struct TUtils {
         Cerr << "LOAD" << Endl;
         Cerr << "< SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
         Storage.Initialize(snapshot);
-        Storage.InitMetrics();
         Cerr << "< STORAGE DUMP: " << Storage.DebugString() << Endl;
     }
 
@@ -143,7 +143,6 @@ struct TUtils {
         Cerr << "LOAD" << Endl;
         Cerr << "< WAL: " << wal.ShortDebugString() << Endl;
         Storage.ApplyWAL(wal);
-        Storage.InitMetrics();
         Cerr << "< STORAGE DUMP: " << Storage.DebugString() << Endl;
     }
 
@@ -1296,6 +1295,7 @@ Y_UNIT_TEST(StorageSerialization) {
         storage.SetKeepMessageOrder(true);
 
         storage.Initialize(snapshot);
+        storage.InitMetrics();
         Cerr << "DUMP 2: " << storage.DebugString() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
@@ -1481,6 +1481,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
 
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
+        storage.InitMetrics();
 
         auto it = storage.begin();
         {
@@ -1606,6 +1607,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
 
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
+        storage.InitMetrics();
 
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 7);
 
@@ -1702,6 +1704,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
 
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
+        storage.InitMetrics();
 
         UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseDeadline(), timeProvider->Now() - TDuration::Seconds(7));
 

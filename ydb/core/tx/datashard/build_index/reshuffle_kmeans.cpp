@@ -307,7 +307,7 @@ protected:
     void FeedRow(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
-        Clusters->FindClusters(row.at(EmbeddingPos).AsRef(), TmpClusters, OverlapClusters, OverlapRatio);
+        Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);
         if (OutForeign) {
             bool foreign = false;
             if (InForeign) {

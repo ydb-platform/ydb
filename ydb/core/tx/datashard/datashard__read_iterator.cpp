@@ -52,6 +52,10 @@ struct TReadIteratorVectorTop {
     ui64 TotalReadBytes = 0;
 
     void AddRow(TConstArrayRef<TCell> cells) {
+        const auto embedding = cells.at(Column).AsBuf();
+        if (!KMeans->IsExpectedFormat(embedding)) {
+            return;
+        }
         TotalReadRows++;
         TotalReadBytes += EstimateSize(cells);
         TString serializedKey;
@@ -66,7 +70,7 @@ struct TReadIteratorVectorTop {
             }
         }
         const auto embedding = cells.at(Column).AsBuf();
-        if (!KMeans->IsExpectedSize(embedding)) {
+        if (!KMeans->IsExpectedFormat(embedding)) {
             return;
         }
         double distance = KMeans->CalcDistance(embedding, Target);
@@ -2196,7 +2200,7 @@ public:
                 if (!topState->KMeans && error.empty()) {
                     error = "CreateClusters failed";
                 }
-                if (topState->KMeans && !topState->KMeans->IsExpectedSize(topK.GetTargetVector())) {
+                if (topState->KMeans && !topState->KMeans->IsExpectedFormat(topK.GetTargetVector())) {
                     error = "Target vector has invalid format";
                 }
             }

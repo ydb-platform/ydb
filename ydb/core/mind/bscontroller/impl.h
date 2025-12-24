@@ -351,8 +351,8 @@ public:
         bool HasExpectedSlotCount = false;
         ui32 NumActiveSlots = 0; // sum of owners weights allocated on this PDisk
         ui32 SlotSizeInUnits = 0;
-        ui64 InferPDiskSlotCountFromUnitSize = 0;
-        ui32 InferPDiskSlotCountMax = 0;
+        // ui64 InferPDiskSlotCountFromUnitSize = 0;
+        // ui32 InferPDiskSlotCountMax = 0;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
 
         bool Operational = false; // set to true when both containing node is connected and Operational is reported in Metrics
@@ -391,9 +391,9 @@ public:
                     Table::LastSeenPath,
                     Table::DecommitStatus,
                     Table::ShredComplete,
-                    Table::MaintenanceStatus,
-                    Table::InferPDiskSlotCountFromUnitSize,
-                    Table::InferPDiskSlotCountMax
+                    Table::MaintenanceStatus
+                    // Table::InferPDiskSlotCountFromUnitSize,
+                    // Table::InferPDiskSlotCountMax
                 > adapter(
                     &TPDiskInfo::Path,
                     &TPDiskInfo::Kind,
@@ -410,9 +410,9 @@ public:
                     &TPDiskInfo::LastSeenPath,
                     &TPDiskInfo::DecommitStatus,
                     &TPDiskInfo::ShredComplete,
-                    &TPDiskInfo::MaintenanceStatus,
-                    &TPDiskInfo::InferPDiskSlotCountFromUnitSize,
-                    &TPDiskInfo::InferPDiskSlotCountMax
+                    &TPDiskInfo::MaintenanceStatus
+                    // &TPDiskInfo::InferPDiskSlotCountFromUnitSize,
+                    // &TPDiskInfo::InferPDiskSlotCountMax
                 );
             callback(&adapter);
         }
@@ -436,9 +436,7 @@ public:
                    const TString& lastSeenPath,
                    ui32 staticSlotUsage,
                    bool shredComplete,
-                   NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus,
-                   ui64 inferPDiskSlotCountFromUnitSize,
-                   ui32 inferPDiskSlotCountMax)
+                   NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus)
             : HostId(hostId)
             , Path(path)
             , Kind(kind)
@@ -449,8 +447,8 @@ public:
             , PDiskConfig(std::move(pdiskConfig))
             , ShredComplete(shredComplete)
             , BoxId(boxId)
-            , InferPDiskSlotCountFromUnitSize(inferPDiskSlotCountFromUnitSize)
-            , InferPDiskSlotCountMax(inferPDiskSlotCountMax)
+            // , InferPDiskSlotCountFromUnitSize(inferPDiskSlotCountFromUnitSize)
+            // , InferPDiskSlotCountMax(inferPDiskSlotCountMax)
             , Status(status)
             , StatusTimestamp(statusTimestamp)
             , DecommitStatus(decommitStatus)
@@ -576,10 +574,6 @@ public:
             if (Metrics.HasSlotCount()) {
                 slotCount = Metrics.GetSlotCount();
                 slotSizeInUnits = Metrics.GetSlotSizeInUnits();
-            } else if (InferPDiskSlotCountFromUnitSize != 0) {
-                // inferred values are unknown yet
-                slotCount = 0;
-                slotSizeInUnits = 0;
             } else {
                 slotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;
@@ -973,8 +967,8 @@ public:
             Table::ReadCentric::Type ReadCentric;
             Table::Kind::Type Kind;
             TMaybe<Table::PDiskConfig::Type> PDiskConfig;
-            Table::InferPDiskSlotCountFromUnitSize::Type InferPDiskSlotCountFromUnitSize;
-            Table::InferPDiskSlotCountMax::Type InferPDiskSlotCountMax;
+            // Table::InferPDiskSlotCountFromUnitSize::Type InferPDiskSlotCountFromUnitSize;
+            // Table::InferPDiskSlotCountMax::Type InferPDiskSlotCountMax;
 
             template<typename T>
             static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -983,17 +977,17 @@ public:
                         Table::SharedWithOs,
                         Table::ReadCentric,
                         Table::Kind,
-                        Table::PDiskConfig,
-                        Table::InferPDiskSlotCountFromUnitSize,
-                        Table::InferPDiskSlotCountMax
+                        Table::PDiskConfig
+                        // Table::InferPDiskSlotCountFromUnitSize,
+                        // Table::InferPDiskSlotCountMax
                     > adapter(
                         &TDriveInfo::Type,
                         &TDriveInfo::SharedWithOs,
                         &TDriveInfo::ReadCentric,
                         &TDriveInfo::Kind,
-                        &TDriveInfo::PDiskConfig,
-                        &TDriveInfo::InferPDiskSlotCountFromUnitSize,
-                        &TDriveInfo::InferPDiskSlotCountMax
+                        &TDriveInfo::PDiskConfig
+                        // &TDriveInfo::InferPDiskSlotCountFromUnitSize,
+                        // &TDriveInfo::InferPDiskSlotCountMax
                     );
                 callback(&adapter);
             }
@@ -1517,6 +1511,14 @@ private:
     ui64 ExpectedStorageYamlConfigVersion = 0;
     TBackoffTimer GetBlockBackoff{1, 1000};
 
+    // struct TInferPDiskSlotCountSettingsForDriveType {
+    //     ui64 UnitSize = 0;
+    //     ui32 MaxSlots = 0;
+    // };
+    // TInferPDiskSlotCountSettingsForDriveType InferPDiskSlotCountForRot = {};
+    // TInferPDiskSlotCountSettingsForDriveType InferPDiskSlotCountForSsd = {};
+    // bool PreferInferredSettingsOverExplicit = false;
+
     ui64 NextValidationCookie = 1;
     THashMap<ui64, TConfigValidationInfo> PendingValidationRequests;
 
@@ -1543,7 +1545,7 @@ private:
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     TSelfHealSettings SelfHealSettings;
-    
+
     TClusterBalancingSettings ClusterBalancingSettings;
 
     TActorId SystemViewsCollectorId;
@@ -1828,6 +1830,20 @@ public:
     void CreateEmptyHostRecordsMap() {
         HostRecords = std::make_shared<THostRecordMapImpl>();
     }
+
+    // TInferPDiskSlotCountSettingsForDriveType GetInferPDiskSlotCountSettingsForDriveType(NPDisk::EDeviceType type) const {
+    //     if (type == NPDisk::DEVICE_TYPE_ROT) {
+    //         return InferPDiskSlotCountForRot;
+    //     } else if (type == NPDisk::DEVICE_TYPE_SSD || type == NPDisk::DEVICE_TYPE_NVME) {
+    //         return InferPDiskSlotCountForSsd;
+    //     } else {
+    //         return {};
+    //     }
+    // }
+
+    // bool ShouldPreferInferredSettingsOverExplicit() const {
+    //     return PreferInferredSettingsOverExplicit;
+    // }
 
     ui64 NextConfigTxSeqNo = 1;
 
@@ -2261,7 +2277,13 @@ public:
         for (const auto& [id, pdisk] : PDisks) {
             ui32 effectiveSlotCount, effectiveSlotSizeInUnits;
             pdisk->ExtractInferredPDiskSettings(effectiveSlotCount, effectiveSlotSizeInUnits);
-            bool settingsShouldBeInferred = !pdisk->HasExpectedSlotCount && pdisk->InferPDiskSlotCountFromUnitSize;
+            // Check if we should infer PDisk slot count based on global settings
+            bool settingsShouldBeInferred = !pdisk->HasExpectedSlotCount &&
+                StorageConfig && StorageConfig->HasBlobStorageConfig() &&
+                StorageConfig->GetBlobStorageConfig().HasInferPDiskSlotCountSettings() &&
+                (pdisk->Kind.Type() == NPDisk::DEVICE_TYPE_ROT ?
+                    StorageConfig->GetBlobStorageConfig().GetInferPDiskSlotCountSettings().HasRot() :
+                    StorageConfig->GetBlobStorageConfig().GetInferPDiskSlotCountSettings().HasSsd());
 
             numWithoutExpectedSlotCount += !effectiveSlotCount;
             numWithoutSerial += !pdisk->ExpectedSerial;
@@ -2490,8 +2512,9 @@ public:
         const Schema::PDisk::Guid::Type Guid;
         Schema::PDisk::PDiskConfig::Type PDiskConfig;
         ui32 ExpectedSlotCount = 0;
-        ui64 InferPDiskSlotCountFromUnitSize = 0;
-        ui32 InferPDiskSlotCountMax = 0;
+        ui32 SlotSizeInUnits = 0;
+        // ui64 InferPDiskSlotCountFromUnitSize = 0;
+        // ui32 InferPDiskSlotCountMax = 0;
 
         // runtime info
         ui32 StaticSlotUsage = 0;
@@ -2504,14 +2527,15 @@ public:
             , Path(pdisk.GetPath())
             , Category(pdisk.GetPDiskCategory())
             , Guid(pdisk.GetPDiskGuid())
-            , InferPDiskSlotCountFromUnitSize(pdisk.GetInferPDiskSlotCountFromUnitSize())
-            , InferPDiskSlotCountMax(pdisk.GetInferPDiskSlotCountMax())
+            // , InferPDiskSlotCountFromUnitSize(pdisk.GetInferPDiskSlotCountFromUnitSize())
+            // , InferPDiskSlotCountMax(pdisk.GetInferPDiskSlotCountMax())
         {
             if (pdisk.HasPDiskConfig()) {
                 const auto& cfg = pdisk.GetPDiskConfig();
                 bool success = cfg.SerializeToString(&PDiskConfig);
                 Y_ABORT_UNLESS(success);
                 ExpectedSlotCount = cfg.GetExpectedSlotCount();
+                SlotSizeInUnits = cfg.GetSlotSizeInUnits();
             }
 
             const TPDiskId pdiskId(NodeId, PDiskId);
@@ -2525,13 +2549,9 @@ public:
             if (PDiskMetrics && PDiskMetrics->HasSlotCount()) {
                 slotCount = PDiskMetrics->GetSlotCount();
                 slotSizeInUnits = PDiskMetrics->GetSlotSizeInUnits();
-            } else if (InferPDiskSlotCountFromUnitSize != 0) {
-                // inferred values are unknown yet
-                slotCount = 0;
-                slotSizeInUnits = 0;
             } else {
-                slotCount = ExpectedSlotCount ? ExpectedSlotCount : StaticSlotUsage;
-                slotSizeInUnits = 0; // Not available for static PDisks
+                slotCount = ExpectedSlotCount;
+                slotSizeInUnits = SlotSizeInUnits;
             }
         }
     };

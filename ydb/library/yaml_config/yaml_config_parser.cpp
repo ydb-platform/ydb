@@ -641,20 +641,6 @@ namespace NKikimr::NYaml {
                         drive.MutablePDiskConfig()->SetSlotSizeInUnits(drive.GetSlotSizeInUnits());
                     }
                 }
-
-                if (hostConfig.HasInferPDiskSlotCountFromUnitSize()) {
-                    auto unitSizeByType = hostConfig.GetInferPDiskSlotCountFromUnitSize();
-                    for(auto& drive : *hostConfig.MutableDrive()) {
-                        if (drive.HasInferPDiskSlotCountFromUnitSize()) {
-                            continue;
-                        }
-                        if (drive.GetType() == "ROT" && unitSizeByType.HasRot()) {
-                            drive.SetInferPDiskSlotCountFromUnitSize(unitSizeByType.GetRot());
-                        } else if (auto& type = drive.GetType(); (type == "SSD" || type == "NVME") && unitSizeByType.HasSsd()) {
-                            drive.SetInferPDiskSlotCountFromUnitSize(unitSizeByType.GetSsd());
-                        }
-                    }
-                }
             }
         }
 

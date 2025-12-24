@@ -133,9 +133,9 @@ TString BuildCreateReplicationQuery(
         "-- backup root: \"{}\"\n"
         "CREATE ASYNC REPLICATION `{}`\n"
         "FOR\n"
-        "  {}\n"
+        "{}\n"
         "WITH (\n"
-        "  {}\n"
+        "{}\n"
         ");",
         db.c_str(),
         backupRoot.c_str(),

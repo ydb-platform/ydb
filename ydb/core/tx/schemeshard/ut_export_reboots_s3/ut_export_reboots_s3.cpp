@@ -528,10 +528,16 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             return TopicScheme;
         }
 
+        static const TTypedScheme& Replication() {
+            return ReplicationScheme;
+        }
+
         static TString Request(EPathType pathType = EPathType::EPathTypeTable) {
             switch (pathType) {
             case EPathType::EPathTypeTable:
                 return RequestStringTable;
+            case EPathType::EPathTypeReplication:
+                return RequestStringReplication;
             default:
                 Y_ABORT("not supported");
             }
@@ -543,8 +549,12 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const TTypedScheme TableScheme;
         static const TTypedScheme ChangefeedScheme;
         static const TTypedScheme TopicScheme;
-        static const TString RequestStringTable;
+        static const TTypedScheme ReplicationScheme;
         static const TTypedScheme IndexedTableScheme;
+
+        static const TString RequestStringTable;
+        static const TString RequestStringReplication;
+
     };
 
     const char* TTestData::TableName = "Table";
@@ -572,6 +582,31 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )", TableName)
     };
 
+    const TTypedScheme TTestData::ReplicationScheme = TTypedScheme {
+        EPathTypeReplication,
+        R"(
+            Name: "Replication"
+            Config {
+                SrcConnectionParams {
+                    StaticCredentials {
+                        User: "user"
+                        Password: "pwd"
+                    }
+                }
+                Specific {
+                    Targets {
+                        SrcPath: "/MyRoot/Table1"
+                        DstPath: "/MyRoot/Table1Replica"
+                    }
+                    Targets {
+                        SrcPath: "/MyRoot/Table2"
+                        DstPath: "/MyRoot/Table2Replica"
+                    }
+                }
+            }
+        )"
+    };
+
     const TTypedScheme TTestData::IndexedTableScheme = TTypedScheme {
         EPathTypeTableIndex, // TODO: Replace with IndexedTable
         Sprintf(R"(
@@ -592,6 +627,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             scheme: HTTP
             items {
                 source_path: "/MyRoot/Table"
+                destination_prefix: ""
+            }
+        }
+    )";
+
+    const TString TTestData::RequestStringReplication = R"(
+        ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+                source_path: "/MyRoot/Replication"
                 destination_prefix: ""
             }
         }
@@ -728,11 +774,11 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         TestSingleTopic(&RunS3);
     }
 
-    Y_UNIT_TEST(CancelOnOnSingleTopic) {
+    Y_UNIT_TEST(CancelOnSingleTopic) {
         TestSingleTopic(&CancelS3);
     }
 
-    Y_UNIT_TEST(ForgetShouldSucceedOnOnSingleTopic) {
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleTopic) {
         TestSingleTopic(&ForgetS3);
     }
 
@@ -764,5 +810,24 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
               }
             }
         )", TTestEnvOptions().EnableIndexMaterialization(true));
+    }
+
+    // Async Replication
+    Y_UNIT_TEST(ShouldSucceedOnSingleReplication) {
+        RunS3({
+            TTestData::Replication()
+        }, TTestData::Request(EPathTypeReplication));
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleReplication) {
+        CancelS3({
+            TTestData::Replication()
+        }, TTestData::Request(EPathTypeReplication));
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleReplication) {
+        ForgetS3({
+            TTestData::Replication()
+        }, TTestData::Request(EPathTypeReplication));
     }
 }

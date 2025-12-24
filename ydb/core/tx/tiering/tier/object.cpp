@@ -33,6 +33,30 @@ TConclusion<NKikimrSchemeOp::TS3Settings> TTierConfig::GetPatchedConfig(
     return config;
 }
 
+TConclusionStatus TTierConfig::CheckSecretAccess(const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets, const NACLib::TUserToken& userToken) const {
+    if (!secrets) {
+        return TConclusionStatus::Success();
+    }
+
+    {
+        auto secretIdOrValue = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(ProtoConfig.GetAccessKey());
+        AFL_VERIFY(secretIdOrValue);
+        if (!secrets->CheckSecretAccess(*secretIdOrValue, userToken)) {
+            return TConclusionStatus::Fail(TStringBuilder() << "Access denied to secret for access key");
+        }
+    }
+
+    {
+        auto secretIdOrValue = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(ProtoConfig.GetSecretKey());
+        AFL_VERIFY(secretIdOrValue);
+        if (!secrets->CheckSecretAccess(*secretIdOrValue, userToken)) {
+            return TConclusionStatus::Fail(TStringBuilder() << "Access denied to secret for secret key");
+        }
+    }
+
+    return TConclusionStatus::Success();
+}
+
 TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto) {
     if (!proto.GetAuth().HasAws()) {
         return TConclusionStatus::Fail("AWS auth is not defined for storage tier");

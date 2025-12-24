@@ -141,7 +141,7 @@ void ConvertState(const NKikimrReplication::TReplicationState& from, T& to) {
 }
 
 bool CheckReplicationConfig(
-    const NKikimrReplication::TReplicationConfig config,
+    const NKikimrReplication::TReplicationConfig& config,
     Ydb::StatusIds_StatusCode& status,
     TString& error)
 {

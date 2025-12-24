@@ -40,7 +40,7 @@ private:
     ui32 VPutResponses = 0;
     ui32 VMultiPutRequests = 0;
     ui32 VMultiPutResponses = 0;
-    bool AtLeastOneResponseWasNotOk = false;
+    NActors::NLog::EPriority ResultPriority = NActors::NLog::PRI_DEBUG;
     bool EnableRequestMod3x3ForMinLatecy = false;
 
     const TEvBlobStorage::TEvPut::ETactic Tactic;
@@ -299,10 +299,6 @@ public:
         return it->second;
     }
 
-    bool WasNotOkResponses() {
-        return AtLeastOneResponseWasNotOk;
-    }
-
 protected:
     void RunStrategies(TLogContext &logCtx, TPutResultVec &outPutResults, const TBlobStorageGroupInfo::TGroupVDisks& expired,
         bool accelerate);
@@ -328,7 +324,6 @@ protected:
             case NKikimrProto::VDISK_ERROR_STATE:
             case NKikimrProto::OUT_OF_SPACE:
                 Blackboard.AddErrorResponse(blobId, orderNumber, record.GetErrorReason());
-                AtLeastOneResponseWasNotOk = true;
                 break;
             case NKikimrProto::OK:
             case NKikimrProto::ALREADY:

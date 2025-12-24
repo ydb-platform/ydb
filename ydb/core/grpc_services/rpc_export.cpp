@@ -6,13 +6,12 @@
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/ydb_convert/compression.h>
 
 #include <ydb/library/actors/core/hfunc.h>
-
-#include <library/cpp/regex/pcre/regexp.h>
 
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
@@ -555,10 +554,7 @@ public:
         InitCommonSourcePath();
 
         try {
-            ExcludeRegexps.reserve(static_cast<size_t>(settings.exclude_regexps_size()));
-            for (const TString& excludeRegex : settings.exclude_regexps()) {
-                ExcludeRegexps.emplace_back(excludeRegex);
-            }
+            ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
         } catch (const std::exception& ex) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
         }

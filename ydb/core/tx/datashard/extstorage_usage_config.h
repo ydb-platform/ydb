@@ -113,7 +113,7 @@ public:
     }
 
     explicit TStorageSettings(const TString& objectKeyPattern, ui32 shard, const TEncryptionSettings& encryptionSettings)
-        : ObjectKeyPattern(CanonizePath(objectKeyPattern))
+        : ObjectKeyPattern(objectKeyPattern)
         , Shard(shard)
         , EncryptionSettings(encryptionSettings)
     {

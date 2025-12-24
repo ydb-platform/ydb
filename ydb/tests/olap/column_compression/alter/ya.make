@@ -3,11 +3,13 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 FORK_SUBTESTS()
 
+SIZE(MEDIUM)
+
+TIMEOUT(300)
+
 TEST_SRCS(
     alter_compression.py
 )
-
-SIZE(MEDIUM)
 
 PEERDIR(
     ydb/tests/library

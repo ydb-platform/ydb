@@ -66,7 +66,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         ("zstd_compression", 'algorithm=zstd'),
     ] + [
         (f"zstd_{lvl}_compression", f'algorithm=zstd,level={lvl}')
-        for lvl in range(2, 3)
+        for lvl in range(2, 22, 3)
     ]
 
     def create_table_without_compression(self, suffix: str):

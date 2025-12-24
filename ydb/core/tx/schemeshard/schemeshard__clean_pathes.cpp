@@ -131,7 +131,7 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
             TPathId pathId = *--itCandidate;
             Self->CleanDroppedPathsCandidates.erase(itCandidate);
             TPathElement::TPtr path = Self->PathsById.at(pathId);
-            if (path->DbRefCount == 0 && path->Dropped() && !path->GetShardsInside()) {
+            if (path->DbRefCount == 0 && path->Dropped()) {
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxCleanDroppedPaths: PersistRemovePath for PathId# " << pathId
                     << ", at schemeshard: "<< Self->TabletID());

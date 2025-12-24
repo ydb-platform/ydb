@@ -1,8 +1,10 @@
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_path_describer.h"
 
-#include <ydb/core/ydb_convert/compression.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/ydb_convert/compression.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <util/string/builder.h>
@@ -55,9 +57,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     auto& copyTables = *modifyScheme.MutableCreateConsistentCopyTables()->MutableCopyTableDescriptions();
     copyTables.Reserve(exportInfo->Items.size());
 
-    const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
-    const TString& exportPathName = exportPath.PathString();
-
     for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
         const auto& item = exportInfo->Items.at(itemIdx);
         if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
@@ -66,8 +65,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
 
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.SourcePathName);
-        desc.SetDstPath(ExportItemPathName(exportPathName, itemIdx));
-        desc.SetOmitIndexes(true);
+        desc.SetDstPath(ExportItemPathName(ss, exportInfo, itemIdx));
+        desc.SetOmitIndexes(!exportInfo->IncludeIndexData);
         desc.SetOmitFollowers(true);
         desc.SetIsBackup(true);
     }
@@ -75,46 +74,18 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     return propose;
 }
 
-static void SetTableDescriptionOptions(NKikimrSchemeOp::TDescribeOptions& opts) {
+static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const TPathId& pathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
     opts.SetReturnPartitioningInfo(false);
     opts.SetReturnPartitionConfig(true);
     opts.SetReturnBoundaries(true);
     opts.SetReturnIndexTableBoundaries(true);
-}
-
-static void SetChangefeedDescriptionOptions(NKikimrSchemeOp::TDescribeOptions& opts) {
-    SetTableDescriptionOptions(opts);
     opts.SetShowPrivateTable(true);
-}
 
-static void SetTopicDescriptionOptions(NKikimrSchemeOp::TDescribeOptions& opts) {
-    SetTableDescriptionOptions(opts);
-    opts.SetShowPrivateTable(true);
-}
-
-static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const TPathId& pathId, NKikimrSchemeOp::TDescribeOptions& opts) {
     auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId, opts);
     auto record = desc->GetRecord();
 
     return record.GetPathDescription();
-}
-
-static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {
-    NKikimrSchemeOp::TDescribeOptions opts;
-    SetTableDescriptionOptions(opts);
-    return GetDescription(ss, pathId, opts);
-}
-
-static NKikimrSchemeOp::TPathDescription GetChangefeedDescription(TSchemeShard* ss, const TPathId& pathId) {
-    NKikimrSchemeOp::TDescribeOptions opts;
-    SetChangefeedDescriptionOptions(opts);
-    return GetDescription(ss, pathId, opts);
-}
-
-static NKikimrSchemeOp::TPathDescription GetTopicDescription(TSchemeShard* ss, const TPathId& pathId) {
-    NKikimrSchemeOp::TDescribeOptions opts;
-    SetTopicDescriptionOptions(opts);
-    return GetDescription(ss, pathId, opts);
 }
 
 void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& description,
@@ -142,15 +113,35 @@ void FillSetValForSequences(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription
 }
 
 void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc, const TPathId& exportItemPathId) {
-    NKikimrSchemeOp::TDescribeOptions opts;
-    opts.SetReturnPartitionConfig(true);
-    opts.SetReturnBoundaries(true);
-
-    auto copiedPath = DescribePath(ss, TlsActivationContext->AsActorContext(), exportItemPathId, opts);
-    const auto& copiedTable = copiedPath->GetRecord().GetPathDescription().GetTable();
+    auto copiedPath = GetDescription(ss, exportItemPathId);
+    const auto& copiedTable = copiedPath.GetTable();
 
     *desc.MutableSplitBoundary() = copiedTable.GetSplitBoundary();
     *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
+}
+
+void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
+    if (!sourcePath.IsResolved() || !exportItemPath.IsResolved()) {
+        return;
+    }
+
+    auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
+    if (sourceDescription.HasTable()) {
+        FillSetValForSequences(
+            ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+        FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+        for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
+            auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
+            for (const auto& child : cdcPathDesc.GetChildren()) {
+                if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
+                    *task.AddChangefeedUnderlyingTopics() =
+                        GetDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
+                }
+            }
+        }
+    }
+
+    task.MutableTable()->CopyFrom(sourceDescription);
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
@@ -160,6 +151,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     ui32 itemIdx
 ) {
     Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
+    const auto& item = exportInfo->Items[itemIdx];
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
 
@@ -168,33 +160,33 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     modifyScheme.SetInternal(true);
 
     const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
-    const TString& exportPathName = exportPath.PathString();
-    modifyScheme.SetWorkingDir(exportPathName);
-
     auto& task = *modifyScheme.MutableBackup();
-    task.SetTableName(ToString(itemIdx));
-    task.SetNeedToBill(!exportInfo->UserSID || !ss->SystemBackupSIDs.contains(*exportInfo->UserSID));
 
-    const TPath sourcePath = TPath::Init(exportInfo->Items[itemIdx].SourcePathId, ss);
-    const TPath exportItemPath = exportPath.Child(ToString(itemIdx));
-    if (sourcePath.IsResolved() && exportItemPath.IsResolved()) {
-        auto sourceDescription = GetTableDescription(ss, sourcePath.Base()->PathId);
-        if (sourceDescription.HasTable()) {
-            FillSetValForSequences(
-                ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-            FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-            for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
-                auto cdcPathDesc =  GetChangefeedDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
-                for (const auto& child : cdcPathDesc.GetChildren()) {
-                    if (child.GetPathType() == NKikimrSchemeOp::EPathTypePersQueueGroup) {
-                        *task.AddChangefeedUnderlyingTopics() = GetTopicDescription(ss, TPathId(child.GetSchemeshardId(), child.GetPathId()));
-                    }
-                }
-            }
+    if (item.ParentIdx == Max<ui32>()) {
+        modifyScheme.SetWorkingDir(exportPath.PathString());
+        task.SetTableName(ToString(itemIdx));
+
+        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
+    } else {
+        auto parentPath = exportPath.Child(ToString(item.ParentIdx));
+
+        auto childParts = SplitPath(item.SourcePathName);
+        Y_ABORT_UNLESS(!childParts.empty());
+
+        auto childName = std::move(childParts.back());
+        childParts.pop_back();
+
+        for (const auto& part : childParts) {
+            parentPath.Dive(part);
         }
-        task.MutableTable()->CopyFrom(sourceDescription);
+
+        modifyScheme.SetWorkingDir(parentPath.PathString());
+        task.SetTableName(childName);
+
+        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), parentPath.Child(childName));
     }
 
+    task.SetNeedToBill(!exportInfo->UserSID || !ss->SystemBackupSIDs.contains(*exportInfo->UserSID));
     task.SetSnapshotStep(exportInfo->SnapshotStep);
     task.SetSnapshotTxId(exportInfo->SnapshotTxId);
 
@@ -209,8 +201,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetHost(exportSettings.host());
             backupSettings.SetPort(exportSettings.port());
             backupSettings.SetToken(exportSettings.token());
-            backupSettings.SetTablePattern(exportSettings.items(itemIdx).destination_path());
             backupSettings.SetUseTypeV3(exportSettings.use_type_v3());
+
+            Y_ABORT_UNLESS(itemIdx < (ui32)exportSettings.items().size());
+            backupSettings.SetTablePattern(exportSettings.items(itemIdx).destination_path());
         }
         break;
 
@@ -225,9 +219,25 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetBucket(exportSettings.bucket());
             backupSettings.SetAccessKey(exportSettings.access_key());
             backupSettings.SetSecretKey(exportSettings.secret_key());
-            backupSettings.SetObjectKeyPattern(exportSettings.items(itemIdx).destination_prefix());
             backupSettings.SetStorageClass(exportSettings.storage_class());
             backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
+
+            TString dstPrefix;
+            if (item.ParentIdx == Max<ui32>()) {
+                Y_ABORT_UNLESS(itemIdx < (ui32)exportSettings.items().size());
+                dstPrefix = exportSettings.items(itemIdx).destination_prefix();
+            } else {
+                Y_ABORT_UNLESS(item.ParentIdx < (ui32)exportSettings.items().size());
+                dstPrefix = exportSettings.items(item.ParentIdx).destination_prefix();
+
+                if (dstPrefix && dstPrefix.back() != '/') {
+                    dstPrefix += '/';
+                }
+
+                dstPrefix += item.SourcePathName;
+            }
+
+            backupSettings.SetObjectKeyPattern(dstPrefix);
 
             switch (exportSettings.scheme()) {
             case Ydb::Export::ExportToS3Settings::HTTP:
@@ -312,12 +322,15 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
 }
 
 TString ExportItemPathName(TSchemeShard* ss, const TExportInfo::TPtr exportInfo, ui32 itemIdx) {
-    const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
-    return ExportItemPathName(exportPath.PathString(), itemIdx);
-}
+    Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
+    const auto& item = exportInfo->Items[itemIdx];
 
-TString ExportItemPathName(const TString& exportPathName, ui32 itemIdx) {
-    return TStringBuilder() << exportPathName << "/" << itemIdx;
+    const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
+    if (item.ParentIdx == Max<ui32>()) {
+        return TStringBuilder() << exportPath.PathString() << "/" << itemIdx;
+    } else {
+        return TStringBuilder() << exportPath.PathString() << "/" << item.ParentIdx << "/" << item.SourcePathName;
+    }
 }
 
 void PrepareDropping(
@@ -339,7 +352,7 @@ void PrepareDropping(
         item.WaitTxId = InvalidTxId;
         item.State = TExportInfo::EState::Dropped;
         const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
-        if (itemPath.IsResolved() && !itemPath.IsDeleted()) {
+        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && itemPath.IsResolved() && !itemPath.IsDeleted()) {
             item.State = TExportInfo::EState::Dropping;
             if (exportInfo->State == TExportInfo::EState::AutoDropping) {
                 func(itemIdx);

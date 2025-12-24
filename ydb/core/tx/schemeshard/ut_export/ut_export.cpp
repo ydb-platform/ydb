@@ -1,3 +1,4 @@
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
@@ -2465,7 +2466,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = s3Mock.GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "b72575244ae0cce8dffd45f3537d1e412bfe39de4268f4f85f529cb529870903 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "c81d49a7f50afcbc70fc72f148587a52bdc5b401e93f9606becd4207536ff78f metadata.json");
 
         const auto* schemeChecksum = s3Mock.GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -2538,7 +2539,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = s3Mock.GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "b72575244ae0cce8dffd45f3537d1e412bfe39de4268f4f85f529cb529870903 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "c81d49a7f50afcbc70fc72f148587a52bdc5b401e93f9606becd4207536ff78f metadata.json");
 
         const auto* schemeChecksum = s3Mock.GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -2787,5 +2788,190 @@ attributes {
                 KeyColumnNames: ["key"]
             )",
         }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
+    }
+
+    void IndexMaterialization(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, bool enabled, const TString& indexDesc) {
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "embedding" Type: "String" }
+              Columns { Name: "prefix" Type: "String" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            %s
+        )", indexDesc.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        const auto expectedStatus = enabled ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::PRECONDITION_FAILED;
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", s3Port), "", "", expectedStatus);
+
+        if (!enabled) {
+            return;
+        }
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = DescribePrivatePath(runtime, "/MyRoot/Table/index");
+        const auto& tableIndex = desc.GetPathDescription().GetTableIndex();
+        const auto indexType = tableIndex.GetType();
+        const TVector<TString> indexColumns(tableIndex.GetKeyColumnNames().begin(), tableIndex.GetKeyColumnNames().end());
+
+        for (const auto implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
+            UNIT_ASSERT(s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb"));
+        }
+    }
+
+    Y_UNIT_TEST(IndexMaterializationDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(false);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, false, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterialization) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobal) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobal
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalAsync) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTree) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalVectorKmeansTreePrefix) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        IndexMaterialization(env, runtime, s3Mock, port, true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["prefix", "embedding"]
+              Type: EIndexTypeGlobalVectorKmeansTree
+              VectorIndexKmeansTreeDescription {
+                Settings {
+                  settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                  }
+                  clusters: 4
+                  levels: 5
+                }
+              }
+            }
+        )");
     }
 }

@@ -140,8 +140,7 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsTable()
-                .NotBackupTable();
+                .IsTable();
 
             if (!internal) {
                 checks.NotAsyncReplicaTable();
@@ -151,6 +150,8 @@ public:
                 checks
                     .IsUnderCreating(NKikimrScheme::StatusNameConflict)
                     .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+            } else {
+                checks.NotBackupTable(); // allow to create backup table with index, but not to build index on a backup table
             }
 
             if (!checks) {

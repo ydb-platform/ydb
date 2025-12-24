@@ -215,4 +215,5 @@ message TFeatureFlags {
     reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns
     optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = false];
     optional bool EnableReplication = 217 [default = true];
+    optional bool EnableIndexMaterialization = 221 [default = false];
 }

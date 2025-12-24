@@ -3150,6 +3150,11 @@
                 "ColumnId": 18,
                 "ColumnName": "EnablePermissions",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "IncludeIndexData",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -3173,7 +3178,8 @@
                     15,
                     16,
                     17,
-                    18
+                    18,
+                    21
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3246,6 +3252,11 @@
                 "ColumnId": 9,
                 "ColumnName": "SourcePathType",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "ParentIndex",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -3260,7 +3271,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6319,6 +6331,16 @@
                 "ColumnId": 16,
                 "ColumnName": "NextChangefeedIdx",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "SrcPrefix",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "ParentIndex",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -6340,7 +6362,9 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    21
                 ],
                 "RoomID": 0,
                 "Codec": 0,

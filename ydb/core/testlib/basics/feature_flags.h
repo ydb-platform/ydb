@@ -81,6 +81,7 @@ public:
     FEATURE_FLAG_SETTER(EnableSharedMetadataAccessorCache)
     FEATURE_FLAG_SETTER(DisableMissingDefaultColumnsInBulkUpsert)
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
+    FEATURE_FLAG_SETTER(EnableIndexMaterialization)
 
     #undef FEATURE_FLAG_SETTER
 };

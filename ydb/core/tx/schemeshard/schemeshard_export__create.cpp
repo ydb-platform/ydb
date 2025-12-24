@@ -24,6 +24,12 @@ ui32 PopFront(TDeque<ui32>& pendingItems) {
     return itemIdx;
 }
 
+
+bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable
+        || item.SourcePathType == NKikimrSchemeOp::EPathTypeTableIndex;
+}
+
 }
 
 namespace NKikimr {
@@ -131,6 +137,15 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
                 exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
+                exportInfo->IncludeIndexData = settings.include_index_data();
+                if (exportInfo->IncludeIndexData && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
+                    return Reply(
+                        std::move(response),
+                        Ydb::StatusIds::PRECONDITION_FAILED,
+                        "Index materialization is not enabled"
+                    );
+                }
+
                 TString explain;
                 if (!FillItems(exportInfo, settings, explain)) {
                     return Reply(
@@ -225,7 +240,24 @@ private:
             }
 
             exportInfo->Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
-            exportInfo->PendingItems.push_back(itemIdx);
+            exportInfo->PendingItems.push_back(exportInfo->Items.size() - 1);
+
+            if (exportInfo->IncludeIndexData && path.Base()->IsTable()) {
+                for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
+                    TVector<TString> childParts;
+                    childParts.push_back(childName);
+
+                    auto childPath = path.Child(childName);
+                    if (childPath.IsDeleted() || !childPath.IsTableIndex()) {
+                        continue;
+                    }
+                    for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                        const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));
+                        exportInfo->Items.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
+                        exportInfo->PendingItems.push_back(exportInfo->Items.size() - 1);
+                    }
+                }
+            }
         }
 
         return true;
@@ -629,7 +661,7 @@ private:
                 const auto& item = exportInfo->Items.at(itemIdx);
 
                 if (item.WaitTxId == InvalidTxId) {
-                    if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && item.State <= EState::Transferring) {
+                    if (IsPathTypeTransferrable(item) && item.State <= EState::Transferring) {
                         pendingTables.emplace_back(itemIdx);
                     } else {
                         UploadScheme(exportInfo, itemIdx, ctx);
@@ -683,7 +715,7 @@ private:
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                     const auto& item = exportInfo->Items.at(itemIdx);
 
-                    if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable || item.State != EState::Dropping) {
+                    if (!IsPathTypeTransferrable(item) || item.State != EState::Dropping) {
                         continue;
                     }
 
@@ -750,13 +782,13 @@ private:
                 return;
             }
             itemIdx = PopFront(exportInfo->PendingItems);
-            if (const auto type = exportInfo->Items.at(itemIdx).SourcePathType; type == NKikimrSchemeOp::EPathTypeTable) {
+            if (IsPathTypeTransferrable(exportInfo->Items.at(itemIdx))) {
                 TransferData(exportInfo, itemIdx, txId);
             } else {
                 LOG_W("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring"
                     << ": id# " << id
                     << ", itemIdx# " << itemIdx
-                    << ", type# " << type
+                    << ", type# " << exportInfo->Items.at(itemIdx).SourcePathType
                 );
                 return;
             }
@@ -1131,7 +1163,7 @@ private:
                 item.State = EState::Transferring;
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
 
-                if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+                if (IsPathTypeTransferrable(item)) {
                     tables.emplace_back(itemIdx);
                 } else {
                     UploadScheme(exportInfo, itemIdx, ctx);
@@ -1152,7 +1184,7 @@ private:
             item.WaitTxId = InvalidTxId;
 
             bool itemHasIssues = false;
-            if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+            if (IsPathTypeTransferrable(item)) {
                 if (const auto issue = GetIssues(ItemPathId(Self, exportInfo, itemIdx), txId)) {
                     item.Issue = *issue;
                     Cancel(exportInfo, itemIdx, "issues during backing up");

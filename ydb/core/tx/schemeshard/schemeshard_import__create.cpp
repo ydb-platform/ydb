@@ -31,10 +31,6 @@ namespace {
 using TItem = TImportInfo::TItem;
 using EState = TImportInfo::EState;
 
-bool IsWaiting(const TItem& item) {
-    return item.State == EState::Waiting;
-}
-
 THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
     THashMap<EState, int> counter;
     for (const auto& item : items) {
@@ -148,6 +144,20 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 auto settings = request.GetRequest().GetImportFromS3Settings();
                 if (!settings.scheme()) {
                     settings.set_scheme(Ydb::Import::ImportFromS3Settings::HTTPS);
+                }
+
+                if (!AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
+                    switch (settings.index_population_mode()) {
+                    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+                    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Index materialization is not enabled"
+                        );
+                    default:
+                        break;
+                    }
                 }
 
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
@@ -434,7 +444,7 @@ private:
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo->Items.size())) {
             auto& item = importInfo->Items[itemIdx];
-            if (IsWaiting(item) && IsCreatedByQuery(item)) {
+            if (item.State == EState::Waiting && IsCreatedByQuery(item)) {
                 item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                     Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
                 ));
@@ -943,7 +953,7 @@ private:
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
             const TString source = TStringBuilder()
-                << importInfo->Settings.items(msg.ItemIdx).source_prefix() << NYdb::NDump::NFiles::CreateView().FileName;
+                << importInfo->GetItemSrcPrefix(msg.ItemIdx) << NYdb::NDump::NFiles::CreateView().FileName;
 
             NYql::TIssues issues;
             if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
@@ -956,13 +966,40 @@ private:
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
         }
 
+        if (!IsCreatedByQuery(item)) {
+            AllocateTxId(importInfo, msg.ItemIdx);
+        }
+
         Self->PersistImportItemScheme(db, importInfo, msg.ItemIdx);
 
         item.State = EState::CreateSchemeObject;
         Self->PersistImportItemState(db, importInfo, msg.ItemIdx);
-        if (!IsCreatedByQuery(item)) {
-            AllocateTxId(importInfo, msg.ItemIdx);
+
+        const TString parentSrc = importInfo->GetItemSrcPrefix(msg.ItemIdx);
+        const TString parentDst = item.DstPathName;
+        auto materializedIndexes = std::move(item.MaterializedIndexes);
+        item.ChildItems.reserve(materializedIndexes.size());
+        importInfo->Items.reserve(importInfo->Items.size() + materializedIndexes.size());
+
+        for (auto& [indexMetadata, scheme] : materializedIndexes) {
+            auto src = TStringBuilder() << parentSrc << "/" << indexMetadata.ExportPrefix;
+            auto dst = TStringBuilder() << parentDst << "/" << indexMetadata.ImplTablePrefix;
+
+            auto& childItem = importInfo->Items.emplace_back(std::move(dst));
+            const ui32 childIdx = importInfo->Items.size() - 1;
+
+            importInfo->Items.at(msg.ItemIdx).ChildItems.push_back(childIdx);
+
+            childItem.SrcPrefix = std::move(src);
+            childItem.State = EState::Waiting;
+            childItem.ParentIdx = msg.ItemIdx;
+            childItem.Scheme = std::move(scheme);
+
+            Self->PersistNewImportItem(db, importInfo, childIdx);
+            Self->PersistImportItemScheme(db, importInfo, childIdx);
         }
+
+        Self->PersistImportState(db, importInfo);
     }
 
     void OnSchemeQueryPreparation(TTransactionContext& txc, const TActorContext& ctx) {
@@ -1171,7 +1208,6 @@ private:
             }
 
             if (txId == InvalidTxId) {
-
                 if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists && item.State == EState::CreateChangefeed) {
                     if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
                         item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateConsumers;
@@ -1200,14 +1236,24 @@ private:
         }
 
         if (item.State == EState::CreateSchemeObject) {
-            auto createPath = TPath::Resolve(item.DstPathName, Self);
-            Y_ABORT_UNLESS(createPath);
-
-            item.DstPathId = createPath.Base()->PathId;
-            Self->PersistImportItemDstPathId(db, importInfo, itemIdx);
+            UpdateItemDstPathId(db, importInfo, itemIdx);
+            for (auto childIdx : item.ChildItems) {
+                UpdateItemDstPathId(db, importInfo, childIdx);
+            }
         }
 
         SubscribeTx(importInfo, itemIdx);
+    }
+
+    void UpdateItemDstPathId(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+
+        auto path = TPath::Resolve(item.DstPathName, Self);
+        Y_ABORT_UNLESS(path);
+
+        item.DstPathId = path.Base()->PathId;
+        Self->PersistImportItemDstPathId(db, importInfo, itemIdx);
     }
 
     void OnCreateIndexResult(TTransactionContext& txc, const TActorContext&) {
@@ -1323,6 +1369,14 @@ private:
             }
             item.State = EState::Transferring;
             AllocateTxId(importInfo, itemIdx);
+            for (auto childIdx : item.ChildItems) {
+                Y_ABORT_UNLESS(childIdx < importInfo->Items.size());
+                auto& childItem = importInfo->Items.at(childIdx);
+
+                childItem.State = EState::Transferring;
+                Self->PersistImportItemState(db, importInfo, childIdx);
+                AllocateTxId(importInfo, childIdx);
+            }
             break;
 
         case EState::Transferring:
@@ -1330,7 +1384,8 @@ private:
                 item.Issue = *issue;
                 Cancel(importInfo, itemIdx, "issues during restore");
             } else {
-                if (item.NextIndexIdx < item.Scheme.indexes_size()) {
+                const auto needToBuildIndexes = NeedToBuildIndexes(*importInfo, itemIdx);
+                if (needToBuildIndexes && item.NextIndexIdx < item.Scheme.indexes_size()) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&

@@ -41,7 +41,6 @@ SRCS(
     partition_ut.cpp
     partitiongraph_ut.cpp
     pqtablet_ut.cpp
-    quota_tracker_ut.cpp
     sourceid_ut.cpp
     user_info_ut.cpp
     pqrb_describes_ut.cpp

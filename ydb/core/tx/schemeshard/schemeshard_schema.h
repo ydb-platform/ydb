@@ -1206,7 +1206,7 @@ struct Schema : NIceDb::Schema {
 
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
-        struct MaterializeIndexes : Column<21, NScheme::NTypeIds::Bool> {};
+        struct IncludeIndexData : Column<21, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1228,7 +1228,7 @@ struct Schema : NIceDb::Schema {
             PeerName,
             EnableChecksums,
             EnablePermissions,
-            MaterializeIndexes
+            IncludeIndexData
         >;
     };
 

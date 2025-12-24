@@ -680,7 +680,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              materialize_indexes: true
+              include_index_data: true
               items {
                 source_path: "/MyRoot/Table"
                 destination_prefix: ""

@@ -52,15 +52,15 @@ message ImportFromS3Settings {
         string destination_path = 2 [(required) = true];
     }
 
-    enum IndexFillingMode {
+    enum IndexPopulationMode {
         // If unspecified, use default - Build
-        INDEX_FILLING_MODE_UNSPECIFIED = 0;
+        INDEX_POPULATION_MODE_UNSPECIFIED = 0;
         // Build index
-        INDEX_FILLING_MODE_BUILD = 1;
+        INDEX_POPULATION_MODE_BUILD = 1;
         // Import materialized index
-        INDEX_FILLING_MODE_IMPORT = 2;
+        INDEX_POPULATION_MODE_IMPORT = 2;
         // Try to import materialized index, build otherwise
-        INDEX_FILLING_MODE_AUTO = 3;
+        INDEX_POPULATION_MODE_AUTO = 3;
     }
 
     string endpoint = 1 [(required) = true];
@@ -88,9 +88,9 @@ message ImportFromS3Settings {
     // Skip checksum validation during import
     bool skip_checksum_validation = 12;
 
-    // Index filling mode.
+    // Index population mode.
     // If not specified, indexes will be built.
-    IndexFillingMode index_filling_mode = 16;
+    IndexPopulationMode index_population_mode = 16;
 }
 
 message ImportFromS3Result {

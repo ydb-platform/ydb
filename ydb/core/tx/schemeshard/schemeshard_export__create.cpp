@@ -137,8 +137,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
                 exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
-                exportInfo->MaterializeIndexes = settings.materialize_indexes();
-                if (exportInfo->MaterializeIndexes && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
+                exportInfo->IncludeIndexData = settings.include_index_data();
+                if (exportInfo->IncludeIndexData && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
                     return Reply(
                         std::move(response),
                         Ydb::StatusIds::PRECONDITION_FAILED,
@@ -242,7 +242,7 @@ private:
             exportInfo->Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
             exportInfo->PendingItems.push_back(exportInfo->Items.size() - 1);
 
-            if (exportInfo->MaterializeIndexes && path.Base()->IsTable()) {
+            if (exportInfo->IncludeIndexData && path.Base()->IsTable()) {
                 for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
                     TVector<TString> childParts;
                     childParts.push_back(childName);

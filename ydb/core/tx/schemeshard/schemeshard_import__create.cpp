@@ -147,9 +147,9 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 if (!AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
-                    switch (settings.index_filling_mode()) {
-                    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
-                    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+                    switch (settings.index_population_mode()) {
+                    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+                    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
                         return Reply(
                             std::move(response),
                             Ydb::StatusIds::PRECONDITION_FAILED,

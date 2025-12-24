@@ -3153,7 +3153,7 @@
             },
             {
                 "ColumnId": 21,
-                "ColumnName": "MaterializeIndexes",
+                "ColumnName": "IncludeIndexData",
                 "ColumnType": "Bool"
             }
         ],

@@ -2764,7 +2764,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
     bool EnableChecksums = false;
     bool EnablePermissions = false;
-    bool MaterializeIndexes = false;
+    bool IncludeIndexData = false;
 
     explicit TExportInfo(
             const ui64 id,

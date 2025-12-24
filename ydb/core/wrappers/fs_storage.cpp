@@ -4,11 +4,10 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
 
+#include <util/folder/dirut.h>
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/system/fs.h>
-#include <util/folder/dirut.h>
-#include <util/generic/yexception.h>
 
 #include <type_traits>
 
@@ -283,16 +282,12 @@ TFsExternalStorage::~TFsExternalStorage()
 }
 
 void TFsExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {
-    FS_LOG(Verbose, "TFsExternalStorage::Execute(TEvPutObjectRequest) called, BasePath# " << BasePath);
-
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
 }
 
 void TFsExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev) const {
-    FS_LOG(Verbose, "TFsExternalStorage::Execute(TEvGetObjectRequest) called");
-
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
@@ -329,24 +324,18 @@ void TFsExternalStorage::Execute(TEvDeleteObjectsRequest::TPtr& ev) const {
 }
 
 void TFsExternalStorage::Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const {
-    FS_LOG(Verbose, "TFsExternalStorage::Execute(TEvCreateMultipartUploadRequest) called");
-
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
 }
 
 void TFsExternalStorage::Execute(TEvUploadPartRequest::TPtr& ev) const {
-    FS_LOG(Verbose, "TFsExternalStorage::Execute(TEvUploadPartRequest) called");
-
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
 }
 
 void TFsExternalStorage::Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const {
-    FS_LOG(Verbose, "TFsExternalStorage::Execute(TEvCompleteMultipartUploadRequest) called");
-
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));

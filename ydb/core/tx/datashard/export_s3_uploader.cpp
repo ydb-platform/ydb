@@ -973,9 +973,7 @@ IActor* CreateUploaderBySettingsType(
             dataShard, txId, task,
             std::move(scheme), std::move(changefeeds),
             std::move(permissions), std::move(metadata));
-    }
-
-    if (task.HasFSSettings()) {
+    } else if (task.HasFSSettings()) {
         return new TS3Uploader<NKikimrSchemeOp::TFSSettings>(
             dataShard, txId, task,
             std::move(scheme), std::move(changefeeds),

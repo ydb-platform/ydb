@@ -1,7 +1,7 @@
 #include "abstract.h"
 #include "fake_storage_config.h"
-#include "s3_storage_config.h"
 #include "fs_storage_config.h"
+#include "s3_storage_config.h"
 
 namespace NKikimr::NWrappers::NExternalStorage {
 

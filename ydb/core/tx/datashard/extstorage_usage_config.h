@@ -4,13 +4,12 @@
 
 #include "backup_restore_traits.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
-#include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/StorageClass.h>
 #include <util/string/printf.h>

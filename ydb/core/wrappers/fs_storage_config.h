@@ -5,8 +5,6 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/public/api/protos/ydb_import.pb.h>
-#include <ydb/public/api/protos/ydb_export.pb.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 

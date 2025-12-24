@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/driver_lib/run/grpc_servers_manager.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -17,7 +18,6 @@ namespace NKikimr::NKqp {
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
 
-// Event for child actor completion notification
 struct TEvPrivate {
     enum EEv {
         EvFetchCacheResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -43,12 +43,12 @@ struct TEvPrivate {
 class TFetchCacheActor : public TQueryBase {
 public:
     TFetchCacheActor(const TString& database, ui32 selfNodeId)
-        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, 
-                     /*sessionId=*/{}, database, /*isSystemUser=*/true, /*isStreamingMode=*/true)
+        : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
         , SelfNodeId(selfNodeId)
     {}
 
     void OnRunQuery() override {
+        // fetch all the queries as the system user
         TString sql = TStringBuilder()
             << "SELECT Query, UserSID, AccessCount"
             << " FROM `" << Database << "/.sys/compile_cache_queries` "
@@ -102,9 +102,9 @@ public:
     TKqpCompileCacheWarmup(const TKqpWarmupConfig& config, const TString& database,
                            const TString& cluster, NActors::TActorId notifyActorId)
         : Config(config)
-        , NotifyActorId(notifyActorId)
         , Database(database)
         , Cluster(cluster)
+        , NotifyActorId(notifyActorId)
     {}
 
     void Bootstrap() {
@@ -112,15 +112,8 @@ public:
               << ", deadline: " << Config.Deadline
               << ", maxConcurrent: " << Config.MaxConcurrentCompilations);
 
-        if (Config.Deadline != TDuration::Zero()) {
-            Schedule(Config.Deadline, new NActors::TEvents::TEvWakeup());
-        }
-
-        if (!Config.CompileCacheWarmupEnabled) {
-            LOG_I("Compile cache warmup disabled");
-            Complete(true, "Compile cache warmup disabled");
-            return;
-        }
+        auto deadline = Config.Deadline != TDuration::Zero() ? Config.Deadline : TDuration::Seconds(3);
+        Schedule(deadline, new NActors::TEvents::TEvWakeup());
 
         LOG_I("Spawning fetch cache actor");
         Register(new TFetchCacheActor(Database, SelfId().NodeId()));
@@ -166,9 +159,6 @@ private:
 
         QueriesToCompile = std::move(result->Queries);
         LOG_I("Fetched " << QueriesToCompile.size() << " queries from compile cache");
-        for (const auto& query : QueriesToCompile) {
-            LOG_D("Query length: " << query.QueryText.size() << ", UserSID: " << query.UserSID);
-        }
 
         if (QueriesToCompile.empty()) {
             Complete(true, "No queries to warm up");
@@ -208,7 +198,7 @@ private:
     {
         auto queryEv = std::make_unique<TEvKqp::TEvQueryRequest>();
         auto& record = queryEv->Record;
-        
+        // compile for each user separately
         auto userToken = MakeIntrusive<NACLib::TUserToken>(userSid, TVector<NACLib::TSID>{});
         record.SetUserToken(userToken->SerializeAsString());
         
@@ -248,14 +238,14 @@ private:
     }
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
-        LOG_W("Warmup deadline reached, compiled: " << EntriesLoaded 
+        LOG_I("Warmup deadline reached, compiled: " << EntriesLoaded
               << ", failed: " << EntriesFailed
               << ", pending: " << PendingCompilations);
         Complete(false, "Warmup deadline exceeded");
     }
 
     void HandlePoison() {
-        LOG_D("Received poison pill");
+        LOG_D("Received poison, stop warmup");
         PassAway();
     }
 
@@ -276,9 +266,11 @@ private:
 
 
     const TKqpWarmupConfig Config;
-    const NActors::TActorId NotifyActorId;
+
     const TString Database;
     const TString Cluster;
+
+    const NActors::TActorId NotifyActorId;
 
     std::deque<TEvPrivate::TQueryToCompile> QueriesToCompile;
     ui32 PendingCompilations = 0;

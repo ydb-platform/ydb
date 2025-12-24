@@ -482,14 +482,9 @@ message TTableServiceConfig {
     message TWarmupConfig {
         optional bool Enabled = 1 [default = false];
         optional uint32 DeadlineSeconds = 2 [default = 30];
-        optional bool CompileCacheWarmupEnabled = 3 [default = true];
-        optional uint32 MaxNodesToQuery = 4 [default = 5];
-        optional uint32 MaxConcurrentCompilations = 5 [default = 5];
+        optional uint32 MaxNodesToQuery = 3 [default = 5];
+        optional uint32 MaxConcurrentCompilations = 4 [default = 5];
     }
 
-<<<<<<< HEAD
-    optional TWarmupConfig WarmupConfig = 121;
-=======
-    optional TWarmupConfig WarmupConfig = 120 [default = false, (InvalidateCompileCache) = false];
->>>>>>> f42f9e7c2a1 (seems to be working!)
+    optional TWarmupConfig WarmupConfig = 121 [(InvalidateCompileCache) = false];
 };

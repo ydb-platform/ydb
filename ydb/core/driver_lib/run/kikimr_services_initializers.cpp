@@ -1,6 +1,7 @@
 #include "auto_config_initializer.h"
 #include "config_helpers.h"
 #include "config.h"
+#include "grpc_servers_manager.h"
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
 
@@ -2292,19 +2293,13 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
         if (Config.GetTableServiceConfig().HasWarmupConfig() && 
             Config.GetTableServiceConfig().GetWarmupConfig().GetEnabled()) {
-            const auto& warmupProtoConfig = Config.GetTableServiceConfig().GetWarmupConfig();
-            
-            NKqp::TKqpWarmupConfig warmupConfig;
-            warmupConfig.Enabled = warmupProtoConfig.GetEnabled();
-            warmupConfig.Deadline = TDuration::Seconds(warmupProtoConfig.GetDeadlineSeconds());
-            warmupConfig.CompileCacheWarmupEnabled = warmupProtoConfig.GetCompileCacheWarmupEnabled();
-            warmupConfig.MaxNodesToQuery = warmupProtoConfig.GetMaxNodesToQuery();
-            warmupConfig.MaxConcurrentCompilations = warmupProtoConfig.GetMaxConcurrentCompilations();
+            auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetWarmupConfig());
 
             TString database = appData->TenantName;
             TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();
 
-            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, {});
+            auto grpcManagerId = MakeGRpcServersManagerId(NodeId);
+            auto warmupActor = NKqp::CreateKqpWarmupActor(warmupConfig, database, cluster, grpcManagerId);
             setup->LocalServices.push_back(std::make_pair(
                 NKqp::MakeKqpWarmupActorId(NodeId),
                 TActorSetupCmd(warmupActor, TMailboxType::HTSwap, appData->UserPoolId)));

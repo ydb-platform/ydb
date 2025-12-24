@@ -422,7 +422,7 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), lastFullBackupName, relativeItemPath}));
-        desc.SetDstPath(item.GetPath());
+        desc.SetDstPath(item.GetPath() + "_restored");
         desc.SetAllowUnderSameOperation(true);
         if (incrBackupNames) {
             desc.SetTargetPathTargetState(NKikimrSchemeOp::EPathStateIncomingIncrementalRestore);

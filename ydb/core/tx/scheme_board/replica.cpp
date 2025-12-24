@@ -945,7 +945,7 @@ private:
             }
 
             log("Inject description only by pathId, it is update from GSS");
-            // Don't use UpsertDescriptionWithRelinkSubscribers (relink is not reuiqred?)
+            // Don't use UpdateDescriptionWithRelinkSubscribers (relink is not required?)
             UpsertDescriptionByPathId(path, pathId, std::move(pathDescription));
             return AckUpdate(ev);
         }

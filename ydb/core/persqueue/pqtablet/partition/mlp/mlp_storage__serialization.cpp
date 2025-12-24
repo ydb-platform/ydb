@@ -383,18 +383,20 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                 Messages.push_back(message);
             }
 
-            if (message.GetStatus() == EMessageStatus::Locked && KeepMessageOrder && message.HasMessageGroupId) {
+            const auto& messageStatus = message.GetStatus();
+            if (messageStatus == EMessageStatus::Locked && KeepMessageOrder && message.HasMessageGroupId) {
                 LockedMessageGroupsId.insert(message.MessageGroupIdHash);
             }
 
-            const auto& messageStatus = message.GetStatus();
-            if (messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::Delayed && moveUnlockedOffset) {
+            moveUnlockedOffset = moveUnlockedOffset && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::Unprocessed;
+            moveUncommittedOffset = moveUncommittedOffset && messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked;
+            
+            if (moveUnlockedOffset) {
                 ++FirstUnlockedOffset;
-                moveUnlockedOffset = false;
             }
-            if (messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked && moveUncommittedOffset) {
+
+            if (moveUncommittedOffset) {
                 ++FirstUncommittedOffset;
-                moveUncommittedOffset = false;
             }
         }
     }

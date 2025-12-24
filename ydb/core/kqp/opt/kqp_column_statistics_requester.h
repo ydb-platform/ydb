@@ -72,7 +72,7 @@ private:
         THashMap<TString, TOptimizerStatistics::TColumnStatMap> ColumnStatisticsByTableName;
     };
     std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
-    NThreading::TPromise<void> AsyncReadiness;
+    NThreading::TFuture<void> AsyncReadiness;
 
     //////////////////////////////////////////////////////////////
 

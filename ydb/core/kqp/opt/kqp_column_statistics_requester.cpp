@@ -170,10 +170,13 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
         return IGraphTransformer::TStatus::Ok;
     }
 
-    AsyncReadiness = NewPromise<void>();
-
-    NThreading::WaitAll(futures).Subscribe([this, futures](auto) mutable {
+    AsyncReadiness = NThreading::WaitAll(futures).Apply(
+            [this, futures=std::move(futures)](const TFuture<void>&) mutable {
         for (auto& fut : futures) {
+            if (fut.HasException()) {
+                fut.TryRethrow();
+            }
+
             auto newStats = fut.ExtractValue();
             if (!ColumnStatisticsResponse) {
                 ColumnStatisticsResponse = std::move(newStats);
@@ -193,8 +196,6 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
                 }
             }
         }
-
-        AsyncReadiness.SetValue();
     });
 
     return TStatus::Async;
@@ -219,7 +220,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TE
 }
 
 TFuture<void> TKqpColumnStatisticsRequester::DoGetAsyncFuture(const TExprNode&) {
-    return AsyncReadiness.GetFuture();
+    return AsyncReadiness;
 }
 
 bool TKqpColumnStatisticsRequester::BeforeLambdas(const TExprNode::TPtr& input) {

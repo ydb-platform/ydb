@@ -658,4 +658,34 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             }
         });
     }
+
+    Y_UNIT_TEST(IndexMaterialization) {
+        RunS3({
+            {
+                EPathTypeTableIndex,
+                R"(
+                    TableDescription {
+                      Name: "Table"
+                      Columns { Name: "key" Type: "Utf8" }
+                      Columns { Name: "value" Type: "Utf8" }
+                      KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                      Name: "index"
+                      KeyColumnNames: ["value"]
+                    }
+                )",
+            },
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", TTestEnvOptions().EnableIndexMaterialization(true));
+    }
 }

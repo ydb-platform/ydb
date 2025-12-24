@@ -86,6 +86,28 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const T
     return result;
 }
 
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type) {
+    switch (type) {
+        case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
+        case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobal;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalAsync;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalUnique;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+        default:
+            return std::nullopt;
+    }
+}
+
+NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type) {
+    const auto result = TryConvertIndexType(type);
+    Y_ENSURE(result);
+    return *result;
+}
+
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {
     if (const auto* broken = IsContains(table.Keys, table.Columns)) {
         explain = TStringBuilder()

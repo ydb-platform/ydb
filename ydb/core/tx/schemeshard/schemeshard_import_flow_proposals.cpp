@@ -1,4 +1,6 @@
 #include "schemeshard_import_flow_proposals.h"
+#include "schemeshard_import_helpers.h"
+
 #include "schemeshard_path_describer.h"
 
 #include <ydb/core/base/path.h>
@@ -46,6 +48,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         return nullptr;
     }
 
+    if (!NeedToBuildIndexes(*importInfo, itemIdx) && !FillIndexDescription(*indexedTable, item.Scheme, status, error)) {
+        return nullptr;
+    }
+
     for(const auto& column: item.Scheme.columns()) {
         switch (column.default_value_case()) {
             case Ydb::Table::ColumnMeta::kFromSequence: {
@@ -87,8 +93,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     return CreateTablePropose(ss, txId, importInfo, itemIdx, unused);
 }
 
+template <typename TPath>
+static auto GetDescription(TSchemeShard* ss, const TPath& path) {
+    NKikimrSchemeOp::TDescribeOptions opts;
+    opts.SetShowPrivateTable(true);
+    return DescribePath(ss, TlsActivationContext->AsActorContext(), path, opts);
+}
+
 static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {
-    auto desc = DescribePath(ss, TlsActivationContext->AsActorContext(), pathId);
+    auto desc = GetDescription(ss, pathId);
     auto record = desc->GetRecord();
 
     Y_ABORT_UNLESS(record.HasPathDescription());
@@ -153,7 +166,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
             restoreSettings.SetBucket(importInfo->Settings.bucket());
             restoreSettings.SetAccessKey(importInfo->Settings.access_key());
             restoreSettings.SetSecretKey(importInfo->Settings.secret_key());
-            restoreSettings.SetObjectKeyPattern(importInfo->Settings.items(itemIdx).source_prefix());
+            restoreSettings.SetObjectKeyPattern(importInfo->GetItemSrcPrefix(itemIdx));
             restoreSettings.SetUseVirtualAddressing(!importInfo->Settings.disable_virtual_addressing());
 
             switch (importInfo->Settings.scheme()) {
@@ -321,13 +334,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
 
     pqGroup.SetName("streamImpl");
 
-    NKikimrSchemeOp::TDescribeOptions opts;
-    opts.SetReturnPartitioningInfo(false);
-    opts.SetReturnPartitionConfig(true);
-    opts.SetReturnBoundaries(true);
-    opts.SetReturnIndexTableBoundaries(true);
-    opts.SetShowPrivateTable(true);
-    auto describeSchemeResult = DescribePath(ss, TlsActivationContext->AsActorContext(),changefeedPath + "/streamImpl", opts);
+    auto describeSchemeResult = GetDescription(ss, changefeedPath + "/streamImpl");
 
     const auto& response = describeSchemeResult->GetRecord().GetPathDescription();
     item.StreamImplPathId = {response.GetSelf().GetSchemeshardId(), response.GetSelf().GetPathId()};

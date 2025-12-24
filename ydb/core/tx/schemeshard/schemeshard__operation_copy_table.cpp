@@ -884,6 +884,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             auto operation = schema.MutableCreateTableIndex();
             operation->SetName(name);
             operation->SetType(indexInfo->Type);
+            operation->SetState(indexInfo->State);
             for (const auto& keyName: indexInfo->IndexKeys) {
                 *operation->MutableKeyColumnNames()->Add() = keyName;
             }

@@ -4,6 +4,7 @@
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -42,6 +43,11 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
     static TString PermissionsKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
         return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/permissions.pb";
+    }
+
+    static TString MaterializedIndexSchemeKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx, const TString& indexImplTablePrefix) {
+        Y_ABORT_UNLESS(itemIdx < (ui32)settings.items_size());
+        return TStringBuilder() << settings.items(itemIdx).source_prefix() << "/" << indexImplTablePrefix << "/scheme.pb";
     }
 
     static TString ChangefeedDescriptionKeyFromSettings(const Ydb::Import::ImportFromS3Settings& settings, ui32 itemIdx, const TString& changefeedName) {
@@ -114,8 +120,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             << ", result# " << result);
 
         if (NoObjectFound(result.GetError().GetErrorType())) {
-            StartDownloadingChangefeeds(); // permissions are optional
-            return;
+            return StartCheckingMaterializedIndexes(); // permissions are optional
         } else if (!CheckResult(result, "HeadObject")) {
             return;
         }
@@ -137,6 +142,29 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
         const auto contentLength = result.GetResult().GetContentLength();
         GetObject(NBackup::ChecksumKey(CurrentObjectKey), std::make_pair(0, contentLength - 1));
+    }
+
+    void HandleIndex(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        LOG_D("HandleIndex TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        const bool canSkip = IndexPopulationMode != Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
+        if (canSkip && NoObjectFound(result.GetError().GetErrorType())) {
+            Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+            auto& item = ImportInfo->Items.at(ItemIdx);
+            item.MaterializedIndexes.clear();
+            return StartDownloadingChangefeeds();
+        } else if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+
+        const auto contentLength = result.GetResult().GetContentLength();
+        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+        GetObject(MaterializedIndexSchemeKeyFromSettings(ImportInfo->Settings, ItemIdx,
+            IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix), std::make_pair(0, contentLength - 1));
     }
 
     void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -246,7 +274,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
             if (NeedDownloadPermissions) {
                 StartDownloadingPermissions();
             } else {
-                StartDownloadingChangefeeds();
+                StartCheckingMaterializedIndexes();
             }
         };
 
@@ -283,7 +311,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         item.Permissions = std::move(permissions);
 
         auto nextStep = [this]() {
-            StartDownloadingChangefeeds();
+            StartCheckingMaterializedIndexes();
         };
 
         if (NeedValidateChecksums) {
@@ -313,6 +341,52 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         }
 
         ChecksumValidatedCallback();
+    }
+
+    void HandleIndex(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandleIndex TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& item = ImportInfo->Items.at(ItemIdx);
+
+        LOG_T("Trying to parse index"
+            << ": self# " << SelfId()
+            << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
+
+        Ydb::Table::CreateTableRequest request;
+        if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &request)) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse index");
+        }
+
+        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+        const auto& indexImplTablePrefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable];
+        item.MaterializedIndexes.emplace_back(indexImplTablePrefix, std::move(request));
+
+        auto nextStep = [this]() {
+            if (++IndexCheckedMaterializedIndexImplTable >= IndexImplTablePrefixes.size()) {
+                StartDownloadingChangefeeds();
+            } else {
+                Become(&TThis::StateCheckIndexes);
+                HeadObject(MaterializedIndexSchemeKeyFromSettings(ImportInfo->Settings, ItemIdx,
+                    IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
+            }
+        };
+
+        if (NeedValidateChecksums) {
+            StartValidatingChecksum(MaterializedIndexSchemeKeyFromSettings(ImportInfo->Settings, ItemIdx,
+                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix), msg.Body, nextStep);
+        } else {
+            nextStep();
+        }
     }
 
     void HandleChangefeed(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
@@ -510,6 +584,65 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         Download(NBackup::ChecksumKey(CurrentObjectKey));
     }
 
+    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode) {
+        switch (mode) {
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    void CheckMaterializedIndexes() {
+        Become(&TThis::StateCheckIndexes);
+
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& item = ImportInfo->Items.at(ItemIdx);
+
+        IndexImplTablePrefixes.clear();
+        IndexCheckedMaterializedIndexImplTable = 0;
+        item.MaterializedIndexes.clear();
+
+        if (const auto& indexes = item.Metadata.GetIndexes()) {
+            IndexImplTablePrefixes.reserve(indexes->size());
+            for (const auto& index : *indexes) {
+                IndexImplTablePrefixes.push_back(index);
+            }
+
+            DownloadMaterializedIndexes();
+        } else {
+            IndexImplTablePrefixes.reserve(item.Scheme.indexes_size());
+
+            for (const auto& index : item.Scheme.indexes()) {
+                const auto indexType = NTableIndex::TryConvertIndexType(index.type_case());
+                if (!indexType) {
+                    return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unsupported index"
+                        << ": name# " << index.name()
+                        << ": type# " << static_cast<int>(index.type_case()));
+                }
+
+                const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
+                for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
+                    const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
+                    IndexImplTablePrefixes.push_back({implTablePrefix, implTablePrefix});
+                }
+            }
+
+            DownloadMaterializedIndexes();
+        }
+    }
+
+    void DownloadMaterializedIndexes() {
+        if (!IndexImplTablePrefixes.empty()) {
+            Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+            HeadObject(MaterializedIndexSchemeKeyFromSettings(ImportInfo->Settings, ItemIdx,
+                IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].ExportPrefix));
+        } else {
+            StartDownloadingChangefeeds();
+        }
+    }
+
     void DownloadChangefeeds() {
         Become(&TThis::StateDownloadChangefeeds);
         ListChangefeeds();
@@ -529,6 +662,15 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         ResetRetries();
         DownloadPermissions();
         Become(&TThis::StateDownloadPermissions);
+    }
+
+    void StartCheckingMaterializedIndexes() {
+        ResetRetries();
+        if (NeedToCheckMaterializedIndexes(IndexPopulationMode)) {
+            CheckMaterializedIndexes();
+        } else {
+            StartDownloadingChangefeeds();
+        }
     }
 
     void StartDownloadingChangefeeds() {
@@ -555,6 +697,7 @@ public:
         , MetadataKey(MetadataKeyFromSettings(importInfo->Settings, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(importInfo->Settings, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(importInfo->Settings, itemIdx))
+        , IndexPopulationMode(ImportInfo->Settings.index_population_mode())
         , Retries(importInfo->Settings.number_of_retries())
         , NeedDownloadPermissions(!importInfo->Settings.no_acl())
         , NeedValidateChecksums(!importInfo->Settings.skip_checksum_validation())
@@ -592,6 +735,16 @@ public:
             hFunc(TEvExternalStorage::TEvGetObjectResponse, HandlePermissions);
 
             sFunc(TEvents::TEvWakeup, DownloadPermissions);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
+    STATEFN(StateCheckIndexes) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleIndex);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleIndex);
+
+            sFunc(TEvents::TEvWakeup, CheckMaterializedIndexes);
             sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
@@ -638,6 +791,10 @@ private:
     const TString PermissionsKey;
     TVector<TString> ChangefeedsNames;
     ui64 IndexDownloadedChangefeed = 0;
+
+    TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
+    ui64 IndexCheckedMaterializedIndexImplTable = 0;
+    Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode;
 
     const ui32 Retries;
     ui32 Attempt = 0;

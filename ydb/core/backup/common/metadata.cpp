@@ -21,6 +21,17 @@ ui64 TMetadata::GetVersion() const {
     return *Version;
 }
 
+void TMetadata::AddIndex(const TIndexMetadata& index) {
+    if (!Indexes) {
+        Indexes.emplace();
+    }
+    Indexes->push_back(index);
+}
+
+const std::optional<std::vector<TIndexMetadata>>& TMetadata::GetIndexes() const {
+    return Indexes;
+}
+
 TString TMetadata::Serialize() const {
     NJson::TJsonMap m;
     if (Version.Defined()) {
@@ -37,6 +48,18 @@ TString TMetadata::Serialize() const {
         fullBackups.AppendValue(std::move(backupMap));
     }
     m["full_backups"] = fullBackups;
+
+    NJson::TJsonArray indexes;
+    if (Indexes) {
+        for (const auto& index : *Indexes) {
+            NJson::TJsonMap indexMap;
+            indexMap["export_prefix"] = index.ExportPrefix;
+            indexMap["impl_table_prefix"] = index.ImplTablePrefix;
+            indexes.AppendValue(std::move(indexMap));
+        }
+    }
+    m["indexes"] = indexes;
+
     return NJson::WriteJson(&m, false);
 }
 
@@ -48,6 +71,17 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
     TMetadata result;
     if (value.IsUInteger()) {
         result.Version = value.GetUIntegerSafe();
+    }
+
+    if (json.Has("indexes")) {
+        result.Indexes.emplace();
+        const NJson::TJsonValue& indexes = json["indexes"];
+        for (const NJson::TJsonValue& index : indexes.GetArray()) {
+            result.AddIndex({
+                .ExportPrefix = index["export_prefix"].GetString(),
+                .ImplTablePrefix = index["impl_table_prefix"].GetString(),
+            });
+        }
     }
 
     return result;

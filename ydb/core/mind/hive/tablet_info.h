@@ -165,6 +165,11 @@ public:
     TInstant BootTime;
     TNodeFilter NodeFilter;
     bool InWaitQueue = false;
+<<<<<<< HEAD
+=======
+    double UsageImpact = 0;
+    bool UpdateMetricsEnqueued = false;
+>>>>>>> f8803a6050a (batch tablet metrics processing (#30996))
 
     TTabletInfo(ETabletRole role, THive& hive);
     TTabletInfo(const TTabletInfo&) = delete;

@@ -4344,7 +4344,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    Y_UNIT_TEST(ExcludeNonSupportedObjetsInExport) {
+    Y_UNIT_TEST(ExcludeNonSupportedObjectsInExport) {
         TS3TestEnv testEnv;
 
         // Disable views export

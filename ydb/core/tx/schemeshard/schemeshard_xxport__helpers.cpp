@@ -60,7 +60,6 @@ TMaybe<XxportProperties> PathTypeToXxportProperties(NKikimrSchemeOp::EPathType p
     }
 
     return *it;
-
 }
 
 }  // NKikimr::NSchemeShard

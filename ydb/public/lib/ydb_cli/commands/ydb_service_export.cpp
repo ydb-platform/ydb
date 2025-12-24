@@ -38,7 +38,7 @@ namespace {
     }
 
     TStatus FilterAsyncReplicaTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
-        auto isAsyncReplicaTable = [&](const NScheme::TSchemeEntry& entry) {
+        auto isAsyncReplicaTable = [&session](const NScheme::TSchemeEntry& entry) {
             if (entry.Type != NScheme::ESchemeEntryType::Table) {
                 return false;
             }
@@ -50,7 +50,11 @@ namespace {
             return it != attributes.end() && it->second == "true";
         };
 
-        std::erase_if(entries, isAsyncReplicaTable);
+        try {
+            std::erase_if(entries, isAsyncReplicaTable);
+        } catch (NStatusHelpers::TYdbErrorException& e) {
+            return e.ExtractStatus();
+        }
         return TStatus(EStatus::SUCCESS, {});
     }
 
@@ -59,9 +63,8 @@ namespace {
         NTable::TTableClient tableClient,
         TStringBuf srcPath,
         TStringBuf dstPath,
-        const TFilterOp& filter,
-        bool ignoreAsyncReplicaTables
-    ) {
+        const TFilterOp& filter)
+    {
         // cut trailing slash
         srcPath.ChopSuffix(slash);
         dstPath.ChopSuffix(slash);
@@ -69,12 +72,9 @@ namespace {
         auto ret = RecursiveList(schemeClient, TString{srcPath}, TRecursiveListSettings().Filter(filter));
         NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
 
-        // Additionaly remove all async replica tables
-        if (ignoreAsyncReplicaTables) {
-            tableClient.RetryOperationSync([&ret](NTable::TSession session) {
-                return FilterAsyncReplicaTables(session, ret.Entries);
-            });
-        }
+        tableClient.RetryOperationSync([&ret](NTable::TSession session) {
+            return FilterAsyncReplicaTables(session, ret.Entries);
+        });
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
             return {{TString{srcPath}, TString{dstPath}}};
@@ -98,13 +98,11 @@ namespace {
         NTable::TTableClient tableClient,
         TSettings& settings,
         const TVector<TRegExMatch>& exclusionPatterns,
-        const TFilterOp& filter = FilterTables
-    ) {
+        const TFilterOp& filter = FilterTables)
+    {
         auto items(std::move(settings.Item_));
-        // Ignore async replica tables just for S3 export
-        bool ignoreAsyncReplicaTables = !std::is_same_v<TSettings, NExport::TExportToYtSettings>;
         for (const auto& item : items) {
-            for (const auto& [src, dst] : ExpandItem(schemeClient, tableClient, item.Src, item.Dst, filter, ignoreAsyncReplicaTables)) {
+            for (const auto& [src, dst] : ExpandItem(schemeClient, tableClient, item.Src, item.Dst, filter)) {
                 settings.AppendItem({src, dst});
             }
         }

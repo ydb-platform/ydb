@@ -20,13 +20,14 @@ message ESidType {
 message TSid {
     string Name = 1;
     ESidType.SidType Type = 2;
-    string Hash = 3;
+    string ArgonHash = 3 [deprecated = true];
     repeated string Members = 4;
     uint64 CreatedAt = 5; // microseconds
     uint64 LastSuccessfulLogin = 6; // microseconds
     uint64 LastFailedLogin = 7; // microseconds
     uint64 FailedLoginAttemptCount = 8;
     bool IsEnabled = 9;
+    string PasswordHashes = 10; // Base64 encoded JSON map with hash type and hash secrets
 }
 
 message TSecurityState {

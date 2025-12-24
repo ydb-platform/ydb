@@ -1035,7 +1035,6 @@ void TStorage::UpdateMessageMetrics(const TMessage& message) {
         case EMessageStatus::Locked:
             ++Metrics.LockedMessageCount;
             if (KeepMessageOrder && message.HasMessageGroupId) {
-                LockedMessageGroupsId.insert(message.MessageGroupIdHash);
                 ++Metrics.LockedMessageGroupCount;
             }
             break;

@@ -6,7 +6,7 @@ import time
 import ydb
 import pyarrow as pa
 
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any
 from dataclasses import dataclass, field
 
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types

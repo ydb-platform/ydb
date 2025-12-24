@@ -2671,16 +2671,25 @@ TStatus AnnotateOpSort(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+bool GetForceOptional(const TKqpOpAggregationTraits& traits) {
+    const auto traitsPtr = traits.Ptr();
+    if (traitsPtr->ChildrenSize() > TKqpOpAggregationTraits::idx_ForceOptional) {
+        return TString(TCoAtom(traitsPtr->ChildPtr(TKqpOpAggregationTraits::idx_ForceOptional))) == "True" ? true : false;
+    }
+    return false;
+}
+
 TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto* inputType = input->ChildPtr(TKqpOpAggregate::idx_Input)->GetTypeAnn();
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto opAggregate = TKqpOpAggregate(input);
 
-    THashMap<TString, TString> aggTraitsMap;
+    THashMap<TString, std::pair<TString, bool>> aggTraitsMap;
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TString(traits.OriginalColName());
         const auto aggFuncName = TString(traits.AggregationFunction());
-        aggTraitsMap[originalColName] = aggFuncName;
+        const auto forceOptional = GetForceOptional(traits);
+        aggTraitsMap[originalColName] = {aggFuncName, forceOptional};
     }
 
     THashSet<TString> keyColumns;
@@ -2694,7 +2703,8 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
         const auto itemName = itemType->GetName();
         if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
             const auto& colName = it->first;
-            const auto& aggFunction = it->second;
+            const auto& aggFunction = it->second.first;
+            const auto& forceOptional = it->second.second;
             const TTypeAnnotationNode* aggFieldType = itemType->GetItemType();
             TPositionHandle dummyPos;
 
@@ -2706,6 +2716,10 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
             } else if (aggFunction == "avg") {
                 Y_ENSURE(GetAvgResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx),
                          "Unsupported type for avg aggregation function");
+            }
+
+            if (!aggFieldType->IsOptionalOrNull() && forceOptional) {
+                aggFieldType = ctx.MakeType<TOptionalExprType>(aggFieldType);
             }
 
             newItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, aggFieldType));

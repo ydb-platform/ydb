@@ -200,6 +200,14 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
     return output;
 }
 
+bool GetForceOptional(const TKqpOpAggregationTraits& traits) {
+    const auto traitsPtr = traits.Ptr();
+    if (traitsPtr->ChildrenSize() > TKqpOpAggregationTraits::idx_ForceOptional) {
+        return TString(TCoAtom(traitsPtr->ChildPtr(TKqpOpAggregationTraits::idx_ForceOptional))) == "True" ? true : false;
+    }
+    return false;
+}
+
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr node) {
     auto opAggregate = TKqpOpAggregate(node);
     auto input = ExprNodeToOperator(opAggregate.Input().Ptr());
@@ -208,12 +216,13 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TInfoUnit(TString(traits.OriginalColName()));
         const auto aggFuncName = TString(traits.AggregationFunction());
-        TOpAggregationTraits opAggTraits(originalColName, aggFuncName);
+        const auto forceOptional = GetForceOptional(traits);
+        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, forceOptional);
         opAggTraitsList.push_back(opAggTraits);
     }
 
     TVector<TInfoUnit> keyColumns;
-    for (const auto &keyColumn : opAggregate.KeyColumns()) {
+    for (const auto& keyColumn : opAggregate.KeyColumns()) {
         keyColumns.push_back(TInfoUnit(TString(keyColumn)));
     }
 

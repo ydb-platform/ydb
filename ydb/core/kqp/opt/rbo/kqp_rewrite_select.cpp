@@ -76,7 +76,8 @@ void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& agg
         }
 
         if (!!GetSetting(*node->Child(1), "distinct")) {
-            Y_ENSURE(!IsExpression(node->ChildPtr(2)), "Nested distinct on expression is not supported, aka f(distinct a x b)");
+            const ui32 index = node->ChildrenSize() == 3 ? 2 : 3;
+            Y_ENSURE(!IsExpression(node->ChildPtr(index)), "Nested distinct on expression is not supported, aka f(distinct a x b)");
         }
 
         const TString aggFunction = GetAggregationFunction(node->ChildPtr(0));
@@ -156,7 +157,13 @@ TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit> &joinKeys, const TJoinTab
     return Build<TDqJoinKeyTupleList>(ctx, pos).Add(keys).Done().Ptr();
 }
 
-TExprNode::TPtr BuildAggregationTraits(const TString& originalColName, const TString& aggFunction, TExprContext& ctx, TPositionHandle pos) {
+TExprNode::TPtr BuildAggregationTraits(const TString& originalColName, const TString& aggFunction, TExprContext& ctx, TPositionHandle pos,
+                                       TExprNode::TPtr typeNode = nullptr) {
+    TString forceOptional = "False";
+    if (typeNode && TMaybeNode<TCoOptionalType>(typeNode.Get())) {
+        forceOptional = "True";
+    }
+
     // clang-format off
     return Build<TKqpOpAggregationTraits>(ctx, pos)
         .OriginalColName<TCoAtom>()
@@ -164,6 +171,9 @@ TExprNode::TPtr BuildAggregationTraits(const TString& originalColName, const TSt
         .Build()
         .AggregationFunction<TCoAtom>()
             .Value(aggFunction)
+        .Build()
+        .ForceOptional<TCoAtom>()
+            .Value(forceOptional)
         .Build()
     .Done().Ptr();
     // clang-format on
@@ -943,6 +953,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                     TExprNode::TPtr exprBody;
                     const ui32 aggInputIndex = aggregation->ChildrenSize() == 3 ? 2 : 3;
                     const bool aggHasInput = aggregation->ChildrenSize() > 2;
+                    const bool aggHasType = aggHasInput;
 
                     // Aggregation with column specified.
                     if (aggHasInput) {
@@ -960,6 +971,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                             // For example: f(a) -> map(a -> a) -> f(a).
                             // This is needed to simplify logic for translation from PgSelect to KqpOp.
                             exprBody = GetMember(aggInput);
+
                             Y_ENSURE(exprBody, "Aggregation input is not a member");
                             auto member = TCoMember(exprBody);
                             // f(a), g(a) => map(a -> a, a -> b) -> f(a), g(b)
@@ -977,10 +989,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         // Here we create a new column with non optional type,
                         // because aggregation for optional and non optional is different.
                         // count(*) counts nulls, count(a) does not.
-
                         exprBody = Build<TCoUint64>(ctx, node->Pos()).Literal().Build("1").Done().Ptr();
                     }
-
 
                     // clang-format off
                     auto exprLambda = Build<TCoLambda>(ctx, node->Pos())
@@ -1004,9 +1014,10 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         distinctPreAggregate = true;
                     }
 
+                    TExprNode::TPtr typeExprNode = aggHasType ? aggregation->ChildPtr(2) : nullptr;
                     // Build an aggregation traits.
                     auto aggregationTraits =
-                        BuildAggregationTraits(aggColName.GetFullName(), aggFuncName, ctx, node->Pos());
+                        BuildAggregationTraits(aggColName.GetFullName(), aggFuncName, ctx, node->Pos(), typeExprNode);
                     aggTraits.AggTraitsList.push_back(aggregationTraits);
                 }
 

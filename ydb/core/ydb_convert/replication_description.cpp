@@ -152,7 +152,7 @@ bool CheckReplicationConfig(
             error = "not implemented";
             break;
         case NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific:
-            error = "Replication config was expected, Async Transfer config provided";
+            error = "Async Replication config was expected, Transfer config provided";
             break;
         default:
             error = "unexpected config type";
@@ -180,7 +180,7 @@ void FillReplicationDescription(
 
 bool FillReplicationDescription(
     Ydb::Replication::DescribeReplicationResult& out,
-    const NKikimrSchemeOp::TReplicationDescription inDesc,
+    const NKikimrSchemeOp::TReplicationDescription& inDesc,
     const NKikimrSchemeOp::TDirEntry& inDirEntry,
     Ydb::StatusIds_StatusCode& status,
     TString& error)

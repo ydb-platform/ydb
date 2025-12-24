@@ -4,6 +4,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
 
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/client/AWSError.h>
+#include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Errors.h>
+
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
 #include <util/stream/file.h>
@@ -61,8 +64,14 @@ private:
 
     template<typename TEvResponse>
     void ReplyError(const NActors::TActorId& sender, const std::optional<TString>& key, const TString& errorMessage) {
-        Y_UNUSED(errorMessage);
-        Aws::Utils::Outcome<typename TEvResponse::TAwsResult, Aws::S3::S3Error> outcome;
+        Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
+            Aws::S3::S3Errors::INTERNAL_FAILURE,
+            "FsStorageError",
+            errorMessage,
+            false // not retryable for FS errors
+        );
+        Aws::S3::S3Error error(std::move(awsError));
+        Aws::Utils::Outcome<typename TEvResponse::TAwsResult, Aws::S3::S3Error> outcome(std::move(error));
 
         std::unique_ptr<TEvResponse> response;
         if constexpr (HasKeyConstructor<TEvResponse>()) {

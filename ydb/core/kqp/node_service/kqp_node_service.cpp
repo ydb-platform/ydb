@@ -8,6 +8,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
@@ -34,13 +35,13 @@ namespace NKqp {
 using namespace NActors;
 
 namespace {
-
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_NODE, stream)
+#define STLOG_C(MESSAGE, ...) STLOG(PRI_CRIT, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_E(MESSAGE, ...) STLOG(PRI_ERROR, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_W(MESSAGE, ...) STLOG(PRI_WARN, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_N(MESSAGE, ...) STLOG(PRI_NOTICE, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_I(MESSAGE, ...) STLOG(PRI_INFO, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_D(MESSAGE, ...) STLOG(PRI_DEBUG, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
+#define STLOG_T(MESSAGE, ...) STLOG(PRI_TRACE, NKikimrServices::KQP_NODE, KQPNS, MESSAGE, __VA_ARGS__)
 
 // Min interval between stats send from scan/compute actor to executor
 constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
@@ -91,7 +92,8 @@ public:
     }
 
     void Bootstrap() {
-        LOG_I("Starting KQP Node service");
+        STLOG_I("Starting KQP Node service",
+            (node_id, SelfId().NodeId()));
 
         // Subscribe for TableService config changes
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
@@ -151,8 +153,13 @@ private:
 
         YQL_ENSURE(msg.GetStartAllOrFail()); // todo: support partial start
 
-        LOG_D("TxId: " << txId << ", new compute tasks request from " << requester
-            << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
+        STLOG_D("HandleStartKqpTasksRequest",
+            (node_id, SelfId().NodeId()),
+            (tx_id, txId),
+            (requester, requester),
+            (tasks_count, msg.GetTasks().size()),
+            (task_ids, TasksIdsStr(msg.GetTasks())),
+            (trace_id, ev->TraceId.GetHexTraceId()));
 
         const auto& poolId = msg.GetPoolId().empty() ? NResourcePool::DEFAULT_POOL_ID : msg.GetPoolId();
         const auto& databaseId = msg.GetDatabaseId();
@@ -192,7 +199,10 @@ private:
         auto& bucket = State_->GetStateBucketByTx(txId);
 
         if (bucket.Exists(txId, requester)) {
-            LOG_E("TxId: " << txId << ", requester: " << requester << ", request already exists");
+            STLOG_E("Request already exists",
+                    (tx_id, txId),
+                    (requester, requester),
+                    (node_id, SelfId().NodeId()));
             co_return ReplyError(txId, request.Executer, msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR);
         }
 
@@ -281,7 +291,12 @@ private:
             Y_ABORT_UNLESS(actorId);
             taskCtx.ComputeActorId = *actorId;
 
-            LOG_D("TxId: " << txId << ", executing task: " << taskCtx.TaskId << " on compute actor: " << taskCtx.ComputeActorId);
+            STLOG_D("Executing task",
+                    (node_id, SelfId().NodeId()),
+                    (tx_id, txId),
+                    (task_id, taskCtx.TaskId),
+                    (compute_actor_id, taskCtx.ComputeActorId),
+                    (trace_id, ev->TraceId.GetHexTraceId()));
 
             auto* startedTask = reply->Record.AddStartedTasks();
             startedTask->SetTaskId(taskCtx.TaskId);
@@ -321,7 +336,9 @@ private:
                 << ", NodeId: "<< SelfId().NodeId()
                 << ", TxId: " << msg.TxId;
 
-            LOG_E(finalReason);
+            STLOG_E("Node service cancelled the task, because of direct request",
+                    (tx_id, msg.TxId),
+                    (node_id, SelfId().NodeId()));
             for (const auto& [taskId, computeActorId]: tasksToAbort) {
                 if (msg.TaskId != taskId)
                     continue;
@@ -337,7 +354,10 @@ private:
         ui64 txId = ev->Get()->Record.GetTxId();
         auto& reason = ev->Get()->Record.GetReason();
 
-        LOG_W("TxId: " << txId << ", terminate transaction, reason: " << reason);
+        STLOG_W("Terminate transaction",
+            (node_id, SelfId().NodeId()),
+            (tx_id, txId),
+            (reason, reason));
         TerminateTx(txId, reason);
 
         Counters->NodeServiceProcessCancelTime->Collect(timer.Passed() * SecToUsec);
@@ -348,12 +368,9 @@ private:
         auto tasksToAbort = bucket.GetTasksByTxId(txId);
 
         if (!tasksToAbort.empty()) {
-            TStringBuilder finalReason;
-            finalReason << "node service cancelled the task, because it " << reason
-                << ", NodeId: "<< SelfId().NodeId()
-                << ", TxId: " << txId;
-
-            LOG_E(finalReason);
+            STLOG_E("Node service cancelled the task, because it " << reason,
+                (node_id, SelfId().NodeId()),
+                (tx_id, txId));
             for (const auto& [taskId, computeActorId]: tasksToAbort) {
                 auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(status, reason);
                 Send(computeActorId, abortEv.release());
@@ -373,7 +390,7 @@ private:
 
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_D("Subscribed for config changes");
+        STLOG_D("Subscribed for config changes");
     }
 
     void HandleWork(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -395,7 +412,9 @@ private:
             FORCE_VALUE(MinMemFreeSize);
 #undef FORCE_VALUE
 
-            LOG_I("Updated table service config: " << Config.DebugString());
+            STLOG_I("Updated table service config",
+                (node_id, SelfId().NodeId()),
+                (config, Config.DebugString()));
         }
 
         CaFactory_->ApplyConfig(event.GetConfig().GetTableServiceConfig().GetResourceManager());
@@ -466,15 +485,19 @@ private:
             }
 
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_C("Failed to deliver subscription request to config dispatcher");
+                STLOG_C("Failed to deliver subscription request to config dispatcher",
+                    (node_id, SelfId().NodeId()));
                 break;
 
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_E("Failed to deliver config notification response");
+                STLOG_E("Failed to deliver config notification response",
+                    (node_id, SelfId().NodeId()));
                 break;
 
             default:
-                LOG_E("Undelivered event with unexpected source type: " << ev->Get()->SourceType);
+                STLOG_E("Undelivered event with unexpected source type",
+                    (node_id, SelfId().NodeId()),
+                    (source_type, ev->Get()->SourceType));
                 break;
         }
     }

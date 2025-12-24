@@ -94,23 +94,29 @@ public:
             CancelAt = StartTime + *Request.CancelAfter;
         }
 
-        LOG_D("Begin literal execution. Operation timeout: " << Request.Timeout << ", cancelAfter: " << Request.CancelAfter);
+        KQP_STLOG_D(KQPLIT, "Begin literal execution",
+            (operation_timeout, Request.Timeout),
+            (cancel_after, Request.CancelAfter),
+            (trace_id, TraceId()));
     }
 
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral() {
         try {
             ExecuteLiteralImpl();
         } catch (const TMemoryLimitExceededException&) {
-            LOG_W("TKqpLiteralExecuter, memory limit exceeded.");
+            KQP_STLOG_W(KQPLIT, "TKqpLiteralExecuter, memory limit exceeded.",
+                (trace_id, TraceId()));
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Memory limit exceeded"));
         } catch (const NMiniKQL::TKqpEnsureFail& e) {
-            LOG_E("TKqpLiteralExecuter, TKqpEnsure failed.");
+            KQP_STLOG_E(KQPLIT, "TKqpLiteralExecuter, TKqpEnsure failed.",
+                (trace_id, TraceId()));
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, EYqlIssueCode(e.GetCode()), e.GetMessage()));
         } catch (...) {
             auto msg = CurrentExceptionMessage();
-            LOG_C("TKqpLiteralExecuter, unexpected exception caught: " << msg);
+            KQP_STLOG_C(KQPLIT, "TKqpLiteralExecuter, unexpected exception caught: " << msg,
+                (trace_id, TraceId()));
             CreateErrorResponse(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, msg));
         }
@@ -123,8 +129,10 @@ public:
             Stats->StartTs = TInstant::Now();
         }
 
-        LOG_D("Begin literal execution, txs: " << Request.Transactions.size());
         auto& transactions = Request.Transactions;
+        KQP_STLOG_D(KQPLIT, "Begin literal execution",
+            (transactions_count, transactions.size()),
+            (trace_id, TraceId()));
         TasksGraph.FillKqpTasksGraphStages(transactions);
 
         for (ui32 txIdx = 0; txIdx < transactions.size(); ++txIdx) {
@@ -133,7 +141,10 @@ public:
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
                 auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
-                LOG_D("Stage " << stageInfo.Id << " AST: " << stage.GetProgramAst());
+                KQP_STLOG_D(KQPLIT, "Stage AST",
+                    (stage_id, stageInfo.Id),
+                    (ast, stage.GetProgramAst()),
+                    (trace_id, TraceId()));
 
                 YQL_ENSURE(stageInfo.Meta.ShardOperations.empty());
                 YQL_ENSURE(stageInfo.InputsCount == 0);
@@ -273,10 +284,19 @@ public:
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
         LiteralExecuterSpan.EndOk();
         CleanupCtx();
-        LOG_D("Execution is complete, results: " << ResponseEv->ResultsSize());
+        KQP_STLOG_D(KQPLIT, "Execution is complete",
+            (results_size, ResponseEv->ResultsSize()),
+            (trace_id, TraceId()));
     }
 
 private:
+    TString TraceId() const {
+        if (LiteralExecuterSpan) {
+            return LiteralExecuterSpan.GetTraceId().GetHexTraceId();
+        }
+        return TString();
+    }
+
     void CleanupCtx() {
         with_lock(*Request.TxAlloc->Alloc) {
             TaskRunners.erase(TaskRunners.begin(), TaskRunners.end());
@@ -290,7 +310,8 @@ private:
         auto now = AppData()->TimeProvider->Now();
 
         if (Deadline && *Deadline <= now) {
-            LOG_I("Timeout exceeded.");
+            KQP_STLOG_I(KQPLIT, "Timeout exceeded.",
+                (trace_id, TraceId()));
 
             CreateErrorResponse(Ydb::StatusIds::TIMEOUT,
                 YqlIssue({}, TIssuesIds::KIKIMR_TIMEOUT, "Request timeout exceeded."));
@@ -298,7 +319,8 @@ private:
         }
 
         if (CancelAt && *CancelAt <= now) {
-            LOG_I("CancelAt exceeded.");
+            KQP_STLOG_I(KQPLIT, "CancelAt exceeded.",
+                (trace_id, TraceId()));
 
             CreateErrorResponse(Ydb::StatusIds::CANCELLED,
                 YqlIssue({}, TIssuesIds::KIKIMR_OPERATION_CANCELLED, "Request timeout exceeded."));
@@ -314,7 +336,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        LOG_E(message);
+        KQP_STLOG_E(KQPLIT, message,
+            (trace_id, TraceId()));
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         issue.AddSubIssue(MakeIntrusive<TIssue>(message));
         CreateErrorResponse(Ydb::StatusIds::INTERNAL_ERROR, issue);

@@ -44,6 +44,10 @@ protected:
     void HandleWakeUpImpl() override;
     TString Description() const override { return "Write quoter"; }
 
+    void CheckDeduplicationIdPartitionQuota(TRequestContext&& context);
+    void ProcessPartitionQuotaQueues() override;
+    void ProcessDeduplicationIdPartitionQuotaQueue();
+
     STFUNC(ProcessEventImpl) override
     {
         Y_UNUSED(ev);
@@ -53,6 +57,10 @@ private:
     bool GetAccountQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig) const;
     bool QuotingEnabled;
     THolder<TAccountQuoterHolder> AccountQuotaTracker;
+
+    TQuotaTracker PartitionDeduplicationIdQuotaTracker;
+    std::deque<TRequestContext> WaitingDeduplicationIdPartitionQuotaRequests;
+
 };
 
 

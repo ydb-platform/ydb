@@ -97,8 +97,9 @@ void TPartitionQuoterBase::StartQuoting(TRequestContext&& context) {
 }
 
 void TPartitionQuoterBase::CheckTotalPartitionQuota(TRequestContext&& context) {
-    if (!PartitionTotalQuotaTracker)
+    if (!PartitionTotalQuotaTracker) {
         return ApproveQuota(context);
+    }
     if (!PartitionTotalQuotaTracker->CanExaust(ActorContext().Now()) || !WaitingTotalPartitionQuotaRequests.empty()) {
         WaitingTotalPartitionQuotaRequests.push_back(std::move(context));
         return;
@@ -124,6 +125,10 @@ void TPartitionQuoterBase::ApproveQuota(TRequestContext& context) {
         context.TotalQuotaWaitTime = waitTime;
     }
     Send(context.PartitionActor, MakeQuotaApprovedEvent(context));
+}
+
+void TPartitionQuoterBase::ProcessPartitionQuotaQueues() {
+    ProcessPartitionTotalQuotaQueue();
 }
 
 void TPartitionQuoterBase::ProcessPartitionTotalQuotaQueue() {
@@ -191,7 +196,7 @@ TQuotaTracker TPartitionQuoterBase::CreatePartitionTotalQuotaTracker(const NKiki
 
 void TPartitionQuoterBase::HandleWakeUp(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
     HandleWakeUpImpl();
-    ProcessPartitionTotalQuotaQueue();
+    ProcessPartitionQuotaQueues();
     UpdateCounters(ctx);
     ScheduleWakeUp(ctx);
 }

@@ -34,10 +34,6 @@ TDuration TMessageIdDeduplicator::GetDeduplicationWindow() const {
     return DeduplicationWindow;
 }
 
-size_t TMessageIdDeduplicator::GetWrittenMessages() const {
-    return WriteRateLimiter.GetValue();
-}
-
 std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicationId, const ui64 offset) {
     auto it = Messages.find(deduplicationId);
     if (it != Messages.end()) {
@@ -55,8 +51,6 @@ std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicat
     HasChanges = true;
     Queue.emplace_back(deduplicationId, expirationTime, offset);
     Messages.emplace(deduplicationId, offset);
-
-    WriteRateLimiter.Update(1, now);
 
     return std::nullopt;
 }
@@ -128,8 +122,6 @@ bool TMessageIdDeduplicator::ApplyWAL(TString&& key, NKikimrPQ::TMessageDeduplic
         }
         Queue.emplace_back(message.GetDeduplicationId(), expirationTime, offset);
         Messages[std::move(*message.MutableDeduplicationId())] = offset;
-
-        WriteRateLimiter.Update(1, expirationTime - DeduplicationWindow);
     }
 
     CurrentBucket.LastWrittenMessageIndex = Queue.size();
@@ -245,10 +237,6 @@ std::optional<ui64> TPartition::DeduplicateByMessageId(const TEvPQ::TEvWrite::TM
     }
 
     return MessageIdDeduplicator.AddMessage(*msg.MessageDeduplicationId, offset);
-}
-
-bool TPartition::WaitingForDeduplicationQuota(const TEvPQ::TEvWrite::TMsg& msg) const {
-    return !msg.MessageDeduplicationId && MessageIdDeduplicator.GetWrittenMessages() > MaxDeduplicationRPS;
 }
 
 } // namespace NKikimr::NPQ

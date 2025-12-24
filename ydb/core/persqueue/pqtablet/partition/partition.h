@@ -312,7 +312,7 @@ private:
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
     bool RequestBlobQuota();
-    void RequestBlobQuota(size_t quotaSize);
+    void RequestBlobQuota(size_t quotaSize, size_t deduplicationIdQuotaSize);
     void ConsumeBlobQuota();
     void UpdateAfterWriteCounters(bool writeComplete);
 
@@ -330,7 +330,6 @@ private:
     bool IsQuotingEnabled() const;
     bool WaitingForPreviousBlobQuota() const;
     bool WaitingForSubDomainQuota(const ui64 withSize = 0) const;
-    bool WaitingForDeduplicationQuota(const TEvPQ::TEvWrite::TMsg& msg) const;
     size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request);
     std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const;
     ui32 NextChannel(bool isHead, ui32 blobSize);
@@ -1065,6 +1064,7 @@ private:
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;
+    ui64 DeduplicationIdQuotaSize = 0;
     bool NeedDeletePartition = false;
 
     // Wait topic quota metrics

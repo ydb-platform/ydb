@@ -18,6 +18,7 @@ TWriteQuoter::TWriteQuoter(
             tabletId, counters, 1
     )
     , QuotingEnabled(pqConfig.GetQuotingConfig().GetEnableQuoting())
+    , PartitionDeduplicationIdQuotaTracker(500, 1000, TAppData::TimeProvider->Now()) // TODO MLP config
 {
 }
 
@@ -31,8 +32,30 @@ void TWriteQuoter::Bootstrap(const TActorContext& ctx) {
 }
 
 void TWriteQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
+    CheckDeduplicationIdPartitionQuota(std::move(context));
+}
+
+void TWriteQuoter::CheckDeduplicationIdPartitionQuota(TRequestContext&& context) {
+    if (!PartitionDeduplicationIdQuotaTracker.CanExaust(ActorContext().Now()) || !WaitingDeduplicationIdPartitionQuotaRequests.empty()) {
+        WaitingDeduplicationIdPartitionQuotaRequests.push_back(std::move(context));
+        return;
+    }
     CheckTotalPartitionQuota(std::move(context));
 }
+
+void TWriteQuoter::ProcessPartitionQuotaQueues() {
+    ProcessDeduplicationIdPartitionQuotaQueue();
+    ProcessPartitionTotalQuotaQueue();
+}
+
+void TWriteQuoter::ProcessDeduplicationIdPartitionQuotaQueue() {
+    while (!WaitingDeduplicationIdPartitionQuotaRequests.empty() && PartitionDeduplicationIdQuotaTracker.CanExaust(ActorContext().Now())) {
+        auto& request = WaitingDeduplicationIdPartitionQuotaRequests.front();
+        CheckTotalPartitionQuota(std::move(request));
+        WaitingDeduplicationIdPartitionQuotaRequests.pop_front();
+    }
+}
+
 
 void TWriteQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
     Y_UNUSED(context);
@@ -45,6 +68,8 @@ void TWriteQuoter::HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) {
             new NAccountQuoterEvents::TEvConsumed(ev->Get()->ConsumedBytes, ev->Get()->RequestCookie)
         );
     }
+
+    PartitionDeduplicationIdQuotaTracker.Exaust(ev->Get()->ConsumedDeduplicationIds, ActorContext().Now());
 }
 
 bool TWriteQuoter::GetAccountQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig) const {

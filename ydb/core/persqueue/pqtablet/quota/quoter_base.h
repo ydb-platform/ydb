@@ -100,11 +100,13 @@ protected:
     inline ui64 GetTabletId() const {return TabletId;}
     inline const TPartitionId& GetPartition() const {return Partition;}
 
+    virtual void ProcessPartitionQuotaQueues();
+    void ProcessPartitionTotalQuotaQueue();
+
 private:
     void StartQuoting(TRequestContext&& context);
     void UpdateQuota();
     void ProcessInflightQueue();
-    void ProcessPartitionTotalQuotaQueue();
 
     void ScheduleWakeUp(const TActorContext& ctx);
 

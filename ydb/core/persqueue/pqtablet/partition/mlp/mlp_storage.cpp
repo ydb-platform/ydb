@@ -22,6 +22,7 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     , MaxFastMessages(maxMessages - maxMessages / 4)
     , MaxSlowMessages(maxMessages / 4)
     , TimeProvider(timeProvider)
+    , NextVacuumRun(TInstant::Zero())
     , Batch(this)
 {
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
@@ -178,7 +179,14 @@ TInstant TStorage::GetMessageDeadline(ui64 messageId) {
 }
 
 size_t TStorage::ProccessDeadlines() {
-    auto deadlineDelta = (TimeProvider->Now() - BaseDeadline).Seconds();
+    auto now = TimeProvider->Now();
+
+    if (now < NextVacuumRun) {
+        return 0;
+    }
+    NextVacuumRun = TrimToSeconds(now, false) + VACUUM_INTERVAL;
+
+    auto deadlineDelta = (now - BaseDeadline).Seconds();
     size_t count = 0;
 
     auto unlockIfNeed = [&](auto offset, auto& message) {

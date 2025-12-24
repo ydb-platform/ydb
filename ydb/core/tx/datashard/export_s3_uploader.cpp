@@ -48,6 +48,9 @@ struct TChangefeedExportDescriptions {
 };
 
 template <typename TSettings>
+inline constexpr bool RequiresHttpResolver = std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>;
+
+template <typename TSettings>
 class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     using TThis = TS3Uploader;
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
@@ -72,7 +75,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfig(const TS3ExternalStorageConfig& settings) {
-        if (std::is_same<TSettings, NKikimrSchemeOp::TFSSettings>::value) {
+        if constexpr (!RequiresHttpResolver<TSettings>) {
             return Nothing();
         }
         return GetHttpResolverConfig(NormalizeEndpoint(settings.GetConfig().endpointOverride));
@@ -796,8 +799,12 @@ public:
             << ": self# " << this->SelfId()
             << ", attempt# " << Attempt);
 
-        ProxyResolved = !HttpResolverConfig.Defined() || std::is_same<TSettings, NKikimrSchemeOp::TFSSettings>::value;
-        
+        if constexpr (!RequiresHttpResolver<TSettings>) {
+            ProxyResolved = true;
+        } else {
+            ProxyResolved = !HttpResolverConfig.Defined();
+        }
+
         if (!ProxyResolved) {
             ResolveProxy();
         } else {
@@ -940,14 +947,14 @@ private:
 
 template <>
 NKikimrSchemeOp::TS3Settings TS3Uploader<NKikimrSchemeOp::TS3Settings>::GetSettings(
-    const NKikimrSchemeOp::TBackupTask& task) 
+    const NKikimrSchemeOp::TBackupTask& task)
 {
     return task.GetS3Settings();
 }
 
 template <>
 NKikimrSchemeOp::TFSSettings TS3Uploader<NKikimrSchemeOp::TFSSettings>::GetSettings(
-    const NKikimrSchemeOp::TBackupTask& task) 
+    const NKikimrSchemeOp::TBackupTask& task)
 {
     return task.GetFSSettings();
 }

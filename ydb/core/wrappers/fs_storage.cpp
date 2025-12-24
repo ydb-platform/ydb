@@ -64,7 +64,7 @@ private:
     void ReplyError(const NActors::TActorId& sender, const std::optional<TString>& key, const TString& errorMessage) {
         Y_UNUSED(errorMessage);
         Aws::Utils::Outcome<typename TEvResponse::TAwsResult, Aws::S3::S3Error> outcome;
-        
+
         std::unique_ptr<TEvResponse> response;
         if constexpr (HasKeyConstructor<TEvResponse>()) {
             Y_ENSURE(key, "Key is required for this response type");
@@ -180,7 +180,7 @@ public:
     void Handle(TEvCreateMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        
+
         FS_LOG(Verbose, "FS CreateMultipartUpload: key# " << key);
 
         ReplySuccess<TEvCreateMultipartUploadResponse>(ev->Sender, key);
@@ -191,17 +191,17 @@ public:
         const auto& body = ev->Get()->Body;
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const int partNumber = request.GetPartNumber();
-        
+
         FS_LOG(Verbose, "FS UploadPart: key# " << key << ", part# " << partNumber << ", size# " << body.size());
 
         try {
             WriteFile(key, body, true);
 
             TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
-            
+
             Aws::S3::Model::UploadPartResult awsResult;
             awsResult.SetETag(etag.c_str());
-            
+
             Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
             ReplyAdapter.Reply(ev->Sender, std::move(response));
@@ -216,7 +216,7 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
-        
+
         FS_LOG(Verbose, "FS CompleteMultipartUpload: key# " << key << ", uploadId# " << uploadId);
 
         try {
@@ -224,7 +224,7 @@ public:
             awsResult.SetKey(request.GetKey());
             TString etag = "\"completed\"";
             awsResult.SetETag(etag.c_str());
-            
+
             Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
             ReplyAdapter.Reply(ev->Sender, std::move(response));
@@ -238,7 +238,7 @@ public:
     void Handle(TEvAbortMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        
+
         FS_LOG(Verbose, "FS AbortMultipartUpload: key# " << key);
         ReplySuccess<TEvAbortMultipartUploadResponse>(ev->Sender, key);
     }
@@ -284,7 +284,7 @@ TFsExternalStorage::~TFsExternalStorage()
 
 void TFsExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {
     FS_LOG(Verbose, "TFsExternalStorage::Execute(TEvPutObjectRequest) called, BasePath# " << BasePath);
-    
+
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
@@ -292,7 +292,7 @@ void TFsExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {
 
 void TFsExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev) const {
     FS_LOG(Verbose, "TFsExternalStorage::Execute(TEvGetObjectRequest) called");
-    
+
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
@@ -330,7 +330,7 @@ void TFsExternalStorage::Execute(TEvDeleteObjectsRequest::TPtr& ev) const {
 
 void TFsExternalStorage::Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const {
     FS_LOG(Verbose, "TFsExternalStorage::Execute(TEvCreateMultipartUploadRequest) called");
-    
+
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
@@ -338,7 +338,7 @@ void TFsExternalStorage::Execute(TEvCreateMultipartUploadRequest::TPtr& ev) cons
 
 void TFsExternalStorage::Execute(TEvUploadPartRequest::TPtr& ev) const {
     FS_LOG(Verbose, "TFsExternalStorage::Execute(TEvUploadPartRequest) called");
-    
+
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
@@ -346,7 +346,7 @@ void TFsExternalStorage::Execute(TEvUploadPartRequest::TPtr& ev) const {
 
 void TFsExternalStorage::Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const {
     FS_LOG(Verbose, "TFsExternalStorage::Execute(TEvCompleteMultipartUploadRequest) called");
-    
+
     auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
     auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));

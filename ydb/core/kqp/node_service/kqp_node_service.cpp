@@ -209,6 +209,7 @@ private:
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
 
+        const auto& runtimeSettings = msg.GetRuntimeSettings();
         NYql::NDq::TComputeRuntimeSettings runtimeSettingsBase;
         runtimeSettingsBase.ReportStatsSettings = NYql::NDq::TReportStatsSettings{
             .MinInterval = runtimeSettings.HasMinStatsSendIntervalMs() ? TDuration::MilliSeconds(runtimeSettings.GetMinStatsSendIntervalMs()) : MinStatInterval,

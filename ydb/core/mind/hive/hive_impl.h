@@ -244,6 +244,12 @@ protected:
     friend class TLoggedMonTransaction;
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
+<<<<<<< HEAD
+=======
+    friend class TTxUpdatePiles;
+    friend class TTxSetDown;
+    friend class TTxProcessTabletMetrics;
+>>>>>>> f8803a6050a (batch tablet metrics processing (#30996))
 
     friend class TDeleteTabletActor;
 
@@ -312,6 +318,12 @@ protected:
     ITransaction* CreateGenerateTestData(uint64_t seed);
     ITransaction* CreateDeleteNode(TNodeId nodeId);
     ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
+<<<<<<< HEAD
+=======
+    ITransaction* CreateUpdatePiles();
+    ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
+    ITransaction* CreateProcessTabletMetrics();
+>>>>>>> f8803a6050a (batch tablet metrics processing (#30996))
 
 public:
     TDomainsView DomainsView;
@@ -411,6 +423,7 @@ protected:
     bool LogTabletMovesScheduled = false;
     bool ProcessStorageBalancerScheduled = false;
     bool ProcessFollowerUpdatesScheduled = false;
+    bool ProcessTabletMetricsScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -432,6 +445,7 @@ protected:
     std::queue<TTabletId> StopTenantTabletsQueue;
     std::queue<TTabletId> ResumeTenantTabletsQueue;
     bool NotEnoughResources = false;
+    std::queue<TFullTabletId> ProcessTabletMetricsQueue;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -600,6 +614,15 @@ protected:
     void Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr& ev);
     void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateFollowers::TPtr& ev);
+<<<<<<< HEAD
+=======
+    void Handle(TEvNodeWardenStorageConfig::TPtr& ev);
+    void HandleInit(TEvNodeWardenStorageConfig::TPtr& ev);
+    void Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr& ev);
+    void Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev);
+    void Handle(TEvHive::TEvSetDown::TPtr& ev);
+    void Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr& ev);
+>>>>>>> f8803a6050a (batch tablet metrics processing (#30996))
 
 protected:
     void RestartPipeTx(ui64 tabletId);

@@ -456,7 +456,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
-        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Greater,  collectMembers);
+        resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Greater, collectMembers);
     }
 
     else if (auto less = input.Maybe<TCoCmpLessOrEqual>()) {

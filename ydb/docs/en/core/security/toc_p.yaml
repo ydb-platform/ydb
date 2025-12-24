@@ -5,6 +5,8 @@ items:
   href: authorization.md
 - name: Audit log
   href: audit-log.md
+- name: Initial security configuration
+  href: builtin-security.md
 - name: Encryption
   href: encryption/index.md
   include:

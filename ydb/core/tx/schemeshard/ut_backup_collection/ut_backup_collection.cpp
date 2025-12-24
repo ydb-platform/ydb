@@ -2669,4 +2669,122 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         // Now full backup rotate streams like incremental backup
         UNIT_ASSERT_VALUES_EQUAL(tableDesc4.GetPathDescription().GetTable().CdcStreamsSize(), 1);
     }
+
+    Y_UNIT_TEST(IndexCdcStreamCountRotation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TString collectionSettings = R"(
+            Name: "CountTestCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto getBackupStreamCount = [&](const TString& path) -> size_t {
+            auto desc = DescribePrivatePath(runtime, path, true, true);
+            if (!desc.GetPathDescription().HasTable()) return 0;
+            
+            size_t count = 0;
+            const auto& table = desc.GetPathDescription().GetTable();
+            for (size_t i = 0; i < table.CdcStreamsSize(); ++i) {
+                if (table.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                    count++;
+                }
+            }
+            return count;
+        };
+
+        auto getIndexImplPath = [&](const TString& tablePath, const TString& indexName) -> TString {
+            auto indexDesc = DescribePrivatePath(runtime, tablePath + "/" + indexName, true, true);
+            if (indexDesc.GetPathDescription().ChildrenSize() == 0) return "";
+            return tablePath + "/" + indexName + "/" + indexDesc.GetPathDescription().GetChildren(0).GetName();
+        };
+
+        auto getCurrentStreamName = [&](const TString& path) -> TString {
+            auto desc = DescribePrivatePath(runtime, path, true, true);
+            if (!desc.GetPathDescription().HasTable()) return "";
+            const auto& table = desc.GetPathDescription().GetTable();
+            for (size_t i = 0; i < table.CdcStreamsSize(); ++i) {
+                if (table.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                    return table.GetCdcStreams(i).GetName();
+                }
+            }
+            return "";
+        };
+
+        TString tablePath = "/MyRoot/TableWithIndex";
+        TString indexPath = getIndexImplPath(tablePath, "ValueIndex");
+
+        UNIT_ASSERT_VALUES_EQUAL(getBackupStreamCount(tablePath), 0);
+        UNIT_ASSERT_VALUES_EQUAL(getBackupStreamCount(indexPath), 0);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CountTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(tablePath), 1, "Table should have exactly 1 stream after 1st backup");
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(indexPath), 1, "Index should have exactly 1 stream after 1st backup");
+        
+        TString streamNameV1 = getCurrentStreamName(tablePath);
+        TString indexStreamNameV1 = getCurrentStreamName(indexPath);
+        UNIT_ASSERT_VALUES_EQUAL(streamNameV1, indexStreamNameV1);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CountTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(tablePath), 1, "Table must have exactly 1 stream after rotation (old deleted, new added)");
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(indexPath), 1, "Index must have exactly 1 stream after rotation");
+
+        TString streamNameV2 = getCurrentStreamName(tablePath);
+        TString indexStreamNameV2 = getCurrentStreamName(indexPath);
+
+        UNIT_ASSERT_C(streamNameV1 != streamNameV2, "Stream name should have changed");
+        UNIT_ASSERT_VALUES_EQUAL(streamNameV2, indexStreamNameV2);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CountTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(tablePath), 1, "Table stream count stable at 1");
+        UNIT_ASSERT_VALUES_EQUAL_C(getBackupStreamCount(indexPath), 1, "Index stream count stable at 1");
+
+        TString streamNameV3 = getCurrentStreamName(tablePath);
+        UNIT_ASSERT_C(streamNameV2 != streamNameV3, "Stream name changed again");
+    }
 } // TBackupCollectionTests

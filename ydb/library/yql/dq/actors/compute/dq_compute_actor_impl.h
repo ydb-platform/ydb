@@ -1856,6 +1856,8 @@ public:
     }
 
 protected:
+    virtual TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) = 0;
+
     void FillIoMaps(
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -1925,6 +1927,7 @@ protected:
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .Alloc = Alloc,
+                        .WatermarksTracker = GetInputTransformWatermarksTracker(inputIndex),
                         .TraceId = ComputeActorSpan.GetTraceId()
                     });
             } catch (const std::exception& ex) {

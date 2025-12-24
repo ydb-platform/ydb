@@ -5480,6 +5480,128 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::ShardsInsideDomain(7)
         });
     }
+
+    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+
+        const auto a = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+            indexes {
+              name: "by_value"
+              index_columns: "value"
+              global_index {}
+            }
+        )", {{"a", 1}});
+
+        const auto b = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "value"
+            primary_key: "key"
+        )", {{"b", 1}});
+
+        Run(runtime, env, ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%%d"
+              scheme: HTTP
+              index_population_mode: %s
+              items {
+                source_prefix: "a"
+                destination_path: "/MyRoot/Table"
+              }
+              skip_checksum_validation: true
+            }
+        )", Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(mode).c_str()));
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1),
+        });
+    }
+
+    Y_UNIT_TEST(MaterializedIndexBuild) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD);
+    }
+
+    Y_UNIT_TEST(MaterializedIndexImport) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT);
+    }
+
+    Y_UNIT_TEST(MaterializedIndexAuto) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO);
+    }
+
+    void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+
+        const auto a = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+            indexes {
+              name: "by_value"
+              index_columns: "value"
+              global_index {}
+            }
+        )", {{"a", 1}});
+
+        const auto expectedStatus = shouldFail ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS;
+        Run(runtime, env, ConvertTestData({{"/a", a}}), Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%%d"
+              scheme: HTTP
+              index_population_mode: %s
+              items {
+                source_prefix: "a"
+                destination_path: "/MyRoot/Table"
+              }
+              skip_checksum_validation: true
+            }
+        )", Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(mode).c_str()), expectedStatus);
+
+        if (shouldFail) {
+            return;
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1),
+        });
+    }
+
+    Y_UNIT_TEST(MaterializedIndexAbsentBuild) {
+        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD, false);
+    }
+
+    Y_UNIT_TEST(MaterializedIndexAbsentImport) {
+        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, true);
+    }
+
+    Y_UNIT_TEST(MaterializedIndexAbsentAuto) {
+        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO, false);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
@@ -6039,5 +6161,77 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             )"
         );
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnMaterializedIndex) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        const auto a = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+            indexes {
+              name: "by_value"
+              index_columns: "value"
+              global_index {}
+            }
+        )", {{"a", 1}});
+
+        const auto b = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "value"
+            primary_key: "key"
+        )", {{"b", 1}});
+
+        TS3Mock s3Mock(ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+            }
+
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  index_population_mode: INDEX_POPULATION_MODE_IMPORT
+                  items {
+                    source_prefix: "a"
+                    destination_path: "/MyRoot/Table"
+                  }
+                  skip_checksum_validation: true
+                }
+            )", port));
+            t.TestEnv->TestWaitNotification(runtime, importId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetImport(runtime, importId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+            }
+        });
     }
 }

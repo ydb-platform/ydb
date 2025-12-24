@@ -2708,6 +2708,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         TString SourcePathName;
         TPathId SourcePathId;
         NKikimrSchemeOp::EPathType SourcePathType;
+        ui32 ParentIdx; // used by indexes
 
         EState State = EState::Waiting;
         ESubState SubState = ESubState::AllocateTxId;
@@ -2717,10 +2718,15 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
         TItem() = default;
 
-        explicit TItem(const TString& sourcePathName, const TPathId sourcePathId, NKikimrSchemeOp::EPathType sourcePathType)
+        explicit TItem(
+                const TString& sourcePathName,
+                const TPathId sourcePathId,
+                NKikimrSchemeOp::EPathType sourcePathType,
+                ui32 parentIdx = Max<ui32>())
             : SourcePathName(sourcePathName)
             , SourcePathId(sourcePathId)
             , SourcePathType(sourcePathType)
+            , ParentIdx(parentIdx)
         {
         }
 
@@ -2758,6 +2764,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
     bool EnableChecksums = false;
     bool EnablePermissions = false;
+    bool IncludeIndexData = false;
 
     explicit TExportInfo(
             const ui64 id,
@@ -2878,11 +2885,13 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         TString DstPathName;
         TPathId DstPathId;
+        TString SrcPrefix;
         Ydb::Table::CreateTableRequest Scheme;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
+        TVector<std::pair<NBackup::TIndexMetadata, Ydb::Table::CreateTableRequest>> MaterializedIndexes;
         NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
 
         EState State = EState::GetScheme;
@@ -2895,6 +2904,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         int NextChangefeedIdx = 0;
         TString Issue;
         TPathId StreamImplPathId;
+
+        ui32 ParentIdx = Max<ui32>();
+        TVector<ui32> ChildItems;
 
         TItem() = default;
 
@@ -2931,6 +2943,20 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
+
+    TString GetItemSrcPrefix(size_t i) const {
+        if (i < Items.size() && Items[i].SrcPrefix) {
+            return Items[i].SrcPrefix;
+        }
+
+        // Backward compatibility.
+        // But there can be no paths in settings at all.
+        if (i < ui32(Settings.items_size())) {
+            return Settings.items(i).source_prefix();
+        }
+
+        return {};
+    }
 
     explicit TImportInfo(
             const ui64 id,

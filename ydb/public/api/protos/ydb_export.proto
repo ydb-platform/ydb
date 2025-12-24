@@ -120,6 +120,12 @@ message ExportToS3Settings {
     // details: https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
     // it is especially useful for custom s3 implementations
     bool disable_virtual_addressing = 12;
+
+    // Include index data or not.
+    // By default, only index metadata is uploaded and indexes are built during import — it saves space
+    // and reduces export time, but it can potentially increase the import time.
+    // Index data can be uploaded and downloaded back during import.
+    bool include_index_data = 16;
 }
 
 message ExportToS3Result {

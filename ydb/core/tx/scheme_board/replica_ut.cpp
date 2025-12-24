@@ -8,8 +8,6 @@
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <fstream>
-
 namespace NKikimr {
 namespace NSchemeBoard {
 

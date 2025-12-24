@@ -2138,7 +2138,7 @@ void TPartition::ReportCounters(const TActorContext& ctx, bool force) {
     }
 }
 
-void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext&) {
+void TPartition::Handle(NQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext&) {
     for (auto& [consumerStr, quota] : ev->Get()->UpdatedConsumerQuotas) {
         TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumerStr);
         if (userInfo && userInfo->LabeledCounters) {
@@ -4285,7 +4285,7 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
     ProcessTxsAndUserActs(ctx);
 }
 
-void TPartition::Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext&) {
+void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext&) {
     if (ev->Get()->ForWriteQuota) {
         LOG_A("Got TEvQuotaCountersUpdated for write counters, this is unexpected. Event ignored");
         return;

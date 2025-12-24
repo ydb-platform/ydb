@@ -246,7 +246,7 @@ void TReadQuoter::HandleUpdateAccountQuotaCounters(NAccountQuoterEvents::TEvCoun
     if (consumerQuota->AccountQuotaTracker) {
         auto diff = ev->Get()->Counters.MakeDiffForAggr(consumerQuota->AccountQuotaTracker->Baseline);
         ev->Get()->Counters.RememberCurrentStateAsBaseline(consumerQuota->AccountQuotaTracker->Baseline);
-        Send(Parent, new NReadQuoterEvents::TEvAccountQuotaCountersUpdated(diff));
+        Send(Parent, new NQuoterEvents::TEvAccountQuotaCountersUpdated(diff));
     }
 }
 
@@ -281,7 +281,7 @@ void TReadQuoter::UpdateCounters(const TActorContext& ctx) {
     } else {
         InflightLimitSlidingWindow.Update(now);
     }
-    Send(Parent, NReadQuoterEvents::TEvQuotaCountersUpdated::ReadCounters(InflightLimitSlidingWindow.GetValue() / 60));
+    Send(Parent, NQuoterEvents::TEvQuotaCountersUpdated::ReadCounters(InflightLimitSlidingWindow.GetValue() / 60));
 }
 
 void TReadQuoter::HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
@@ -309,7 +309,7 @@ void TReadQuoter::UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorCont
         totalSpeed = PartitionTotalQuotaTracker->GetTotalSpeed();
     }
     if (updatedQuotas.size() || totalQuotaUpdated) {
-        Send(Parent, new NReadQuoterEvents::TEvQuotaUpdated(updatedQuotas, totalSpeed));
+        Send(Parent, new NQuoterEvents::TEvQuotaUpdated(updatedQuotas, totalSpeed));
     }
 }
 
@@ -372,7 +372,7 @@ TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consume
                 GetConsumerReadBurst(PQTabletConfig, consumerStr, ctx),
                 GetConsumerReadSpeed(PQTabletConfig, consumerStr, ctx)
         );
-        Send(Parent, new NReadQuoterEvents::TEvQuotaUpdated(
+        Send(Parent, new NQuoterEvents::TEvQuotaUpdated(
                 {{consumerStr, consumer.PartitionPerConsumerQuotaTracker.GetTotalSpeed()}},
                 GetTotalPartitionSpeed(PQTabletConfig, ctx)
         ));
@@ -387,6 +387,20 @@ TConsumerReadQuota* TReadQuoter::GetConsumerQuotaIfExists(const TString& consume
     auto it = ConsumerQuotas.find(consumerStr);
     return it != ConsumerQuotas.end() ? &it->second : nullptr;
 }
+
+NActors::IActor* CreateReadQuoter(
+    const NKikimrPQ::TPQConfig& pqConfig,
+    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TPartitionId& partition,
+    TActorId tabletActor,
+    const TActorId& parent,
+    ui64 tabletId,
+    const std::shared_ptr<TTabletCountersBase>& counters
+) {
+    return new TReadQuoter(pqConfig, topicConverter, config, partition, tabletActor, parent, tabletId, counters);
+}
+
 
 }// NPQ
 }// NKikimr

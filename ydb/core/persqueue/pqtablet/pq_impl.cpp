@@ -18,7 +18,7 @@
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/sourceid.h>  // FIXME move sourceid
-#include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
+#include <ydb/core/persqueue/pqtablet/quota/quota.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/writer.h>
@@ -1896,6 +1896,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
 
         ui64 createTimestampMs = 0, writeTimestampMs = 0;
         NKikimrPQClient::TDataChunk proto;
+        std::optional<TString> deduplicationId;
 
         TString errorStr = "";
         if (!cmd.HasSeqNo() && !req.GetIsDirectWrite()) {
@@ -1940,16 +1941,19 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             }
         }
 
-        if (errorStr.empty()) {
-            bool res = proto.ParseFromString(cmd.GetData());
-            if (!res) {
-                errorStr = "Data parsing error";
-            }
-        }
-
         if (!errorStr.empty()) {
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, errorStr);
             return;
+        }
+
+        bool res = proto.ParseFromString(cmd.GetData());
+        if (!res) {
+            for (auto& attr : *proto.MutableMessageMeta()) {
+                if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
+                    deduplicationId = attr.value();
+                    break;
+                }
+            }
         }
 
         ui32 mSize = MAX_BLOB_PART_SIZE - cmd.GetSourceId().size() - sizeof(ui32) - TClientBlob::OVERHEAD; //megaqc - remove this
@@ -1960,14 +1964,6 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         std::optional<TRowVersion> heartbeatVersion;
         if (cmd.HasHeartbeat()) {
             heartbeatVersion.emplace(cmd.GetHeartbeat().GetStep(), cmd.GetHeartbeat().GetTxId());
-        }
-
-        std::optional<TString> deduplicationId;
-        for (auto& attr : *proto.MutableMessageMeta()) {
-            if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
-                deduplicationId = attr.value();
-                break;
-            }
         }
 
         if (cmd.GetData().size() > mSize) {
@@ -4859,10 +4855,10 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
 
     auto& quoterId = PartitionWriteQuoters[partition.OriginalPartitionId];
     if (!quoterId) {
-        quoterId = RegisterWithSameMailbox(new TWriteQuoter(
+        quoterId = RegisterWithSameMailbox(CreateWriteQuoter(
+            AppData()->PQConfig,
             TopicConverter,
             Config,
-            AppData()->PQConfig,
             partition,
             SelfId(),
             TabletID(),

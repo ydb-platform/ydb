@@ -1,5 +1,6 @@
+#include "write_quoter.h"
+
 #include <ydb/core/persqueue/pqtablet/partition/partition_util.h>
-#include "read_quoter.h"
 
 namespace NKikimr::NPQ  {
 
@@ -116,4 +117,16 @@ TAccountQuoterHolder* TWriteQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::
     return AccountQuotaTracker.Get();
 }
 
-} //namespace
+NActors::IActor* CreateWriteQuoter(
+    const NKikimrPQ::TPQConfig& pqConfig,
+    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TPartitionId& partition,
+    TActorId tabletActor,
+    ui64 tabletId,
+    const std::shared_ptr<TTabletCountersBase>& counters
+) {
+    return new TWriteQuoter(topicConverter, config, pqConfig, partition, tabletActor, tabletId, counters);
+}
+
+} // namespace NKikimr::NPQ

@@ -384,10 +384,10 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
     TopicConverter = factory.MakeTopicConverter(Config);
     TActorId quoterId;
     if (Ctx->Runtime->GetAppData(0).PQConfig.GetQuotingConfig().GetEnableQuoting()) {
-        quoterId = Ctx->Runtime->Register(new TWriteQuoter(
+        quoterId = Ctx->Runtime->Register(CreateWriteQuoter(
+                Ctx->Runtime->GetAppData().PQConfig,
                 TopicConverter,
                 Config,
-                Ctx->Runtime->GetAppData().PQConfig,
                 id,
                 Ctx->Edge,
                 Ctx->TabletId,

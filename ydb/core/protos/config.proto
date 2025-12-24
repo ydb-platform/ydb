@@ -2158,6 +2158,11 @@ message TColumnShardConfig {
 
     optional TStatistics Statistics = 57;
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
+    
+    oneof DefaultCompaction {
+        string DefaultCompactionPreset = 61 [default = "lc-buckets"];
+        NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
+    }
 }
 
 message TSchemeShardConfig {

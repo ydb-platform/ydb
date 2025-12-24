@@ -5,6 +5,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -36,6 +37,29 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransaction(
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransaction(TSchemeShard* ss, TTxId txId, const TImportInfo& importInfo) {
     return MakeModifySchemeTransactionImpl(ss, txId, importInfo);
+}
+
+const TVector<XxportProperties>& GetXxportProperties() {
+    static TVector<XxportProperties> properties = {
+        {NYdb::NDump::NFiles::TableScheme().FileName, NBackup::EBackupFileType::TableSchema, NKikimrSchemeOp::EPathType::EPathTypeTable},
+        {NYdb::NDump::NFiles::CreateView().FileName, NBackup::EBackupFileType::ViewCreate, NKikimrSchemeOp::EPathType::EPathTypeView},
+        {NYdb::NDump::NFiles::CreateTopic().FileName, NBackup::EBackupFileType::TopicCreate, NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup},
+        {NYdb::NDump::NFiles::CreateAsyncReplication().FileName, NBackup::EBackupFileType::AsyncReplicationCreate, NKikimrSchemeOp::EPathType::EPathTypeReplication},
+    };
+
+    return properties;
+}
+
+TMaybe<XxportProperties> PathTypeToXxportProperties(NKikimrSchemeOp::EPathType pathType) {
+    auto it = std::ranges::find_if(GetXxportProperties(), [&](const XxportProperties& prop) {
+        return prop.PathType == pathType;
+    });
+
+    if (it == GetXxportProperties().end()) {
+        return Nothing();
+    }
+
+    return *it;
 }
 
 }  // NKikimr::NSchemeShard

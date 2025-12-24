@@ -36,6 +36,12 @@ bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& it
         || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
 }
 
+bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    return item.SourcePathType == NKikimrSchemeOp::EPathTypeView
+        || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup
+        || item.SourcePathType == NKikimrSchemeOp::EPathTypeReplication;
+}
+
 template <typename T>
 concept HasIncludeIndexData = requires(const T& t) {
     { t.include_index_data() } -> std::same_as<bool>;
@@ -260,6 +266,7 @@ private:
                     .NotDeleted()
                     .NotUnderDeleting()
                     .IsSupportedInExports()
+                    .NotAsyncReplicaTable()
                     .FailOnRestrictedCreateInTempZone();
 
                 if (!checks) {
@@ -418,9 +425,7 @@ private:
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView
-            || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup)
-        {
+        if (IsPathTypeSchemeObject(item)) {
             Ydb::Export::ExportToS3Settings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
             const auto databaseRoot = CanonizePath(Self->RootPathElements);

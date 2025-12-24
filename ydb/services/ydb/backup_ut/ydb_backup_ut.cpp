@@ -4343,4 +4343,83 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             IsOlap
         );
     }
+
+    Y_UNIT_TEST(ExcludeNonSupportedObjectsInExport) {
+        TS3TestEnv testEnv;
+
+        // Disable views export
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(false);
+        // Enable destination prefix in rpc_export
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+        TSchemeClient schemeClient(testEnv.GetDriver());
+        auto result = schemeClient.MakeDirectory("/Root/Dir").ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto& querySession = testEnv.GetQuerySession();
+
+        ExecuteQuery(
+            querySession,
+            "CREATE VIEW `View` WITH security_invoker = TRUE AS SELECT 1;",
+            true
+        );
+
+        ExecuteQuery(
+            querySession,
+            "CREATE VIEW `Dir/View` WITH security_invoker = TRUE AS SELECT 1;",
+            true
+        );
+
+        ExecuteQuery(
+            querySession,
+            R"(
+                CREATE TABLE `Table` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )",
+            true
+        );
+
+        ExecuteQuery(
+            querySession,
+            R"(
+                CREATE TABLE `Dir/Table` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )",
+            true
+        );
+
+        auto exportSettings = NExport::TExportToS3Settings()
+            .Endpoint(Sprintf("localhost:%u", testEnv.GetS3Port()))
+            .Scheme(ES3Scheme::HTTP)
+            .Bucket("test_bucket")
+            .AccessKey("test_key")
+            .SecretKey("test_secret")
+            .DestinationPrefix("Dest")
+            .SourcePath("/Root");
+
+        const auto clientSettings = TCommonClientSettings().Database("/Root");
+        NExport::TExportClient exportClient(testEnv.GetDriver(), clientSettings);
+        auto response = exportClient.ExportToS3(exportSettings).ExtractValueSync();
+
+        NOperation::TOperationClient operationClient(testEnv.GetDriver());
+        UNIT_ASSERT_C(response.Status().IsSuccess(), response.Status().GetIssues().ToString());
+        UNIT_ASSERT_C(WaitForOperation<NExport::TExportToS3Response>(operationClient, response.Id()),
+            "The export did not complete within the allocated time."
+        );
+
+        auto opResponse = operationClient.Get<NExport::TExportToS3Response>(response.Id()).ExtractValueSync();
+        auto& items = opResponse.Metadata().Settings.Item_;
+
+        UNIT_ASSERT_VALUES_EQUAL(items.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(items[0].Src, "/Root/Dir/Table");
+        UNIT_ASSERT_VALUES_EQUAL(items[0].Dst, "Dest/Dir/Table");
+        UNIT_ASSERT_VALUES_EQUAL(items[1].Src, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(items[1].Dst, "Dest/Table");
+    }
 }

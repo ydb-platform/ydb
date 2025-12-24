@@ -74,8 +74,8 @@ bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
     const TString& dbPath,
-    NYql::TIssues& issues) {
-
+    NYql::TIssues& issues)
+{
     if (IsCreateViewQuery(query)) {
         return NYdb::NDump::RewriteCreateViewQuery(query, dbRestoreRoot, true, dbPath, issues);
     }
@@ -600,7 +600,7 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    void RetrySchemeQueryObjectsCreation(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    void RetrySchemeObjectsQueryExecution(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const auto database = GetDatabase(*Self);
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo.Items.size())) {
@@ -618,7 +618,7 @@ private:
             }
         }
         if (!retriedItems.empty()) {
-            importInfo.WaitingSchemeObjeects = std::ssize(retriedItems);
+            importInfo.WaitingSchemeObjects = std::ssize(retriedItems);
             LOG_D("TImport::TTxProgress: retry view creation"
                 << ": id# " << importInfo.Id
                 << ", retried items# " << JoinSeq(", ", retriedItems)
@@ -1271,11 +1271,11 @@ private:
                 // Cancel the import, or we will end up waiting indefinitely.
                 return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
             } else if (AllDoneOrWaiting(stateCounts)) {
-                if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjeects) {
+                if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
                     // No progress has been made since the last view creation retry.
                     return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
                 }
-                RetrySchemeQueryObjectsCreation(*importInfo, db, ctx);
+                RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
             }
             return;
         }
@@ -1682,7 +1682,7 @@ private:
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         } else if (AllDoneOrWaiting(stateCounts)) {
-            RetrySchemeQueryObjectsCreation(*importInfo, db, ctx);
+            RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
         }
 
         Self->PersistImportItemState(db, *importInfo, itemIdx);

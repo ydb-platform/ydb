@@ -528,7 +528,7 @@ namespace NInterconnect::NRdma {
         static_assert((MinAllocSz & (MinAllocSz - 1)) == 0, "MinAllocSz must be a power of 2");
         static_assert((MaxAllocSz & (MaxAllocSz - 1)) == 0, "MaxAllocSz must be a power of 2");
         static constexpr ui32 ChainsNum = GetNumChains(MinAllocSz, MaxAllocSz);
-        static constexpr ui32 BatchSizeBytes = 32 * 1024 * 1024; // 32 MB
+        static constexpr ui64 BatchSizeBytes = 32 * 1024 * 1024; // 32 MB
 
         static constexpr ui32 GetChainIndex(ui32 size) noexcept {
             return GetPowerOfTwo(std::max(size, MinAllocSz)) - GetPowerOfTwo(MinAllocSz);
@@ -609,10 +609,12 @@ namespace NInterconnect::NRdma {
             if (!settings.has_value())
                 return 128; //default
 
-            if (settings->SizeLimitMb * 1024 * 1024 < BatchSizeBytes)
+            const ui64 sizeLimit = settings->SizeLimitMb * (1ull << 20);
+
+            if (sizeLimit < BatchSizeBytes)
                 return 1; //Do not allow zerro limit
 
-            return settings->SizeLimitMb * 1024 * 1024 / BatchSizeBytes;
+            return sizeLimit / BatchSizeBytes;
         }
     public:
         TSlotMemPool(NMonitoring::TDynamicCounterPtr counter, const std::optional<TMemPoolSettings>& settings)

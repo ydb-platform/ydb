@@ -6315,7 +6315,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_EQUAL(issues.begin()->message(), "Unsupported scheme object type");
     }
 
-    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode) {
+    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
 
@@ -6353,13 +6353,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             ImportFromS3Settings {
               endpoint: "localhost:%%d"
               scheme: HTTP
-              index_filling_mode: %s
+              index_population_mode: %s
               items {
                 source_prefix: "a"
                 destination_path: "/MyRoot/Table"
               }
             }
-        )", Ydb::Import::ImportFromS3Settings::IndexFillingMode_Name(mode).c_str()));
+        )", Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(mode).c_str()));
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
             NLs::PathExist,
@@ -6368,18 +6368,18 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST(MaterializedIndexBuild) {
-        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD);
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD);
     }
 
     Y_UNIT_TEST(MaterializedIndexImport) {
-        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT);
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT);
     }
 
     Y_UNIT_TEST(MaterializedIndexAuto) {
-        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO);
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO);
     }
 
-    void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode, bool shouldFail) {
+    void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
 
@@ -6405,13 +6405,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             ImportFromS3Settings {
               endpoint: "localhost:%%d"
               scheme: HTTP
-              index_filling_mode: %s
+              index_population_mode: %s
               items {
                 source_prefix: "a"
                 destination_path: "/MyRoot/Table"
               }
             }
-        )", Ydb::Import::ImportFromS3Settings::IndexFillingMode_Name(mode).c_str()), expectedStatus);
+        )", Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(mode).c_str()), expectedStatus);
 
         if (shouldFail) {
             return;
@@ -6424,15 +6424,15 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST(MaterializedIndexAbsentBuild) {
-        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD, false);
+        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD, false);
     }
 
     Y_UNIT_TEST(MaterializedIndexAbsentImport) {
-        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT, true);
+        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, true);
     }
 
     Y_UNIT_TEST(MaterializedIndexAbsentAuto) {
-        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO, false);
+        MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO, false);
     }
 }
 
@@ -7089,7 +7089,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 ImportFromS3Settings {
                   endpoint: "localhost:%d"
                   scheme: HTTP
-                  index_filling_mode: INDEX_FILLING_MODE_IMPORT
+                  index_population_mode: INDEX_POPULATION_MODE_IMPORT
                   items {
                     source_prefix: "a"
                     destination_path: "/MyRoot/Table"

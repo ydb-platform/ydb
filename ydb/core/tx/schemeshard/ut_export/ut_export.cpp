@@ -3114,7 +3114,7 @@ attributes {
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              materialize_indexes: true
+              include_index_data: true
               items {
                 source_path: "/MyRoot/Table"
                 destination_prefix: ""

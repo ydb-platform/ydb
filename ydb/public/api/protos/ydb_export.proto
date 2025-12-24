@@ -145,11 +145,11 @@ message ExportToS3Settings {
     // the resulting data will not be encrypted.
     EncryptionSettings encryption_settings = 15;
 
-    // Materialization of index table data.
+    // Include index data or not.
     // By default, only index metadata is uploaded and indexes are built during import — it saves space
     // and reduces export time, but it can potentially increase the import time.
-    // Indexes can be materialized, then their data will be uploaded during export and downloaded during import.
-    bool materialize_indexes = 16;
+    // Index data can be uploaded and downloaded back during import.
+    bool include_index_data = 16;
 
     // Patterns (PCRE) for paths excluded from export operation.
     // - Patterns are matched against the object path relative to the export's source_path.

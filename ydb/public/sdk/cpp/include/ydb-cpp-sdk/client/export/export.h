@@ -101,7 +101,7 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
     FLUENT_SETTING_OPTIONAL(std::string, Compression);
     FLUENT_SETTING_OPTIONAL(std::string, SourcePath);
     FLUENT_SETTING_OPTIONAL(std::string, DestinationPrefix);
-    FLUENT_SETTING_DEFAULT(bool, MaterializeIndexes, false);
+    FLUENT_SETTING_DEFAULT(bool, IncludeIndexData, false);
     FLUENT_SETTING_VECTOR(std::string, ExcludeRegexp);
 
     TSelf& SymmetricEncryption(const std::string& algorithm, const std::string& key) {

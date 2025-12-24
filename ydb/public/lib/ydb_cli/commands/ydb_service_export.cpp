@@ -318,14 +318,14 @@ void TCommandExportToS3::Config(TConfig& config) {
 
     {
         TStringBuilder help;
-        help << "Materialize index table data or not";
+        help << "Include index data or not";
         if (config.HelpCommandVerbosiltyLevel >= 2) {
             help << Endl << "    By default, only index metadata is uploaded and indexes are built during import — it"
                  << Endl << "    saves space and reduces export time, but it can potentially increase the import time."
-                 << Endl << "    Indexes can be materialized, then their data will be uploaded during export and downloaded during import.";
+                 << Endl << "    Index data can be uploaded and downloaded back during import.";
         }
-        config.Opts->AddLongOption("materialize-indexes", help)
-            .RequiredArgument("BOOL").StoreResult<bool>(&MaterializeIndexes).DefaultValue("false");
+        config.Opts->AddLongOption("include-index-data", help)
+            .RequiredArgument("BOOL").StoreResult<bool>(&IncludeIndexData).DefaultValue("false");
     }
 
     {
@@ -421,7 +421,7 @@ int TCommandExportToS3::Run(TConfig& config) {
     settings.AccessKey(AwsAccessKey);
     settings.SecretKey(AwsSecretKey);
     settings.UseVirtualAddressing(UseVirtualAddressing);
-    settings.MaterializeIndexes(MaterializeIndexes);
+    settings.IncludeIndexData(IncludeIndexData);
 
     for (const auto& item : Items) {
         settings.AppendItem({item.Source, item.Destination});

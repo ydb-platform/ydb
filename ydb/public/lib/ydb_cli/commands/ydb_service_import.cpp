@@ -103,10 +103,10 @@ void TCommandImportFromS3::Config(TConfig& config) {
 
     {
         TStringBuilder help;
-        help << "Index filling mode. Supported values: ";
+        help << "Index population mode. Supported values: ";
         bool first = true;
-        for (auto mode : GetEnumAllValues<NImport::EIndexFillingMode>()) {
-            if (mode == NImport::EIndexFillingMode::Unknown) {
+        for (auto mode : GetEnumAllValues<NImport::EIndexPopulationMode>()) {
+            if (mode == NImport::EIndexPopulationMode::Unknown) {
                 continue;
             }
 
@@ -117,16 +117,16 @@ void TCommandImportFromS3::Config(TConfig& config) {
             if (config.HelpCommandVerbosiltyLevel >= 2) {
                 help << Endl;
                 switch (mode) {
-                case NImport::EIndexFillingMode::Build:
+                case NImport::EIndexPopulationMode::Build:
                     help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": build index";
                     break;
-                case NImport::EIndexFillingMode::Import:
-                    help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": import materialized index";
+                case NImport::EIndexPopulationMode::Import:
+                    help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": import index data";
                     break;
-                case NImport::EIndexFillingMode::Auto:
-                    help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": try to import materialized index, build otherwise";
+                case NImport::EIndexPopulationMode::Auto:
+                    help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": try to import index data, build otherwise";
                     break;
-                case NImport::EIndexFillingMode::Unknown:
+                case NImport::EIndexPopulationMode::Unknown:
                     break;
                 }
             } else {
@@ -135,8 +135,8 @@ void TCommandImportFromS3::Config(TConfig& config) {
 
             first = false;
         }
-        config.Opts->AddLongOption("index-filling-mode", help)
-            .RequiredArgument("STRING").StoreResult(&IndexFillingMode).DefaultValue(IndexFillingMode);
+        config.Opts->AddLongOption("index-population-mode", help)
+            .RequiredArgument("STRING").StoreResult(&IndexPopulationMode).DefaultValue(IndexPopulationMode);
     }
 
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
@@ -336,7 +336,7 @@ TSettings TCommandImportFromS3::MakeSettings() {
         }
 
         settings.NumberOfRetries(NumberOfRetries);
-        settings.IndexFillingMode(IndexFillingMode);
+        settings.IndexPopulationMode(IndexPopulationMode);
         settings.NoACL(NoACL);
         settings.SkipChecksumValidation(SkipChecksumValidation);
 

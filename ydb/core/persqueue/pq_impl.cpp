@@ -5523,8 +5523,10 @@ void TPersQueue::BeginDeletePartitions(const TWriteId& writeId, TTxWriteInfo& wr
         PQ_LOG_TX_D("Already deleting WriteInfo");
         return;
     }
+    writeInfo.Deleting = true;
     if (writeInfo.Partitions.empty()) {
         TryDeleteWriteId(writeId, writeInfo, ActorContext());
+        TxWritesChanged = true;
     } else {
         for (auto& [_, partitionId] : writeInfo.Partitions) {
             Y_ABORT_UNLESS(Partitions.contains(partitionId));
@@ -5533,7 +5535,6 @@ void TPersQueue::BeginDeletePartitions(const TWriteId& writeId, TTxWriteInfo& wr
             Send(partition.Actor, new TEvPQ::TEvDeletePartition);
         }
     }
-    writeInfo.Deleting = true;
 }
 
 void TPersQueue::BeginDeletePartitions(const TDistributedTransaction& tx)

@@ -2167,7 +2167,7 @@ message TSchemeShardConfig {
         // to disable set to 0
         optional uint32 InFlightLimit = 2 [default = 10000];
     }
-    // after this amount of time we forcely write full stats to local DB
+    // after this amount of time we forcibly write full stats to local DB
     // to disable set to 0
     optional uint32 StatsBatchTimeoutMs = 1 [default = 100];
 
@@ -2185,6 +2185,11 @@ message TSchemeShardConfig {
     // number of shards per table
     // 0 means default - NKikimrIndexBuilder.TIndexBuildSettings.max_shards_in_flight
     optional uint32 MaxRestoreBuildIndexShardsInFlight = 6 [default = 1000];
+
+    // number of shards per table
+    // database level default for TTL mechanics
+    // 0 means no limit
+    optional uint32 MaxTTLShardsInFlight = 7 [default = 0];
 }
 
 message TCompactionConfig {

@@ -908,6 +908,10 @@ namespace NActors {
         return NodeCount;
     }
 
+    void TTestActorRuntimeBase::ResetFirstNodeId() {
+        NextNodeId = 1;
+    }
+
     ui64 TTestActorRuntimeBase::AllocateLocalId() {
         TGuard<TMutex> guard(Mutex);
         ui64 nextId = ++LocalId;

@@ -421,7 +421,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
         ChangefeedsNames.reserve(objects.size());
 
         for (const auto& obj : objects) {
-            const TFsPath& path = obj.GetKey();
+            const TFsPath path = obj.GetKey();
             if (path.GetName() == "changefeed_description.pb") {
                 ChangefeedsNames.push_back(path.Parent().GetName());
             }
@@ -486,7 +486,7 @@ class TSchemeGetter: public TActorBootstrapped<TSchemeGetter> {
 
     void ListChangefeeds() {
         CreateClient();
-        ListObjects(ImportInfo->Settings.items(ItemIdx).source_prefix());
+        ListObjects(ImportInfo->Settings.items(ItemIdx).source_prefix() + "/");
     }
 
     void Download(const TString& key) {

@@ -17,7 +17,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/defs.h>
 
-
+#include <util/system/backtrace.h>
 
 #include <util/system/mutex.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -1754,7 +1754,13 @@ public:
     TGenerateResult DoGenGetValues(
         const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const override
     {
-        // Cerr << "DoGenGetValues; IsAggregate = " << IsAggregator << Endl;
+        /*
+        Cerr << "DoGenGetValues; IsAggregate = " << IsAggregator << Endl;
+        TBackTrace bt;
+        bt.Capture();
+        Cerr << bt.PrintToString() << Endl;
+        Cerr << "End of stack" << Endl;
+        */
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context); // TUnboxedValue represented as int128

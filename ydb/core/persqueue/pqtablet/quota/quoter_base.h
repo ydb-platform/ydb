@@ -20,44 +20,31 @@ struct TRequestContext {
     TDuration TotalQuotaWaitTime;
     TActorId PartitionActor;
 
-    TRequestContext() = default;
-    TRequestContext(THolder<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor)
-        : Request(std::move(request))
-        , PartitionActor(partitionActor)
-    {}
-    TRequestContext(THolder<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor, const TDuration& accountWaitTime, TInstant now)
-        : Request(std::move(request))
-        , AccountQuotaWaitTime(accountWaitTime)
-        , PartitionQuotaWaitStart(std::move(now))
-        , PartitionActor(partitionActor)
-    {}
+    TRequestContext();
+    TRequestContext(THolder<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor);
+    TRequestContext(THolder<TEvPQ::TEvRequestQuota>&& request, const TActorId& partitionActor, const TDuration& accountWaitTime, TInstant now);
 };
 
 struct TAccountQuoterHolder {
-    TAccountQuoterHolder(const TActorId& actor, const TTabletCountersBase& baseline)
-        : Actor(actor)
-    {
-        Baseline.Populate(baseline);
-    }
+    TAccountQuoterHolder(const TActorId& actor, const TTabletCountersBase& baseline);
 
     TActorId Actor;
     TTabletCountersBase Baseline;
 };
 
 class TConsumerReadQuota {
-    public:
-        TConsumerReadQuota(THolder<TAccountQuoterHolder> accountQuotaTracker, ui64 readQuotaBurst, ui64 readQuotaSpeed):
-            PartitionPerConsumerQuotaTracker(readQuotaBurst, readQuotaSpeed, TAppData::TimeProvider->Now()),
-            AccountQuotaTracker(std::move(accountQuotaTracker))
-        { }
-    public:
-        TQuotaTracker PartitionPerConsumerQuotaTracker;
-        THolder<TAccountQuoterHolder> AccountQuotaTracker;
-        std::deque<TRequestContext> ReadRequests;
+public:
+    TConsumerReadQuota(THolder<TAccountQuoterHolder> accountQuotaTracker, ui64 readQuotaBurst, ui64 readQuotaSpeed);
+
+public:
+    TQuotaTracker PartitionPerConsumerQuotaTracker;
+    THolder<TAccountQuoterHolder> AccountQuotaTracker;
+    std::deque<TRequestContext> ReadRequests;
 };
 
 
-class TPartitionQuoterBase : public TBaseTabletActor<TPartitionQuoterBase>, private TConstantLogPrefix {
+class TPartitionQuoterBase : public TBaseTabletActor<TPartitionQuoterBase>
+                           , private TConstantLogPrefix {
 
 const TDuration WAKE_UP_TIMEOUT = TDuration::Seconds(1);
 
@@ -71,18 +58,7 @@ public:
         ui64 tabletId,
         const std::shared_ptr<TTabletCountersBase>& counters,
         ui64 maxRequestsInflight
-    )
-        : TBaseTabletActor(tabletId, tabletActor, NKikimrServices::PERSQUEUE)
-        , Partition(partition)
-        , InflightLimitSlidingWindow(1000, TDuration::Minutes(1))
-        , RequestsInflight(0)
-        , PQTabletConfig(config)
-        , TopicConverter(topicConverter)
-        , MaxInflightRequests(maxRequestsInflight)
-        , TotalPartitionQuotaEnabled(totalPartitionQuotaEnabled)
-    {
-        Counters.Populate(*counters);
-    }
+    );
 
 public:
 

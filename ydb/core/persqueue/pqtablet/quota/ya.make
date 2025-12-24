@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     account_read_quoter.cpp
     quota_tracker.cpp
+    quoter_base.cpp
     read_quoter.cpp
     write_quoter.cpp
 )

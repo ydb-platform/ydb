@@ -38,6 +38,11 @@ struct TEvPrivate {
         EvGenerateTestData,
         EvRefreshScaleRecommendation,
         EvUpdateFollowers,
+<<<<<<< HEAD
+=======
+        EvUpdateBalanceCounters,
+        EvProcessTabletMetrics,
+>>>>>>> f8803a6050a (batch tablet metrics processing (#30996))
         EvEnd
     };
 
@@ -142,6 +147,13 @@ struct TEvPrivate {
 
     struct TEvUpdateFollowers : TEventLocal<TEvUpdateFollowers, EvUpdateFollowers> {
     };
+<<<<<<< HEAD
+=======
+
+    struct TEvUpdateBalanceCounters : TEventLocal<TEvUpdateBalanceCounters, EvUpdateBalanceCounters> {};
+
+    struct TEvProcessTabletMetrics : TEventLocal<TEvProcessTabletMetrics, EvProcessTabletMetrics> {};
+>>>>>>> f8803a6050a (batch tablet metrics processing (#30996))
 };
 
 } // NHive

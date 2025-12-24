@@ -140,6 +140,11 @@ IGraphTransformer::TStatus MatchRecognizeMeasuresCallableWrapper(const TExprNode
         }
 
         const auto traits = aggregate->Child(1);
+        if (traits->GetTypeAnn() && traits->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(traits->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!traits->IsCallable(TCoAggregationTraits::CallableName())) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(aggregate->Pos()), TStringBuilder()
                 << "Expected AggregationTraits, but got: " << aggregate->Content()));

@@ -72,6 +72,11 @@ IGraphTransformer::TStatus YqlAggFactoryWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (!ctx.Types.Modules) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     const TExprNode::TPtr* factory = ImportFreezed(
         input->Child(0)->Pos(ctx.Expr),
         "/lib/yql/aggregate.yqls",

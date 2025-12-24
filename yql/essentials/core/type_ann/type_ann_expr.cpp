@@ -780,6 +780,17 @@ public:
             return IGraphTransformer::TStatus::Ok;
         }
 
+        if (input->IsCallable({"Udf", "ScriptUdf", "EvaluateAtom",
+            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode"})) {
+            input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (input->IsCallable({"FileContent","FilePath","FolderPath"})) {
+            input->SetTypeAnn(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String));
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         for (auto child : input->Children()) {
             if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
                 input->SetTypeAnn(child->GetTypeAnn());
@@ -798,6 +809,40 @@ TAutoPtr<IGraphTransformer> CreatePartialTypeAnnotationTransformer(
     return new TPartialTypeAnnotationTransformer(callableTransformer, types);
 }
 
+namespace {
+
+class TFakeArrowResolver : public IArrowResolver {
+public:
+    EStatus LoadFunctionMetadata(const TPosition& pos, TStringBuf name, const TVector<const TTypeAnnotationNode*>& argTypes,
+        const TTypeAnnotationNode* returnType, TExprContext& ctx) const {
+        Y_UNUSED(pos);
+        Y_UNUSED(name);
+        Y_UNUSED(argTypes);
+        Y_UNUSED(returnType);
+        Y_UNUSED(ctx);
+        return EStatus::OK;
+    }
+
+    EStatus HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, TExprContext& ctx) const {
+        Y_UNUSED(pos);
+        Y_UNUSED(from);
+        Y_UNUSED(to);
+        Y_UNUSED(ctx);
+        return EStatus::OK;
+    }
+
+    virtual EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx,
+        const TUnsupportedTypeCallback& onUnsupported = {}) const final {
+        Y_UNUSED(pos);
+        Y_UNUSED(types);
+        Y_UNUSED(ctx);
+        Y_UNUSED(onUnsupported);
+        return EStatus::OK;
+    }
+};
+
+}
+
 bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issues) {
     TExprContext ctx;
     TExprNode::TPtr exprRoot;
@@ -809,6 +854,9 @@ bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issu
 
     TTypeAnnotationContext typeCtx;
     typeCtx.LangVer = langver;
+    typeCtx.ArrowResolver = new TFakeArrowResolver;
+    typeCtx.DeriveColumnOrder = true;
+    typeCtx.OrderedColumns = true;
     auto callableTypeAnnTransformer = CreateExtCallableTypeAnnotationTransformer(typeCtx);
     TVector<TTransformStage> transformers;
     transformers.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply),

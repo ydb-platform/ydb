@@ -1100,7 +1100,10 @@ TExprNode::TPtr CompileBind(const TAstNode& node, TContext& ctx) {
 
         return ctx.Expr.DeepCopy(*ex->second, exportsPtr->ExprCtx(), ctx.DeepClones, true, false);
     } else {
-        const auto stub = ctx.Expr.NewAtom(node.GetPosition(), "stub");
+        /* clang-format off */
+        const auto stub = ctx.Expr.NewCallable(node.GetPosition(), "InstanceOf",
+            {ctx.Expr.NewCallable(node.GetPosition(), "UniversalType", {})});
+        /* clang-format on */
         ctx.Frames.back().Bindings[name->GetContent()] = {stub};
         ctx.Cohesion.Imports[stub.Get()] = std::make_pair(import, TString(aliasValue));
         return stub;

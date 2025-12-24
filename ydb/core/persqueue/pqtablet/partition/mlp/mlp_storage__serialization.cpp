@@ -370,6 +370,9 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     };
 
     {
+        bool moveUnlockedOffset = true;
+        bool moveUncommittedOffset = true;
+
         TDeserializer<TSnapshotMessage> deserializer(snapshot.GetMessages());
         TSnapshotMessage snapshot;
         for (size_t i = 0; deserializer.Next(snapshot); ++i) {
@@ -380,11 +383,13 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
             }
 
             const auto& messageStatus = Messages[i].GetStatus();
-            if (messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::Delayed) {
+            if (messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::Delayed && moveUnlockedOffset) {
                 ++FirstUnlockedOffset;
+                moveUnlockedOffset = false;
             }
-            if (messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked) {
+            if (messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked && moveUncommittedOffset) {
                 ++FirstUncommittedOffset;
+                moveUncommittedOffset = false;
             }
         }
     }

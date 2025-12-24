@@ -183,12 +183,14 @@ private:
             : ConnectionsActive(profiler.Gauge("/connections_active"))
             , ConnectionsAccepted(profiler.Counter("/connections_accepted"))
             , ConnectionsDropped(profiler.Counter("/connections_dropped"))
+            , RequestsMissingHeaders(profiler.Counter("/requests_missing_headers"))
             , Profiler_(profiler)
         { }
 
         TGauge ConnectionsActive;
         TCounter ConnectionsAccepted;
         TCounter ConnectionsDropped;
+        TCounter RequestsMissingHeaders;
 
         TRequestProfiling* GetRequestProfiling(const THttpInputPtr& httpRequest)
         {
@@ -267,19 +269,19 @@ private:
 
     bool HandleRequest(const THttpInputPtr& request, const THttpOutputPtr& response)
     {
-        auto* requestProfiling = Profiling_.GetRequestProfiling(request);
-        requestProfiling->RequestCounter.Increment();
-
         response->SetStatus(EStatusCode::InternalServerError);
-        auto finallyGuard = Finally([requestProfiling, &response] {
-            requestProfiling->StatusCodeCounter.GetCounter(*response->GetStatus())->Increment();
-        });
 
         bool closeResponse = true;
         try {
             if (!request->ReceiveHeaders()) {
+                Profiling_.RequestsMissingHeaders.Increment();
                 return false;
             }
+            auto* requestProfiling = Profiling_.GetRequestProfiling(request);
+            requestProfiling->RequestCounter.Increment();
+            auto finallyGuard = Finally([requestProfiling, &response] {
+                requestProfiling->StatusCodeCounter.GetCounter(*response->GetStatus())->Increment();
+            });
 
             const auto& path = request->GetUrl().Path;
 

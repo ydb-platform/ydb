@@ -11653,6 +11653,25 @@ Y_UNIT_TEST(FromTableWithImmediateCluster) {
     UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
 }
 
+Y_UNIT_TEST(FromTmpTableWithImmediateCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        INSERT INTO plato.@tmp (a) VALUES (1);
+        COMMIT;
+        SELECT a FROM plato.@tmp;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!", "TempTable"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["TempTable"], 2);
+}
+
 Y_UNIT_TEST(Where) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();

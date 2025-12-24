@@ -135,6 +135,7 @@ struct TUtils {
         Cerr << "LOAD" << Endl;
         Cerr << "< SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
         Storage.Initialize(snapshot);
+        Storage.InitMetrics();
         Cerr << "< STORAGE DUMP: " << Storage.DebugString() << Endl;
     }
 
@@ -142,6 +143,7 @@ struct TUtils {
         Cerr << "LOAD" << Endl;
         Cerr << "< WAL: " << wal.ShortDebugString() << Endl;
         Storage.ApplyWAL(wal);
+        Storage.InitMetrics();
         Cerr << "< STORAGE DUMP: " << Storage.DebugString() << Endl;
     }
 

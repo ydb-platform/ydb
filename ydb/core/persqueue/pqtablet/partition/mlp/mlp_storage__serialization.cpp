@@ -400,6 +400,9 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         TSnapshotMessage snapshot;
         while (deserializer.Next(offset, snapshot)) {
             SlowMessages[offset] = fromSnapshot(snapshot);
+            if (KeepMessageOrder && SlowMessages[offset].HasMessageGroupId) {
+                LockedMessageGroupsId.insert(SlowMessages[offset].MessageGroupIdHash);
+            }
         }
     }
 

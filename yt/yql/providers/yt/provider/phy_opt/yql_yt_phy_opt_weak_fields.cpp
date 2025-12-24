@@ -95,7 +95,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::WeakFields(TExprBase no
 
         for (const auto& rowArg : rowArgs) {
             auto rowArgParentsIt = parentsMap->find(rowArg.Get());
-            YQL_ENSURE(rowArgParentsIt != parentsMap->end());
+            if (rowArgParentsIt == parentsMap->end()) {
+                return node;
+            }
+
             for (const auto& memberNode: rowArgParentsIt->second) {
                 if (auto column = getMemberColumn(memberNode, rowArg.Get())) {
                     if (column != YqlOthersColumnName) {

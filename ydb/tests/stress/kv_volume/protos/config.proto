@@ -14,9 +14,8 @@ message ActionDataMode {
     }
     
     oneof Mode {
-        All all = 1;
-        Worker worker = 2;
-        FromPrevActions from_prev_actions = 3;
+        Worker worker = 1;
+        FromPrevActions from_prev_actions = 2;
     }
 }
 

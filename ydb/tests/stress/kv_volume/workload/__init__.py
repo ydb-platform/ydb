@@ -2,6 +2,8 @@ import logging
 from datetime import datetime, timedelta
 import random
 from collections import defaultdict, deque
+from itertools import chain
+import uuid
 import asyncio
 
 from ydb.public.api.protos import ydb_status_codes_pb2 as ydb_status_codes
@@ -35,12 +37,29 @@ def parse_endpoint(endpoint):
 
 
 class Worker:
-    def __init__(self, worker_id):
+    class Action:
+        def __init__(self, config, parent = None):
+            self.id = uuid.uuid4()
+            self.name = config.name
+            self.config = config
+            self.parent = parent
+            
+        def make_with_parent(self, parent):
+            return Worker.Action(self.config, parent))
+    
+    def __init__(self, worker_id, duration):
         self.worker_id = worker_id
         self.triggers_by_name = defaultdict(list) # action.name -> [action.name]
+        self.action_configs = dict() # action.name -> action_config
         self.always_triggered = set()
-        
+        self.triggered = set()
         self.aqueue = None # asyncio.Queue
+        
+        self.duration = duration
+
+        self.begin_time = None
+        self.end_time = None
+        self.actions = dict() # action.id -> action
         
     def add_action(self, action):
         if not action.name:
@@ -49,20 +68,39 @@ class Worker:
         if parent_action == "":
             self.always_triggered.add(action.name)
         self.triggers_by_name[parent_action].append(action.name)
+        self.action_configs[action.name] = Worker.Action(action)
+        
+    async def schedule(queue: asyncio.Queue, delay_us: float, func):
+        await asyncio.sleep(delay_us / 1000000) # convert to seconds
+        await func()
+        
+    def triggered(self):
+        return chain(self.triggered, self.always_triggered)
+
+    def process_triggered(self, trigger):
+        
         
     async def arun(self):
         self.aqueue = asyncio.Queue(maxsize=10)
-        ...
+        
+        self.begin_time = datetime.now()
+        self.end_time = self.begin_time + timedelta(secon∏ds=self.duration)
+        
+        while datetime.now() < self.end_time:
+            pass
+        
+        
 
     def run(self):
         asyncio.run(self.arun())
 
 class WorkerBuilder:
-    def __init__(self, config):
+    def __init__(self, config, duration):
         self.config = config
+        self.duration = duration
         
     def build(self, worker_id):
-        worker = Worker(worker_id)
+        worker = Worker(worker_id, self.duration)
         return worker
         
 

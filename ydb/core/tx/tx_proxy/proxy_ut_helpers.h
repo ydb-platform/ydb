@@ -217,6 +217,7 @@ public:
 
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
+        GetSettings().SetEnableRealSystemViewPaths(false);
         GetSettings().SetEnableAlterDatabaseCreateHiveFirst(enableAlterDatabaseCreateHiveFirst);
 
         for (ui32 poolNum = 1; poolNum <= poolsCount; ++poolNum) {

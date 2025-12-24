@@ -1774,7 +1774,7 @@ namespace Tests {
     }
 
     void TServer::AddSysViewsRosterUpdateObserver() {
-        if (Runtime && !Runtime->IsRealThreads()) {
+        if (Runtime && !Runtime->IsRealThreads() && Settings->EnableStorage) {
             SysViewsRosterUpdateFinished = false;
             SysViewsRosterUpdateObserver = Runtime->AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
                 SysViewsRosterUpdateFinished = true;
@@ -1783,7 +1783,7 @@ namespace Tests {
     }
 
     void TServer::WaitForSysViewsRosterUpdate() {
-        if (Runtime && !Runtime->IsRealThreads()) {
+        if (Runtime && !Runtime->IsRealThreads() && Settings->EnableStorage) {
             Runtime->WaitFor("SysViewsRoster update finished", [this] {
                 return SysViewsRosterUpdateFinished;
             });

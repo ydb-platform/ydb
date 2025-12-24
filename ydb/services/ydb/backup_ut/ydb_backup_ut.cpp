@@ -3066,7 +3066,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestSystemViewBackupRestore() {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableShowCreate(true);
-        config.MutableFeatureFlags()->SetEnableRealSystemViewPaths(true);
         TKikimrWithGrpcAndRootSchema server(config);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TSchemeClient schemeClient(driver);
@@ -3194,7 +3193,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             return; // TODO: fix me issue@26498
         }
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableRealSystemViewPaths(true);
         config.MutableFeatureFlags()->SetEnableShowCreate(true);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
@@ -3614,6 +3612,13 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TReplicationClient replicationClient(driver);
+        TSchemeClient schemeClient(driver);
+
+        TPermissions permissions("root@builtin", {"ydb.generic.full"});
+        const auto result = schemeClient.ModifyPermissions("/Root",
+            TModifyPermissionsSettings().AddGrantPermissions(permissions)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();

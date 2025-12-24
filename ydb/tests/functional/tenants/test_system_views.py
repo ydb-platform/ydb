@@ -213,6 +213,12 @@ class TestSysViewsRegistry(BaseSystemViews):
     - Adding new columns (with sequential IDs)
     - Adding new sysviews
     """
+    @classmethod
+    def setup_class(cls):
+        cls.cluster = KiKiMR(KikimrConfigGenerator())
+        # Remove after support sysview type in python SDK
+        cls.cluster.config.yaml_config['feature_flags']['enable_real_system_view_paths'] = False
+        cls.cluster.start()
 
     def collect_sysviews(self, driver, database):
         """Collects information about all sysviews in the database."""
@@ -223,7 +229,7 @@ class TestSysViewsRegistry(BaseSystemViews):
         try:
             children = driver.scheme_client.list_directory(sys_dir_path).children
         except Exception as e:
-            logger.warning(f"Failed to list .sys directory for {database}: {e}")
+            logger.warning(f"Failed to list .sys directory for '{database}': {e}")
             return sysviews
 
         with ydb.SessionPool(driver, size=1) as pool:
@@ -255,7 +261,7 @@ class TestSysViewsRegistry(BaseSystemViews):
                     except Exception as e:
                         # Some sysviews may be unavailable or have special nature (e.g., pg_* views)
                         if sysview_name in pg_sysviews:
-                            logger.debug(f"Skipping pg sysview {sysview_name}: {e}")
+                            logger.debug(f"Skipping pg sysview '{sysview_name}': {e}")
                             continue
                         else:
                             raise
@@ -264,16 +270,24 @@ class TestSysViewsRegistry(BaseSystemViews):
 
     def load_canonical_file(self, filename):
         """Loads canonical file if it exists."""
-        try:
-            canonical_path = os.path.join(
-                yatest.common.output_path(),
-                filename
-            )
-            if os.path.exists(canonical_path):
+        test_name = yatest.common.context.test_name
+        # Remove .py and replace :: with .
+        test_name = test_name.replace('.py::', '.').replace('::', '.')
+
+        canonical_path = os.path.join(
+            yatest.common.test_source_path('canondata'),
+            test_name,
+            filename
+        )
+
+        if os.path.exists(canonical_path):
+            try:
                 with open(canonical_path, 'r') as f:
                     return json.load(f)
-        except Exception as e:
-            logger.debug(f"Could not load canonical file {filename}: {e}")
+
+            except Exception as e:
+                logger.debug(f"Could not load canonical file '{filename}': {e}")
+
         return None
 
     def write_canonical_file(self, content, filename):
@@ -283,13 +297,14 @@ class TestSysViewsRegistry(BaseSystemViews):
             f.write(json.dumps(content, indent=2, sort_keys=True, ensure_ascii=False))
         return output_path
 
-    def validate_compatibility(self, canonical_sysviews, current_sysviews, database_name):
+    def validate_compatibility(self, canonical_sysviews, current_sysviews):
         """
         Validates compatibility of changes according to rules above.
         Returns list of compatibility errors.
         """
         if canonical_sysviews is None:
             # No canonical data - this is the first run
+            logger.debug('Dry run without canon data')
             return []
 
         errors = []
@@ -297,14 +312,12 @@ class TestSysViewsRegistry(BaseSystemViews):
         # Check that all canonical sysviews are present
         for sysview_name, canonical_sysview in canonical_sysviews.items():
             if sysview_name not in current_sysviews:
-                errors.append(
-                    f"[{database_name}] Sysview '{sysview_name}' was deleted"
-                )
+                errors.append(f"Sysview '{sysview_name}' was deleted")
                 continue
 
             current_sysview = current_sysviews[sysview_name]
-            canonical_columns = {col['name']: col for col in canonical_sysview['columns']}
-            current_columns = {col['name']: col for col in current_sysview['columns']}
+            canonical_columns = { col['name']: col for col in canonical_sysview['columns'] }
+            current_columns = { col['name']: col for col in current_sysview['columns'] }
             canonical_pk = canonical_sysview['primary_key']
             current_pk = current_sysview['primary_key']
 
@@ -312,36 +325,33 @@ class TestSysViewsRegistry(BaseSystemViews):
             for col_name, col_info in canonical_columns.items():
                 if col_name not in current_columns:
                     errors.append(
-                        f"[{database_name}] Column '{col_name}' was deleted from sysview '{sysview_name}'"
+                        f"Column '{col_name}' was deleted from sysview '{sysview_name}'"
                     )
                 else:
                     # Check 2: Column types must not change
                     if col_info['type'] != current_columns[col_name]['type']:
                         errors.append(
-                            f"[{database_name}] Column '{col_name}' changed type in sysview '{sysview_name}': "
+                            f"Column '{col_name}' changed type in sysview '{sysview_name}': "
                             f"was '{col_info['type']}', became '{current_columns[col_name]['type']}'"
                         )
 
             # Check 3: Primary key must contain all canonical columns in the same order
             if len(canonical_pk) > len(current_pk):
-                errors.append(
-                    f"[{database_name}] Primary key was shortened in sysview '{sysview_name}'"
-                )
+                errors.append(f"Primary key was shortened in sysview '{sysview_name}'")
             else:
                 for i, pk_col in enumerate(canonical_pk):
                     if pk_col != current_pk[i]:
                         errors.append(
-                            f"[{database_name}] Primary key differs in sysview '{sysview_name}': "
-                            f"expected '{pk_col}' at position {i}, "
-                            f"got '{current_pk[i] if i < len(current_pk) else 'missing'}'"
+                            f"Primary key differs in sysview '{sysview_name}': "
+                            f"expected '{pk_col}' at position {i}, got '{current_pk[i]}'"
                         )
 
         return errors
 
-    def test_sysviews_registry(self):
+    def test_domain_sysviews_registry(self):
         """
-        Main test: validates SysViews registry changes
-        for both root database and tenant database.
+        Test validates SysViews registry changes
+        for root database.
 
         Test flow:
         1. Collects current state of sysviews
@@ -359,6 +369,44 @@ class TestSysViewsRegistry(BaseSystemViews):
             root_driver.wait(timeout=10)
             root_sysviews = self.collect_sysviews(root_driver, '/Root')
 
+        # Load canonical data
+        canonical_root = self.load_canonical_file('root_sysviews.json')
+
+        # Check whether changes are compatible
+        all_errors = []
+        all_errors.extend(self.validate_compatibility(canonical_root, root_sysviews))
+
+        # If there are compatibility errors, the test has to drop.
+        if all_errors:
+            error_message = "SysViews registry validation failed:\n" + "\n".join(all_errors)
+            logger.error(error_message)
+            assert False, error_message
+
+        # Log information
+        logger.info(f"Root sysviews count: {len(root_sysviews)}")
+        logger.info(f"Root sysviews: {sorted(root_sysviews.keys())}")
+
+        # Return canonized files
+        # If schemas changed incompatibly, test already failed above
+        # If changes are compatible - update canon
+        return yatest.common.canonical_file(
+            local=True,
+            universal_lines=True,
+            path=self.write_canonical_file(root_sysviews, 'root_sysviews.json')
+        )
+
+    def test_tenant_sysviews_registry(self):
+        """
+        Test validates SysViews registry changes
+        for tenant database.
+
+        Test flow:
+        1. Collects current state of sysviews
+        2. Loads canonical data (if exists)
+        3. Validates compatibility of changes
+        4. Canonizes new state
+        """
+
         # Collect sysviews from tenant database
         tenant_driver_config = ydb.DriverConfig(
             "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
@@ -369,39 +417,28 @@ class TestSysViewsRegistry(BaseSystemViews):
             tenant_driver.wait(timeout=10)
             tenant_sysviews = self.collect_sysviews(tenant_driver, self.database)
 
-        # Загружаем канонические данные
-        canonical_root = self.load_canonical_file('root_sysviews.json')
+        # Load canonical data
         canonical_tenant = self.load_canonical_file('tenant_sysviews.json')
 
-        # Проверяем совместимость изменений
+        # Check whether changes are compatible
         all_errors = []
-        all_errors.extend(self.validate_compatibility(canonical_root, root_sysviews, 'Root'))
-        all_errors.extend(self.validate_compatibility(canonical_tenant, tenant_sysviews, 'Tenant'))
+        all_errors.extend(self.validate_compatibility(canonical_tenant, tenant_sysviews))
 
-        # Если есть ошибки совместимости, тест должен упасть
+        # If there are compatibility errors, the test has to drop.
         if all_errors:
             error_message = "SysViews registry validation failed:\n" + "\n".join(all_errors)
             logger.error(error_message)
             assert False, error_message
 
         # Log information
-        logger.info(f"Root sysviews count: {len(root_sysviews)}")
-        logger.info(f"Root sysviews: {sorted(root_sysviews.keys())}")
         logger.info(f"Tenant sysviews count: {len(tenant_sysviews)}")
         logger.info(f"Tenant sysviews: {sorted(tenant_sysviews.keys())}")
 
         # Return canonized files
         # If schemas changed incompatibly, test already failed above
         # If changes are compatible - update canon
-        return {
-            'root_sysviews': yatest.common.canonical_file(
-                local=True,
-                universal_lines=True,
-                path=self.write_canonical_file(root_sysviews, 'root_sysviews.json')
-            ),
-            'tenant_sysviews': yatest.common.canonical_file(
-                local=True,
-                universal_lines=True,
-                path=self.write_canonical_file(tenant_sysviews, 'tenant_sysviews.json')
-            )
-        }
+        return yatest.common.canonical_file(
+            local=True,
+            universal_lines=True,
+            path=self.write_canonical_file(tenant_sysviews, 'tenant_sysviews.json')
+        )

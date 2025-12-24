@@ -129,7 +129,7 @@ struct TItemDeserializer<TSnapshotMessage> {
         if (data == end) {
             return false;
         }
-        AFL_ENSURE(data < end);
+        AFL_ENSURE(data < end)("d", std::distance(data, end));
 
         memcpy(&msg.Common.Value, data, sizeof(TSnapshotMessage::Common.Value));  // TODO BIGENDIAN/LOWENDIAN
         data += sizeof(TSnapshotMessage::Common.Value);
@@ -195,7 +195,7 @@ struct TItemDeserializer<TMessageChange> {
         if (data == end) {
             return false;
         }
-        AFL_ENSURE(data < end);
+        AFL_ENSURE(data < end)("d", std::distance(data, end));
 
         memcpy(&msg.Common.Value, data, sizeof(TMessageChange::Common.Value));  // TODO BIGENDIAN/LOWENDIAN
         data += sizeof(TMessageChange::Common.Value);

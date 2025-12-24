@@ -19,7 +19,7 @@ CREATE SECRET `MySecretName` WITH (value = `MySecretData`);
 
 ## Устаревший синтаксис
 
-### Создание секретов {#create_secret_depricated}
+### Создание секретов {#create_secret_deprecated}
 
 {% note warning %}
 
@@ -33,7 +33,7 @@ CREATE SECRET `MySecretName` WITH (value = `MySecretData`);
 CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
 ```
 
-### Управление доступом {#secret_access_depricated}
+### Управление доступом {#secret_access_deprecated}
 
 {% note warning %}
 

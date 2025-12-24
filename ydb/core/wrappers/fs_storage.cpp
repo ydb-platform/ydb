@@ -267,13 +267,6 @@ private:
     }
 };
 
-template <typename TEvRequest>
-void ExecuteRequest(typename TEvRequest::TPtr& ev, const TString& basePath, bool verbose, const TReplyAdapterContainer& replyAdapter) {
-    auto actor = new TFsOperationActor(basePath, verbose, replyAdapter);
-    auto actorId = TlsActivationContext->AsActorContext().Register(actor, TMailboxType::HTSwap, AppData()->IOPoolId);
-    TlsActivationContext->AsActorContext().Send(ev->Forward(actorId));
-}
-
 } // anonymous namespace
 
 TFsExternalStorage::TFsExternalStorage(const TString& basePath, bool verbose)
@@ -286,54 +279,88 @@ TFsExternalStorage::TFsExternalStorage(const TString& basePath, bool verbose)
 
 TFsExternalStorage::~TFsExternalStorage()
 {
+    Shutdown();
+}
+
+void TFsExternalStorage::EnsureActor() const {
+    if (ActorCreated) {
+        return;
+    }
+
+    auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
+    OperationActorId = TlsActivationContext->AsActorContext().Register(
+        actor, TMailboxType::HTSwap, AppData()->IOPoolId);
+    ActorCreated = true;
+
+    FS_LOG(Verbose, "TFsExternalStorage: Created persistent actor# " << OperationActorId);
+}
+
+void TFsExternalStorage::Shutdown() {
+    if (ActorCreated && TlsActivationContext) {
+        FS_LOG(Verbose, "TFsExternalStorage: Shutting down actor# " << OperationActorId);
+        TlsActivationContext->AsActorContext().Send(OperationActorId, new NActors::TEvents::TEvPoison());
+        ActorCreated = false;
+    }
 }
 
 void TFsExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {
-    ExecuteRequest<TEvPutObjectRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev) const {
-    ExecuteRequest<TEvGetObjectRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvHeadObjectRequest::TPtr& ev) const {
-    ExecuteRequest<TEvHeadObjectRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvDeleteObjectRequest::TPtr& ev) const {
-    ExecuteRequest<TEvDeleteObjectRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvCheckObjectExistsRequest::TPtr& ev) const {
-    ExecuteRequest<TEvCheckObjectExistsRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvListObjectsRequest::TPtr& ev) const {
-    ExecuteRequest<TEvListObjectsRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvDeleteObjectsRequest::TPtr& ev) const {
-    ExecuteRequest<TEvDeleteObjectsRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const {
-    ExecuteRequest<TEvCreateMultipartUploadRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvUploadPartRequest::TPtr& ev) const {
-    ExecuteRequest<TEvUploadPartRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const {
-    ExecuteRequest<TEvCompleteMultipartUploadRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const {
-    ExecuteRequest<TEvAbortMultipartUploadRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvUploadPartCopyRequest::TPtr& ev) const {
-    ExecuteRequest<TEvUploadPartCopyRequest>(ev, BasePath, Verbose, ReplyAdapter);
+    EnsureActor();
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 #undef FS_LOG

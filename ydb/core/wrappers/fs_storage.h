@@ -8,6 +8,11 @@ class TFsExternalStorage: public IExternalStorageOperator {
 private:
     TString BasePath;
     bool Verbose = true;
+    mutable NActors::TActorId OperationActorId;
+    mutable bool ActorCreated = false;
+
+    void EnsureActor() const;
+    void Shutdown();
 
 public:
     TFsExternalStorage(const TString& basePath, bool verbose = true);

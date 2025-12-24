@@ -14,7 +14,7 @@ items:
 - name: healthcheck_config
   href: healthcheck_config.md
 - name: hive_config
-  href: hive_config.md
+  href: hive.md
 - name: host_configs
   href: host_configs.md
 - name: hosts

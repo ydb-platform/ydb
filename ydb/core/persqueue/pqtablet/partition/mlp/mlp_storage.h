@@ -161,6 +161,7 @@ public:
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
     std::deque<TDLQMessage> GetDLQMessages();
     const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
+    void InitMetrics();
 
 
     struct TPosition {
@@ -219,6 +220,7 @@ private:
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 
     void RemoveMessage(ui64 offset, const TMessage& message);
+    void UpdateMessageMetrics(const TMessage& message);
 
     std::optional<ui32> GetRetentionDeadlineDelta() const;
 

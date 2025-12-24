@@ -140,11 +140,7 @@ namespace NActors {
         }
 
         i16 limit = Min(threads, (ui32)Max<i16>());
-        if (DefaultFullThreadCount) {
-            DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - HasOwnSharedThread, limit);
-        } else {
-            DefaultFullThreadCount = limit;
-        }
+        DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - HasOwnSharedThread, limit);
 
         MaxFullThreadCount = Min(Max<i16>(MaxFullThreadCount - HasOwnSharedThread, DefaultFullThreadCount), limit);
 

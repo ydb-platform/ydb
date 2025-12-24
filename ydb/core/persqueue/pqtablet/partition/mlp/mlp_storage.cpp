@@ -653,11 +653,9 @@ bool TStorage::DoCommit(ui64 offset, size_t& totalMetrics) {
 
             AFL_ENSURE(Metrics.LockedMessageCount > 0)("o", offset);
             --Metrics.LockedMessageCount;
-            if (KeepMessageOrder && message->HasMessageGroupId) {
-                if (LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {
-                    AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("o", offset);
-                    --Metrics.LockedMessageGroupCount;
-                }
+            if (KeepMessageOrder && message->HasMessageGroupId && LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {
+                AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("o", offset);
+                --Metrics.LockedMessageGroupCount;
             }
 
             ++totalMetrics;
@@ -729,41 +727,37 @@ void TStorage::DoUnlock(ui64 offset, TMessage& message) {
 
     ++Metrics.UnprocessedMessageCount;
 
-    if (KeepMessageOrder && message.HasMessageGroupId) {
-        if (LockedMessageGroupsId.erase(message.MessageGroupIdHash)) {
-            AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("o", offset);
-            --Metrics.LockedMessageGroupCount;
-        }
+    if (KeepMessageOrder && message.HasMessageGroupId && LockedMessageGroupsId.erase(message.MessageGroupIdHash)) {
+        AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("o", offset);
+        --Metrics.LockedMessageGroupCount;
     }
 
     AFL_ENSURE(Metrics.LockedMessageCount > 0)("o", offset);
     --Metrics.LockedMessageCount;
 
-    if (message.ProcessingCount >= MaxMessageProcessingCount) {
-        if (DeadLetterPolicy) {
-            switch (DeadLetterPolicy.value()) {
-                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE: {
-                    message.SetStatus(EMessageStatus::DLQ);
+    if (message.ProcessingCount >= MaxMessageProcessingCount && DeadLetterPolicy) {
+        switch (DeadLetterPolicy.value()) {
+            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE: {
+                message.SetStatus(EMessageStatus::DLQ);
 
-                    auto seqNo = ++Metrics.TotalScheduledToDLQMessageCount;
-                    DLQMessages[offset] = seqNo;
-                    DLQQueue.push_back({
-                        .Offset = offset,
-                        .SeqNo = seqNo
-                    });
-                    Batch.AddToDLQ(offset, seqNo);
+                auto seqNo = ++Metrics.TotalScheduledToDLQMessageCount;
+                DLQMessages[offset] = seqNo;
+                DLQQueue.push_back({
+                    .Offset = offset,
+                    .SeqNo = seqNo
+                });
+                Batch.AddToDLQ(offset, seqNo);
 
-                    AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
-                    --Metrics.UnprocessedMessageCount;
-                    ++Metrics.DLQMessageCount;
-                    return;
-                }
-                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
-                    DoCommit(offset, Metrics.TotalDeletedByDeadlinePolicyMessageCount);
-                    return;
-                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
-                    break;
+                AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
+                --Metrics.UnprocessedMessageCount;
+                ++Metrics.DLQMessageCount;
+                return;
             }
+            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
+                DoCommit(offset, Metrics.TotalDeletedByDeadlinePolicyMessageCount);
+                return;
+            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
+                break;
         }
     }
 
@@ -1034,6 +1028,41 @@ TStorage::TMessageIterator TStorage::begin() const {
 
 TStorage::TMessageIterator TStorage::end() const {
     return TMessageIterator(*this, SlowMessages.end(), FirstOffset + Messages.size());
+}
+
+void TStorage::UpdateMessageMetrics(const TMessage& message) {
+    switch (message.GetStatus()) {
+        case EMessageStatus::Locked:
+            ++Metrics.LockedMessageCount;
+            if (KeepMessageOrder && message.HasMessageGroupId) {
+                ++Metrics.LockedMessageGroupCount;
+            }
+            break;
+        case EMessageStatus::Unprocessed:
+            ++Metrics.UnprocessedMessageCount;
+            break;
+        case EMessageStatus::Delayed:
+            ++Metrics.DelayedMessageCount;
+            break;
+        case EMessageStatus::Committed:
+            ++Metrics.CommittedMessageCount;
+            break;
+        case EMessageStatus::DLQ:
+            ++Metrics.DLQMessageCount;
+            break;
+    }
+}
+
+void TStorage::InitMetrics() {
+    for (const auto& [_, message] : SlowMessages) {
+        UpdateMessageMetrics(message);
+    }
+    
+    for (const auto& message : Messages) {
+        UpdateMessageMetrics(message);
+    }
+
+    Metrics.InflightMessageCount = Messages.size() + SlowMessages.size();
 }
 
 } // namespace NKikimr::NPQ::NMLP

@@ -288,6 +288,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
             AFL_ENSURE(false)("c", record.GetCookie());
     }
 
+    Storage->InitMetrics();
     CommitIfNeeded();
 
     if (!FetchMessagesIfNeeded()) {

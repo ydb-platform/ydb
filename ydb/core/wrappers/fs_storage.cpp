@@ -19,9 +19,9 @@ namespace NKikimr::NWrappers::NExternalStorage {
 #define FS_LOG(verbose, stream) \
     do { \
         if (verbose) { \
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, stream); \
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream); \
         } else { \
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, stream); \
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream); \
         } \
     } while (false)
 
@@ -114,7 +114,7 @@ public:
             hFunc(TEvUploadPartCopyRequest, Handle);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
                     "TFsOperationActor StateWork received unknown event type# " << ev->GetTypeRewrite());
         }
     }
@@ -130,7 +130,7 @@ public:
             WriteFile(key, body);
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const std::exception& ex) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
                 "FS PutObject failed: key# " << key << ", error# " << ex.what());
             ReplyError<TEvPutObjectResponse>(ev->Sender, key, ex.what());
         }
@@ -140,7 +140,7 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
             "FS GetObject: not implemented");
         ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Not implemented");
     }
@@ -149,7 +149,7 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
             "FS HeadObject: not implemented");
         ReplyError<TEvHeadObjectResponse>(ev->Sender, key, "Not implemented");
     }
@@ -157,7 +157,7 @@ public:
     void Handle(TEvDeleteObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
             "FS DeleteObject: not implemented");
         ReplyError<TEvDeleteObjectResponse>(ev->Sender, key, "Not implemented");
     }
@@ -165,7 +165,7 @@ public:
     void Handle(TEvCheckObjectExistsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
             "FS CheckObjectExists: not implemented");
         ReplyError<TEvCheckObjectExistsResponse>(ev->Sender, key, "Not implemented");
     }
@@ -173,14 +173,14 @@ public:
     void Handle(TEvListObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString prefix = TString(request.GetPrefix().data(), request.GetPrefix().size());
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
             "FS ListObjects: prefix# " << prefix << ", not implemented");
         ReplyError  <TEvListObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
     }
 
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
             "FS DeleteObjects: not implemented, objects count# " << request.GetDelete().GetObjects().size());
         ReplyError<TEvDeleteObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
     }
@@ -214,7 +214,7 @@ public:
             auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
             ReplyAdapter.Reply(ev->Sender, std::move(response));
         } catch (const std::exception& ex) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
                 "FS UploadPart failed: key# " << key << ", error# " << ex.what());
             ReplyError<TEvUploadPartResponse>(ev->Sender, key, ex.what());
         }
@@ -237,7 +237,7 @@ public:
             auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
             ReplyAdapter.Reply(ev->Sender, std::move(response));
         } catch (const std::exception& ex) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
                 "FS CompleteMultipartUpload failed: key# " << key << ", error# " << ex.what());
             ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender, key, ex.what());
         }
@@ -255,7 +255,7 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
             "FS UploadPartCopy: not implemented");
         ReplyError<TEvUploadPartCopyResponse>(ev->Sender, key, "Not implemented");
     }
@@ -282,7 +282,7 @@ TFsExternalStorage::TFsExternalStorage(const TString& basePath, bool verbose)
     : BasePath(basePath)
     , Verbose(verbose)
 {
-    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
         "TFsExternalStorage created: BasePath# " << BasePath << ", Verbose# " << Verbose);
 }
 

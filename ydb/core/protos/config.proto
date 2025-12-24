@@ -2191,6 +2191,11 @@ message TColumnShardConfig {
     optional bool EnableDiagnostics = 55 [default = true];
     optional bool EnableParallelCompaction = 56 [default = false];
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
+
+    oneof DefaultCompaction {
+        string DefaultCompactionPreset = 61 [default = "lc-buckets"];
+        NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
+    }
 }
 
 message TSchemeShardConfig {

@@ -10281,7 +10281,7 @@ Y_UNIT_TEST_SUITE(AggregationPhases) {
 }
 
 Y_UNIT_TEST_SUITE(Watermarks) {
-    Y_UNIT_TEST(Insert) {
+    Y_UNIT_TEST(InsertAs) {
         const auto stmt = R"sql(
 USE plato;
 
@@ -10293,7 +10293,7 @@ WITH(
     SCHEMA(
         ts Timestamp,
     ),
-    WATERMARK AS (ts)
+    WATERMARK AS (CAST(ts AS TImestamp))
 );
 )sql";
         const auto& res = SqlToYql(stmt);
@@ -10301,7 +10301,7 @@ WITH(
         UNIT_ASSERT(res.IsOk());
     }
 
-    Y_UNIT_TEST(Select) {
+    Y_UNIT_TEST(SelectAs) {
         const auto stmt = R"sql(
 USE plato;
 
@@ -10312,7 +10312,45 @@ WITH(
     SCHEMA(
         ts Timestamp,
     ),
-    WATERMARK AS (ts)
+    WATERMARK AS (CAST(ts AS TImestamp))
+);
+)sql";
+        const auto& res = SqlToYql(stmt);
+        Err2Str(res, EDebugOutput::ToCerr);
+        UNIT_ASSERT(res.IsOk());
+    }
+    Y_UNIT_TEST(InsertEquals) {
+        const auto stmt = R"sql(
+USE plato;
+
+INSERT INTO Output
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK = CAST(ts AS TImestamp)
+);
+)sql";
+        const auto& res = SqlToYql(stmt);
+        Err2Str(res, EDebugOutput::ToCerr);
+        UNIT_ASSERT(res.IsOk());
+    }
+
+    Y_UNIT_TEST(SelectEquals) {
+        const auto stmt = R"sql(
+USE plato;
+
+SELECT
+    *
+FROM Input
+WITH(
+    SCHEMA(
+        ts Timestamp,
+    ),
+    WATERMARK = CAST(ts AS TImestamp)
 );
 )sql";
         const auto& res = SqlToYql(stmt);

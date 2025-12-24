@@ -13,7 +13,5 @@ WITH(
     SCHEMA(
         ts Timestamp NOT NULL
     ),
-    WATERMARK = ts - Interval("PT5S"),
-    WATERMARK_GRANULARITY="PT2S",
-    WATERMARK_IDLE_TIMEOUT="PT3S"
+    WATERMARK AS (UNWRAP(ts - Interval("PT5S")))
 );

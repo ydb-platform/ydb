@@ -5,7 +5,7 @@
 namespace NKikimr::NConveyorComposite {
 TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
-    : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetUsableThreads()))
+    : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetMaxExecutorThreadLimit()))
     , Counters(counters)
     , MaxBatchSize(config.GetMaxBatchSize()) {
     Workers.reserve(WorkersCount);
@@ -16,7 +16,7 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
     AFL_VERIFY(Processes.size());
     for (ui32 i = 0; i < WorkersCount; ++i) {
         Workers.emplace_back(std::make_unique<TWorker>(
-            poolName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetUsableThreads()), distributorId, i, config.GetWorkersPoolId()));
+            poolName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetMaxExecutorThreadLimit()), distributorId, i, config.GetWorkersPoolId()));
         ActiveWorkersIdx.emplace_back(i);
     }
     AFL_VERIFY(WorkersCount)("name", poolName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(

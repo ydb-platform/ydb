@@ -29,15 +29,9 @@ public:
             if (tablet != nullptr && metrics.HasResourceUsage()) {
                 tablet->UpdateResourceUsage(metrics.GetResourceUsage());
 
-                NKikimrTabletBase::TMetrics metrics;
-                tablet->GetResourceValues().ToProto(&metrics);
-                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::ProtoMetrics>(metrics);
-                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::MaximumCPU>(tablet->GetResourceMetricsAggregates().MaximumCPU);
-                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::MaximumMemory>(tablet->GetResourceMetricsAggregates().MaximumMemory);
-                db.Table<Schema::Metrics>().Key(tabletId, followerId).Update<Schema::Metrics::MaximumNetwork>(tablet->GetResourceMetricsAggregates().MaximumNetwork);
-
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
                 tablet->ActualizeTabletStatistics(now);
+                Self->EnqueueUpdateMetrics(tablet);
                     
                 if (tablet->IsLeader()) {
                     db.Table<Schema::Tablet>()

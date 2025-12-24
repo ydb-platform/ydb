@@ -76,6 +76,13 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 26600:Block Hash Hoin utils: add splitting of tuple layout rows into buckets. [#26600](https://github.com/ydb-platform/ydb/pull/26600) ([Vyacheslav Boev](https://github.com/spaikus))
+* 26593:* YDB FQ: pushdown Decimal type [#26593](https://github.com/ydb-platform/ydb/pull/26593) ([Vitaly Isaev](https://github.com/vitalyisaev2))
+* 26448:We need to be able to allocate RcBuf using RDMA memory. This commit contains RDMA aware memory pool, common wrapper for ibverbs context, link manager to select right context using ip address. [#26448](https://github.com/ydb-platform/ydb/pull/26448) ([Daniil Cherednik](https://github.com/dcherednik))
+* 26335:Get rid of 'Topics' table and DescribeAllTopics request [#26335](https://github.com/ydb-platform/ydb/pull/26335) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
+* 26213:Supported solomon insert into solomon in query service and streaming queries [#26213](https://github.com/ydb-platform/ydb/pull/26213) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 25897:Supported stream lookup join with external data sources in YDB [#25897](https://github.com/ydb-platform/ydb/pull/25897) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 25763:Add SIMD-based implementation of TTupleLayout interface. [#25763](https://github.com/ydb-platform/ydb/pull/25763) ([Alexander](https://github.com/san-kir-k))
 
 ### Bug fixes
 
@@ -146,12 +153,21 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 26671:ibdrv wrapper performs dlopen during first call of ib* "C" function. But in case of missed library will throw exception. To prevent cross language exception we will try to open the library before first ibv* call and check is ibverbs present.
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+https://github.com/ydb-platform/ydb/issues/26673 [#26671](https://github.com/ydb-platform/ydb/pull/26671) ([Daniil Cherednik](https://github.com/dcherednik))
+* 26591:Fixed checkpoints for map join [#26591](https://github.com/ydb-platform/ydb/pull/26591) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 26551:Fixed fault in node service on kikimr process stop [#26551](https://github.com/ydb-platform/ydb/pull/26551) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 26550:Fixed streaming query creation with another operations [#26550](https://github.com/ydb-platform/ydb/pull/26550) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 26515:Fix crash in debug mode from VERIFY that detected column null-ability loose
+https://github.com/ydb-platform/ydb/issues/25336 [#26515](https://github.com/ydb-platform/ydb/pull/26515) ([Stanislav Yablonskiy](https://github.com/neyrox))
+* 26510:Fix backup of out-of-range decimal values which may have been accidentally inserted into tables. Fixes #26470. [#26510](https://github.com/ydb-platform/ydb/pull/26510) ([Aleksei Borzenkov](https://github.com/snaury))
+* 26489:Fix upsert to table with unique index [#26489](https://github.com/ydb-platform/ydb/pull/26489) ([Nikita Vasilev](https://github.com/nikvas0))
+* 26454:Исправлено возможное падение из-за обращения к уже освобожденной памяти [#26454](https://github.com/ydb-platform/ydb/pull/26454) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 26345:Move LWTRACK before co_await to prevent ResponseEv race #26344 [#26345](https://github.com/ydb-platform/ydb/pull/26345) ([Ivan](https://github.com/abyss7))
+* 26340:Try to fix crash
+https://github.com/ydb-platform/ydb/issues/25727 [#26340](https://github.com/ydb-platform/ydb/pull/26340) ([Stanislav Yablonskiy](https://github.com/neyrox))
 
 ### YDB UI
 

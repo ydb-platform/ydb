@@ -33,6 +33,9 @@ TOrderedHashMap<TKey, TValue, THashFunction, TEqualFunction>::TOrderedHashMap(co
 template <class TKey, class TValue, class THashFunction, class TEqualFunction>
 auto TOrderedHashMap<TKey, TValue, THashFunction, TEqualFunction>::operator=(const TOrderedHashMap& other) -> TOrderedHashMap&
 {
+    if (this == &other) {
+        return *this;
+    }
     clear();
     Table_.reserve(other.size());
     for (const auto& item : other) {

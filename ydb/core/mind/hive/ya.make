@@ -61,6 +61,7 @@ SRCS(
     tx__load_everything.cpp
     tx__lock_tablet.cpp
     tx__process_boot_queue.cpp
+    tx__process_metrics.cpp
     tx__process_pending_operations.cpp
     tx__reassign_groups.cpp
     tx__reassign_groups_on_decommit.cpp

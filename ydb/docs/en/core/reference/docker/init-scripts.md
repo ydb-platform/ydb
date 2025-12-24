@@ -29,7 +29,7 @@ There are two directories for placing custom scripts:
 | Extension | Description |
 |---|---|
 | `.sh` | Shell scripts. If the script is executable, it is run directly. Otherwise, it is [sourced](https://bash.cyberciti.biz/guide/Source_command). |
-| `.sql` | SQL files. The contents are executed using the YDB YQL command-line interface. |
+| `.sql` | SQL files. The contents are executed using the YDB command-line interface. |
 | `.sql.gz` | Gzip-compressed SQL files. The contents are decompressed and executed. |
 
 ## Execution order

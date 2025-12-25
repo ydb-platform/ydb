@@ -148,7 +148,7 @@ int TCommandClusterDiagnosticsCollect::Run(TConfig& config) {
     while (PeriodSeconds && (TInstant::Now() - start) < duration - period) {
         index++;
         auto p = TDuration::Seconds(PeriodSeconds * index);
-        
+
         if (start + p > TInstant::Now()) {
             std::this_thread::sleep_for(std::chrono::nanoseconds((start + p - TInstant::Now()).NanoSeconds()));
         }

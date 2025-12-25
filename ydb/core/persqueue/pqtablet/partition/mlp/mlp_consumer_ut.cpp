@@ -440,7 +440,7 @@ Y_UNIT_TEST(RetentionStorageAfterReload) {
     }
 }
 
-Y_UNIT_TEST(HtmlApp) {
+void HtmlApp(std::string_view consumer, size_t partitionId, std::string_view expected) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 
@@ -456,7 +456,9 @@ Y_UNIT_TEST(HtmlApp) {
     Sleep(TDuration::Seconds(1));
 
     auto tabletId = GetTabletId(setup, "/Root", "/Root/topic1", 0);
-    auto url = TStringBuilder() << "/app?TabletID=" << tabletId << "&consumer=mlp-consumer&partitionId=0";
+    auto url = TStringBuilder() << "/app?TabletID=" << tabletId 
+        << "&consumer=" << consumer 
+        << "&partitionId=" << partitionId;
     runtime.SendToPipe(tabletId, runtime.AllocateEdgeActor(),
         new NMon::TEvRemoteHttpInfo(url, HTTP_METHOD_GET));
 
@@ -464,7 +466,19 @@ Y_UNIT_TEST(HtmlApp) {
     UNIT_ASSERT(response);
 
     Cerr << (TStringBuilder() <<">>>>> " << response->Html << Endl);
-    UNIT_ASSERT(response->Html.find("Total metrics") != TString::npos);
+    UNIT_ASSERT(response->Html.find(expected) != TString::npos);
+}
+
+Y_UNIT_TEST(HtmlApp_Success) {
+    HtmlApp("mlp-consumer", 0, "Total metrics");
+}
+
+Y_UNIT_TEST(HtmlApp_BadConsumer) {
+    HtmlApp("mlp-consumer-not-exists", 0, "MLP consumer 'mlp-consumer-not-exists' not found");
+}
+
+Y_UNIT_TEST(HtmlApp_BadPartition) {
+    HtmlApp("mlp-consumer", 13, "Tablet info");
 }
 
 }

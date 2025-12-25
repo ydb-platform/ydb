@@ -329,6 +329,8 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
     ::NMonitoring::THistogramPtr CounterTicketsBuildTime;
+    ::NMonitoring::THistogramPtr CounterTicketsHighPriorityBuildTime;
+    ::NMonitoring::THistogramPtr CounterTicketsLowPriorityBuildTime;
 
     TDuration RefreshPeriod = TDuration::Seconds(1); // how often do we check for ticket freshness/expiration
     TDuration RefreshTime = TDuration::Hours(1); // within this time we will try to refresh valid ticket
@@ -1870,7 +1872,13 @@ protected:
         }
         record.RefreshRetryableErrorImmediately = true;
         CounterTicketsSuccess->Inc();
-        CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
+        TDuration::TValue ticketBuildTime = (now - record.InitTime).MilliSeconds();
+        CounterTicketsBuildTime->Collect(ticketBuildTime);
+        if (record.IsLowAccessServiceRequestPriority) {
+            CounterTicketsLowPriorityBuildTime->Collect(ticketBuildTime);
+        } else {
+            CounterTicketsHighPriorityBuildTime->Collect(ticketBuildTime);
+        }
         BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
                     << record.PeerName << ") has now valid token of " << record.Subject);
         record.IsLowAccessServiceRequestPriority = true;
@@ -2140,7 +2148,11 @@ protected:
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);
         CounterTicketsCacheMiss = counters->GetCounter("TicketsCacheMiss", true);
         CounterTicketsBuildTime = counters->GetHistogram("TicketsBuildTimeMs",
-                                                         NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
+            NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
+        CounterTicketsHighPriorityBuildTime = counters->GetHistogram("TicketsHighPriorityBuildTimeMs",
+            NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
+        CounterTicketsLowPriorityBuildTime = counters->GetHistogram("TicketsLowPriorityBuildTimeMs",
+            NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
     }
 
     void FillAccessServiceSettings(NGrpcActorClient::TGrpcClientSettings& settings) {

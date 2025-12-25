@@ -44,7 +44,7 @@ namespace {
 
 // Min interval between stats send from scan/compute actor to executor
 constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
-// Max interval in case of no activety
+// Max interval in case of no activity
 constexpr TDuration MaxStatInterval = TDuration::Seconds(1);
 
 template <class TTasksCollection>
@@ -209,8 +209,12 @@ private:
         auto reply = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         reply->Record.SetTxId(txId);
 
+        const auto& runtimeSettings = msg.GetRuntimeSettings();
         NYql::NDq::TComputeRuntimeSettings runtimeSettingsBase;
-        runtimeSettingsBase.ReportStatsSettings = NYql::NDq::TReportStatsSettings{MinStatInterval, MaxStatInterval};
+        runtimeSettingsBase.ReportStatsSettings = NYql::NDq::TReportStatsSettings{
+            .MinInterval = runtimeSettings.HasMinStatsSendIntervalMs() ? TDuration::MilliSeconds(runtimeSettings.GetMinStatsSendIntervalMs()) : MinStatInterval,
+            .MaxInterval = runtimeSettings.HasMaxStatsSendIntervalMs() ? TDuration::MilliSeconds(runtimeSettings.GetMaxStatsSendIntervalMs()) : MaxStatInterval,
+        };
 
         TShardsScanningPolicy scanPolicy(Config.GetShardsScanningPolicy());
 

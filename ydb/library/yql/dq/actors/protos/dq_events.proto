@@ -137,11 +137,13 @@ message TComputeRuntimeSettings {
 
     reserved 3; //optional NKqpProto.EKqpStatsMode LegacyStatsMode = 3;
     optional EDqStatsMode StatsMode = 8;
-    optional bool UseLLVM_DeprecatedForCompatibility = 4[default = false];
+    optional bool UseLLVM_DeprecatedForCompatibility = 4 [default = false];
     optional bool UseSpilling = 6;
     optional uint32 TasksOnNodeCount = 5; // approx
     optional TRlPath RlPath = 7;
     optional bool WithProgressStats = 9 [default = false];
+    optional uint64 MinStatsSendIntervalMs = 10; // Min interval between stats messages
+    optional uint64 MaxStatsSendIntervalMs = 11; // Max interval to sent stats in case of no activity
 }
 
 message TEvNewCheckpointCoordinator {

@@ -2459,7 +2459,7 @@ message TColumnShardConfig {
     optional NKikimrSchemeOp.TS3Settings S3Client = 58;
     optional uint32 ProxyOverloadedDelayMs = 59 [default = 5000];
     optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
-    
+
     oneof DefaultCompaction {
         string DefaultCompactionPreset = 61 [default = "tiling"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
@@ -2872,6 +2872,11 @@ message TSystemTabletBackupConfig {
     optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
 }
 
+message TClusterDiagnosticsConfig {
+    optional uint64 MaxCountersSize = 1 [default = 52428800]; // 50MB
+    optional uint64 CountersMaxInflight = 2 [default = 100];
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -2984,6 +2989,8 @@ message TAppConfig {
     optional TAwsClientConfig AwsClientConfig = 116;
 
     optional TRecoveryShardConfig RecoveryShardConfig = 117;
+
+    optional TClusterDiagnosticsConfig ClusterDiagnosticsConfig = 118;
 }
 
 message TYdbVersion {

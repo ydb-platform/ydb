@@ -43,8 +43,8 @@ public:
     using TThis = TClusterStateRPC;
     using TBase = TRpcRequestActor<TClusterStateRPC, TEvClusterStateRequest, true>;
 
-    static constexpr ui32 CountersMaxInflight = 100;
-    static constexpr ui32 MaxCountersSize = 50 * 1024 * 1024;
+    ui32 CountersMaxInflight;
+    ui32 MaxCountersSize;
     TVector<ui32> NodeRequested;
     TVector<ui32> NodeReceived;
     ui32 Requested = 0;
@@ -364,6 +364,8 @@ public:
     }
 
     void Bootstrap() {
+        MaxCountersSize = AppData()->ClusterDiagnosticsConfig.GetMaxCountersSize();
+        CountersMaxInflight = AppData()->ClusterDiagnosticsConfig.GetCountersMaxInflight();
         constexpr ui32 defaultDurationSec = 60;
         const TActorId nameserviceId = GetNameserviceActorId();
         Send(nameserviceId, new TEvInterconnect::TEvListNodes());

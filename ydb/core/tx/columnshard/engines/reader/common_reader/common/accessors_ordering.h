@@ -164,12 +164,12 @@ public:
         AFL_VERIFY(!Initialized);
         Initialized = true;
         HeapObjects = std::move(objects);
-        std::make_heap(HeapObjects.begin(), HeapObjects.end(), TDataSourceConstructor::TReversedComparator(Sorting));
+        std::make_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(Sorting));
     }
 
     void PrepareOrdered(const ui32 count) {
         while (AlreadySorted.size() < count && HeapObjects.size()) {
-            std::pop_heap(HeapObjects.begin(), HeapObjects.end(), TDataSourceConstructor::TReversedComparator(Sorting));
+            std::pop_heap(HeapObjects.begin(), HeapObjects.end(), typename TObject::TReversedComparator(Sorting));
             HeapObjects.back().SetIndex(NextObjectIdx++);
             AlreadySorted.emplace_back(std::move(HeapObjects.back()));
             HeapObjects.pop_back();

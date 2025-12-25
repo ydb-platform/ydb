@@ -50,8 +50,8 @@ PEERDIR(
     ydb/library/keys
     ydb/library/pdisk_io
     ydb/library/security
-    ydb/library/yql/udfs/common/fulltext
     ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yql/udfs/common/fulltext
     ydb/library/yql/udfs/common/knn
     ydb/library/yql/udfs/common/roaring
     ydb/library/yql/udfs/statistics_internal

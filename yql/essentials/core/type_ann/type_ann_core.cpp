@@ -8101,10 +8101,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 });
 
                 for (const auto& x : ctx.Types.DataSources) {
-                    auto tokens = x->GetClusterTokens();
-                    if (tokens) {
-                        for (const auto& t : *tokens) {
-                            description.SecureParams.insert(std::make_pair(TString("cluster:default_") + t.first, t.second));
+                    for (const auto& clusterName : x->GetValidClusters()) {
+                        if (auto token = x->ResolveClusterToken(clusterName)) {
+                            description.SecureParams.emplace(TString("cluster:default_") + TString(clusterName), *token);
                         }
                     }
                 }
@@ -12011,18 +12010,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     TStringBuf clusterName = p1;
                     if (clusterName.SkipPrefix("default_")) {
                         for (auto& x : ctx.Types.DataSources) {
-                            auto tokens = x->GetClusterTokens();
-                            auto token = tokens ? tokens->FindPtr(clusterName) : nullptr;
-                            if (token) {
+                            if (auto token = x->ResolveClusterToken(TString(clusterName))) {
                                 clusterCred.ConstructInPlace(TString(x->GetName()), "", *token);
                                 cred = clusterCred.Get();
                                 break;
                             }
                         }
                         for (auto& x : ctx.Types.DataSinks) {
-                            auto tokens = x->GetClusterTokens();
-                            auto token = tokens ? tokens->FindPtr(clusterName) : nullptr;
-                            if (token) {
+                            if (auto token = x->ResolveClusterToken(TString(clusterName))) {
                                 clusterCred.ConstructInPlace(TString(x->GetName()), "", *token);
                                 cred = clusterCred.Get();
                                 break;

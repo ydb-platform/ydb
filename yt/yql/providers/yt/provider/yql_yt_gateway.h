@@ -7,6 +7,7 @@
 #include <yt/yql/providers/yt/lib/full_capture/yql_yt_full_capture.h>
 #include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
 #include <yt/yql/providers/yt/lib/temp_files/temp_files.h>
+#include <yt/yql/providers/yt/lib/yt_token_resolver/yt_token_resolver.h>
 
 #include <yql/providers/stat/uploader/yql_stat_uploader.h>
 
@@ -815,6 +816,8 @@ public:
     virtual NThreading::TFuture<TDumpResult> Dump(TDumpOptions&& options) = 0;
 
     virtual NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) = 0;
+
+    virtual IYtTokenResolver::TPtr GetYtTokenResolver() const = 0;
 };
 
 }

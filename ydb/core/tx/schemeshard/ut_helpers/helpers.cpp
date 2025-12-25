@@ -552,8 +552,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard) {
-        TActorId sender = runtime.AllocateEdgeActor();
-        ForwardToTablet(runtime, schemeShard, sender, TruncateTableRequest(txId, workingDir, tableName, schemeShard, {}));
+        AsyncSend(runtime, schemeShard, TruncateTableRequest(txId, workingDir, tableName, schemeShard, {}));
     }
 
     void TestTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults) {

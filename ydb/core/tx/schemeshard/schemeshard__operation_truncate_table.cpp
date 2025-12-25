@@ -208,7 +208,8 @@ public:
         }
     }
 
-    THolder<TProposeResponse> CheckConditions(TOperationContext& context) {
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        // Begin check conditions
         const TTabletId ssId = context.SS->SelfTabletId();
 
         THolder<TProposeResponse> result;
@@ -224,30 +225,16 @@ public:
         const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), op.GetTableName()});
         TPath tablePath = TPath::Resolve(stringTablePath, context.SS);
         {
-            if (!tablePath.IsResolved()) {
-                TString error = TStringBuilder() << "Path `" << stringTablePath << "` doesnt exist";
-                result->SetError(NKikimrScheme::StatusPathDoesNotExist, std::move(error));
-                return result;
-            }
-
-            if (tablePath->IsColumnTable()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "Column tables don`t support TRUNCATE TABLE");
-                return result;
-            }
-
-            if (!tablePath->IsTable()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "You can use TRUNCATE TABLE only on tables");
-                return result;
-            }
-
             TPath::TChecker checks = tablePath.Check();
             checks
+                .IsResolved()
                 .NotEmpty()
                 .NotUnderDomainUpgrade()
                 .NotDeleted()
                 .NotBackupTable()
                 .NotUnderTheSameOperation(OperationId.GetTxId())
-                .NotUnderOperation();
+                .NotUnderOperation()
+                .IsTable();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -284,15 +271,9 @@ public:
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }
+        // End check conditions
 
-        return result;
-    }
-
-    void Persist(TOperationContext& context) {
-        const auto& op = Transaction.GetTruncateTable();
-        const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), op.GetTableName()});
-        TPath tablePath = TPath::Resolve(stringTablePath, context.SS);
-
+        // Begin create local transaction
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
         Y_ABORT_UNLESS(table->GetPartitions().size());
@@ -332,14 +313,8 @@ public:
             SetState(NextState());
             Y_ABORT_UNLESS(txState.Shards.size());
         }
-    }
-
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        auto result = CheckConditions(context);
-
-        if (result->IsAccepted()) {
-            Persist(context);
-        }
+        // End create local transaction
+        // (but this does not mean that the local transaction has been executed or started)
 
         return result;
     }
@@ -356,18 +331,15 @@ public:
     }
 };
 
-ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TTruncateTable>(id, tx);
-}
-
-void DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, const TPathId& vertexPathId, TVector<ISubOperation::TPtr>& result) {
-    TPath vertexPath = TPath::Init(vertexPathId, context.SS);
+void DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, const TPathId& currentPathId, TVector<ISubOperation::TPtr>& result) {
+    TPath vertexPath = TPath::Init(currentPathId, context.SS);
 
     bool isTable = vertexPath->IsTable();
     bool isIndexParent = vertexPath.Base()->IsTableIndex();
 
     if (isTable) {
-        const auto [workingDir, tableName] = NKikimr::SplitPathByDirAndBaseNames(vertexPath.PathString());
+        const auto workingDir = TString(NKikimr::ExtractParent(vertexPath.PathString()));
+        const auto tableName = TString(NKikimr::ExtractBase(vertexPath.PathString()));
 
         {
             auto modifycheme = TransactionTemplate(workingDir, NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
@@ -390,6 +362,10 @@ void DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
 
 namespace NKikimr::NSchemeShard {
 
+ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TTruncateTable>(id, tx);
+}
+
 ISubOperation::TPtr CreateTruncateTable(TOperationId opId, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
     return MakeSubOperation<TTruncateTable>(opId, state);
@@ -402,15 +378,28 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
 
     TVector<ISubOperation::TPtr> result = {};
 
-    // This check is necessary because the dfs implementation expects that the vertex coming into the function exists.
+    // 'IsResolved' check is necessary because the dfs implementation expects that the vertex coming into the function exists.
     // If we do not do this check, then the Y_VERIFY may fire if the path does not exist.
-    if (mainTablePath.IsResolved()) {
-        DfsOnTableChildrenTree(opId, tx, context, mainTablePath.Base()->PathId, result);
-    } else {
+
+    // Since one check was added, it makes sense to add all the checks at once, 
+    // so as not to generate a large set of sub-operations in case even the main table is "wrong".
+    TPath::TChecker checks = mainTablePath.Check();
+    checks
+        .IsResolved()
+        .NotEmpty()
+        .NotUnderDomainUpgrade()
+        .NotDeleted()
+        .NotBackupTable()
+        .NotUnderOperation()
+        .IsTable();
+
+    if (!checks) {
         // We cannot return empty vector of suboperations because of technical features of schemeshard's work
-        TString error = TStringBuilder() << "Path `" << stringMainTablePath << "` doesnt exist";
-        result = {CreateReject(opId, NKikimrScheme::StatusPathDoesNotExist, std::move(error))};
+        result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        return result;
     }
+
+    DfsOnTableChildrenTree(opId, tx, context, mainTablePath.Base()->PathId, result);
 
     return result;
 }

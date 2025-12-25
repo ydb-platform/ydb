@@ -45,6 +45,4 @@ inline TVector<TString> ChildPath(const TVector<TString>& parentPath, const TVec
     return path;
 }
 
-std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path);
-
 }

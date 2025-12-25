@@ -1,6 +1,7 @@
 #include "scheme_helpers.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/external_sources.pb.h>
@@ -141,6 +142,16 @@ void FillAlterDatabaseSchemeLimits(TModifyScheme& modifyScheme, const TString& n
     auto& subdomain = *modifyScheme.MutableSubDomain();
     subdomain.SetName(name);
     *subdomain.MutableSchemeLimits() = in;
+}
+
+std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path) {
+    auto splitPos = path.find_last_of('/');
+
+    if (splitPos == path.npos) {
+        return {{}, path};
+    }
+
+    return {path.substr(0, splitPos), path.substr(splitPos + 1)};
 }
 
 } // namespace NKikimr::NKqp::NSchemeHelpers

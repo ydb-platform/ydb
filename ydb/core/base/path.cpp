@@ -313,14 +313,4 @@ bool TrySplitPathByDb(const TString& path, const TString& database,
     return true;
 }
 
-std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path) {
-    auto splitPos = path.find_last_of('/');
-
-    if (splitPos == path.npos) {
-        return {{}, path};
-    }
-
-    return {path.substr(0, splitPos), path.substr(splitPos + 1)};
-}
-
 }

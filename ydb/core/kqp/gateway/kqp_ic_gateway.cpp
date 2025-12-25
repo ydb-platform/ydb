@@ -1298,7 +1298,7 @@ public:
                     record.SetUserToken(UserToken->GetSerializedToken());
                 }
 
-                auto [dirname, basename] = NKikimr::SplitPathByDirAndBaseNames(currentPath);
+                auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
                 if (!IsStartWithSlash(currentPath)) {
                     dirname = JoinPath({Database, dirname});
                 }

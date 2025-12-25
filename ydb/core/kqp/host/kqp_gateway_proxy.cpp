@@ -660,7 +660,7 @@ public:
 
     TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
         try {
-            auto [dirname, tableName] = NKikimr::SplitPathByDirAndBaseNames(tablePath);
+            auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
 
             if (tableName.empty()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Empty basename for setting constraint"));
@@ -698,7 +698,7 @@ public:
             return result;
         }
 
-        const auto [dirname, basename] = NKikimr::SplitPathByDirAndBaseNames(settings.DatabasePath);
+        const auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
 
         if (basename.empty()) {
             TGenericResult result;
@@ -1327,7 +1327,7 @@ public:
             const auto serializedDiffAcl = acl.SerializeAsString();
 
             for (const auto& currentPath : settings.Paths) {
-                auto [dirname, basename] = NKikimr::SplitPathByDirAndBaseNames(currentPath);
+                auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
 
                 if (basename.empty()) {
                     return MakeFuture(ResultFromError<TGenericResult>("Empty basename for modify permissions"));

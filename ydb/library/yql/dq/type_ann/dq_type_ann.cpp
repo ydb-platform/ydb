@@ -1211,9 +1211,9 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
         return IGraphTransformer::TStatus(TStatus::Error);
     }
     const auto joinType = joinTypeNode.Content();
-    if (joinType != "Inner") {
+    if (joinType != "Inner" && joinType != "Left" && joinType != "LeftSemi" && joinType != "LeftOnly") {
         ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder() << "Unknown join kind: " << joinType
-                    << ", supported: Inner"));
+                    << ", supported: Inner, Left, LeftSemi, LeftOnly"));
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
@@ -1251,8 +1251,15 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     }
 
     // Add right side columns
-    for (auto itemType : rightItemTypes) {
-        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    if (joinType != "LeftSemi" && joinType != "LeftOnly") {
+        for (auto itemType : rightItemTypes) {
+            if (joinType == "Left") {
+                if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
+                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                }
+            }
+            resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+        }
     }
 
     // Add scalar length column at the end

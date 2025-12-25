@@ -199,7 +199,7 @@ public:
 private:
     class TStreamState : public TComputationValue<TStreamState> {
         using TBase = TComputationValue<TStreamState>;
-        using JoinType = NJoinPackedTuples::THybridHashJoin<TScalarPackedTupleSource, TestStorageSettings>;
+        using JoinType = NJoinPackedTuples::THybridHashJoin<TScalarPackedTupleSource, TestStorageSettings, EJoinKind::Inner>;
 
     public:
         TStreamState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationWideFlowNode*> flows,
@@ -213,10 +213,9 @@ private:
                                   static_cast<int>(std::ssize(Meta_->InputTypes.Build))},
                         .Probe = {ctx, flows.Probe, Converters_.Probe.get(),
                                   static_cast<int>(std::ssize(Meta_->InputTypes.Probe))}},
-                    ctx.MakeLogger(), "ScalarHashJoinPacked",
+                    ctx, "ScalarHashJoinPacked",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
-                                                              .Probe = Converters_.Probe->GetTupleLayout()},
-                    ctx)
+                                                              .Probe = Converters_.Probe->GetTupleLayout()})
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
         {}
 

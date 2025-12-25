@@ -479,8 +479,10 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
                     renames.emplace_back(index, EJoinSide::kLeft);       
                 }
-                for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                    renames.emplace_back(index, EJoinSide::kRight);       
+                if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
+                    for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
+                        renames.emplace_back(index, EJoinSide::kRight);       
+                    }
                 }
                 return TGraceJoinRenames::FromDq(renames);    
             }();

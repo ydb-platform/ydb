@@ -11,8 +11,6 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TruncateTableReboots) {
     Y_UNIT_TEST_WITH_REBOOTS(Simple) {
-        T t(true /*killOnCommit*/);
-
         // speed up the test: only check scheme shard reboots
         t.TabletIds.clear();
         t.TabletIds.push_back(t.SchemeShardTabletId);
@@ -84,8 +82,6 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(WithSplit) {
-        T t(true /*killOnCommit*/);
-
         // speed up the test: only check scheme shard reboots
         t.TabletIds.clear();
         t.TabletIds.push_back(t.SchemeShardTabletId);

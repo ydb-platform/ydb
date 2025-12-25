@@ -141,6 +141,7 @@ namespace NActors {
             FlagGenerateUnsureUndelivered = 1 << 4,
             FlagExtendedFormat = 1 << 5,
             FlagDebugTrackReceive = 1 << 6,
+            FlagFailFastWhenDisconnected = 1 << 7,
         };
         using TEventFlags = ui32;
 

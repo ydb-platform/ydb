@@ -465,17 +465,13 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
     std::vector<std::shared_ptr<TPortionInfo>> out;
     using namespace NColumnShard::NLWTrace_YDB_CS;
 
-    TInstant start = TAppData::TimeProvider->Now();
     auto spg = GranulesStorage->GetGranuleOptional(pathId);
-    const ui64 timeOfGetGranuleOptionalMs = (TAppData::TimeProvider->Now() - start).MilliSeconds();
     if (!spg) {
-        if (LWPROBE_ENABLED(ColumnEngineForLogsSelect)) {
-            LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfGetGranuleOptionalMs, 0, 0, 0, 0, 0);
-        }
-
         return out;
     }
 
+    const bool calculateProbe = LWPROBE_ENABLED(ColumnEngineForLogsSelect);
+    TInstant start;
     TDuration timeOfInsertedIsUsed;
     ui64 totalPortionsCount = 0;
     ui64 totalFilteredPortionsCount = 0;
@@ -493,7 +489,7 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
         }
 
         bool takePortion;
-        if (LWPROBE_ENABLED(ColumnEngineForLogsSelect)) {
+        if (calculateProbe) {
             start = TAppData::TimeProvider->Now();
             takePortion = pkRangesFilter.IsUsed(*portion);
             timeOfInsertedIsUsed += TAppData::TimeProvider->Now() - start;
@@ -530,7 +526,7 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
         }
 
         bool takePortion;
-        if (LWPROBE_ENABLED(ColumnEngineForLogsSelect)) {
+        if (calculateProbe) {
             start = TAppData::TimeProvider->Now();
             takePortion = pkRangesFilter.IsUsed(*portion);
             timeOfCompactedIsUsed += TAppData::TimeProvider->Now() - start;
@@ -548,7 +544,7 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
     }
 
     if (LWPROBE_ENABLED(ColumnEngineForLogsSelect)) {
-        LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfGetGranuleOptionalMs, timeOfInsertedIsUsed.MilliSeconds(), timeOfCompactedIsUsed.MilliSeconds(), totalPortionsCount, totalFilteredPortionsCount, out.size());
+        LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfInsertedIsUsed.MilliSeconds(), timeOfCompactedIsUsed.MilliSeconds(), totalPortionsCount, totalFilteredPortionsCount, out.size());
     }
 
     return out;

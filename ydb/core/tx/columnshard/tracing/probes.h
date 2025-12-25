@@ -33,8 +33,8 @@ namespace NKikimr::NColumnShard  {
         NAMES("TablePath", "durationMs")) \
     PROBE(ColumnEngineForLogsSelect, \
         GROUPS("Read"), \
-        TYPES(TString, ui64, ui64, ui64, ui64, ui64, ui64), \
-        NAMES("PathId", "timeOfGetGranuleOptionalMs", "timeOfInsertedIsUsedMs", "timeOfCompactedIsUsedMs", "totalPortionsCount", "totalFilteredPortionsCount", "totalResultSize")) \
+        TYPES(TString, ui64, ui64, ui64, ui64, ui64), \
+        NAMES("PathId", "timeOfInsertedIsUsedMs", "timeOfCompactedIsUsedMs", "totalPortionsCount", "totalFilteredPortionsCount", "totalResultSize")) \
 
 LWTRACE_DECLARE_PROVIDER(YDB_CS)
 

@@ -37,7 +37,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
 
     using namespace NColumnShard::NLWTrace_YDB_CS;
     if (LWPROBE_ENABLED(SelectMetadata)) {
-        LWPROBE(SelectMetadata, readDescription.TableMetadataAccessor->GetTableName() , (TAppData::TimeProvider->Now() - start).MilliSeconds());
+        LWPROBE(SelectMetadata, readDescription.TableMetadataAccessor->GetTableName(), (TAppData::TimeProvider->Now() - start).MilliSeconds());
     }
 
     if (!SourcesConstructor) {

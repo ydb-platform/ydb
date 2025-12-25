@@ -6,6 +6,7 @@
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/ydb_convert/compression.h>
@@ -37,19 +38,19 @@ template<>
 struct TExportTraits<TEvExportToS3Request> {
     using TSettings = Ydb::Export::ExportToS3Settings;
     using TItem = Ydb::Export::ExportToS3Settings::Item;
-    
+
     static constexpr bool HasEncryption = true;
     static constexpr bool HasCompression = true;
     static constexpr bool HasSourcePath = true;
-    
+
     static auto* GetSettings(NKikimrExport::TCreateExportRequest& req) {
         return req.MutableExportToS3Settings();
     }
-    
+
     static auto& GetItems(const TSettings& settings) {
         return settings.items();
     }
-    
+
     static const auto& GetSourcePath(const TSettings& settings) {
         return settings.source_path();
     }
@@ -65,11 +66,11 @@ struct TExportTraits<TEvExportToS3Request> {
     static const auto& GetDestination(const TItem& item) {
         return item.destination_prefix();
     }
-    
+
     static void SetSourcePath(TSettings* settings, const TString& path) {
         settings->set_source_path(path);
     }
-    
+
     static void SetDestination(TItem* item, const TString& dest) {
         item->set_destination_prefix(dest);
     }
@@ -79,19 +80,19 @@ template<>
 struct TExportTraits<TEvExportToFsRequest> {
     using TSettings = Ydb::Export::ExportToFsSettings;
     using TItem = Ydb::Export::ExportToFsSettings::Item;
-    
+
     static constexpr bool HasEncryption = true;
     static constexpr bool HasCompression = true;
     static constexpr bool HasSourcePath = true;
-    
+
     static auto* GetSettings(NKikimrExport::TCreateExportRequest& req) {
         return req.MutableExportToFsSettings();
     }
-    
+
     static auto& GetItems(const TSettings& settings) {
         return settings.items();
     }
-    
+
     static const auto& GetSourcePath(const TSettings& settings) {
         return settings.source_path();
     }
@@ -103,15 +104,15 @@ struct TExportTraits<TEvExportToFsRequest> {
     static bool HasDestination(const TSettings& settings) {
         return !settings.base_path().empty();
     }
-    
+
     static const auto& GetDestination(const TItem& item) {
         return item.destination_path();
     }
-    
+
     static void SetSourcePath(TSettings* settings, const TString& path) {
         settings->set_source_path(path);
     }
-    
+
     static void SetDestination(TItem* item, const TString& dest) {
         item->set_destination_path(dest);
     }
@@ -121,23 +122,23 @@ template<>
 struct TExportTraits<TEvExportToYtRequest> {
     using TSettings = Ydb::Export::ExportToYtSettings;
     using TItem = Ydb::Export::ExportToYtSettings::Item;
-    
+
     static constexpr bool HasEncryption = false;
     static constexpr bool HasCompression = false;
     static constexpr bool HasSourcePath = false;
-    
+
     static auto* GetSettings(NKikimrExport::TCreateExportRequest& req) {
         return req.MutableExportToYtSettings();
     }
-    
+
     static auto& GetItems(const TSettings& settings) {
         return settings.items();
     }
-    
+
     static const auto& GetDestination(const TItem& item) {
         return item.destination_path();
     }
-    
+
     static void SetDestination(TItem* item, const TString& dest) {
         item->set_destination_path(dest);
     }
@@ -204,14 +205,14 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto& createExport = *ev->Record.MutableRequest();
         *createExport.MutableOperationParams() = request.operation_params();
-        
+
         auto* exportSettings = TTraits::GetSettings(createExport);
         *exportSettings = request.settings();
 
         if constexpr (TTraits::HasSourcePath) {
             TTraits::SetSourcePath(exportSettings, CommonSourcePath);
         }
-        
+
         exportSettings->clear_items();
         for (const auto& [sourcePath, info] : ExportItems) {
             auto* item = exportSettings->add_items();
@@ -229,12 +230,17 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         paths.emplace_back(this->GetDatabaseName()); // first entry is database
         paths.emplace_back(CommonSourcePath); // second entry is common source path
         for (const auto& item : TTraits::GetItems(settings)) {
-            TString path = CanonizePath(item.source_path());
-            if (path.size() > CommonSourcePath.size() && path.StartsWith(CommonSourcePath) && path[CommonSourcePath.size()] == '/') {
-                paths.emplace_back(path); // Full path
+            TString userSpecifiedPath = CanonizePath(item.source_path());
+            TString fullPath;
+            if (HasCommonSourcePathPrefix(userSpecifiedPath)) {
+                fullPath = userSpecifiedPath; // Full path
             } else {
-                paths.emplace_back(CommonSourcePath + path); // Relative path
+                fullPath = CommonSourcePath + userSpecifiedPath; // Relative path
             }
+            if (IsExcludedFromExport(fullPath)) {
+                continue;
+            }
+            paths.emplace_back(fullPath);
             auto [it, inserted] = ExportItems.insert({paths.back(), TExportItemInfo{}});
             if (!inserted) {
                 this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Duplicate export item source path: \"" << item.source_path() << "\"");
@@ -248,6 +254,11 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 paths.emplace_back(CommonSourcePath);
                 ExportItems.insert({CommonSourcePath, TExportItemInfo{}});
             }
+        }
+
+        if (ExportItems.empty()) { // Excluded all items by regexp
+            this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Nothing to export");
+            return false;
         }
 
         return true;
@@ -421,7 +432,9 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                         DirectoryItems.insert({childPath, TExportItemInfo{.Destination = destination}});
                     } else {
                         // We'll remove all unsupported children on ResolveExpandedPaths stage
-                        ExportItems.insert({childPath, TExportItemInfo{.Destination = destination}});
+                        if (!IsExcludedFromExport(childPath)) {
+                            ExportItems.insert({childPath, TExportItemInfo{.Destination = destination}});
+                        }
                     }
                 }
                 DirectoryItems.erase(it);
@@ -511,10 +524,29 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         }
     }
 
+    bool HasCommonSourcePathPrefix(const TStringBuf path) const {
+        return path.StartsWith(CommonSourcePath)
+            && path.size() > CommonSourcePath.size()
+            && path[CommonSourcePath.size()] == '/';
+    }
+
+    bool IsExcludedFromExport(const TString& exportPath) const {
+        const char* path = exportPath.c_str();
+        if (HasCommonSourcePathPrefix(exportPath)) {
+            path += CommonSourcePath.size() + 1; // prefix + /
+        }
+        for (const auto& regexp : ExcludeRegexps) {
+            if (regexp.Match(path)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 public:
     using TRpcOperationRequestActor<TDerived, TEvRequest, true>::TRpcOperationRequestActor;
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap() {
         const auto& request = *this->GetProtoRequest();
         if (request.operation_params().has_forget_after() && request.operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
             return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "forget_after is not supported for this type of operation");
@@ -523,9 +555,15 @@ public:
         const auto& settings = request.settings();
         InitCommonSourcePath();
 
+        try {
+            ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
+        } catch (const std::exception& ex) {
+            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
+        }
+
         if constexpr (IsFsExport) {
             if (!settings.base_path().StartsWith("/")) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
                     "base_path must be an absolute path");
             }
         }
@@ -609,6 +647,7 @@ private:
     TString CommonSourcePath; // Canonized source path
     THashMap<TString, TExportItemInfo> ExportItems;
     THashMap<TString, TExportItemInfo> DirectoryItems;
+    std::vector<TRegExMatch> ExcludeRegexps;
 }; // TExportRPC
 
 class TExportToYtRPC: public TExportRPC<TExportToYtRPC, TEvExportToYtRequest> {

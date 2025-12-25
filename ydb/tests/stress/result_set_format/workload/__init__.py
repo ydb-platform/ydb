@@ -17,7 +17,6 @@ class WorkloadRunner:
         self.tables_prefix = "/".join([self.client.database, self.name])
         self.duration = duration
         self.format = format
-        ydb.interceptor.monkey_patch_event_handler()
 
     def __enter__(self):
         self._cleanup()
@@ -29,7 +28,10 @@ class WorkloadRunner:
     def _cleanup(self):
         print(f"Cleaning up {self.tables_prefix}...")
         deleted = self.client.remove_recursively(self.tables_prefix)
-        print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
+        if deleted is None:
+            print(f"Cleaning up {self.tables_prefix}... done, no tables deleted")
+        else:
+            print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 
     def run(self):
         stop = threading.Event()
@@ -46,7 +48,7 @@ class WorkloadRunner:
 
         started_at = time.time()
         while time.time() - started_at < self.duration:
-            print(f"Elapsed {(int)(time.time() - started_at)} seconds, stat:")
+            print(f"Elapsed {int(time.time() - started_at)} seconds, stat:")
             for w in workloads:
                 print(f"\t{w.name}: {w.get_stat()}")
             time.sleep(10)

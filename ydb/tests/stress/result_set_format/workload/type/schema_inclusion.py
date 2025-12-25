@@ -389,7 +389,7 @@ class WorkloadSchemaInclusion(WorkloadBase):
 
         result_set_schemas = {}
         for result_set in result:
-            wait_schema = None
+            wait_schema = False
             match schema_inclusion_mode:
                 case ydb.QuerySchemaInclusionMode.ALWAYS:
                     wait_schema = True
@@ -419,7 +419,7 @@ class WorkloadSchemaInclusion(WorkloadBase):
 
         result_set_indexes = set()
         for result_set in result:
-            wait_schema = None
+            wait_schema = False
             match schema_inclusion_mode:
                 case ydb.QuerySchemaInclusionMode.ALWAYS:
                     wait_schema = True

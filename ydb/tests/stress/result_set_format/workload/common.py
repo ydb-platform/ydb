@@ -108,8 +108,8 @@ class TableInfo:
 
         return f"""
             CREATE TABLE `{self.path}` (
-                {', '.join([col.to_string() for col in self.columns])},
-                PRIMARY KEY ({', '.join([f"{col}" for col in self.primary_key_columns])}),
+                {", ".join([col.to_string() for col in self.columns])},
+                PRIMARY KEY ({", ".join([f"{col}" for col in self.primary_key_columns])}),
             ) WITH (
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {self.min_partitions}
             );
@@ -197,14 +197,17 @@ def generate_value_by_type(column: ColumnInfo, max_value: int, null_probability:
         bits, is_signed = int_types[column.type_name]
         limit = 2**bits
         if is_signed:
-            return random.randint(-(max_value // 2) % -(limit // 2 + 1), (max_value // 2) % (limit // 2))
+            min_val = max(-(limit // 2), -(max_value // 2))
+            max_val = min((limit // 2) - 1, max_value // 2)
+            return random.randint(min_val, max_val)
         else:
             return random.randint(0, max_value % limit)
     elif column.type_name == "Bool":
         return random.choice([True, False])
     elif column.type_name in ["String", "Utf8"]:
         length = random.randint(1, 100)
-        return ''.join(random.choice([chr(i) for i in range(ord('a'), ord('z'))]) for _ in range(length)).encode()
+        chars = "".join(chr(i) for i in range(ord("a"), ord("z") + 1))
+        return "".join(random.choice(chars) for _ in range(length)).encode()
     elif column.type_name == "Float":
         return float(seed_value)
     elif column.type_name == "Double":

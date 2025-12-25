@@ -215,6 +215,20 @@ protected:
         return false;
     }
 
+    virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
+        AFL_VERIFY(SourceIdx);
+        if (*SourceIdx != entity.GetEntityId()) {
+            return false;
+        }
+        if (!entity.GetEntityRecordsCount()) {
+            usage = false;
+        } else {
+            AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount());
+            usage = RecordIndex < entity.GetEntityRecordsCount();
+        }
+        return true;
+    }
+
 public:
     ISimpleScanCursor() = default;
     ISimpleScanCursor(const ui32 sourceIdx, const ui32 recordIndex, const std::optional<ui64>& portionId)
@@ -231,10 +245,11 @@ private:
 
     virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
         AFL_VERIFY(SourceIdx);
-        proto.MutableColumnShardSimple()->SetSourceIdx(*SourceIdx);
-        proto.MutableColumnShardSimple()->SetStartRecordIndex(RecordIndex);
+        auto& data = *proto.MutableColumnShardSimple();
+        data.SetSourceIdx(*SourceIdx);
+        data.SetStartRecordIndex(RecordIndex);
         if (PortionId) {
-            proto.MutableColumnShardSimple()->SetOptionalPortionId(*PortionId);
+            data.SetOptionalPortionId(*PortionId);
         }
     }
 
@@ -242,34 +257,21 @@ private:
         return PrimaryKey;
     }
 
-    virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
-        AFL_VERIFY(SourceIdx);
-        if (*SourceIdx != entity.GetEntityId()) {
-            return false;
-        }
-        if (!entity.GetEntityRecordsCount()) {
-            usage = false;
-        } else {
-            AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount());
-            usage = RecordIndex < entity.GetEntityRecordsCount();
-        }
-        return true;
-    }
-
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) override {
         if (!proto.HasColumnShardSimple()) {
             return TConclusionStatus::Fail("absent sorted cursor data");
         }
-        if (!proto.GetColumnShardSimple().HasSourceIdx()) {
+        auto& data = proto.GetColumnShardSimple();
+        if (!data.HasSourceIdx()) {
             return TConclusionStatus::Fail("incorrect source id for cursor initialization");
         }
-        SourceIdx = proto.GetColumnShardSimple().GetSourceIdx();
-        if (!proto.GetColumnShardSimple().HasStartRecordIndex()) {
+        SourceIdx = data.GetSourceIdx();
+        if (!data.HasStartRecordIndex()) {
             return TConclusionStatus::Fail("incorrect record index for cursor initialization");
         }
-        RecordIndex = proto.GetColumnShardSimple().GetStartRecordIndex();
-        if (proto.GetColumnShardSimple().HasOptionalPortionId()) {
-            PortionId = proto.GetColumnShardSimple().GetOptionalPortionId();
+        RecordIndex = data.GetStartRecordIndex();
+        if (data.HasOptionalPortionId()) {
+            PortionId = data.GetOptionalPortionId();
         }
         return TConclusionStatus::Success();
     }
@@ -299,20 +301,6 @@ private:
 
     virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const override {
         return Default<std::shared_ptr<NArrow::TSimpleRow>>();
-    }
-
-    virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
-        AFL_VERIFY(SourceIdx);
-        if (*SourceIdx != entity.GetEntityId()) {
-            return false;
-        }
-        if (!entity.GetEntityRecordsCount()) {
-            usage = false;
-        } else {
-            AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())("index", RecordIndex)("count", entity.GetEntityRecordsCount());
-            usage = RecordIndex < entity.GetEntityRecordsCount();
-        }
-        return true;
     }
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) override {

@@ -1,6 +1,6 @@
 #include "write_quoter.h"
 
-#include <ydb/core/persqueue/pqtablet/partition/partition_util.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace NKikimr::NPQ  {
 
@@ -18,7 +18,8 @@ TWriteQuoter::TWriteQuoter(
             tabletId, counters, 1
     )
     , QuotingEnabled(pqConfig.GetQuotingConfig().GetEnableQuoting())
-    , PartitionDeduplicationIdQuotaTracker(500, 1000, TAppData::TimeProvider->Now()) // TODO MLP config
+    , PartitionDeduplicationIdQuotaTracker(config.GetPartitionConfig().GetWriteMessageDeduplicationIdPerSecond() / 2,
+        config.GetPartitionConfig().GetWriteMessageDeduplicationIdPerSecond(), TAppData::TimeProvider->Now()) // TODO MLP config
 {
 }
 

@@ -15,6 +15,11 @@ PEERDIR(
     ydb/core/persqueue/common
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/pqtablet/common
+    ydb/core/quoter/public
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

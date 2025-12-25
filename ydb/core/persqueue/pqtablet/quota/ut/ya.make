@@ -7,10 +7,12 @@ SIZE(MEDIUM)
 
 SRCS(
     quota_tracker_ut.cpp
+    write_quoter_ut.cpp
 )
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/testlib/default
 )
 
 END()

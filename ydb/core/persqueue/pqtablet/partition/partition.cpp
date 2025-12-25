@@ -4310,13 +4310,6 @@ void TPartition::CreateMirrorerActor() {
     );
 }
 
-bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig,
-                      bool isLocalDC)
-{
-    const auto& quotingConfig = pqConfig.GetQuotingConfig();
-    return isLocalDC && quotingConfig.GetEnableQuoting() && !pqConfig.GetTopicsAreFirstClassCitizen();
-}
-
 bool TPartition::IsQuotingEnabled() const
 {
     return NPQ::IsQuotingEnabled(AppData()->PQConfig,

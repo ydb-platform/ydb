@@ -1946,8 +1946,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             return;
         }
 
-        bool res = proto.ParseFromString(cmd.GetData());
-        if (!res) {
+        if (proto.ParseFromString(cmd.GetData())) {
             for (auto& attr : *proto.MutableMessageMeta()) {
                 if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
                     deduplicationId = attr.value();

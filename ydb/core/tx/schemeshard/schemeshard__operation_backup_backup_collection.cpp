@@ -178,7 +178,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     
                     NCdc::DoCreateStreamImpl(result, indexCdcStreamOp, opId, indexTablePath, false, false);
                     (*desc.MutableIndexImplTableCdcStreams())[childName].CopyFrom(indexCdcStreamOp);
-                    
+
                     if (!oldIndexStreamName.empty()) {
                         auto& dropOp = (*desc.MutableIndexImplTableDropCdcStreams())[childName];
                         dropOp.SetTableName(implTableName);

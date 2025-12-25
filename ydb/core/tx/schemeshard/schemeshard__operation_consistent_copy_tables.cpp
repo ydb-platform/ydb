@@ -274,36 +274,6 @@ bool CreateConsistentCopyTables(
             scheme->SetInternal(tx.GetInternal());
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), *scheme));
 
-            // for (const auto& [srcImplTableName, srcImplTablePathId] : srcIndexPath.Base()->GetChildren()) {
-            //     TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
-            //     Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcImplTablePathId);
-            //     TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
-
-            //     LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            //         "CreateConsistentCopyTables: Creating index impl table copy"
-            //         << ", srcImplTable: " << srcImplTable.PathString()
-            //         << ", dstImplTable: " << dstImplTable.PathString());
-
-            //     // Check if we have CDC stream info for this index impl table in the descriptor
-            //     NKikimrSchemeOp::TCopyTableConfig indexDescr;
-            //     indexDescr.CopyFrom(descr);
-
-            //     auto it = descr.GetIndexImplTableCdcStreams().find(name);
-            //     if (it != descr.GetIndexImplTableCdcStreams().end()) {
-            //         // CDC stream Impl was already created in the backup operation before copying
-            //         // Store the CDC info so the copy operation creates AtTable and PQ parts
-            //         indexDescr.MutableCreateSrcCdcStream()->CopyFrom(it->second);
-            //     } else {
-            //         // No CDC stream for this index impl table, clear it
-            //         indexDescr.ClearCreateSrcCdcStream();
-            //     }
-
-            //     result.push_back(CreateCopyTable(NextPartId(nextId, result),
-            //         CopyTableTask(srcImplTable, dstImplTable, indexDescr), GetLocalSequences(context, srcImplTable)));
-            //     AddCopySequences(nextId, tx, context, result, srcImplTable, dstImplTable.PathString());
-            // }
-
-
             for (const auto& [srcImplTableName, srcImplTablePathId] : srcIndexPath.Base()->GetChildren()) {
                 TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
                 Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcImplTablePathId);
@@ -313,7 +283,7 @@ bool CreateConsistentCopyTables(
                     "CreateConsistentCopyTables: Creating index impl table copy"
                     << ", srcImplTable: " << srcImplTable.PathString()
                     << ", dstImplTable: " << dstImplTable.PathString());
-                
+
                 // Check if we have CDC stream info for this index impl table in the descriptor
                 NKikimrSchemeOp::TCopyTableConfig indexDescr;
                 indexDescr.CopyFrom(descr);
@@ -324,7 +294,7 @@ bool CreateConsistentCopyTables(
                 auto itCreate = descr.GetIndexImplTableCdcStreams().find(name);
                 if (itCreate != descr.GetIndexImplTableCdcStreams().end()) {
                     indexDescr.MutableCreateSrcCdcStream()->CopyFrom(itCreate->second);
-                } 
+                }
 
                 auto itDrop = descr.GetIndexImplTableDropCdcStreams().find(name);
                 if (itDrop != descr.GetIndexImplTableDropCdcStreams().end()) {

@@ -147,6 +147,58 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
         }
     }
 
+    Y_UNIT_TEST(ExportWithExcludeRegexps) {
+        // Export with common source path == dir1
+        {
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
+            exportSettings
+                .AppendExcludeRegexp(".*");
+            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+            WaitOpStatus(res, EStatus::BAD_REQUEST); // Nothing to export
+        }
+
+        {
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
+            exportSettings
+                .AppendExcludeRegexp("invalid regexp)");
+            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+            WaitOpStatus(res, EStatus::BAD_REQUEST); // Invalid regexp
+        }
+
+        {
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
+            exportSettings
+                .AppendExcludeRegexp("^Table$") // No matching
+                .AppendExcludeRegexp("^dir1$") // Partial match does not prevent from exporting children - only full path match
+                .AppendExcludeRegexp("^dir1/Table"); // Matches table in directory
+            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json",
+                "/test_bucket/Prefix/Table0/metadata.json",
+                "/test_bucket/Prefix/Table0/scheme.pb",
+                "/test_bucket/Prefix/Table0/data_00.csv",
+                "/test_bucket/Prefix/dir1/dir2/Table2/metadata.json",
+                "/test_bucket/Prefix/dir1/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/dir1/dir2/Table2/data_00.csv",
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateHasYdbTables({
+                "/Root/RestorePrefix/Table0",
+                "/Root/RestorePrefix/dir1/dir2/Table2",
+            });
+        }
+    }
+
     Y_UNIT_TEST(ExportWithCommonSourcePathAndExplicitTableInside) {
         // Export with directory path == dir1 + explicit table from this subdir (must remove duplicate)
         {

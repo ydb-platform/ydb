@@ -393,12 +393,12 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             TLocalHelper(*Kikimr).CreateTestOlapTable();
             auto tableClient = Kikimr->GetTableClient();
 
-/*
+
             Tests::NCommon::TLoggerInit(*Kikimr)
-                .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
-                .SetPriority(NActors::NLog::PRI_DEBUG)
+                .SetComponents({ NKikimrServices::KQP_RESOURCE_MANAGER, NKikimrServices::TX_COLUMNSHARD }, "CS")
+                .SetPriority(NActors::NLog::PRI_ERROR)
                 .Initialize();
-*/
+
 
             {
                 auto alterQuery =
@@ -609,6 +609,12 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto tableClient = Kikimr->GetTableClient();
 
             WriteTestData(*Kikimr, "/Root/olapTable", 1000000, 300000000, 10000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 1100000, 300100000, 10000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 1200000, 300200000, 10000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 1300000, 300300000, 10000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 1400000, 300400000, 10000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 2000000, 200000000, 70000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 3000000, 100000000, 110000);
 
             {
                 auto alterQuery =

@@ -68,14 +68,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
     TTabletInfo::EVolatileState oldState = tablet->GetVolatileState();
     if (IsResourceDrainingState(oldState)) {
         if (Tablets[oldState].erase(tablet) != 0) {
-<<<<<<< HEAD
-            UpdateResourceValues(tablet, tablet->GetResourceValues(), NKikimrTabletBase::TMetrics());
-=======
             UpdateResourceValues(tablet, tablet->GetResourceValues(), {});
-            if (!IsResourceDrainingState(newState)) {
-                LastScheduledTablet.reset();
-            }
->>>>>>> e3ffe7944b9 (refactoring: storing tablet metrics in a struct (#30181))
         } else {
             if (oldState != newState) {
                 BLOG_W("Node(" << Id << ") could not delete tablet " << tablet->ToString() << " from state " << TTabletInfo::EVolatileStateName(oldState));
@@ -93,14 +86,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
     }
     if (IsResourceDrainingState(newState)) {
         if (Tablets[newState].insert(tablet).second) {
-<<<<<<< HEAD
-            UpdateResourceValues(tablet, NKikimrTabletBase::TMetrics(), tablet->GetResourceValues());
-=======
             UpdateResourceValues(tablet, {}, tablet->GetResourceValues());
-            if (!IsResourceDrainingState(oldState)) {
-                LastScheduledTablet = {.TabletId = tablet->GetFullTabletId(), .UsageBefore = NodeTotalUsage};
-            }
->>>>>>> e3ffe7944b9 (refactoring: storing tablet metrics in a struct (#30181))
         } else {
             BLOG_W("Node(" << Id << ") could not insert tablet " << tablet->ToString() << " to state " << TTabletInfo::EVolatileStateName(newState));
         }

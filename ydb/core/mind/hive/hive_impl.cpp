@@ -3139,14 +3139,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle);
         hFunc(TEvHive::TEvConfigureScaleRecommender, Handle);
         hFunc(TEvPrivate::TEvUpdateFollowers, Handle);
-<<<<<<< HEAD
-=======
-        hFunc(TEvNodeWardenStorageConfig, Handle);
-        hFunc(TEvPrivate::TEvUpdateBalanceCounters, Handle);
-        hFunc(TEvHive::TEvSetDown, Handle);
-        hFunc(TEvHive::TEvRequestDrainInfo, Handle);
         hFunc(TEvPrivate::TEvProcessTabletMetrics, Handle);
->>>>>>> f8803a6050a (batch tablet metrics processing (#30996))
     }
 }
 
@@ -3256,14 +3249,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvRefreshScaleRecommendation::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvConfigureScaleRecommender::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvUpdateFollowers::EventType, EnqueueIncomingEvent);
-<<<<<<< HEAD
-=======
-        fFunc(TEvNodeWardenStorageConfig::EventType, EnqueueIncomingEvent);
-        fFunc(TEvPrivate::TEvUpdateBalanceCounters::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvRequestDrainInfo::EventType, EnqueueIncomingEvent);
-        fFunc(TEvHive::TEvSetDown::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvProcessTabletMetrics::EventType, EnqueueIncomingEvent);
->>>>>>> f8803a6050a (batch tablet metrics processing (#30996))
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3606,50 +3592,10 @@ void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {
     Execute(CreateProcessUpdateFollowers());
 }
 
-<<<<<<< HEAD
-=======
-void THive::HandleInit(TEvNodeWardenStorageConfig::TPtr& ev) {
-    BLOG_D("HandleInit TEvNodeWardenStorageConfig");
-    BridgeInfo = ev->Get()->BridgeInfo;
-    MaybeLoadEverything();
-}
-
-void THive::Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
-    BLOG_D("Handle TEvNodeWardenStorageConfig");
-    BridgeInfo = ev->Get()->BridgeInfo;
-    if (BridgeInfo) {
-        UpdatePiles();
-    }
-}
-
-void THive::Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr&) {
-    THiveStats stats = GetStats();
-    TabletCounters->Simple()[NHive::COUNTER_BALANCE_SCATTER].Set(stats.Scatter * 100);
-    TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MIN].Set(stats.MinUsage * 100);
-    TabletCounters->Simple()[NHive::COUNTER_BALANCE_USAGE_MAX].Set(stats.MaxUsage * 100);
-
-    auto& nodeUsageHistogram = TabletCounters->Percentile()[NHive::COUNTER_NODE_USAGE];
-    nodeUsageHistogram.Clear();
-    for (const auto& record : stats.Values) {
-        nodeUsageHistogram.IncrementFor(record.Usage * 100);
-    }
-
-    if (stats.MaxUsage < CurrentConfig.GetMinNodeUsageToBalance()) {
-        TabletCounters->Cumulative()[NHive::COUNTER_SUGGESTED_SCALE_DOWN].Increment(1);
-    }
-
-    Schedule(GetBalanceCountersRefreshFrequency(), new TEvPrivate::TEvUpdateBalanceCounters());
-}
-
-void THive::Handle(TEvHive::TEvSetDown::TPtr& ev) {
-    Execute(CreateSetDown(ev));
-}
-
 void THive::Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr&) {
     Execute(CreateProcessTabletMetrics());
 }
 
->>>>>>> f8803a6050a (batch tablet metrics processing (#30996))
 void THive::MakeScaleRecommendation() {
     BLOG_D("[MSR] Started");
 

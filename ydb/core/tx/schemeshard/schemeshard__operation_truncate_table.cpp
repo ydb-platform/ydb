@@ -332,14 +332,18 @@ public:
 };
 
 void DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, const TPathId& currentPathId, TVector<ISubOperation::TPtr>& result) {
-    TPath vertexPath = TPath::Init(currentPathId, context.SS);
+    TPath currentPath = TPath::Init(currentPathId, context.SS);
 
-    bool isTable = vertexPath->IsTable();
-    bool isIndexParent = vertexPath.Base()->IsTableIndex();
+    // The check that the main table is not deleted is performed before the DFS call.
+    // However, the indexes of this table themselves may well be in a state of dropping, there is nothing wrong with that.
+    // It is only important that do not execute TRUNCATE on such indexes.
+    bool isDeleted = currentPath.Base()->Dropped();
+    bool isTable = currentPath->IsTable();
+    bool isIndexParent = currentPath.Base()->IsTableIndex();
 
-    if (isTable) {
-        const auto workingDir = TString(NKikimr::ExtractParent(vertexPath.PathString()));
-        const auto tableName = TString(NKikimr::ExtractBase(vertexPath.PathString()));
+    if (!isDeleted && isTable) {
+        const auto workingDir = TString(NKikimr::ExtractParent(currentPath.PathString()));
+        const auto tableName = TString(NKikimr::ExtractBase(currentPath.PathString()));
 
         {
             auto modifycheme = TransactionTemplate(workingDir, NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
@@ -350,8 +354,8 @@ void DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
         }
     }
 
-    if (isTable || isIndexParent) {
-        for (const auto& [childName, childPathId] : vertexPath.Base()->GetChildren()) {
+    if (!isDeleted && (isTable || isIndexParent)) {
+        for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
             Y_UNUSED(childName);
             DfsOnTableChildrenTree(opId, tx, context, childPathId, result);
         }

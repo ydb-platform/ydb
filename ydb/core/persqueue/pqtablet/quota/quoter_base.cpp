@@ -74,14 +74,11 @@ void TPartitionQuoterBase::HandleQuotaRequest(TEvPQ::TEvRequestQuota::TPtr& ev, 
     QuotaRequestedTimes.emplace(ev->Get()->Cookie, ctx.Now());
     TRequestContext context{ev->Release(), ev->Sender};
     HandleQuotaRequestImpl(context);
-    Cerr << ">>>>> HandleQuotaRequest: "<< (int)ExclusiveLockState << Endl;
     if ((ExclusiveLockState != EExclusiveLockState::EReleased) || (RequestsInflight >= MaxInflightRequests) || !WaitingInflightRequests.empty()) {
-        Cerr << ">>>>> HandleQuotaRequest: waiting inflight requests" << Endl;
         if (WaitingInflightRequests.empty())
             InflightIsFullStartTime = ctx.Now();
         WaitingInflightRequests.push_back(std::move(context));
     } else {
-        Cerr << ">>>>> HandleQuotaRequest: start quoting" << Endl;
         StartQuoting(std::move(context));
     }
 }
@@ -91,28 +88,22 @@ void TPartitionQuoterBase::StartQuoting(TRequestContext&& context) {
     auto& request = context.Request;
     auto* accountQuotaTracker = GetAccountQuotaTracker(request);
     if (accountQuotaTracker) {
-        Cerr << ">>>>> StartQuoting: send request to account quoter" << Endl;
         Send(accountQuotaTracker->Actor, new NAccountQuoterEvents::TEvRequest(request->Cookie, request->Request.Release()));
         PendingAccountQuotaRequests[request->Cookie] = std::move(context);
     } else {
-        Cerr << ">>>>> StartQuoting: account quoter not found, approve quota" << Endl;
         context.PartitionQuotaWaitStart = ActorContext().Now();
         OnAccountQuotaApproved(std::move(context));
     }
 }
 
 void TPartitionQuoterBase::CheckTotalPartitionQuota(TRequestContext&& context) {
-    Cerr << ">>>>> CheckTotalPartitionQuota: " << Endl;
     if (!PartitionTotalQuotaTracker) {
-        Cerr << ">>>>> CheckTotalPartitionQuota: no partition total quota tracker, approve quota" << Endl;
         return ApproveQuota(context);
     }
     if (!CanExaust(ActorContext().Now()) || !WaitingTotalPartitionQuotaRequests.empty()) {
-        Cerr << ">>>>> CheckTotalPartitionQuota: waiting total partition quota requests" << Endl;
         WaitingTotalPartitionQuotaRequests.push_back(std::move(context));
         return;
     }
-    Cerr << ">>>>> CheckTotalPartitionQuota: approve quota" << Endl;
     ApproveQuota(context);
 }
 

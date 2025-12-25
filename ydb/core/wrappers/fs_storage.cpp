@@ -195,17 +195,89 @@ public:
     void Handle(TEvGetObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
+        const TString filePath = key;
 
-        FS_LOG_W("GetObject: not implemented");
-        ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Not implemented");
+        FS_LOG(Verbose, "FS GetObject: key=" << key << ", filePath=" << filePath);
+
+        try {
+            TFile file(filePath, RdOnly);
+            i64 fileSize = file.GetLength();
+
+            // Handle range request if specified
+            TString rangeStr(request.GetRange().data(), request.GetRange().size());
+            std::pair<ui64, ui64> range;
+
+            if (!rangeStr.empty()) {
+                // Parse "bytes=start-end" format
+                if (!TEvGetObjectResponse::TryParseRange(rangeStr, range)) {
+                    ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Invalid range format");
+                    return;
+                }
+            } else {
+                // No range, read entire file
+                range = std::make_pair(0, fileSize - 1);
+            }
+
+            ui64 start = range.first;
+            ui64 end = range.second;
+            ui64 length = end - start + 1;
+
+            if ((i64)start >= fileSize) {
+                ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Range out of bounds");
+                return;
+            }
+
+            // Read data
+            TString data;
+            data.resize(length);
+            file.Seek(start, sSet);
+            size_t bytesRead = file.Read((void*)data.data(), length);
+            data.resize(bytesRead);
+
+            FS_LOG(Verbose, "FS GetObject: read " << bytesRead << " bytes from " << filePath);
+
+            // Create successful response with data
+            Aws::S3::Model::GetObjectResult awsResult;
+            awsResult.SetContentLength(bytesRead);
+            Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+
+            auto response = std::make_unique<TEvGetObjectResponse>(key, range, std::move(outcome), std::move(data));
+            ReplyAdapter.Reply(ev->Sender, std::move(response));
+
+        } catch (const std::exception& ex) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                "FS GetObject error: key=" << key << ", error=" << ex.what());
+            ReplyError<TEvGetObjectResponse>(ev->Sender, key, TString("File read error: ") + ex.what());
+        }
     }
 
     void Handle(TEvHeadObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
+        const TString filePath = key;
 
-        FS_LOG_W("HeadObject: not implemented");
-        ReplyError<TEvHeadObjectResponse>(ev->Sender, key, "Not implemented");
+        FS_LOG(Verbose, "FS HeadObject: key=" << key << ", filePath=" << filePath);
+
+        try {
+            TFile file(filePath, RdOnly | Seq);
+            i64 fileSize = file.GetLength();
+
+            FS_LOG(Verbose, "FS HeadObject: file size=" << fileSize << " for " << filePath);
+
+            // Create successful response
+            Aws::S3::Model::HeadObjectResult awsResult;
+            awsResult.SetContentLength(fileSize);
+            awsResult.SetETag("\"fs-file\"");  // Simple ETag for FS
+
+            Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+            auto response = std::make_unique<TEvHeadObjectResponse>(key, std::move(outcome));
+            ReplyAdapter.Reply(ev->Sender, std::move(response));
+
+        } catch (const std::exception& ex) {
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER,
+                "FS HeadObject error: key=" << key << ", error=" << ex.what());
+            ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TString("File head error: ") + ex.what());
+        }
     }
 
     void Handle(TEvDeleteObjectRequest::TPtr& ev) {

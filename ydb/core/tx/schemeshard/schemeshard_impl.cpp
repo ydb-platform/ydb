@@ -2636,6 +2636,9 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         if (txState.TargetPathTargetState) {
             proto.MutableTxCopyTableExtraData()->SetTargetPathTargetState(*txState.TargetPathTargetState);
         }
+        if (txState.CoordinatedSchemaVersion) {
+            proto.MutableTxCopyTableExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
+        }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     } else if (txState.TxType == TTxState::TxChangePathState) {
@@ -2648,6 +2651,9 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
     }  else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        if (txState.CoordinatedSchemaVersion) {
+            proto.MutableTxCdcStreamExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
+        }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable ||
@@ -2658,6 +2664,9 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        if (txState.CoordinatedSchemaVersion) {
+            proto.MutableTxCdcStreamExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
+        }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     }

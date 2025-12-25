@@ -50,6 +50,34 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 << " operationId: " << OperationId;
         }
 
+        // Helper to find the main table PathId for a given path
+        // For index impl tables: goes up to find the main table (impl -> index -> main table)
+        static TPathId FindMainTablePathId(const TPath& path) {
+            TPath parentPath = path.Parent();
+            if (parentPath.IsResolved() && parentPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
+                // This is an index impl table, go up one more level to main table
+                TPath mainTablePath = parentPath.Parent();
+                if (mainTablePath.IsResolved() && mainTablePath.Base()->IsTable()) {
+                    return mainTablePath.Base()->PathId;
+                }
+            }
+            // Regular table or couldn't find parent - use path's own PathId
+            return path.Base()->PathId;
+        }
+
+        // Lookup coordinated version for a given path from the per-table map
+        static ui64 GetCoordinatedVersionForPath(const TPath& path,
+                                                 const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
+            TPathId mainTablePathId = FindMainTablePathId(path);
+
+            const auto& versionMap = finalize.GetTableCoordinatedVersions();
+            auto it = versionMap.find(mainTablePathId.LocalPathId);
+            if (it != versionMap.end()) {
+                return it->second;
+            }
+            return 0;  // Not found - will use fallback logic
+        }
+
     public:
         TConfigureParts(TOperationId id, const TTxTransaction& tx)
             : OperationId(id), Transaction(tx)
@@ -100,23 +128,28 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 }
 
                 auto table = context.SS->Tables.at(tablePathId);
-                
+
+                // Determine target version - use per-table coordinated version if available
+                TPath tablePath = TPath::Init(tablePathId, context.SS);
+                ui64 coordinatedVersion = GetCoordinatedVersionForPath(tablePath, finalize);
+                ui64 targetVersion = (coordinatedVersion > 0) ? coordinatedVersion : table->AlterVersion + 1;
+
                 // Create AlterData if it doesn't exist
                 if (!table->AlterData) {
                     // Create minimal AlterData just to bump schema version
                     auto alterData = MakeIntrusive<TTableInfo::TAlterTableInfo>();
-                    alterData->AlterVersion = table->AlterVersion + 1;
+                    alterData->AlterVersion = targetVersion;
                     alterData->NextColumnId = table->NextColumnId;
                     alterData->Columns = table->Columns;
                     alterData->KeyColumnIds = table->KeyColumnIds;
                     alterData->IsBackup = table->IsBackup;
                     alterData->IsRestore = table->IsRestore;
                     alterData->TableDescriptionFull = table->TableDescription;
-                    
+
                     table->PrepareAlter(alterData);
                 } else {
-                    // Increment AlterVersion if AlterData already exists
-                    table->AlterData->AlterVersion = table->AlterVersion + 1;
+                    // Use target version for AlterData
+                    table->AlterData->AlterVersion = targetVersion;
                 }
                 
                 LOG_I(DebugHint() << " Preparing ALTER for table " << tablePathId 
@@ -216,8 +249,36 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 << " operationId: " << OperationId;
         }
 
+        // Helper to find the main table PathId for a given path
+        // For index impl tables: goes up to find the main table (impl -> index -> main table)
+        static TPathId FindMainTablePathId(const TPath& path) {
+            TPath parentPath = path.Parent();
+            if (parentPath.IsResolved() && parentPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
+                // This is an index impl table, go up one more level to main table
+                TPath mainTablePath = parentPath.Parent();
+                if (mainTablePath.IsResolved() && mainTablePath.Base()->IsTable()) {
+                    return mainTablePath.Base()->PathId;
+                }
+            }
+            // Regular table or couldn't find parent - use path's own PathId
+            return path.Base()->PathId;
+        }
+
+        // Lookup coordinated version for a given path from the per-table map
+        static ui64 GetCoordinatedVersionForPath(const TPath& path,
+                                                 const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
+            TPathId mainTablePathId = FindMainTablePathId(path);
+
+            const auto& versionMap = finalize.GetTableCoordinatedVersions();
+            auto it = versionMap.find(mainTablePathId.LocalPathId);
+            if (it != versionMap.end()) {
+                return it->second;
+            }
+            return 0;  // Not found - will use fallback logic
+        }
+
     public:
-        TFinalizationPropose(TOperationId id, const TTxTransaction& tx) 
+        TFinalizationPropose(TOperationId id, const TTxTransaction& tx)
             : OperationId(id), Transaction(tx) {}
 
         bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -328,24 +389,31 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     TPathId indexPathId = indexPath.Base()->PathId;
                     if (context.SS->Indexes.contains(indexPathId)) {
                         auto oldVersion = context.SS->Indexes[indexPathId]->AlterVersion;
-                        context.SS->Indexes[indexPathId]->AlterVersion += 1;
-                        context.SS->PersistTableIndexAlterVersion(db, indexPathId, context.SS->Indexes[indexPathId]);
-                        
-                        LOG_I("SyncIndexSchemaVersions: Index AlterVersion incremented from "
-                              << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);
 
-                        context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
+                        // Use per-table coordinated version if available
+                        ui64 coordinatedVersion = GetCoordinatedVersionForPath(path, finalize);
+                        ui64 targetVersion = (coordinatedVersion > 0) ? coordinatedVersion : oldVersion + 1;
 
-                        // Publish the main table that owns this index
-                        // The main table's TIndexDescription.SchemaVersion must match index's AlterVersion
-                        TPath mainTablePath = indexPath.Parent();
-                        if (mainTablePath.IsResolved() && mainTablePath.Base()->PathType == NKikimrSchemeOp::EPathTypeTable) {
-                            TPathId mainTablePathId = mainTablePath.Base()->PathId;
-                            if (!publishedMainTables.contains(mainTablePathId)) {
-                                publishedMainTables.insert(mainTablePathId);
-                                context.SS->ClearDescribePathCaches(mainTablePath.Base());
-                                context.OnComplete.PublishToSchemeBoard(OperationId, mainTablePathId);
-                                LOG_I("SyncIndexSchemaVersions: Published main table: " << mainTablePathId);
+                        if (context.SS->Indexes[indexPathId]->AlterVersion < targetVersion) {
+                            context.SS->Indexes[indexPathId]->AlterVersion = targetVersion;
+                            context.SS->PersistTableIndexAlterVersion(db, indexPathId, context.SS->Indexes[indexPathId]);
+
+                            LOG_I("SyncIndexSchemaVersions: Index AlterVersion updated from "
+                                  << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);
+
+                            context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
+
+                            // Publish the main table that owns this index
+                            // The main table's TIndexDescription.SchemaVersion must match index's AlterVersion
+                            TPath mainTablePath = indexPath.Parent();
+                            if (mainTablePath.IsResolved() && mainTablePath.Base()->PathType == NKikimrSchemeOp::EPathTypeTable) {
+                                TPathId mainTablePathId = mainTablePath.Base()->PathId;
+                                if (!publishedMainTables.contains(mainTablePathId)) {
+                                    publishedMainTables.insert(mainTablePathId);
+                                    context.SS->ClearDescribePathCaches(mainTablePath.Base());
+                                    context.OnComplete.PublishToSchemeBoard(OperationId, mainTablePathId);
+                                    LOG_I("SyncIndexSchemaVersions: Published main table: " << mainTablePathId);
+                                }
                             }
                         }
                     }

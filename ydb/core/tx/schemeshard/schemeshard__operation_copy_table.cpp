@@ -272,10 +272,31 @@ public:
 
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
                 auto srcTable = context.SS->Tables.at(srcPathId);
-                srcTable->AlterVersion += 1;
+
+                // Use coordinated version if available (from backup operations)
+                if (txState->CoordinatedSchemaVersion) {
+                    srcTable->AlterVersion = *txState->CoordinatedSchemaVersion;
+                } else {
+                    srcTable->AlterVersion += 1;
+                }
                 context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
 
-                NCdcStreamState::SyncChildIndexes(srcPath, srcTable->AlterVersion, OperationId, context, db);
+                // Update child index entity versions to match
+                for (const auto& [childName, childPathId] : srcPath->GetChildren()) {
+                    auto childPath = context.SS->PathsById.at(childPathId);
+                    if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                        continue;
+                    }
+                    if (context.SS->Indexes.contains(childPathId)) {
+                        auto index = context.SS->Indexes.at(childPathId);
+                        if (index->AlterVersion < srcTable->AlterVersion) {
+                            index->AlterVersion = srcTable->AlterVersion;
+                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                            context.SS->ClearDescribePathCaches(childPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
+                        }
+                    }
+                }
             }
 
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {

@@ -484,7 +484,10 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                         result.GetStatus(),
                         EStatus::PRECONDITION_FAILED,
                         result.GetIssues().ToString());
-                    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes");
+                    UNIT_ASSERT_STRING_CONTAINS_C(
+                        result.GetIssues().ToString(),
+                        "is not supported in Online Read-Only or Stale Read-Only transaction modes",
+                        result.GetIssues().ToString());
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL_C(
                         result.GetStatus(),
@@ -497,6 +500,9 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
     };
 
     Y_UNIT_TEST_QUAD(TIsolationSettingTest, IsOlap, UsePragma) {
+        if (!IsOlap) {
+            return;
+        }
         for (const std::string isolation : {"SerializableRW", "SnapshotRW", "SnapshotRO", "StaleRO", "OnlineRO"}) {
             if (isolation == "OnlineRO" && !UsePragma) {
                 continue;

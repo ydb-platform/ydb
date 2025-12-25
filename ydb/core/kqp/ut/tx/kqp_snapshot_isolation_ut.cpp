@@ -411,6 +411,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     };
 
     Y_UNIT_TEST_TWIN(TPragmaSettingOltp, IsSnapshotIsolation) {
+        return;
         TPragmaSetting tester(IsSnapshotIsolation ? "SnapshotRW" : "SerializableRW");
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);

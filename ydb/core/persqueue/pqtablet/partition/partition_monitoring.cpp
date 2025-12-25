@@ -354,7 +354,7 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
 
     auto it = MLPConsumers.find(consumerName);
     if (it == MLPConsumers.end()) {
-        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(TStringBuilder() <<"MLP consumer '" << consumerName << "' not found"));
+        Send(ev->Get()->ReplyTo, new NMon::TEvRemoteHttpInfoRes(TStringBuilder() <<"MLP consumer '" << consumerName << "' not found"));
         return;
     }
     auto& consumerInfo = it->second;

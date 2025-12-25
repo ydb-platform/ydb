@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/library/actors/core/mon.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -417,8 +418,6 @@ Y_UNIT_TEST(RetentionStorageAfterReload) {
                 .KeepMessagesOrder(false)
             .EndAddConsumer()).GetValueSync();
 
-    Sleep(TDuration::Seconds(1));
-
     WriteMany(setup, "/Root/topic1", 0, 1_MB, 25);
 
     Cerr << ">>>>> BEGIN REBOOT " << Endl;
@@ -439,6 +438,33 @@ Y_UNIT_TEST(RetentionStorageAfterReload) {
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
     }
+}
+
+Y_UNIT_TEST(HtmlApp) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionStorageMb(8)
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+            .EndAddConsumer()).GetValueSync();
+
+    Sleep(TDuration::Seconds(1));
+
+    auto tabletId = GetTabletId(setup, "/Root", "/Root/topic1", 0);
+    auto url = TStringBuilder() << "/app?TabletID=" << tabletId << "&consumer=mlp-consumer&partitionId=0";
+    runtime.SendToPipe(tabletId, runtime.AllocateEdgeActor(),
+        new NMon::TEvRemoteHttpInfo(url, HTTP_METHOD_GET));
+
+    auto response = runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>();
+    UNIT_ASSERT(response);
+
+    Cerr << (TStringBuilder() <<">>>>> " << response->Html << Endl);
+    UNIT_ASSERT(response->Html.find("Total metrics") != TString::npos);
 }
 
 }

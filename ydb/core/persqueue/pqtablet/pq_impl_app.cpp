@@ -206,7 +206,7 @@ private:
     ui32 TotalResponses;
 };
 
-bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
+bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     auto txIdStr = ev->Get()->Cgi().Get("TxId");
 
     TStringStream str;
@@ -309,23 +309,17 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     }
 
     if (ev->Get()->Cgi().Has("consumer") && ev->Get()->Cgi().Has("partitionId")) {
-        auto partitionIdStr = ev->Get()->Cgi().Get("TxId");
+        auto partitionIdStr = ev->Get()->Cgi().Get("partitionId");
         auto consumer = ev->Get()->Cgi().Get("consumer");
 
         char *endptr;
         const ui64 partitionId = strtoull(partitionIdStr.c_str(), &endptr, 10);
-        if (*endptr) {
-            return true;
-        }
 
         auto partition = Partitions.find(TPartitionId(partitionId));
-        if (partition == Partitions.end()) {
+        if (partition != Partitions.end()) {
+            Send(partition->second.Actor, new TEvPQ::TEvMLPConsumerMonRequest(ev->Sender, partitionId, consumer));
             return true;
         }
-
-        Send(partition->second.Actor, new TEvPQ::TEvMLPConsumerMonRequest(ev->Sender, partitionId, consumer));
-
-        return true;
     }
 
     if (ev->Get()->Cgi().Has("TxId")) {

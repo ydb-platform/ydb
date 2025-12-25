@@ -42,7 +42,6 @@ PEERDIR(
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard
     ydb/core/kqp/ut/olap/helpers
-    ydb/core/kqp/ut/olap/indexes
     ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common
     ydb/public/sdk/cpp/src/client/operation
@@ -53,3 +52,7 @@ YQL_LAST_ABI_VERSION()
 GENERATE_ENUM_SERIALIZATION(bool_test_enums.h)
 
 END()
+
+RECURSE_FOR_TESTS(
+    indexes
+)

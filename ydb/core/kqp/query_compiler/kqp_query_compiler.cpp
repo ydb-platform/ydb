@@ -1349,7 +1349,7 @@ private:
             FillTableId(settings.Table().Cast(), *fullTextProto.MutableTable());
             fullTextProto.SetIndex(settings.Index().Cast().StringValue());
             FillColumns(settings.ResultColumns().Cast(), *tableMeta, fullTextProto, false);
-            fullTextProto.MutableQuerySettings()->SetQuery(TString(settings.Query().Cast().Ptr()->Content()));
+            fullTextProto.MutableQuerySettings()->SetQuery(TString(settings.Query().Cast<TCoString>().Literal().Value()));
             FillColumns(settings.Columns().Cast(), *tableMeta, *fullTextProto.MutableQuerySettings(), false);
         } else {
             YQL_ENSURE(false, "Unsupported source type");

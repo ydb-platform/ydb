@@ -2413,7 +2413,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevance) {
         }
     }
 
-    /*for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
+    for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
         TString query = Sprintf(R"sql(
             SELECT Key, Text, FullText::Relevance(Text, "%s") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
@@ -2433,14 +2433,15 @@ Y_UNIT_TEST(SelectWithFulltextRelevance) {
         while (parser.TryNextRow()) {
             auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
             ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            double relevance = parser.ColumnParser("Relevance").GetDouble();
             UNIT_ASSERT_C(bodyValue, "Body should not be null");
-            Cerr << "Key: " << key << Endl;
+            Cerr << "Key: " << key << ", Relevance: " << relevance << Endl;
             UNIT_ASSERT_C(
                 IsIn(expectedKeys, key),
                 "All returned rows should contain search term related text"
             );
         }
-    }*/
+    }
 
     {
         TString query = R"sql(

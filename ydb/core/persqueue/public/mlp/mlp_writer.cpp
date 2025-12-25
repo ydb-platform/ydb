@@ -23,6 +23,7 @@ void TWriterActor::PassAway() {
         Send(ChildActorId, new TEvents::TEvPoison());
     }
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+    TActor::PassAway();
 }
 
 void TWriterActor::DoDescribe() {

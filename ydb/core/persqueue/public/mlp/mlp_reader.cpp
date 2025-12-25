@@ -198,6 +198,7 @@ void TReaderActor::PassAway() {
         Send(ChildActorId, new TEvents::TEvPoison());
     }
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+    TActor::PassAway();
 }
 
 bool TReaderActor::OnUnhandledException(const std::exception& exc) {

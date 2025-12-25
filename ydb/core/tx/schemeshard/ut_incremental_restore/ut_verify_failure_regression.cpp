@@ -190,8 +190,13 @@ Y_UNIT_TEST_SUITE(TVerifyFailureRegressionTests) {
         // and DoDoneTransactions() finds the path missing from PathsById
         TestModificationResult(runtime, restoreTxId, NKikimrScheme::StatusAccepted);
 
-        // Drop should fail - table doesn't exist yet (restore is creating it)
-        TestModificationResult(runtime, dropTxId, NKikimrScheme::StatusPathDoesNotExist);
+        // Drop should fail - either:
+        // - StatusPathDoesNotExist: table doesn't exist yet
+        // - StatusMultipleModifications: table is being created (under operation)
+        TestModificationResults(runtime, dropTxId, {
+            NKikimrScheme::StatusPathDoesNotExist,
+            NKikimrScheme::StatusMultipleModifications
+        });
 
         // Wait for completion - crash would occur here if bug exists
         env.TestWaitNotification(runtime, restoreTxId);

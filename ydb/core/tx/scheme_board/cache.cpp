@@ -270,14 +270,31 @@ namespace {
     public:
         explicit TAccessChecker(TContextPtr context)
             : Context(context)
+            , RootSchemeShard(AppData()->DomainsInfo->GetDomain()->SchemeRoot, 1)
         {
             Y_ABORT_UNLESS(!Context->WaitCounter);
         }
 
         void Bootstrap(const TActorContext&) {
             for (auto& entry : Context->Request->ResultSet) {
-                if (!IsDomain(entry) && Context->ResolvedDomainInfo && entry.DomainInfo) {
-                    // ^ It is allowed to describe subdomains by specifying root as DatabaseName
+                // Lookup path policy for DatabaseName and Path provided by SchemeCache request
+                //
+                // DatabaseName         | Path                              | Allowed
+                // ------------------------------------------------------------------
+                // Domain root path     | Domain root path                  | True
+                // Domain root path     | Regular path within domain        | True
+                // Domain root path     | Subdomain root path               | True
+                // Domain root path     | Regular path within subdomain1    | False
+                // Subdomain1 root path | Domain root path                  | False
+                // Subdomain1 root path | Regular path within domain        | False
+                // Subdomain1 root path | Subdomain1 root path              | True
+                // Subdomain1 root path | Regular path within subdomain1    | True
+                // Subdomain1 root path | Subdomain2 root path              | False
+                // Subdomain1 root path | Regular path within subdomain2    | False
+
+                if (Context->ResolvedDomainInfo && entry.DomainInfo
+                    && !(Context->ResolvedDomainInfo->DomainKey == RootSchemeShard && IsDomain(entry))
+                ) {
 
                     if (Context->ResolvedDomainInfo->DomainKey != entry.DomainInfo->DomainKey) {
                         SBC_LOG_W("Path does not belong to the specified domain"
@@ -315,6 +332,7 @@ namespace {
 
     private:
         TContextPtr Context;
+        const TPathId RootSchemeShard;
 
     }; // TAccessChecker
 

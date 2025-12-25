@@ -21,6 +21,7 @@ private:
     const NActors::TActorId OwnerActorId;
     THashMap<ui64, TProcessMemory> Processes;
     std::map<TProcessMemoryUsage, TProcessMemory*> ProcessesOrdered;
+    std::set<TProcessMemoryUsage> WaitingProcesses;
     std::shared_ptr<TStageFeatures> DefaultStage;
     TIdsControl ProcessIds;
 
@@ -34,12 +35,14 @@ private:
         bool Released = false;
         TProcessMemory& Process;
         std::map<TProcessMemoryUsage, TProcessMemory*>* Processes;
+        std::set<TProcessMemoryUsage>* WaitingProcesses;
         TProcessMemoryUsage Start;
 
     public:
-        TOrderedProcessesGuard(TProcessMemory& process, std::map<TProcessMemoryUsage, TProcessMemory*>& processes)
+        TOrderedProcessesGuard(TProcessMemory& process, std::map<TProcessMemoryUsage, TProcessMemory*>& processes, std::set<TProcessMemoryUsage>& waitingProcesses)
             : Process(process)
             , Processes(&processes)
+            , WaitingProcesses(&waitingProcesses)
             , Start(Process.BuildUsageAddress()) {
             AFL_VERIFY(Processes->contains(Start));
         }
@@ -50,6 +53,10 @@ private:
             }
             AFL_VERIFY(Processes->erase(Start))("start", Start.DebugString());
             AFL_VERIFY(Processes->emplace(Process.BuildUsageAddress(), &Process).second);
+            WaitingProcesses->erase(Start);
+            if (Process.HasWaitingAllocations()) {
+                WaitingProcesses->emplace(Process.BuildUsageAddress());
+            }
         }
 
         void Release() {
@@ -59,7 +66,7 @@ private:
     };
 
     TOrderedProcessesGuard BuildProcessOrderGuard(TProcessMemory& process) {
-        return TOrderedProcessesGuard(process, ProcessesOrdered);
+        return TOrderedProcessesGuard(process, ProcessesOrdered, WaitingProcesses);
     }
 
     TProcessMemory& GetProcessMemoryVerified(const ui64 internalProcessId) {
@@ -78,6 +85,8 @@ private:
             return nullptr;
         }
     }
+
+    void UpdateWaitingProcesses(TProcessMemory* process);
 
 public:
     TManager(const NActors::TActorId& ownerActorId, const TConfig& config, const TString& name, const std::shared_ptr<TCounters>& signals,

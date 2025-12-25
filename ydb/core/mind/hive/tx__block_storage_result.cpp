@@ -54,6 +54,10 @@ public:
                 }
             } else {
                 BLOG_W("THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status) << ": " << msg->ErrorReason);
+                if (tablet->IsDeleting()) {
+                    --Self->DeleteTabletInProgress;
+                    Self->UpdateCounterTabletsDeleting();
+                }
                 SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateBlockStorage(tablet->Id));
             }
         }

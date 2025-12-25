@@ -162,7 +162,7 @@ void THive::Handle(TEvHive::TEvStopTablet::TPtr& ev) {
     NKikimrHive::TEvStopTablet& rec = ev->Get()->Record;
     const TActorId actorToNotify = rec.HasActorToNotify() ? ActorIdFromProto(rec.GetActorToNotify()) : ev->Sender;
     if (rec.HasTabletID()) {
-
+        Execute(CreateStopTablet(rec.GetTabletID(), actorToNotify));
     } else {
         Y_ENSURE_LOG(rec.HasTabletID(), rec.ShortDebugString());
         Send(actorToNotify, new TEvHive::TEvStopTabletResult(NKikimrProto::ERROR, 0), 0, ev->Cookie);
@@ -1743,6 +1743,20 @@ void THive::UpdateCounterNodesFrozen(i64 nodesFrozenDiff) {
     }
 }
 
+void THive::UpdateCounterDeleteTabletQueueSize() {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_DELETE_TABLET_QUEUE_SIZE];
+        counter.Set(DeleteTabletQueue.size());
+    }
+}
+
+void THive::UpdateCounterTabletsDeleting() {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_DELETING];
+        counter.Set(DeleteTabletInProgress);
+    }
+}
+
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
@@ -2898,7 +2912,8 @@ void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects)
     if (tablet == nullptr) {
         return;
     }
-    if (DeleteTabletInProgress < MAX_DELETE_TABLET_IN_PROGRESS) {
+    Y_ENSURE(tablet->IsDeleting());
+    if (DeleteTabletInProgress < GetMaxDeleteTabletInProgress()) {
         ++DeleteTabletInProgress;
         if (!tablet->InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
             DeleteTabletWithoutStorage(tablet);
@@ -2906,6 +2921,8 @@ void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects)
     } else {
         DeleteTabletQueue.push(tabletId);
     }
+    UpdateCounterDeleteTabletQueueSize();
+    UpdateCounterTabletsDeleting();
 }
 
 void THive::ProcessPendingStopTablet() {

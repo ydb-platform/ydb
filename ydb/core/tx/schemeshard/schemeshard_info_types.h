@@ -333,6 +333,12 @@ private:
     ui64 CPU = 0;
 };
 
+struct TStoragePoolStatsDelta {
+    i64 DataSize = 0;
+    i64 IndexSize = 0;
+};
+using TDiskSpaceUsageDelta = TVector<std::pair<TString, TStoragePoolStatsDelta>>;
+
 struct TTableAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
@@ -344,13 +350,13 @@ struct TTableAggregatedStats {
         return Aggregated.PartCount && UpdatedStats.size() == Aggregated.PartCount;
     }
 
-    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 };
 
 struct TAggregatedStats : public TTableAggregatedStats {
     THashMap<TPathId, TTableAggregatedStats> TableStats;
 
-    void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats);
+    void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now);
 };
 
 struct TSubDomainInfo;
@@ -469,6 +475,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 
+    bool IsExternalBlobsEnabled = false;
+
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
 
@@ -577,6 +585,7 @@ public:
         , IsRestore(alterData.IsRestore)
     {
         TableDescription.Swap(alterData.TableDescriptionFull.Get());
+        IsExternalBlobsEnabled = PartitionConfigHasExternalBlobsEnabled(TableDescription.GetPartitionConfig());
     }
 
     static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
@@ -669,7 +678,7 @@ public:
         ShardsStatsDetached = true;
     }
 
-    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 
     void RegisterSplitMergeOp(TOperationId txId, const TTxState& txState);
 
@@ -693,12 +702,12 @@ public:
                             const TForceShardSplitSettings& forceShardSplitSettings,
                             TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                             THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                            const TTableInfo* mainTableForIndex, TString& reason) const;
+                            const TTableInfo* mainTableForIndex, TInstant now, TString& reason) const;
 
     bool CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                  const TForceShardSplitSettings& forceShardSplitSettings,
                                  TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
-                                 const TTableInfo* mainTableForIndex, TString& reason) const;
+                                 const TTableInfo* mainTableForIndex, TInstant now, TString& reason) const;
 
     bool CheckSplitByLoad(
             const TSplitSettings& splitSettings, TShardIdx shardIdx,
@@ -711,7 +720,7 @@ public:
             return false;
         }
         // Auto split is always enabled, unless table is using external blobs
-        return !PartitionConfigHasExternalBlobsEnabled(PartitionConfig());
+        return (IsExternalBlobsEnabled == false);
     }
 
     bool IsMergeBySizeEnabled(const TForceShardSplitSettings& params) const {
@@ -757,7 +766,7 @@ public:
 
     bool IsSplitByLoadEnabled(const TTableInfo* mainTableForIndex) const {
         // We cannot split when external blobs are enabled
-        if (PartitionConfigHasExternalBlobsEnabled(PartitionConfig())) {
+        if (IsExternalBlobsEnabled) {
             return false;
         }
 
@@ -1946,6 +1955,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
+    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& delta);
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 
@@ -3238,7 +3248,7 @@ public:
             return result;
         }
     };
-    
+
     TMap<TShardIdx, TShardStatus> Shards;
     TDeque<TShardIdx> ToUploadShards;
     THashSet<TShardIdx> InProgressShards;
@@ -3276,7 +3286,7 @@ public:
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ " 
+                << "{ "
                 << "State = " << State
                 << ", Rows = " << Rows.size()
                 << ", MaxProbability = " << MaxProbability
@@ -3402,7 +3412,7 @@ public:
     template<class TRow>
     static void FillFromRow(const TRow& row, TIndexBuildInfo* indexInfo) {
         Y_ENSURE(indexInfo); // TODO: pass by ref
-        
+
         TIndexBuildId id = row.template GetValue<Schema::IndexBuild::Id>();
         TString uid = row.template GetValue<Schema::IndexBuild::Uid>();
 
@@ -3567,7 +3577,7 @@ public:
 
         TSerializedTableRange bound{range};
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx); 
+            "AddShardStatus id# " << Id << " shard " << shardIdx);
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex) {
             AddParent(bound, shardIdx);
         }

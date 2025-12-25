@@ -98,12 +98,22 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         ui64 txId = 10;
         int writeId = 10;
-        std::vector<ui64> writeIds;
-        const bool ok =
-            WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
-        UNIT_ASSERT(ok);
-        const auto commitTxId = ++txId;
-        planStep = ProposeCommit(runtime, sender, commitTxId, writeIds);
+        std::vector<ui64> writeIds1;
+        const auto lock1 = 1;
+        {
+            const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true,
+                &writeIds1, NEvWrite::EModificationType::Upsert, lock1);
+            UNIT_ASSERT(ok);
+        }
+        std::vector<ui64> writeIds2;
+        const auto lock2 = 2;
+        {
+            const bool ok = WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTable.Schema), testTable.Schema,
+                true, &writeIds2, NEvWrite::EModificationType::Upsert, lock2);
+            UNIT_ASSERT(ok);
+        }
+        const auto commitTxId1 = ++txId;
+        planStep = ProposeCommit(runtime, sender, commitTxId1, writeIds1, lock1);
         const auto commitPlanStep = planStep;
         const ui64 dstPathId = 2;
         const auto moveTableTxId = ++txId;
@@ -111,12 +121,17 @@ Y_UNIT_TEST_SUITE(MoveTable) {
             NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, moveTableTxId, TTestSchema::MoveTableTxBody(srcPathId, dstPathId, 1), 0, 0);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
 
+        {
+            const auto commitTxId2 = ++txId;
+            ProposeCommitFail(runtime, sender, TTestTxConfig::TxTablet0, commitTxId2, writeIds2, lock2);
+        }
+
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
         if (Reboot) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
 
-        PlanCommit(runtime, sender, commitPlanStep, commitTxId);
+        PlanCommit(runtime, sender, commitPlanStep, commitTxId1);
 
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
         if (Reboot) {

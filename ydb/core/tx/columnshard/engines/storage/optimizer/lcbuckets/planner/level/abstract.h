@@ -141,10 +141,11 @@ private:
     THashSet<ui64> CurrentLevelPortionIds;
     std::vector<TPortionsChain> Chains;
     std::optional<NArrow::TSimpleRow> StopSeparation;
+    std::optional<ui64> ExpectedPortionSize;
 
 public:
     ui64 GetTargetCompactionLevel() const {
-        if (MemoryUsage > ((ui64)1 << 30)) {
+        if (MemoryUsage > ((ui64)1 << 30) || MemoryUsage < ExpectedPortionSize.value_or(0)) {
             return TargetCompactionLevel.GetDec();
         } else {
             return TargetCompactionLevel;
@@ -274,8 +275,9 @@ public:
                Portions.size() < 10000;
     }
 
-    TCompactionTaskData(const ui64 targetCompactionLevel)
-        : TargetCompactionLevel(targetCompactionLevel) {
+    TCompactionTaskData(const ui64 targetCompactionLevel, const std::optional<ui64> expectedPortionSize = std::nullopt)
+        : TargetCompactionLevel(targetCompactionLevel)
+        , ExpectedPortionSize(expectedPortionSize) {
     }
 };
 

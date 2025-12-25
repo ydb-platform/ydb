@@ -65,6 +65,7 @@ namespace {
                 Ctx->Runtime->SetLogPriority(NKikimrServices::PQ_TX, NLog::PRI_DEBUG);
                 TContext::TPtr kafkaContext = std::make_shared<TContext>(KafkaConfig);
                 kafkaContext->DatabasePath = "/Root/PQ";
+                kafkaContext->ResourceDatabasePath = "/Root/PQ";
                 kafkaContext->ConnectionId = Ctx->Edge;
                 ActorId = Ctx->Runtime->Register(CreateKafkaProduceActor(kafkaContext));
                 auto dummySchemeCacheId = Ctx->Runtime->Register(new TDummySchemeCacheActor(Ctx->TabletId));
@@ -218,7 +219,7 @@ namespace {
                 return TTestActorRuntimeBase::EEventAction::PROCESS;
             };
             Ctx->Runtime->SetObserverFunc(observer);
-            
+
             SendProduce(TransactionalId, producerId, producerEpoch);
 
             TDispatchOptions options;

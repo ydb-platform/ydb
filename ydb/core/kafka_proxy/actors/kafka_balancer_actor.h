@@ -383,7 +383,6 @@ private:
     TMessagePtr<TSyncGroupRequestData> SyncGroupRequestData;
     TMessagePtr<THeartbeatRequestData> HeartbeatGroupRequestData;
     TMessagePtr<TLeaveGroupRequestData> LeaveGroupRequestData;
-
 };
 
 } // namespace NKafka

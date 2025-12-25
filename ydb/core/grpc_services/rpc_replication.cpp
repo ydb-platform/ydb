@@ -4,6 +4,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -54,6 +55,7 @@ private:
     STATEFN(StateDescribeScheme) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            sFunc(TEvents::TEvWakeup, DescribeScheme);
         default:
             return TBase::StateWork(ev);
         }
@@ -76,6 +78,16 @@ private:
                         break;
                     default: {
                         auto issue = NYql::TIssue("Is not a replication");
+                        TBase::Request_->RaiseIssue(issue);
+                        return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                    }
+                }
+
+                if (desc.GetReplicationDescription().GetControllerId() == 0) {
+                    if (Backoff.HasMore()) {
+                        return ctx.Schedule(Backoff.Next(), new TEvents::TEvWakeup());
+                    } else {
+                        auto issue = NYql::TIssue("The creation of the object has not been completed yet");
                         TBase::Request_->RaiseIssue(issue);
                         return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
                     }
@@ -280,6 +292,7 @@ private:
 private:
     TResult Result;
     TActorId ControllerPipeClient;
+    TBackoff Backoff = TBackoff(5, TDuration::MilliSeconds(100));
 };
 
 using TDescribeReplicationActor = TDescribeReplicationRPC<Replication::DescribeReplicationRequest, Replication::DescribeReplicationResponse, Replication::DescribeReplicationResult>;

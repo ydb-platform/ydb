@@ -92,7 +92,6 @@ public:
                 compactionsStart = GetCompactionStartedCounter().Val();
                 start = TInstant::Now();
             }
-            Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << "; count: " << count << "; max: " << maxCount << Endl;
             if (maxCount && count >= maxCount) {
                 return true;
             }
@@ -110,7 +109,6 @@ public:
                 countStart = GetCleaningStartedCounter().Val();
                 start = TInstant::Now();
             }
-            Cerr << "WAIT_CLEANING: " << GetCleaningStartedCounter().Val() << Endl;
             if (testRuntime) {
                 testRuntime->SimulateSleep(TDuration::Seconds(1));
             } else {

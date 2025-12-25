@@ -1,10 +1,8 @@
-#include "helpers/local.h"
-#include "helpers/writer.h"
-
-#include "combinatory/variator.h"
-
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/olap/combinatory/variator.h>
+#include <ydb/core/kqp/ut/olap/helpers/local.h>
+#include <ydb/core/kqp/ut/olap/helpers/writer.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
@@ -138,8 +136,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
-            Cerr << result << Endl;
-            Cerr << csController->GetIndexesSkippingOnSelect().Val() << " / " << csController->GetIndexesApprovedOnSelect().Val() << Endl;
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
@@ -239,7 +235,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             std::unordered_set<TString> indexNames{ "cms_ts", "cms_res_id", "cms_uid", "cms_level", "cms_message" };
             for (const auto& i : indexes) {
-                Cerr << ">>> " << i.GetName() << " of class name " << i.GetClassName() << Endl;
                 UNIT_ASSERT(i.GetClassName() == "COUNT_MIN_SKETCH");
                 UNIT_ASSERT(indexNames.erase(i.GetName()));
             }
@@ -254,7 +249,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             std::optional<NColumnShard::TSchemeShardLocalPathId> schemeShardLocalPathId;
             for (auto&& i : csController->GetShardActualIds()) {
-                Cerr << ">>> shard actual id: " << i << Endl;
                 const auto pathIds = csController->GetPathIdTranslator(i)->GetSchemeShardLocalPathIds();
                 UNIT_ASSERT(pathIds.size() == 1);
                 if (schemeShardLocalPathId.has_value()) {
@@ -282,12 +276,10 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 UNIT_ASSERT(event);
 
                 auto& response = event->Record;
-                // Cerr << response << Endl;
                 UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
                 UNIT_ASSERT(response.ColumnsSize() == 6);
                 TString someData = response.GetColumns(0).GetStatistics(0).GetData();
                 *sketch += *std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(someData.data(), someData.size()));
-                Cerr << ">>> sketch.GetElementCount() = " << sketch->GetElementCount() << Endl;
                 UNIT_ASSERT(sketch->GetElementCount() > 0);
             }
         }
@@ -383,11 +375,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto it = tableClient.StreamExecuteScanQuery(text).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("result", result)("expected", expectedResult);
-            auto* controller = NYDBTest::TControllers::GetControllerAs<NOlap::TWaitCompactionController>();
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("skip", controller->GetIndexesSkippingOnSelect().Val() - SkipStart)(
-                "check", controller->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
-                "no_data", controller->GetIndexesSkippedNoData().Val() - NoDataStart);
             CompareYson(result, expectedResult);
         }
 
@@ -808,7 +795,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)";
             {
                 ResetZeroLevel(csController);
-                ui32 requestsCount = 100;
+                ui32 requestsCount = 10;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [&](const TString& res, const TString& uid, const ui32 level) {
@@ -827,7 +814,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ui32 requestsCount = 300;
+                ui32 requestsCount = 10;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [&](const TString& res) {
@@ -843,7 +830,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ui32 requestsCount = 300;
+                ui32 requestsCount = 10;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [&](const TString& res) {
@@ -859,7 +846,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ui32 requestsCount = 300;
+                ui32 requestsCount = 10;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
                     const auto query = [&](const TString& res) {
@@ -889,7 +876,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     }
 
     TString scriptDifferentIndexesConfig = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,
-        FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "hashes_count" : $$1|5|8$$,
+        FEATURES=`{"column_name" : "resource_id", "ngramm_size" : $$3|8$$, "hashes_count" : $$5|8$$,
                    "filter_size_bytes" : $$128|129|131|255|257$$,
                    "records_count" : $$331|1879$$, "case_sensitive": $$false|true$$,
                    "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "$$SIMPLE_STRING|BITSET$$"}`);

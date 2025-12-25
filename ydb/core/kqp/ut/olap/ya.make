@@ -22,7 +22,6 @@ SRCS(
     decimal_ut.cpp
     delete_ut.cpp
     dictionary_ut.cpp
-    indexes_ut.cpp
     json_ut.cpp
     kqp_olap_stats_ut.cpp
     locks_ut.cpp
@@ -43,6 +42,7 @@ PEERDIR(
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard
     ydb/core/kqp/ut/olap/helpers
+    ydb/core/kqp/ut/olap/indexes
     ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common
     ydb/public/sdk/cpp/src/client/operation

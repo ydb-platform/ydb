@@ -107,20 +107,6 @@ bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
     return std::find(AllowedDataCenters.begin(), AllowedDataCenters.end(), dc) != AllowedDataCenters.end();
 }
 
-<<<<<<< HEAD
-=======
-bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
-    if (MustBePrimaryPile) {
-        return Hive->IsPrimaryPile(pile);
-    } else {
-        const auto* pileInfo = Hive->FindPile(pile);
-        if (!pileInfo) {
-            return false;
-        }
-        return pileInfo->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
-    }
-}
-
 TMetrics& TMetrics::operator+=(const TMetrics& other) {
     CPU += other.CPU;
     Memory += other.Memory;
@@ -168,7 +154,6 @@ void TMetrics::ToProto(NKikimrTabletBase::TMetrics* proto) const {
     proto->MutableGroupWriteIops()->Assign(GroupWriteIops.begin(), GroupWriteIops.end());
 }
 
->>>>>>> e3ffe7944b9 (refactoring: storing tablet metrics in a struct (#30181))
 template <typename K, typename V>
 std::unordered_map<V, K> MakeReverseMap(const std::unordered_map<K, V>& map) {
     std::unordered_map<V, K> result;

@@ -43,11 +43,17 @@ public:
     using TThis = TClusterStateRPC;
     using TBase = TRpcRequestActor<TClusterStateRPC, TEvClusterStateRequest, true>;
 
+    static constexpr ui32 CountersMaxInflight = 100;
+    static constexpr ui32 MaxCountersSize = 50 * 1024 * 1024;
     TVector<ui32> NodeRequested;
     TVector<ui32> NodeReceived;
     ui32 Requested = 0;
     ui32 Received = 0;
     TString SessionId;
+    ui32 CountersInflight = 0;
+    ui32 CountersNodeToRequest = 0;
+    bool CountersNextBlock = true;
+
 
     struct TQuery {
         struct TColumn {
@@ -131,6 +137,8 @@ public:
         {TopQueryColumns, ".sys/top_queries_by_request_units_one_minute" },
     };
     ui32 QueryIdx = 0;
+
+    ui32 CountersSize = 0;
     TVector<TVector<std::pair<TString, TInstant>>> Counters;
     TVector<TEvInterconnect::TNodeInfo> Nodes;
     NKikimrClusterStateInfoProto::TClusterStateInfo State;
@@ -291,6 +299,9 @@ public:
         for (ui32 i : xrange(Nodes.size())) {
             if (Nodes[i].NodeId == nodeId) {
                 NodeReceived[i] = NodeRequested[i];
+                if (CountersInflight > 0) {
+                    CountersInflight--;
+                }
                 CheckReply();
                 return;
             }
@@ -313,7 +324,14 @@ public:
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
         ui32 idx = ev.Get()->Cookie;
-        Counters[idx].push_back(std::make_pair(std::move(ev->Get()->Record.GetResponse()), TInstant::Now()));
+        auto& response = ev->Get()->Record.GetResponse();
+        Counters[idx].push_back(std::make_pair(std::move(response), TInstant::Now()));
+        CountersSize += response.size();
+        if (CountersSize > MaxCountersSize) {
+            ReplyAndPassAway();
+        }
+        CountersInflight--;
+        RequestCounters();
         NodeStateInfoReceived(idx);
     }
 
@@ -357,15 +375,28 @@ public:
     }
 
     void RequestCounters() {
-        for (ui32 i : xrange(Nodes.size())) {
-            const auto& ni = Nodes[i];
-            TActorId countersInfoProviderServiceId = NKikimr::NCountersInfo::MakeCountersInfoProviderServiceID(ni.NodeId);
-            Send(countersInfoProviderServiceId, new NKikimr::NCountersInfo::TEvCountersInfoRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, i);
-            NodeRequested[i]++;
+        if (CountersNodeToRequest == 0) {
+            if (CountersNextBlock) {
+                CountersNextBlock = false;
+            } else {
+                return;
+            }
         }
+        for (; CountersNodeToRequest < Nodes.size() && CountersInflight < CountersMaxInflight; ++CountersNodeToRequest) {
+            const auto& ni = Nodes[CountersNodeToRequest];
+            TActorId countersInfoProviderServiceId = NKikimr::NCountersInfo::MakeCountersInfoProviderServiceID(ni.NodeId);
+            Send(countersInfoProviderServiceId, new NKikimr::NCountersInfo::TEvCountersInfoRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, CountersNodeToRequest);
+            NodeRequested[CountersNodeToRequest]++;
+            CountersInflight++;
+        }
+        if (CountersNodeToRequest >= Nodes.size()) {
+            CountersNodeToRequest = 0;
+        }
+
     }
     void Wakeup() {
         if (Period > TDuration::Zero()) {
+            CountersNextBlock = true;
             RequestCounters();
             Schedule(Period, new TEvents::TEvWakeup());
         }
@@ -439,12 +470,7 @@ public:
 
         if (!CountersOnly) {
             AddBlock(result, "cluster_state", State);
-            NKikimrClusterStateInfoProto::TClusterStateInfoParameters params;
-            params.SetStartedAt(Started.ToStringUpToSeconds());
-            params.SetDurationSeconds(Duration.Seconds());
-            params.SetPeriodSeconds(Period.Seconds());
-            AddBlock(result, "cluster_state_fetch_parameters", params);
-        }
+         }
         for (ui32 node : xrange(Counters.size())) {
             for (ui32 i : xrange(Counters[node].size())) {
                 auto* counterBlock = result.Addblocks();

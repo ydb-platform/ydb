@@ -15,6 +15,7 @@ struct TDescribeOptions {
     bool ShowKeyShardBoundaries = false;
     bool ShowStats = false;
     bool ShowPartitionStats = false;
+    TString Database;
 };
 
 class TDescribeLogic {

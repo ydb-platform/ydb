@@ -154,6 +154,7 @@ int TCommandDescribe::Run(TConfig& config) {
     options.ShowKeyShardBoundaries = ShowKeyShardBoundaries;
     options.ShowStats = ShowStats;
     options.ShowPartitionStats = ShowPartitionStats;
+    options.Database = Database;
 
     TDescribeLogic describeLogic(driver, *OutputStream);
     return describeLogic.Describe(Path, options, OutputFormat);

@@ -606,12 +606,12 @@ static TString ProgressOr(const std::optional<float>& value, const U& orValue) {
     }
 }
 
-// static TStringBuf SkipDatabasePrefix(TStringBuf value, TStringBuf prefix) {
-//     if (value.SkipPrefix(prefix)) {
-//         value.Skip(1); // skip '/'
-//     }
-//     return value;
-// }
+static TStringBuf SkipDatabasePrefix(TStringBuf value, TStringBuf prefix) {
+    if (value.SkipPrefix(prefix)) {
+        value.Skip(1); // skip '/'
+    }
+    return value;
+}
 
 void PrintConnectionParams(const NReplication::TConnectionParams& connParams, IOutputStream& out) {
     bool isLocal = connParams.GetDiscoveryEndpoint().empty();
@@ -884,6 +884,10 @@ int TDescribeLogic::DescribeCoordinationNode(const TString& path, EDataFormat fo
 
     if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
         return PrintCoordinationNodeResponsePretty(desc);
+    } else if (format == EDataFormat::Json) {
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+             << "Use \"--format proto-json-base64\" option instead." << Endl;
+        return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(desc), Out);
     } else {
         return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(desc), Out);
     }
@@ -915,6 +919,10 @@ int TDescribeLogic::DescribeReplication(const TString& path, const TDescribeOpti
 
     if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
         return PrintReplicationResponsePretty(result, options);
+    } else if (format == EDataFormat::Json) {
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+             << "Use \"--format proto-json-base64\" option instead." << Endl;
+        return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(result), Out);
     } else {
         return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(result), Out);
     }
@@ -946,15 +954,8 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
     }
 
     const auto& connParams = desc.GetConnectionParams();
-    // const auto& srcDatabase = connParams.GetDatabase();
-    // const auto& dstDatabase = Database; // Need database? It was used for skipping prefix.
-    // TDescribeLogic doesn't know "Database" from options, maybe it should?
-    // Wait, TDescribeOptions doesn't have Database.
-    // SkipDatabasePrefix used srcDatabase and dstDatabase.
-    // dstDatabase was TCommandDescribe::Database which was config.Database.
-
-    // I need to pass Database to TDescribeLogic constructor?
-    // For now I'll just print paths as is or implement simplified version.
+    const auto& srcDatabase = connParams.GetDatabase();
+    const auto& dstDatabase = options.Database;
 
     PrintConnectionParams(connParams, Out);
 
@@ -978,8 +979,8 @@ int TDescribeLogic::PrintReplicationResponsePretty(const NYdb::NReplication::TDe
         for (const auto& item : items) {
             auto& row = table.AddRow()
                 .Column(0, item.Id)
-                .Column(1, item.SrcPath) // Simplified
-                .Column(2, item.DstPath) // Simplified
+                .Column(1, SkipDatabasePrefix(TStringBuf(item.SrcPath), TStringBuf(srcDatabase)))
+                .Column(2, SkipDatabasePrefix(TStringBuf(item.DstPath), TStringBuf(dstDatabase)))
                 .Column(3, ValueOr(item.SrcChangefeedName, "n/a"));
             if (options.ShowStats) {
                 row
@@ -1005,6 +1006,10 @@ int TDescribeLogic::DescribeTransfer(const TString& path, EDataFormat format) {
 
     if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
         return PrintTransferResponsePretty(result);
+    } else if (format == EDataFormat::Json) {
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+             << "Use \"--format proto-json-base64\" option instead." << Endl;
+        return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(result), Out);
     } else {
         return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(result), Out);
     }
@@ -1051,7 +1056,7 @@ int TDescribeLogic::DescribeView(const TString& path) {
     return EXIT_FAILURE;
 }
 
-int TDescribeLogic::DescribeExternalDataSource(const TString& path, EDataFormat /*format*/) {
+int TDescribeLogic::DescribeExternalDataSource(const TString& path, EDataFormat format) {
     NTable::TTableClient client(Driver);
     const auto sessionResult = client.CreateSession().ExtractValueSync();
     if (!sessionResult.IsSuccess()) {
@@ -1064,10 +1069,16 @@ int TDescribeLogic::DescribeExternalDataSource(const TString& path, EDataFormat 
         return EXIT_FAILURE;
     }
 
-    // return PrintDescription(this, format, description.GetExternalDataSourceDescription(), options, &TDescribeLogic::PrintExternalDataSourceResponsePretty);
-    // Stub
-    Out << "ExternalDataSource: " << path << Endl;
-    return EXIT_SUCCESS;
+    const auto& desc = description.GetExternalDataSourceDescription();
+    if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
+        return PrintExternalDataSourceResponsePretty(desc);
+    } else if (format == EDataFormat::Json) {
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+             << "Use \"--format proto-json-base64\" option instead." << Endl;
+        return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(desc), Out);
+    } else {
+        return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(desc), Out);
+    }
 }
 
 int TDescribeLogic::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& /*result*/) const {
@@ -1075,7 +1086,7 @@ int TDescribeLogic::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TE
     return EXIT_SUCCESS;
 }
 
-int TDescribeLogic::DescribeExternalTable(const TString& path, EDataFormat /*format*/) {
+int TDescribeLogic::DescribeExternalTable(const TString& path, EDataFormat format) {
     NTable::TTableClient client(Driver);
     const auto sessionResult = client.CreateSession().ExtractValueSync();
     if (!sessionResult.IsSuccess()) {
@@ -1088,9 +1099,16 @@ int TDescribeLogic::DescribeExternalTable(const TString& path, EDataFormat /*for
         return EXIT_FAILURE;
     }
 
-    // return PrintDescription(this, format, result.GetExternalTableDescription(), options, &TDescribeLogic::PrintExternalTableResponsePretty);
-    Out << "ExternalTable: " << path << Endl;
-    return EXIT_SUCCESS;
+    const auto& desc = result.GetExternalTableDescription();
+    if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
+        return PrintExternalTableResponsePretty(desc);
+    } else if (format == EDataFormat::Json) {
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+             << "Use \"--format proto-json-base64\" option instead." << Endl;
+        return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(desc), Out);
+    } else {
+        return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(desc), Out);
+    }
 }
 
 int TDescribeLogic::PrintExternalTableResponsePretty(const NYdb::NTable::TExternalTableDescription& /*result*/) const {
@@ -1112,10 +1130,12 @@ int TDescribeLogic::DescribeSystemView(const TString& path, EDataFormat format) 
     }
 
     const auto desc = result.GetSystemViewDescription();
-    // return PrintDescription(this, format, desc, options, &TDescribeLogic::PrintSystemViewResponsePretty);
-    // Custom call to avoid templating mess
     if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
         return PrintSystemViewResponsePretty(desc);
+    } else if (format == EDataFormat::Json) {
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+             << "Use \"--format proto-json-base64\" option instead." << Endl;
+        return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(desc), Out);
     } else {
         return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(desc), Out);
     }

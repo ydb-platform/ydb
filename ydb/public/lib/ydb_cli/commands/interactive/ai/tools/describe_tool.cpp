@@ -71,6 +71,7 @@ protected:
         if (auto p = parser.MaybeKey(PARTITION_BOUNDARIES_PROPERTY)) Options.ShowKeyShardBoundaries = p->GetBooleanSafe(false);
         if (auto p = parser.MaybeKey(STATS_PROPERTY)) Options.ShowStats = p->GetBooleanSafe(false);
         if (auto p = parser.MaybeKey(PARTITION_STATS_PROPERTY)) Options.ShowPartitionStats = p->GetBooleanSafe(false);
+        Options.Database = Database;
     }
 
     bool AskPermissions() final {

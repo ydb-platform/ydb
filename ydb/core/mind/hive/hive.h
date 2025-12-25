@@ -372,6 +372,27 @@ struct TFollowerUpdates {
     }
 };
 
+// same as NKikimrTabletBase::TMetrics, except not a protobuf - for lighter operations
+struct TMetrics {
+    ui64 CPU = 0;
+    ui64 Memory = 0;
+    ui64 Network = 0;
+    ui64 Counter = 0;
+    ui64 Storage = 0;
+    TVector<NKikimrTabletBase::TThroughputRecord> GroupReadThroughput;
+    TVector<NKikimrTabletBase::TThroughputRecord> GroupWriteThroughput;
+    ui64 ReadThroughput = 0;
+    ui64 WriteThroughput = 0;
+    TVector<NKikimrTabletBase::TIopsRecord> GroupReadIops;
+    TVector<NKikimrTabletBase::TIopsRecord> GroupWriteIops;
+    ui64 ReadIops = 0;
+    ui64 WriteIops = 0;
+
+    TMetrics& operator+=(const TMetrics& other);
+
+    void ToProto(NKikimrTabletBase::TMetrics* proto) const;
+};
+
 
 } // NHive
 } // NKikimr

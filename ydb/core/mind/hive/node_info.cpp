@@ -68,7 +68,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
     TTabletInfo::EVolatileState oldState = tablet->GetVolatileState();
     if (IsResourceDrainingState(oldState)) {
         if (Tablets[oldState].erase(tablet) != 0) {
-            UpdateResourceValues(tablet, tablet->GetResourceValues(), NKikimrTabletBase::TMetrics());
+            UpdateResourceValues(tablet, tablet->GetResourceValues(), {});
         } else {
             if (oldState != newState) {
                 BLOG_W("Node(" << Id << ") could not delete tablet " << tablet->ToString() << " from state " << TTabletInfo::EVolatileStateName(oldState));
@@ -86,7 +86,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
     }
     if (IsResourceDrainingState(newState)) {
         if (Tablets[newState].insert(tablet).second) {
-            UpdateResourceValues(tablet, NKikimrTabletBase::TMetrics(), tablet->GetResourceValues());
+            UpdateResourceValues(tablet, {}, tablet->GetResourceValues());
         } else {
             BLOG_W("Node(" << Id << ") could not insert tablet " << tablet->ToString() << " to state " << TTabletInfo::EVolatileStateName(newState));
         }
@@ -103,7 +103,7 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
     return true;
 }
 
-void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const NKikimrTabletBase::TMetrics& before, const NKikimrTabletBase::TMetrics& after) {
+void TNodeInfo::UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& before, const TMetrics& after) {
     TResourceRawValues delta = ResourceRawValuesFromMetrics(after) - ResourceRawValuesFromMetrics(before);
     auto oldResourceValues = ResourceValues;
     auto oldNormalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
@@ -405,7 +405,7 @@ void TNodeInfo::UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics
         std::get<NMetrics::EResource::Network>(ResourceMaximumValues) = metrics.GetNetwork();
     }
     auto normalizedValues = NormalizeRawValues(ResourceValues, ResourceMaximumValues);
-    Hive.UpdateTotalResourceValues(nullptr, nullptr, NKikimrTabletBase::TMetrics(), NKikimrTabletBase::TMetrics(), {}, normalizedValues - oldNormalizedValues);
+    Hive.UpdateTotalResourceValues(nullptr, nullptr, {}, {}, {}, normalizedValues - oldNormalizedValues);
 }
 
 double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet) const {

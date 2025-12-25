@@ -467,7 +467,7 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
 
     TInstant start = TAppData::TimeProvider->Now();
     auto spg = GranulesStorage->GetGranuleOptional(pathId);
-    const ui64 timeOfGetGranuleOptionalMs = TAppData::TimeProvider->Now().MilliSeconds() - start.MilliSeconds();
+    const ui64 timeOfGetGranuleOptionalMs = (TAppData::TimeProvider->Now() - start).MilliSeconds();
     if (!spg) {
         if (LWPROBE_ENABLED(ColumnEngineForLogsSelect)) {
             LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfGetGranuleOptionalMs, 0, 0, 0, 0, 0);
@@ -476,7 +476,7 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
         return out;
     }
 
-    ui64 timeOfInsertedIsUsedMs = 0;
+    TDuration timeOfInsertedIsUsed;
     ui64 totalPortionsCount = 0;
     ui64 totalFilteredPortionsCount = 0;
     for (const auto& [writeId, portion] : spg->GetInsertedPortions()) {
@@ -492,18 +492,25 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
             continue;
         }
 
-        start = TAppData::TimeProvider->Now();
-        const bool takePortion = pkRangesFilter.IsUsed(*portion);
-        timeOfInsertedIsUsedMs += TAppData::TimeProvider->Now().MilliSeconds() - start.MilliSeconds();
+        bool takePortion;
+        if (LWPROBE_ENABLED(ColumnEngineForLogsSelect)) {
+            start = TAppData::TimeProvider->Now();
+            takePortion = pkRangesFilter.IsUsed(*portion);
+            timeOfInsertedIsUsed += TAppData::TimeProvider->Now() - start;
+            if (!takePortion) {
+                ++totalFilteredPortionsCount;
+            }
+        } else {
+            takePortion = pkRangesFilter.IsUsed(*portion);
+        }
+
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
         if (takePortion) {
             out.emplace_back(portion);
-        } else {
-            ++totalFilteredPortionsCount;
         }
     }
 
-    ui64 timeOfSpgIsUsedMs = 0;
+    TDuration timeOfCompactedIsUsed{};
     for (const auto& [_, portion] : spg->GetPortions()) {
         ++totalPortionsCount;
         if (portion->IsRemovedFor(snapshot)) {
@@ -522,19 +529,26 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
             continue;
         }
 
-        start = TAppData::TimeProvider->Now();
-        const bool takePortion = pkRangesFilter.IsUsed(*portion);
-        timeOfSpgIsUsedMs += TAppData::TimeProvider->Now().MilliSeconds() - start.MilliSeconds();
+        bool takePortion;
+        if (LWPROBE_ENABLED(ColumnEngineForLogsSelect)) {
+            start = TAppData::TimeProvider->Now();
+            takePortion = pkRangesFilter.IsUsed(*portion);
+            timeOfCompactedIsUsed += TAppData::TimeProvider->Now() - start;
+            if (!takePortion) {
+                ++totalFilteredPortionsCount;
+            }
+        } else {
+            takePortion = pkRangesFilter.IsUsed(*portion);
+        }
+
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
         if (takePortion) {
             out.emplace_back(portion);
-        } else {
-            ++totalFilteredPortionsCount;
         }
     }
 
     if (LWPROBE_ENABLED(ColumnEngineForLogsSelect)) {
-        LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfGetGranuleOptionalMs, timeOfInsertedIsUsedMs, timeOfSpgIsUsedMs, totalPortionsCount, totalFilteredPortionsCount, out.size());
+        LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfGetGranuleOptionalMs, timeOfInsertedIsUsed.MilliSeconds(), timeOfCompactedIsUsed.MilliSeconds(), totalPortionsCount, totalFilteredPortionsCount, out.size());
     }
 
     return out;

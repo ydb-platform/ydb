@@ -102,8 +102,20 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             }
             case TIndexDescription::EType::GlobalFulltext: {
                 // For fulltext indexes, we need to tokenize the text and create deleted rows
-                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet, indexTableColumns, /*includeDataColumns=*/false,
-                    del.Pos(), ctx);
+                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet, indexTableColumns,
+                    true /*forDelete*/, del.Pos(), ctx);
+                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc);
+                const bool withRelevance = fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                if (withRelevance) {
+                    // Update dictionary rows
+                    const auto& dictTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DictTable);
+                    auto dictRows = BuildFulltextDictRows(deleteIndexKeys, false /*useSum*/, true /*useStage*/, del.Pos(), ctx);
+                    effects.emplace_back(BuildFulltextDictUpsert(dictTable, dictRows, del.Pos(), ctx));
+                    // Rows in deleteIndexKeys include __ydb_freq, but we don't need it for delete keys
+                    deleteIndexKeys = BuildFulltextPostingKeys(table, deleteIndexKeys, del.Pos(), ctx);
+                }
                 break;
             }
         }

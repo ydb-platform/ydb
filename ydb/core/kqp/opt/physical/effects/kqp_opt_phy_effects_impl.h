@@ -121,7 +121,18 @@ std::pair<NYql::NNodes::TExprBase, NYql::NNodes::TExprBase> BuildVectorIndexPref
     TVector<TStringBuf>& indexTableColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase BuildFulltextIndexRows(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
-    const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns, bool includeDataColumns,
+    const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns,
+    bool forDelete, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+NYql::NNodes::TExprBase BuildFulltextDictRows(const NYql::NNodes::TExprBase& tokenRows, bool useSum, bool useStage,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+NYql::NNodes::TExprBase CombineFulltextDictRows(const TVector<NYql::NNodes::TExprBase>& deltas, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+NYql::NNodes::TExprBase BuildFulltextPostingKeys(const NYql::TKikimrTableDescription& table, const NYql::NNodes::TExprBase& tokenRows,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+NYql::NNodes::TExprBase BuildFulltextDictUpsert(const NYql::TKikimrTableDescription& dictTable,
+    const NYql::NNodes::TExprBase& tokenRows, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 } // NKikimr::NKqp::NOpt

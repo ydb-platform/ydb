@@ -229,8 +229,18 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             }
             case TIndexDescription::EType::GlobalFulltext: {
                 // For fulltext indexes, we need to tokenize the text and create inserted rows
-                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, *insertRows, inputColumnsSet, indexTableColumns, /*includeDataColumns=*/true,
-                    insert.Pos(), ctx);
+                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, *insertRows, inputColumnsSet, indexTableColumns,
+                    false /*forDelete*/, insert.Pos(), ctx);
+                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc);
+                const bool withRelevance = fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                if (withRelevance) {
+                    // Update dictionary rows
+                    const auto& dictTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DictTable);
+                    auto dictRows = BuildFulltextDictRows(*upsertIndexRows, false /*useSum*/, true /*useStage*/, insert.Pos(), ctx);
+                    effects.emplace_back(BuildFulltextDictUpsert(dictTable, dictRows, insert.Pos(), ctx));
+                }
                 break;
             }
         }

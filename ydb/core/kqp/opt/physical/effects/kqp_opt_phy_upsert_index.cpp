@@ -913,6 +913,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
         }
 
+        TVector<TExprBase> fulltextDictDelta;
+        const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+        const bool withRelevance = fulltextDesc && fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+
         if (indexKeyColumnsUpdated) {
             // Have to delete old index value from index table in case when index key columns were updated
             auto deleteIndexKeys = optUpsert
@@ -936,7 +940,12 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 case TIndexDescription::EType::GlobalFulltext: {
                     // For fulltext indexes, we need to tokenize the text and create deleted rows
                     deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet,
-                        indexTableColumnsWithoutData, /*includeDataColumns=*/false, pos, ctx);
+                        indexTableColumnsWithoutData, true /*forDelete*/, pos, ctx);
+                    if (withRelevance) {
+                        fulltextDictDelta.push_back(deleteIndexKeys);
+                        // Rows in deleteIndexKeys include __ydb_freq, but we don't need it for delete keys
+                        deleteIndexKeys = BuildFulltextPostingKeys(table, deleteIndexKeys, pos, ctx);
+                    }
                     break;
                 }
             }
@@ -988,9 +997,20 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 case TIndexDescription::EType::GlobalFulltext: {
                     // For fulltext indexes, we need to tokenize the text and create upserted rows
                     upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, indexTableColumnsSet,
-                        indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
+                        indexTableColumns, false /*forDelete*/, pos, ctx);
+                    if (withRelevance) {
+                        fulltextDictDelta.push_back(upsertIndexRows);
+                    }
                     break;
                 }
+            }
+
+            if (fulltextDictDelta.size()) {
+                // Update fulltext dictionary table
+                const auto& dictTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << mainTableNode.Path().Value()
+                    << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DictTable);
+                const auto mergedDelta = CombineFulltextDictRows(fulltextDictDelta, pos, ctx);
+                effects.emplace_back(BuildFulltextDictUpsert(dictTable, mergedDelta, pos, ctx));
             }
 
             auto indexUpsert = Build<TKqlUpsertRows>(ctx, pos)

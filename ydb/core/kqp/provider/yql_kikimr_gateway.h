@@ -264,14 +264,7 @@ struct TIndexDescription {
                 }
                 return true;
             case EType::GlobalFulltext:
-                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
-                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
-                const auto& settings = fulltextDesc->GetSettings();
-                if (settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT) {
-                    // Only FLAT fulltext index update is supported at the moment
-                    return true;
-                }
-                return false;
+                return true;
         }
     }
 

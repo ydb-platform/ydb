@@ -100,7 +100,7 @@ void TPartitionQuoterBase::CheckTotalPartitionQuota(TRequestContext&& context) {
     if (!PartitionTotalQuotaTracker) {
         return ApproveQuota(context);
     }
-    if (!PartitionTotalQuotaTracker->CanExaust(ActorContext().Now()) || !WaitingTotalPartitionQuotaRequests.empty()) {
+    if (!CanExaust(ActorContext().Now()) || !WaitingTotalPartitionQuotaRequests.empty()) {
         WaitingTotalPartitionQuotaRequests.push_back(std::move(context));
         return;
     }
@@ -127,14 +127,14 @@ void TPartitionQuoterBase::ApproveQuota(TRequestContext& context) {
     Send(context.PartitionActor, MakeQuotaApprovedEvent(context));
 }
 
-void TPartitionQuoterBase::ProcessPartitionQuotaQueues() {
-    ProcessPartitionTotalQuotaQueue();
+bool TPartitionQuoterBase::CanExaust(TInstant now) {
+    return PartitionTotalQuotaTracker->CanExaust(now);
 }
 
 void TPartitionQuoterBase::ProcessPartitionTotalQuotaQueue() {
     if (!PartitionTotalQuotaTracker)
         return;
-    while (!WaitingTotalPartitionQuotaRequests.empty() && PartitionTotalQuotaTracker->CanExaust(ActorContext().Now())) {
+    while (!WaitingTotalPartitionQuotaRequests.empty() && CanExaust(ActorContext().Now())) {
         auto& request = WaitingTotalPartitionQuotaRequests.front();
         ApproveQuota(request);
         WaitingTotalPartitionQuotaRequests.pop_front();
@@ -196,7 +196,7 @@ TQuotaTracker TPartitionQuoterBase::CreatePartitionTotalQuotaTracker(const NKiki
 
 void TPartitionQuoterBase::HandleWakeUp(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
     HandleWakeUpImpl();
-    ProcessPartitionQuotaQueues();
+    ProcessPartitionTotalQuotaQueue();
     UpdateCounters(ctx);
     ScheduleWakeUp(ctx);
 }

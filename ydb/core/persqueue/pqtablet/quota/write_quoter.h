@@ -44,9 +44,7 @@ protected:
     void HandleWakeUpImpl() override;
     TString Description() const override { return "Write quoter"; }
 
-    void CheckDeduplicationIdPartitionQuota(TRequestContext&& context);
-    void ProcessPartitionQuotaQueues() override;
-    void ProcessDeduplicationIdPartitionQuotaQueue();
+    bool CanExaust(TInstant now) override;
 
     STFUNC(ProcessEventImpl) override
     {
@@ -59,8 +57,6 @@ private:
     THolder<TAccountQuoterHolder> AccountQuotaTracker;
 
     TQuotaTracker PartitionDeduplicationIdQuotaTracker;
-    std::deque<TRequestContext> WaitingDeduplicationIdPartitionQuotaRequests;
-
 };
 
 

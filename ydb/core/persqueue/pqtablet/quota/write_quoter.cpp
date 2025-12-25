@@ -33,30 +33,12 @@ void TWriteQuoter::Bootstrap(const TActorContext& ctx) {
 }
 
 void TWriteQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
-    CheckDeduplicationIdPartitionQuota(std::move(context));
-}
-
-void TWriteQuoter::CheckDeduplicationIdPartitionQuota(TRequestContext&& context) {
-    if (!PartitionDeduplicationIdQuotaTracker.CanExaust(ActorContext().Now()) || !WaitingDeduplicationIdPartitionQuotaRequests.empty()) {
-        WaitingDeduplicationIdPartitionQuotaRequests.push_back(std::move(context));
-        return;
-    }
     CheckTotalPartitionQuota(std::move(context));
 }
 
-void TWriteQuoter::ProcessPartitionQuotaQueues() {
-    ProcessDeduplicationIdPartitionQuotaQueue();
-    ProcessPartitionTotalQuotaQueue();
+bool TWriteQuoter::CanExaust(TInstant now) {
+    return TPartitionQuoterBase::CanExaust(now) && PartitionDeduplicationIdQuotaTracker.CanExaust(now);
 }
-
-void TWriteQuoter::ProcessDeduplicationIdPartitionQuotaQueue() {
-    while (!WaitingDeduplicationIdPartitionQuotaRequests.empty() && PartitionDeduplicationIdQuotaTracker.CanExaust(ActorContext().Now())) {
-        auto& request = WaitingDeduplicationIdPartitionQuotaRequests.front();
-        CheckTotalPartitionQuota(std::move(request));
-        WaitingDeduplicationIdPartitionQuotaRequests.pop_front();
-    }
-}
-
 
 void TWriteQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
     Y_UNUSED(context);

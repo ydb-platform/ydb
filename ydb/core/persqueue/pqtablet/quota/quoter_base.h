@@ -91,6 +91,8 @@ protected:
     virtual ui64 GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const = 0;
     virtual TString Description() const = 0;
 
+    virtual bool CanExaust(TInstant now);
+
 protected:
     void CheckTotalPartitionQuota(TRequestContext&& context);
     void ApproveQuota(TRequestContext& context);
@@ -100,13 +102,11 @@ protected:
     inline ui64 GetTabletId() const {return TabletId;}
     inline const TPartitionId& GetPartition() const {return Partition;}
 
-    virtual void ProcessPartitionQuotaQueues();
-    void ProcessPartitionTotalQuotaQueue();
-
 private:
     void StartQuoting(TRequestContext&& context);
     void UpdateQuota();
     void ProcessInflightQueue();
+    void ProcessPartitionTotalQuotaQueue();
 
     void ScheduleWakeUp(const TActorContext& ctx);
 
@@ -114,9 +114,9 @@ private:
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPQ::TEvRequestQuota, HandleQuotaRequest);
+            HFunc(TEvPQ::TEvConsumed, HandleConsumed);
             HFunc(TEvents::TEvWakeup, HandleWakeUp);
             HFunc(NAccountQuoterEvents::TEvResponse, HandleAccountQuotaApproved);
-            HFunc(TEvPQ::TEvConsumed, HandleConsumed);
             HFunc(TEvPQ::TEvChangePartitionConfig, HandleConfigUpdate);
             HFunc(NAccountQuoterEvents::TEvCounters, HandleUpdateAccountQuotaCounters);
             HFunc(TEvPQ::TEvAcquireExclusiveLock, HandleAcquireExclusiveLock);

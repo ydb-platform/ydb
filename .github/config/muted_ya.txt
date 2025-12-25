@@ -11,9 +11,11 @@ ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexO
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
+ydb/core/cms/ut_sentinel_unstable unittest.sole chunk
 ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ManyRawClients
 ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.WatermarkWhereFalse
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.SlowSession
+ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.CheckpointsPropagationWithGroupByHop
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithMetadataSizeBackPressure
 ydb/core/kqp/ut/indexes KqpFulltextIndexes.SelectWithFulltextContainsAndSnowball
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
@@ -21,7 +23,9 @@ ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
 ydb/core/kqp/ut/olap KqpOlapIndexes.CheckCompactionFailingOnIndexes
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultIlike[3,1,128,1879,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultIlike[3,1,128,1879,SIMPLE_STRING]
+ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultIlike[3,1,131,1879,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultIlike[3,1,131,1879,SIMPLE_STRING]
+ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultIlike[3,1,257,1879,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultIlike[3,1,257,1879,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultIlike[3,5,129,1879,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultIlike[3,5,255,1879,SIMPLE_STRING]
@@ -37,6 +41,7 @@ ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultIlike[8,8,129,1
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultIlike[8,8,255,1879,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[3,1,128,1879,false,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[3,1,129,331,true,BITSET]
+ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[3,1,131,1879,false,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[3,1,131,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[3,1,255,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[3,1,257,331,true,BITSET]
@@ -55,6 +60,7 @@ ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[8,1,129,33
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[8,1,131,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[8,1,255,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[8,1,257,331,true,BITSET]
+ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[8,5,128,1879,false,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[8,5,128,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[8,5,129,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[8,5,131,331,true,BITSET]
@@ -67,11 +73,13 @@ ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[8,8,255,33
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigDefaultLike[8,8,257,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[3,1,128,1879,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[3,1,131,1879,SIMPLE_STRING]
+ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[3,1,257,1879,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[3,1,257,1879,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[3,5,129,1879,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[3,5,255,1879,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[3,8,128,1879,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[3,8,131,1879,SIMPLE_STRING]
+ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[3,8,257,1879,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[3,8,257,1879,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[8,1,129,1879,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[8,1,255,1879,SIMPLE_STRING]
@@ -83,8 +91,10 @@ ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalIlike[8,8,255,187
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[3,1,128,1879,false,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[3,1,129,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[3,1,131,331,true,BITSET]
+ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[3,1,255,1879,false,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[3,1,255,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[3,1,257,331,true,BITSET]
+ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[3,5,128,1879,false,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[3,5,128,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[3,5,129,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[3,5,131,331,true,BITSET]
@@ -105,6 +115,7 @@ ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[8,5,129,331,
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[8,5,131,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[8,5,255,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[8,5,257,331,true,BITSET]
+ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[8,8,128,1879,false,SIMPLE_STRING]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[8,8,128,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[8,8,129,331,true,BITSET]
 ydb/core/kqp/ut/olap KqpOlapIndexes.DifferentIndexesConfigLocalLike[8,8,131,331,true,BITSET]
@@ -114,13 +125,14 @@ ydb/core/kqp/ut/olap unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec+UseSink
 ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec-UseSink
+ydb/core/kqp/ut/scan KqpScan.StreamExecuteScanQueryClientTimeoutBruteForce
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/service KqpQueryServiceScripts.ExecuteScriptWithCancelAfterAndTimeout
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanClientOperationTimeoutBruteForce
+ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanClientTimeoutBruteForce
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/persqueue/ut PQCountersSimple.PartitionLevelMetrics
-ydb/core/persqueue/ut TPQTest.TestPartitionWriteQuota
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
@@ -129,38 +141,23 @@ ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/sys_view/ut SystemView.ShowCreateTableChangefeeds
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
+ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.CdcVersionSync
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.MultipleTablesWithIndexesIncrementalRestore
-ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelOnOnSingleTopic
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelShouldSucceedOnSingleShardTableWithUniqueIndex
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.ShouldSucceedOnSingleShardTableWithChangefeed
+ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.ShouldSucceedOnViewsAndTables
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.Create-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDrop-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateDropAbort-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateMultiplePqTablets-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
-ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots
 ydb/core/tx/schemeshard/ut_system_names unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed+Overlap[PipeResets]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed+Overlap[TabletReboots]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed-Overlap[PipeResets]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed-Overlap[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[PipeResets]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed+Overlap[PipeResets]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed+Overlap[TabletReboots]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed-Overlap[PipeResets]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed-Overlap[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.OverlapPipeResets+Prefixed
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.OverlapPipeResets-Prefixed
+ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.OverlapRebootsBucket2
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlapRebootsBucket1
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlapRebootsBucket2
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
@@ -192,22 +189,25 @@ ydb/services/ydb/backup_ut BackupRestore.TestAllSchemeObjectTypes-EPathTypeRepli
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects-IsOlap
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility py3test.[test_statistics.py */*] chunk
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_stable-25-2-1_to_stable-25-3-1-row]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-25-2-1_to_stable-25-3-1]
 ydb/tests/compatibility test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-25-2-1_to_stable-25-3-1-COLUMN]
 ydb/tests/compatibility test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-25-3-1_to_stable-25-2-1-COLUMN]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderTabletTransfer.test_simple_reader_tablet_transfer[rolling_stable-25-2-1_to_stable-25-3-1]
 ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[rolling_stable-25-2-1_to_stable-25-3-1]
 ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[rolling_stable-25-3-1_to_prestable-25-4]
-ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_prestable-25-4_and_stable-25-3-1-row]
 ydb/tests/compatibility test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-25-2-1_to_stable-25-3-1]
 ydb/tests/compatibility test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-25-3-1_to_prestable-25-4]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_topics[mixed_stable-25-3-1_and_stable-25-2-1]
+ydb/tests/datashard/async_replication test_async_replication.py.TestPgAsyncReplication.test_async_replication[table_ttl_pgint4-pk_types3-all_types3-index3-pgint4--]
 ydb/tests/datashard/async_replication test_async_replication.py.TestPgAsyncReplication.test_async_replication[table_ttl_pgint8-pk_types4-all_types4-index4-pgint8--]
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
+ydb/tests/fq/multi_plane py3test.[test_retry.py] chunk
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead
-ydb/tests/fq/s3 py3test.[test_format_setting.py] chunk
 ydb/tests/fq/s3 test_bindings_0.py.TestBindings.test_modify_connection_with_a_lot_of_bindings[v2-kikimr_settings0-client0]
+ydb/tests/fq/streaming py3test.sole chunk
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_json_errors
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
@@ -225,7 +225,6 @@ ydb/tests/functional/backup_collection basic_user_scenarios.py.TestIncrementalCh
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration.test_state_storage
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
-ydb/tests/functional/restarts test_restarts.py.TestRestartMultipleMirror34.test_tablets_are_successfully_started_after_few_killed_nodes
 ydb/tests/functional/serverless py3test.[test_serverless.py */*] chunk
 ydb/tests/functional/serverless test_serverless.py.test_database_with_column_disk_quotas[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false-enable_pool_encryption--false]

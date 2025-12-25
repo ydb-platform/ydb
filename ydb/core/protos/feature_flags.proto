@@ -227,7 +227,7 @@ message TFeatureFlags {
     optional bool EnableFulltextIndex = 201 [default = false];
     optional bool EnableSetColumnConstraint = 202 [default = false];
     optional bool EnableSchemaSecrets = 203 [default = true];
-    optional bool EnableTableCacheModes = 204 [default = false];
+    optional bool EnableTableCacheModes = 204 [default = true];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
     optional bool EnableStreamingQueries = 206 [default = false];
     optional bool EnableTinyDisks = 207 [default = false];

@@ -203,18 +203,15 @@ public:
             TFile file(filePath, RdOnly);
             i64 fileSize = file.GetLength();
 
-            // Handle range request if specified
             TString rangeStr(request.GetRange().data(), request.GetRange().size());
             std::pair<ui64, ui64> range;
 
             if (!rangeStr.empty()) {
-                // Parse "bytes=start-end" format
                 if (!TEvGetObjectResponse::TryParseRange(rangeStr, range)) {
                     ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Invalid range format");
                     return;
                 }
             } else {
-                // No range, read entire file
                 range = std::make_pair(0, fileSize - 1);
             }
 
@@ -227,7 +224,6 @@ public:
                 return;
             }
 
-            // Read data
             TString data;
             data.resize(length);
             file.Seek(start, sSet);
@@ -236,7 +232,6 @@ public:
 
             FS_LOG(Verbose, "FS GetObject: read " << bytesRead << " bytes from " << filePath);
 
-            // Create successful response with data
             Aws::S3::Model::GetObjectResult awsResult;
             awsResult.SetContentLength(bytesRead);
             Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
@@ -264,10 +259,9 @@ public:
 
             FS_LOG(Verbose, "FS HeadObject: file size=" << fileSize << " for " << filePath);
 
-            // Create successful response
             Aws::S3::Model::HeadObjectResult awsResult;
             awsResult.SetContentLength(fileSize);
-            awsResult.SetETag("\"fs-file\"");  // Simple ETag for FS
+            awsResult.SetETag("\"fs-file\"");
 
             Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvHeadObjectResponse>(key, std::move(outcome));

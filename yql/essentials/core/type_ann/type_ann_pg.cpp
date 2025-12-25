@@ -115,13 +115,18 @@ TExprNodePtr FindLeftCombinatorOfNthSetItem(const TExprNode* setItems, const TEx
 }
 
 IGraphTransformer::TStatus InferPgCommonType(TPositionHandle pos, const TExprNode* setItems, const TExprNode* setOps,
-    TColumnOrder& resultColumnOrder, const TStructExprType*& resultStructType, TExtContext& ctx)
+    TColumnOrder& resultColumnOrder, const TStructExprType*& resultStructType, TExtContext& ctx, bool& isUniversal)
 {
+    isUniversal = false;
     TVector<TVector<ui32>> pgTypes;
     size_t fieldsCnt = 0;
 
     for (size_t i = 0; i < setItems->ChildrenSize(); ++i) {
         const auto* child = setItems->Child(i);
+        if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            isUniversal = true;
+            return IGraphTransformer::TStatus::Ok;
+        }
 
         if (!EnsureListType(*child, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -1704,9 +1709,14 @@ using TInputs = TVector<TInput>;
 
 using TProjectionOrders = TVector<TMaybe<std::pair<TColumnOrder, bool>>>;
 
-void ScanSublinks(TExprNode::TPtr root, TNodeSet& sublinks) {
+void ScanSublinks(TExprNode::TPtr root, TNodeSet& sublinks, bool& isUniversal) {
+    isUniversal = false;
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable({"PgSubLink", "YqlSubLink"})) {
+            if (node->GetTypeAnn() && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                isUniversal = true;
+                return false;
+            }
             sublinks.insert(node.Get());
             return false;
         }
@@ -2483,7 +2493,8 @@ void MakeOptionalColumns(const TStructExprType*& structType, TExprContext& ctx) 
     structType = ctx.MakeType<TStructExprType>(newItems);
 }
 
-void ScanAggregations(const TExprNode::TPtr& root, bool& hasAggregations) {
+void ScanAggregations(const TExprNode::TPtr& root, bool& hasAggregations, bool& isUniversal) {
+    isUniversal = false;
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable({"PgAgg", "YqlAgg"})) {
             hasAggregations = true;
@@ -2503,12 +2514,19 @@ void ScanAggregations(const TExprNode::TPtr& root, bool& hasAggregations) {
     });
 
     TNodeSet sublinks;
-    ScanSublinks(root, sublinks);
+    ScanSublinks(root, sublinks, isUniversal);
+    if (isUniversal) {
+        return;
+    }
+
     for (const auto& s : sublinks) {
         const auto& testRowLambda = *s->Child(3);
         if (!testRowLambda.IsCallable("Void")) {
             YQL_ENSURE(testRowLambda.IsLambda());
-            ScanAggregations(testRowLambda.TailPtr(), hasAggregations);
+            ScanAggregations(testRowLambda.TailPtr(), hasAggregations, isUniversal);
+            if (isUniversal) {
+                return;
+            }
         }
     }
 }
@@ -3032,8 +3050,10 @@ bool ValidateGroups(
     const TExprNode::TPtr& projection,
     const TExprNode::TPtr& result,
     bool isYql,
-    THashMap<TString, TString> usedInUsing={})
+    THashMap<TString, TString> usedInUsing,
+    bool& isUniversal)
 {
+    isUniversal = false;
     newGroups.clear();
     hasNewGroups = false;
     bool hasColumnRef = false;
@@ -3065,7 +3085,10 @@ bool ValidateGroups(
             }
 
             bool hasNestedAggregations = false;
-            ScanAggregations(group->Tail().TailPtr(), hasNestedAggregations);
+            ScanAggregations(group->Tail().TailPtr(), hasNestedAggregations, isUniversal);
+            if (isUniversal) {
+                return true;
+            }
             if (!allowAggregates && hasNestedAggregations) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(group->Pos()), "Nested aggregations aren't allowed"));
                 return false;
@@ -3190,13 +3213,17 @@ bool IsPlainMemberOverArg(const TExprNode& expr, TStringBuf& memberName) {
 bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TString>& possibleAliases,
     const TExprNode& data, TExtContext& ctx, bool& hasNewSort, TExprNode::TListType& newSorts, bool scanColumnsOnly,
     const TExprNode::TPtr& groupExprs, const TStringBuf& scope, const TProjectionOrders* projectionOrders,
-    const TExprNode::TPtr& projection, bool isYql, THashMap<TString, TString> usedInUsing={}) {
+    const TExprNode::TPtr& projection, bool isYql, THashMap<TString, TString> usedInUsing, bool& isUniversal) {
     newSorts.clear();
+    isUniversal = false;
     for (ui32 index = 0; index < data.ChildrenSize(); ++index) {
         auto oneSort = data.Child(index);
 
         TNodeSet sublinks;
-        ScanSublinks(oneSort->Child(1)->TailPtr(), sublinks);
+        ScanSublinks(oneSort->Child(1)->TailPtr(), sublinks, isUniversal);
+        if (isUniversal) {
+            return true;
+        }
 
         bool hasColumnRef = false;
         THashSet<TString> refs;
@@ -3372,14 +3399,18 @@ bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TStrin
     return true;
 }
 
-bool GatherExtraSortColumns(const TExprNode& data, const TInputs& inputs, TExprNode::TPtr& extraInputColumns, TExprNode::TPtr& extraKeys, TExprContext& ctx) {
+bool GatherExtraSortColumns(const TExprNode& data, const TInputs& inputs, TExprNode::TPtr& extraInputColumns, TExprNode::TPtr& extraKeys, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
     ui32 inputsCount = inputs.size() - 1;
     THashMap<ui32, TSet<TString>> columns;
     TSet<TString> keys;
     extraKeys = nullptr;
     for (auto oneSort : data.Children()) {
         TNodeSet sublinks;
-        ScanSublinks(oneSort->Child(1)->TailPtr(), sublinks);
+        ScanSublinks(oneSort->Child(1)->TailPtr(), sublinks, isUniversal);
+        if (isUniversal) {
+            return false;
+        }
 
         auto scanLambda = [&](const auto& lambda) {
             auto arg = &lambda.Head().Head();
@@ -3775,7 +3806,12 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             }
 
                             TNodeSet sublinks;
-                            ScanSublinks(lambda.TailPtr(), sublinks);
+                            bool isUniversal;
+                            ScanSublinks(lambda.TailPtr(), sublinks, isUniversal);
+                            if (isUniversal) {
+                                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                                return IGraphTransformer::TStatus::Ok;
+                            }
 
                             if (!ScanColumns(lambda.TailPtr(), joinInputs, possibleAliases, &hasStar, hasColumnRef,
                                 refs, &qualifiedRefs, ctx, scanColumnsOnly, hasEmitPgStar, repeatedColumnsInUsing)) {
@@ -3978,7 +4014,12 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         }
 
                         for (const auto& column : data.Children()) {
-                            ScanAggregations(column->TailPtr(), hasAggregations);
+                            bool isUniversal;
+                            ScanAggregations(column->TailPtr(), hasAggregations, isUniversal);
+                            if (isUniversal) {
+                                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                                return IGraphTransformer::TStatus::Ok;
+                            }
                         }
 
                         if (groupExprs) {
@@ -4099,11 +4140,22 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
                                 return IGraphTransformer::TStatus::Ok;
                             }
+
+                            if (p->Head().GetTypeAnn() && p->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                                return IGraphTransformer::TStatus::Ok;
+                            }
+
                             if (!EnsureListType(p->Head(), ctx.Expr)) {
                                 return IGraphTransformer::TStatus::Error;
                             }
 
                             auto inputRowType = p->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+                            if (inputRowType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+                                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                                return IGraphTransformer::TStatus::Ok;
+                            }
+
                             if (!EnsureStructType(p->Head().Pos(), *inputRowType, ctx.Expr)) {
                                 return IGraphTransformer::TStatus::Error;
                             }
@@ -4196,8 +4248,13 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
 
                     if (data.Child(0)->IsCallable("Void")) {
                         // no effective type yet, scan lambda body
+                        bool isUniversal;
                         TNodeSet sublinks;
-                        ScanSublinks(data.Child(1)->TailPtr(), sublinks);
+                        ScanSublinks(data.Child(1)->TailPtr(), sublinks, isUniversal);
+                        if (isUniversal) {
+                            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                            return IGraphTransformer::TStatus::Ok;
+                        }
 
                         bool hasColumnRef = false;
                         THashSet<TString> refs;
@@ -4629,8 +4686,14 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
 
                     TExprNode::TListType newGroups;
                     bool hasNewGroups = false;
-                    if (!ValidateGroups(joinInputs, possibleAliases, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "GROUP BY", &projectionOrders, GetSetting(options, "result"), result, isYql, repeatedColumnsInUsing)) {
+                    bool isUniversal;
+                    if (!ValidateGroups(joinInputs, possibleAliases, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "GROUP BY", &projectionOrders, GetSetting(options, "result"), result, isYql, repeatedColumnsInUsing, isUniversal)) {
                         return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (isUniversal) {
+                        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                        return IGraphTransformer::TStatus::Ok;
                     }
 
                     if (!scanColumnsOnly && hasNewGroups) {
@@ -4752,16 +4815,27 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         auto newChildren = x->ChildrenList();
                         TExprNode::TListType newGroups;
                         bool hasNewGroups = false;
-                        if (!ValidateGroups(joinInputs, possibleAliases, *partitions, ctx, newGroups, hasNewGroups, scanColumnsOnly, true, groupExprs, "", nullptr, nullptr, nullptr, isYql, repeatedColumnsInUsing)) {
+                        bool isUniversal;
+                        if (!ValidateGroups(joinInputs, possibleAliases, *partitions, ctx, newGroups, hasNewGroups, scanColumnsOnly, true, groupExprs, "", nullptr, nullptr, nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
                             return IGraphTransformer::TStatus::Error;
+                        }
+
+                        if (isUniversal) {
+                            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                            return IGraphTransformer::TStatus::Ok;
                         }
 
                         newChildren[2] = ctx.Expr.NewList(x->Pos(), std::move(newGroups));
 
                         bool hasNewSort = false;
                         TExprNode::TListType newSorts;
-                        if (!ValidateSort(joinInputs, joinInputs, possibleAliases, *sort, ctx, hasNewSort, newSorts, scanColumnsOnly, groupExprs, "", nullptr, nullptr, isYql, repeatedColumnsInUsing)) {
+                        if (!ValidateSort(joinInputs, joinInputs, possibleAliases, *sort, ctx, hasNewSort, newSorts, scanColumnsOnly, groupExprs, "", nullptr, nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
                             return IGraphTransformer::TStatus::Error;
+                        }
+
+                        if (isUniversal) {
+                            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                            return IGraphTransformer::TStatus::Ok;
                         }
 
                         if (hasNewSort) {
@@ -4813,11 +4887,17 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     }
 
                     bool hasNewGroups = false;
+                    bool isUniversal;
                     TExprNode::TListType newGroups;
                     TInputs projectionInputs;
                     projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), TInput::Projection, {} });
-                    if (!ValidateGroups(projectionInputs, {}, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "DISTINCT ON", &projectionOrders, GetSetting(options, "result"), nullptr, isYql, repeatedColumnsInUsing)) {
+                    if (!ValidateGroups(projectionInputs, {}, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "DISTINCT ON", &projectionOrders, GetSetting(options, "result"), nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
                         return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (isUniversal) {
+                        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                        return IGraphTransformer::TStatus::Ok;
                     }
 
                     if (hasNewGroups) {
@@ -4853,11 +4933,18 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     }
 
                     bool hasNewSort = false;
+                    bool isUniversal;
                     TExprNode::TListType newSortTupleItems;
                     // no effective types yet, scan lambda bodies
                     if (!ValidateSort(projectionInputs, joinInputs, possibleAliases, data, ctx, hasNewSort, newSortTupleItems,
-                        scanColumnsOnly, groupExprs, "ORDER BY", &projectionOrders, GetSetting(options, "result"), isYql, repeatedColumnsInUsing)) {
+                        scanColumnsOnly, groupExprs, "ORDER BY", &projectionOrders, GetSetting(options, "result"), isYql, repeatedColumnsInUsing,
+                        isUniversal)) {
                         return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (isUniversal) {
+                        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                        return IGraphTransformer::TStatus::Ok;
                     }
 
                     if (hasNewSort && !scanColumnsOnly) {
@@ -4872,7 +4959,13 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         if (!GetSetting(options, "final_extra_sort_columns") && !GetSetting(options, "final_extra_sort_keys")) {
                             TExprNode::TPtr extraColumns;
                             TExprNode::TPtr extraKeys;
-                            auto hasExtraColumns = GatherExtraSortColumns(data, projectionInputs, extraColumns, extraKeys, ctx.Expr);
+                            bool isUniversal;
+                            auto hasExtraColumns = GatherExtraSortColumns(data, projectionInputs, extraColumns, extraKeys, ctx.Expr, isUniversal);
+                            if (isUniversal) {
+                                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                                return IGraphTransformer::TStatus::Ok;
+                            }
+
                             if (hasExtraColumns || extraKeys) {
                                 TExprNode::TPtr newSettings;
                                 if (hasExtraColumns) {
@@ -5458,16 +5551,22 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
     const TStructExprType* resultStructType = nullptr;
 
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Error;
+    bool isUniversal = false;
     if (isYql && (1 != setItems->ChildrenSize())) {
         status = InferUnionType(input->Pos(), setItems->ChildrenList(), resultStructType, ctx, /* areHashesChecked = */ false);
     } else if (isYql || (1 == setItems->ChildrenSize() && HasSetting(*setItems->Child(0)->Child(0), "unknowns_allowed"))) {
         status = InferPositionalUnionType(input->Pos(), setItems->ChildrenList(), resultColumnOrder, resultStructType, ctx);
     } else {
-        status = InferPgCommonType(input->Pos(), setItems, setOps, resultColumnOrder, resultStructType, ctx);
+        status = InferPgCommonType(input->Pos(), setItems, setOps, resultColumnOrder, resultStructType, ctx, isUniversal);
     }
 
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (hasSort) {
@@ -5487,8 +5586,15 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
             projectionOrders.push_back(std::make_pair(clmn, true));
         }
 
-        if (!ValidateSort(projectionInputs, projectionInputs, {}, data, ctx, hasNewSort, newSortTupleItems, false, nullptr, "ORDER BY", &projectionOrders, nullptr, isYql)) {
+        bool isUniversal;
+        if (!ValidateSort(projectionInputs, projectionInputs, {}, data, ctx, hasNewSort, newSortTupleItems, false, nullptr, "ORDER BY", &projectionOrders, nullptr, isYql,
+            {}, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (hasNewSort) {

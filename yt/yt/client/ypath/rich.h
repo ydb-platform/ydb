@@ -174,7 +174,7 @@ public:
     void SetClusters(const std::vector<std::string>& value);
 
     // "create"
-    bool GetCreate() const;
+    std::variant<bool, NYTree::IAttributeDictionaryPtr> GetCreate() const;
 
     // "versioned_read_options"
     NTableClient::TVersionedReadOptions GetVersionedReadOptions() const;

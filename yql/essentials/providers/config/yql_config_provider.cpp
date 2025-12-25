@@ -1160,13 +1160,16 @@ private:
         TString customUdfPrefix = args.size() > 1 ? TString(args[1]) : "";
         const auto key = TUserDataStorage::ComposeUserDataKey(fileAlias);
         TString errorMessage;
-        const TUserDataBlock* udfSource = nullptr;
+        TUserDataBlock* udfSource = nullptr;
         if (!Types_.QContext.CanRead()) {
             udfSource = Types_.UserDataStorage->FreezeUdfNoThrow(key, errorMessage, customUdfPrefix, Types_.RuntimeLogLevel, fileAlias);
             if (!udfSource) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown file: " << fileAlias << ", details: " << errorMessage));
                 return false;
             }
+        } else {
+            udfSource = &Types_.UserDataStorage->GetUserDataBlock(key);
+            udfSource->CustomUdfPrefix = customUdfPrefix;
         }
 
         IUdfResolver::TImport import;

@@ -144,7 +144,7 @@ private:
         THttpInputPtr Response;
     };
 
-    TRequestData Connect(const TUrlRef& urlRef)
+    TRequestData Connect(EMethod method, const TUrlRef& urlRef)
     {
         auto context = New<TDialerContext>();
         context->Host = urlRef.Host;
@@ -161,6 +161,7 @@ private:
                 address,
                 Invoker_,
                 EMessageType::Response,
+                method,
                 Config_);
 
             auto output = New<THttpOutput>(
@@ -180,6 +181,7 @@ private:
                 address,
                 Invoker_,
                 EMessageType::Response,
+                method,
                 Config_);
             input->SetReusableState(reusableState);
 
@@ -262,9 +264,9 @@ private:
         const THeadersPtr& headers)
     {
         auto urlRef = ParseUrl(url);
-        auto requestData = Connect(urlRef);
-
+        auto requestData = Connect(method, urlRef);
         requestData.Request->SetHost(urlRef.Host, urlRef.PortStr);
+
         if (headers) {
             requestData.Request->SetHeaders(headers);
         }

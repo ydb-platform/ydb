@@ -1421,11 +1421,21 @@ namespace NTypeAnnImpl {
             }
 
             auto prefix = child->Child(0);
+            if (prefix->GetTypeAnn() && prefix->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(prefix->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!EnsureAtom(*prefix, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
             auto structObj = child->Child(1);
+            if (structObj->GetTypeAnn() && structObj->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(structObj->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             bool optional = false;
             const TStructExprType* structType = nullptr;
             if (!EnsureStructOrOptionalStructType(*structObj, optional, structType, ctx.Expr)) {
@@ -4078,6 +4088,11 @@ namespace NTypeAnnImpl {
                 }
 
                 const auto& nameNode = input->Child(i)->Head();
+                if (nameNode.GetTypeAnn() && nameNode.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                    input->SetTypeAnn(nameNode.GetTypeAnn());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
                 if (!EnsureAtom(nameNode, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -6155,6 +6170,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             auto nameNode = child->Child(0);
+            if (nameNode->GetTypeAnn() && nameNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(nameNode->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!EnsureAtom(*nameNode, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }

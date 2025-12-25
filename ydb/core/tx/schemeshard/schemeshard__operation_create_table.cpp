@@ -208,7 +208,7 @@ public:
                     DebugHint() << " HandleReply TEvProposeTransactionResult"
                                 << " message: " << ev->Get()->Record.ShortDebugString());
 
-        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {

@@ -2697,71 +2697,8 @@ void TSchemeShard::ChangeTxState(NIceDb::TNiceDb& db, const TOperationId opId, T
 
     const auto& ctx = TActivationContext::AsActorContext();
 
-    auto stateToString = [](TTxState::ETxState state) {
-        switch (state) {
-            case TTxState::Invalid:
-                return "Invalid";
-            case TTxState::Waiting:
-                return "Waiting";
-            case TTxState::CreateParts:
-                return "CreateParts";
-            case TTxState::ConfigureParts:
-                return "ConfigureParts";
-            case TTxState::DropParts:
-                return "DropParts";
-            case TTxState::DeleteParts:
-                return "DeleteParts";
-            case TTxState::PublishTenantReadOnly:
-                return "PublishTenantReadOnly";
-            case TTxState::PublishGlobal:
-                return "PublishGlobal";
-            case TTxState::RewriteOwners:
-                return "RewriteOwners";
-            case TTxState::PublishTenant:
-                return "PublishTenant";
-            case TTxState::DoneMigrateTree:
-                return "DoneMigrateTree";
-            case TTxState::DeleteTenantSS:
-                return "DeleteTenantSS";
-            case TTxState::Propose:
-                return "Propose";
-            case TTxState::ProposedWaitParts:
-                return "ProposedWaitParts";
-            case TTxState::ProposedDeleteParts:
-                return "ProposedDeleteParts";
-            case TTxState::TransferData:
-                return "TransferData";
-            case TTxState::NotifyPartitioningChanged:
-                return "NotifyPartitioningChanged";
-            case TTxState::Aborting:
-                return "Aborting";
-            case TTxState::DeleteExternalShards:
-                return "DeleteExternalShards";
-            case TTxState::DeletePrivateShards:
-                return "DeletePrivateShards";
-            case TTxState::WaitShadowPathPublication:
-                return "WaitShadowPathPublication";
-            case TTxState::DeletePathBarrier:
-                return "DeletePathBarrier";
-            case TTxState::SyncHive:
-                return "SyncHive";
-            case TTxState::CopyTableBarrier:
-                return "CopyTableBarrier";
-            case TTxState::ProposedCopySequence:
-                return "ProposedCopySequence";
-            case TTxState::ProposedMoveSequence:
-                return "ProposedMoveSequence";
-            case TTxState::Done:
-                return "Done";
-            case TTxState::Aborted:
-                return "Aborted";
-            default:
-                return "Unknown";
-        }
-    };
-
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Change state for txid " << opId << " "
-                 << stateToString(TxInFlight[opId].State) << " -> " << stateToString(newState));
+                 << NKikimr::NSchemeShard::TxStateName(TxInFlight[opId].State) << " -> " << NKikimr::NSchemeShard::TxStateName(newState));
 
     FindTx(opId)->State = newState;
     db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(

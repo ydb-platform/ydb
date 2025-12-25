@@ -226,19 +226,21 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
         ExecSQL(server, edgeSender, R"(
-            UPSERT INTO `/Root/test_table` (key, value) VALUES (1, 100);
+            INSERT INTO `/Root/test_table` (key, value) VALUES (1, 100);
         )");
 
         TString sessionId, txId;
 
+        // 'SELECT' executes because the UPSERT does not move during the commit of the transaction in this case.
         KqpSimpleBegin(*runtime, sessionId, txId, Q_(R"(
+            SELECT * FROM `/Root/test_table`;
             UPSERT INTO `/Root/test_table` (key, value, value2) VALUES (2, 200, 300);
         )"));
 
         ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
         WaitTxNotification(server, edgeSender, truncateTxId);
 
-        auto commitResult = KqpSimpleCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        auto commitResult = KqpSimpleCommit(*runtime, sessionId, txId, Q_(R"(SELECT * FROM `/Root/test_table`;)"));
         UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
 
         auto afterResult = ReadTable(server, shards, tableId);

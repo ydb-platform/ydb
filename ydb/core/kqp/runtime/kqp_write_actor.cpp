@@ -859,8 +859,8 @@ public:
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
-                    NYql::NDqProto::StatusIds::OVERLOADED,
-                    NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
                     TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. Table `"
                         << TablePath << "`.",
                     getIssues());
@@ -4309,8 +4309,8 @@ public:
                 << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             ReplyError(
-                NYql::NDqProto::StatusIds::OVERLOADED,
-                NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
                 TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. "
                     << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());

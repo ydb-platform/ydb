@@ -257,7 +257,6 @@ public:
         , Settings(settings)
         , LogFunc(logFunc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>())
-        , WatermarksTracker(Settings.WatermarksTracker)
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
         Stats->CreateTs = TInstant::Now();
@@ -556,8 +555,10 @@ public:
     }
 
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx) override
+        const IDqTaskRunnerExecutionContext& execCtx,
+        TDqComputeActorWatermarks* watermarksTracker) override
     {
+        WatermarksTracker = watermarksTracker;
         TaskId = task.GetId();
         StageId = task.GetStageId();
         auto entry = BuildTask(task);
@@ -1150,7 +1151,7 @@ private:
 
     std::optional<TAllocatedHolder> AllocatedHolder;
     NKikimr::NMiniKQL::TWatermark Watermark;
-    TDqComputeActorWatermarks* WatermarksTracker;
+    TDqComputeActorWatermarks* WatermarksTracker = nullptr;
 
     bool TaskHasEffects = false;
 

@@ -472,7 +472,7 @@ public:
 
         if (!CountersOnly) {
             AddBlock(result, "cluster_state", State);
-         }
+        }
         for (ui32 node : xrange(Counters.size())) {
             for (ui32 i : xrange(Counters[node].size())) {
                 auto* counterBlock = result.Addblocks();

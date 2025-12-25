@@ -37,7 +37,6 @@ void TWriteQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
 }
 
 bool TWriteQuoter::CanExaust(TInstant now) {
-    Cerr << ">>>>> CanExaust: " << TPartitionQuoterBase::CanExaust(now) << " " << PartitionDeduplicationIdQuotaTracker.CanExaust(now) << Endl;
     return TPartitionQuoterBase::CanExaust(now) && PartitionDeduplicationIdQuotaTracker.CanExaust(now);
 }
 

@@ -907,6 +907,27 @@ def on_ts_proto_configure(unit: NotsUnitType) -> None:
     unit.on_ts_configure()
     unit.on_node_modules_configure()
 
+    if unit.get("_GRPC_ENABLED") == "yes":
+        from lib.nots.package_manager import BasePackageManager
+
+        output_services_opts = [s for s in unit.get("_TS_PROTO_OPT").split() if s.startswith("outputServices")]
+        if output_services_opts:
+            return
+
+        pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+        version = pj.get_dep_specifier("@grpc/grpc-js")
+
+        if version:
+            __set_append(unit, "_TS_PROTO_OPT", "--ts-proto-opt outputServices=grpc-js")
+            return
+
+        ymake.report_configure_error(
+            "\n"
+            f"ya.make includes macro {COLORS.cyan}GRPC(){COLORS.reset} but {COLORS.red}package.json is missing @grpc/grpc-js{COLORS.reset} dependency.\n"
+            f"Call {COLORS.green}ya tool nots add @grpc/grpc-js{COLORS.reset} to fix the issue.\n"
+            f"Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PROTO#grpc_custom_package"
+        )
+
 
 @_with_report_configure_error
 def on_ts_proto_auto_configure(unit: NotsUnitType) -> None:
@@ -915,6 +936,29 @@ def on_ts_proto_auto_configure(unit: NotsUnitType) -> None:
 
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
+
+    if unit.get("_GRPC_ENABLED") == "yes":
+        SUPPORTED_OUTPUT_SERVICES_VALUES = ["grpc-js", "generic-definitions", "default", "false", "none"]
+        output_services_opts = set(
+            [s.split("=")[1] for s in unit.get("_TS_PROTO_OPT").split() if s.startswith("outputServices")]
+        )
+
+        if not len(output_services_opts):
+            __set_append(unit, "_TS_PROTO_OPT", "--ts-proto-opt outputServices=grpc-js")
+            return
+
+        wrong_values = output_services_opts.difference(SUPPORTED_OUTPUT_SERVICES_VALUES)
+        if not wrong_values:
+            return
+
+        ymake.report_configure_error(
+            "\n"
+            f"ya.make includes macro {COLORS.cyan}GRPC(){COLORS.reset} but {COLORS.cyan}TS_PROTO_OPT(){COLORS.reset} has "
+            f"outputServices option with unsupported value(s): {COLORS.red}{', '.join(wrong_values)}{COLORS.reset}.\n"
+            f"Remove outputServices from {COLORS.cyan}TS_PROTO_OPT(){COLORS.reset} to use default {COLORS.green}grpc-js{COLORS.reset}.\n"
+            f"Or set one of supported values: {COLORS.green}{', '.join(SUPPORTED_OUTPUT_SERVICES_VALUES)}{COLORS.reset}.\n"
+            f"Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PROTO#grpc"
+        )
 
 
 @_with_report_configure_error

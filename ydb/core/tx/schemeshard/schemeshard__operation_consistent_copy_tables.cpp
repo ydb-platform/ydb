@@ -284,12 +284,17 @@ bool CreateConsistentCopyTables(
                     << ", srcImplTable: " << srcImplTable.PathString()
                     << ", dstImplTable: " << dstImplTable.PathString());
 
-                // Check if we have CDC stream info for this index impl table in the descriptor
                 NKikimrSchemeOp::TCopyTableConfig indexDescr;
-                indexDescr.CopyFrom(descr);
 
-                indexDescr.ClearCreateSrcCdcStream();
-                indexDescr.ClearDropSrcCdcStream();
+                indexDescr.SetOmitFollowers(descr.GetOmitFollowers());
+                indexDescr.SetIsBackup(descr.GetIsBackup());
+                indexDescr.SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
+
+                if (descr.HasTargetPathTargetState()) {
+                    indexDescr.SetTargetPathTargetState(descr.GetTargetPathTargetState());
+                }
+
+                indexDescr.SetOmitIndexes(true); 
 
                 auto itCreate = descr.GetIndexImplTableCdcStreams().find(name);
                 if (itCreate != descr.GetIndexImplTableCdcStreams().end()) {

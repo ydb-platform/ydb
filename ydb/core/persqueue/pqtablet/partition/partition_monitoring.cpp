@@ -16,6 +16,7 @@
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <library/cpp/html/pcdata/pcdata.h>
+#include <library/cpp/html/escape/escape.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/folder/path.h>
@@ -164,8 +165,8 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 for (auto& [consumerName, _] : MLPConsumers) {
                                     TABLER() {
                                         TABLED() {
-                                            HREF(TStringBuilder() << "app?TabletID=" << TabletActorId << "&consumer=" << consumerName << "&partitionId=" << Partition.OriginalPartitionId) {
-                                                out << consumerName;
+                                            HREF(TStringBuilder() << "app?TabletID=" << TabletActorId << "&consumer=" << NHtml::EscapeAttributeValue(consumerName) << "&partitionId=" << Partition.OriginalPartitionId) {
+                                                out <<  EncodeHtmlPcdata(consumerName);
                                             }
                                         }
                                     }

@@ -22,9 +22,6 @@ items:
       href: localdb-uncommitted-txs.md
   - name: Hive
     href: hive.md
-    items:
-     - name: Запуск таблеток
-       href: hive-booting.md
   - name: DataShard
     items:
     - name: Локи и видимость изменений в транзакциях

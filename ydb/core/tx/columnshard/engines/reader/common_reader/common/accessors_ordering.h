@@ -105,7 +105,6 @@ public:
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
             if (l.SortingKey != r.SortingKey) {
-                Y_ABORT("aboba");   // TODO remove
                 if (!!l.SortingKey && !!r.SortingKey) {
                     return l.SortingKey > r.SortingKey;
                 }

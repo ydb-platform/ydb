@@ -138,6 +138,10 @@ int TCommandClusterDiagnosticsCollect::Run(TConfig& config) {
     ui32 index = 0;
     TFileOutput out(FileName);
     TBZipCompress compress(&out);
+    TARFile::ToStream(compress, "cluster_state_fetch_parameters.json", TStringBuilder()
+        << "{\"DurationSeconds\": " << DurationSeconds
+        << ", \"PeriodSeconds\": " << PeriodSeconds
+        << ", \"StartedAt\": \"" << start.ToStringUpToSeconds() << "\"}", start);
     Cout << TInstant::Now().ToString() << " Request cluster diagnostics" << "\n";
     ProcessState(config, compress);
 
@@ -146,7 +150,7 @@ int TCommandClusterDiagnosticsCollect::Run(TConfig& config) {
         auto p = TDuration::Seconds(PeriodSeconds * index);
 
         if (start + p > TInstant::Now()) {
-            std::this_thread::sleep_for(std::chrono::nanoseconds((start - TInstant::Now() + p).NanoSeconds()));
+            std::this_thread::sleep_for(std::chrono::nanoseconds((start + p - TInstant::Now()).NanoSeconds()));
         }
         Cout <<  TInstant::Now().ToString() << " Request counteres #" << index << "\n";
         ProcessState(config, compress, index);

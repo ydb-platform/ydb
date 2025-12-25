@@ -56,6 +56,39 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                     }
                 }
             }
+
+            NAVIGATION_TAB_CONTENT("mesages") {
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        TABLE_CLASS("table") {
+                            CAPTION() {str << "Messages";}
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() {str << "Zone";}
+                                    TABLEH() {str << "Status";}
+                                    TABLEH() {str << "Write Timestamp";}
+                                    TABLEH() {str << "Processing Count";}
+                                    TABLEH() {str << "Processing Deadline";}
+                                    TABLEH() {str << "Locking Timestamp";}
+                                }
+                            }
+                            TABLEBODY() {
+                                for (auto it = Storage->begin(); it != Storage->end(); ++it) {
+                                    auto message = *it;
+                                    TABLER() {
+                                        TABLED() { str << (message.SlowZone ? "S" : "F"); }
+                                        TABLED() { str << message.Status; }
+                                        TABLED() { str << message.WriteTimestamp; }
+                                        TABLED() { str << message.ProcessingCount; }
+                                        TABLED() { str << (TInstant::Zero() == message.ProcessingDeadline ? "" : message.ProcessingDeadline.ToString()); }
+                                        TABLED() { str << (TInstant::Zero() == message.LockingTimestamp ? "" : message.LockingTimestamp.ToString()); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

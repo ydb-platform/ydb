@@ -63,8 +63,7 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqPr
     NScheduler::TSchedulableActorOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    const TString& database,
-    bool enableWatermarks
+    const TString& database
 );
 
 IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,

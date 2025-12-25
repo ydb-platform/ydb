@@ -423,6 +423,7 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvEndOffsetChanged, HandleInit);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+        hFunc(TEvPQ::TEvMLPConsumerMonRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         hFunc(TEvPersQueue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvError, Handle);
@@ -445,6 +446,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvEndOffsetChanged, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+        hFunc(TEvPQ::TEvMLPConsumerMonRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPersQueue::TEvResponse, Handle);
@@ -470,6 +472,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvEndOffsetChanged, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+        hFunc(TEvPQ::TEvMLPConsumerMonRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPersQueue::TEvResponse, Handle);

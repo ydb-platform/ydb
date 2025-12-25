@@ -1578,7 +1578,8 @@ bool TPath::IsUnderOperation() const {
             + (ui32)IsUnderDeleting()
             + (ui32)IsUnderDomainUpgrade()
             + (ui32)IsUnderMoving()
-            + (ui32)IsUnderOutgoingIncrementalRestore();
+            + (ui32)IsUnderOutgoingIncrementalRestore()
+            + (ui32)IsUnderIncomingIncrementalRestore();
         Y_VERIFY_S(sum == 1,
                    "only one operation at the time"
                        << " pathId: " << Base()->PathId
@@ -1671,6 +1672,12 @@ bool TPath::IsUnderOutgoingIncrementalRestore() const {
 
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore
         || Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
+}
+
+bool TPath::IsUnderIncomingIncrementalRestore() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore;
 }
 
 TPath& TPath::RiseUntilOlapStore() {

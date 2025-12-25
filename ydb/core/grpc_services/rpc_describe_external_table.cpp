@@ -72,7 +72,7 @@ private:
                 if (!FillExternalTableDescription(describeResult, pathDescription.GetExternalTableDescription(), pathDescription.GetSelf(), status, error)) {
                     TIssues issues;
                     issues.AddIssue(error);
-                    Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
+                    Reply(status, issues, ctx);
                     return;
                 }
 

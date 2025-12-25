@@ -443,6 +443,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/Table", "Table");
 
+        // Enable verbose logging for debugging
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
+
         // Add CSV data: 3 rows with key-value pairs
         TString csvData = R"([["key1"];["value1"]]
 [["key2"];["value2"]]
@@ -492,7 +497,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        // FS backups enabled by default
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
 
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/LargeTable", "LargeTable");
@@ -534,6 +542,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
 
         TTempBackupFiles backup;
         backup.CreateTableBackup(
@@ -589,6 +600,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
 
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/EmptyTable", "EmptyTable");
@@ -621,6 +635,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
 
         TTempBackupFiles backup;
 

@@ -148,8 +148,9 @@ int TCommandClusterDiagnosticsCollect::Run(TConfig& config) {
     while (PeriodSeconds && (TInstant::Now() - start) < duration - period) {
         index++;
         auto p = TDuration::Seconds(PeriodSeconds * index);
+        
         if (start + p > TInstant::Now()) {
-            std::this_thread::sleep_for(std::chrono::seconds((start + p - TInstant::Now()).Seconds()));
+            std::this_thread::sleep_for(std::chrono::nanoseconds((start + p - TInstant::Now()).NanoSeconds()));
         }
         Cout <<  TInstant::Now().ToString() << " Request counteres #" << index << "\n";
         ProcessState(config, compress, index);

@@ -795,113 +795,123 @@ protected:
             TStringBuf(content.Data(), content.Size()));
         return TString(encrypted.Data(), encrypted.Size());
     }
-};
 
-Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonRequirementsTestFixture) {
-    Y_UNIT_TEST_TWIN(CommonEncryptionRequirements, IsOlap) {
-        if (IsOlap) {
+    void TestCommonEncryptionRequirements(bool isOlap, bool useSchemaSecrets) {
+        if (isOlap) {
             return; // TODO: fix me issue@26498
         }
         using namespace ::fmt::literals;
         // Create different objects with names that are expected to be hidden (anonymized) in encrypted exports
         // Create two object of each type in order to verify that we don't duplicate IVs
         {
-            auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
-                CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table` (
-                    Key Uint32 NOT NULL,
-                    Value String NOT NULL,
-                    Value2 String NOT NULL,
-                    PRIMARY KEY (Key),
-                    INDEX `Anonymized_Index` GLOBAL ON (`Value`),
-                    INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
-                )
-                WITH (
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
-                    PARTITION_AT_KEYS = (42),
-                    STORE = {store}
-                );
+            auto res = YdbQueryClient().ExecuteQuery(
+                fmt::format(
+                    R"sql(
+                        CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table` (
+                            Key Uint32 NOT NULL,
+                            Value String NOT NULL,
+                            Value2 String NOT NULL,
+                            PRIMARY KEY (Key),
+                            INDEX `Anonymized_Index` GLOBAL ON (`Value`),
+                            INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
+                        )
+                        WITH (
+                            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+                            PARTITION_AT_KEYS = (42),
+                            STORE = {store}
+                        );
 
-                CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table2` (
-                    Key Uint32 NOT NULL,
-                    Value String NOT NULL,
-                    Value2 String NOT NULL,
-                    PRIMARY KEY (Key),
-                    INDEX `Anonymized_Index` GLOBAL ON (`Value`),
-                    INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
-                ) WITH (
-                    STORE = {store}
-                );
+                        CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table2` (
+                            Key Uint32 NOT NULL,
+                            Value String NOT NULL,
+                            Value2 String NOT NULL,
+                            PRIMARY KEY (Key),
+                            INDEX `Anonymized_Index` GLOBAL ON (`Value`),
+                            INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
+                        ) WITH (
+                            STORE = {store}
+                        );
 
-                ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
-                    ADD CHANGEFEED Anonymized_Changefeed WITH (format="JSON", mode="UPDATES");
+                        ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
+                            ADD CHANGEFEED Anonymized_Changefeed WITH (format="JSON", mode="UPDATES");
 
-                ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
-                    ADD CHANGEFEED Anonymized_Changefeed2 WITH (format="JSON", mode="UPDATES");
+                        ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
+                            ADD CHANGEFEED Anonymized_Changefeed2 WITH (format="JSON", mode="UPDATES");
 
-                CREATE VIEW `/Root/Anonymized_Dir/Anonymized_View`
-                    WITH (security_invoker = TRUE) AS
-                        SELECT Value FROM `/Root/Anonymized_Dir/Anonymized_Table`
-                            WHERE Key = 42;
+                        CREATE VIEW `/Root/Anonymized_Dir/Anonymized_View`
+                            WITH (security_invoker = TRUE) AS
+                                SELECT Value FROM `/Root/Anonymized_Dir/Anonymized_Table`
+                                    WHERE Key = 42;
 
-                CREATE VIEW `/Root/Anonymized_Dir/Anonymized_View2`
-                    WITH (security_invoker = TRUE) AS
-                        SELECT Value FROM `/Root/Anonymized_Dir/Anonymized_Table`
-                            WHERE Key = 42;
+                        CREATE VIEW `/Root/Anonymized_Dir/Anonymized_View2`
+                            WITH (security_invoker = TRUE) AS
+                                SELECT Value FROM `/Root/Anonymized_Dir/Anonymized_Table`
+                                    WHERE Key = 42;
 
-                CREATE TOPIC `/Root/Anonymized_Dir/Anonymized_Topic` (
-                    CONSUMER Anonymized_Consumer,
-                    CONSUMER Anonymized_Consumer2
-                );
+                        CREATE TOPIC `/Root/Anonymized_Dir/Anonymized_Topic` (
+                            CONSUMER Anonymized_Consumer,
+                            CONSUMER Anonymized_Consumer2
+                        );
 
-                CREATE TOPIC `/Root/Anonymized_Dir/Anonymized_Topic2` (
-                    CONSUMER Anonymized_Consumer,
-                    CONSUMER Anonymized_Consumer2
-                );
+                        CREATE TOPIC `/Root/Anonymized_Dir/Anonymized_Topic2` (
+                            CONSUMER Anonymized_Consumer,
+                            CONSUMER Anonymized_Consumer2
+                        );
 
-                CREATE USER anonymizeduser;
-                CREATE USER anonymizeduser2;
+                        CREATE USER anonymizeduser;
+                        CREATE USER anonymizeduser2;
 
-                CREATE GROUP anonymizedgroup WITH USER anonymizeduser, anonymizeduser2;
-                CREATE GROUP anonymizedgroup2 WITH USER anonymizeduser, anonymizeduser2;
+                        CREATE GROUP anonymizedgroup WITH USER anonymizeduser, anonymizeduser2;
+                        CREATE GROUP anonymizedgroup2 WITH USER anonymizeduser, anonymizeduser2;
 
-                CREATE OBJECT id (TYPE SECRET) WITH (value=`test_id`);
-                CREATE OBJECT key (TYPE SECRET) WITH (value=`test_key`);
-                CREATE EXTERNAL DATA SOURCE `/Root/Anonymized_Dir/Anonymized_DataSource` WITH (
-                    SOURCE_TYPE="ObjectStorage",
-                    LOCATION="localhost:42",
-                    AUTH_METHOD="AWS",
-                    AWS_ACCESS_KEY_ID_SECRET_NAME="id",
-                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="key",
-                    AWS_REGION="test-central-1"
-                );
+                        CREATE OBJECT id (TYPE SECRET) WITH (value=`test_id`);
+                        CREATE OBJECT key (TYPE SECRET) WITH (value=`test_key`);
+                        CREATE SECRET id WITH (value="test_id");
+                        CREATE SECRET key WITH (value="test_key");
+                        CREATE EXTERNAL DATA SOURCE `/Root/Anonymized_Dir/Anonymized_DataSource` WITH (
+                            SOURCE_TYPE="ObjectStorage",
+                            LOCATION="localhost:42",
+                            AUTH_METHOD="AWS",
+                            {secret_param_name_1}="id",
+                            {secret_param_name_2}="key",
+                            AWS_REGION="test-central-1"
+                        );
 
-                CREATE OBJECT id2 (TYPE SECRET) WITH (value=`test_id`);
-                CREATE OBJECT key2 (TYPE SECRET) WITH (value=`test_key`);
-                CREATE EXTERNAL DATA SOURCE `/Root/Anonymized_Dir/Anonymized_DataSource2` WITH (
-                    SOURCE_TYPE="ObjectStorage",
-                    LOCATION="localhost:42",
-                    AUTH_METHOD="AWS",
-                    AWS_ACCESS_KEY_ID_SECRET_NAME="id2",
-                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="key2",
-                    AWS_REGION="test-central-2"
-                );
+                        CREATE OBJECT id2 (TYPE SECRET) WITH (value=`test_id`);
+                        CREATE OBJECT key2 (TYPE SECRET) WITH (value=`test_key`);
+                        CREATE SECRET id2 WITH (value="test_id");
+                        CREATE SECRET key2 WITH (value="test_key");
+                        CREATE EXTERNAL DATA SOURCE `/Root/Anonymized_Dir/Anonymized_DataSource2` WITH (
+                            SOURCE_TYPE="ObjectStorage",
+                            LOCATION="localhost:42",
+                            AUTH_METHOD="AWS",
+                            {secret_param_name_1}="id2",
+                            {secret_param_name_2}="key2",
+                            AWS_REGION="test-central-2"
+                        );
 
-                CREATE EXTERNAL TABLE `/Root/Anonymized_Dir/Anonymized_ExternalTable` (
-                    Key Uint64,
-                    Value String
-                ) WITH (
-                    DATA_SOURCE="/Root/Anonymized_Dir/Anonymized_DataSource",
-                    LOCATION="/"
-                );
+                        CREATE EXTERNAL TABLE `/Root/Anonymized_Dir/Anonymized_ExternalTable` (
+                            Key Uint64,
+                            Value String
+                        ) WITH (
+                            DATA_SOURCE="/Root/Anonymized_Dir/Anonymized_DataSource",
+                            LOCATION="/"
+                        );
 
-                CREATE EXTERNAL TABLE `/Root/Anonymized_Dir/Anonymized_ExternalTable2` (
-                    Key Uint64,
-                    Value String
-                ) WITH (
-                    DATA_SOURCE="/Root/Anonymized_Dir/Anonymized_DataSource2",
-                    LOCATION="/"
-                );
-            )sql", "store"_a = IsOlap ? "COLUMN" : "ROW"), NQuery::TTxControl::NoTx()).GetValueSync();
+                        CREATE EXTERNAL TABLE `/Root/Anonymized_Dir/Anonymized_ExternalTable2` (
+                            Key Uint64,
+                            Value String
+                        ) WITH (
+                            DATA_SOURCE="/Root/Anonymized_Dir/Anonymized_DataSource2",
+                            LOCATION="/"
+                        );
+                    )sql",
+                    "store"_a = isOlap ? "COLUMN" : "ROW",
+                    "secret_param_name_1"_a = useSchemaSecrets ? "AWS_ACCESS_KEY_ID_SECRET_PATH" : "AWS_ACCESS_KEY_ID_SECRET_NAME",
+                    "secret_param_name_2"_a = useSchemaSecrets ? "AWS_SECRET_ACCESS_KEY_SECRET_PATH" : "AWS_SECRET_ACCESS_KEY_SECRET_NAME"
+                ),
+                NQuery::TTxControl::NoTx()
+            ).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
             auto res2 = YdbQueryClient().ExecuteQuery(R"sql(
@@ -1028,5 +1038,15 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
             S3Mock().GetData()[key] = ReencryptWithDifferentIV(sourceValue, encryptionKey, NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM);
             checkImportFails(TStringBuilder() << "Change IV of " << key);
         }
+    }
+};
+
+Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonRequirementsTestFixture) {
+    Y_UNIT_TEST_TWIN(CommonEncryptionRequirements, IsOlap) {
+        TestCommonEncryptionRequirements(IsOlap, /* useSchemaSecrets */ false);
+    }
+
+    Y_UNIT_TEST_TWIN(CommonEncryptionRequirementsWithSchemaSecrets, IsOlap) {
+        TestCommonEncryptionRequirements(IsOlap, /* useSchemaSecrets */ true);
     }
 }

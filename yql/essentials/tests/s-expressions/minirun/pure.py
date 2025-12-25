@@ -81,7 +81,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
             binary=MINIRUN_PATH,
             langver=langver,
-            extra_args=["--compile-only --test-partial-typecheck"] if is_typecheck else []
+            extra_args=["--compile-only","--test-partial-typecheck"] if is_typecheck else []
         )
 
         opt_res, opt_tables_res = execute(

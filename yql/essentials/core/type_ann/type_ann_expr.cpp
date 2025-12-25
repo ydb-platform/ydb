@@ -767,7 +767,8 @@ public:
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (input->IsCallable("MrTableConcat")) {
+        if (input->IsCallable({"MrTableConcat", "MrTableRange",
+            "MrTableConcatStrict", "MrTableRangeStrict"})) {
             input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
             return IGraphTransformer::TStatus::Ok;
         }

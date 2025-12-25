@@ -10,7 +10,6 @@ Released on December 19, 2025. To update to version **2.28.0**, select the [Down
 * Added `NO_COLOR` environment variable support to disable ANSI colors in {{ ydb-short-name }} CLI (see [no-color.org](https://no-color.org/)).
 * Added a simple progress bar for non-interactive stderr.
 * Added the `omit-indexes` property to the `--item` option of the `{{ ydb-cli }} tools copy` [command](./reference/ydb-cli/tools-copy.md), allowing tables to be copied without their indexes.
-* Added new options for shared consumers to the `{{ ydb-cli }} topic consumer add` [command](./reference/ydb-cli/topic-consumer-add.md) to configure DLQ and max attempts policy.
 * Added the `import files` subcommand to the `{{ ydb-cli }} workload vector` [command](./reference/ydb-cli/commands/workload/index.md) to populate the table from CSV or Parquet files.
 * Added the `import generate` subcommand to the `{{ ydb-cli }} workload vector` [command](./reference/ydb-cli/commands/workload/index.md) to populate the table with random data.
 * **_(Requires server v26.1+)_** Changes to previously added `{{ ydb-cli }} admin cluster state fetch` command:

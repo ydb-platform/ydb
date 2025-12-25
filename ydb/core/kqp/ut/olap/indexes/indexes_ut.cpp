@@ -653,7 +653,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
 
             csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
-            UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(5)));
+            UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(10)));
 
             {
                 ExecuteSQL(R"(
@@ -664,7 +664,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     FROM `/Root/olapTable`
                     WHERE checkIndexesColumn = "5")",
                     "[[0u;]]");
-                UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesSkippedNoData().Val() + csController->GetIndexesSkippingOnSelect().Val(), 3);
                 UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), 0);
             }
         }

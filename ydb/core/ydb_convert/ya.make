@@ -8,6 +8,8 @@ SRCS(
     table_profiles.cpp
     topic_description.cpp
     replication_description.cpp
+    external_data_source_description.cpp
+    external_table_description.cpp
     ydb_convert.cpp
     tx_proxy_status.cpp
 )

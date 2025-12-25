@@ -641,18 +641,23 @@ namespace NYdb::NConsoleClient {
             .StoreMappedResult(&AvailabilityPeriod_, ParseDuration);
         config.Opts->AddLongOption("type", "Consumer type. Available options: streaming, shared")
             .DefaultValue("streaming")
+            .Hidden()
             .StoreResult(&ConsumerType_);
         config.Opts->AddLongOption("keep-messages-order", "Keep messages order for shared consumer")
             .Optional()
+            .Hidden()
             .StoreResult(&KeepMessagesOrder_);
         config.Opts->AddLongOption("default-processing-timeout", "Default processing timeout for shared consumer (ex. '1h', '1m', '1s)")
             .Optional()
+            .Hidden()
             .StoreMappedResult(&DefaultProcessingTimeout_, ParseDuration);
         config.Opts->AddLongOption("max-processing-attempts", "Max processing attempts for DLQ for shared consumer")
             .Optional()
+            .Hidden()
             .StoreResult(&MaxProcessingAttempts_);
         config.Opts->AddLongOption("dlq-queue-name", "DLQ queue name for shared consumer")
             .Optional()
+            .Hidden()
             .StoreResult(&DlqQueueName_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");

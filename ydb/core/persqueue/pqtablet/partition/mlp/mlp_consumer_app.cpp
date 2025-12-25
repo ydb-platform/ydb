@@ -1,0 +1,65 @@
+#include "mlp_consumer.h"
+#include "mlp_storage.h"
+
+#include <ydb/core/persqueue/common/common_app.h>
+
+
+namespace NKikimr::NPQ::NMLP {
+
+void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
+    auto& consumerName = ev->Get()->Consumer;
+    auto& replyTo = ev->Get()->ReplyTo;
+
+    auto& metrics = Storage->GetMetrics();
+
+    TStringStream str;
+    HTML_APP_PAGE(str, "MLP consumer '" << consumerName << "'") {
+        NAVIGATION_BAR() {
+            NAVIGATION_TAB("generic", "Generic Info");
+            NAVIGATION_TAB("messages", "Messages");
+
+            NAVIGATION_TAB_CONTENT("generic") {
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        PROPERTIES("Total metrics") {
+                            PROPERTY("Total committed messages", metrics.TotalCommittedMessageCount);
+                            PROPERTY("Total moved to DLQ messages", metrics.TotalMovedToDLQMessageCount);
+                            PROPERTY("Total scheduled to DLQ messages", metrics.TotalScheduledToDLQMessageCount);
+                            PROPERTY("Total purged messages", metrics.TotalPurgedMessageCount);
+                            PROPERTY("Total deleted by deadline policy messages", metrics.TotalDeletedByDeadlinePolicyMessageCount);
+                            PROPERTY("Total deleted by retention messages", metrics.TotalDeletedByRetentionMessageCount);
+                        }
+
+                        PROPERTIES("Inflight metrics") {
+                            PROPERTY("Inflight count", metrics.InflightMessageCount);
+                            PROPERTY("Inflight unlocked count", metrics.UnprocessedMessageCount);
+                            PROPERTY("Inflight locked count", metrics.LockedMessageCount);
+                            PROPERTY("Inflight locked group count", metrics.LockedMessageGroupCount);
+                            PROPERTY("Inflight delayed count", metrics.DelayedMessageCount);
+                            PROPERTY("Inflight committed count", metrics.CommittedMessageCount);
+                            PROPERTY("Inflight scheduled to DLQ count", metrics.DLQMessageCount);
+                            PROPERTY("Inflight deadline expired count", metrics.DeadlineExpiredMessageCount);
+                        }
+                    }
+
+                    LAYOUT_COLUMN() {
+                        PROPERTIES("Message locks") {
+                            for (size_t i = 0; i < metrics.MessageLocks.GetRangeCount(); ++i) {
+                                PROPERTY(metrics.MessageLocks.GetRangeName(i), metrics.MessageLocks.GetRangeValue(i));
+                            }
+                        }
+                        PROPERTIES("Message locking duration") {
+                            for (size_t i = 0; i < metrics.MessageLockingDuration.GetRangeCount(); ++i) {
+                                PROPERTY(metrics.MessageLockingDuration.GetRangeName(i), metrics.MessageLockingDuration.GetRangeValue(i));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Send(replyTo, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+}
+
+} // namespace NKikimr::NPQ::NMLP

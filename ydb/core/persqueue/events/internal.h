@@ -222,6 +222,7 @@ struct TEvPQ {
         EvEndOffsetChanged,
         EvMLPConsumerState,
         EvTxDone,
+        EvMLPConsumerMonRequest,
         EvEnd
     };
 
@@ -1645,6 +1646,19 @@ struct TEvPQ {
         }
 
         NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
+    };
+
+    struct TEvMLPConsumerMonRequest : TEventLocal<TEvMLPConsumerMonRequest, EvMLPConsumerMonRequest> {
+        TEvMLPConsumerMonRequest(TActorId replyTo, ui32 partitionId, const TString& consumer)
+            : ReplyTo(replyTo)
+            , PartitionId(partitionId)
+            , Consumer(consumer)
+        {
+        }
+
+        TActorId ReplyTo;
+        ui32 PartitionId;
+        TString Consumer;
     };
 };
 

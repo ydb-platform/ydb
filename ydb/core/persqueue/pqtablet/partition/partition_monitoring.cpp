@@ -150,6 +150,32 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                 }
             }
 
+            if (!Partition.IsSupportivePartition()) {
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        TABLE_CLASS("table") {
+                            CAPTION() {out << "MLP consumers";}
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() {out << "Consumer";}
+                                }
+                            }
+                            TABLEBODY() {
+                                for (auto& [consumerName, _] : MLPConsumers) {
+                                    TABLER() {
+                                        TABLED() {
+                                            HREF(TStringBuilder() << "app?TabletID=" << TabletActorId << "&consumer=" << consumerName << "&partitionId=" << Partition.OriginalPartitionId) {
+                                                out << consumerName;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             LAYOUT_ROW() {
                 LAYOUT_COLUMN() {
                     CONFIGURATION(SecureDebugStringMultiline(Config));
@@ -321,6 +347,18 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
     }
 
     ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Partition, out.Str()));
+}
+
+void TPartition::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
+    auto& consumerName = ev->Get()->Consumer;
+
+    auto it = MLPConsumers.find(consumerName);
+    if (it == MLPConsumers.end()) {
+        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(TStringBuilder() <<"MLP consumer '" << consumerName << "' not found"));
+        return;
+    }
+    auto& consumerInfo = it->second;
+    Forward(ev, consumerInfo.ActorId);
 }
 
 } // namespace NKikimr::NPQ

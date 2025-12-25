@@ -14,7 +14,7 @@ if __name__ == "__main__":
     parser.add_argument("--path", default="result_set_format", help="A path prefix for tables")
     parser.add_argument("--format", default="value", choices=["value", "arrow"], help="A format of result sets")
     parser.add_argument("--duration", default=10**9, type=lambda x: int(x), help="A duration of workload in seconds.")
-    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="Logging level")
+    parser.add_argument("--log-level", default="WARNING", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="Logging level")
 
     args = parser.parse_args()
 

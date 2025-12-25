@@ -357,11 +357,12 @@ class WorkloadSchemaInclusion(WorkloadBase):
             assert result is not None, f"Result is None for operation {operation_id}"
         except ydb.issues.PreconditionFailed as e:
             self._stats.increment_precondition_failed()
-            logger.error(
-                f"Operation {operation_id} with {len(selected_operations)} statements returned precondition failed error: {e}"
-            )
             result = []
-            if OperationType.INSERT not in selected_operations:
+            log_msg = f"Operation {operation_id} with {len(selected_operations)} statements returned precondition failed error: {e}"
+            if OperationType.INSERT in selected_operations:
+                logger.warning(log_msg)
+            else:
+                logger.error(log_msg)
                 raise e
         except Exception:
             raise

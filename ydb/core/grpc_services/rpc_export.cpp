@@ -525,7 +525,9 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     }
 
     bool HasCommonSourcePathPrefix(const TStringBuf path) const {
-        return path.StartsWith(CommonSourcePath) && path.size() > CommonSourcePath.size() && path[CommonSourcePath.size()] == '/';
+        return path.StartsWith(CommonSourcePath)
+            && path.size() > CommonSourcePath.size()
+            && path[CommonSourcePath.size()] == '/';
     }
 
     bool IsExcludedFromExport(const TString& exportPath) const {

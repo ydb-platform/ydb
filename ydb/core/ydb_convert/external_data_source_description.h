@@ -19,4 +19,4 @@ void FillExternalDataSourceDescription(
     const NKikimrSchemeOp::TExternalDataSourceDescription& inDesc,
     const NKikimrSchemeOp::TDirEntry& inDirEntry);
 
-}
+} // namespace NKikimr

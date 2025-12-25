@@ -61,7 +61,7 @@ bool ConvertContent(
     return true;
 }
 
-}
+} // anonymous namespace
 
 bool FillExternalTableDescription(
     Ydb::Table::DescribeExternalTableResult& out,
@@ -86,4 +86,4 @@ bool FillExternalTableDescription(
     return true;
 }
 
-}
+} // namespace NKikimr

@@ -101,7 +101,7 @@ void Convert(const TExternalTableReferences& in, TProperties& out) {
     references = WriteJson(json, false);
 }
 
-}
+} // anonymous namespace
 
 void FillExternalDataSourceDescription(
     Ydb::Table::DescribeExternalDataSourceResult& out,
@@ -120,4 +120,4 @@ void FillExternalDataSourceDescription(
     Convert(inDesc.GetReferences(), properties);
 }
 
-}
+} // namespace NKikimr

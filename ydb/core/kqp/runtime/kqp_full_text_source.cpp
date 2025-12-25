@@ -332,7 +332,8 @@ public:
         }
 
         if (NeedFullTextRelevance) {
-            rowItems[resultRowTypes.size()] = NUdf::TUnboxedValuePod(GetBM25Score(totalDocLength, docCount));
+            double score = GetBM25Score(totalDocLength, docCount);
+            rowItems[resultRowTypes.size()] = NUdf::TUnboxedValuePod(score);
             computeBytes += 8;
         }
 

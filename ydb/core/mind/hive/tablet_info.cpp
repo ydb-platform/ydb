@@ -358,7 +358,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
         } else {
             ResourceMetricsAggregates.MaximumCPU.AdvanceTime(now);
         }
-        ResourceValues.SetCPU(ResourceMetricsAggregates.MaximumCPU.GetValue());
+        ResourceValues.CPU = ResourceMetricsAggregates.MaximumCPU.GetValue();
     }
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory)) {
         if (metrics.HasMemory()) {
@@ -370,7 +370,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
         } else {
             ResourceMetricsAggregates.MaximumMemory.AdvanceTime(now);
         }
-        ResourceValues.SetMemory(ResourceMetricsAggregates.MaximumMemory.GetValue());
+        ResourceValues.Memory = ResourceMetricsAggregates.MaximumMemory.GetValue();
     }
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network)) {
         if (metrics.HasNetwork()) {
@@ -382,32 +382,28 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
         } else {
             ResourceMetricsAggregates.MaximumNetwork.AdvanceTime(now);
         }
-        ResourceValues.SetNetwork(ResourceMetricsAggregates.MaximumNetwork.GetValue());
+        ResourceValues.Network = ResourceMetricsAggregates.MaximumNetwork.GetValue();
     }
     if (metrics.HasStorage()) {
-        ResourceValues.SetStorage(metrics.GetStorage());
+        ResourceValues.Storage = metrics.GetStorage();
     }
     if (metrics.HasReadThroughput()) {
-        ResourceValues.SetReadThroughput(metrics.GetReadThroughput());
+        ResourceValues.ReadThroughput = metrics.GetReadThroughput();
     }
     if (metrics.HasWriteThroughput()) {
-        ResourceValues.SetWriteThroughput(metrics.GetWriteThroughput());
+        ResourceValues.WriteThroughput = metrics.GetWriteThroughput();
     }
     if (metrics.GroupReadThroughputSize() > 0) {
-        ResourceValues.ClearGroupReadThroughput();
-        for (const auto& v : metrics.GetGroupReadThroughput()) {
-            ResourceValues.AddGroupReadThroughput()->CopyFrom(v);
-        }
+        const auto& records = metrics.GetGroupReadThroughput();
+        ResourceValues.GroupReadThroughput.assign(records.begin(), records.end());
     }
     if (metrics.GroupWriteThroughputSize() > 0) {
-        ResourceValues.ClearGroupWriteThroughput();
-        for (const auto& v : metrics.GetGroupWriteThroughput()) {
-            ResourceValues.AddGroupWriteThroughput()->CopyFrom(v);
-        }
+        const auto& records = metrics.GetGroupWriteThroughput();
+        ResourceValues.GroupWriteThroughput.assign(records.begin(), records.end());
     }
-    i64 counterBefore = ResourceValues.GetCounter();
+    i64 counterBefore = ResourceValues.Counter;
     ActualizeCounter();
-    i64 counterAfter = ResourceValues.GetCounter();
+    i64 counterAfter = ResourceValues.Counter;
     const auto& after = ResourceValues;
     if (Node != nullptr) {
         if (IsResourceDrainingState(VolatileState)) {
@@ -438,26 +434,26 @@ i64 TTabletInfo::GetCounterValue() const {
     const auto& allowedMetricIds = GetTabletAllowedMetricIds();
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)
         && (ResourceMetricsAggregates.MaximumCPU.GetAllTimeMaximum() > 0
-        || ResourceValues.GetCPU() > 0)) {
+        || ResourceValues.CPU > 0)) {
         return 0;
     }
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory)
         && (ResourceMetricsAggregates.MaximumMemory.GetAllTimeMaximum() > 0
-        || ResourceValues.GetMemory() > 0)) {
+        || ResourceValues.Memory > 0)) {
         return 0;
     }
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network)
         && (ResourceMetricsAggregates.MaximumNetwork.GetAllTimeMaximum() > 0
-        || ResourceValues.GetNetwork() > 0)) {
+        || ResourceValues.Network > 0)) {
         return 0;
     }
     return 1;
 }
 
 void TTabletInfo::FilterRawValues(TResourceRawValues& values) const {
-    const NKikimrTabletBase::TMetrics& metrics(ResourceValues);
+    const auto& metrics(ResourceValues);
     const TVector<i64>& allowedMetricIds = GetTabletAllowedMetricIds();
-    if (metrics.GetCounter() == 0) {
+    if (metrics.Counter == 0) {
         std::get<NMetrics::EResource::Counter>(values) = 0;
     }
     if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics)) {
@@ -472,9 +468,9 @@ void TTabletInfo::FilterRawValues(TResourceRawValues& values) const {
 }
 
 void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
-    const NKikimrTabletBase::TMetrics& metrics(ResourceValues);
+    const auto& metrics(ResourceValues);
     const TVector<i64>& allowedMetricIds = GetTabletAllowedMetricIds();
-    if (metrics.GetCounter() == 0) {
+    if (metrics.Counter == 0) {
         std::get<NMetrics::EResource::Counter>(values) = 0;
     }
     if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics)) {
@@ -489,7 +485,7 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
 }
 
 void TTabletInfo::ActualizeCounter() {
-    ResourceValues.SetCounter(GetCounterValue());
+    ResourceValues.Counter = GetCounterValue();
 }
 
 const TNodeFilter& TTabletInfo::GetNodeFilter() const {

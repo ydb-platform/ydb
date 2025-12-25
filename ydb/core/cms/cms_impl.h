@@ -228,10 +228,10 @@ private:
     #define HFuncChecked(TEvType, HandleFunc) \
         case TEvType::EventType: { \
             typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
-            if (State->Config.Enable) { \
-                HandleFunc(*x, this->ActorContext()); \
+            if (State->Config.DisableMaintenance) { \
+                ReplyWithError<TEvCms::TEvPermissionResponse>(*x, NKikimrCms::TStatus::ERROR_TEMP, "Maintenance is disabled", this->ActorContext()); \
             } else { \
-                ReplyWithError<TEvCms::TEvPermissionResponse>(*x, NKikimrCms::TStatus::ERROR_TEMP, "CMS is disabled", this->ActorContext()); \
+                HandleFunc(*x, this->ActorContext()); \
             } \
             break; \
         } Y_SEMICOLON_GUARD

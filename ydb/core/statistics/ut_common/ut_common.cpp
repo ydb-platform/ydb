@@ -106,6 +106,8 @@ TString CreateDatabase(TTestEnv& env, const TString& databaseName,
 
     if (!env.GetServer().GetSettings().UseRealThreads) {
         runtime.SimulateSleep(TDuration::Seconds(1));
+    } else {
+        Sleep(TDuration::Seconds(1));
     }
 
     return fullDbName;

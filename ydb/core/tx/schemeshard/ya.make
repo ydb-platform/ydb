@@ -1,7 +1,3 @@
-RECURSE(
-    ut_truncate_table
-)
-
 RECURSE_FOR_TESTS(
     ut_auditsettings
     ut_background_cleaning

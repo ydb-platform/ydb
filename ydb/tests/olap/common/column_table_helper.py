@@ -88,8 +88,8 @@ class ColumnTableHelper:
             for rows in result.rows:
                 logger.info(f"line: {rows}")
 
-    def _collect_volumes_column_extra(self):
-        query = f'SELECT * FROM `{self.path}/.sys/primary_index_stats`'
+    def _collect_volumes_column_extra(self, column_name):
+        query = f'SELECT * FROM `{self.path}/.sys/primary_index_stats` WHERE Activity == 1 AND EntityName = \"{column_name}\"'
         result_set = self.ydb_client.query(query)
         rows = []
         for result in result_set:
@@ -108,13 +108,13 @@ class ColumnTableHelper:
 
     def get_volumes_column_extra(self, column_name: str) -> tuple[int, int]:
         pred_raw_bytes, pred_bytes = 0, 0
-        rows = self._collect_volumes_column_extra()
+        rows = self._collect_volumes_column_extra(column_name)
         raw_bytes, bytes = self._extract_volumes(rows, column_name)
         while pred_raw_bytes != raw_bytes and pred_bytes != bytes:
             pred_raw_bytes = raw_bytes
             pred_bytes = bytes
             time.sleep(5)
-            rows = self._collect_volumes_column_extra()
+            rows = self._collect_volumes_column_extra(column_name)
             raw_bytes, bytes = self._extract_volumes(rows, column_name)
         return raw_bytes, bytes, rows
 

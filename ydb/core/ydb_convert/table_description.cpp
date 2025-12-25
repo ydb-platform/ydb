@@ -833,17 +833,18 @@ bool FillColumnCompression(
         const auto fromCompression = from.Getcompression();
         auto toSerializer = to->MutableSerializer();
         toSerializer->SetClassName("ARROW_SERIALIZER");
+        auto arrowCompression = toSerializer->MutableArrowCompression();
 
         if (from.Getcompression().Hasalgorithm()) {
             switch (fromCompression.Getalgorithm()) {
                 case Ydb::Table::ColumnCompression_Algorithm::ColumnCompression_Algorithm_ALGORITHM_OFF:
-                    toSerializer->MutableArrowCompression()->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
                     break;
                 case Ydb::Table::ColumnCompression_Algorithm::ColumnCompression_Algorithm_ALGORITHM_LZ4:
-                    toSerializer->MutableArrowCompression()->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
                     break;
                 case Ydb::Table::ColumnCompression_Algorithm::ColumnCompression_Algorithm_ALGORITHM_ZSTD:
-                    toSerializer->MutableArrowCompression()->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
                     break;
                     
                 default:
@@ -854,7 +855,7 @@ bool FillColumnCompression(
         }
 
         if (from.Getcompression().Hascompression_level()) {
-            toSerializer->MutableArrowCompression()->SetLevel(fromCompression.Getcompression_level());
+            arrowCompression->SetLevel(fromCompression.Getcompression_level());
         }
     }
     return true;

@@ -55,13 +55,14 @@ class TestAlterColumnCompression(TestCompressionBase):
     @classmethod
     def setup_class(cls):
         super(TestAlterColumnCompression, cls).setup_class()
-        cls.single_upsert_rows_count: int = 1000
+        cls.single_upsert_rows_count: int = 10000
         cls.upsert_count: int = 10
         cls.volumes_without_compression: tuple[int, int]
         cls.test_name: str = "all_supported_compression"
         cls.test_dir: str = f"{cls.ydb_client.database}/{cls.class_name}/{cls.test_name}"
 
     COMPRESSION_CASES = [
+        ("default",          ''),
         ("lz4_compression",  'algorithm=lz4'),
         ("zstd_compression", 'algorithm=zstd'),
     ] + [
@@ -79,7 +80,11 @@ class TestAlterColumnCompression(TestCompressionBase):
                     value1 Uint64 COMPRESSION(algorithm=off),
                     PRIMARY KEY(value),
                 )
-                WITH (STORE = COLUMN)
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                    PARTITION_COUNT = 1
+                )
             """
         )
         logger.info(f"Table {self.table_path} created")
@@ -87,9 +92,9 @@ class TestAlterColumnCompression(TestCompressionBase):
         self.upsert_and_wait_portions(table, self.single_upsert_rows_count, self.upsert_count)
 
         expected_raw = self.upsert_count * self.single_upsert_rows_count * 8
-        self.volumes_without_compression: tuple[int, int] = table.get_volumes_column("value")
+        self.volumes_without_compression = table.get_volumes_column("value1")
 
-        volumes = table.get_volumes_column("value")
+        volumes = table.get_volumes_column("value1")
         assert volumes[0] == expected_raw
         assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == expected_raw // 8
 
@@ -106,36 +111,18 @@ class TestAlterColumnCompression(TestCompressionBase):
             """
         )
         logger.info(f"Table {self.table_path} altered")
-        table = ColumnTableHelper(self.ydb_client, self.table_path)
-
-        koef: float = 1
-        for _ in range(9):
-            volumes: tuple[int, int] = table.get_volumes_column("value")
-            koef = self.volumes_without_compression[1] / volumes[1]
-            logging.info(
-                f"compression in `{table.path}` {self.volumes_without_compression[1]} / {volumes[1]}: {koef}"
-            )
-            if koef > 1:
-                break
-
-        assert koef > 1
-
-    def test_alter_to_default(self):
-        self.create_table_without_compression("default")
-
+        # update items for them to be written with compression
         self.ydb_client.query(
             f"""
-                ALTER TABLE `{self.table_path}`
-                    ALTER COLUMN `value` SET COMPRESSION(),
-                    ALTER COLUMN `value1` SET COMPRESSION();
+                UPDATE `{self.table_path}` SET value1 = value1 + 1;
             """
         )
-        logger.info(f"Table {self.table_path} altered")
+
         table = ColumnTableHelper(self.ydb_client, self.table_path)
 
-        volumes: tuple[int, int] = table.get_volumes_column("value")
-        koef: float = self.volumes_without_compression[1] / volumes[1]
+        volumes = table.get_volumes_column("value1")
+        koef = self.volumes_without_compression[1] / volumes[1]
         logging.info(
             f"compression in `{table.path}` {self.volumes_without_compression[1]} / {volumes[1]}: {koef}"
         )
-        assert koef >= 1
+        assert koef > 1

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface/yql_yt_coordinator_service_interface.h>
 

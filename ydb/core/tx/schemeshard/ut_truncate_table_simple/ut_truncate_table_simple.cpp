@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
                     firstProposeTransactionResultHandled = true;
                     
                     TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable",
-                                                {NKikimrScheme::StatusMultipleModifications});
+                                     {NKikimrScheme::StatusMultipleModifications});
                     env.TestWaitNotification(runtime, txId);
                 }
             }
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
        // Cannot truncate table with CDC stream
        TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable",
-                                      {NKikimrScheme::StatusPreconditionFailed});
+                        {NKikimrScheme::StatusPreconditionFailed});
        env.TestWaitNotification(runtime, txId);
    }
 }

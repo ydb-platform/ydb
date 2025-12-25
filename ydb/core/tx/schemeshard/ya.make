@@ -401,8 +401,6 @@ PEERDIR(
     ydb/core/tx/tiering/tier
 )
 
-
-
 YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)

@@ -637,6 +637,10 @@ protected:
             OnRequestProcessed(request);
         }
 
+        if (!CloseConnection && Step == INFLIGTH_CHECK) {
+            DoRead(ctx);
+        }
+
         return true;
     }
 
@@ -888,6 +892,10 @@ protected:
                 OnRequestProcessed(request);
                 KAFKA_LOG_D("Sent reply (after retry): ApiKey=" << header.RequestApiKey << ", Version=" << header.RequestApiVersion << ", Correlation=" << header.CorrelationId);
                 ProcessReplyQueue(ctx);
+
+                if (!CloseConnection && Step == INFLIGTH_CHECK) {
+                    DoRead(ctx);
+                }
             }
         }
 

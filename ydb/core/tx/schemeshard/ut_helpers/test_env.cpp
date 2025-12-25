@@ -1213,7 +1213,10 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithPipeResets(std::function<v
 
             activeZone = true;
             testScenario(*Runtime, activeZone);
-        }
+        },
+        Max<ui32>(),
+        Bucket,
+        TotalBuckets
     );
 }
 

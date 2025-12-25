@@ -34,7 +34,8 @@ public:
         NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         const TString& database,
-        bool enableWatermarks
+        bool enableWatermarks,
+        const TIntrusivePtr<TKqpCounters>& kqpCounters
     );
 
     void DoBootstrap();
@@ -79,6 +80,10 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString Database;
     const bool EnableWatermarks;
+
+    // Counters for channel's buffer size in bytes.
+    NMonitoring::TDynamicCounters::TCounterPtr OutputTotalSizeCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr OutputOverLimitSizeCounter;
 };
 
 } // namespace NKikimr::NKqp

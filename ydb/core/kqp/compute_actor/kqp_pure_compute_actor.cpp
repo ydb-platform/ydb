@@ -22,7 +22,8 @@ TKqpComputeActor::TKqpComputeActor(
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-    bool enableWatermarks
+    bool enableWatermarks,
+    const TIntrusivePtr<TKqpCounters>& kqpCounters
 )
     : TBase(std::move(schedulableOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena), GUCSettings)
     , ComputeCtx(settings.StatsMode)
@@ -40,6 +41,12 @@ TKqpComputeActor::TKqpComputeActor(
         YQL_ENSURE(Meta->GetReads().size() == 1);
         YQL_ENSURE(!Meta->GetReads()[0].GetKeyRanges().empty());
         YQL_ENSURE(!Meta->GetTable().GetSysViewInfo().empty() || Meta->GetTable().HasSysViewInfo());
+    }
+
+    if (kqpCounters && settings.CollectFull()) {
+        auto group = kqpCounters->GetKqpCounters()->GetSubgroup("group", "kqp");
+        OutputTotalSizeCounter = group->GetCounter("Channels/BufferTotalBytes", false);
+        OutputOverLimitSizeCounter = group->GetCounter("Channels/BufferOverLimitBytes", false);
     }
 }
 
@@ -92,7 +99,7 @@ void TKqpComputeActor::DoBootstrap() {
         execCtx.FuncProvider = FederatedQuerySetup->DqTaskTransformFactory({settings.TaskParams, settings.ReadRanges}, TBase::FunctionRegistry);
     }
 
-    auto taskRunner = MakeDqTaskRunner(TBase::GetAllocatorPtr(), execCtx, settings, logger);
+    auto taskRunner = MakeDqTaskRunner(TBase::GetAllocatorPtr(), execCtx, settings, logger, OutputTotalSizeCounter, OutputOverLimitSizeCounter);
     SetTaskRunner(taskRunner);
 
     auto selfId = this->SelfId();
@@ -344,10 +351,13 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-    bool enableWatermarks
+    bool enableWatermarks,
+    const TIntrusivePtr<TKqpCounters>& kqpCounters
 ) {
     return new TKqpComputeActor(executerId, txId, task, std::move(asyncIoFactory),
-        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings, std::move(schedulableOptions), mode, std::move(userToken), database, enableWatermarks);
+        settings, memoryLimits, std::move(traceId), std::move(arena),
+        federatedQuerySetup, GUCSettings, std::move(schedulableOptions),
+        mode, std::move(userToken), database, enableWatermarks, kqpCounters);
 }
 
 } // namespace NKqp

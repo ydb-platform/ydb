@@ -364,6 +364,7 @@ public:
     }
 
     void Verify() override {
+        // Module_->dump();
         std::string what;
         llvm::raw_string_ostream os(what);
         if (llvm::verifyModule(*Module_, &os)) {

@@ -54,6 +54,7 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
             )";
             TString dqHashPragma = Sprintf("PRAGMA ydb.UseDqHashCombine = \"%s\";\n\n", UseDqHashCombine ? "true" : "false");
             TString select = R"(
+                PRAGMA ydb.UseDqHashAggregate = "true";
                 PRAGMA ydb.OptUseFinalizeByKey = "true";
                 PRAGMA ydb.OptEnableOlapPushdown = "false"; -- need this to force intermediate/final combiner pair over the sample table
 
@@ -64,13 +65,6 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
 
             TString groupQuery = TStringBuilder() << hints << dqHashPragma << select;
 
-            auto status = queryClient.ExecuteQuery(groupQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-
-            auto resultSet = status.GetResultSets()[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
-
             auto explainResult = queryClient.ExecuteQuery(
                 groupQuery,
                 NYdb::NQuery::TTxControl::NoTx(),
@@ -80,6 +74,7 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
 
             auto astOpt = explainResult.GetStats()->GetAst();
             UNIT_ASSERT(astOpt.has_value());
+            Cerr << TString(*astOpt) << Endl;
             TString ast = TString(*astOpt);
             Cout << "AST (DqPhyHashCombine=" << (UseDqHashCombine ? "true" : "false") << "): " << ast << Endl;
 
@@ -90,6 +85,13 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
                 UNIT_ASSERT_C(!ast.Contains("DqPhyHashCombine"),
                     TStringBuilder() << "AST should NOT contain DqPhyHashCombine when disabled! Actual AST: " << ast);
             }
+
+            auto status = queryClient.ExecuteQuery(groupQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto resultSet = status.GetResultSets()[0];
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
         }
     }
 }

@@ -211,11 +211,20 @@ public:
         if (config->GetUseDqHashCombine()) {
             AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashCombiner));
         }
+        if (config->GetUseDqHashAggregate()) {
+            AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashAggregator));
+        }
 #undef HNDL
     }
 
     TMaybeNode<TExprBase> RewriteWideCombinerToDqHashCombiner(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteWideCombiner(node, ctx);
+        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashCombiner(node, ctx);
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteWideCombinerToDqHashAggregator(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashAggregator(node, ctx);
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -244,8 +253,9 @@ private:
 };
 
 struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
-    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config)
+    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config, const bool withFinalStageRules)
         : Config(config)
+        , WithFinalStageRules(withFinalStageRules)
     {}
 
     void AfterCreate(TTransformationPipeline*) const override {}
@@ -255,10 +265,14 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
-        pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+        if (WithFinalStageRules) {
+            pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+        }
     }
+
 private:
     const TKikimrConfiguration::TPtr Config;
+    const bool WithFinalStageRules;
 };
 
 // Sort stages in topological order by their inputs, so that we optimize the ones without inputs first.
@@ -656,7 +670,7 @@ TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, 
     bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts)
 {
     TKqpPeepholePipelineConfigurator kqpPeephole(config, disabledOpts);
-    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config);
+    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config, withFinalStageRules);
     TPeepholeSettings peepholeSettings;
     peepholeSettings.CommonConfig = &kqpPeephole;
     peepholeSettings.FinalConfig = &kqpPeepholeFinal;

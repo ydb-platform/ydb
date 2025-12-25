@@ -120,6 +120,10 @@ public:
         return Spillers_;
     }
 
+    void ForgetSpillers() {
+        Spillers_.clear();
+    }
+
     void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback reportAlloc, ISpiller::TMemoryReportCallback reportFree) override {
         Y_UNUSED(reportAlloc);
         Y_UNUSED(reportFree);

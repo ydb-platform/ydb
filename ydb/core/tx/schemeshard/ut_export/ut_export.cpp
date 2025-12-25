@@ -3515,6 +3515,7 @@ $transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, off
 CREATE TRANSFER `Transfer`
 FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
 WITH (
+  CONNECTION_STRING = 'grpc:///?database=',
   CONSUMER = '',
   BATCH_SIZE_BYTES = 8388608,
   FLUSH_INTERVAL = Interval('PT60S')
@@ -3579,6 +3580,7 @@ $transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, off
 CREATE TRANSFER `Transfer`
 FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
 WITH (
+  CONNECTION_STRING = 'grpc:///?database=',
   CONSUMER = 'consumerName',
   BATCH_SIZE_BYTES = 8388608,
   FLUSH_INTERVAL = Interval('PT60S')

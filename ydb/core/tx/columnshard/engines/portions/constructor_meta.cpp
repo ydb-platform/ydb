@@ -40,14 +40,14 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
 
 TPortionMeta TPortionMetaConstructor::Build() {
     AFL_VERIFY(FirstAndLastPK);
-    TMemoryProfileGuard mGuard1("meta_construct/pk");
+    TMemoryProfileGuard mGuard1("meta_construct/pk", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     static TAtomicCounter sumValues = 0;
     static TAtomicCounter sumValuesMeta = 0;
     static TAtomicCounter countValues = 0;
 //    FirstAndLastPK->Reallocate();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", FirstAndLastPK->GetMemorySize())("data_size", FirstAndLastPK->GetDataSize())(
         "sum", sumValues.Add(FirstAndLastPK->GetMemorySize()))("count", countValues.Inc());
-    TMemoryProfileGuard mGuard("meta_construct/others");
+    TMemoryProfileGuard mGuard("meta_construct/others", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(RecordSnapshotMin);
     AFL_VERIFY(RecordSnapshotMax);
     TPortionMeta result(*FirstAndLastPK, *RecordSnapshotMin, *RecordSnapshotMax);

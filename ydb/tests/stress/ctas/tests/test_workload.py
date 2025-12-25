@@ -29,5 +29,5 @@ class TestYdbWorkload(StressFixture):
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
             "--database", self.database,
-            "--duration", "60",
+            "--duration", "120",
         ])

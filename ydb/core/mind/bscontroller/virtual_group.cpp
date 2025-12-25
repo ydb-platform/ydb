@@ -828,8 +828,8 @@ namespace NKikimr::NBsController {
                 TNodeInfo& node = Self->GetNode(nodeId);
                 node.WaitingForGroups.erase(group->ID);
                 auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
-                TSet<ui32> groups;
-                groups.insert(group->ID.GetRawId());
+                TSet<TGroupId> groups;
+                groups.insert(group->ID);
                 Self->ReadGroups(groups, false, ev.get(), nodeId);
                 Send(MakeBlobStorageNodeWardenID(nodeId), ev.release());
             }

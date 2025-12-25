@@ -150,6 +150,20 @@ namespace NMonitoring {
             AssertResult(samples);
         }
 
+        Y_UNIT_TEST(InvalidUtf8) {
+            TDynamicCounterPtr rootGroup(new TDynamicCounters());
+            rootGroup->GetNamedCounter("invalidUtf8Name\x80", "validUtf8");
+            rootGroup->GetNamedCounter("validUtf8Name", "invalidUtf8\x80");
+
+            {
+                TString result;
+                TStringOutput out(result);
+                auto encoder = CreateEncoder(&out, EFormat::JSON);
+                rootGroup->Accept(TString(), TString(), *encoder);
+                UNIT_ASSERT_STRINGS_EQUAL(result, "");
+            }
+        }
+
         Y_UNIT_TEST(Spack) {
             TBuffer result;
             {

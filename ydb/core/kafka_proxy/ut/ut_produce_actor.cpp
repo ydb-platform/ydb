@@ -330,7 +330,31 @@ namespace {
             auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
             UNIT_ASSERT(response);
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
-            UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode, NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
+            UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                NKafka::EKafkaErrors::NOT_LEADER_OR_FOLLOWER);
+        }
+
+        Y_UNIT_TEST(OnProduce_ManyRequests) {
+            i64 producerId = 1;
+            i32 producerEpoch = 2;
+
+            SendProduce({}, producerId, producerEpoch, 1);
+            SendProduce({}, producerId, producerEpoch, 2);
+
+            {
+                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+                UNIT_ASSERT(response);
+                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                    NKafka::EKafkaErrors::NONE_ERROR);
+            }
+            {
+                auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+                UNIT_ASSERT(response);
+                UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
+                    NKafka::EKafkaErrors::NONE_ERROR);
+            }
         }
     }
 } // anonymous namespace

@@ -140,6 +140,10 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
         exprt.MutableExportToS3Settings()->clear_access_key();
         exprt.MutableExportToS3Settings()->clear_secret_key();
         break;
+
+    case TExportInfo::EKind::FS:
+        Y_ABORT_UNLESS(exprt.MutableExportToFsSettings()->ParseFromString(exportInfo.Settings));
+        break;
     }
 }
 
@@ -153,7 +157,7 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& e
         NIceDb::TUpdate<Schema::Exports::Items>(exportInfo.Items.size()),
         NIceDb::TUpdate<Schema::Exports::EnableChecksums>(exportInfo.EnableChecksums),
         NIceDb::TUpdate<Schema::Exports::EnablePermissions>(exportInfo.EnablePermissions),
-        NIceDb::TUpdate<Schema::Exports::MaterializeIndexes>(exportInfo.MaterializeIndexes),
+        NIceDb::TUpdate<Schema::Exports::IncludeIndexData>(exportInfo.IncludeIndexData),
         NIceDb::TUpdate<Schema::Exports::PeerName>(exportInfo.PeerName),
         NIceDb::TUpdate<Schema::Exports::SanitizedToken>(exportInfo.SanitizedToken)
     );

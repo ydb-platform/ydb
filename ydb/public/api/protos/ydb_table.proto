@@ -92,6 +92,10 @@ message KMeansTreeSettings {
     optional uint32 clusters = 2;
     
     optional uint32 levels = 3;
+
+    optional uint32 overlap_clusters = 4;
+
+    optional double overlap_ratio = 5;
 }
 
 message GlobalIndex {

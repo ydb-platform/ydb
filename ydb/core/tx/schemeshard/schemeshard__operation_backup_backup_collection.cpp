@@ -3,7 +3,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_create_cdc_stream.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_utils.h"
 #include "schemeshard_impl.h"
 
 
@@ -111,9 +110,29 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             streamDescription.SetName(streamName);
             streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
-            
-            NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
-            desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
+
+            TString oldStreamName;
+            for (const auto& [childName, childId] : sPath.Base()->GetChildren()) {
+                if (childName.EndsWith("_continuousBackupImpl")) {
+                    TPath child = sPath.Child(childName);
+                    if (!child.IsDeleted() && child.IsCdcStream()) {
+                        oldStreamName = childName;
+                    }
+                }
+            }
+
+            if (!oldStreamName.empty()) {
+                NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
+
+                desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
+                
+                auto* dropOp = desc.MutableDropSrcCdcStream();
+                dropOp->SetTableName(item.GetPath());
+                dropOp->AddStreamName(oldStreamName);
+            } else {
+                NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
+                desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
+            }
             
             if (incrBackupEnabled && !omitIndexes) {
                 const auto tablePath = sPath;

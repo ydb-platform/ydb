@@ -3,6 +3,7 @@
 #include "global.h"
 
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/common/key.h>
@@ -50,19 +51,23 @@ namespace NPQ {
     };
 
     struct TRequestedBlob {
+        mutable TKey Key;
+        mutable TString RawValue;
         ui64 Offset;
         ui16 PartNo;
         ui32 Count;
         ui16 InternalPartsCount;
         ui32 Size;
-        TString Value;
         bool Cached;
-        TKey Key;
         ui64 CreationUnixTime;
+        mutable std::shared_ptr<TVector<TBatch>> Batches;
 
         TRequestedBlob() = delete;
-
         TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value, const TKey& key, ui64 creationUnixTime);
+        
+        bool Empty() const;
+        void Clear();
+        std::shared_ptr<TVector<TBatch>> GetBatches() const;
     };
 
     struct TDataKey {
@@ -215,6 +220,8 @@ struct TEvPQ {
         EvMLPConsumerUpdateConfig,
         EvMLPDLQMoverResponse,
         EvEndOffsetChanged,
+        EvMLPConsumerState,
+        EvTxDone,
         EvEnd
     };
 
@@ -561,7 +568,7 @@ struct TEvPQ {
         void Check() const
         {
             //error or empty response(all from cache) or not empty response at all
-            AFL_ENSURE(Error.HasError() || Blobs.empty() || !Blobs[0].Value.empty())
+            AFL_ENSURE(Error.HasError() || Blobs.empty() || (!Blobs[0].Empty()))
                 ("Cookie", Cookie)("Error code", NPersQueue::NErrorCode::EErrorCode_Name(Error.ErrorCode))("blobs count", Blobs.size());
         }
 
@@ -950,21 +957,10 @@ struct TEvPQ {
         ui64 TxId;
 
         TMessageGroupsPtr ExplicitMessageGroups;
-
-        NWilson::TSpan Span;
-    };
-
-    struct TEvTxCommitDone : public TEventLocal<TEvTxCommitDone, EvTxCommitDone> {
-        TEvTxCommitDone(ui64 step, ui64 txId, const NPQ::TPartitionId& partition) :
-            Step(step),
-            TxId(txId),
-            Partition(partition)
-        {
-        }
-
-        ui64 Step;
-        ui64 TxId;
-        NPQ::TPartitionId Partition;
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+        TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+        TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+        TMaybe<NKikimrPQ::TPartitions> PartitionsData;
 
         NWilson::TSpan Span;
     };
@@ -978,6 +974,22 @@ struct TEvPQ {
 
         ui64 Step;
         ui64 TxId;
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+
+        NWilson::TSpan Span;
+    };
+
+    struct TEvTxDone : public TEventLocal<TEvTxDone, EvTxDone> {
+        TEvTxDone(ui64 step, ui64 txId, const NPQ::TPartitionId& partition) :
+            Step(step),
+            TxId(txId),
+            Partition(partition)
+        {
+        }
+
+        ui64 Step;
+        ui64 TxId;
+        NPQ::TPartitionId Partition;
 
         NWilson::TSpan Span;
     };
@@ -1619,6 +1631,15 @@ struct TEvPQ {
         }
 
         ui64 Offset;
+    };
+
+    struct TEvMLPConsumerState : TEventLocal<TEvMLPConsumerState, EvMLPConsumerState> {
+        TEvMLPConsumerState(NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters&& metrics)
+            : Metrics(std::move(metrics))
+        {
+        }
+
+        NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
     };
 };
 

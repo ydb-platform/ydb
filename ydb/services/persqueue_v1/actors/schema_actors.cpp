@@ -112,6 +112,9 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         if (config.GetEnableCompactification()) {
             (*settings->mutable_attributes())["_cleanup_policy"] = "compact";
         }
+        if (config.HasMetricsLevel()) {
+            settings->set_metrics_level(config.GetMetricsLevel());
+        }
         bool local = config.GetLocalDC();
         settings->set_client_write_disabled(!local);
         const auto &partConfig = config.GetPartitionConfig();

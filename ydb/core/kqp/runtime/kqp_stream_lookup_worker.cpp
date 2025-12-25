@@ -342,6 +342,19 @@ public:
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
                 YQL_ENSURE(resultRow.size() <= Settings.Columns.size(), "Result columns mismatch");
 
+                if (Settings.VectorTopK && Settings.VectorTopK->DistinctColumnsSize()) {
+                    TVector<TCell> uniqueKey;
+                    for (auto& colIdx: Settings.VectorTopK->GetDistinctColumns()) {
+                        YQL_ENSURE(colIdx < resultRow.size(), "Unique column index is too large");
+                        uniqueKey.push_back(resultRow.at(colIdx));
+                    }
+                    TString serializedKey = TSerializedCellVec::Serialize(uniqueKey);
+                    if (UniqueKeys.contains(serializedKey)) {
+                        continue;
+                    }
+                    UniqueKeys.insert(serializedKey);
+                }
+
                 NUdf::TUnboxedValue* rowItems = nullptr;
                 auto row = HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rowItems);
 
@@ -507,6 +520,7 @@ private:
     std::deque<TOwnedTableRange> UnprocessedKeys;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
     std::deque<TShardReadResult> ReadResults;
+    std::unordered_set<TString> UniqueKeys;
 };
 
 class TKqpJoinRows : public TKqpStreamLookupWorker {
@@ -1291,6 +1305,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
 
     switch (settings.GetLookupStrategy()) {
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
+        case NKqpProto::EStreamLookupStrategy::UNIQUE:
             return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);
         case NKqpProto::EStreamLookupStrategy::JOIN:
         case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
@@ -1302,7 +1317,8 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& settings,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory) {
-    AFL_ENSURE(settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP);
+    AFL_ENSURE(settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP
+            || settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::UNIQUE);
     AFL_ENSURE(!settings.KeepRowsOrder);
     AFL_ENSURE(!settings.AllowNullKeysPrefixSize);
     AFL_ENSURE(settings.LookupKeyColumns.size() <= settings.KeyColumns.size());

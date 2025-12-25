@@ -44,11 +44,13 @@ struct TKqpPhyTxSettings {
 };
 
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
+constexpr TStringBuf KqpFullTextSourceName = "KqpFullTextSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
 
 enum class EStreamLookupStrategyType {
     Unspecified,
     LookupRows,
+    LookupUniqueRows,
     LookupJoinRows,
     LookupSemiJoinRows,
 };
@@ -60,9 +62,11 @@ struct TKqpStreamLookupSettings {
     static constexpr TStringBuf VectorTopIndexSettingName = "VectorTopIndex";
     static constexpr TStringBuf VectorTopLimitSettingName = "VectorTopLimit";
     static constexpr TStringBuf VectorTopTargetSettingName = "VectorTopTarget";
+    static constexpr TStringBuf VectorTopDistinctSettingName = "VectorTopDistinct";
 
     // stream lookup strategy types
     static constexpr std::string_view LookupStrategyName = "LookupRows"sv;
+    static constexpr std::string_view LookupUniqueStrategyName = "LookupUniqueRows"sv;
     static constexpr std::string_view LookupJoinStrategyName = "LookupJoinRows"sv;
     static constexpr std::string_view LookupSemiJoinStrategyName = "LookupSemiJoinRows"sv;
 
@@ -76,11 +80,15 @@ struct TKqpStreamLookupSettings {
     TExprNode::TPtr VectorTopTarget;
     TExprNode::TPtr VectorTopLimit;
 
+    bool VectorTopDistinct = false;
+
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupTable& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupIndex& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TKqpCnStreamLookup& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TCoNameValueTupleList& node);
+    static bool HasVectorTopDistinct(const NNodes::TKqlStreamLookupTable& node);
+    static bool HasVectorTopDistinct(const NNodes::TCoNameValueTupleList& node);
 };
 
 struct TKqpDeleteRowsIndexSettings {

@@ -132,15 +132,21 @@ public:
     virtual std::variant<TError, TStatistics> Map(
         const TMapTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
-        std::shared_ptr<std::atomic<bool>> /* cancelFlag */
+        std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
+        const TMaybe<TString>& jobEnvironmentDir,
+        const std::vector<TFileInfo>& jobFiles,
+        const std::vector<TYtResourceInfo>& jobYtResources,
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources
     ) override {
         TFmrUserJob mapJob;
         // deserialize map job and fill params
         TStringStream serializedJobStateStream(params.SerializedMapJobState);
         mapJob.Load(serializedJobStateStream);
         FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, YtJobService_);
-        return JobLauncher_->LaunchJob(mapJob);
+
+        return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
     }
+    // TODO - figure out how to how to use cancel flag to kill map job.
 
 private:
     ITableDataService::TPtr TableDataService_; // Table data service http client
@@ -179,7 +185,7 @@ TJobResult RunJob(
         } else if constexpr (std::is_same_v<T, TMergeTaskParams>) {
             return job->Merge(taskParams, task->ClusterConnections, cancelFlag);
         } else if constexpr (std::is_same_v<T, TMapTaskParams>) {
-            return job->Map(taskParams, task->ClusterConnections, cancelFlag);;
+            return job->Map(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
         } else {
             ythrow yexception() << "Unsupported task type";
         }

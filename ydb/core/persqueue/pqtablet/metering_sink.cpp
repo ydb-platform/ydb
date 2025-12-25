@@ -10,6 +10,49 @@ namespace NKikimr::NPQ {
 
 std::atomic<ui64> TMeteringSink::MeteringCounter_{0};
 
+
+struct TMeteringSink::FlushParameters {
+    FlushParameters(TString&& name,
+                    TString&& schema,
+                    TString&& units,
+                    ui64 quantity = 1)
+        : Name(std::move(name))
+        , Schema(std::move(schema))
+        , Units(std::move(units))
+        , Quantity(quantity) {
+    }
+
+    FlushParameters& withTags(THashMap<TString, ui64>&& tags) {
+        Tags = std::move(tags);
+        return *this;
+    }
+
+    FlushParameters& withVersion(TString&& version) {
+        Version = std::move(version);
+        return *this;
+    }
+
+    FlushParameters& withOneFlush() {
+        OneFlush = true;
+        return *this;
+    }
+
+    // skip flush, if quantity is zero
+    FlushParameters& withImplicitZero() {
+        ImplicitZero = true;
+        return *this;
+    }
+
+    TString Name;
+    TString Schema;
+    TString Units;
+    ui64 Quantity;
+    THashMap<TString, ui64> Tags;
+    bool OneFlush = false;
+    bool ImplicitZero = false;
+    TString Version = "v1";
+};
+
 bool TMeteringSink::Create(TInstant now, const TMeteringSink::TParameters& p,
                            const TSet<EMeteringJson>& whichToFlush,
                            std::function<void(TString)> howToFlush) {
@@ -71,7 +114,7 @@ bool TMeteringSink::IsCreated() const {
 
 TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& parameters, ui64 quantity,
                                        TInstant start, TInstant end, TInstant now) {
-    MeteringCounter_.fetch_add(1);
+    const ui64 currentMeteringCounterValue = MeteringCounter_.fetch_add(1) + 1;
 
     TStringStream output;
     NJson::TJsonWriter writer(&output, false);
@@ -85,7 +128,7 @@ TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& par
                  "-" << Parameters_.YdbDatabaseId <<
                  "-" << Parameters_.TabletId <<
                  "-" << start.MilliSeconds() <<
-                 "-" << GetMeteringCounter());
+                 "-" << currentMeteringCounterValue);
     writer.Write("schema", parameters.Schema);
 
     writer.OpenMap("tags");
@@ -117,7 +160,7 @@ TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& par
 }
 
 
-const TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMeteringJson type, const TInstant& now, const TInstant& lastFlush) {
+TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMeteringJson type, const TInstant now, const TInstant lastFlush) {
     switch (type) {
     case EMeteringJson::PutEventsV1: {
         ui64 putUnits = CurrentPutUnitsQuantity_;
@@ -257,5 +300,7 @@ ui64 TMeteringSink::GetMeteringCounter() const {
 bool TMeteringSink::IsTimeToFlush(TInstant now, TInstant last) const {
     return (now - last) >= Parameters_.FlushInterval;
 }
+
+TMeteringSink::~TMeteringSink() = default;
 
 } // namespace NKikimr::NPQ

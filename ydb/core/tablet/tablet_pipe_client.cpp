@@ -627,7 +627,7 @@ namespace NTabletPipe {
                     Y_ABORT_UNLESS(Event, "Sending an empty event without a buffer");
                     TAllocChunkSerializer serializer;
                     Event->SerializeToArcadiaStream(&serializer);
-                    Buffer = serializer.Release(Event->CreateSerializationInfo());
+                    Buffer = serializer.Release(Event->CreateSerializationInfo(false));
                 }
 
                 auto msg = MakeHolder<TEvTabletPipe::TEvPush>(tabletId, Type, Sender, Buffer, cookie,

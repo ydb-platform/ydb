@@ -59,7 +59,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TReadTablePartitionCommand
-    : public TTypedCommand<NApi::TTableReaderOptions>
+    : public TTypedCommand<NApi::TReadTablePartitionOptions>
 {
     REGISTER_YSON_STRUCT_LITE(TReadTablePartitionCommand);
 
@@ -126,6 +126,7 @@ private:
     NTableClient::EColumnarStatisticsFetcherMode FetcherMode;
     std::optional<int> MaxChunksPerNodeFetch;
     bool EnableEarlyFinish;
+    bool EnableReadSizeEstimation;
 
     void DoExecute(ICommandContextPtr context) override;
 };

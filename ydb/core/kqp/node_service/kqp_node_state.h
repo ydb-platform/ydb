@@ -52,6 +52,8 @@ class TNodeState {
 public:
     void AddRequest(TNodeRequest&& request);
     bool HasRequest(ui64 txId) const;
+    bool IsRequestCancelled(ui64 txId, TActorId executerId) const;
+    bool AddTasksToRequest(ui64 txId, TActorId executerId, const TVector<ui64>& taskIds);
     std::vector<ui64 /* txId */> ClearExpiredRequests();
 
     bool OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, TActorId executerId);
@@ -60,6 +62,7 @@ public:
     // Returns only started tasks
     std::vector<TNodeRequest::TTaskInfo> GetTasksByTxId(ui64 txId) const;
 
+    void MarkRequestAsCancelled(ui64 txId);
     void DumpInfo(TStringStream& str) const;
     bool ValidateComputeActorId(const TString& computeActorId, TActorId& id) const;
     bool ValidateKqpExecuterId(const TString& kqpExecuterId, ui32 nodeId, TActorId& id) const;

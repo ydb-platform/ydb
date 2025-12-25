@@ -23,10 +23,10 @@ namespace {
 
 TEST(TSchemaSerializationTest, ParseUsingNodeAndSerialize)
 {
-    const char* schemaString = "<strict=%true;unique_keys=%false>"
+    const TStringBuf schemaString = "<strict=%true;unique_keys=%false>"
         "[{name=a;required=%false;type=int64;};{deleted=%true;stable_name=b}]";
     TTableSchema schema;
-    Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(TString(schemaString))));
+    Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(schemaString)));
 
     EXPECT_EQ(1, std::ssize(schema.Columns()));
     EXPECT_EQ("a", schema.Columns()[0].Name());
@@ -43,7 +43,7 @@ TEST(TSchemaSerializationTest, ParseUsingNodeAndSerialize)
     auto ref = buffer.Flush();
     auto buf = ref.ToStringBuf();
 
-    EXPECT_EQ(TString(buf.data(), buf.size()),
+    EXPECT_EQ(TStringBuf(buf.data(), buf.size()),
 R"RR({"$attributes":{"strict":true,"unique_keys":false},"$value":[{"name":"a","required":false,"type":"int64","type_v3":{"type_name":"optional","item":"int64"}},{"stable_name":"b","deleted":true}]})RR");
 }
 
@@ -59,7 +59,7 @@ TEST(TSchemaSerializationTest, ParseEntityUsingNodeAndSerialize)
     auto ref = buffer.Flush();
     auto buf = ref.ToStringBuf();
 
-    EXPECT_EQ(TString(buf.data(), buf.size()), "null");
+    EXPECT_EQ(TStringBuf(buf.data(), buf.size()), "null");
 }
 
 TEST(TSchemaSerializationTest, Cursor)
@@ -82,12 +82,12 @@ TEST(TSchemaSerializationTest, Cursor)
 
 TEST(TSchemaSerializationTest, Deleted)
 {
-    const char* schemaString = "<strict=%true;unique_keys=%false>"
+    const TStringBuf schemaString = "<strict=%true;unique_keys=%false>"
         "[{name=a;required=%false;type=int64;};{deleted=%true;name=b}]";
 
     TTableSchema schema;
     EXPECT_THROW_WITH_SUBSTRING(
-        Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(TString(schemaString)))),
+        Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(schemaString))),
         "Stable name should be set for a deleted column");
 }
 

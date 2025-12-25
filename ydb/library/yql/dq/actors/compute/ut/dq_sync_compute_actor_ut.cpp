@@ -53,6 +53,9 @@ struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
     TStringStream Out;
     TCgiParameters Params;
     THttpHeaders Headers;
+    TMockHttpRequest() {
+        Params.Scan("view=dump");
+    }
     IOutputStream& Output() override {
         return Out;
     }
@@ -420,14 +423,18 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
             LOG_D(msg);
         };
         // DqOutputChannel is used for simulating input on CA under the test
-        TDqOutputChannelSettings settings;
-        settings.TransportVersion = TransportVersion;
-        settings.MutableSettings.IsLocalChannel = true;
-        settings.Level = TCollectStatsLevel::Profile;
-        return CreateDqOutputChannel(channelId, ThisStageId,
-                (IsWide ? static_cast<TType*>(WideRowType) : RowType), HolderFactory,
-                settings,
-                logFunc);
+        TDqChannelSettings settings = {
+            .RowType = (IsWide ? static_cast<TType*>(WideRowType) : RowType),
+            .HolderFactory = &HolderFactory,
+            .ChannelId = channelId,
+            .DstStageId = ThisStageId,
+            .Level = TCollectStatsLevel::Profile,
+            .TransportVersion = TransportVersion,
+            .MaxStoredBytes = 100,
+            .MaxChunkBytes = 100
+        };
+
+        return CreateDqOutputChannel(settings, logFunc);
     }
 
     auto AddDummyInputChannel(NDqProto::TDqTask& task, ui64 channelId) {
@@ -467,15 +474,17 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         // DstEndpoint
         // IsPersistent
         // EnableSpilling
-        return CreateDqInputChannel(channelId,
-                                    ThisStageId,
-                                    type,
-                                    10_MB,
-                                    TCollectStatsLevel::Profile,
-                                    TypeEnv,
-                                    HolderFactory,
-                                    TransportVersion,
-                                    NKikimr::NMiniKQL::EValuePackerVersion::V0);
+        TDqChannelSettings settings = {
+            .RowType = type,
+            .HolderFactory = &HolderFactory,
+            .ChannelId = channelId,
+            .SrcStageId = ThisStageId,
+            .Level = TCollectStatsLevel::Profile,
+            .TransportVersion = TransportVersion,
+            .MaxStoredBytes = 10_MB
+        };
+
+        return CreateDqInputChannel(settings, TypeEnv);
     }
 
     auto CreateTestSyncComputeActor(NDqProto::TDqTask& task, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
@@ -654,8 +663,8 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     }
 
     void DumpMonPage(auto syncCA, auto hook) {
+        TMockHttpRequest request;
         {
-            TMockHttpRequest request;
             auto evHttpInfo = MakeHolder<NActors::NMon::TEvHttpInfo>(request);
             ActorSystem.Send(syncCA, EdgeActor, evHttpInfo.Release());
         }

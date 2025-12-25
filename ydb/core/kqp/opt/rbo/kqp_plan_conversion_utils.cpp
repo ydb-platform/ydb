@@ -90,6 +90,7 @@ std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr nod
     return result;
 }
 
+
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
     auto opMap = TKqpOpMap(node);
     auto input = ExprNodeToOperator(opMap.Input().Ptr());
@@ -97,7 +98,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
     TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
 
     for (auto mapElement : opMap.MapElements()) {
-        auto iu = TInfoUnit(mapElement.Variable().StringValue());
+        const auto iu = TInfoUnit(mapElement.Variable().StringValue());
         if (mapElement.Maybe<TKqpOpMapElementRename>()) {
             auto element = mapElement.Cast<TKqpOpMapElementRename>();
             auto fromIU = TInfoUnit(element.From().StringValue());
@@ -195,8 +196,16 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
         output = std::make_shared<TOpMap>(input, input->Pos, mapElements, false);
     }
 
-    output->Props.OrderEnforcer = TOrderEnforcer(EOrderEnforcerAction::REQUIRE, EOrderEnforcerReason::USER, sortElements);
+    output = std::make_shared<TOpSort>(output, node->Pos(), sortElements);
     return output;
+}
+
+bool GetForceOptional(const TKqpOpAggregationTraits& traits) {
+    const auto traitsPtr = traits.Ptr();
+    if (traitsPtr->ChildrenSize() > TKqpOpAggregationTraits::idx_ForceOptional) {
+        return TString(TCoAtom(traitsPtr->ChildPtr(TKqpOpAggregationTraits::idx_ForceOptional))) == "True" ? true : false;
+    }
+    return false;
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr node) {
@@ -207,12 +216,13 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TInfoUnit(TString(traits.OriginalColName()));
         const auto aggFuncName = TString(traits.AggregationFunction());
-        TOpAggregationTraits opAggTraits(originalColName, aggFuncName);
+        const auto forceOptional = GetForceOptional(traits);
+        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, forceOptional);
         opAggTraitsList.push_back(opAggTraits);
     }
 
     TVector<TInfoUnit> keyColumns;
-    for (const auto &keyColumn : opAggregate.KeyColumns()) {
+    for (const auto& keyColumn : opAggregate.KeyColumns()) {
         keyColumns.push_back(TInfoUnit(TString(keyColumn)));
     }
 

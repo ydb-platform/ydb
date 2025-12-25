@@ -1752,6 +1752,82 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(PushdownIfWithParams)
+    {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64	NOT NULL,
+                b Uint8,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        std::vector<TString> queries = {
+            R"(
+                declare $str_param as String;
+
+                $filter = ($filter_param)->{
+                    RETURN case
+                        WHEN $str_param = "One" THEN IF($filter_param=1, True, False)
+                        ELSE True
+                        END
+                    };
+                select t1.a from `/Root/t1` as t1 where $filter(t1.b);
+            )",
+            R"(
+                declare $str_param as String;
+
+                $filter = ($filter_param)->{
+                   RETURN case
+                       WHEN $str_param = "One" THEN IF($filter_param=1, True, False)
+                       WHEN $str_param = "Two" THEN IF($filter_param=2, True, False)
+                       ELSE True
+                       END
+                };
+                select t1.a from `/Root/t1` as t1 where $filter(t1.b);
+            )",
+            R"(
+                declare $str_param as String;
+
+                $filter = ($filter_param)->{
+                   RETURN case
+                       WHEN $str_param = "One" THEN IF($filter_param=1, True, False)
+                       WHEN $str_param = "Two" THEN IF($filter_param=2, True, False)
+                       WHEN $str_param = "Three" THEN IF($filter_param=3, True, False)
+                       ELSE True
+                       END
+                };
+                select t1.a from `/Root/t1` as t1 where $filter(t1.b);
+            )"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Olap filter not pushed down. Query: " << query);
+        }
+    }
+
     Y_UNIT_TEST(ProjectionPushDown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

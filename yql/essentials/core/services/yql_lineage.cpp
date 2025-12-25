@@ -971,13 +971,13 @@ void IterateTwoLists(NYT::TNode::TListType& listFirst, NYT::TNode::TListType& li
     for (auto it = listFirst.begin(); it != listFirst.end(); ++it) {
         itFirst.push_back(it);
     }
-    SortBy(itFirst, comp);
+    Sort(itFirst, comp);
 
     TVector<NYT::TNode::TListType::iterator> itSecond;
     for (auto it = listSecond.begin(); it != listSecond.end(); ++it) {
         itSecond.push_back(it);
     }
-    SortBy(itSecond, comp);
+    Sort(itSecond, comp);
 
     for (size_t i = 0; i < itFirst.size(); ++i) {
         action(*itFirst[i], *itSecond[i]);
@@ -1006,7 +1006,11 @@ void CheckEquvalentLineages(const TString& lineageFirst, const TString& lineageS
     THashMap<i64, NYT::TNode> idToPath1, idToPath2;
     IterateTwoLists(lineageNode1["Reads"].AsList(),
                     lineageNode2["Reads"].AsList(),
-                    [](NYT::TNode::TListType::iterator it) { return it->AsMap()["Name"].AsString(); },
+                    // clang-format off
+                    [](NYT::TNode::TListType::iterator it1, NYT::TNode::TListType::iterator it2) {
+                        return it1->AsMap()["Name"].AsString() > it2->AsMap()["Name"].AsString();
+                    },
+                    // clang-format on
                     [&idToPath1, &idToPath2](auto& it1, auto& it2) {
                         idToPath1[it1["Id"].AsInt64()] = it1["Name"];
                         idToPath2[it2["Id"].AsInt64()] = it2["Name"];
@@ -1017,7 +1021,11 @@ void CheckEquvalentLineages(const TString& lineageFirst, const TString& lineageS
 
     IterateTwoLists(lineageNode1["Writes"].AsList(),
                     lineageNode2["Writes"].AsList(),
-                    [](NYT::TNode::TListType::iterator it) { return it->AsMap()["Name"].AsString(); },
+                    // clang-format off
+                    [](NYT::TNode::TListType::iterator it1, NYT::TNode::TListType::iterator it2) {
+                        return it1->AsMap()["Name"].AsString() > it2->AsMap()["Name"].AsString();
+                    },
+                    // clang-format on
                     [&idToPath1, &idToPath2](auto& it1, auto& it2) {
                         it1["Id"] = it1["Name"], it2["Id"] = it2["Name"];
                         if (it1.AsMap().size() != it2.AsMap().size()) {
@@ -1041,8 +1049,17 @@ void CheckEquvalentLineages(const TString& lineageFirst, const TString& lineageS
                                             });
                                     IterateTwoLists(fieldLineage.AsList(),
                                                     it2["Lineage"].AsMap()[fieldName].AsList(),
-                                                    [](NYT::TNode::TListType::iterator it) {
-                                                        return std::make_pair(it->AsMap()["Field"].AsString(), it->AsMap()["Input"].AsString());
+                                                    [](NYT::TNode::TListType::iterator it1, NYT::TNode::TListType::iterator it2) {
+                                                        if (it1->AsMap()["Field"].AsString() == it2->AsMap()["Field"].AsString()) {
+                                                            if (it1->AsMap()["Input"].AsString() == it2->AsMap()["Input"].AsString()) {
+                                                                const auto& transforms1 = it1->AsMap()["Transforms"].IsNull() ? "#" : it1->AsMap()["Transforms"].AsString();
+                                                                const auto& transforms2 = it2->AsMap()["Transforms"].IsNull() ? "#" : it2->AsMap()["Transforms"].AsString();
+                                                                return transforms1 > transforms2;
+                                                            } else {
+                                                                return it1->AsMap()["Input"].AsString() > it2->AsMap()["Input"].AsString();
+                                                            }
+                                                        }
+                                                        return it1->AsMap()["Field"].AsString() > it2->AsMap()["Field"].AsString();
                                                     },
                                                     [fieldName](auto& itt1, auto& itt2) {
                                                         if (NodeToCanonicalYsonString(itt1) != NodeToCanonicalYsonString(itt2)) {

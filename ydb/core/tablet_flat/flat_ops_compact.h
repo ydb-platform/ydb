@@ -597,8 +597,14 @@ namespace NTabletFlatExecutor {
             }
 
             auto flag = NKikimrBlobStorage::AsyncBlob;
-            auto *ev = new TEvPut(id.Logo, std::exchange(glob.Data, TString{ }), TInstant::Max(), flag,
-                TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput);
+            auto *ev = new TEvPut(TEvPut::TParameters{
+                .BlobId = id.Logo,
+                .Buffer = TRope(std::exchange(glob.Data, TString{ })),
+                .Deadline = TInstant::Max(),
+                .HandleClass = flag,
+                .Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput,
+                .ExternalRelevanceWatcher = RelevanceTracker,
+            });
             auto ctx = ActorContext();
 
             SendToBSProxy(ctx, id.Group, ev);
@@ -607,6 +613,7 @@ namespace NTabletFlatExecutor {
     private:
         const TLogoBlobID Mask;
         const TActorId Owner;
+        TMessageRelevanceOwner RelevanceTracker = std::make_shared<TMessageRelevanceTracker>();
         TAutoPtr<NUtil::ILogger> Logger;
         IDriver * Driver = nullptr;
         THolder<TCompactCfg> Conf;

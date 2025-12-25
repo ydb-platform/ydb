@@ -1,6 +1,5 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -36,6 +35,9 @@ static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath
     if (descr.HasCreateSrcCdcStream()) {
         auto* coOp = scheme.MutableCreateCdcStream();
         coOp->CopyFrom(descr.GetCreateSrcCdcStream());
+    }
+    if (descr.HasDropSrcCdcStream()) {
+        operation->MutableDropSrcCdcStream()->CopyFrom(descr.GetDropSrcCdcStream());
     }
     if (descr.HasTargetPathTargetState()) {
         operation->SetPathState(descr.GetTargetPathTargetState());

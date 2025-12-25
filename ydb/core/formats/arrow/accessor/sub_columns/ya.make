@@ -10,6 +10,7 @@ PEERDIR(
     ydb/library/signals
     ydb/library/formats/arrow
     ydb/library/formats/arrow/protos
+    yql/essentials/minikql/jsonpath
     yql/essentials/types/binary_json
 )
 
@@ -20,6 +21,7 @@ SRCS(
     partial.cpp
     data_extractor.cpp
     json_extractors.cpp
+    json_value_path.cpp
     accessor.cpp
     direct_builder.cpp
     settings.cpp

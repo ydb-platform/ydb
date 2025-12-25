@@ -5,9 +5,10 @@
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
 
 #include <chrono>
+#include <thread>
+
 #include <util/generic/xrange.h>
 #include <util/stream/mem.h>
-#include <library/cpp/streams/bzip2/bzip2.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -104,24 +105,51 @@ struct TARFile {
     }
 };
 
-int TCommandClusterDiagnosticsCollect::Run(TConfig& config) {
+TString ReplaceCountersIdx(TString& name, ui32 index) {
+    if (!name.StartsWith("node")) {
+        return TStringBuilder() << name << ".json";
+    }
+    return TStringBuilder() << name << "_" << index << ".json";
+}
+
+void TCommandClusterDiagnosticsCollect::ProcessState(TConfig& config, TBZipCompress& compress, ui32 index) {
     NMonitoring::TMonitoringClient client(CreateDriver(config));
     NMonitoring::TClusterStateSettings settings;
-    settings.DurationSeconds(DurationSeconds);
-    settings.PeriodSeconds(PeriodSeconds);
+    settings.DurationSeconds(PeriodSeconds ? PeriodSeconds : DurationSeconds);
     settings.NoSanitize(NoSanitize);
+    settings.CountersOnly(index > 0);
     NMonitoring::TClusterStateResult result = client.ClusterState(settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     const auto& proto = NYdb::TProtoAccessor::GetProto(result);
-
-    TFileOutput out(FileName);
-    TBZipCompress compress(&out);
     for (ui32 i : xrange(proto.blocksSize())) {
         auto& block = proto.Getblocks(i);
         TString data = block.Getcontent();
         TMemoryInput input(data.data(), data.size());
         TBZipDecompress decompress(&input);
-        TARFile::ToStream(compress, block.Getname(), decompress.ReadAll(), TInstant::Seconds(block.Gettimestamp().seconds()));
+        TString fileName = block.Getname();
+        TARFile::ToStream(compress, ReplaceCountersIdx(fileName, index), decompress.ReadAll(), TInstant::Seconds(block.Gettimestamp().seconds()));
+    }
+}
+
+int TCommandClusterDiagnosticsCollect::Run(TConfig& config) {
+    auto start = TInstant::Now();
+    auto period = TDuration::Seconds(PeriodSeconds);
+    auto duration = TDuration::Seconds(DurationSeconds);
+    ui32 index = 0;
+    TFileOutput out(FileName);
+    TBZipCompress compress(&out);
+    Cout << TInstant::Now().ToString() << " Request cluster diagnostics" << "\n";
+    ProcessState(config, compress);
+
+    while (PeriodSeconds && (TInstant::Now() - start) < duration - period) {
+        index++;
+        auto p = TDuration::Seconds(PeriodSeconds * index);
+
+        if (start + p > TInstant::Now()) {
+            std::this_thread::sleep_for(std::chrono::nanoseconds((start - TInstant::Now() + p).NanoSeconds()));
+        }
+        Cout <<  TInstant::Now().ToString() << " Request counteres #" << index << "\n";
+        ProcessState(config, compress, index);
     }
     return EXIT_SUCCESS;
 }

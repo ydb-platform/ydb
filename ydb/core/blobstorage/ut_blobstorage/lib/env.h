@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include "node_warden_mock.h"
+#include "ydb/core/blobstorage/dsproxy/dsproxy.h"
 
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -67,6 +68,7 @@ struct TEnvironmentSetup {
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
         const bool EnablePhantomFlagStorage = false;
         const bool TinySyncLog = false;
+        const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
     };
 
     const TSettings Settings;
@@ -520,12 +522,12 @@ config:
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
 
                 auto& icb = *appData->Icb;
-#define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {   \
-                    auto& icbControl = icb.ICB_CONTROL_PATH;                            \
-                    TControlWrapper control(defaultVal, minVal, maxVal);                \
-                    TControlBoard::RegisterSharedControl(control, icbControl);          \
-                    control = currentValue;                                             \
-                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});    \
+#define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {       \
+                    auto& icbControl = icb.ICB_CONTROL_PATH;                                \
+                    TControlWrapper control(defaultVal, minVal, maxVal);                    \
+                    TControlBoard::RegisterSharedControl(control, icbControl);              \
+                    control = currentValue;                                                 \
+                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});  \
                 }
 
                 if (Settings.BurstThresholdNs) {
@@ -547,6 +549,7 @@ config:
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisks, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(DSProxyControls.MaxPutTimeoutSeconds, 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
 
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
@@ -1051,6 +1054,30 @@ config:
         request.AddCommand()->MutableSetScrubPeriodicity()->SetScrubPeriodicity(periodicity.Seconds());
         auto response = Invoke(request);
         UNIT_ASSERT(response.GetSuccess());
+    }
+
+    TActorId CreateRealDSProxy(ui32 groupId, ui32 nodeId) {
+        auto realProxyActorId = MakeBlobStorageProxyID(groupId);
+        auto& appData = *(Runtime->GetNode(nodeId)->AppData.get());
+        TIntrusivePtr<NKikimr::TDsProxyNodeMon> nodeMon = new NKikimr::TDsProxyNodeMon(appData.Counters, true);
+        TString name = Sprintf("%09" PRIu64, groupId);
+
+        TDsProxyPerPoolCounters perPoolCounters(appData.Counters);
+        TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
+        TControlWrapper enablePutBatching(true, false, true);
+        TControlWrapper enableVPatch(false, false, true);
+        auto info = GetGroupInfo(groupId);
+        IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(info), nullptr, true, nodeMon,
+            std::move(storagePoolCounters), TBlobStorageProxyParameters{
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = enablePutBatching,
+                        .EnableVPatch = enableVPatch,
+                    }
+                }
+            );
+        TActorId actorId = Runtime->Register(dsproxy, nodeId);
+        Runtime->RegisterService(realProxyActorId, actorId);
+        return actorId;
     }
 
     void SettlePDisk(const TActorId& vdiskActorId) {

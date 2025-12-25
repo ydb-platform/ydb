@@ -107,7 +107,7 @@ class DriverConfig(object):
         auth_token=None,
         channel_options=None,
         credentials=None,
-        use_all_nodes=False,
+        use_all_nodes=True,
         root_certificates=None,
         certificate_chain=None,
         private_key=None,

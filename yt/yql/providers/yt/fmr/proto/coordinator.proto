@@ -25,6 +25,9 @@ message TStartOperationRequest {
     uint32 NumRetries = 5;
     map<string, TClusterConnection> ClusterConnections = 6;
     optional string FmrOperationSpec = 7;
+    repeated TFileInfo Files = 8;
+    repeated TYtResourceInfo YtResources = 9;
+    repeated TFmrResourceOperationInfo FmrResources = 10;
 }
 
 message TStartOperationResponse {

@@ -179,7 +179,7 @@ namespace {
         TStringBuilder freeText;
 
         if constexpr (std::is_same_v<NExport::TExportToS3Response, T>) {
-            freeText << "Materialize indexes: " << (settings.MaterializeIndexes_ ? "true" : "false") << Endl;
+            freeText << "Include index data: " << (settings.IncludeIndexData_ ? "true" : "false") << Endl;
             freeText << "StorageClass: " << settings.StorageClass_ << Endl;
             if (settings.Compression_) {
                 freeText << "Compression: " << *settings.Compression_ << Endl;
@@ -187,7 +187,7 @@ namespace {
         }
 
         if constexpr (std::is_same_v<NImport::TImportFromS3Response, T>) {
-            freeText << "Index filling mode: " << settings.IndexFillingMode_ << Endl;
+            freeText << "Index population mode: " << settings.IndexPopulationMode_ << Endl;
 
             if (settings.NoACL_) {
                 freeText << "NoACL: " << *settings.NoACL_ << Endl;

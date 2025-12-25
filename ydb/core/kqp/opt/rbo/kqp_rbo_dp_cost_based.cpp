@@ -78,8 +78,8 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
             auto mappedLeftKey = cboTree->TreeRoot->Props.Metadata->MapColumn(leftKey);
             auto mappedRightKey = cboTree->TreeRoot->Props.Metadata->MapColumn(rightKey);
 
-            leftKeys.push_back(TJoinColumn(mappedLeftKey.Alias, mappedLeftKey.ColumnName));
-            rightKeys.push_back(TJoinColumn(mappedRightKey.Alias, mappedRightKey.ColumnName));
+            leftKeys.push_back(TJoinColumn(mappedLeftKey.GetAlias(), mappedLeftKey.GetColumnName()));
+            rightKeys.push_back(TJoinColumn(mappedRightKey.GetAlias(), mappedRightKey.GetColumnName()));
         }
 
         result = std::make_shared<TJoinOptimizerNode>(leftNode, 
@@ -176,7 +176,7 @@ namespace NKqp {
  * are transformed into Pg types, we remap the synthenic variables back into original ones
  * to run the CBO, and then map them back
  */
-std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
     if (input->Kind != EOperator::CBOTree) {

@@ -947,13 +947,31 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
         return *this;
     }
 
-    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer() {
+    TConsumerSettings<TAlterTopicSettings>& BeginAddSharedConsumer() {
+        return BeginAddConsumer(EConsumerType::Shared);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddStreamingConsumer() {
+        return BeginAddConsumer(EConsumerType::Streaming);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer(EConsumerType consumerType = EConsumerType::Streaming) {
         AddConsumers_.push_back({*this});
+        AddConsumers_.back().ConsumerType(consumerType);
         return AddConsumers_.back();
     }
 
-    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer(const std::string& name) {
+    TConsumerSettings<TAlterTopicSettings>& BeginAddSharedConsumer(const std::string& name) {
+        return BeginAddConsumer(name, EConsumerType::Shared);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddStreamingConsumer(const std::string& name) {
+        return BeginAddConsumer(name, EConsumerType::Streaming);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer(const std::string& name, EConsumerType consumerType = EConsumerType::Streaming) {
         AddConsumers_.push_back({*this, name});
+        AddConsumers_.back().ConsumerType(consumerType);
         return AddConsumers_.back();
     }
 

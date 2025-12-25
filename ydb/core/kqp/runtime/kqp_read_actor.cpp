@@ -608,7 +608,7 @@ public:
         } else if (!Snapshot.IsValid() && !Settings->HasLockTxId() && !Settings->GetAllowInconsistentReads()) {
             return RuntimeError("Inconsistent reads without locks", NDqProto::StatusIds::UNAVAILABLE);
         }
-        if (Settings->GetIsolationLevel() == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+        if (Settings->GetIsolationLevel() == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
             YQL_ENSURE(!Settings->HasLockTxId(), "SnapshotReadOnly should not take locks");
         }
 
@@ -1501,6 +1501,17 @@ public:
             //tableStats->SetReadRows(tableStats->GetReadRows() + ReceivedRowCount);
             //tableStats->SetReadBytes(tableStats->GetReadBytes() + BytesStats.DataBytes);
             //tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
+
+            // Add lock stats for broken locks from read operations
+            if (!BrokenLocks.empty()) {
+                NKqpProto::TKqpTaskExtraStats extraStats;
+                if (stats->HasExtra()) {
+                    stats->GetExtra().UnpackTo(&extraStats);
+                }
+                extraStats.MutableLockStats()->SetBrokenAsVictim(
+                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                stats->MutableExtra()->PackFrom(extraStats);
+            }
         }
     }
 

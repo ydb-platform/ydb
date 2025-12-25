@@ -49,7 +49,7 @@ private:
 
     TNodePtr BindParameterRule(const TRule_bind_parameter& rule, const TTrailingQuestions& tail);
     TNodeResult LambdaRule(const TRule_lambda& rule);
-    TNodePtr CastRule(const TRule_cast_expr& rule);
+    TNodeResult CastRule(const TRule_cast_expr& rule);
     TNodePtr BitCastRule(const TRule_bitcast_expr& rule);
     TNodeResult ExistsRule(const TRule_exists_expr& rule);
     TNodeResult CaseRule(const TRule_case_expr& rule);

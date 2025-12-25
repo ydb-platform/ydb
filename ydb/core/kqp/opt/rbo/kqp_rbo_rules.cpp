@@ -2,6 +2,9 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
+#include <ydb/core/kqp/opt/physical/predicate_collector.h>
+#include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
+
 #include <typeinfo>
 
 using namespace NYql::NNodes;
@@ -115,6 +118,7 @@ TExprNode::TPtr PruneCast(TExprNode::TPtr node) {
     return node;
 }
 
+[[maybe_unused]]
 TVector<TInfoUnit> GetHashableKeys(const std::shared_ptr<IOperator> &input) {
     if (!input->Type) {
         return input->GetOutputIUs();
@@ -215,7 +219,7 @@ namespace NKqp {
 // Identity map that projects maybe a projection operator and can be removed if it doesn't do any extra
 // projections
 
-std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(ctx);
     Y_UNUSED(props);
@@ -249,7 +253,7 @@ std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleTestAndApply(const std::
 
 // Currently we only extract simple expressions where there is only one variable on either side
 
-bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TExtractJoinExpressionsRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     if (input->Kind != EOperator::Filter) {
         return false;
@@ -370,7 +374,7 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input
 
 // Rewrite a single scalar subplan into a cross-join
 
-bool TInlineScalarSubplanRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TInlineScalarSubplanRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     auto scalarIUs = input->GetScalarSubplanIUs(props);
     if (scalarIUs.empty()) {
         return false;
@@ -424,7 +428,7 @@ bool TInlineScalarSubplanRule::TestAndApply(std::shared_ptr<IOperator> &input, T
 // We only push a non-projecting map operator, and there are some limitations to where we can push:
 //  - we cannot push the right side of left join for example or left side of right join
 
-std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -499,16 +503,33 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_pt
         join->SetRightInput(std::make_shared<TOpMap>(rightInput, input->Pos, rightMapElements, false));
     }
 
-    // If there was an enforcer on the input map, move it to the output
-    if (input->Props.OrderEnforcer.has_value()) {
-        output->Props.OrderEnforcer = input->Props.OrderEnforcer;
-    }
-
     return output;
 }
 
+std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(props);
+
+    if (input->Kind != EOperator::Limit) {
+        return input;
+    }
+
+    auto limit = CastOperator<TOpLimit>(input);
+    if (limit->GetInput()->Kind != EOperator::Sort) {
+        return input;
+    }
+
+    auto sort = CastOperator<TOpSort>(limit->GetInput());
+    if (sort->LimitCond) {
+        return input;
+    }
+
+    sort->LimitCond = limit->LimitCond;
+    return sort;
+}
+
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
-std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(props);
 
@@ -628,18 +649,101 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
         output = join;
     }
 
-    if (input->Props.OrderEnforcer.has_value()) {
-        output->Props.OrderEnforcer = input->Props.OrderEnforcer;
+    return output;
+}
+
+bool IsSuitableToPushPredicateToColumnTables(const std::shared_ptr<IOperator>& input) {
+    if (input->Kind != EOperator::Filter) {
+        return false;
     }
 
-    return output;
+    const auto filter = CastOperator<TOpFilter>(input);
+    const auto maybeRead = filter->GetInput();
+    return ((maybeRead->Kind == EOperator::Source) && (CastOperator<TOpRead>(maybeRead)->GetTableStorageType() == NYql::EStorageType::ColumnStorage) && filter->GetTypeAnn());
+}
+
+std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+    Y_UNUSED(props);
+    if (!ctx.KqpCtx.Config->HasOptEnableOlapPushdown()) {
+        return input;
+    }
+
+    const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->EnableOlapScalarApply, ctx.KqpCtx.Config->EnableOlapSubstringPushdown,
+                                           /*StripAliasPrefixForColumnName=*/true);
+    if (!IsSuitableToPushPredicateToColumnTables(input)) {
+        return input;
+    }
+
+    const auto filter = CastOperator<TOpFilter>(input);
+    const auto read = CastOperator<TOpRead>(filter->GetInput());
+    const auto lambda = TCoLambda(filter->FilterLambda);
+    const auto& lambdaArg = lambda.Args().Arg(0).Ref();
+    TExprBase predicate = lambda.Body();
+
+    TOLAPPredicateNode predicateTree;
+    predicateTree.ExprNode = predicate.Ptr();
+    CollectPredicates(predicate, predicateTree, &lambdaArg, filter->GetTypeAnn()->Cast<TListExprType>()->GetItemType(), pushdownOptions);
+    YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
+    TPositionHandle pos = input->Pos;
+
+    auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, false);
+    TVector<TFilterOpsLevels> pushedPredicates;
+    for (const auto& p : pushable) {
+        pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx.ExprCtx, pos, pushdownOptions));
+    }
+
+    // TODO: All or nothing currently. Add partial pushdown.
+    if (pushedPredicates.empty() || !remaining.empty()) {
+        return input;
+    }
+
+    const auto& pushedFilter = TFilterOpsLevels::Merge(pushedPredicates, ctx.ExprCtx, pos);
+    const auto remainingFilter = CombinePredicatesWithAnd(remaining, ctx.ExprCtx, pos, false, true);
+
+    TMaybeNode<TExprBase> olapFilter;
+    if (pushedFilter.FirstLevelOps.IsValid()) {
+        // clang-format off
+        olapFilter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
+            .Input(lambda.Args().Arg(0))
+            .Condition(pushedFilter.FirstLevelOps.Cast())
+        .Done();
+        // clang-format on
+    }
+
+    if (pushedFilter.SecondLevelOps.IsValid()) {
+        // clang-format off
+        olapFilter = Build<TKqpOlapFilter>(ctx.ExprCtx, pos)
+            .Input(olapFilter.IsValid() ? olapFilter.Cast() : lambda.Args().Arg(0))
+            .Condition(pushedFilter.SecondLevelOps.Cast())
+        .Done();
+        // clang-format on
+    }
+
+    if (!olapFilter.IsValid()) {
+        YQL_CLOG(TRACE, ProviderKqp) << "KqpOlapFilter was not constructed";
+        return input;
+    }
+
+    // clang-format off
+    auto newOlapFilterLambda = Build<TCoLambda>(ctx.ExprCtx, pos)
+        .Args({"olap_filter_row"})
+        .Body<TExprApplier>()
+            .Apply(olapFilter.Cast())
+            .With(lambda.Args().Arg(0), "olap_filter_row")
+            .Build()
+        .Done();
+    // clang-format on
+    YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newOlapFilterLambda, ctx.ExprCtx);
+
+    return std::make_shared<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newOlapFilterLambda.Ptr(),
+                                     read->Pos);
 }
 
 /**
  * Initially we build CBO only for joins that don't have other joins or CBO trees as arguments
  * There could be an intermediate filter in between, we also check that
  */
-std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -669,7 +773,7 @@ std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleTestAndApply(const st
  * FIXME: Add maybes to make matching look simpler
  * FIXME: Support other joins for filter push-out, refactor into a lambda to apply to both sides
  */
-std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -756,7 +860,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleTestAndApply(const std::sha
 /**
  * Convert unoptimized CBOTrees back into normal operators
  */
-std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -771,7 +875,7 @@ std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleTestAndApply(const std::sha
 /**
  * Assign stages and build stage graph in the process
  */
-bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TAssignStagesRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
     auto nodeName = input->ToString(ctx.ExprCtx);
@@ -871,7 +975,15 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
-    } else if (input->Kind == EOperator::Limit) {
+    } else if (input->Kind == EOperator::Sort) {
+        auto sort = CastOperator<TOpSort>(input);
+        auto newStageId = props.StageGraph.AddStage();
+        input->Props.StageId = newStageId;
+        auto prevStageId = *(sort->GetInput()->Props.StageId);
+        auto conn = std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(prevStageId));
+        props.StageGraph.Connect(prevStageId, newStageId,conn);
+    }
+    else if (input->Kind == EOperator::Limit) {
         auto limit = CastOperator<TOpLimit>(input);
         auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
@@ -899,10 +1011,13 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
 
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
-        const auto shuffleKeys = aggregate->KeyColumns.size() ? aggregate->KeyColumns : GetHashableKeys(aggregate->GetInput());
+        if (!aggregate->KeyColumns.empty()) {
+            props.StageGraph.Connect(inputStageId, newStageId,
+                                 std::make_shared<TShuffleConnection>(aggregate->KeyColumns, props.StageGraph.GetStorageType(inputStageId)));
+        } else {
+            props.StageGraph.Connect(inputStageId, newStageId, std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(inputStageId)));
+        }
 
-        props.StageGraph.Connect(inputStageId, newStageId,
-                                 std::make_shared<TShuffleConnection>(shuffleKeys, props.StageGraph.GetStorageType(inputStageId)));
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to Aggregation ";
     } else {
         Y_ENSURE(false, "Unknown operator encountered");
@@ -910,30 +1025,6 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
 
     return true;
 }
-
-TRuleBasedStage RuleStage1 = TRuleBasedStage("Inline scalar subplans", {std::make_shared<TInlineScalarSubplanRule>()});
-
-TRuleBasedStage RuleStage2 = TRuleBasedStage("Logical rewrites I",
-    {
-        std::make_shared<TRemoveIdenityMapRule>(),
-        std::make_shared<TExtractJoinExpressionsRule>(), 
-        std::make_shared<TPushMapRule>(), 
-        std::make_shared<TPushFilterRule>()
-    });
-
-TRuleBasedStage RuleStage3 = TRuleBasedStage("Prepare for CBO", 
-    {
-        std::make_shared<TBuildInitialCBOTreeRule>(),
-        std::make_shared<TExpandCBOTreeRule>()
-    });
-
-TRuleBasedStage RuleStage4 = TRuleBasedStage("Invoke CBO", {std::make_shared<TOptimizeCBOTreeRule>()});
-
-TRuleBasedStage RuleStage5 = TRuleBasedStage("Clean up after CBO", 
-    {std::make_shared<TInlineCBOTreeRule>(),
-    std::make_shared<TPushFilterRule>()});
-
-TRuleBasedStage RuleStage6 = TRuleBasedStage("Assign stages", {std::make_shared<TAssignStagesRule>()});
 
 } // namespace NKqp
 } // namespace NKikimr

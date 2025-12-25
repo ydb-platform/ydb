@@ -3,8 +3,10 @@
 #include "yql_yt_lambda_builder.h"
 #include "yql_yt_session.h"
 #include "yql_yt_spec.h"
-#include "yql_yt_transform.h"
 #include "yql_yt_native_folders.h"
+#include "yql_yt_transform.h"
+
+#include <yt/yql/providers/yt/lib/yt_file_download/yql_yt_file_download.h>
 
 #include <yt/yql/providers/yt/gateway/lib/map_builder.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_attrs.h>
@@ -48,6 +50,7 @@
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/common/wait_proxy.h>
 #include <yt/cpp/mapreduce/interface/error_codes.h>
 
 #include <library/cpp/yson/node/node_io.h>
@@ -727,6 +730,10 @@ public:
                 future = DoTouch(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtDropTable>()) {
                 future = DoDrop(op.Cast(), execCtx);
+            } else if (auto op = opBase.Maybe<TYtDropView>()) {
+                future = DoDrop(op.Cast(), execCtx);
+            } else if (auto op = opBase.Maybe<TYtCreateView>()) {
+                future = DoCreateView(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtStatOut>()) {
                 future = DoStatOut(op.Cast(), execCtx);
             } else if (auto op = opBase.Maybe<TYtDqProcessWrite>()) {
@@ -3828,7 +3835,7 @@ private:
                 mapOpSpec.Ordered(true);
             }
 
-            auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
+            auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec userJobSpec;
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
@@ -3836,7 +3843,7 @@ private:
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
-                TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
+                auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
                 if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
@@ -4046,7 +4053,7 @@ private:
             job->SetUseSkiff(useSkiff, TMkqlIOSpecs::ESystemField::RowIndex | TMkqlIOSpecs::ESystemField::KeySwitch);
             job->SetYamrInput(execCtx->YamrInput);
 
-            auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
+            auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec userJobSpec;
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
@@ -4054,7 +4061,7 @@ private:
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
-                TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
+                auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
                 if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
@@ -4301,7 +4308,7 @@ private:
 
             reduceJob->SetUseSkiff(reduceUseSkiff, TMkqlIOSpecs::ESystemField::KeySwitch);
 
-            auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
+            auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec mapUserJobSpec;
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
@@ -4309,7 +4316,7 @@ private:
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
-                TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
+                auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
                 if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
@@ -4340,7 +4347,7 @@ private:
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
-                TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
+                auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
                 if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
@@ -4489,7 +4496,7 @@ private:
             reduceJob->SetUseSkiff(useSkiff, TMkqlIOSpecs::ESystemField::KeySwitch);
             reduceJob->SetYamrInput(execCtx->YamrInput);
 
-            auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
+            auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec reduceUserJobSpec;
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
@@ -4497,7 +4504,7 @@ private:
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
-                TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
+                auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(reduceLambda, nodeCount, transform);
                 if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
@@ -4785,8 +4792,7 @@ private:
             TIntrusivePtr<TYqlUserJob> job;
             TRawMapOperationSpec mapOpSpec;
 
-            auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
-
+            auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             bool localRun = !testRun &&
                 (execCtx->Config_->HasExecuteUdfLocallyIfPossible()
                     ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false);
@@ -4802,7 +4808,7 @@ private:
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
-                TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
+                auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
                 transform.SetTwoPhaseTransform();
 
                 TRuntimeNode root = builder.Deserialize(lambda);
@@ -4953,7 +4959,7 @@ private:
         });
     }
 
-    TFuture<void> DoDrop(TYtDropTable drop, const TExecContext<TRunOptions>::TPtr& execCtx) {
+    TFuture<void> DoDrop(TYtIsolatedOpBase drop, const TExecContext<TRunOptions>::TPtr& execCtx) {
         TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
         auto table = drop.Table();
         bool isAnonymous = NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous);
@@ -4964,6 +4970,23 @@ private:
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             auto entry = execCtx->GetEntry();
             entry->Tx->Remove(path, TRemoveOptions().Force(true));
+        });
+    }
+
+    TFuture<void> DoCreateView(TYtCreateView create, const TExecContext<TRunOptions>::TPtr& execCtx) {
+        const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
+        const auto table = create.Table();
+        const bool isAnonymous = NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous);
+        const auto path = NYql::TransformPath(tmpFolder, table.Name().Value(), isAnonymous, execCtx->Session_->UserName_);
+        YQL_CLOG(INFO, ProviderYt) << "Creating: " << execCtx->Cluster_ << '.' << path;
+
+        auto attrs = YqlOpOptionsToAttrs(execCtx->Session_->OperationOptions_);
+        attrs[YqlTypeAttribute] = "view";
+        attrs["value"] = create.Original().Value();
+
+        return execCtx->Session_->Queue_->Async([path, attrs, execCtx]() {
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+            execCtx->GetEntry()->Tx->Create(path, NT_DOCUMENT, TCreateOptions().Force(true).Attributes(attrs));
         });
     }
 
@@ -5481,8 +5504,7 @@ private:
         TRawMapOperationSpec mapOpSpec;
         mapOpSpec.Format(TFormat::YsonBinary());
         TIntrusivePtr<TYqlCalcJob> job;
-        auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
-
+        auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
         bool localRun = execCtx->Config_->HasExecuteUdfLocallyIfPossible() ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false;
         bool hasLayerPaths = false;
         if constexpr (NPrivate::THasLayersPaths<decltype(execCtx->Options_)>::value) {
@@ -5500,7 +5522,7 @@ private:
             THolder<TCodecContext> codecCtx;
             TString pathPrefix;
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
-            TGatewayTransformer transform(execCtx, entry, pgmBuilder, *tmpFiles);
+            auto transform = MakeNativeGatewayTransformer(execCtx, entry, pgmBuilder, tmpFiles);
             transform.SetTwoPhaseTransform();
             TRuntimeNode root = builder.Deserialize(lambda);
             root = builder.TransformAndOptimizeProgram(root, transform);
@@ -5840,7 +5862,7 @@ private:
         const TExprNode* root,
         TExprContext* exprCtx)
     {
-        auto ctx = MakeIntrusive<TExecContext<TOptions>>(TIntrusivePtr<TYtNativeGateway>(this), MakeIntrusive<TYtNativeServices>(Services_), Clusters_, MkqlCompiler_, std::move(options), session, cluster, UrlMapper_, Services_.Metrics);
+        auto ctx = MakeIntrusive<TExecContext<TOptions>>(TIntrusivePtr<TYtNativeGateway>(this), MakeIntrusive<TYtNativeServices>(Services_), Clusters_, MkqlCompiler_, std::move(options), session, cluster, std::make_shared<TYtUrlMapper>(UrlMapper_), Services_.Metrics);
         if (root) {
             YQL_ENSURE(exprCtx);
             if (TYtTransientOpBase::Match(root)) {
@@ -5957,6 +5979,193 @@ private:
         } catch (...) {
             return MakeFuture(ResultFromCurrentException<TLayersSnapshotResult>());
         }
+    }
+
+    NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) override {
+        TSession::TPtr session = GetSession(options.SessionId());
+        auto execCtx = MakeExecCtx(TDownloadTableOptions(options), session, options.Cluster(), nullptr, nullptr);
+        auto logCtx = NYql::NLog::CurrentLogContextPath();
+
+        return session->Queue_->Async([session, execCtx, logCtx, options = std::move(options)] {
+            bool forceLocalTableContent = options.ForceLocalTableContent();
+            YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+            try {
+                auto publicId = options.PublicId();
+                TDownloadTableResult downloadTableResult;
+
+                auto settings = options.Config();
+                const TString cluster = options.Cluster();
+                const TString tmpFolder = GetTablesTmpFolder(*settings, cluster);
+                TTransactionCache::TEntry::TPtr entry = execCtx->GetOrCreateEntry();
+                auto tx = entry->Tx;
+                auto tables = options.Tables();
+
+                auto deliveryMode = forceLocalTableContent ? ETableContentDeliveryMode::File : settings->TableContentDeliveryMode.Get(cluster).GetOrElse(ETableContentDeliveryMode::Native);
+                TString contentTmpFolder = forceLocalTableContent ? TString() : settings->TableContentTmpFolder.Get(cluster).GetOrElse(TString());
+                if (contentTmpFolder.StartsWith("//")) {
+                    contentTmpFolder = contentTmpFolder.substr(2);
+                }
+                if (contentTmpFolder.EndsWith('/')) {
+                    contentTmpFolder.remove(contentTmpFolder.length() - 1);
+                }
+
+                THashMap<TString, ui32> structColumns = options.StructColumns();
+
+                for (auto& table: tables) {
+                    NYT::TRichYPath& richYPath = table.RichPath;
+                    auto& curTableOpts = table.TableOptions;
+
+                    const bool isTemporary = curTableOpts.IsTemporary;
+                    const bool isAnonymous = curTableOpts.IsAnonymous;
+                    const ui32 epoch = curTableOpts.Epoch;
+
+                    auto tablePath = TransformPath(tmpFolder, richYPath.Path_, isTemporary, session->UserName_);
+
+
+                    if (isTemporary && !isAnonymous) {
+                        richYPath.Path_ = NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix);
+                    } else {
+                        with_lock (entry->Lock_) {
+                            auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, epoch));
+                            YQL_ENSURE(p, "Table " << tablePath << " has no snapshot");
+                            richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
+                        }
+                    }
+                }
+
+                auto samplingConfig = options.SamplingConfig();
+                TString uniqueId = options.UniqueId();
+                YQL_ENSURE(!uniqueId.empty());
+
+                for (size_t i = 0; i < tables.size(); ++i) {
+                    NYT::TRichYPath richYPath = tables[i].RichPath;
+
+                    TString richYPathDesc = NYT::NodeToYsonString(NYT::PathToNode(richYPath));
+                    TString fileName = TStringBuilder() << uniqueId << '_' << i;
+
+                    if (ETableContentDeliveryMode::Native == deliveryMode) {
+                        richYPath.Format(tables[i].Format);
+                        richYPath.FileName(fileName);
+                        downloadTableResult.RemoteFiles.push_back(richYPath);
+
+                        YQL_CLOG(DEBUG, ProviderYt) << "Passing table " << richYPathDesc << " as remote file "
+                            << fileName.Quote();
+                    }
+                    else {
+                        NYT::TTableReaderOptions readerOptions;
+                        readerOptions.CreateTransaction(false);
+
+                        auto readerTx = tx;
+                        if (richYPath.TransactionId_) {
+                            readerTx = entry->GetSnapshotTx(*richYPath.TransactionId_);
+                            richYPath.TransactionId_.Clear();
+                        }
+
+                        if (samplingConfig.Defined()) {
+                            double samplingPercent = samplingConfig->SamplingPercent;
+                            ui64 samplingSeed = samplingConfig->SamplingSeed;
+                            bool isSystemSampling = samplingConfig->IsSystemSampling;
+                            if (!isSystemSampling) {
+                                NYT::TNode spec = NYT::TNode::CreateMap();
+                                spec["sampling_rate"] = samplingPercent / 100.;
+                                if (samplingSeed) {
+                                    spec["sampling_seed"] = static_cast<i64>(samplingSeed);
+                                }
+                                readerOptions.Config(spec);
+                            }
+                        }
+
+                        TRawTableReaderPtr reader;
+                        const int lastAttempt = NYT::TConfig::Get()->ReadRetryCount - 1;
+                        for (int attempt = 0; attempt <= lastAttempt; ++attempt) {
+                            try {
+                                reader = readerTx->CreateRawReader(richYPath, NYT::TFormat(tables[i].Format), readerOptions);
+                                break;
+                            } catch (const NYT::TErrorResponse& e) {
+                                YQL_CLOG(ERROR, ProviderYt) << "Error creating reader for " << richYPathDesc << ": " << e.what();
+                                // Already retried inside CreateRawReader
+                                throw;
+                            } catch (const yexception& e) {
+                                YQL_CLOG(ERROR, ProviderYt) << "Error creating reader for " << richYPathDesc << ": " << e.what();
+                                if (attempt == lastAttempt) {
+                                    throw;
+                                }
+                                NYT::NDetail::TWaitProxy::Get()->Sleep(NYT::TConfig::Get()->RetryInterval);
+                            }
+                        }
+
+                        if (contentTmpFolder) {
+                            entry->GetRoot()->Create(contentTmpFolder, NT_MAP,
+                                TCreateOptions().Recursive(true).IgnoreExisting(true));
+
+                            auto remotePath = TString(contentTmpFolder).append('/').append(fileName);
+
+                            while (true) {
+                                try {
+                                    auto out = tx->CreateFileWriter(TRichYPath(remotePath));
+                                    TBrotliCompress compressor(out.Get(), settings->TableContentCompressLevel.Get(cluster).GetOrElse(8));
+                                    TransferData(reader.Get(), &compressor);
+                                    compressor.Finish();
+                                    out->Finish();
+                                } catch (const yexception& e) {
+                                    YQL_CLOG(ERROR, ProviderYt) << "Error transferring " << richYPathDesc << " to " << remotePath << ": " << e.what();
+                                    if (reader->Retry(Nothing(), Nothing(), std::make_exception_ptr(e))) {
+                                        continue;
+                                    }
+                                    throw;
+                                }
+                                break;
+                            }
+                            entry->DeleteAtFinalize(remotePath);
+                            YQL_CLOG(DEBUG, ProviderYt) << "Passing table " << richYPathDesc << " as remote file " << remotePath.Quote();
+
+                            downloadTableResult.RemoteFiles.emplace_back(NYT::TRichYPath(NYT::AddPathPrefix(remotePath, NYT::TConfig::Get()->Prefix)).FileName(fileName));
+                        } else {
+                            auto tmpFiles = options.TmpFiles();
+                            YQL_ENSURE(tmpFiles);
+
+                            TString outPath = tmpFiles->AddFile(fileName);
+
+                            if (publicId) {
+                                auto progress = TOperationProgress(TString(YtProviderName), *publicId,
+                                    TOperationProgress::EState::InProgress, "Preparing table content");
+                                session->ProgressWriter_(progress);
+                            }
+                            while (true) {
+                                try {
+                                    TOFStream out(outPath);
+                                    out.SetFinishPropagateMode(false);
+                                    out.SetFlushPropagateMode(false);
+                                    TBrotliCompress compressor(&out, settings->TableContentCompressLevel.Get(cluster).GetOrElse(8));
+                                    TransferData(reader.Get(), &compressor);
+                                    compressor.Finish();
+                                    out.Finish();
+                                } catch (const TIoException& e) {
+                                    YQL_CLOG(ERROR, ProviderYt) << "Error reading " << richYPathDesc << ": " << e.what();
+                                    // Don't retry IO errors
+                                    throw;
+                                } catch (const yexception& e) {
+                                    YQL_CLOG(ERROR, ProviderYt) << "Error reading " << richYPathDesc << ": " << e.what();
+                                    if (reader->Retry(Nothing(), Nothing(), std::make_exception_ptr(e))) {
+                                        continue;
+                                    }
+                                    throw;
+                                }
+                                break;
+                            }
+                            YQL_CLOG(DEBUG, ProviderYt) << "Passing table " << richYPathDesc << " as file "
+                                << fileName.Quote() << " (size=" << TFileStat(outPath).Size << ')';
+
+                            downloadTableResult.LocalFiles.emplace_back(outPath);
+                        }
+                    }
+                }
+                downloadTableResult.SetSuccess();
+                return MakeFuture<TDownloadTableResult>(downloadTableResult);
+            } catch (...) {
+                return MakeFuture(ResultFromCurrentException<TDownloadTableResult>());
+            }
+        });
     }
 
 private:

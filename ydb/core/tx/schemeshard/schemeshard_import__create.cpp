@@ -1,5 +1,6 @@
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_index_build_info.h"
 #include "schemeshard_import.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_getters.h"
@@ -192,9 +193,9 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 if (!AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
-                    switch (settings.index_filling_mode()) {
-                    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
-                    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+                    switch (settings.index_population_mode()) {
+                    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+                    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
                         return Reply(
                             std::move(response),
                             Ydb::StatusIds::PRECONDITION_FAILED,
@@ -206,6 +207,27 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
+
+                if (request.HasUserSID()) {
+                    importInfo->UserSID = request.GetUserSID();
+                }
+
+                TString explain;
+                if (!FillItems(*importInfo, settings, explain)) {
+                    return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, explain);
+                }
+            }
+            break;
+
+        case NKikimrImport::TCreateImportRequest::kImportFromFsSettings:
+            {
+                if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
+                    return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
+                }
+
+                const auto& settings = request.GetRequest().GetImportFromFsSettings();
+
+                importInfo = new TImportInfo(id, uid, TImportInfo::EKind::FS, settings, domainPath.Base()->PathId, request.GetPeerName());
 
                 if (request.HasUserSID()) {
                     importInfo->UserSID = request.GetUserSID();
@@ -277,23 +299,35 @@ private:
         return true;
     }
 
-    template <typename TSettings>
-    bool FillItems(TImportInfo& importInfo, const TSettings& settings, TString& explain) {
+    // Common helper to validate destination path
+    bool ValidateAndAddDestinationPath(const TString& dstPath, THashSet<TString>& dstPaths, TString& explain) {
+        if (dstPath) {
+            if (!dstPaths.insert(NBackup::NormalizeItemPath(dstPath)).second) {
+                explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
+                return false;
+            }
+
+            if (!ValidateImportDstPath(dstPath, Self, explain)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // S3-specific FillItems
+    bool FillItems(TImportInfo& importInfo, const Ydb::Import::ImportFromS3Settings& settings, TString& explain) {
         THashSet<TString> dstPaths;
 
         importInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const TString& dstPath = settings.items(itemIdx).destination_path();
-            if (dstPath) {
-                if (!dstPaths.insert(NBackup::NormalizeItemPath(dstPath)).second) {
-                    explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
-                    return false;
-                }
+            
+            if (!ValidateAndAddDestinationPath(dstPath, dstPaths, explain)) {
+                return false;
+            }
 
-                if (!ValidateImportDstPath(dstPath, Self, explain)) {
-                    return false;
-                }
-            } else if (settings.source_prefix().empty()) { // Can not take path from schema mapping
+            if (!dstPath && settings.source_prefix().empty()) {
+                // Can not take path from schema mapping
                 explain = "No common source prefix and item destination path set";
                 return false;
             }
@@ -301,6 +335,37 @@ private:
             auto& item = importInfo.Items.emplace_back(dstPath);
             item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
             item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
+        }
+
+        return true;
+    }
+
+    // FS-specific FillItems
+    bool FillItems(TImportInfo& importInfo, const Ydb::Import::ImportFromFsSettings& settings, TString& explain) {
+        THashSet<TString> dstPaths;
+
+        importInfo.Items.reserve(settings.items().size());
+        for (ui32 itemIdx : xrange(settings.items().size())) {
+            const TString& dstPath = settings.items(itemIdx).destination_path();
+            
+            if (!ValidateAndAddDestinationPath(dstPath, dstPaths, explain)) {
+                return false;
+            }
+
+            if (!dstPath) {
+                explain = "destination_path is required for FS import items";
+                return false;
+            }
+
+            const TString& srcPath = settings.items(itemIdx).source_path();
+            if (!srcPath) {
+                explain = "source_path is required for FS import items";
+                return false;
+            }
+
+            auto& item = importInfo.Items.emplace_back(dstPath);
+            // For FS imports, source_path is the full relative path from base_path
+            item.SrcPath = NBackup::NormalizeItemPath(srcPath);
         }
 
         return true;
@@ -414,9 +479,14 @@ private:
         LOG_I("TImport::TTxProgress: Get scheme"
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
-
-        item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
-        Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
+        
+        if (importInfo->Kind == TImportInfo::EKind::S3) {
+            item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
+            Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
+        } else {
+            item.SchemeGetter = ctx.Register(CreateSchemeGetterFS(Self->SelfId(), importInfo, itemIdx), TMailboxType::Simple, AppData()->IOPoolId);
+            Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
+        }
     }
 
     void GetSchemaMapping(TImportInfo::TPtr importInfo, const TActorContext& ctx) {
@@ -855,7 +925,7 @@ private:
     TMaybe<TString> GetIssues(TIndexBuildId indexBuildId) {
         const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(indexBuildId);
         Y_ABORT_UNLESS(indexInfoPtr);
-        const auto& indexInfo = *indexInfoPtr->Get();
+        const auto& indexInfo = *indexInfoPtr->get();
 
         if (indexInfo.IsDone()) {
             return Nothing();
@@ -1110,8 +1180,12 @@ private:
         }
 
         if (!importInfo->SchemaMapping->Items.empty()) {
-            if (importInfo->Settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
-                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+            // TODO(st-shchetinin): Only S3 imports support schema mapping with encryption (add for FS)
+            if (importInfo->Kind == TImportInfo::EKind::S3) {
+                auto settings = importInfo->GetS3Settings();
+                if (settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
+                    return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+                }
             }
         }
 
@@ -1515,6 +1589,10 @@ private:
                 }
             } else {
                 Y_ABORT("Create Scheme Object: schema objects are empty");
+            }
+            if (importInfo->Kind == TImportInfo::EKind::FS) {
+                item.State = EState::Done;
+                break;
             }
             item.State = EState::Transferring;
             AllocateTxId(*importInfo, itemIdx);

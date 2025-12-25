@@ -11,6 +11,9 @@
 
 namespace NKikimr::NKqp::NOpt {
 
+NYql::NNodes::TExprBase KqpRewriteReadTableFullText(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
 NYql::NNodes::TExprBase KqpRewriteReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
@@ -18,6 +21,9 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
     const TKqpOptimizeContext& kqpCtx);
 
 NYql::NNodes::TExprBase KqpBuildReadTableStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
+NYql::NNodes::TExprBase KqpBuildReadTableFullTextIndexStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 
 NYql::NNodes::TExprBase KqpBuildReadTableRangesStage(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,

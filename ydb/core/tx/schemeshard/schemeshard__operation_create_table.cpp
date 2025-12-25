@@ -2,7 +2,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for IsAllowedKeyType
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -586,7 +585,7 @@ public:
 
         std::optional<TString> defaultPoolKind = InferDefaultPoolKind(domainInfo->EffectiveStoragePools(), schema.GetPartitionConfig());
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), AppData(), isServerless, errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), schema.GetColumns(), AppData(), isServerless, errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;

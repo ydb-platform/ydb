@@ -339,7 +339,6 @@ class TDataShard
             EvPersistScanState,
             EvPersistScanStateAck,
             EvConditionalEraseRowsRegistered,
-            EvAsyncJobComplete,
             EvSubDomainPathIdFound, // unused
             EvRequestChangeRecords,
             EvRemoveChangeRecords,
@@ -483,15 +482,6 @@ class TDataShard
 
             const ui64 TxId;
             const TActorId ActorId;
-        };
-
-        struct TEvAsyncJobComplete : public TEventLocal<TEvAsyncJobComplete, EvAsyncJobComplete> {
-            explicit TEvAsyncJobComplete(TAutoPtr<IDestructable> prod)
-                : Prod(prod)
-            {
-            }
-
-            TAutoPtr<IDestructable> Prod;
         };
 
         struct TEvRequestChangeRecords : public TEventLocal<TEvRequestChangeRecords, EvRequestChangeRecords> {};
@@ -1359,7 +1349,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRestartOperation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvBlockFailPointUnblock::TPtr& ev, const TActorContext& ctx);
     void Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, const TActorContext& ctx);
@@ -3253,7 +3243,7 @@ protected:
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
-            HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
+            HFunc(TEvDataShard::TEvAsyncJobComplete, Handle);
             HFunc(TEvPrivate::TEvRestartOperation, Handle);
             HFunc(TEvPrivate::TEvBlockFailPointUnblock, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);

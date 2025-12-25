@@ -65,6 +65,7 @@ struct TRunConfig {
     int DriverCount = 0;
     ELogPriority LogPriority = static_cast<ELogPriority>(DEFAULT_LOG_LEVEL);
     bool NoDelays = false;
+    bool HighResHistogram = false;
     bool ExtendedStats = false;
     bool NoTui = false;
     EDisplayMode DisplayMode = EDisplayMode::None;

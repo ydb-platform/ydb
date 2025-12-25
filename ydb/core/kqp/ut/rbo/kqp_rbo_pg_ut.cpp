@@ -156,11 +156,23 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 SELECT id as "id2" FROM foo WHERE name = '3_name';
             )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT * FROM foo WHERE name = '3_name';
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT f.* FROM foo as f WHERE name = '3_name';
+            )"
         };
 
         std::vector<std::string> results = {
             R"([["0"];["1"];["2"];["4"];["5"];["6"];["7"];["8"];["9"]])",
-            R"([["3"]])"
+            R"([["3"]])",
+            R"([["3";"\\x335f6e616d65"]])",
+            R"([["3";"\\x335f6e616d65"]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -410,9 +422,8 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         }
     }
 
-    Y_UNIT_TEST(TestCrossInnerJoin) {
-        TestCrossInnerJoin(false);
-        TestCrossInnerJoin(true);
+    Y_UNIT_TEST_TWIN(TestCrossInnerJoin, ColumnStore) {
+        TestCrossInnerJoin(ColumnStore);
     }
 
     Y_UNIT_TEST(PredicatePushdownLeftJoin) {
@@ -684,7 +695,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 select t1.b, sum(t1.c) from t1 inner join t2 on t1.a = t2.a group by t1.b order by t1.b;
             )",
-            /*
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -693,7 +703,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 select sum(t1.b) as sum from t1
                 order by sum;
             )",
-            */
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -837,19 +846,17 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 select count(*) from t1 group by t1.b order by t1.b;
             )",
-            /*
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
                 select count(*) from t1 group by t1.b + 1 order by t1.b + 1;
             )"
-            */
         };
 
         std::vector<std::string> results = {
             R"([["1";"4"];["2";"6"]])",
             R"([["1";"4"];["2";"6"]])",
-            //R"([["4"];["6"];["8"]])",
+            R"([["4"];["6"];["8"]])",
             R"([["1";"1"];["2";"0"]])",
             R"([["1";"3"];["2";"4"]])",
             R"([["1";"2"];["2";"3"]])",
@@ -888,9 +895,8 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         }
     }
 
-    Y_UNIT_TEST(Aggregation) {
-        TestAggregation(/*columnstore=*/false);
-        TestAggregation(/*columnstore=*/true);
+    Y_UNIT_TEST_TWIN(Aggregation, ColumnStore) {
+        TestAggregation(ColumnStore);
     }
 
     Y_UNIT_TEST(UnionAll) {

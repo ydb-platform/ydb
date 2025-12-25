@@ -1,0 +1,10 @@
+{
+    "test_system_views.TestSysViewsRegistry.test_sysviews_registry": {
+        "root_sysviews": {
+            "uri": "file://test_system_views.TestSysViewsRegistry.test_sysviews_registry/root_sysviews.json"
+        },
+        "tenant_sysviews": {
+            "uri": "file://test_system_views.TestSysViewsRegistry.test_sysviews_registry/tenant_sysviews.json"
+        }
+    }
+}

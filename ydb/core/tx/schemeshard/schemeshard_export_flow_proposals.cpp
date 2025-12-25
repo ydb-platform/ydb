@@ -6,6 +6,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/ydb_convert/compression.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
@@ -60,7 +61,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.SourcePathName);
         desc.SetDstPath(ExportItemPathName(ss, exportInfo, itemIdx));
-        desc.SetOmitIndexes(!exportInfo.MaterializeIndexes);
+        desc.SetOmitIndexes(!exportInfo.IncludeIndexData);
         desc.SetOmitFollowers(true);
         desc.SetIsBackup(true);
     }
@@ -115,7 +116,7 @@ void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc
 }
 
 void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
-    if (!sourcePath.IsResolved() || !exportItemPath.IsResolved()) {
+    if (!sourcePath.IsResolved() || (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved())) {
         return;
     }
 
@@ -158,10 +159,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     auto& task = *modifyScheme.MutableBackup();
 
     if (item.ParentIdx == Max<ui32>()) {
-        modifyScheme.SetWorkingDir(exportPath.PathString());
-        task.SetTableName(ToString(itemIdx));
+        const TPath sourcePath = TPath::Init(item.SourcePathId, ss);
+        TString exportPathName;
+        TString tableName;
+        if (sourcePath.IsResolved() && sourcePath->IsColumnTable()) {
+            exportPathName = sourcePath.Parent().PathString();
+            tableName = sourcePath->Name;
+        } else {
+            exportPathName = exportPath.PathString();
+            tableName = ToString(itemIdx);
+        }
+        modifyScheme.SetWorkingDir(exportPathName);
+        task.SetTableName(tableName);
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
+        FillTableDescription(ss, task, sourcePath, exportPath.Child(ToString(itemIdx)));
     } else {
         auto parentPath = exportPath.Child(ToString(item.ParentIdx));
 
@@ -314,6 +325,24 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 encryptionSettings.SetIV(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
                 *encryptionSettings.MutableSymmetricKey() = exportSettings.encryption_settings().symmetric_key();
             }
+        }
+        break;
+    case TExportInfo::EKind::FS:
+        {
+            Ydb::Export::ExportToFsSettings exportSettings;
+            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+
+            task.SetNumberOfRetries(exportSettings.number_of_retries());
+            auto& backupSettings = *task.MutableFSSettings();
+            backupSettings.SetBasePath(exportSettings.base_path());
+            backupSettings.SetPath(exportSettings.items(itemIdx).destination_path());
+
+            if (const auto compression = exportSettings.compression()) {
+                Y_ABORT_UNLESS(FillCompression(*task.MutableCompression(), compression));
+            }
+
+            task.SetEnableChecksums(exportInfo.EnableChecksums);
+            task.SetEnablePermissions(exportInfo.EnablePermissions);
         }
         break;
     }

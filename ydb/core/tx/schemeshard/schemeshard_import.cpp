@@ -1,6 +1,7 @@
 #include "schemeshard_import.h"
 
 #include "schemeshard_impl.h"
+#include "schemeshard_index_build_info.h"
 #include "schemeshard_import_getters.h"
 #include "schemeshard_import_helpers.h"
 
@@ -221,11 +222,18 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     }
 
     switch (importInfo.Kind) {
-    case TImportInfo::EKind::S3:
-        import.MutableImportFromS3Settings()->CopyFrom(importInfo.Settings);
+    case TImportInfo::EKind::S3: {
+        Ydb::Import::ImportFromS3Settings settings = importInfo.GetS3Settings();
+        import.MutableImportFromS3Settings()->CopyFrom(settings);
         import.MutableImportFromS3Settings()->clear_access_key();
         import.MutableImportFromS3Settings()->clear_secret_key();
         break;
+    }
+    case TImportInfo::EKind::FS: {
+        Ydb::Import::ImportFromFsSettings settings = importInfo.GetFsSettings();
+        import.MutableImportFromFsSettings()->CopyFrom(settings);
+        break;
+    }
     }
 }
 
@@ -233,7 +241,7 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& i
     db.Table<Schema::Imports>().Key(importInfo.Id).Update(
         NIceDb::TUpdate<Schema::Imports::Uid>(importInfo.Uid),
         NIceDb::TUpdate<Schema::Imports::Kind>(static_cast<ui8>(importInfo.Kind)),
-        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.Settings.SerializeAsString()),
+        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.SettingsSerialized),
         NIceDb::TUpdate<Schema::Imports::DomainPathOwnerId>(importInfo.DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::Imports::DomainPathLocalId>(importInfo.DomainPathId.LocalPathId),
         NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size()),
@@ -440,15 +448,18 @@ void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* 
 }
 
 bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
+    if (importInfo.Kind != TImportInfo::EKind::S3) {
+        return true;
+    }
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     auto& item = importInfo.Items.at(itemIdx);
 
-    switch (importInfo.Settings.index_filling_mode()) {
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD:
+    switch (importInfo.GetS3Settings().index_population_mode()) {
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD:
             return true;
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
             return item.ChildItems.empty();
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
             return false;
         default:
             return true;

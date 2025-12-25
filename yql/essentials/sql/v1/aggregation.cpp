@@ -181,6 +181,11 @@ protected:
             ctx.Error(Pos_) << "Aggregation of aggregated values is forbidden";
             return false;
         }
+
+        if (!src) { // YqlSelect
+            return true;
+        }
+
         if (AggMode_ == EAggregateMode::Distinct || AggMode_ == EAggregateMode::OverWindowDistinct) {
             const auto column = Expr_->GetColumnName();
             if (!column) {
@@ -189,7 +194,6 @@ protected:
                 return false;
             }
             DistinctKey_ = *column;
-            YQL_ENSURE(src);
             if (!IsGeneratedKeyColumn_ && src->GetJoin()) {
                 const auto sourcePtr = Expr_->GetSourceName();
                 if (!sourcePtr || !*sourcePtr) {

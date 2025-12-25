@@ -35,7 +35,7 @@ TVector<THashMap<TString, TColumnOffsetRange>> ParseYsonAndCollectColumnOffsetsS
     parser.Parse();
     const auto& rows = parser.GetRows();
 
-    // Convert TVector<TVector<TColumnOffsetRange>> back to TVector<THashMap<...>> for backward compatibility
+    // Convert TVector<TRowIndexMarkup> back to TVector<THashMap<...>> for backward compatibility
     TVector<THashMap<TString, TColumnOffsetRange>> result;
     for (const auto& row : rows) {
         THashMap<TString, TColumnOffsetRange> offsets;

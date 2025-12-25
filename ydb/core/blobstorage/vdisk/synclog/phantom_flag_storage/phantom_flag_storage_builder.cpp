@@ -17,7 +17,7 @@ namespace NSyncLog {
 class TPhantomFlagStorageBuilderActor : public TActorBootstrapped<TPhantomFlagStorageBuilderActor> {
 public:
     TPhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-            const TActorId& keeperId, const TSyncLogSnapshotPtr& snapshot)
+            const TActorId& keeperId, TSyncLogSnapshotPtr snapshot)
         : TActorBootstrapped<TPhantomFlagStorageBuilderActor>()
         , SlCtx(slCtx)
         , KeeperId(keeperId)
@@ -154,7 +154,7 @@ private:
 
 
 NActors::IActor* CreatePhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-    const TActorId& keeperId, const TSyncLogSnapshotPtr& snapshot) {
+    const TActorId& keeperId, TSyncLogSnapshotPtr snapshot) {
     return new TPhantomFlagStorageBuilderActor(slCtx, keeperId, snapshot);
 }
 

@@ -1961,7 +1961,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
             result.Content = UnescapeAnsiQuoted(str);
         } else {
             TString error;
-            if (!UnescapeQuoted(str, pos, str[0], result.Content, error, ctx.Settings.Antlr4Parser)) {
+            if (!UnescapeQuoted(str, pos, str[0], result.Content, error, /*utf8Aware=*/true)) {
                 ctx.Error(pos) << "Failed to parse string literal: " << error;
                 return {};
             }
@@ -2035,7 +2035,7 @@ TString IdContent(TContext& ctx, const TString& s) {
 
     auto unescapeResult = UnescapeArbitraryAtom(atom, endSym, &sout, &readBytes);
     if (unescapeResult != EUnescapeResult::OK) {
-        TTextWalker walker(pos, ctx.Settings.Antlr4Parser);
+        TTextWalker walker(pos, /*utf8Aware=*/true);
         walker.Advance(atom.Trunc(readBytes));
         ctx.Error(pos) << "Cannot parse broken identifier: " << UnescapeResultToString(unescapeResult);
         return {};

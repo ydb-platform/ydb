@@ -762,9 +762,11 @@ message TClientInfo {
 
 message TAggregatedCounters {
     repeated uint64 Values = 1;
+
     repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
     optional TCompactionCounters CompactionCounters = 3;
     optional TExtendedCounters ExtendedCounters = 4;
+    repeated TMLPConsumerCounters MLPConsumerCounters = 5;
 
     message TConsumerAggregatedCounters {
         optional string Consumer = 1;
@@ -776,6 +778,20 @@ message TAggregatedCounters {
 
     message TExtendedCounters {
         repeated uint64 Values = 1;
+    }
+
+    message TMLPConsumerCounters {
+        optional string Consumer = 1;
+
+        repeated uint64 CountersValues = 2;
+        repeated uint64 MessageLocksValues = 3;
+        repeated uint64 MessageLockingDurationValues = 4;
+
+        optional uint64 DeletedByRetentionPolicy = 5;
+        optional uint64 DeletedByDeadlinePolicy = 6;
+        optional uint64 DeletedByMovedToDLQ = 7;
+
+        optional uint64 CPUUsage = 8;
     }
 }
 
@@ -1362,7 +1378,12 @@ message TEvMLPChangeMessageDeadlineResponse {
 }
 
 message TMLPMetrics {
+    optional uint64 TotalCommittedMessageCount = 2;
+    optional uint64 TotalMovedToDLQMessageCount = 3;
     optional uint64 TotalScheduledToDLQMessageCount = 1;
+    optional uint64 TotalPurgedMessageCount = 4;
+    optional uint64 TotalDeletedByDeadlinePolicyMessageCount = 5;
+    optional uint64 TotalDeletedByRetentionMessageCount = 6;
 }
 
 message TMLPStorageSnapshot {

@@ -67,9 +67,11 @@ bool EnsureMinMaxArgsCount(const TExprNode& node, ui32 minArgs, ui32 maxArgs, TE
 bool EnsureCallableMinArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx);
 bool EnsureCallableMaxArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx);
 bool EnsureAtom(const TExprNode& node, TExprContext& ctx);
+bool EnsureAtomOrUniversal(const TExprNode& node, TExprContext& ctx, bool& isUniversal);
 bool EnsureCallable(const TExprNode& node, TExprContext& ctx);
 bool EnsureTuple(TExprNode& node, TExprContext& ctx);
 bool EnsureTupleOfAtoms(TExprNode& node, TExprContext& ctx);
+bool EnsureTupleOfAtomsOrUniversal(TExprNode& node, TExprContext& ctx, bool& isUniversal);
 
 using TSettingNodeValidator = std::function<bool (TStringBuf name, TExprNode& setting, TExprContext& ctx)>;
 bool EnsureValidSettings(TExprNode& node,
@@ -351,7 +353,8 @@ TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& 
 bool IsSystemMember(const TStringBuf& memberName);
 
 template<bool Deduplicte = true, ui8 OrListsOfAtomsDepth = 0U>
-IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
+IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx,
+    bool& isUniversal);
 
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
     TExprContext& ctx, bool deduplicate = false);

@@ -47,7 +47,7 @@ class DropTable(DropObject):
 
     Example:
         sth = ScenarioTestHelper(ctx)
-        sth.execute_scheme_query(DropTable('testTable'), retries=2)
+        sth.execute_scheme_query(DropTable('testTable'), retries=5)
     """
 
     @override
@@ -62,7 +62,7 @@ class DropTableStore(DropObject):
 
     Example:
         sth = ScenarioTestHelper(ctx)
-        sth.execute_scheme_query(DropTable('testStore'), retries=2)
+        sth.execute_scheme_query(DropTable('testStore'), retries=5)
     """
 
     @override

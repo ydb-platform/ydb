@@ -161,6 +161,8 @@ public:
     NCommon::TConfSetting<NSize::TSize, Static> _QueryDumpTableSizeLimit;
     NCommon::TConfSetting<ui32, Static> _QueryDumpTableCountPerClusterLimit;
     NCommon::TConfSetting<ui32, Static> _QueryDumpFileCountPerOperationLimit;
+    NCommon::TConfSetting<bool, Static> KeepWorldDepForFillOp;
+    NCommon::TConfSetting<ui32, Static> CostBasedOptimizerPartial;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

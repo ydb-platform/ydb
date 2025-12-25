@@ -36,7 +36,7 @@ public:
         }
         Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TX_COMPLETE_LAG, Self->GetTxCompleteLag().MilliSeconds());
 
-        const size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
+        const size_t removedCount = Self->ProgressTxController->CleanExpiredTxs();
         if (removedCount > 0) {
             // We cannot continue with this transaction, start a new transaction
             AbortedThroughRemoveExpired = true;

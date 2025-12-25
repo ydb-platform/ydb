@@ -43,10 +43,11 @@ void AddPrefix(TColumnOrder& columnOrder, const TString& prefix) {
 
 IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit) {
+    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit ||
+        node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
         return IGraphTransformer::TStatus::Ok;
     }
-    
+
     TColumnOrder columnOrder;
     auto result = GetSetting(node->Tail(), "result");
     auto emitPgStar = GetSetting(node->Tail(), "emit_pg_star");
@@ -221,6 +222,10 @@ IGraphTransformer::TStatus OrderForEquiJoin(const TExprNode::TPtr& node, TExprNo
     TJoinLabels labels;
     for (size_t i = 0; i < numLists; ++i) {
         auto& list = node->Child(i)->Head();
+        if (list.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         inputColumnOrder.push_back(ctx.Types.LookupColumnOrder(list));
         if (auto err = labels.Add(ctx.Expr, *node->Child(i)->Child(1),
             list.GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()))
@@ -280,6 +285,10 @@ IGraphTransformer::TStatus OrderForCalcOverWindow(const TExprNode::TPtr& node, T
 
     auto inputOrder = ctx.Types.LookupColumnOrder(node->Head());
     if (!inputOrder) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
         return IGraphTransformer::TStatus::Ok;
     }
 

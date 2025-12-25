@@ -891,11 +891,11 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     Y_UNIT_TEST(TestMultiGroupClassification) {
         auto ydb = TYdbSetupSettings().Create();
 
-        auto settings = TQueryRunnerSettings().PoolId("");
+        auto settings = TQueryRunnerSettings().PoolId("").UserSID("no@user");
 
         const TString& poolId = "my_pool";
-        const TString& firstSID = "first@user";
-        const TString& secondSID = "second@user";
+        const TString& firstSID = "first@group";
+        const TString& secondSID = "second@group";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT=0
@@ -910,6 +910,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
                 MEMBER_NAME=")" << secondSID << R"(",
                 RANK=2
             );
+            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << firstSID << R"(`, `)" << secondSID << R"(`
+            ;
         )");
 
         WaitForFail(ydb, settings.GroupSIDs({firstSID}), poolId);

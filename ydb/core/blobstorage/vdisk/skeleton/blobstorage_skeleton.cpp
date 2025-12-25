@@ -2109,6 +2109,9 @@ namespace NKikimr {
                     Db->LoggerID,
                     Db->LogCutterID,
                     Db->SyncLogID,
+                    Hull->GetHullDs()->LogoBlobs,
+                    Hull->GetHullDs()->Blocks,
+                    Hull->GetHullDs()->Barriers,
                     Config);
                 // syncer performes sync recovery
                 Db->SyncerID.Set(ctx.Register(CreateSyncerActor(sc, GInfo, ev->Get()->SyncerData)));

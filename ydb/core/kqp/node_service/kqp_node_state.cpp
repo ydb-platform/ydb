@@ -14,10 +14,40 @@ void TNodeState::AddRequest(TNodeRequest&& request) {
     }
 }
 
+bool TNodeState::AddTasksToRequest(ui64 txId, TActorId executerId, const TVector<ui64>& taskIds) {
+    auto& bucket = GetBucketByTxId(txId);
+    TWriteGuard guard(bucket.Mutex);
+
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        if (requestIt->second.ExecuterId == executerId) {
+            YQL_ENSURE(!requestIt->second.ExecutionCancelled, "Request TxId: " << txId << " is already cancelled");
+            for (ui64 taskId : taskIds) {
+                auto [_, inserted] = requestIt->second.Tasks.emplace(taskId, std::nullopt);
+                YQL_ENSURE(inserted, "Task " << taskId << " already exists in request TxId: " << txId);
+            }
+            return true;
+        }
+    }
+    return false;
+}
 bool TNodeState::HasRequest(ui64 txId) const {
     const auto& bucket = GetBucketByTxId(txId);
     TReadGuard guard(bucket.Mutex);
     return bucket.Requests.contains(txId);
+}
+
+bool TNodeState::IsRequestCancelled(ui64 txId, TActorId executerId) const {
+    const auto& bucket = GetBucketByTxId(txId);
+    TReadGuard guard(bucket.Mutex);
+
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        if (requestIt->second.ExecuterId == executerId) {
+            return requestIt->second.ExecutionCancelled;
+        }
+    }
+    return false;
 }
 
 std::vector<ui64> TNodeState::ClearExpiredRequests() {
@@ -110,6 +140,16 @@ std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId) const
     }
 
     return tasks;
+}
+
+void TNodeState::MarkRequestAsCancelled(ui64 txId) {
+    auto& bucket = GetBucketByTxId(txId);
+    TWriteGuard guard(bucket.Mutex);
+
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        requestIt->second.ExecutionCancelled = true;
+    }
 }
 
 void TNodeState::DumpInfo(TStringStream& str) const {

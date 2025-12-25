@@ -1041,9 +1041,9 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_TO_PROTO(protoJob, pool_tree, job.PoolTree);
     YT_OPTIONAL_TO_PROTO(protoJob, pool, job.Pool);
     YT_OPTIONAL_SET_PROTO(protoJob, job_cookie, job.JobCookie);
-    YT_OPTIONAL_SET_PROTO(protoJob, distributed_group_job_index, job.DistributedGroupJobIndex);
-    if (job.DistributedGroupMainJobId) {
-        ToProto(protoJob->mutable_distributed_group_main_job_id(), job.DistributedGroupMainJobId);
+    YT_OPTIONAL_SET_PROTO(protoJob, collective_member_rank, job.CollectiveMemberRank);
+    if (job.CollectiveId) {
+        ToProto(protoJob->mutable_collective_id(), job.CollectiveId);
     }
     if (job.ArchiveFeatures) {
         protoJob->set_archive_features(ToProto(job.ArchiveFeatures));
@@ -1114,10 +1114,10 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->CoreInfos = TYsonString();
     }
-    if (protoJob.has_distributed_group_main_job_id()) {
-        FromProto(&job->DistributedGroupMainJobId, protoJob.distributed_group_main_job_id());
+    if (protoJob.has_collective_id()) {
+        FromProto(&job->CollectiveId, protoJob.collective_id());
     } else {
-        job->DistributedGroupMainJobId = {};
+        job->CollectiveId = {};
     }
     if (protoJob.has_job_competition_id()) {
         FromProto(&job->JobCompetitionId, protoJob.job_competition_id());
@@ -1148,7 +1148,7 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     job->PoolTree = YT_OPTIONAL_FROM_PROTO(protoJob, pool_tree);
     job->Pool = YT_OPTIONAL_FROM_PROTO(protoJob, pool);
     job->JobCookie = YT_OPTIONAL_FROM_PROTO(protoJob, job_cookie);
-    job->DistributedGroupJobIndex = YT_OPTIONAL_FROM_PROTO(protoJob, distributed_group_job_index);
+    job->CollectiveMemberRank = YT_OPTIONAL_FROM_PROTO(protoJob, collective_member_rank);
     if (protoJob.has_archive_features()) {
         job->ArchiveFeatures = TYsonString(protoJob.archive_features());
     } else {
@@ -1268,6 +1268,8 @@ void ToProto(
     YT_OPTIONAL_SET_PROTO(protoStatistics, legacy_chunk_row_count, statistics.LegacyChunkRowCount);
 
     ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
+
+    YT_OPTIONAL_SET_PROTO(protoStatistics, read_size_estimation, statistics.ReadDataSizeEstimate);
 }
 
 void FromProto(
@@ -1286,6 +1288,8 @@ void FromProto(
     statistics->LegacyChunkRowCount = YT_OPTIONAL_FROM_PROTO(protoStatistics, legacy_chunk_row_count);
 
     FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
+
+    statistics->ReadDataSizeEstimate = YT_OPTIONAL_FROM_PROTO(protoStatistics, read_size_estimation);
 }
 
 void ToProto(
@@ -1510,6 +1514,21 @@ void FromProto(
     }
     if (protoQuery.has_is_indexed()) {
         query->IsIndexed = protoQuery.is_indexed();
+    }
+}
+
+void FromProto(
+    NApi::TSuppressableAccessTrackingOptions* options,
+    const NApi::NRpcProxy::NProto::TSuppressableAccessTrackingOptions& proto)
+{
+    if (proto.has_suppress_access_tracking()) {
+        options->SuppressAccessTracking = proto.suppress_access_tracking();
+    }
+    if (proto.has_suppress_modification_tracking()) {
+        options->SuppressModificationTracking = proto.suppress_modification_tracking();
+    }
+    if (proto.has_suppress_expiration_timeout_renewal()) {
+        options->SuppressExpirationTimeoutRenewal = proto.suppress_expiration_timeout_renewal();
     }
 }
 
@@ -2070,6 +2089,133 @@ NJobTrackerClient::EJobTraceState ConvertJobTraceStateFromProto(
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
+    TReqReadTable* req,
+    const NYPath::TRichYPath& path,
+    const std::optional<TYsonString>& format,
+    const TTableReaderOptions& options)
+{
+    ToProto(req->mutable_path(), path);
+
+    if (format) {
+        req->set_format(ToProto(*format));
+        req->set_desired_rowset_format(NProto::ERowsetFormat::RF_FORMAT);
+    }
+
+    req->set_unordered(options.Unordered);
+    req->set_omit_inaccessible_columns(options.OmitInaccessibleColumns);
+    req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
+    req->set_enable_table_index(options.EnableTableIndex);
+    req->set_enable_row_index(options.EnableRowIndex);
+    req->set_enable_range_index(options.EnableRangeIndex);
+    req->set_enable_any_unpacking(options.EnableAnyUnpacking);
+    if (options.Config) {
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
+    }
+
+    ToProto(req->mutable_transactional_options(), options);
+    ToProto(req->mutable_suppressable_access_tracking_options(), options);
+}
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    std::optional<TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TTableReaderOptions* mutableOptions,
+    const TReqReadTable& req)
+{
+    *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+
+    if (req.has_format()) {
+        *mutableFormat = TYsonStringBuf(req.format());
+    }
+
+    *mutableDesiredRowsetFormat = req.desired_rowset_format();
+    *mutableArrowFallbackFormat = req.arrow_fallback_rowset_format();
+
+    TTableReaderOptions parsedOptions;
+    parsedOptions.Unordered = req.unordered();
+    parsedOptions.OmitInaccessibleColumns = req.omit_inaccessible_columns();
+    parsedOptions.OmitInaccessibleRows = req.omit_inaccessible_rows();
+    parsedOptions.EnableTableIndex = req.enable_table_index();
+    parsedOptions.EnableRowIndex = req.enable_row_index();
+    parsedOptions.EnableRangeIndex = req.enable_range_index();
+    parsedOptions.EnableAnyUnpacking = req.enable_any_unpacking();
+
+    if (req.has_config()) {
+        parsedOptions.Config = ConvertTo<TTableReaderConfigPtr>(TYsonString(req.config()));
+    }
+
+    if (req.has_transactional_options()) {
+        FromProto(&parsedOptions, req.transactional_options());
+    }
+
+    if (req.has_suppressable_access_tracking_options()) {
+        FromProto(&parsedOptions, req.suppressable_access_tracking_options());
+    }
+
+    *mutableOptions = std::move(parsedOptions);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqReadTablePartition* req,
+    const TTablePartitionCookiePtr& cookie,
+    const std::optional<NYson::TYsonString>& format,
+    const TReadTablePartitionOptions& options)
+{
+    ToProto(req->mutable_cookie(), cookie);
+
+    if (format) {
+        req->set_format(ToProto(*format));
+        req->set_desired_rowset_format(NProto::ERowsetFormat::RF_FORMAT);
+    }
+
+    req->set_unordered(options.Unordered);
+    req->set_omit_inaccessible_columns(options.OmitInaccessibleColumns);
+    req->set_enable_table_index(options.EnableTableIndex);
+    req->set_enable_row_index(options.EnableRowIndex);
+    req->set_enable_range_index(options.EnableRangeIndex);
+    if (options.Config) {
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
+    }
+}
+
+void ParseRequest(
+    TTablePartitionCookiePtr* mutableCookie,
+    std::optional<NYson::TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TReadTablePartitionOptions* mutableOptions,
+    const TReqReadTablePartition& req)
+{
+    *mutableCookie = ConvertTo<TTablePartitionCookiePtr>(TYsonStringBuf(req.cookie()));
+
+    if (req.has_format()) {
+        *mutableFormat = TYsonStringBuf(req.format());
+    }
+
+    *mutableDesiredRowsetFormat = req.desired_rowset_format();
+    *mutableArrowFallbackFormat = req.arrow_fallback_rowset_format();
+
+    TReadTablePartitionOptions parsedOptions;
+    parsedOptions.Unordered = req.unordered();
+    parsedOptions.OmitInaccessibleColumns = req.omit_inaccessible_columns();
+    parsedOptions.EnableTableIndex = req.enable_table_index();
+    parsedOptions.EnableRowIndex = req.enable_row_index();
+    parsedOptions.EnableRangeIndex = req.enable_range_index();
+
+    if (req.has_config()) {
+        parsedOptions.Config = ConvertTo<TTableReaderConfigPtr>(TYsonString(req.config()));
+    }
+
+    *mutableOptions = std::move(parsedOptions);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
     TReqStartDistributedWriteSession* req,
     const NYPath::TRichYPath& path,
     const TDistributedWriteSessionStartOptions& options)
@@ -2308,6 +2454,7 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
         error.FindMatching(NTabletClient::EErrorCode::HunkTabletStoreToggleConflict) ||
+        error.FindMatching(NTabletClient::EErrorCode::HunkStoreAllocationFailed) ||
         IsChaosRetriableError(error);
 }
 

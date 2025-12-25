@@ -1787,6 +1787,49 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.RestoreBackup(genDirs.back(), TestTabletFlags);
         assertState();
     }
+
+    Y_UNIT_TEST(NewSnapshotChangelogSize) {
+        TEnv env;
+
+        // Small limit
+        env->GetAppData().SystemTabletBackupConfig.SetNewBackupChangelogMinBytes(100);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing much data to changelog" << Endl;
+        env.WriteRange(0, 1000, 10);
+
+        Cerr << "...waiting for new snapshot" << Endl;
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...writing little bit more data to changelog" << Endl;
+        env.WriteValue(1000, 10);
+
+        env.WaitChangelogFlush();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> backupDirs;
+        tabletIdDir.List(backupDirs);
+
+        UNIT_ASSERT_VALUES_EQUAL(backupDirs.size(), 2);
+
+        // Check state before and after restore
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1001);
+        };
+
+        assertState();
+        env.RestoreLastBackup(TestTabletFlags);
+        assertState();
+    }
 }
 
 } // namespace NKikimr::NTabletFlatExecutor::NBackup

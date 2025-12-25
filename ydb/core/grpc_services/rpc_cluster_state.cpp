@@ -6,6 +6,8 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/cms/cms.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -111,7 +113,7 @@ public:
         {{ "OwnerId", "PathId", "PartIdx", "DataSize", "RowCount", "IndexSize", "CPUCores", "TabletId", "Path", "NodeId", "StartTime", "AccessTime", "UpdateTime", "InFlightTxCount", "RowUpdates", "RowDeletes", "RowReads", "RangeReads", "RangeReadRows", "ImmediateTxCompleted", "CoordinatedTxCompleted", "TxRejectedByOverload", "TxRejectedByOutOfStorage", "LastTtlRunTime", "LastTtlRowsProcessed", "LastTtlRowsErased", "FollowerId", "LocksAcquired", "LocksWholeShard", "LocksBroken", "TxCompleteLag" }, ".sys/partition_stats" },
         {{ "oid", "relacl", "relallvisible", "relam", "relchecks", "relfilenode", "relforcerowsecurity", "relfrozenxid", "relhasindex", "relhasrules", "relhassubclass", "relhastriggers", "relispartition", "relispopulated", "relisshared", "relkind", "relminmxid", "relname", "relnamespace", "relnatts", "reloftype", "reloptions", "relowner", "relpages", "relpartbound", "relpersistence", "relreplident", "relrewrite", "relrowsecurity", "reltablespace", "reltoastrelid", "reltuples", "reltype" }, ".sys/pg_class" },
         {{ "hasindexes", "hasrules", "hastriggers", "rowsecurity", "schemaname", "tablename", "tableowner", "tablespace" }, ".sys/pg_tables", true},
-        {{ "IntervalEnd", "Rank", {"QueryText", true}, "Count", "SumCPUTime", "MinCPUTime", "MaxCPUTime", "SumDuration", "MinDuration", "MaxDuration", "MinReadRows", "MaxReadRows", "SumReadRows", "MinReadBytes", "MaxReadBytes", "SumReadBytes", "MinUpdateRows", "MaxUpdateRows", "SumUpdateRows", "MinUpdateBytes", "MaxUpdateBytes", "SumUpdateBytes", "MinDeleteRows", "MaxDeleteRows", "SumDeleteRows", "MinRequestUnits", "MaxRequestUnits", "SumRequestUnits" }, ".sys/query_metrics_one_minute" },
+        {{ "IntervalEnd", "Rank", {"QueryText", true}, "Count", "SumCPUTime", "MinCPUTime", "MaxCPUTime", "SumDuration", "MinDuration", "MaxDuration", "MinReadRows", "MaxReadRows", "SumReadRows", "MinReadBytes", "MaxReadBytes", "SumReadBytes", "MinUpdateRows", "MaxUpdateRows", "SumUpdateRows", "MinUpdateBytes", "MaxUpdateBytes", "SumUpdateBytes", "MinDeleteRows", "MaxDeleteRows", "SumDeleteRows", "MinRequestUnits", "MaxRequestUnits", "SumRequestUnits", "LocksBrokenAsBreaker", "LocksBrokenAsVictim" }, ".sys/query_metrics_one_minute" },
         {{ "SessionId", "NodeId", "State", {"Query", true}, "QueryCount", "ClientAddress", "ClientPID", "ClientUserAgent", "ClientSdkBuildInfo", "ApplicationName", "SessionStartAt", "QueryStartAt", "StateChangeAt", "UserSID" }, ".sys/query_sessions" },
         {{ "Name", "Rank", "MemberName", "ResourcePool" }, ".sys/resource_pool_classifiers" },
         {{ "Name", "ConcurrentQueryLimit", "QueueSize", "DatabaseLoadCpuThreshold", "ResourceWeight", "TotalCpuLimitPercentPerNode", "QueryCpuLimitPercentPerNode", "QueryMemoryLimitPercentPerNode" }, ".sys/resource_pools" },
@@ -138,6 +140,8 @@ public:
     TDuration Duration;
     TDuration Period;
     bool Sanitize;
+    bool CountersOnly;
+    TActorId Pipe;
 
     void SendRequest(ui32 i) {
         ui32 nodeId = Nodes[i].NodeId;
@@ -155,12 +159,17 @@ public:
 #undef request
     }
 
-    void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        RequestSession();
-        RequestHealthCheck();
-        RequestBaseConfig();
-        RequestStorageConfig();
+    void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext &ctx) {
         Nodes = ev->Get()->Nodes;
+        CountersOnly = GetProtoRequest()->counters_only();
+        if (!CountersOnly) {
+            RequestSession();
+            RequestHealthCheck();
+            RequestBaseConfig();
+            RequestStorageConfig();
+            RequestStateStorageConfig();
+            RequestSentinelState(ctx);
+        }
         NodeReceived.resize(Nodes.size());
         NodeRequested.resize(Nodes.size());
         for (ui32 i : xrange(Nodes.size())) {
@@ -170,7 +179,9 @@ public:
             node->SetHost(ni.Host);
             node->SetPort(ni.Port);
             node->SetLocation(ni.Location.ToString());
-            SendRequest(i);
+            if (!CountersOnly) {
+                SendRequest(i);
+            }
         }
         Counters.resize(Nodes.size());
         RequestCounters();
@@ -251,6 +262,35 @@ public:
         Requested++;
     }
 
+    void RequestStateStorageConfig() {
+        auto request = std::make_unique<NKikimr::NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableGetStateStorageConfig()->SetNodesState(true);
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        Requested++;
+    }
+
+    void RequestSentinelState(const TActorContext &ctx) {
+        auto request = std::make_unique<NKikimr::NCms::TEvCms::TEvGetSentinelStateRequest>();
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
+        Pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig));
+
+        NTabletPipe::SendData(ctx, Pipe, request.release());
+        Requested++;
+    }
+
+    void HandleResult(NKikimr::NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
+        State.MutableStateStorageConfig()->CopyFrom(ev->Get()->Record.GetStateStorageConfig());
+        ++Received;
+        CheckReply();
+    }
+
+    void HandleResult(NKikimr::NCms::TEvCms::TEvGetSentinelStateResponse::TPtr& ev) {
+        State.MutableSentinelState()->CopyFrom(ev->Get()->Record);
+        ++Received;
+        CheckReply();
+    }
+
     void Handle(NKikimr::NStorage::TEvNodeWardenBaseConfig::TPtr ev) {
         State.MutableBaseConfig()->CopyFrom(ev->Get()->BaseConfig);
         ++Received;
@@ -258,6 +298,7 @@ public:
     }
 
     void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr ev) {
+        State.MutableStorageConfig()->CopyFrom(*ev->Get()->Config);
         State.MutableBridgeClusterState()->CopyFrom(ev->Get()->Config->GetClusterState());
         State.MutableBridgeClusterStateDetails()->CopyFrom(ev->Get()->Config->GetClusterStateDetails());
         ++Received;
@@ -291,7 +332,7 @@ public:
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
         ui32 idx = ev.Get()->Cookie;
-        Counters[idx].push_back(std::make_pair(Pack(std::move(ev->Get()->Record.GetResponse())), TInstant::Now()));
+        Counters[idx].push_back(std::make_pair(std::move(ev->Get()->Record.GetResponse()), TInstant::Now()));
         NodeStateInfoReceived(idx);
     }
 
@@ -356,12 +397,13 @@ public:
         for (const auto& ni : Nodes) {
             ctx.Send(TActivationContext::InterconnectProxy(ni.NodeId), new TEvents::TEvUnsubscribe());
         }
+        NTabletPipe::CloseClient(ctx, Pipe);
         TBase::Die(ctx);
     }
 
     STFUNC(StateRequestedBrowse) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvInterconnect::TEvNodesInfo, HandleBrowse);
+            HFunc(TEvInterconnect::TEvNodesInfo, HandleBrowse);
             cFunc(TEvents::TSystem::Wakeup, Wakeup);
         }
     }
@@ -382,6 +424,8 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, Wakeup);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
+            hFunc(NKikimr::NStorage::TEvNodeConfigInvokeOnRootResult, HandleResult);
+            hFunc(NKikimr::NCms::TEvCms::TEvGetSentinelStateResponse, HandleResult);
         }
     }
 
@@ -413,18 +457,24 @@ public:
         operation.set_status(Ydb::StatusIds::SUCCESS);
 
         Ydb::Monitoring::ClusterStateResult result;
-        AddBlock(result, "cluster_state.json", State);
-        NKikimrClusterStateInfoProto::TClusterStateInfoParameters params;
-        params.SetStartedAt(Started.ToStringUpToSeconds());
-        params.SetDurationSeconds(Duration.Seconds());
-        params.SetPeriodSeconds(Period.Seconds());
-        AddBlock(result, "cluster_state_fetch_parameters.json", params);
+
+        if (!CountersOnly) {
+            AddBlock(result, "cluster_state", State);
+            NKikimrClusterStateInfoProto::TClusterStateInfoParameters params;
+            params.SetStartedAt(Started.ToStringUpToSeconds());
+            params.SetDurationSeconds(Duration.Seconds());
+            params.SetPeriodSeconds(Period.Seconds());
+            AddBlock(result, "cluster_state_fetch_parameters", params);
+        }
         for (ui32 node : xrange(Counters.size())) {
             for (ui32 i : xrange(Counters[node].size())) {
                 auto* counterBlock = result.Addblocks();
                 TStringBuilder sb;
                 auto nodeId = Nodes[node].NodeId;
-                sb << "node_" << nodeId << "_counters_" << i << ".json";
+                sb << "node_" << nodeId << "_counters";
+                if (Counters[node].size() > 1) {
+                    sb << "_" << i;
+                }
                 counterBlock->Setname(sb);
                 counterBlock->Setcontent(Counters[node][i].first);
                 counterBlock->Mutabletimestamp()->set_seconds(Counters[node][i].second.Seconds());

@@ -6337,43 +6337,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(R"([[240000u]])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
-
-    Y_UNIT_TEST(ComplexQuery) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-
-        TKikimrRunner kikimr(settings);
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-
-        const TString query = R"(
-            CREATE TABLE `/Root/test` (
-                c0 Int32, c1 Int32, c2 Uint8, c3 Uint8, c4 Uint64, c5 Int32, c6 Uint32, c7 Int32,
-                PRIMARY KEY (c0, c1),
-            );
-        )";
-
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto client = kikimr.GetQueryClient();
-        {
-            auto prepareResult = client.ExecuteQuery(R"(
-                UPDATE `/Root/test` ON (c0, c1, c2, c3, c4, c5, c6, c7)
-                VALUES (CAST(1 AS Int32), CAST(1 AS Int32), CAST(1 AS Uint8), CAST(1 AS Uint8), CAST(1 AS Uint64), CAST(1 AS Int32), CAST(1 AS Uint32), CAST(1 AS Int32));
-
-                UPDATE `/Root/test`
-                SET c2 = CAST(2 AS Uint8), c3 = CAST(2 AS Uint8), c4 = CAST(2 AS Uint64), c5 = CAST(2 AS Int32), c6 = CAST(2 AS Uint32), c7 = CAST(2 AS Int32)
-                WHERE c0 = CAST(2 AS Int32) AND c1 = CAST(2 AS Int32);
-
-                DELETE FROM `/Root/test` ON (c0, c1)
-                VALUES (CAST(3 AS Int32), CAST(3 AS Int32));
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
-        }
-    }
 }
 
 } // namespace NKqp

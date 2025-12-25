@@ -734,6 +734,11 @@ public:
         }
     }
 
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
+    }
+
     bool IsFinished() const override {
         ythrow yexception() << "unimplemented";
     }
@@ -1185,8 +1190,9 @@ public:
         }
     }
 
-    void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
-        Y_UNUSED(settings);
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
     }
 
     template<typename T>

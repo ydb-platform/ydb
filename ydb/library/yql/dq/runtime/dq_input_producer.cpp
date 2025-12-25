@@ -76,7 +76,7 @@ private:
 
         if (Batch.empty()) {
             // pass watermark and wait for drain only if watermarks enabled
-            if (WatermarksEnabled() && TrySendWatermark()) {
+            if (TrySendWatermark()) {
                 return NUdf::EFetchStatus::Yield;
             }
 
@@ -94,7 +94,8 @@ private:
             }
 
             // pass watermark and wait for drain only if watermarks enabled and batch is still empty
-            if (Batch.empty() && WatermarksEnabled() && TrySendWatermark()) {
+            if (Batch.empty()) {
+                Y_UNUSED(TrySendWatermark());
                 return NUdf::EFetchStatus::Yield;
             }
         }
@@ -122,7 +123,7 @@ private:
 
         if (Batch.empty()) {
             // pass watermark and wait for drain only if watermarks enabled
-            if (WatermarksEnabled() && TrySendWatermark()) {
+            if (TrySendWatermark()) {
                 return NUdf::EFetchStatus::Yield;
             }
 
@@ -140,7 +141,8 @@ private:
             }
 
             // pass watermark and wait for drain only if watermarks enabled and batch is still empty
-            if (Batch.empty() && WatermarksEnabled() && TrySendWatermark()) {
+            if (Batch.empty()) {
+                Y_UNUSED(TrySendWatermark());
                 return NUdf::EFetchStatus::Yield;
             }
         }
@@ -200,8 +202,10 @@ private:
     }
 
     [[nodiscard]] bool TrySendWatermark() {
-        Y_DEBUG_ABORT_UNLESS(WatermarksEnabled());
-        if (!Watermark || !NotifyWatermarkTracker(InputKey, *Watermark)) {
+        if (!WatermarksEnabled()) {
+            return false;
+        }
+        if (!Watermark || !NotifyWatermarkTracker(InputKey, *Watermark) || !WatermarksTracker->HasPendingWatermark()) {
             return false;
         }
         Y_DEBUG_ABORT_UNLESS(WatermarksTracker->HasPendingWatermark());

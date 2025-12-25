@@ -289,7 +289,7 @@ private:
 
 public:
     TRandomDataGenerator(const TVectorWorkloadParams& params, const NVector::TVectorOpts& vectorOpts, const size_t rowCount, const uint32_t randomSeed)
-        : IBulkDataGenerator(params.TableName, rowCount)
+        : IBulkDataGenerator(params.TableOpts.Name, rowCount)
         , Params(params)
         , VectorOpts(vectorOpts)
         , RowCount(rowCount)
@@ -360,7 +360,7 @@ public:
                 arrow::ipc::SerializeSchema(*schema).ValueOrDie()->ToString()
             );
 
-            return {MakeIntrusive<TDataPortion>(Params.GetFullTableName(Params.TableName.c_str()), std::move(arrowData), currentBatchSize)};
+            return {MakeIntrusive<TDataPortion>(Params.GetFullTableName(Params.TableOpts.Name.c_str()), std::move(arrowData), currentBatchSize)};
         }
     }
 };
@@ -402,9 +402,9 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {
     const auto basicDataGenerator = std::make_shared<TDataGenerator>(
         *this,
-        Params.TableName,
+        Params.TableOpts.Name,
         0,
-        Params.TableName,
+        Params.TableOpts.Name,
         DataFiles,
         Params.GetColumns(),
         TDataGenerator::EPortionSizeUnit::Line

@@ -51,6 +51,7 @@ class TsTestType(StrEnum):
     ESLINT = auto()
     HERMIONE = auto()
     JEST = auto()
+    VITEST = auto()
     PLAYWRIGHT = auto()
     PLAYWRIGHT_LARGE = auto()
     TSC_TYPECHECK = auto()
@@ -119,6 +120,16 @@ class UnitType:
 
 
 class NotsUnitType(UnitType):
+    def on_ts_configure(self):
+        """
+        Run base configuration for TS module
+        """
+
+    def on_node_modules_configure(self):
+        """
+        Calculates inputs and outputs of node_modules, fills `_NODE_MODULES_INOUTS` variable
+        """
+
     def on_peerdir_ts_resource(self, *resources: str):
         """
         Ensure dependency installed on the project
@@ -146,9 +157,14 @@ class NotsUnitType(UnitType):
         Setup test recipe to extract peer's output before running tests
         """
 
+    def on_ts_proto_auto_configure(self) -> None:
+        """
+        Configure auto TS_PROTO
+        """
+
     def on_ts_proto_auto_prepare_deps_configure(self) -> None:
         """
-        Configure prepare deps for TS_PROTO_AUTO
+        Configure prepare deps for auto TS_PROTO
         """
 
 
@@ -187,6 +203,17 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestForPath.value,
     ),
     TsTestType.JEST: (
+        df.Size.from_unit,
+        df.Tag.from_unit,
+        df.Requirements.from_unit,
+        df.ConfigPath.value,
+        df.TsTestDataDirs.value,
+        df.TsTestDataDirsRename.value,
+        df.TsResources.value,
+        df.TsTestForPath.value,
+        df.DockerImage.value,
+    ),
+    TsTestType.VITEST: (
         df.Size.from_unit,
         df.Tag.from_unit,
         df.Requirements.from_unit,
@@ -852,17 +879,51 @@ def _select_matching_version(
         )
 
 
-@_with_report_configure_error
-def on_prepare_deps_configure(unit: NotsUnitType) -> None:
+def _is_ts_proto_auto(unit: NotsUnitType) -> bool:
+    """TS_PROTO without package.json"""
     from lib.nots.package_manager.base.utils import build_pj_path
 
-    pm = _create_pm(unit)
+    is_ts_proto = unit.get("TS_PROTO") == "yes" or unit.get("TS_PROTO_PREPARE_DEPS") == "yes"
+    if not is_ts_proto:
+        return False
 
-    if not _is_real_file(build_pj_path(pm.sources_path)) and unit.get("TS_PROTO_PREPARE_DEPS") == "yes":
-        # if this is a PREPARE_DEPS for TS_PROTO and there is no package.json - this is TS_PROTO_AUTO
+    pj_path = unit.resolve(build_pj_path(unit.path()))
+    has_pj = _is_real_file(pj_path)
+    return not has_pj
+
+
+@_with_report_configure_error
+def on_ts_proto_configure(unit: NotsUnitType) -> None:
+    if _is_ts_proto_auto(unit):
+        unit.on_ts_proto_auto_configure()
+        return
+
+    in_pj = _build_directives(["hide", "input"], ["package.json"])
+    out_pj = _build_directives(["hide", "output"], ["package.json"])
+    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_pj, out_pj])
+
+    unit.set(["_TS_PROTO_AUTO_ARGS", ""])
+
+    unit.on_ts_configure()
+    unit.on_node_modules_configure()
+
+
+@_with_report_configure_error
+def on_ts_proto_auto_configure(unit: NotsUnitType) -> None:
+    out_files = _build_directives(["hide", "output"], ["package.json", "pnpm-lock.yaml"])
+    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", out_files)
+
+    deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
+    unit.onpeerdir([deps_path])
+
+
+@_with_report_configure_error
+def on_prepare_deps_configure(unit: NotsUnitType) -> None:
+    if _is_ts_proto_auto(unit):
         unit.on_ts_proto_auto_prepare_deps_configure()
         return
 
+    pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
@@ -983,7 +1044,7 @@ def on_ts_test_for_configure(
     user_recipes = unit.get_subst("TEST_RECIPES_VALUE").strip()
     unit.set(["TEST_RECIPES_VALUE", ""])
 
-    if test_runner in [TsTestType.JEST]:
+    if test_runner in [TsTestType.JEST, TsTestType.VITEST]:
         unit.on_setup_install_node_modules_recipe([for_mod_path])
     else:
         unit.on_setup_extract_node_modules_recipe([for_mod_path])

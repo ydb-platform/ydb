@@ -2,7 +2,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
-#include <ydb/core/persqueue/pqtablet/partition/read_quoter.h>
+#include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -2285,101 +2285,6 @@ Y_UNIT_TEST_F(Huge_ProposeTransacton, TPQTabletFixture)
 
     //WaitPlanStepAck({.Step=100, .TxIds={txId_1, txId_2}});
     //WaitPlanStepAccepted({.Step=100});
-}
-
-Y_UNIT_TEST_F(After_Restarting_The_Tablet_Sends_A_TEvReadSet_For_Transactions_In_The_EXECUTED_State, TPQTabletFixture)
-{
-    const ui64 txId_1 = 67890;
-    const ui64 txId_2 = txId_1 + 1;
-    const ui64 mockTabletId = 22222;
-
-    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
-    PQTabletPrepare({.partitions=1}, {}, *Ctx);
-
-    // 1st tx
-    SendProposeTransactionRequest({.TxId=txId_1,
-                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    WaitProposeTransactionResponse({.TxId=txId_1,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-
-    SendPlanStep({.Step=100, .TxIds={txId_1}});
-
-    WaitForCalcPredicateResult();
-
-    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId_1, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
-
-    WaitProposeTransactionResponse({.TxId=txId_1,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-
-    WaitForTxState(txId_1, NKikimrPQ::TTransaction::EXECUTED);
-
-    tablet->ReadSet = Nothing();
-
-    // 2nd tx
-    SendProposeTransactionRequest({.TxId=txId_2,
-                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    WaitProposeTransactionResponse({.TxId=txId_2,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-
-    SendPlanStep({.Step=110, .TxIds={txId_2}});
-
-    WaitForCalcPredicateResult();
-
-    WaitReadSetEx(*tablet, {.Step=110, .TxId=txId_2, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Count=1});
-
-    // the PQ tablet has moved a step forward
-    WaitForExecStep(110);
-
-    // restart PQ tablet
-    PQTabletRestart(*Ctx);
-
-    // the PQ tablet should send a TEvReadSet for the executed transaction
-    WaitReadSetEx(*tablet, {.Step=100, .TxId=txId_1, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Count=2});
-}
-
-Y_UNIT_TEST_F(TEvReadSet_Is_Not_Sent_Ahead_Of_Time, TPQTabletFixture)
-{
-    const ui64 txId = 67890;
-    const ui64 mockTabletId = 22222;
-
-    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
-    PQTabletPrepare({.partitions=1}, {}, *Ctx);
-
-    SendProposeTransactionRequest({.TxId=txId,
-                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    WaitProposeTransactionResponse({.TxId=txId,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-
-    SendPlanStep({.Step=100, .TxIds={txId}});
-
-    WaitForCalcPredicateResult();
-
-    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
-
-    //WaitProposeTransactionResponse({.TxId=txId,
-    //                               .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-
-    TAutoPtr<IEventHandle> kvRequest;
-    InterceptSaveTxState(kvRequest);
-
-    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
-
-    WaitForNoReadSetAck(*tablet);
-
-    SendSaveTxState(kvRequest);
-
-    WaitForTxState(txId, NKikimrPQ::TTransaction::EXECUTED);
-
-    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
 Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)

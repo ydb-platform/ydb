@@ -29,6 +29,8 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     TVector<ui32> YellowStopChannels;
     THashMap<ui32, float> ApproximateFreeSpaceShareByChannel;
 
+    TMessageRelevanceWatcher Relevance;
+
     NWilson::TSpan RequestSpan;
     TMap<TLogoBlobID, NWilson::TSpan> BlobSpans;
 
@@ -143,7 +145,15 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         ui64 cookie = RandomNumber<ui64>();
         RequestCookies ^= cookie;
 
-        SendPutToGroup(ctx, x->GroupID, Info.Get(), MakeHolder<TEvBlobStorage::TEvPut>(id, buffer, TInstant::Max(), handleClass, tactic), cookie, std::move(traceId));
+        SendPutToGroup(ctx, x->GroupID, Info.Get(),
+            MakeHolder<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+                .BlobId = id,
+                .Buffer = TRope(buffer),
+                .Deadline = TInstant::Max(),
+                .HandleClass = handleClass,
+                .Tactic = tactic,
+                .ExternalRelevanceWatcher = Relevance,
+            }), cookie, std::move(traceId));
     }
 
 public:
@@ -152,13 +162,14 @@ public:
     }
 
     TTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &logid, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs,
-        TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info, NWilson::TTraceId traceId)
+        TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info, TMessageRelevanceWatcher relevance, NWilson::TTraceId traceId)
         : Owner(owner)
         , LogEntryID(logid)
         , LogEntry(entry)
         , CommitTactic(commitTactic)
         , Info(info)
         , RepliesToWait(Max<ui32>())
+        , Relevance(std::move(relevance))
         , RequestSpan(TWilsonTablet::TabletDetailed, std::move(traceId), "Tablet.WriteLog")
     {
         References.swap(refs);
@@ -215,8 +226,8 @@ public:
     }
 };
 
-IActor* CreateTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &entryId, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info, NWilson::TTraceId traceId) {
-    return new TTabletReqWriteLog(owner, entryId, entry, refs, commitTactic, info, std::move(traceId));
+IActor* CreateTabletReqWriteLog(const TActorId &owner, const TLogoBlobID &entryId, NKikimrTabletBase::TTabletLogEntry *entry, TVector<TEvTablet::TLogEntryReference> &refs, TEvBlobStorage::TEvPut::ETactic commitTactic, TTabletStorageInfo *info, TMessageRelevanceWatcher relevance, NWilson::TTraceId traceId) {
+    return new TTabletReqWriteLog(owner, entryId, entry, refs, commitTactic, info, std::move(relevance), std::move(traceId));
 }
 
 }

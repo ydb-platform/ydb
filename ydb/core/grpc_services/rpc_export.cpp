@@ -165,10 +165,15 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         return "[CreateExport]";
     }
 
-    static bool IsItemSupportedInExport(NSchemeCache::TSchemeCacheNavigate::EKind kind) {
-        switch (kind) {
-            case NSchemeCache::TSchemeCacheNavigate::KindTable:
+    static bool IsItemSupportedInExport(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        switch (entry.Kind) {
+            case NSchemeCache::TSchemeCacheNavigate::KindTable: {
+                auto it = entry.Attributes.find("__async_replica");
+                return it == entry.Attributes.end() || it->second != "true";
+
+            }
             case NSchemeCache::TSchemeCacheNavigate::KindTopic:
+            case NSchemeCache::TSchemeCacheNavigate::KindReplication:
                 return true;
             case NSchemeCache::TSchemeCacheNavigate::KindColumnTable:
                 return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
@@ -370,7 +375,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 if (IsLikeDirectory(kind)) {
                     DirectoryItems[path] = it->second;
                 }
-                if (!IsItemSupportedInExport(kind)) {
+                if (!IsItemSupportedInExport(entry)) {
                     if (IsLikeDirectory(kind)) { // If directories/databases are not supported => it is OK, they are expanded and then thrown
                         ExportItems.erase(it);
                     } else {
@@ -412,11 +417,11 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                     if (it->second.Destination) {
                         destination = TStringBuilder() << it->second.Destination << "/" << child.Name;
                     }
-                    if (IsItemSupportedInExport(kind)) {
-                        ExportItems.insert({childPath, TExportItemInfo{.Destination = destination}});
-                    }
                     if (IsLikeDirectory(kind)) {
                         DirectoryItems.insert({childPath, TExportItemInfo{.Destination = destination}});
+                    } else {
+                        // We'll remove all unsupported children on ResolveExpandedPaths stage
+                        ExportItems.insert({childPath, TExportItemInfo{.Destination = destination}});
                     }
                 }
                 DirectoryItems.erase(it);
@@ -446,6 +451,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             TString path = CanonizePath(entry.Path);
             const auto it = ExportItems.find(path);
             if (it != ExportItems.end()) {
+                if (!IsItemSupportedInExport(entry)) {
+                    ExportItems.erase(it);
+                    continue;
+                }
                 it->second.Resolved = true;
             }
 
@@ -514,6 +523,13 @@ public:
         const auto& settings = request.settings();
         InitCommonSourcePath();
 
+        if constexpr (IsFsExport) {
+            if (!settings.base_path().StartsWith("/")) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
+                    "base_path must be an absolute path");
+            }
+        }
+
         if constexpr (!TTraits::HasSourcePath) {
             if (settings.items().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
@@ -536,7 +552,7 @@ public:
                 }
             }
             if (settings.items().empty() && !commonDestSpecified) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No destination prefix specified. Don't know where to export");
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No destination prefix nor items specified. Don't know where to export");
             }
             for (const auto& item : settings.items()) {
                 if (TTraits::GetDestination(item).empty() && !commonDestSpecified) {
@@ -563,13 +579,6 @@ public:
                 if (!CheckCompression(settings.compression(), status, error)) {
                     return this->Reply(status, TIssuesIds::DEFAULT_ERROR, error);
                 }
-            }
-        }
-        
-        if constexpr (IsFsExport) {
-            if (!settings.base_path().StartsWith("/")) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
-                    "base_path must be an absolute path");
             }
         }
 

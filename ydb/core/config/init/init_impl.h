@@ -179,9 +179,9 @@ auto MutableConfigPartMerge(
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
-void LoadMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigFile, const TString& storageYamlConfigFile,
+void ApplyMainYamlConfig(TConfigRefs refs, const TString& mainYamlConfigString,
+    const std::optional<TString>& storageYamlConfigString,
     bool loadedFromStore, NKikimrConfig::TAppConfig& appConfig,
-    NYamlConfig::IConfigSwissKnife* csk,
     const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
@@ -1123,9 +1123,10 @@ public:
         Option("auth-file", TCfg::TAuthConfigFieldTag{});
         LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
 
-        TString yamlConfigFile = CommonAppOptions.YamlConfigFile;
-        TString storageYamlConfigFile;
         bool loadedFromStore = false;
+
+        std::optional<TString> mainYamlConfigString;
+        std::optional<TString> storageYamlConfigString;
 
         if (CommonAppOptions.ConfigDirPath) {
             AppConfig.SetConfigDirPath(CommonAppOptions.ConfigDirPath);
@@ -1133,14 +1134,27 @@ public:
             auto dir = fs::path(CommonAppOptions.ConfigDirPath.c_str());
 
             if (auto path = dir / STORAGE_CONFIG_NAME; fs::is_regular_file(path)) {
-                storageYamlConfigFile = path.string();
+                storageYamlConfigString.emplace(ProtoConfigFileProvider.GetProtoFromFile(path.string(), ErrorCollector));
+                if (csk) {
+                    csk->VerifyStorageConfig(*storageYamlConfigString);
+                }
             }
 
             if (auto path = dir / CONFIG_NAME; fs::is_regular_file(path)) {
-                yamlConfigFile = path.string();
+                mainYamlConfigString.emplace(ProtoConfigFileProvider.GetProtoFromFile(path.string(), ErrorCollector));
+                if (csk) {
+                    csk->VerifyMainConfig(*mainYamlConfigString);
+                }
                 loadedFromStore = true;
             } else {
-                storageYamlConfigFile.clear();
+                storageYamlConfigString.reset();
+            }
+        }
+
+        if (!mainYamlConfigString && CommonAppOptions.YamlConfigFile) {
+            mainYamlConfigString.emplace(ProtoConfigFileProvider.GetProtoFromFile(CommonAppOptions.YamlConfigFile, ErrorCollector));
+            if (csk) {
+                csk->VerifyMainConfig(*mainYamlConfigString);
             }
         }
 
@@ -1148,16 +1162,19 @@ public:
             ParseSeedNodes(CommonAppOptions);
         }
 
-        if (CommonAppOptions.IsStaticNode()) {
-            if (yamlConfigFile.empty() && CommonAppOptions.SeedNodesFile) {
-                InitConfigFromSeedNodes(yamlConfigFile, storageYamlConfigFile);
-            }
-            if (!CommonAppOptions.ConfigDirPath.empty() && yamlConfigFile.empty()) {
-                ythrow yexception() << "YAML config is not provided for static node";
+        if (CommonAppOptions.IsStaticNode() && !mainYamlConfigString) {
+            if (CommonAppOptions.SeedNodesFile) {
+                InitConfigFromSeedNodes(mainYamlConfigString.emplace(), storageYamlConfigString);
+                Y_ABORT_UNLESS(mainYamlConfigString);
+            } else {
+                ythrow yexception() << "YAML config is not provided for static node and no seed nodes given";
             }
         }
 
-        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
+        if (mainYamlConfigString) {
+            ApplyMainYamlConfig(refs, *mainYamlConfigString, storageYamlConfigString, loadedFromStore, AppConfig);
+        }
+
         OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
 
         // start memorylog as soon as possible
@@ -1179,7 +1196,16 @@ public:
             InitDynamicNode();
         }
 
-        LoadMainYamlConfig(refs, yamlConfigFile, storageYamlConfigFile, loadedFromStore, AppConfig, csk);
+        if (mainYamlConfigString) {
+            ApplyMainYamlConfig(refs, *mainYamlConfigString, storageYamlConfigString, loadedFromStore, AppConfig);
+        }
+
+        // disable as early as possible to properly propagate it everywhere
+        if (CommonAppOptions.TinyMode) {
+            if (!AppConfig.GetFeatureFlags().HasEnableBackgroundCompaction()) {
+                AppConfig.MutableFeatureFlags()->SetEnableBackgroundCompaction(false);
+            }
+        }
 
         Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
 
@@ -1554,75 +1580,83 @@ public:
         }
     }
 
-    void InitConfigFromSeedNodes(TString& yamlConfigFile, TString& storageYamlConfigFile) {
-        if (AppConfig.GetConfigDirPath().empty()) {
+    void InitConfigFromSeedNodes(TString& mainYamlConfigString, std::optional<TString>& storageYamlConfigString) {
+        if (!AppConfig.GetConfigDirPath()) {
             ythrow yexception() << "Seed nodes file provided, but config dir path is not set";
         }
 
-        if (CommonAppOptions.SeedNodes.empty()) {
-            ythrow yexception() << "No seed nodes provided";
+        std::vector<TString> hostOptions = {
+            // possible variants how host can be identified in config; they should be kept consistent with DeduceNodeId code
+            Env.HostName(),
+            Env.FQDNHostName(),
+        };
+        std::ranges::sort(hostOptions);
+        auto [begin, end] = std::ranges::unique(hostOptions);
+        hostOptions.erase(begin, end);
+        auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger,
+            hostOptions, CommonAppOptions.InterconnectPort);
+        if (!result) {
+            ythrow yexception() << "Failed to fetch config from seed nodes for static node";
         }
 
-        auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
-        if (!result) {
-            Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
+        if (const auto& config = result->GetMainYamlConfig()) {
+            mainYamlConfigString = *config;
+        } else {
+            ythrow yexception() << "No main YAML config has been provided from seed nodes for static node";
+        }
+
+        storageYamlConfigString = result->GetStorageYamlConfig();
+
+        if (result->IsTransient()) {
+            // we do not want to save transient configs into filesystem
             return;
         }
 
-        const TString& clusterConfig = result->GetMainYamlConfig();
-        const TString& storageConfig = result->GetStorageYamlConfig();
-        const TString configDirPath = AppConfig.GetConfigDirPath();
+        const fs::path configDirPath(AppConfig.GetConfigDirPath().c_str());
 
         auto saveConfig = [&](const TString& config, const TString& configName) {
             try {
-                TString tempPath = TStringBuilder() << AppConfig.GetConfigDirPath() << "/temp_" << configName;
-                TString configPath = TStringBuilder() << AppConfig.GetConfigDirPath() << "/" << configName;
-            {
-                TFileOutput tempFile(tempPath);
-                tempFile << config;
-                tempFile.Flush();
-
+                fs::path tempPath = configDirPath / (TStringBuilder() << configName << "."
+                    << Sprintf("%08" PRIx32, RandomNumber<ui32>())).c_str();
+                *std::make_unique<TFileOutput>(tempPath) << config;
                 if (Chmod(tempPath.c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
+                    NFs::Remove(tempPath.string());
                     return false;
                 }
-            }
 
-            return NFs::Rename(tempPath, configPath);
+                fs::path configPath = configDirPath / configName.c_str();
+                if (!NFs::Rename(tempPath.string(), configPath.string())) {
+                    NFs::Remove(tempPath.string());
+                    return false;
+                }
+
+                return true;
             } catch (const std::exception& e) {
                 return false;
             }
         };
 
-        bool clusterSaved = !clusterConfig.empty() && saveConfig(clusterConfig, CONFIG_NAME);
-        bool storageSaved = !storageConfig.empty() && saveConfig(storageConfig, STORAGE_CONFIG_NAME);
+        const bool mainError = !saveConfig(mainYamlConfigString, CONFIG_NAME);
+        const bool storageError = storageYamlConfigString && !saveConfig(*storageYamlConfigString, STORAGE_CONFIG_NAME);
 
-        if (clusterSaved) {
-            yamlConfigFile = configDirPath + "/" + CONFIG_NAME;
-        }
-        if (storageSaved) {
-            storageYamlConfigFile = configDirPath + "/" + STORAGE_CONFIG_NAME;
-        }
-
-        if (clusterSaved && storageSaved) {
-            Logger.Out() << "Initialized main and storage configs in " << configDirPath << "/"
-                         << CONFIG_NAME << " and " << STORAGE_CONFIG_NAME << Endl;
-        } else if (clusterSaved) {
-            Logger.Out() << "Initialized config in " << configDirPath << "/" << CONFIG_NAME << Endl;
-        } else if (!clusterConfig.empty() || !storageConfig.empty()) {
+        if (mainError || storageError) {
             TStringBuilder errorMsg;
             errorMsg << "Failed to save configs: ";
-            if (!clusterConfig.empty() && !clusterSaved) {
+            if (mainError) {
                 errorMsg << "main config";
             }
-            if (!storageConfig.empty() && !storageSaved) {
-                if (!clusterConfig.empty() && !clusterSaved) {
+            if (storageError) {
+                if (mainError) {
                     errorMsg << ", ";
                 }
                 errorMsg << "storage config";
             }
             ythrow yexception() << errorMsg;
+        } else if (storageYamlConfigString) {
+            Logger.Out() << "Initialized main and storage configs in " << configDirPath << "/"
+                << CONFIG_NAME << " and " << STORAGE_CONFIG_NAME << Endl;
         } else {
-            Logger.Out() << "No configs received from seed nodes" << Endl;
+            Logger.Out() << "Initialized config in " << configDirPath << "/" << CONFIG_NAME << Endl;
         }
     }
 
@@ -1642,21 +1676,21 @@ public:
             ythrow yexception() << "No seed nodes provided";
         }
 
-        auto cfgResult = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
+        auto cfgResult = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger, {}, 0);
         if (!cfgResult) {
             Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
             return;
         }
 
-        const TString& mainYaml = cfgResult->GetMainYamlConfig();
-        if (mainYaml.empty()) {
+        const std::optional<TString>& mainYaml = cfgResult->GetMainYamlConfig();
+        if (!mainYaml) {
             Logger.Out() << "No main config received from seed nodes" << Endl;
             return;
         }
 
         const TString& sourceAddress = cfgResult->GetSourceAddress();
         NKikimrConfig::TAppConfig yamlConfig;
-        NYamlConfig::ResolveAndParseYamlConfig(mainYaml, {}, Labels, yamlConfig);
+        NYamlConfig::ResolveAndParseYamlConfig(*mainYaml, {}, Labels, yamlConfig);
 
         yamlConfig.SetYamlConfigEnabled(true);
         Labels["config_source"] = "seed_nodes";

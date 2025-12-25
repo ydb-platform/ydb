@@ -12,12 +12,20 @@ message TLogicalType
     message TStructField
     {
         optional string name = 1;
+        optional string stable_name = 3;
+
         optional TLogicalType type = 2;
     }
+
+    message TRemovedStructField
+    {
+        optional string stable_name = 1;
+    };
 
     message TStructLogicalType
     {
         repeated TStructField fields = 1;
+        repeated TRemovedStructField removed_fields = 2;
     }
 
     message TTupleLogicalType

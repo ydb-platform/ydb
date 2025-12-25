@@ -1284,6 +1284,11 @@ private:
 
     void AddReadConflict(ui64 txId) {
         Y_ENSURE(State.LockId);
+        if (State.LockMode != NKikimrDataEvents::OPTIMISTIC) {
+            // Note for AI agents: we don't record read conflicts in snapshot
+            // isolation, that's the whole point of snapshot isolation.
+            return;
+        }
         // We have skipped uncommitted changes in txId, which would affect
         // the read result when it commits. Add a conflict edge that breaks
         // our lock when txId is committed.
@@ -1991,7 +1996,8 @@ public:
         TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
 
         if (guardLocks.LockTxId) {
-            switch (Self->SysLocksTable().EnsureCurrentLock()) {
+            bool createMissing = state.LockMode == NKikimrDataEvents::OPTIMISTIC;
+            switch (Self->SysLocksTable().EnsureCurrentLock(createMissing)) {
                 case EEnsureCurrentLock::Success:
                     // Lock is valid, we may continue with reads and side-effects
                     break;
@@ -2014,6 +2020,13 @@ public:
                         TStringBuilder() << "Transaction was already committed or aborted"
                             << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
                     return EExecutionStatus::DelayComplete;
+
+                case EEnsureCurrentLock::Missing:
+                    // Note for AI agents: we don't want to create a lock when
+                    // reading in snapshot isolation, because we don't want to
+                    // track read conflicts in snapshot isolation, that's the
+                    // whole point of snapshot isolation.
+                    break;
             }
         }
 
@@ -2136,6 +2149,20 @@ public:
 
         state.LockId = request->Record.GetLockTxId();
         state.LockNodeId = request->Record.GetLockNodeId();
+        state.LockMode = request->Record.GetLockMode();
+        switch (state.LockMode) {
+            case NKikimrDataEvents::OPTIMISTIC:
+            case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+                break;
+
+            default:
+                SetStatusError(
+                    Result->Record,
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder() << "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented"
+                        << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << ")");
+                return;
+        }
 
         // Note: some checks already performed in TTxReadViaPipeline::Execute
         if (state.PathId.OwnerId != Self->TabletID()) {
@@ -2581,31 +2608,43 @@ private:
 
         TTableId tableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion);
 
-        if (!state.Request->Keys.empty()) {
-            for (size_t i = 0; i < state.Request->Keys.size(); ++i) {
-                const auto& key = state.Request->Keys[i];
-                if (key.GetCells().size() != TableInfo.KeyColumnCount) {
-                    // key prefix, treat it as range [prefix, 0, 0] - [prefix, +inf, +inf]
-                    TTableRange lockRange(
-                        state.Keys[i].GetCells(),
-                        true,
-                        key.GetCells(),
-                        true);
-                    sysLocks.SetLock(tableId, lockRange);
-                } else {
-                    sysLocks.SetLock(tableId, key.GetCells());
+        switch (state.LockMode) {
+        case NKikimrDataEvents::OPTIMISTIC:
+            if (!state.Request->Keys.empty()) {
+                for (size_t i = 0; i < state.Request->Keys.size(); ++i) {
+                    const auto& key = state.Request->Keys[i];
+                    if (key.GetCells().size() != TableInfo.KeyColumnCount) {
+                        // key prefix, treat it as range [prefix, 0, 0] - [prefix, +inf, +inf]
+                        TTableRange lockRange(
+                            state.Keys[i].GetCells(),
+                            true,
+                            key.GetCells(),
+                            true);
+                        sysLocks.SetLock(tableId, lockRange);
+                    } else {
+                        sysLocks.SetLock(tableId, key.GetCells());
+                    }
+                }
+            } else {
+                // no keys, so we must have ranges (has been checked initially)
+                for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
+                    auto range = state.Request->Ranges[i].ToTableRange();
+                    sysLocks.SetLock(tableId, range);
                 }
             }
-        } else {
-            // no keys, so we must have ranges (has been checked initially)
-            for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
-                auto range = state.Request->Ranges[i].ToTableRange();
-                sysLocks.SetLock(tableId, range);
-            }
-        }
 
-        if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
-            sysLocks.BreakSetLocks();
+            if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
+                sysLocks.BreakSetLocks();
+            }
+
+            break;
+
+        case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            if (Reader->HadInconsistentResult()) {
+                sysLocks.BreakSetLocks();
+            }
+
+            break;
         }
 
         auto [locks, _] = sysLocks.ApplyLocks();
@@ -3185,6 +3224,19 @@ public:
         }
     }
 
+    bool MustBreakLock(TReadIteratorState& state) const {
+        switch (state.LockMode) {
+        case NKikimrDataEvents::OPTIMISTIC:
+            return Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult();
+
+        case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            return Reader->HadInconsistentResult();
+
+        default:
+            return false;
+        }
+    }
+
     void ApplyLocks(const TActorContext& ctx) {
         auto it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
         Y_ENSURE(it != Self->ReadIteratorsByLocalReadId.end());
@@ -3205,7 +3257,7 @@ public:
             auto& sysLocks = Self->SysLocksTable();
 
             bool isBroken = state.Lock->IsBroken();
-            if (!isBroken && (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult())) {
+            if (!isBroken && MustBreakLock(state)) {
                 sysLocks.BreakLock(state.Lock->GetLockId());
                 sysLocks.ApplyLocks();
                 Y_ENSURE(state.Lock->IsBroken());

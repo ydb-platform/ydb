@@ -103,8 +103,14 @@ public:
 
         Become(&TDqAsyncComputeActor::StateFuncWrapper<&TDqAsyncComputeActor::StateFuncBody>);
 
-        auto wakeupCallback = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
-        auto errorCallback = [this](const TString& error){ SendError(error); };
+        const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
+        auto selfId = this->SelfId();
+        auto wakeupCallback = [actorSystem, selfId]() {
+            actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        };
+        auto errorCallback = [actorSystem, selfId](const TString& error) {
+            actorSystem->Send(selfId, new TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, error));
+        };
         std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::make_shared<TDqTaskRunnerExecutionContext>(TxId, std::move(wakeupCallback), std::move(errorCallback));
 
         Send(TaskRunnerActorId,

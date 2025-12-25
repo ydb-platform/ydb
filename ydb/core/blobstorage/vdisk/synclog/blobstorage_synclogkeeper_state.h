@@ -14,89 +14,18 @@ namespace NKikimr {
     namespace NSyncLog {
 
         ////////////////////////////////////////////////////////////////////////////
-        // TChunksToDeleteDelayed
-        ////////////////////////////////////////////////////////////////////////////
-        class TChunksToDeleteDelayed {
-        public:
-            void Insert(const TVector<ui32> &chunks) {
-                for (auto chunkIdx : chunks) {
-                    bool inserted = Chunks.insert(chunkIdx).second;
-                    Y_ABORT_UNLESS(inserted);
-                }
-            }
-
-            TVector<ui32> Copy() const {
-                // copy from TSet to vector
-                TVector<ui32> vec;
-                vec.assign(Chunks.begin(), Chunks.end());
-                return vec;
-            }
-
-            void Erase(ui32 chunkIdx) {
-                const ui32 del = Chunks.erase(chunkIdx);
-                Y_ABORT_UNLESS(del == 1);
-            }
-
-            TString ToString() const {
-                TStringStream str;
-                Output(str);
-                return str.Str();
-            }
-
-            void Output(IOutputStream &s) const {
-                s << "[";
-                bool first = true;
-                for (auto chunkIdx : Chunks) {
-                    if (first)
-                        first = false;
-                    else
-                        s << " ";
-                    s << chunkIdx;
-                }
-                s << "]";
-            }
-
-            const TSet<ui32>& Get() const {
-                return Chunks;
-            }
-
-        private:
-            TSet<ui32> Chunks;
-        };
-
-
-
-        ////////////////////////////////////////////////////////////////////////////
         // TDelayedActions
         ////////////////////////////////////////////////////////////////////////////
-        class TDelayedActions {
-        public:
-            // Set methods
-            void SetTrimTail()          { TrimTailAction = true; }
-            void SetCutLog()            { CutLogAction = true; }
-            void SetMemOverflow()       { MemOverflowAction = true; }
-            void SetDeleteChunk()       { DeleteChunkAction = true; }
-            // Has methods
-            bool HasTrimTail()          { return TrimTailAction; }
-            bool HasCutLog()            { return CutLogAction; }
-            bool HasMemOverflow()       { return MemOverflowAction; }
-            bool HasDeleteChunk()       { return DeleteChunkAction; }
-            // Clear methods
-            void ClearTrimTail()        { TrimTailAction = false; }
-            void ClearCutLog()          { CutLogAction = false; }
-            void ClearMemOverflow()     { MemOverflowAction = false; }
-            void ClearDeleteChunk()     { DeleteChunkAction = false; }
-
+        struct TDelayedActions {
             // Has any action?
             bool HasActions() const {
-                return TrimTailAction || CutLogAction || MemOverflowAction || DeleteChunkAction;
+                return TrimTail || CutLog || MemOverflow || DeleteChunk;
             }
 
-        private:
-            bool TrimTailAction = false;
-            bool CutLogAction = false;
-            bool MemOverflowAction = false;
-            bool DeleteChunkAction = false;
+            bool TrimTail = false;
+            bool CutLog = false;
+            bool MemOverflow = false;
+            bool DeleteChunk = false;
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -119,9 +48,8 @@ namespace NKikimr {
                 SelfId = selfId;
             }
 
-            bool HasDelayedActions() const {
-                return DelayedActions.HasActions();
-            }
+            bool HasDelayedActions() const { return DelayedActions.HasActions(); }
+            bool GetDeleteChunkAndClear() { return std::exchange(DelayedActions.DeleteChunk, false); }
 
             TSyncLogSnapshotPtr GetSyncLogSnapshot() const {
                 return SyncLogPtr->GetSnapshot();
@@ -151,7 +79,6 @@ namespace NKikimr {
             // just trim log based by TrimTailLsn (which is confirmed lsn from peers)
             bool PerformTrimTailAction();
             bool PerformMemOverflowAction();
-            bool PerformDeleteChunkAction();
             bool PerformInitialCommit();
 
             bool FreeUpToLsnSatisfied() const { return CalculateFirstLsnToKeep() >= FreeUpToLsn; }
@@ -170,6 +97,10 @@ namespace NKikimr {
 
             void UpdateMetrics();
 
+            TVector<ui32> GetChunksToForget() {
+                return std::exchange(ChunksToForget, {});
+            }
+
         private:
             // VDisk Context
             TIntrusivePtr<TSyncLogCtx> SlCtx;
@@ -185,8 +116,6 @@ namespace NKikimr {
             ui64 FreeUpToLsn = 0;
             // actions we must apply but have not applied yet
             TDelayedActions DelayedActions;
-            // chunks that are still used by snapshots
-            TChunksToDeleteDelayed ChunksToDeleteDelayed;
             // notifier for deleted chunks
             std::shared_ptr<IActorNotify> Notifier;
             // logger ctx
@@ -199,8 +128,6 @@ namespace NKikimr {
             const ui64 SyncLogMaxEntryPointSize;
             // does it need initial commit?
             bool NeedsInitialCommit;
-            // Snapshot that can be used by Commiter and PhantomFlagStorageBuilder actors
-            TSyncLogSnapshotPtr Snapshot;
             // Id of Keeper actor which possesses the state
             TActorId SelfId;
 
@@ -215,6 +142,11 @@ namespace NKikimr {
 
             ui32 SelfOrderNumber;
 
+            TVector<ui32> ChunksToForget;
+            THashSet<ui32> ChunksToForgetPending;
+            THashSet<ui32> DeletedChunks;
+            THashSet<ui32> DeletedChunksPending;
+
         private:
             // Fix Disk overflow, i.e. remove some chunks from SyncLog
             TVector<ui32> FixDiskOverflow(ui32 numChunksToAdd);
@@ -225,13 +157,14 @@ namespace NKikimr {
             // 2. Disk chunks used for SyncLog
             // The function fixes limitation excess by
             // 1. returning swapSnap to write to disk (frees memory)
-            // 2. removing some old chunks (putting them to ChunksToDeleteDelayed)
-            TMemRecLogSnapshotPtr FixMemoryAndDiskOverflow();
+            // 2. removing some old chunks (putting them to ChunksToDelete)
+            TMemRecLogSnapshotPtr FixMemoryAndDiskOverflow(const TSyncLogSnapshotPtr& snapshot);
             // Calculate first lsn to keep in recovery log for _DATA_RECORDS_,
             // i.e. for those records in SyncLog which keep user data
             ui64 CalculateFirstDataInRecovLogLsnToKeep() const;
             // Schedule chunks deletion and activate PhantomFlagStorage if needed
-            void DropUnsyncedChunks(const TVector<ui32>& chunks);
+            void DropUnsyncedChunks(const TVector<ui32>& chunks,
+                    const TSyncLogSnapshotPtr& snapshot);
         };
 
     } // NSyncLog

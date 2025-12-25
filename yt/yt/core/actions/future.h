@@ -214,13 +214,6 @@ public:
      */
     const TErrorOr<T>& Get() const;
 
-    //! Extracts the value by moving it out of the future state.
-    /*!
-     *  This call will block until the value is set.
-     */
-    // TODO(babenko): deprecated, see YT-26319
-    TErrorOr<T> GetUnique() const;
-
     //! Waits for the value to become set.
     /*!
      *  This call blocks until either the value is set or #timeout (if given) expires.
@@ -238,13 +231,6 @@ public:
      *  This call does not block.
      */
     std::optional<TErrorOr<T>> TryGet() const;
-
-    //! Extracts the value by moving it out of the future state; returns null if the value is not set yet.
-    /*!
-     *  This call does not block.
-     */
-    // TODO(babenko): deprecated, see YT-26319
-    std::optional<TErrorOr<T>> TryGetUnique() const;
 
     //! Attaches a result handler.
     /*!
@@ -829,7 +815,7 @@ TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Enables runtime checks ensuring that no fiber context switch can happen
-//! during excution of a future handler.
+//! during execution of a future handler.
 //! See YT-25879 for more details.
 void ForbidContextSwitchInFutureHandler();
 bool IsContextSwitchInFutureHandlerForbidden();

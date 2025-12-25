@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 import argparse
+import logging
+import os
 
+from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 from ydb.tests.stress.oltp_workload.workload import WorkloadRunner
-from ydb.tests.stress.common.common import YdbClient
 
+logging.basicConfig(level=os.getenv('LOG_LEVEL', 'INFO'))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -14,7 +17,7 @@ if __name__ == "__main__":
     parser.add_argument("--path", default="oltp_workload", help="A path prefix for tables")
     parser.add_argument("--duration", default=10 ** 9, type=lambda x: int(x), help="A duration of workload in seconds.")
     args = parser.parse_args()
-    client = YdbClient(args.endpoint, args.database, True, sessions=3000)
+    client = InstrumentedYdbClient(args.endpoint, args.database, True, sessions=3000)
     client.wait_connection()
     with WorkloadRunner(client, args.path, args.duration) as runner:
         runner.run()

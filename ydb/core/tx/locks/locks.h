@@ -844,6 +844,8 @@ enum class EEnsureCurrentLock {
     // map, but not yet fully compacted. New reads and especially writes may
     // cause inconsistencies or data corruption and cannot be performed.
     Abort,
+    // Current lock does not exist
+    Missing,
 };
 
 /// /sys/locks table logic
@@ -929,7 +931,7 @@ public:
      * to memory or other constraints. Returns Abort when operation must abort
      * early, e.g. because the given LockId cannot be reused.
      */
-    EEnsureCurrentLock EnsureCurrentLock();
+    EEnsureCurrentLock EnsureCurrentLock(bool createMissing = true);
 
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }

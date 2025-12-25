@@ -150,6 +150,7 @@ public:
         : PathId(pathId)
         , NodePortionsCountLimit(nodePortionsCountLimit) {
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
+        Counters->BadPortionsCountLimit->Set(GetBadPortionsLimit());
     }
 
     bool IsOverloaded(const NMonitoring::TDynamicCounters::TCounterPtr& badPortions) const {
@@ -307,7 +308,11 @@ public:
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("tiling");
+        return BuildDefault(NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompactionPreset());
+    }
+
+    static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {
+        auto result = TFactory::MakeHolder(defaultCompactionName);
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }

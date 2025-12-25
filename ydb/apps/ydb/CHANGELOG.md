@@ -1,3 +1,8 @@
+* Added the `--include-index-data` option to the `ydb export s3` command, enabling index data export.
+* Added the `--index-population-mode` option to the `ydb import s3` command, allowing selection of the index population mode (e.g. build or import).
+
+## 2.28.0 ##
+
 * The `ydb admin cluster state fetch` command was renamed to the `ydb admin cluster diagnostics collect`.
 * Added a new `--no-sanitize` option of the `ydb admin cluster state fetch` command. The new option disable sanitization and preserve sensitive data in the output.
 * Added `snapshot-ro` and `snapshot-rw` transaction modes to `--tx-mode` option of the `ydb table query execute` command.
@@ -9,8 +14,7 @@
 * The `ydb workload vector` now supports the `import files` subcommand to populate the table from CSV or parquet files.
 * The `ydb workload vector` now supports the `import generate` subcommand to populate the table with random data.
 * Named expression-containing view restoration and restoration of views that access secondary indexes have been fixed.
-* Added the `--materialize-indexes` option to the `ydb export s3` command, enabling index materialization during export.
-* Added the `--index-filling-mode` option to the `ydb import s3` command, allowing selection of the index filling mode (e.g. build or import a materialized index).
+* Added new options for shared consumers only to the `ydb topic consumer add` command to configure DLQ and max attempts policy
 
 ## 2.27.0 ##
 

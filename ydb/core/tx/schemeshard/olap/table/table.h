@@ -21,47 +21,23 @@ public:
     ui64 AlterVersion = 0;
     TPtr AlterData;
 
-    TPathId GetOlapStorePathIdVerified() const {
-        AFL_VERIFY(!IsStandalone());
-        return TPathId::FromProto(Description.GetColumnStorePathId());
-    }
+    TPathId GetOlapStorePathIdVerified() const;
 
-    std::shared_ptr<NSharding::IShardingBase> GetShardingVerified(const TOlapSchema& olapSchema) const {
-        return NSharding::IShardingBase::BuildFromProto(olapSchema, Description.GetSharding()).DetachResult();
-    }
+    std::shared_ptr<NSharding::IShardingBase> GetShardingVerified(const TOlapSchema& olapSchema) const;
 
-    std::set<ui64> GetShardIdsSet() const {
-        return std::set<ui64>(Description.GetSharding().GetColumnShards().begin(), Description.GetSharding().GetColumnShards().end());
-    }
+    std::set<ui64> GetShardIdsSet() const;
 
-    const auto& GetColumnShards() const {
-        return Description.GetSharding().GetColumnShards();
-    }
+    const google::protobuf::RepeatedField<arc_ui64>& GetColumnShards() const;
 
-    void SetColumnShards(const std::vector<ui64>& columnShards) {
-        AFL_VERIFY(GetColumnShards().empty())("original", Description.DebugString());
-        AFL_VERIFY(columnShards.size());
+    void SetColumnShards(const std::vector<ui64>& columnShards);
 
-        Description.MutableSharding()->MutableColumnShards()->Clear();
-        Description.MutableSharding()->MutableColumnShards()->Reserve(columnShards.size());
-        for (ui64 columnShard : columnShards) {
-            Description.MutableSharding()->AddColumnShards(columnShard);
-        }
-    }
-
-    THashSet<TString> GetUsedTiers() const {
-        THashSet<TString> tiers;
-        for (const auto& tier : Description.GetTtlSettings().GetEnabled().GetTiers()) {
-            if (tier.HasEvictToExternalStorage()) {
-                tiers.emplace(tier.GetEvictToExternalStorage().GetStorage());
-            }
-        }
-        return tiers;
-    }
+    THashSet<TString> GetUsedTiers() const;
 
     NKikimrSchemeOp::TColumnTableDescription Description;
     TMaybe<NKikimrSchemeOp::TColumnStoreSharding> StandaloneSharding;
     TMaybe<NKikimrSchemeOp::TAlterColumnTable> AlterBody;
+    NKikimrSchemeOp::TBackupTask BackupSettings;
+    TMap<TTxId, TTableInfo::TBackupRestoreResult> BackupHistory;
 
     TAggregatedStats Stats;
 
@@ -70,28 +46,13 @@ public:
         TMaybe<NKikimrSchemeOp::TColumnStoreSharding>&& standaloneSharding,
         TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
 
-    const NKikimrSchemeOp::TColumnStoreSharding& GetStandaloneShardingVerified() const {
-        AFL_VERIFY(!!StandaloneSharding);
-        return *StandaloneSharding;
-    }
+    const NKikimrSchemeOp::TColumnStoreSharding& GetStandaloneShardingVerified() const;
 
-    const auto& GetOwnedColumnShardsVerified() const {
-        AFL_VERIFY(IsStandalone());
-        return StandaloneSharding->GetColumnShards();
-    }
+    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TShardIdx>& GetOwnedColumnShardsVerified() const;
 
-    std::vector<TShardIdx> BuildOwnedColumnShardsVerified() const {
-        std::vector<TShardIdx> result;
-        for (auto&& i : GetOwnedColumnShardsVerified()) {
-            result.emplace_back(TShardIdx::BuildFromProto(i).DetachResult());
-        }
-        return result;
-    }
+    std::vector<TShardIdx> BuildOwnedColumnShardsVerified() const;
 
-    void SetOlapStorePathId(const TPathId& pathId) {
-        Description.MutableColumnStorePathId()->SetOwnerId(pathId.OwnerId);
-        Description.MutableColumnStorePathId()->SetLocalId(pathId.LocalPathId);
-    }
+    void SetOlapStorePathId(const TPathId& pathId);
 
     static TColumnTableInfo::TPtr BuildTableWithAlter(const TColumnTableInfo& initialTable, const NKikimrSchemeOp::TAlterColumnTable& alterBody);
 
@@ -103,16 +64,9 @@ public:
         return Stats;
     }
 
-    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, const TShardIdx shardIdx, const TPartitionStats& newStats, TInstant now) {
-        Stats.Aggregated.PartCount = GetColumnShards().size();
-        Stats.PartitionStats[shardIdx]; // insert if none
-        Stats.UpdateShardStats(diskSpaceUsageDelta, shardIdx, newStats, now);
-    }
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, const TShardIdx shardIdx, const TPartitionStats& newStats, TInstant now);
 
-    void UpdateTableStats(const TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
-        Stats.TableStats[pathId].Aggregated.PartCount = GetColumnShards().size();
-        Stats.UpdateTableStats(shardIdx, pathId, newStats, now);
-    }
+    void UpdateTableStats(const TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now);
 
     TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const;
 

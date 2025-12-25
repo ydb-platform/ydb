@@ -241,6 +241,7 @@ message ClusterStateRequest {
     uint32 duration_seconds = 2;
     uint32 period_seconds = 3;
     bool no_sanitize = 4;
+    bool counters_only = 5;
 }
 
 message ClusterStateResponse {

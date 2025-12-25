@@ -7,6 +7,7 @@ import "ydb/core/scheme/protos/key_range.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/data_events.proto";
 import "ydb/core/protos/kqp.proto";
+import "ydb/core/protos/kqp_physical.proto";
 import "ydb/library/formats/arrow/protos/ssa.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tx.proto";
@@ -273,7 +274,7 @@ message TKqpReadRangesSourceSettings {
     optional bool IsBatch = 22 [default = false];
 
     optional bool IsTableImmutable = 23 [default = false];
-    optional NKikimrKqp.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
+    optional NKqpProto.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
 
     optional string Database = 25;
 
@@ -315,6 +316,10 @@ message TKqpVectorResolveSettings {
 
     // Database name for KqpReadActor
     optional string Database = 17;
+
+    // Parameters for finding overlapping clusters (multiple clusters per row)
+    optional uint32 OverlapClusters = 18;
+    optional double OverlapRatio = 19;
 }
 
 message TKqpTaskInfo {
@@ -517,6 +522,7 @@ message TMoveIndex {
 message TCreateIncrementalBackupSrc {
     optional TSendSnapshot SendSnapshot = 1;
     optional TCreateCdcStreamNotice CreateCdcStreamNotice = 2;
+    optional TDropCdcStreamNotice DropCdcStreamNotice = 3;
 }
 
 message TFlatSchemeTransaction {

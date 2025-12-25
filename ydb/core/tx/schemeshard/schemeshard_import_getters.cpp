@@ -19,6 +19,9 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <util/stream/file.h>
+#include <util/system/fs.h>
+#include <util/folder/path.h>
 #include <util/string/subst.h>
 
 #include <algorithm>
@@ -43,10 +46,11 @@ struct TGetterSettings {
 
     static TGetterSettings FromImportInfo(const TImportInfo::TPtr& importInfo, TMaybe<NBackup::TEncryptionIV> iv) {
         TGetterSettings settings;
-        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->Settings));
-        settings.Retries = importInfo->Settings.number_of_retries();
-        if (importInfo->Settings.has_encryption_settings()) {
-            settings.Key = NBackup::TEncryptionKey(importInfo->Settings.encryption_settings().symmetric_key().key());
+        Y_ABORT_UNLESS(importInfo->Kind == TImportInfo::EKind::S3);
+        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->GetS3Settings()));
+        settings.Retries = importInfo->GetS3Settings().number_of_retries();
+        if (importInfo->GetS3Settings().has_encryption_settings()) {
+            settings.Key = NBackup::TEncryptionKey(importInfo->GetS3Settings().encryption_settings().symmetric_key().key());
         }
         settings.IV = std::move(iv);
         return settings;
@@ -405,7 +409,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ": self# " << SelfId()
             << ", result# " << result);
 
-        const bool canSkip = IndexFillingMode != Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT;
+        const bool canSkip = IndexPopulationMode != Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
         if (canSkip && NoObjectFound(result.GetError().GetErrorType())) {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
@@ -473,8 +477,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         LOG_T("Trying to parse metadata"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
-
-        item.Metadata = NBackup::TMetadata::Deserialize(content);
+        try {
+            item.Metadata = NBackup::TMetadata::Deserialize(content);
+        } catch (const std::exception& e) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed to parse metadata: " << e.what());
+        }
 
         if (item.Metadata.HasVersion() && item.Metadata.GetVersion() == 0) {
             NeedValidateChecksums = false;
@@ -791,10 +798,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Download(PermissionsKey);
     }
 
-    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode) {
+    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode) {
         switch (mode) {
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
             return true;
         default:
             return false;
@@ -908,7 +915,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void StartCheckingMaterializedIndexes() {
         ResetRetries();
-        if (NeedToCheckMaterializedIndexes(IndexFillingMode)) {
+        if (NeedToCheckMaterializedIndexes(IndexPopulationMode)) {
             CheckMaterializedIndexes();
         } else {
             StartDownloadingChangefeeds();
@@ -929,9 +936,9 @@ public:
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
-        , IndexFillingMode(ImportInfo->Settings.index_filling_mode())
-        , NeedDownloadPermissions(!ImportInfo->Settings.no_acl())
-        , NeedValidateChecksums(!ImportInfo->Settings.skip_checksum_validation())
+        , IndexPopulationMode(ImportInfo->GetS3Settings().index_population_mode())
+        , NeedDownloadPermissions(!ImportInfo->GetNoAcl())
+        , NeedValidateChecksums(!ImportInfo->GetSkipChecksumValidation())
     {
     }
 
@@ -1016,7 +1023,7 @@ private:
 
     TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
     ui64 IndexCheckedMaterializedIndexImplTable = 0;
-    Ydb::Import::ImportFromS3Settings::IndexFillingMode IndexFillingMode;
+    Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode;
 
     bool NeedDownloadPermissions = true;
     bool NeedValidateChecksums = true;
@@ -1025,15 +1032,15 @@ private:
 
 class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     static TString MetadataKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.Settings.source_prefix() << "/metadata.json";
+        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/metadata.json";
     }
 
     static TString SchemaMappingKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.Settings.source_prefix() << "/SchemaMapping/mapping.json";
+        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/SchemaMapping/mapping.json";
     }
 
     static TString SchemaMappingMetadataKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.Settings.source_prefix() << "/SchemaMapping/metadata.json";
+        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/SchemaMapping/metadata.json";
     }
 
     void HandleMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -1576,8 +1583,153 @@ private:
     TPathFilter PathFilter;
 };
 
+class TFSHelper {
+public:
+    static TString GetFullPath(const TString& basePath, const TString& relativePath) {
+        if (basePath.empty()) {
+            return TStringBuilder() << "/" << relativePath;
+        }
+        return TFsPath(basePath) / relativePath;
+    }
+
+    static bool ReadFile(const TString& path, TString& content, TString& error) {
+        try {
+            if (!NFs::Exists(path)) {
+                error = TStringBuilder() << "File does not exist: " << path;
+                return false;
+            }
+
+            TFileInput file(path);
+            content = file.ReadAll();
+            return true;
+        } catch (const std::exception& e) {
+            error = TStringBuilder() << "Failed to read file " << path << ": " << e.what();
+            return false;
+        }
+    }
+};
+
+class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
+
+    bool ProcessMetadata(const TString& content, TString& error) {
+        try {
+            ImportInfo->Items[ItemIdx].Metadata = NBackup::TMetadata::Deserialize(content);
+            return true;
+        } catch (const std::exception& e) {
+            error = TStringBuilder() << "Failed to parse metadata: " << e.what();
+            return false;
+        }
+    }
+
+    bool ProcessScheme(const TString& content, TString& error) {
+        auto& item = ImportInfo->Items[ItemIdx];
+
+        Ydb::Table::CreateTableRequest table;
+        if (table.ParseFromString(content)) {
+            item.Table = table;
+            return true;
+        }
+
+        error = "Failed to parse scheme as table";
+        return false;
+    }
+
+    void ProcessPermissions(const TString& content) {
+        auto& item = ImportInfo->Items[ItemIdx];
+        Ydb::Scheme::ModifyPermissionsRequest permissions;
+        if (permissions.ParseFromString(content)) {
+            item.Permissions = permissions;
+        }
+    }
+
+    void Reply(bool success, const TString& errorMessage = {}) {
+        LOG_I("TSchemeGetterFS: Reply"
+            << ": self# " << SelfId()
+            << ", importId# " << ImportInfo->Id
+            << ", itemIdx# " << ItemIdx
+            << ", success# " << success
+            << ", error# " << errorMessage);
+
+        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, success, errorMessage));
+        PassAway();
+    }
+
+public:
+    explicit TSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
+        : ReplyTo(replyTo)
+        , ImportInfo(std::move(importInfo))
+        , ItemIdx(itemIdx)
+    {
+        Y_ABORT_UNLESS(ImportInfo->Kind == TImportInfo::EKind::FS);
+    }
+
+    void Bootstrap() {
+        const auto settings = ImportInfo->GetFsSettings();
+        const TString basePath = settings.base_path();
+        
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& item = ImportInfo->Items[ItemIdx];
+        
+        TString sourcePath = item.SrcPath;
+        if (sourcePath.empty()) {
+            Reply(false, "Source path is empty for import item");
+            return;
+        }
+
+        const TFsPath itemPath = TFsPath(basePath) / sourcePath;
+        TString error;
+
+        const TString metadataPath = itemPath / "metadata.json";
+        TString metadataContent;
+        
+        if (!TFSHelper::ReadFile(metadataPath, metadataContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        if (!ProcessMetadata(metadataContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        const TString schemeFileName = NYdb::NDump::NFiles::TableScheme().FileName;
+        const TString schemePath = itemPath / schemeFileName;
+        TString schemeContent;
+        
+        if (!TFSHelper::ReadFile(schemePath, schemeContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        if (!ProcessScheme(schemeContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        if (!ImportInfo->GetNoAcl()) {
+            const TString permissionsPath = itemPath / "permissions.pb";
+            TString permissionsContent;
+            
+            if (TFSHelper::ReadFile(permissionsPath, permissionsContent, error)) {
+                ProcessPermissions(permissionsContent);
+            }
+        }
+
+        Reply(true);
+    }
+
+private:
+    const TActorId ReplyTo;
+    TImportInfo::TPtr ImportInfo;
+    const ui32 ItemIdx;
+};
+
 IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv) {
     return new TSchemeGetter(replyTo, std::move(importInfo), itemIdx, std::move(iv));
+}
+
+IActor* CreateSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx) {
+    return new TSchemeGetterFS(replyTo, std::move(importInfo), itemIdx);
 }
 
 IActor* CreateSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo) {

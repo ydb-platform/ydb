@@ -61,8 +61,8 @@ namespace {
     requires std::is_floating_point_v<T>
     Y_FORCE_INLINE int NaNSafeCompareFloatingPoint(const T& lhs, const T& rhs) {
         if (std::isnan(lhs) && std::isnan(rhs)) return 0;
-        if (std::isnan(lhs)) return -1;
-        if (std::isnan(rhs)) return 1;
+        if (std::isnan(lhs)) return 1;
+        if (std::isnan(rhs)) return -1;
         return TernaryCompare(lhs, rhs);
     }
 }

@@ -268,3 +268,18 @@ enum EPartitionExtendedLabeledCounters {
     METRIC_BLOB_UNCOMPACTED_SIZE_MAX = 1                          [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.blobs.uncompacted_bytes_max"}];
     METRIC_BLOB_UNCOMPACTED_LAG_MAX = 2                           [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.blobs.compaction_lag_milliseconds_max"}];
 };
+
+enum EMLPConsumerLabeledCounters {
+    option (GlobalGroupNamesOpts) = {
+        Names: "topic"
+        Names: "consumer"
+    };
+    METRIC_INFLIGHT_COMMITTED_COUNT = 0                           [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.committed_messages"}];
+    METRIC_INFLIGHT_LOCKED_COUNT = 1                              [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.locked_messages"}];
+    METRIC_INFLIGHT_DELAYED_COUNT = 2                             [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.delayed_messages"}];
+    METRIC_INFLIGHT_UNLOCKED_COUNT = 3                            [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.unlocked_messages"}];
+    METRIC_INFLIGHT_SCHEDULED_TO_DLQ_COUNT = 4                    [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.inflight.scheduled_to_dlq_messages"}]; // TODO name
+
+    METRIC_COMMITTED_COUNT = 5                                    [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.committed_messages"}];
+    METRIC_PURGED_COUNT = 6                                       [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.purged_messages"}];
+}

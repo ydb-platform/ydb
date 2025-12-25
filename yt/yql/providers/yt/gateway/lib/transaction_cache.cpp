@@ -75,7 +75,6 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
     decltype(CheckpointTxs) checkpointTxs;
     decltype(WriteTxs) writeTxs;
     NYT::ITransactionPtr layersTx;
-    NYT::ITransactionPtr dumpTx;
     with_lock(Lock_) {
         binarySnapshotTx.Swap(BinarySnapshotTx);
         snapshotTxs.swap(SnapshotTxs);
@@ -85,7 +84,6 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
         checkpointTxs.swap(CheckpointTxs);
         writeTxs.swap(WriteTxs);
         layersTx.Swap(LayersSnapshotTx);
-        dumpTx.Swap(DumpTx);
     }
 
     if (layersTx) {
@@ -115,12 +113,12 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
     YQL_CLOG(INFO, ProviderYt) << "Committing tx " << GetGuidAsString(Tx->GetId())  << " on " << clusterName;
     Tx->Commit();
 
-    if (dumpTx) {
-        YQL_CLOG(INFO, ProviderYt) << (commitDumpTx ? "Commiting" : "Aborting") << " dump tx " << GetGuidAsString(dumpTx->GetId())  << " on " << clusterName;
+    if (DumpTx) {
+        YQL_CLOG(INFO, ProviderYt) << (commitDumpTx ? "Commiting" : "Aborting") << " dump tx " << GetGuidAsString(DumpTx->GetId())  << " on " << clusterName;
         if (commitDumpTx) {
-            dumpTx->Commit();
+            DumpTx->Commit();
         } else {
-            dumpTx->Abort();
+            DumpTx->Abort();
         }
     }
 }
@@ -290,69 +288,12 @@ std::pair<TString, NYT::TTransactionId> TTransactionCache::TEntry::GetBinarySnap
     }
     CreateParents({remotePath}, Client);
 
-    NYT::ILockPtr fileLock;
-    ITransactionPtr lockTx;
-    NYT::ILockPtr waitLock;
+    TString binarySnapshot = UploadBinarySnapshotToYt(remotePath, Client, snapshotTx, localPath, expirationInterval, TransactionSpec);
 
-    for (bool uploaded = false; ;) {
-        try {
-            YQL_CLOG(INFO, ProviderYt) << "Taking snapshot of " << remotePath;
-            fileLock = snapshotTx->Lock(remotePath, NYT::ELockMode::LM_SNAPSHOT);
-            break;
-        } catch (const TErrorResponse& e) {
-            // Yt returns NoSuchTransaction as inner issue for ResolveError
-            if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
-                throw;
-            }
-        }
-        YQL_ENSURE(!uploaded, "Fail to take snapshot");
-        if (!lockTx) {
-            auto pos = remotePath.rfind("/");
-            auto dir = remotePath.substr(0, pos);
-            auto childKey = remotePath.substr(pos + 1) + ".lock";
-
-            lockTx = Client->StartTransaction(TStartTransactionOptions().Attributes(TransactionSpec));
-            YQL_CLOG(INFO, ProviderYt) << "Waiting for " << dir << '/' << childKey;
-            waitLock = lockTx->Lock(dir, NYT::ELockMode::LM_SHARED, TLockOptions().Waitable(true).ChildKey(childKey));
-            waitLock->GetAcquiredFuture().GetValueSync();
-            // Try to take snapshot again after waiting lock. Someone else may complete uploading the file at the moment
-            continue;
-        }
-        // Lock is already taken and file still doesn't exist
-        YQL_CLOG(INFO, ProviderYt) << "Start uploading " << localPath << " to " << remotePath;
-        Y_SCOPE_EXIT(localPath, remotePath) {
-            YQL_CLOG(INFO, ProviderYt) << "Complete uploading " << localPath << " to " << remotePath;
-        };
-        auto uploadTx = Client->StartTransaction(TStartTransactionOptions().Attributes(TransactionSpec));
-        try {
-            auto out = uploadTx->CreateFileWriter(TRichYPath(remotePath).Executable(true), TFileWriterOptions().CreateTransaction(false));
-            TIFStream in(localPath);
-            TransferData(&in, out.Get());
-            out->Finish();
-            uploadTx->Commit();
-        } catch (...) {
-            uploadTx->Abort();
-            throw;
-        }
-        // Continue with taking snapshot lock after uploading
-        uploaded = true;
-    }
-
-    TString snapshotPath = TStringBuilder() << '#' << GetGuidAsString(fileLock->GetLockedNodeId());
+    TString snapshotPath = TStringBuilder() << '#' << binarySnapshot;
     YQL_CLOG(INFO, ProviderYt) << "Snapshot of " << remotePath << ": " << snapshotPath;
     with_lock(Lock_) {
         BinarySnapshots[remotePath] = snapshotPath;
-    }
-
-    if (expirationInterval) {
-        TString expirationTime = (Now() + expirationInterval).ToStringUpToSeconds();
-        try {
-            YQL_CLOG(INFO, ProviderYt) << "Prolonging expiration time for " << remotePath << " up to " << expirationTime;
-            Client->Set(remotePath + "/@expiration_time", expirationTime);
-        } catch (...) {
-            // log and ignore the error
-            YQL_CLOG(ERROR, ProviderYt) << "Error setting expiration time for " << remotePath << ": " << CurrentExceptionMessage();
-        }
     }
 
     return std::make_pair(snapshotPath, snapshotTx->GetId());

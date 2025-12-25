@@ -45,11 +45,17 @@ def enable_alter_database_create_hive_first(request):
     return request.param
 
 
+@pytest.fixture(scope='module', params=[True, False], ids=["enable_pool_encryption--true", "enable_pool_encryption--false"])
+def enable_pool_encryption(request):
+    return request.param
+
+
 # fixtures.ydb_cluster_configuration local override
 @pytest.fixture(scope='module')
-def ydb_cluster_configuration(enable_alter_database_create_hive_first):
+def ydb_cluster_configuration(enable_alter_database_create_hive_first, enable_pool_encryption):
     conf = copy.deepcopy(CLUSTER_CONFIG)
     conf['enable_alter_database_create_hive_first'] = enable_alter_database_create_hive_first
+    conf['enable_pool_encryption'] = enable_pool_encryption
     return conf
 
 
@@ -429,8 +435,9 @@ class TestTenants():
 
             result = driver.scheme_client.list_directory(database_path)
             logger.debug("From database: list database <%s> is %s", database_path, convert(result))
-            assert len(result.children) > 0
-            assert result.children[0].name == ".sys"
+            assert len(result.children) > 1
+            assert result.children[0].name == ".metadata"
+            assert result.children[1].name == ".sys"
 
         driver_config_for_root = ydb.DriverConfig(ydb_endpoint, ydb_root)
         with ydb.Driver(driver_config_for_root) as driver:
@@ -438,15 +445,17 @@ class TestTenants():
 
             result = driver.scheme_client.list_directory(database_path)
             logger.debug("From root: list database <%s> is %s", database_path, convert(result))
-            assert len(result.children) > 0
-            assert result.children[0].name == ".sys"
+            assert len(result.children) > 1
+            assert result.children[0].name == ".metadata"
+            assert result.children[1].name == ".sys"
 
             dirname, basename = os.path.split(database_path)
             result = driver.scheme_client.list_directory(dirname)
             logger.debug("From root: list above database <%s> is %s", dirname, convert(result))
-            assert len(result.children) > 0
-            assert result.children[0].name == basename
-            assert result.children[0].type == ydb.scheme.SchemeEntryType.DATABASE
+            assert len(result.children) > 1
+            assert result.children[0].name == ".metadata"
+            assert result.children[1].name == basename
+            assert result.children[1].type == ydb.scheme.SchemeEntryType.DATABASE
 
 
 def _initial_credit(pool):

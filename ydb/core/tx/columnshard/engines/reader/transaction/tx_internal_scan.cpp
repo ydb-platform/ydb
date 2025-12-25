@@ -53,8 +53,11 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
                 read.TableMetadataAccessor = accConclusion.DetachResult();
             }
         }
+        // the parent write has already subscribed to the lock, so no need to subscribe again
+        auto lockNodeId = std::nullopt;
         read.SetLock(
             request.GetLockId(), 
+            lockNodeId,
             NKikimrDataEvents::OPTIMISTIC, 
             request.GetLockId().has_value() ? Self->GetOperationsManager().GetLockOptional(request.GetLockId().value()) : nullptr,
             request.GetReadOnlyConflicts()

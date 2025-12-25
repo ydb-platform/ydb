@@ -1713,6 +1713,9 @@ ECompareOptions CanCompare(const TTypeAnnotationNode* left, const TTypeAnnotatio
 
     const auto lKind = left->GetKind();
     const auto rKind = right->GetKind();
+    if (lKind == ETypeAnnotationKind::Universal || rKind == ETypeAnnotationKind::Universal) {
+        return ECompareOptions::Comparable;
+    }
 
     if (lKind == rKind) {
         switch (lKind) {
@@ -2144,6 +2147,25 @@ bool EnsureAtom(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
+bool EnsureAtomOrUniversal(const TExprNode& node, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (node.GetTypeAnn() && node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        isUniversal = true;
+        return true;
+    }
+
+    if (node.Type() != TExprNode::Atom) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected atom, but got: " << node.Type()));
+        return false;
+    }
+
+    return true;
+}
+
 bool EnsureCallable(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;
@@ -2179,6 +2201,24 @@ bool EnsureTupleOfAtoms(TExprNode& node, TExprContext& ctx) {
     for (const auto& atom : node.ChildrenList()) {
         if (!EnsureAtom(*atom, ctx)) {
             return false;
+        }
+    }
+    return true;
+}
+
+bool EnsureTupleOfAtomsOrUniversal(TExprNode& node, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
+    if (!EnsureTuple(node, ctx)) {
+        return false;
+    }
+
+    for (const auto& atom : node.ChildrenList()) {
+        if (!EnsureAtomOrUniversal(*atom, ctx, isUniversal)) {
+            return false;
+        }
+
+        if (isUniversal) {
+            return true;
         }
     }
     return true;
@@ -5971,6 +6011,10 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
     switch (type.GetKind()) {
     case ETypeAnnotationKind::Unit:
         return ctx.NewCallable(position, "UnitType", {});
+    case ETypeAnnotationKind::Universal:
+        return ctx.NewCallable(position, "UniversalType", {});
+    case ETypeAnnotationKind::UniversalStruct:
+        return ctx.NewCallable(position, "UniversalStructType", {});
     case ETypeAnnotationKind::EmptyList:
         return ctx.NewCallable(position, "EmptyListType", {});
     case ETypeAnnotationKind::EmptyDict:
@@ -6195,8 +6239,10 @@ bool IsSystemMember(const TStringBuf& memberName) {
 }
 
 template<bool Deduplicte, ui8 OrListsOfAtomsDepth>
-IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx)
+IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output,
+    TExprContext& ctx, bool& isUniversal)
 {
+    isUniversal = false;
     auto children = input->Child(index)->ChildrenList();
     bool needRestart = false;
 
@@ -6206,14 +6252,19 @@ IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, u
 
         for (auto i = 0U; i < children.size(); ++i) {
             if (const auto item = input->Child(index)->Child(i); item->IsList()) {
-                if (1U == item->ChildrenSize() && item->Head().IsAtom()) {
+                if (1U == item->ChildrenSize() && item->Head().GetTypeAnn() &&
+                    item->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                    isUniversal = true;
+                    return IGraphTransformer::TStatus::Ok;
+                } else if (1U == item->ChildrenSize() && item->Head().IsAtom()) {
                     needRestart = true;
                     children[i] = item->HeadPtr();
-                } else if (const auto status = NormalizeTupleOfAtoms<Deduplicte, 1U>(input->ChildPtr(index), i, children[i], ctx); status == IGraphTransformer::TStatus::Error)
+                } else if (const auto status = NormalizeTupleOfAtoms<Deduplicte, 1U>(input->ChildPtr(index), i, children[i], ctx, isUniversal);
+                    status == IGraphTransformer::TStatus::Error || isUniversal)
                     return status;
                 else
                     needRestart = needRestart || (status == IGraphTransformer::TStatus::Repeat);
-            } else if (!EnsureAtom(*item, ctx))
+            } else if (!EnsureAtomOrUniversal(*item, ctx, isUniversal))
                 return IGraphTransformer::TStatus::Error;
         }
     } else if constexpr (OrListsOfAtomsDepth == 1U) {
@@ -6222,16 +6273,29 @@ IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, u
 
         for (auto i = 0U; i < children.size(); ++i) {
             if (const auto item = input->Child(index)->Child(i); item->IsList()) {
-                if (1U == item->ChildrenSize() && item->Head().IsAtom()) {
+                if (1U == item->ChildrenSize() && item->Head().GetTypeAnn() &&
+                    item->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                    isUniversal = true;
+                    return IGraphTransformer::TStatus::Ok;
+                } else if (1U == item->ChildrenSize() && item->Head().IsAtom()) {
                     needRestart = true;
                     children[i] = item->HeadPtr();
-                } else if (!EnsureTupleOfAtoms(*item, ctx))
+                } else if (!EnsureTupleOfAtomsOrUniversal(*item, ctx, isUniversal))
                     return IGraphTransformer::TStatus::Error;
-            } else if (!EnsureAtom(*item, ctx))
+            } else if (!EnsureAtomOrUniversal(*item, ctx, isUniversal))
                 return IGraphTransformer::TStatus::Error;
+
+            if (isUniversal) {
+                break;
+            }
         }
-    } else if (!EnsureTupleOfAtoms(*input->Child(index), ctx))
+    } else if (!EnsureTupleOfAtomsOrUniversal(*input->Child(index), ctx, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        return IGraphTransformer::TStatus::Ok;
+    }
 
     const auto getKey = [](const TExprNode::TPtr& node) {
         if constexpr (OrListsOfAtomsDepth == 2U) {
@@ -6288,10 +6352,10 @@ IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, u
     return IGraphTransformer::TStatus::Ok;
 }
 
-template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, 2U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
-template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, 1U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
-template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, 0U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
-template IGraphTransformer::TStatus NormalizeTupleOfAtoms<false, 0U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx);
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, 2U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx, bool& isUniversal);
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, 1U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx, bool& isUniversal);
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<true, 0U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx, bool& isUniversal);
+template IGraphTransformer::TStatus NormalizeTupleOfAtoms<false, 0U>(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx, bool& isUniversal);
 
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
     TExprContext &ctx, bool deduplicate)

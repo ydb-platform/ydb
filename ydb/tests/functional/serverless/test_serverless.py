@@ -67,11 +67,17 @@ def enable_alter_database_create_hive_first(request):
     return request.param
 
 
+@pytest.fixture(scope='module', params=[True, False], ids=["enable_pool_encryption--true", "enable_pool_encryption--false"])
+def enable_pool_encryption(request):
+    return request.param
+
+
 # fixtures.ydb_cluster_configuration local override
 @pytest.fixture(scope='module')
-def ydb_cluster_configuration(enable_alter_database_create_hive_first):
+def ydb_cluster_configuration(enable_alter_database_create_hive_first, enable_pool_encryption):
     conf = copy.deepcopy(CLUSTER_CONFIG)
     conf['enable_alter_database_create_hive_first'] = enable_alter_database_create_hive_first
+    conf['enable_pool_encryption'] = enable_pool_encryption
     return conf
 
 
@@ -537,7 +543,7 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             assert False, 'database did not move into Overloaded state'
 
         logger.info("Upsert data whith SQL")
-        with pytest.raises(ydb.issues.Overloaded, match=r'.*overload data error.*'):
+        with pytest.raises(ydb.issues.Overloaded, match=r'.*Column shard.*is overloaded.*'):
             qpool.execute_with_retries(
                 "UPSERT INTO `{}` (ts, value_string) VALUES(Timestamp('2020-01-01T00:00:00.000000Z'), 'xxx')".format(path),
                 retry_settings=RetrySettings(max_retries=0))

@@ -37,6 +37,11 @@ ids {
   format: "Type annotation"
 }
 ids {
+  code: CORE_PARTIAL_TYPE_ANN
+  severity: S_INFO
+  format: "Partial type annotation"
+}
+ids {
   code: CORE_POST_TYPE_ANN
   severity: S_INFO
   format: "Post type annotation"
@@ -308,7 +313,7 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: KIKIMR_STATUS_DISK_GROUP_OUT_OF_SPACE
+  code: KIKIMR_DISK_GROUP_OUT_OF_SPACE
   severity: S_ERROR
 }
 ids {
@@ -677,6 +682,10 @@ ids {
 }
 ids {
     code: YQL_UNTYPED_STRING_LITERALS
+    severity: S_WARNING
+}
+ids {
+    code: YQL_DISCARD_IN_INVALID_PLACE
     severity: S_WARNING
 }
 ids {

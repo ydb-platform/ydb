@@ -1016,11 +1016,7 @@ namespace Tests {
 
         auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
 
-        NKikimrBlobStorage::TDefineBox boxConfig;
-        boxConfig.SetBoxId(Settings->BOX_ID);
-        boxConfig.SetItemConfigGeneration(boxConfigGeneration);
-
-        NKikimrBlobStorage::TDefineHostConfig hostConfig;
+        auto& hostConfig = *bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig();
         hostConfig.SetHostConfigId(nodeId);
         hostConfig.SetItemConfigGeneration(hostConfigGeneration);
         TString path;
@@ -1032,15 +1028,16 @@ namespace Tests {
         }
         hostConfig.AddDrive()->SetPath(path);
         if (Settings->Verbose) {
-            Cerr << "test_client.cpp: SetPath # " << path << Endl;
+            Cerr << "test_client.cpp: SetPath for PDisk # " << path << Endl;
         }
-        bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
 
+        auto& boxConfig = *bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox();
+        boxConfig.SetBoxId(Settings->BOX_ID);
+        boxConfig.SetItemConfigGeneration(boxConfigGeneration);
         auto& host = *boxConfig.AddHost();
         host.MutableKey()->SetFqdn(nodeInfo.Host);
         host.MutableKey()->SetIcPort(nodeInfo.Port);
         host.SetHostConfigId(hostConfig.GetHostConfigId());
-        bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
 
         for (const auto& [poolKind, storagePool] : Settings->StoragePoolTypes) {
             if (storagePool.GetNumGroups() > 0) {
@@ -1438,7 +1435,8 @@ namespace Tests {
                 Settings->AppConfig->GetQueryServiceConfig(),
                 federatedQuerySetupFactory,
                 Settings->S3ActorsFactory,
-                Settings->EnableScriptExecutionBackgroundChecks
+                Settings->EnableScriptExecutionBackgroundChecks,
+                TDuration::Zero()
             );
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
@@ -3120,9 +3118,10 @@ namespace Tests {
         return FlatQuery(runtime, mkql, opts, result);
     }
 
-    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) {
+    template <typename... TArgs>
+    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs&&... args) {
         TActorId sender = runtime->AllocateEdgeActor(0);
-        ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(query), 0);
+        ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(args...), 0);
         TAutoPtr<IEventHandle> handle;
         // Timeout for DEBUG purposes only
         runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle);
@@ -3136,7 +3135,7 @@ namespace Tests {
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
         TInstant deadline = TInstant::Now() + TIMEOUT;
         while (TInstant::Now() <= deadline) {
-            TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"));
+            TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"), HTTP_METHOD_POST);
             if (!res.empty() && !res.Contains("Error"))
                 return res;
 
@@ -3148,7 +3147,7 @@ namespace Tests {
     TString TClient::KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx) {
         ui32 nodeId = runtime->GetNodeId(nodeIdx);
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
-        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId));
+        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId), HTTP_METHOD_POST);
     }
 
     bool TClient::WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {

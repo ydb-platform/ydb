@@ -1247,7 +1247,7 @@ struct Schema : NIceDb::Schema {
 
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
-        struct MaterializeIndexes : Column<21, NScheme::NTypeIds::Bool> {};
+        struct IncludeIndexData : Column<21, NScheme::NTypeIds::Bool> {};
 
         struct ExportMetadata : Column<19, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportMetadata; };
 
@@ -1273,7 +1273,7 @@ struct Schema : NIceDb::Schema {
             EnablePermissions,
             ExportMetadata,
             SanitizedToken,
-            MaterializeIndexes
+            IncludeIndexData
         >;
     };
 
@@ -1784,6 +1784,7 @@ struct Schema : NIceDb::Schema {
         struct FailedAttemptCount : Column<6, NScheme::NTypeIds::Uint32> {using Type = ui32; static constexpr Type Default = 0;};
         struct CreatedAt : Column<7, NScheme::NTypeIds::Timestamp> {};
         struct IsEnabled : Column<8, NScheme::NTypeIds::Bool> { using Type = bool; static constexpr Type Default = true; };
+        struct PasswordHashes : Column<9, NScheme::NTypeIds::Utf8> {}; // Base64 encoded JSON map with hash type and hash secrets
 
         using TKey = TableKey<SidName>;
         using TColumns = TableColumns<
@@ -1794,7 +1795,8 @@ struct Schema : NIceDb::Schema {
             LastFailedAttempt,
             FailedAttemptCount,
             CreatedAt,
-            IsEnabled
+            IsEnabled,
+            PasswordHashes
         >;
     };
 

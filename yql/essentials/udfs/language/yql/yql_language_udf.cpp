@@ -319,7 +319,7 @@ bool GetParseTree(
 
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer);
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         Y_UNUSED(token);
     };
@@ -337,7 +337,6 @@ bool GetParseTree(
         issues,
         NSQLTranslation::SQL_MAX_PARSER_ERRORS,
         settings.AnsiLexer,
-        /* antlr4Parser = */ true,
         settings.Arena);
 
     return static_cast<bool>(message);

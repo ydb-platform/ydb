@@ -139,6 +139,8 @@ bool IsTableExistsKeySelector(NNodes::TCoLambda keySelector, const TKikimrTableD
     return true;
 }
 
+
+
 bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& indexDesc, TVector<TString>* columns) {
     return IsTableExistsKeySelector(node.KeySelectorLambda(), indexDesc, columns);
 }
@@ -588,6 +590,7 @@ void VectorReadMain(
     const TIntrusivePtr<TKikimrTableMetadata> & mainTableMeta,
     const TCoAtomList& mainColumns,
     const TKqpStreamLookupSettings& pushdownSettings,
+    bool withOverlap,
     TExprNodePtr& read)
 {
     const bool isCovered = CheckIndexCovering(mainColumns, postingTableMeta);
@@ -606,21 +609,48 @@ void VectorReadMain(
             .Columns(postingColumns)
             .Settings(isVectorCovered ? settingsNode : settings.BuildNode(ctx, pos))
         .Done().Ptr();
-
-        read = Build<TKqlStreamLookupTable>(ctx, pos)
-            .Table(mainTable)
-            .LookupKeys(read)
-            .Columns(mainColumns)
-            .Settings(settingsNode)
-        .Done().Ptr();
-    } else {
-        read = Build<TKqlStreamLookupTable>(ctx, pos)
-            .Table(postingTable)
-            .LookupKeys(read)
-            .Columns(mainColumns)
-            .Settings(settingsNode)
-        .Done().Ptr();
     }
+
+    const auto& targetTable = isCovered ? postingTable : mainTable;
+
+    if (withOverlap) {
+        // mainColumns must contain primary key columns for DistinctColumns pushdown
+        THashSet<TStringBuf> cols;
+        for (const auto& col: mainColumns) {
+            cols.insert(col.Value());
+        }
+        TVector<TCoAtom> columnsWithKey;
+        for (const auto& col: mainTableMeta->KeyColumnNames) {
+            if (!cols.contains(col)) {
+                columnsWithKey.push_back(Build<TCoAtom>(ctx, pos)
+                    .Value(col)
+                    .Done());
+            }
+        }
+        if (columnsWithKey.size()) {
+            for (const auto& col: mainColumns) {
+                columnsWithKey.push_back(col);
+            }
+            read = Build<TKqlStreamLookupTable>(ctx, pos)
+                .Table(targetTable)
+                .LookupKeys(read)
+                .Columns<TCoAtomList>().Add(columnsWithKey).Build()
+                .Settings(settingsNode)
+                .Done().Ptr();
+            read = Build<TCoExtractMembers>(ctx, pos)
+                .Input(read)
+                .Members(mainColumns)
+                .Done().Ptr();
+            return;
+        }
+    }
+
+    read = Build<TKqlStreamLookupTable>(ctx, pos)
+        .Table(targetTable)
+        .LookupKeys(read)
+        .Columns(mainColumns)
+        .Settings(settingsNode)
+        .Done().Ptr();
 }
 
 void VectorTopMain(TExprContext& ctx, const TCoTopBase& top, TExprNodePtr& read) {
@@ -632,6 +662,10 @@ void VectorTopMain(TExprContext& ctx, const TCoTopBase& top, TExprNodePtr& read)
         .Count(top.Count())
     .Done().Ptr();
 }
+
+// FIXME Most of this rewriting should probably be handled in kqp/opt/physical
+// Logical optimizer should only rewrite it to something like TKqlReadTableVectorIndex
+// This would remove the need for skipping KqpApplyExtractMembersToReadTable based on settings.VectorTopDistinct
 
 TExprBase DoRewriteTopSortOverKMeansTree(
     const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
@@ -697,6 +731,9 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
     const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
 
+    const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
+    const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
+
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
     settings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
@@ -716,7 +753,8 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
+    settings.VectorTopDistinct = withOverlap;
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (flatMap) {
         read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
@@ -827,6 +865,9 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
 
     const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
 
+    const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
+    const bool withOverlap = kmeansDesc.settings().overlap_clusters() > 1;
+
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
     settings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
@@ -849,7 +890,8 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
 
     settings.VectorTopColumn = indexDesc.KeyColumns.back();
     settings.VectorTopLimit = top.Count().Ptr();
-    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
+    settings.VectorTopDistinct = withOverlap;
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, withOverlap, read);
 
     if (mainLambda) {
         read = Build<TCoMap>(ctx, flatMap.Pos())
@@ -1076,6 +1118,330 @@ TExprBase KqpRewriteTopSortOverFlatMap(const TExprBase& node, TExprContext& ctx)
         .Input(flatMapInput)
         .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
         .Done();
+}
+
+TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap)
+{
+    Y_UNUSED(kqpCtx, parentsMap);
+
+    if (!node.Maybe<TCoTopSort>()) {
+        return node;
+    }
+
+    auto topSort = node.Maybe<TCoTopSort>().Cast();
+
+    auto directions = topSort.SortDirections().Maybe<TCoBool>();
+    if (!directions) {
+        return node;
+    }
+
+    if (directions.Cast().Literal().Value() != "false") {
+        return node;
+    }
+
+    auto maybeFlatMap = topSort.KeySelectorLambda().Body().Maybe<TCoFlatMap>();
+
+    if (!topSort.KeySelectorLambda().Body().Maybe<TCoApply>()) {
+        return node;
+    }
+
+
+    auto apply = topSort.KeySelectorLambda().Body().Maybe<TCoApply>().Cast();
+    if (!apply.Callable().Maybe<TCoUdf>()) {
+        return node;
+    }
+
+    auto udf = apply.Callable().Maybe<TCoUdf>().Cast();
+    if (udf.MethodName().Value() != "FullText.Relevance") {
+        return node;
+    }
+
+    if (apply.Args().Count() != 3) {
+        return node;
+    }
+
+    auto args = apply.Args();
+    TString searchQuery;
+    TString searchColumn;
+
+    TNodeOnNodeOwnedMap replaces;
+    for(const auto& arg : args) {
+        if (arg.Maybe<TCoAtom>()) {
+            searchQuery = TString(arg.Cast<TCoAtom>().Value());
+        }
+
+        if (arg.Maybe<TCoString>()) {
+            searchQuery = TString(arg.Cast<TCoString>().Literal().Value());
+        }
+
+        if (arg.Maybe<TCoMember>()) {
+            searchColumn = TString(arg.Cast<TCoMember>().Name().StringValue());
+
+            auto newMember = Build<TCoMember>(ctx, arg.Pos())
+                .Name().Build("Key")
+                    .Struct(arg.Cast<TCoMember>().Struct())
+                .Done();
+            replaces.emplace(apply.Raw(), newMember.Ptr());
+        }
+    }
+
+    if (searchQuery.empty() || searchColumn.empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Search query and column are required"));
+        return node;
+    }
+
+    auto read = TReadMatch::Match(topSort.Input());
+    if (!read) {
+        return node;
+    }
+
+    if (read.Index().Value().empty()) {
+        return node;
+    }
+
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+    YQL_ENSURE(tableDesc.Metadata);
+
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+    if (indexDesc->Type != TIndexDescription::EType::GlobalFulltext) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Index " << read.Index().Value() << " is not a fulltext index"));
+        return node;
+    }
+
+    auto searchQueryAtom = Build<TCoAtom>(ctx, node.Pos())
+        .Value(Build<TCoAtom>(ctx, node.Pos())
+            .Value(searchQuery)
+            .Done())
+        .Done();
+
+    auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(Build<TCoAtom>(ctx, node.Pos())
+            .Value(searchColumn)
+            .Done())
+        .Done();
+
+    TVector<TCoAtom> resultColumnsVector;
+    for(const auto& column: read.Columns()) {
+        resultColumnsVector.push_back(column);
+    }
+
+    auto resultMembers = Build<TCoNameValueTupleList>(ctx, node.Pos());
+    TVector<TExprBase> structMembers;
+    auto rowArg = Build<TCoArgument>(ctx, topSort.Pos())
+        .Name("row")
+        .Done();
+
+    for(const auto& column: read.Columns()) {
+        auto member = Build<TCoNameValueTuple>(ctx, read.Pos())
+                .Name().Build(column.StringValue())
+                .Value<TCoMember>()
+                    .Struct(rowArg)
+                    .Name().Build(column.StringValue())
+                    .Build()
+                .Done();
+        structMembers.push_back(member);
+    }
+
+    resultColumnsVector.push_back(Build<TCoAtom>(ctx, node.Pos())
+        .Value("_yql_full_text_relevance")
+        .Done());
+
+    auto resultColumns = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(resultColumnsVector)
+        .Done();
+
+    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+        .Table(read.Table())
+        .Index(read.Index())
+        .Columns(searchColumns.Ptr())
+        .Query(searchQueryAtom.Ptr())
+        .ResultColumns(resultColumns.Ptr())
+        .Done();
+
+    auto newLambda = TCoLambda{ctx.NewLambda(
+        topSort.KeySelectorLambda().Pos(),
+        std::move(topSort.KeySelectorLambda().Args().Ptr()),
+        ctx.ReplaceNodes(TExprNode::TListType{topSort.KeySelectorLambda().Body().Ptr()}, replaces))};
+
+    replaces.clear();
+
+    auto oldArgNodes = topSort.KeySelectorLambda().Args().Ptr()->Children();
+    TExprNode::TListType newArgNodes;
+    newArgNodes.reserve(oldArgNodes.size());
+    for (const auto& arg : oldArgNodes) {
+        auto newArg = ctx.ShallowCopy(*arg);
+        YQL_ENSURE(replaces.emplace(arg.Get(), newArg).second);
+        newArgNodes.emplace_back(std::move(newArg));
+    }
+
+    auto argReplacedLambda = ctx.NewLambda(
+        topSort.KeySelectorLambda().Pos(),
+        ctx.NewArguments(topSort.KeySelectorLambda().Pos(), std::move(newArgNodes)),
+        ctx.ReplaceNodes(TExprNode::TListType{newLambda.Body().Ptr()}, replaces));
+
+    auto resultTopSort = Build<TCoTopSort>(ctx, topSort.Pos())
+        .Input(newInput)
+        .KeySelectorLambda(argReplacedLambda)
+        .SortDirections(topSort.SortDirections())
+        .Count(topSort.Count())
+        .Done();
+
+    auto mapResult = Build<TCoMap>(ctx, topSort.Pos())
+        .Input(resultTopSort)
+        .Lambda()
+            .Args({rowArg})
+            .Body<TCoAsStruct>()
+                .Add(structMembers)
+                .Build()
+            .Build()
+        .Done();
+
+    return mapResult;
+};
+
+TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx, const NYql::TParentsMap& parentsMap)
+{
+    Y_UNUSED(kqpCtx, parentsMap);
+
+    if (!node.Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    auto flatMap = node.Maybe<TCoFlatMapBase>().Cast();
+
+    if (!flatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
+        return node;
+    }
+
+    auto optionalIf = flatMap.Lambda().Body().Maybe<TCoOptionalIf>().Cast();
+
+
+    if (!optionalIf.Predicate().Maybe<TCoApply>()) {
+        return node;
+    }
+
+    auto apply = optionalIf.Predicate().Maybe<TCoApply>().Cast();
+
+    if (!apply.Callable().Maybe<TCoUdf>()) {
+        return node;
+    }
+
+    auto udf = apply.Callable().Maybe<TCoUdf>().Cast();
+
+    if (udf.MethodName().Value() != "FullText.Contains") {
+        return node;
+    }
+
+    if (apply.Args().Count() != 3) {
+        return node;
+    }
+
+    auto args = apply.Args();
+    TString searchQuery;
+    TString searchColumn;
+
+    for(const auto& arg : args) {
+        if (arg.Maybe<TCoAtom>()) {
+            if (!searchQuery.empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Multiple search queries are not supported"));
+                return node;
+            }
+
+            searchQuery = TString(arg.Cast<TCoAtom>().Value());
+        }
+
+        if (arg.Maybe<TCoString>()) {
+            if (!searchQuery.empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Multiple search queries are not supported"));
+                return node;
+            }
+
+            searchQuery = TString(arg.Cast<TCoString>().Literal().Value());
+        }
+
+        if (arg.Maybe<TCoMember>()) {
+            auto columnName = std::string(arg.Cast<TCoMember>().Name().StringValue());
+            if (!searchColumn.empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Multiple search columns are not supported"));
+                return node;
+            }
+
+            searchColumn = columnName;
+        }
+    }
+
+    if (searchQuery.empty() || searchColumn.empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Search query and column are required"));
+        return node;
+    }
+
+    auto read = TReadMatch::Match(flatMap.Input());
+    if (!read) {
+        return node;
+    }
+
+    if (read.Index().Value().empty()) {
+        return node;
+    }
+
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+    YQL_ENSURE(tableDesc.Metadata);
+
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+    if (indexDesc->Type != TIndexDescription::EType::GlobalFulltext) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Index " << read.Index().Value() << " is not a fulltext index"));
+        return node;
+    }
+
+    auto searchQueryAtom = Build<TCoAtom>(ctx, node.Pos())
+        .Value(Build<TCoAtom>(ctx, node.Pos())
+            .Value(searchQuery)
+            .Done())
+        .Done();
+
+    auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(Build<TCoAtom>(ctx, node.Pos())
+            .Value(searchColumn)
+            .Done())
+        .Done();
+
+
+    TVector<TCoAtom> resultColumns;
+    for(auto& column: tableDesc.Metadata->KeyColumnNames) {
+        resultColumns.push_back(Build<TCoAtom>(ctx, node.Pos())
+            .Value(column)
+            .Done());
+    }
+    auto resultColumnsList = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(resultColumns)
+        .Done();
+
+    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+        .Table(read.Table())
+        .Index(read.Index())
+        .Columns(searchColumns.Ptr())
+        .Query(searchQueryAtom.Ptr())
+        .ResultColumns(read.Columns().Ptr())
+        .Done();
+
+    auto newLambdaBody = Build<TCoOptionalIf>(ctx, flatMap.Lambda().Pos())
+        .Predicate<TCoBool>()
+            .Literal().Build("true")
+            .Build()
+        .Value(optionalIf.Value().Ptr())
+        .Done();
+
+    TNodeOnNodeOwnedMap replaces;
+    auto newLambda = NewLambdaFrom(ctx, flatMap.Lambda().Pos(), replaces, flatMap.Lambda().Args().Ref(), newLambdaBody);
+
+    auto newFlatMap = Build<TCoFlatMap>(ctx, read.Pos())
+        .Input(newInput)
+        .Lambda(newLambda)
+        .Done();
+
+    return newFlatMap;
 }
 
 // The index and main table have same number of rows, so we can push a copy of TCoTopSort or TCoTake

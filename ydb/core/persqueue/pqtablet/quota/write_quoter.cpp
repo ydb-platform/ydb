@@ -18,7 +18,7 @@ TWriteQuoter::TWriteQuoter(
             tabletId, counters, 1
     )
     , QuotingEnabled(pqConfig.GetQuotingConfig().GetEnableQuoting())
-    , PartitionDeduplicationIdQuotaTracker(config.GetPartitionConfig().GetWriteMessageDeduplicationIdPerSecond() / 2,
+    , PartitionDeduplicationIdQuotaTracker(config.GetPartitionConfig().GetWriteMessageDeduplicationIdPerSecond(),
         config.GetPartitionConfig().GetWriteMessageDeduplicationIdPerSecond(), TAppData::TimeProvider->Now()) // TODO MLP config
 {
 }
@@ -37,6 +37,7 @@ void TWriteQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
 }
 
 bool TWriteQuoter::CanExaust(TInstant now) {
+    Cerr << ">>>>> CanExaust: " << TPartitionQuoterBase::CanExaust(now) << " " << PartitionDeduplicationIdQuotaTracker.CanExaust(now) << Endl;
     return TPartitionQuoterBase::CanExaust(now) && PartitionDeduplicationIdQuotaTracker.CanExaust(now);
 }
 

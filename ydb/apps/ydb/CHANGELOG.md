@@ -14,7 +14,6 @@
 * The `ydb workload vector` now supports the `import files` subcommand to populate the table from CSV or parquet files.
 * The `ydb workload vector` now supports the `import generate` subcommand to populate the table with random data.
 * Named expression-containing view restoration and restoration of views that access secondary indexes have been fixed.
-* Added new options for shared consumers only to the `ydb topic consumer add` command to configure DLQ and max attempts policy
 
 ## 2.27.0 ##
 

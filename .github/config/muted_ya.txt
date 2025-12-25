@@ -19,6 +19,8 @@ ydb/core/kafka_proxy/ut TMetadataActorTests.TopicMetadataGoodAndBad
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.*
 ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Upsert+LogEnabled
+ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Select
+ydb/core/kqp/ut/data_integrity [3/50] chunk chunk
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/join KqpJoinOrder.CanonizedJoinOrderLookupBug
 ydb/core/kqp/ut/join KqpJoinOrder.CanonizedJoinOrderTPCC
@@ -81,6 +83,7 @@ ydb/core/persqueue/ut/ut_with_sdk [4/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [6/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [7/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [8/10] chunk chunk
+ydb/core/persqueue/ut/ut_with_sdk unittest
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeStatus
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
@@ -126,6 +129,7 @@ ydb/services/persqueue_v1/ut TPQCompatTest.BadTopics
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectRead*Cache*
 ydb/services/persqueue_v1/ut TPersQueueTest.TxCounters
 ydb/services/persqueue_v1/ut TPersQueueTest.PreferredCluster_EnabledRemotePreferredClusterAndRemoteClusterEnabledDelaySec_SessionDiesOnlyAfterDelay
+ydb/services/persqueue_v1/ut TPersQueueTest.ReadRuleServiceTypeMigrationWithDisallowDefault
 ydb/services/persqueue_v1/ut [3/10]*
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync*
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestActiveSessionCountAfterBadSession

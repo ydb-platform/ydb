@@ -10,7 +10,7 @@ namespace {
 TString ToString(const NKikimrSSA::TProgram::TParameter& parameter) {
     return TStringBuilder{} << "Param " << parameter.GetName();
 }
-    
+
 TString ToString(const NKikimrSSA::TProgram::TConstant& constant) {
     return TStringBuilder{} << "Const " << constant.ShortDebugString();
 }
@@ -20,7 +20,7 @@ TString ToString(const NKikimrSSA::TProgram::TColumn& column) {
 }
 
 TString ToString(const NKikimrSSA::TProgram::TAssignment::TExternalFunction& externalFunction) {
-    TStringBuilder result;  
+    TStringBuilder result;
     result << externalFunction.GetName();
     for (const auto& column: externalFunction.GetArguments()) {
         result << " " << ToString(column);
@@ -42,7 +42,7 @@ TString ToString(const NKikimrSSA::TProgram::TFilter& filter) {
 }
 
 TString ToString(const NKikimrSSA::TProgram::TAssignment::TFunction& function) {
-    TStringBuilder result;  
+    TStringBuilder result;
     if (function.HasKernelName()) {
         result << function.GetKernelName();
     } else if (function.HasId()) {
@@ -78,10 +78,10 @@ TString ToString(const NKikimrSSA::TProgram::TAssignment& assignment) {
 }
 
 TString ToString(const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& aggregateFunction) {
-    TStringBuilder result;  
+    TStringBuilder result;
     if (aggregateFunction.HasId()) {
         result << NKikimrSSA::TProgram::TAggregateAssignment::EAggregateFunction_Name(NKikimrSSA::TProgram::TAggregateAssignment::EAggregateFunction(aggregateFunction.GetId()));
-    }else {
+    } else {
         result << "UnknownFunction";
     }
     for (const auto& column: aggregateFunction.GetArguments()) {
@@ -100,7 +100,7 @@ TString ToString(const NKikimrSSA::TProgram::TGroupBy& groupBy) {
     for (const auto& column: groupBy.GetKeyColumns()) {
         result << " " << ToString(column);
     }
-    
+
     for (const auto& aggregateAssignment: groupBy.GetAggregates()) {
         result << " " << ToString(aggregateAssignment);
     }
@@ -110,7 +110,7 @@ TString ToString(const NKikimrSSA::TProgram::TGroupBy& groupBy) {
 }
 
 TString SSAToPrettyString(const NKikimrSSA::TProgram& program) {
-    TStringBuilder result;    
+    TStringBuilder result;
     for (const auto& command: program.GetCommand()) {
         switch (command.line_case()) {
             case NKikimrSSA::TProgram::TCommand::LineCase::kAssign: {

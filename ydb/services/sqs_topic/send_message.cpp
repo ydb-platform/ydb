@@ -34,8 +34,8 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
-#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>

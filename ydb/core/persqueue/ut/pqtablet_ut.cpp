@@ -3058,7 +3058,7 @@ void TPQTabletFixture::SendReadQuotaConsumed(ui64 cookie)
 
     Ctx->Runtime->Send(ReadQuoter->Quoter,
                        Ctx->Edge,
-                       new TEvPQ::TEvConsumed(1024, cookie, "client"));
+                       new TEvPQ::TEvConsumed(1024, 0, cookie, "client"));
 }
 
 void TPQTabletFixture::SendReleaseExclusiveLock()

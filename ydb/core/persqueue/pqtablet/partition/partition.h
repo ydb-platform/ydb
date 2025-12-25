@@ -19,7 +19,7 @@
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
-#include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
+#include <ydb/core/persqueue/pqtablet/quota/quota.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/actors/core/actor.h>
@@ -218,9 +218,9 @@ private:
     void FilterDeadlinedWrites(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx, TMessageQueue& requests);
 
-    void Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
-    void Handle(NReadQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
-    void Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(NQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(NQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvApproveReadQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx);
@@ -312,7 +312,7 @@ private:
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
     bool RequestBlobQuota();
-    void RequestBlobQuota(size_t quotaSize);
+    void RequestBlobQuota(size_t quotaSize, size_t deduplicationIdQuotaSize);
     void ConsumeBlobQuota();
     void UpdateAfterWriteCounters(bool writeComplete);
 
@@ -615,9 +615,9 @@ private:
             HFuncTraced(TEvPQ::TEvTxCommit, HandleOnInit);
             HFuncTraced(TEvPQ::TEvTxRollback, HandleOnInit);
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, HandleOnInit);
             hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, HandleOnInit);
@@ -693,9 +693,9 @@ private:
             HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
             hFuncTraced(TEvPQ::TEvExclusiveLockAcquired, Handle);
             HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvQuotaUpdated, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
-            HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvQuotaUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
+            HFuncTraced(NQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
             HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
@@ -1064,6 +1064,7 @@ private:
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;
+    ui64 DeduplicationIdQuotaSize = 0;
     bool NeedDeletePartition = false;
 
     // Wait topic quota metrics

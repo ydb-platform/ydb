@@ -257,6 +257,8 @@ struct TEvPQ {
             // For Kafka deduplication:
             bool EnableKafkaDeduplication = false;
             TMaybe<i16> ProducerEpoch;
+
+            std::optional<TString> MessageDeduplicationId;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
@@ -267,7 +269,8 @@ struct TEvPQ {
         , Msgs(std::move(msgs))
         , IsDirectWrite(isDirectWrite)
         , InitialSeqNo(initialSeqNo)
-        {}
+        {
+        }
 
         ui64 Cookie;
         ui64 MessageNo;
@@ -1046,10 +1049,11 @@ struct TEvPQ {
     };
 
     struct TEvConsumed : public TEventLocal<TEvConsumed, EvConsumed> {
-        TEvConsumed(ui64 consumedBytes, ui64 requestCookie, const TString& consumer)
-            : ConsumedBytes(consumedBytes),
-              RequestCookie(requestCookie),
-              Consumer(consumer)
+        TEvConsumed(ui64 consumedBytes, ui64 consumedDeduplicationIds, ui64 requestCookie, const TString& consumer)
+            : ConsumedBytes(consumedBytes)
+            , ConsumedDeduplicationIds(consumedDeduplicationIds)
+            , RequestCookie(requestCookie)
+            , Consumer(consumer)
         {}
 
         TEvConsumed(ui64 consumedBytes)
@@ -1058,6 +1062,7 @@ struct TEvPQ {
         {}
 
         ui64 ConsumedBytes;
+        ui64 ConsumedDeduplicationIds;
         ui64 RequestCookie;
         TString Consumer;
         bool IsOverhead = false;

@@ -235,7 +235,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     }
 }
 
-void TPartition::Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& /*ctx*/) {
+void TPartition::Handle(NQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& /*ctx*/) {
     TabletCounters.Populate(*ev->Get()->AccountQuotaCounters.Get());
 }
 
@@ -920,7 +920,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
 void TPartition::OnReadRequestFinished(ui64 cookie, ui64 answerSize, const TString& consumer, const TActorContext& ctx) {
     AvgReadBytes.Update(answerSize, ctx.Now());
-    Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumed(answerSize, cookie, consumer));
+    Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumed(answerSize, 0, cookie, consumer));
 }
 
 void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo, const TActorContext& ctx) {

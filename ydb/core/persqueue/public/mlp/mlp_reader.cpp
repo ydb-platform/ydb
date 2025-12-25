@@ -1,6 +1,6 @@
 #include "mlp_reader.h"
-#include "mlp_message_attributes.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
@@ -135,7 +135,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
         }
 
         TString messageGroupId;
-        auto it = messageMetaAttr.find(MESSAGE_KEY);
+        auto it = messageMetaAttr.find(MESSAGE_ATTRIBUTE_KEY);
         if (it != messageMetaAttr.end()) {
             messageGroupId = std::move(it->second);
         }

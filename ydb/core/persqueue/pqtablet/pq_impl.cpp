@@ -18,12 +18,13 @@
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/sourceid.h>  // FIXME move sourceid
-#include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
+#include <ydb/core/persqueue/pqtablet/quota/quota.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -1893,6 +1894,10 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 it->second.Inc(cmd.ByteSize());
         }
 
+        ui64 createTimestampMs = 0, writeTimestampMs = 0;
+        NKikimrPQClient::TDataChunk proto;
+        std::optional<TString> deduplicationId;
+
         TString errorStr = "";
         if (!cmd.HasSeqNo() && !req.GetIsDirectWrite()) {
             errorStr = "no SeqNo";
@@ -1924,14 +1929,15 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "Too big Heartbeat";
         } else if (cmd.HasHeartbeat() && cmd.HasTotalParts() && cmd.GetTotalParts() != 1) {
             errorStr = "Heartbeat must be a single-part message";
-        }
-        ui64 createTimestampMs = 0, writeTimestampMs = 0;
-        if (cmd.HasCreateTimeMS() && cmd.GetCreateTimeMS() >= 0)
-            createTimestampMs = cmd.GetCreateTimeMS();
-        if (cmd.HasWriteTimeMS() && cmd.GetWriteTimeMS() > 0) {
-            writeTimestampMs = cmd.GetWriteTimeMS();
-            if (!cmd.GetDisableDeduplication()) {
-                errorStr = "WriteTimestamp avail only without deduplication";
+        } else {
+            if (cmd.HasCreateTimeMS() && cmd.GetCreateTimeMS() >= 0) {
+                createTimestampMs = cmd.GetCreateTimeMS();
+            }
+            if (cmd.HasWriteTimeMS() && cmd.GetWriteTimeMS() > 0) {
+                writeTimestampMs = cmd.GetWriteTimeMS();
+                if (!cmd.GetDisableDeduplication()) {
+                    errorStr = "WriteTimestamp avail only without deduplication";
+                }
             }
         }
 
@@ -1939,8 +1945,18 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, errorStr);
             return;
         }
+
+        if (proto.ParseFromString(cmd.GetData())) {
+            for (auto& attr : *proto.MutableMessageMeta()) {
+                if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
+                    deduplicationId = attr.value();
+                    break;
+                }
+            }
+        }
+
         ui32 mSize = MAX_BLOB_PART_SIZE - cmd.GetSourceId().size() - sizeof(ui32) - TClientBlob::OVERHEAD; //megaqc - remove this
-        PQ_ENSURE(mSize > 204800);
+        PQ_ENSURE(mSize > 204800)("mSize", mSize);
         ui64 receiveTimestampMs = TAppData::TimeProvider->Now().MilliSeconds();
         bool disableDeduplication = cmd.GetDisableDeduplication();
 
@@ -1973,13 +1989,29 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 TString data = cmd.GetData().substr(pos, mSize - diff);
                 pos += mSize - diff;
                 diff = 0;
-                msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), partNo,
-                    totalParts, totalSize, createTimestampMs, receiveTimestampMs,
-                    disableDeduplication, writeTimestampMs, data, uncompressedSize,
-                    cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation(),
-                    cmd.GetIgnoreQuotaDeadline(), heartbeatVersion, cmd.GetEnableKafkaDeduplication(),
-                    (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing())
+
+                msgs.push_back({
+                    .SourceId = cmd.GetSourceId(),
+                    .SeqNo = static_cast<ui64>(cmd.GetSeqNo()),
+                    .PartNo = partNo,
+                    .TotalParts = totalParts,
+                    .TotalSize = totalSize,
+                    .CreateTimestamp = createTimestampMs,
+                    .ReceiveTimestamp = receiveTimestampMs,
+                    .DisableDeduplication = disableDeduplication,
+                    .WriteTimestamp = writeTimestampMs,
+                    .Data = data,
+                    .UncompressedSize = uncompressedSize,
+                    .PartitionKey = cmd.GetPartitionKey(),
+                    .ExplicitHashKey = cmd.GetExplicitHash(),
+                    .External = cmd.GetExternalOperation(),
+                    .IgnoreQuotaDeadline = cmd.GetIgnoreQuotaDeadline(),
+                    .HeartbeatVersion = heartbeatVersion,
+                    .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
+                    .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
+                    .MessageDeduplicationId = deduplicationId
                 });
+
                 partNo++;
                 uncompressedSize = 0;
                 PQ_LOG_D("got client PART message topic: " << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") << " partition: " << req.GetPartition()
@@ -2007,12 +2039,26 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 ? cmd.GetHeartbeat().GetData()
                 : cmd.GetData();
 
-            msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), static_cast<ui16>(cmd.HasPartNo() ? cmd.GetPartNo() : 0),
-                static_cast<ui16>(cmd.HasPartNo() ? cmd.GetTotalParts() : 1), totalSize,
-                createTimestampMs, receiveTimestampMs, disableDeduplication, writeTimestampMs, data,
-                cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u, cmd.GetPartitionKey(), cmd.GetExplicitHash(),
-                cmd.GetExternalOperation(), cmd.GetIgnoreQuotaDeadline(), heartbeatVersion, cmd.GetEnableKafkaDeduplication(),
-                (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing())
+            msgs.push_back({
+                .SourceId = cmd.GetSourceId(),
+                .SeqNo =  static_cast<ui64>(cmd.GetSeqNo()),
+                .PartNo = static_cast<ui16>(cmd.HasPartNo() ? cmd.GetPartNo() : 0),
+                .TotalParts = static_cast<ui16>(cmd.HasPartNo() ? cmd.GetTotalParts() : 1),
+                .TotalSize = totalSize,
+                .CreateTimestamp = createTimestampMs,
+                .ReceiveTimestamp = receiveTimestampMs,
+                .DisableDeduplication = disableDeduplication,
+                .WriteTimestamp = writeTimestampMs,
+                .Data = data,
+                .UncompressedSize = cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u,
+                .PartitionKey = cmd.GetPartitionKey(),
+                .ExplicitHashKey = cmd.GetExplicitHash(),
+                .External = cmd.GetExternalOperation(),
+                .IgnoreQuotaDeadline = cmd.GetIgnoreQuotaDeadline(),
+                .HeartbeatVersion = heartbeatVersion,
+                .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
+                .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
+                .MessageDeduplicationId = std::move(deduplicationId)
             });
         }
         PQ_LOG_D("got client message topic: " << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") <<
@@ -4808,10 +4854,10 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
 
     auto& quoterId = PartitionWriteQuoters[partition.OriginalPartitionId];
     if (!quoterId) {
-        quoterId = RegisterWithSameMailbox(new TWriteQuoter(
+        quoterId = RegisterWithSameMailbox(CreateWriteQuoter(
+            AppData()->PQConfig,
             TopicConverter,
             Config,
-            AppData()->PQConfig,
             partition,
             SelfId(),
             TabletID(),

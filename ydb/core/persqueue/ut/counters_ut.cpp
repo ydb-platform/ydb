@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

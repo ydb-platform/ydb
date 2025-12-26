@@ -8,6 +8,7 @@
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
+#include <util/folder/dirut.h>
 #include <util/system/env.h>
 
 namespace NYdb::NConsoleClient {
@@ -56,7 +57,7 @@ TFsPath ResolveWindowsDir(const char* overrideEnv, const char* envName, std::ini
         }
         return path.Fix();
     }
-    TFsPath path = GetHomePath();
+    TFsPath path = GetHomeDir();
     for (const auto& suffix : fallbackSuffixes) {
         path = path.Child(suffix);
     }

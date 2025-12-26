@@ -1,5 +1,7 @@
 #include "interactive_config.h"
+#if defined(YDB_CLI_AI_ENABLED)
 #include "api_utils.h"
+#endif
 #include "interactive_log_defs.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -319,12 +321,14 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint(const std::o
                 return false;
             }
 
+#if defined(YDB_CLI_AI_ENABLED)
             try {
                 NAi::CreateApiUrl(url, "/");
             } catch (const std::exception& e) {
                 error = e.what();
                 return false;
             }
+#endif
 
             endpoint = url;
             return true;
@@ -408,11 +412,13 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
     }
 
     std::vector<TString> allowedModels;
+#if defined(YDB_CLI_AI_ENABLED)
     try {
         allowedModels = NAi::ListModelNames(apiEndpoint, GetApiToken(), Log);
     } catch (const std::exception& e) {
         Cerr << Colors.Yellow() << "Failed to list model names, maybe model API endpoint is not correct: " << e.what() << Colors.OldColor() << Endl;
     }
+#endif
 
     TString modelName;
     std::vector<TMenuEntry> options;

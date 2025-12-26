@@ -12,6 +12,10 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/interactive/session
 )
 
+IF (NOT OS_WINDOWS OR USE_SSE4)
+    CFLAGS(-DYDB_CLI_AI_ENABLED=1)
+ENDIF()
+
 END()
 
 RECURSE(

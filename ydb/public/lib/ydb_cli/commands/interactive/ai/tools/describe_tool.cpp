@@ -4,7 +4,7 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/describe.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
-#include <ydb/core/base/path.h>
+#include <ydb/public/lib/ydb_cli/common/ydb_path.h>
 
 #include <util/string/strip.h>
 #include <util/stream/str.h>
@@ -49,7 +49,7 @@ NEVER guess column names, types or keys without verifying them with this tool fi
 public:
     TDescribeTool(const TDescribeToolSettings& settings, const TInteractiveLogger& log)
         : TBase(CreateParametersSchema(), DESCRIPTION, log)
-        , Database(NKikimr::CanonizePath(settings.Database))
+        , Database(CanonizeYdbPath(settings.Database))
         , Driver(settings.Driver)
     {}
 
@@ -59,13 +59,13 @@ protected:
 
         Path = Strip(parser.GetKey(PATH_PROPERTY).GetString());
         if (!Path.StartsWith('/')) {
-            Path = NKikimr::JoinPath({Database, Path});
+            Path = JoinYdbPath({Database, Path});
         } else if (!Path.StartsWith(Database)) {
             // If path starts with '/' but not with Database prefix, assume it is relative to Database.
             // This is a common confusion for AI agents who see file lists without full path prefix.
-            Path = NKikimr::JoinPath({Database, Path});
+            Path = JoinYdbPath({Database, Path});
         }
-        Path = NKikimr::CanonizePath(Path);
+        Path = CanonizeYdbPath(Path);
 
         if (auto p = parser.MaybeKey(PERMISSIONS_PROPERTY)) Options.ShowPermissions = p->GetBooleanSafe(false);
         if (auto p = parser.MaybeKey(PARTITION_BOUNDARIES_PROPERTY)) Options.ShowKeyShardBoundaries = p->GetBooleanSafe(false);

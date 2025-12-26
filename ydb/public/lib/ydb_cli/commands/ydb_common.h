@@ -14,18 +14,6 @@ inline void ThrowOnError(const NYdb::TOperation& operation) {
     NStatusHelpers::ThrowOnError(operation.Status());
 }
 
-inline bool ThrowOnErrorAndCheckEOS(NYdb::Dev::TStreamPartStatus status) {
-    if (!status.IsSuccess()) {
-        if (status.EOS()) {
-            return true;
-        }
-        throw NStatusHelpers::TYdbErrorException(status) << static_cast<NYdb::Dev::TStatus>(status);
-    } else if (status.GetIssues()) {
-        Cerr << static_cast<NYdb::Dev::TStatus>(status);
-    }
-    return false;
-}
-
 inline TDuration ParseDuration(TStringBuf str) {
     StripInPlace(str);
     if (!str.empty() && !IsAsciiAlpha(str.back())) {

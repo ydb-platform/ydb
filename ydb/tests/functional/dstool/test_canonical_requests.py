@@ -176,3 +176,22 @@ class Test(TestBase):
             time.sleep(16),  # ReadyStablePeriod + 1 for sure
             self._trace('group', 'list'),
         ]
+
+    def test_cluster_get_set(self):
+        return [
+            self._trace('cluster', 'get', with_grpc_calls=True),
+            self._trace('cluster', 'get', '-A', '--format=json', with_grpc_calls=True),
+            self._trace('cluster', 'set', '--default-max-slots=4', with_grpc_calls=True),
+            self._trace('cluster', 'set', '--disable-self-heal', with_grpc_calls=True),
+            self._trace('cluster', 'set', '--disable-donor-mode', with_grpc_calls=True),
+            self._trace('cluster', 'set', '--scrub-periodicity', '1d1h1m1s', with_grpc_calls=True),
+            self._trace('cluster', 'set', '--scrub-periodicity', 'disable', with_grpc_calls=True),
+            self._trace('cluster', 'set', '--pdisk-space-margin-promille', '1000', with_grpc_calls=True),
+            self._trace('cluster', 'set', '--pdisk-space-color-border', 'LIGHT_YELLOW', with_grpc_calls=True),
+            self._trace('cluster', 'get', '-A', '--format=json', with_grpc_calls=True),
+
+            # Errors:
+            self._trace('cluster', 'set', '--enable-self-heal', '--enable-donor-mode'),
+            self._trace('cluster', 'set', '--pdisk-space-margin-promille', '1001'),
+            self._trace('cluster', 'set', '--pdisk-space-color-border', 'UNKNOWN'),
+        ]

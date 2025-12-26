@@ -243,7 +243,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TDecompressionQueueIte
 template<bool UseMigrationProtocol>
 TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionImpl() {
     for (auto&& [_, partitionStream] : PartitionStreams) {
-        partitionStream->ClearQueue();
+        if (partitionStream) {
+            partitionStream->ExtractQueue();
+        }
     }
 
     for (auto& e : DecompressionQueue) {

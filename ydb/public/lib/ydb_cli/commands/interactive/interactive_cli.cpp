@@ -1,6 +1,7 @@
 #include "interactive_cli.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
 #if defined(YDB_CLI_AI_ENABLED)

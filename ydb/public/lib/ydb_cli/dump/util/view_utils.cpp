@@ -133,7 +133,7 @@ bool SplitViewQuery(
         NYql::TIssues& issues)
 {
     TVector<TString> statements;
-    auto lexer = MakeLexer(lexers, translationSettings.AnsiLexer, translationSettings.Antlr4Parser);
+    auto lexer = MakeLexer(lexers, translationSettings.AnsiLexer);
     if (!SplitQueryToStatements(query, lexer, statements, issues)) {
         return false;
     }

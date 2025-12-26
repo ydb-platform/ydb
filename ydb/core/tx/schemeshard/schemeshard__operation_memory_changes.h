@@ -117,6 +117,7 @@ public:
 
     void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
 
+    void GrabNewBackupCollection(TSchemeShard* ss, const TPathId& pathId);
     void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabNewSysView(TSchemeShard* ss, const TPathId& pathId);

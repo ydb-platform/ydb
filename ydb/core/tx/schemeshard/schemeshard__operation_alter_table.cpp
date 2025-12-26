@@ -30,6 +30,24 @@ bool CheckFreezeStateAlreadySet(const TTableInfo::TPtr table, const NKikimrSchem
     return false;
 }
 
+bool CheckTableInBackupCollections(TSchemeShard* ss, const TPath& tablePath, const NKikimrSchemeOp::TTableDescription& alter, TString& errStr) {
+    if (alter.ColumnsSize() == 0 && alter.DropColumnsSize() == 0) {
+        return true;
+    }
+
+    for (const auto& [id, collection] : ss->BackupCollections) {
+        const auto& desc = collection->Description;
+        for (const auto& entry : desc.GetExplicitEntryList().GetEntries()) {
+            TPath entryPath = TPath::Resolve(entry.GetPath(), ss);
+            if (entryPath.IsResolved() && entryPath.Base()->PathId == tablePath.Base()->PathId) {
+                errStr = Sprintf("Alter schema forbidden: table is part of backup collection '%s'. Remove table from collection first.", desc.GetName().c_str());
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 template <typename TMessage>
 bool CheckAllowedFields(const TMessage& message, THashSet<TString>&& allowedFields) {
     std::vector<const google::protobuf::FieldDescriptor*> fields;
@@ -601,6 +619,11 @@ public:
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(path.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+
+        if (!CheckTableInBackupCollections(context.SS, path, alter, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
 
         if (table->AlterVersion == 0) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Table is not created yet");

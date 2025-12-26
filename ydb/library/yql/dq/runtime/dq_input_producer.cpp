@@ -95,7 +95,7 @@ private:
 
             // pass watermark and wait for drain only if watermarks enabled and batch is still empty
             if (Batch.empty()) {
-                Y_UNUSED(TrySendWatermark());
+                TrySendWatermark();
                 return NUdf::EFetchStatus::Yield;
             }
         }
@@ -142,7 +142,7 @@ private:
 
             // pass watermark and wait for drain only if watermarks enabled and batch is still empty
             if (Batch.empty()) {
-                Y_UNUSED(TrySendWatermark());
+                TrySendWatermark();
                 return NUdf::EFetchStatus::Yield;
             }
         }
@@ -195,7 +195,7 @@ private:
         return WatermarksTracker && WatermarkStorage;
     }
 
-    [[nodiscard]] bool TrySendWatermark() {
+    bool TrySendWatermark() {
         if (!WatermarksEnabled()) {
             return false;
         }

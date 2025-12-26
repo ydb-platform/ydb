@@ -9,19 +9,15 @@ import "ydb/public/api/protos/ydb_operation.proto";
 message CreateTestShardRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
-    // Database path
-    string database = 2;
-
-    // Base index for tablet ID generation
-    // Same owner_idx = same tablets (idempotent duplicate detection)
-    uint64 owner_idx = 3;
+    // Path to the TestShard object to create
+    string path = 2;
 
     // Storage pool names for tablet channels (optional)
     // If not provided, uses first 3 storage pools from the database domain
-    repeated string channels = 4;
+    repeated string channels = 3;
 
     // Number of tablets to create
-    uint32 count = 5;
+    uint32 count = 4;
 
     // TestShard initialization config in YAML format
     //
@@ -59,14 +55,14 @@ message CreateTestShardRequest {
     //   stall_counter: 1000       # Barrier sync every N requests
     //
     // validation:                 # Optional external validation
-    //   server: "host:9999"       # Validation server address
+    //   server: "host:port"       # Validation server address
     //   after_bytes: 1000000      # Start validation after N bytes
     //
     // tracing:                    # Optional request tracing
     //   put_fraction_ppm: 1000    # Trace fraction (parts per million)
     //   verbosity: 15             # Trace detail level (0-15)
     // ```
-    string config = 6;
+    string config = 5;
 }
 
 message CreateTestShardResponse {
@@ -81,15 +77,8 @@ message CreateTestShardResult {
 message DeleteTestShardRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
-    // Database path
-    string database = 2;
-
-    // Owner index identifying tablets to delete
-    uint64 owner_idx = 3;
-
-    // Number of consecutive tablets to delete starting from owner_idx
-    // If not specified, deletes all tablets with this owner_idx
-    uint32 count = 4;
+    // Path to the TestShard object to delete
+    string path = 2;
 }
 
 message DeleteTestShardResponse {

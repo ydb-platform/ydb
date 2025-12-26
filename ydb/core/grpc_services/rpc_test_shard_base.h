@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "rpc_deferrable.h"
 
-#include <ydb/public/api/protos/draft/ydb_test_shard.pb.h>
+#include <ydb/public/api/protos/ydb_test_shard.pb.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/base/hive.h>

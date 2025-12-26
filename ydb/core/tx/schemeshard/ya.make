@@ -68,6 +68,7 @@ RECURSE_FOR_TESTS(
     ut_sysview_reboots
     ut_topic_splitmerge
     ut_topic_set_boundaries
+    ut_test_shard
     ut_transfer
     ut_ttl
     ut_user_attributes
@@ -176,6 +177,7 @@ SRCS(
     schemeshard__operation_create_subdomain.cpp
     schemeshard__operation_create_sysview.cpp
     schemeshard__operation_create_table.cpp
+    schemeshard__operation_create_test_shard.cpp
     schemeshard__operation_create_view.cpp
     schemeshard__operation_db_changes.cpp
     schemeshard__operation_drop_backup_collection.cpp
@@ -199,6 +201,7 @@ SRCS(
     schemeshard__operation_drop_streaming_query.cpp
     schemeshard__operation_drop_subdomain.cpp
     schemeshard__operation_drop_sysview.cpp
+    schemeshard__operation_drop_test_shard.cpp
     schemeshard__operation_drop_table.cpp
     schemeshard__operation_drop_unsafe.cpp
     schemeshard__operation_drop_view.cpp
@@ -370,6 +373,7 @@ PEERDIR(
     ydb/core/sys_view/partition_stats
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/test_tablet
     ydb/core/tx
     ydb/core/tx/datashard
     ydb/core/tx/schemeshard/common
@@ -409,3 +413,4 @@ ELSE()
 ENDIF()
 
 END()
+

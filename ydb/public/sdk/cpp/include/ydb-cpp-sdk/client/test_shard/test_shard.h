@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace NYdb::inline Dev::NTestShard {
+namespace NYdb::NTestShard {
 
 struct TCreateTestShardSettings : public TOperationRequestSettings<TCreateTestShardSettings> {};
 
@@ -38,17 +38,14 @@ public:
     ~TTestShardClient();
 
     TAsyncCreateTestShardResult CreateTestShard(
-        uint64_t ownerIdx,
+        const std::string& path,
         const std::vector<std::string>& channels,
         uint32_t count = 1,
         const std::string& config = {},
-        const std::string& database = {},
         const TCreateTestShardSettings& settings = {});
 
     TAsyncStatus DeleteTestShard(
-        uint64_t ownerIdx,
-        uint32_t count = 1,
-        const std::string& database = {},
+        const std::string& path,
         const TDeleteTestShardSettings& settings = {});
 
 private:
@@ -56,4 +53,4 @@ private:
     std::unique_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::inline Dev::NTestShard
+} // namespace NYdb::NTestShard

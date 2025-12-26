@@ -8,7 +8,7 @@
 * Added a new `--no-sanitize` option of the `ydb admin cluster state fetch` command. The new option disable sanitization and preserve sensitive data in the output.
 * Added `snapshot-ro` and `snapshot-rw` transaction modes to `--tx-mode` option of the `ydb table query execute` command.
 * Added `NO_COLOR` environment variable support to disable ANSI colors in YDB CLI (no-color.org)
-* Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output .tar.bz2 file.
+* Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output compressed file.
 * Added a simple progress bar for non-interactive stderr.
 * Added a new `omit-indexes` property to the `--item` option of the `ydb tools copy` command, allowing tables to be copied without their indexes.
 * Fixed a bug where the `ydb tools restore` command could crash with an `mutex lock failure (Invalid argument)` error due to an internal race condition.

@@ -9,6 +9,13 @@ namespace {
 
     class TDummySchemeCacheActor : public TActor<TDummySchemeCacheActor> {
         public:
+            enum EEv {
+                EvReplyTopicNotFound = EventSpaceBegin(TEvents::ES_PRIVATE),
+            };
+
+            struct TEvReplyTopicNotFound : public TEventLocal<TEvReplyTopicNotFound, EvReplyTopicNotFound> {
+            };
+
             TDummySchemeCacheActor(ui64 pqTabletId) :
                 TActor<TDummySchemeCacheActor>(&TDummySchemeCacheActor::StateFunc),
                 PqTabletId(pqTabletId) {}
@@ -17,7 +24,9 @@ namespace {
                 auto response = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
                 for (auto& requestedEntry : ev->Get()->Request->ResultSet) {
                     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-                    entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+                    entry.Status = ReplyTopicNotFound
+                        ? NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown
+                        : NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
                     entry.Path = requestedEntry.Path;
                     auto groupInfo = std::make_unique<NKikimr::NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>();
                     groupInfo->Description.MutablePQTabletConfig()->SetMeteringMode(NKikimrPQ::TPQTabletConfig_EMeteringMode_METERING_MODE_REQUEST_UNITS);
@@ -31,14 +40,24 @@ namespace {
                 Send(ev->Sender, MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(response.release()));
             }
 
+            void Handle(TEvReplyTopicNotFound::TPtr&, const TActorContext&) {
+                SetReplyTopicNotFound(true);
+            }
+
         private:
             STFUNC(StateFunc) {
                 switch (ev->GetTypeRewrite()) {
                     HFunc(TEvTxProxySchemeCache::TEvNavigateKeySet, Handle);
+                    HFunc(TEvReplyTopicNotFound, Handle);
                 }
             }
 
+            void SetReplyTopicNotFound(bool value) {
+                ReplyTopicNotFound = value;
+            }
+
             ui64 PqTabletId;
+            bool ReplyTopicNotFound = false;
         };
 
     class TProduceActorFixture : public NUnitTest::TBaseFixture {
@@ -125,6 +144,11 @@ namespace {
                 record.MutablePartitionResponse()->SetCookie(cookie);
                 event->Record = record;
                 return event;
+            }
+
+            void SetSchemeCacheReplyTopicNotFound() {
+                auto ev = std::make_unique<TDummySchemeCacheActor::TEvReplyTopicNotFound>();
+                Ctx->Runtime->SingleSys()->Send(new IEventHandle(MakeSchemeCacheID(), Ctx->Edge, ev.release()));
             }
         };
 
@@ -355,6 +379,29 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL(std::dynamic_pointer_cast<NKafka::TProduceResponseData>(response->Response)->Responses[0].PartitionResponses[0].ErrorCode,
                     NKafka::EKafkaErrors::NONE_ERROR);
             }
+        }
+
+        Y_UNIT_TEST(OnUnknownTopic_ShouldReturnUNKNOWN_TOPIC_OR_PARTITION) {
+            const i64 producerId = 0;
+            const i32 producerEpoch = 0;
+
+            SetSchemeCacheReplyTopicNotFound();
+
+            SendProduce(TransactionalId, producerId, producerEpoch + 0);
+            SendProduce(TransactionalId, producerId, producerEpoch + 1);
+            SendProduce(TransactionalId, producerId, producerEpoch + 2);
+
+            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+
+            response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+
+            response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
         }
     }
 } // anonymous namespace

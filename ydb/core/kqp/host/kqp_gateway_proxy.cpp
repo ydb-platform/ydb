@@ -411,10 +411,12 @@ bool FillSerializer(
         return true;
 
     TString algoName;
+
     auto serializer = to.MutableSerializer();
-    serializer->SetClassName("ARROW_SERIALIZER");
-    auto arrowCompression = serializer->MutableArrowCompression();
     if (from->Algorithm) {
+        serializer->SetClassName("ARROW_SERIALIZER");
+        auto arrowCompression = serializer->MutableArrowCompression();
+
         NKikimrSchemeOp::EColumnCodec codec;
         algoName = to_lower(from->Algorithm.GetRef());
         if (algoName == "off") {
@@ -428,9 +430,11 @@ bool FillSerializer(
             error = TStringBuilder() << "Unknown compression algorithm '" << algoName << "' for a column " << name;
             return false;
         }
-        serializer->MutableArrowCompression()->SetCodec(codec);
+        arrowCompression->SetCodec(codec);
     }
     if (from->Level) {
+        auto arrowCompression = serializer->MutableArrowCompression();
+
         const auto level = *from->Level;
         if (!from->Algorithm) {
             error = TStringBuilder() << "Compression level " << level <<" for a column `" << name << "` specified without an algorithm";

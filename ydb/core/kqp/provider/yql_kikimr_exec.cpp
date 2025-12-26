@@ -1496,8 +1496,8 @@ bool ParseCompressionSettings(
     Ydb::Table::ColumnMeta* alter_columns,
     TExprContext& ctx) {
 
-    const auto settings = alterColumnList.Item(1).Cast<TExprList>();
     auto compression = alter_columns->mutable_compression();
+    const auto settings = alterColumnList.Item(1).Cast<TExprList>();
     for (const auto setting : settings) {
         const auto sKV = setting.Cast<TExprList>();
         const auto key = sKV.Item(0).Cast<TCoAtom>().Value();

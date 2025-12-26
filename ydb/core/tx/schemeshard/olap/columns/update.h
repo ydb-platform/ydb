@@ -15,7 +15,7 @@ namespace NKikimr::NSchemeShard {
 class TOlapColumnDiff {
 private:
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
+    YDB_READONLY_DEF(std::optional<NArrow::NSerialization::TSerializerContainer>, Serializer);
     YDB_READONLY_DEF(NArrow::NDictionary::TEncodingDiff, DictionaryEncoding);
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);

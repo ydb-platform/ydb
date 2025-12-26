@@ -52,9 +52,12 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
         ColumnFamilyName = columnSchema.GetColumnFamilyName();
     }
     if (columnSchema.HasSerializer()) {
-        if (!Serializer.DeserializeFromProto(columnSchema.GetSerializer())) {
-            errors.AddError("cannot parse serializer diff from proto");
-            return false;
+        Serializer = NArrow::NSerialization::TSerializerContainer();
+        if (columnSchema.GetSerializer().HasClassName()) {
+            if (!Serializer->DeserializeFromProto(columnSchema.GetSerializer())) {
+                errors.AddError("cannot parse serializer diff from proto");
+                return false;
+            }
         }
     }
     if (!DictionaryEncoding.DeserializeFromProto(columnSchema.GetDictionaryEncoding())) {
@@ -249,7 +252,11 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         return false;
     }
     if (diffColumn.GetSerializer()) {
-        Serializer = diffColumn.GetSerializer();
+        if (*diffColumn.GetSerializer()) {
+            Serializer = *diffColumn.GetSerializer();
+        } else {
+            Serializer = NArrow::NSerialization::TSerializerContainer();
+        }
     }
 
     {

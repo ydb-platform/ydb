@@ -146,7 +146,10 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     alterData->IsRestore = table->IsRestore;
                     alterData->TableDescriptionFull = table->TableDescription;
 
-                    table->PrepareAlter(alterData);
+                    // Bypass PrepareAlter when using coordinated version that jumps more than 1
+                    // PrepareAlter has assertion: alterData->AlterVersion == AlterVersion + 1
+                    // Coordinated version can be larger (max of all related tables + 1)
+                    table->AlterData = alterData;
                 } else {
                     // Use target version for AlterData
                     table->AlterData->AlterVersion = targetVersion;

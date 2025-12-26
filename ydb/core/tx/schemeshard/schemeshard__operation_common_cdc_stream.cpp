@@ -218,22 +218,31 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
         table->AlterVersion += 1;
     }
 
-    // Update parent index entity version if this is an index impl table with coordinated version
+    // Update parent index entity version if this is an index impl table
+    // This ensures index version stays in sync with impl table version
     auto versionCtx = BuildTableVersionContext(*txState, path, context);
-    if (versionCtx.IsIndexImplTable && txState->CoordinatedSchemaVersion.Defined()) {
+    bool shouldPublishParentIndex = false;
+    if (versionCtx.IsIndexImplTable) {
         if (context.SS->Indexes.contains(versionCtx.ParentPathId)) {
             auto index = context.SS->Indexes.at(versionCtx.ParentPathId);
-            if (index->AlterVersion < *txState->CoordinatedSchemaVersion) {
-                index->AlterVersion = *txState->CoordinatedSchemaVersion;
+            // Use impl table's new version to keep parent index in sync
+            ui64 targetVersion = table->AlterVersion;
+            if (index->AlterVersion < targetVersion) {
+                index->AlterVersion = targetVersion;
                 context.SS->PersistTableIndexAlterVersion(db, versionCtx.ParentPathId, index);
-                context.OnComplete.PublishToSchemeBoard(OperationId, versionCtx.ParentPathId);
+                shouldPublishParentIndex = true;
             }
         }
     }
 
     context.SS->PersistTableAlterVersion(db, pathId, table);
     context.SS->ClearDescribePathCaches(path);
+    // Publish impl table FIRST, then parent index
+    // This prevents race window where queries see updated index version but old impl table version
     context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+    if (shouldPublishParentIndex) {
+        context.OnComplete.PublishToSchemeBoard(OperationId, versionCtx.ParentPathId);
+    }
 
     context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
     return true;

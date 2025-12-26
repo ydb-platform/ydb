@@ -1085,6 +1085,8 @@ message TAlterCdcStream {
         TDisable Disable = 3;
         TGetReady GetReady = 4;
     }
+
+    optional uint64 CoordinatedSchemaVersion = 5; // Pre-calculated version for backup coordination
 }
 
 message TDropCdcStream {

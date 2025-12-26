@@ -1547,10 +1547,9 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             TErrorInfo error;
             TDuration duration = TDuration::MicroSeconds(action.GetDuration());
             duration += TDuration::MicroSeconds(copy->Request.GetDuration());
-            // To get permissions ASAP and not in the priority order.
-            item->DeactivateScheduledLocks(Min<i32>());
+            item->DeactivateLocks(Min<i32>());
             bool isLocked = item->IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration);
-            item->ReactivateScheduledLocks();
+            item->ReactivateLocks();
             if (isLocked) {
                 return ReplyWithError<TEvCms::TEvManageRequestResponse>(
                     ev, TStatus::WRONG_REQUEST, "Request has already locked items: " + error.Reason.GetMessage(), ctx);
@@ -1567,7 +1566,7 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
 
     it->second = *copy;
 
-    AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);
+    AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), Min<i32>(), ctx, true);
 
     auto actor = new TRequestApproveActor(requestId, State, ev->Sender);
     TActorId approveActorId = ctx.RegisterWithSameMailbox(actor);

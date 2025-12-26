@@ -283,6 +283,9 @@ public:
         try {
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
+                // If the UploadId is not found in ActiveUploads,
+                // it means that a restart has occurred and all parts have started being written again
+                // so we can simply create a new session.
                 it = ActiveUploads.emplace(uploadId, std::make_unique<TMultipartUploadSession>(key)).first;
             }
 
@@ -327,7 +330,19 @@ public:
         try {
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
-                throw yexception() << "Upload session not found: uploadId# " << uploadId;
+                // Upload session not found - likely due to actor restart
+                // Return retryable error to force datashard to retry with cleared uploadId
+                Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
+                    Aws::S3::S3Errors::INTERNAL_FAILURE,
+                    "OperationAborted",
+                    TStringBuilder() << "Upload session not found: uploadId# " << uploadId,
+                    true // retryable
+                );
+                Aws::S3::S3Error error(std::move(awsError));
+                Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(error));
+                auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
+                TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
+                return;
             }
 
             auto& session = it->second;

@@ -22,7 +22,6 @@ namespace {
 class TFsOperationActor : public NActors::TActorBootstrapped<TFsOperationActor> {
 private:
     TString BasePath;
-    const TReplyAdapterContainer& ReplyAdapter;
 
     struct TMultipartUploadSession {
         TString Key;
@@ -65,7 +64,7 @@ private:
         } else {
             response = std::make_unique<TEvResponse>(std::move(outcome));
         }
-        ReplyAdapter.Reply(sender, std::move(response));
+        TlsActivationContext->AsActorContext().Send(sender, response.release());
     }
 
     template<typename TEvResponse>
@@ -86,13 +85,12 @@ private:
         } else {
             response = std::make_unique<TEvResponse>(std::move(outcome));
         }
-        ReplyAdapter.Reply(sender, std::move(response));
+        TlsActivationContext->AsActorContext().Send(sender, response.release());
     }
 
 public:
-    TFsOperationActor(const TString& basePath, const TReplyAdapterContainer& replyAdapter)
+    TFsOperationActor(const TString& basePath)
         : BasePath(basePath)
-        , ReplyAdapter(replyAdapter)
     {
         LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor created"
             << ": BasePath# " << BasePath);
@@ -259,7 +257,7 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::CreateMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCreateMultipartUploadResponse>(key, std::move(outcome));
-            ReplyAdapter.Reply(ev->Sender, std::move(response));
+            TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
                 "CreateMultipartUpload failed"
@@ -305,7 +303,7 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
-            ReplyAdapter.Reply(ev->Sender, std::move(response));
+            TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
                 "UploadPart failed"
@@ -352,7 +350,7 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
-            ReplyAdapter.Reply(ev->Sender, std::move(response));
+            TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
                 "CompleteMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
@@ -414,7 +412,6 @@ TFsExternalStorage::TFsExternalStorage(const TString& basePath, bool verbose)
     : BasePath(basePath)
     , Verbose(verbose)
 {
-    InitReplyAdapter(nullptr);
     LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsExternalStorage created"
         << ": BasePath# " << BasePath
         << ", Verbose# " << Verbose);
@@ -429,7 +426,7 @@ void TFsExternalStorage::EnsureActor() const {
         return;
     }
 
-    auto actor = new TFsOperationActor(BasePath, ReplyAdapter);
+    auto actor = new TFsOperationActor(BasePath);
     OperationActorId = TlsActivationContext->AsActorContext().Register(
         actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     ActorCreated = true;

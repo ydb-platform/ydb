@@ -113,12 +113,14 @@ private:
         NKikimrCms::ETenantPolicy TenantPolicy;
         NKikimrCms::EAvailabilityMode AvailabilityMode;
         bool PartialPermissionAllowed;
+        i32 Priority;
 
         TActionOptions(TDuration dur)
             : PermissionDuration(dur)
             , TenantPolicy(NKikimrCms::DEFAULT)
             , AvailabilityMode(NKikimrCms::MODE_MAX_AVAILABILITY)
             , PartialPermissionAllowed(false)
+            , Priority(0)
         {}
     };
 
@@ -362,7 +364,7 @@ private:
         TErrorInfo &error,
         const TActorContext &ctx) const;
     void AcceptPermissions(NKikimrCms::TPermissionResponse &resp, const TString &requestId,
-        const TString &owner, const TActorContext &ctx, bool check = false);
+        const TString &owner, i32 priority, const TActorContext &ctx, bool check = false);
     void ScheduleUpdateClusterInfo(const TActorContext &ctx, bool now = false);
     void ScheduleCleanup(TInstant time, const TActorContext &ctx);
     void SchedulePermissionsCleanup(const TActorContext &ctx);

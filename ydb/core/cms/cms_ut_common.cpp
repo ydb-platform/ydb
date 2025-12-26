@@ -602,6 +602,7 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     appConfig.MutableBootstrapConfig()->CopyFrom(TFakeNodeWhiteboardService::BootstrapConfig);
     appConfig.MutableFeatureFlags()->SetEnableCMSRequestPriorities(options.EnableCMSRequestPriorities);
     appConfig.MutableFeatureFlags()->SetEnableSingleCompositeActionGroup(options.EnableSingleCompositeActionGroup);
+    appConfig.MutableFeatureFlags()->SetEnableCmsLocksPriority(options.EnableCmsLocksPriority);
     runtime.AddLocalService(
         MakeConfigsDispatcherID(
             runtime.GetNodeId(0)),

@@ -86,7 +86,7 @@ public:
         , RangeEnd(std::move(rangeEnd))
     {}
 
-    static std::optional<EHistogramValueType> GetHistogramType(NScheme::TTypeId typeId) {
+    static TMaybe<EHistogramValueType> GetHistogramType(NScheme::TTypeId typeId) {
         using namespace NYql;
         switch (typeId) {
 #define MAKE_PRIMITIVE_VISITOR(type, layout)                                 \
@@ -96,7 +96,7 @@ public:
         KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_VISITOR)
 #undef MAKE_PRIMITIVE_VISITOR
         default:
-            return std::nullopt;
+            return Nothing();
         }
     }
 
@@ -163,7 +163,7 @@ public:
             return TPtr{};
         }
 
-        std::optional<EHistogramValueType> histType = GetHistogramType(type.GetTypeId());
+        TMaybe<EHistogramValueType> histType = GetHistogramType(type.GetTypeId());
         if (!histType) {
             // Unsupported column type
             return TPtr{};
@@ -235,7 +235,7 @@ IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
 }
 
 bool IColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeInfo) {
-    return TEWHEval::GetHistogramType(typeInfo.GetTypeId()).has_value();
+    return TEWHEval::GetHistogramType(typeInfo.GetTypeId()).Defined();
 }
 
 } // NKikimr::NStat

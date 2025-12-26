@@ -700,7 +700,7 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
 
     TExprContext::TFreezeGuard freezeGuard(ctx);
 
-    if (RunOptions_.Mode >= ERunMode::Validate) {
+    if (RunOptions_.Mode >= ERunMode::Compile) {
         std::vector<NFS::IDownloaderPtr> downloaders;
         for (auto& factory : FsDownloadFactories_) {
             if (auto download = factory()) {

@@ -91,11 +91,18 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
         if (!transactions[0].HasSchemeOperation()) {
             return Finish(Ydb::StatusIds::GENERIC_ERROR, "no scheme operations");
         }
-        if (!transactions[0].GetSchemeOperation().HasCreateView()) {
-            return Finish(Ydb::StatusIds::GENERIC_ERROR, "no create view operation");
+
+        if (transactions[0].GetSchemeOperation().HasCreateView()) {
+            const auto& createView = transactions[0].GetSchemeOperation().GetCreateView();
+            return Finish(result->Status, createView);
         }
-        const auto& createView = transactions[0].GetSchemeOperation().GetCreateView();
-        Finish(result->Status, createView);
+
+        if (transactions[0].GetSchemeOperation().HasCreateReplication()) {
+            const auto& createReplication = transactions[0].GetSchemeOperation().GetCreateReplication();
+            return Finish(result->Status, createReplication);
+        }
+
+        return Finish(Ydb::StatusIds::GENERIC_ERROR, "no supported create operation");
     }
 
     void Finish(Ydb::StatusIds::StatusCode status, std::variant<TString, NKikimrSchemeOp::TModifyScheme> result) {

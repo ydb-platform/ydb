@@ -140,28 +140,27 @@ void ConvertState(const NKikimrReplication::TReplicationState& from, T& to) {
     }
 }
 
-bool CheckReplicationConfig(
+template <NKikimrReplication::TReplicationConfig::TargetCase CorrectTargetCase>
+bool CheckConfig(
     const NKikimrReplication::TReplicationConfig& config,
     Ydb::StatusIds_StatusCode& status,
     TString& error)
 {
     switch (config.GetTargetCase()) {
-        case NKikimrReplication::TReplicationConfig::TargetCase::kSpecific:
+        case CorrectTargetCase:
             return true;
-        case NKikimrReplication::TReplicationConfig::TargetCase::kEverything:
-            error = "not implemented";
-            break;
-        case NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific:
-            error = "Async Replication config was expected, Transfer config provided";
-            break;
         default:
-            error = "unexpected config type";
+            error = TStringBuilder() << "wrong config: "
+                << CorrectTargetCase << " expected, "
+                << config.GetTargetCase() << " provided";
             break;
     }
 
     status = Ydb::StatusIds::INTERNAL_ERROR;
     return false;
 }
+
+constexpr auto CheckReplicationConfig = CheckConfig<NKikimrReplication::TReplicationConfig::TargetCase::kSpecific>;
 
 } // anonymous namespace
 
@@ -216,28 +215,7 @@ void ConvertTransferSpecific(
     to.mutable_batch_settings()->mutable_flush_interval()->set_seconds(from.GetBatching().GetFlushIntervalMilliSeconds() / 1000);
 }
 
-bool CheckTransferConfig(
-    const NKikimrReplication::TReplicationConfig& config,
-    Ydb::StatusIds_StatusCode& status,
-    TString& error)
-{
-    switch (config.GetTargetCase()) {
-        case NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific:
-            return true;
-        case NKikimrReplication::TReplicationConfig::TargetCase::kEverything:
-            error = "not implemented";
-            break;
-        case NKikimrReplication::TReplicationConfig::TargetCase::kSpecific:
-            error = "Transfer config was expected, Async Replication config provided";
-            break;
-        default:
-            error = "unexpected config type";
-            break;
-    }
-
-    status = Ydb::StatusIds::INTERNAL_ERROR;
-    return false;
-}
+constexpr auto CheckTransferConfig = CheckConfig<NKikimrReplication::TReplicationConfig::TargetCase::kSpecific>;
 
 } // anonymous namespace
 

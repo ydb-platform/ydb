@@ -207,7 +207,7 @@ struct TGraphMeta {
     TMaybe<ui64> LockTxId;
     ui64 TxId;
     ui32 LockNodeId = 0;
-    NKikimrKqp::EIsolationLevel RequestIsolationLevel;
+    NKqpProto::EIsolationLevel RequestIsolationLevel;
     TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;

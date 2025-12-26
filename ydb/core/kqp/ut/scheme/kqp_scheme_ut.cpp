@@ -2162,8 +2162,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(CreateTableWithFamiliesRegular, UseQueryService) {
-        TKikimrRunner kikimr;
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(true);
+        TKikimrRunner kikimr; // EnableTableCacheModes should be enabled by default
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -2290,7 +2289,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(CreateFamilyWithCacheModeFeatureDisabled, UseQueryService) {
-        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -2314,7 +2314,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(AlterCacheModeInColumnFamilyFeatureDisabled, UseQueryService) {
-        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -2343,7 +2344,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(AddColumnFamilyWithCacheModeFeatureDisabled, UseQueryService) {
-        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -2376,8 +2378,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(CreateTableWithDefaultFamily, UseQueryService) {
-        TKikimrRunner kikimr;
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(true);
+        TKikimrRunner kikimr; // EnableTableCacheModes should be enabled by default
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -16351,7 +16352,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(CreateTableWithCacheModeError) {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.FeatureFlags.SetEnableTableCacheModes(true);
         TTestHelper testHelper(settings);
 
         TString tableName = "/Root/ColumnTableTest";
@@ -16376,7 +16376,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(AlterTableWithCacheModeError) {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.FeatureFlags.SetEnableTableCacheModes(true);
         TTestHelper testHelper(settings);
 
         TString tableName = "/Root/ColumnTableTest";
@@ -16411,7 +16410,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(AddColumnFamilyWithCacheModeError) {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.FeatureFlags.SetEnableTableCacheModes(true);
         TTestHelper testHelper(settings);
 
         TString tableName = "/Root/ColumnTableTest";

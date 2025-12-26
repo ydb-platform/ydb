@@ -290,6 +290,22 @@ public:
                 }
                 context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
 
+                // Update parent index entity version if srcPath is an index impl table
+                // This ensures index version stays in sync with impl table version
+                TPathId parentPathId = srcPath->ParentPathId;
+                if (parentPathId && context.SS->PathsById.contains(parentPathId)) {
+                    auto parentPath = context.SS->PathsById.at(parentPathId);
+                    if (parentPath->IsTableIndex() && context.SS->Indexes.contains(parentPathId)) {
+                        auto index = context.SS->Indexes.at(parentPathId);
+                        if (index->AlterVersion < srcTable->AlterVersion) {
+                            index->AlterVersion = srcTable->AlterVersion;
+                            context.SS->PersistTableIndexAlterVersion(db, parentPathId, index);
+                            context.SS->ClearDescribePathCaches(parentPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, parentPathId);
+                        }
+                    }
+                }
+
                 // Update child index entity versions to match
                 for (const auto& [childName, childPathId] : srcPath->GetChildren()) {
                     auto childPath = context.SS->PathsById.at(childPathId);

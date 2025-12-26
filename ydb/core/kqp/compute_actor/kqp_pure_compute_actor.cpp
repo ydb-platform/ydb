@@ -21,8 +21,7 @@ TKqpComputeActor::TKqpComputeActor(
     NScheduler::TSchedulableActorOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    const TString& database,
-    bool enableWatermarks
+    const TString& database
 )
     : TBase(std::move(schedulableOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena), GUCSettings)
     , ComputeCtx(settings.StatsMode)
@@ -31,7 +30,6 @@ TKqpComputeActor::TKqpComputeActor(
     , ArrayBufferMinFillPercentage(memoryLimits.ArrayBufferMinFillPercentage)
     , UserToken(std::move(userToken))
     , Database(database)
-    , EnableWatermarks(enableWatermarks)
 {
     InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
@@ -71,10 +69,6 @@ void TKqpComputeActor::DoBootstrap() {
 
     settings.OptLLVM = (GetTask().HasUseLlvm() && GetTask().GetUseLlvm()) ? "--compile-options=disable-opt" : "OFF";
     settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
-
-    if (EnableWatermarks) {
-        settings.WatermarksTracker = &this->WatermarksTracker;
-    }
 
     for (const auto& [paramsName, paramsValue] : GetTask().GetTaskParams()) {
         settings.TaskParams[paramsName] = paramsValue;
@@ -343,11 +337,10 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
     NScheduler::TSchedulableActorOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    const TString& database,
-    bool enableWatermarks
+    const TString& database
 ) {
     return new TKqpComputeActor(executerId, txId, task, std::move(asyncIoFactory),
-        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings, std::move(schedulableOptions), mode, std::move(userToken), database, enableWatermarks);
+        settings, memoryLimits, std::move(traceId), std::move(arena), federatedQuerySetup, GUCSettings, std::move(schedulableOptions), mode, std::move(userToken), database);
 }
 
 } // namespace NKqp

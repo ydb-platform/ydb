@@ -279,6 +279,7 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const THashMap<TString, TString>& SecureParams;
         size_t MaxKeysInRequest;
+        const bool IsMultiMatches;
     };
 
     struct TSinkArguments {
@@ -312,6 +313,7 @@ public:
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+        TDqComputeActorWatermarks* WatermarksTracker = nullptr;
         NWilson::TTraceId TraceId;
     };
 

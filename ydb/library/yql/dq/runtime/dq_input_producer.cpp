@@ -53,6 +53,7 @@ public:
         , WatermarkStorage(watermark)
         , WatermarksTracker(watermarksTracker)
     {
+        Y_ENSURE(!WatermarksTracker || WatermarkStorage);
         InputKeys.reserve(Inputs.size());
         for (const auto& input : Inputs) {
             if (const auto* inputChannel = dynamic_cast<const IDqInputChannel*>(input.Get())) {
@@ -95,7 +96,7 @@ private:
 
             // pass watermark and wait for drain only if watermarks enabled and batch is still empty
             if (Batch.empty()) {
-                Y_UNUSED(TrySendWatermark());
+                TrySendWatermark();
                 return NUdf::EFetchStatus::Yield;
             }
         }
@@ -142,7 +143,7 @@ private:
 
             // pass watermark and wait for drain only if watermarks enabled and batch is still empty
             if (Batch.empty()) {
-                Y_UNUSED(TrySendWatermark());
+                TrySendWatermark();
                 return NUdf::EFetchStatus::Yield;
             }
         }
@@ -177,6 +178,10 @@ private:
                 return NUdf::EFetchStatus::Ok;
             }
             if (input->IsFinished()) {
+                if (WatermarksEnabled()) {
+                    WatermarksTracker->UnregisterInput(InputKeys[currentIndex].InputId, InputKeys[currentIndex].IsChannel, /*silent=*/true);
+                    // silent because it can be called on inputs/channels without watermarks
+                }
                 std::swap(Inputs[currentIndex], Inputs[Alive - 1]);
                 std::swap(InputKeys[currentIndex], InputKeys[Alive - 1]);
                 --Alive;
@@ -189,26 +194,16 @@ private:
     }
 
     [[nodiscard]] bool WatermarksEnabled() const {
-        return WatermarksTracker && WatermarkStorage;
+        return WatermarksTracker;
     }
 
-    [[nodiscard]] bool NotifyWatermarkTracker(const TPartitionKey& inputKey, TInstant watermark) {
-        Y_DEBUG_ABORT_UNLESS(WatermarksEnabled());
-        if (inputKey.IsChannel) {
-            return WatermarksTracker->NotifyInChannelWatermarkReceived(inputKey.InputId, watermark);
-        } else {
-            return WatermarksTracker->NotifyAsyncInputWatermarkReceived(inputKey.InputId, watermark);
-        }
-    }
-
-    [[nodiscard]] bool TrySendWatermark() {
+    bool TrySendWatermark() {
         if (!WatermarksEnabled()) {
             return false;
         }
-        if (!Watermark || !NotifyWatermarkTracker(InputKey, *Watermark) || !WatermarksTracker->HasPendingWatermark()) {
+        if (!Watermark || !WatermarksTracker->NotifyInputWatermarkReceived(InputKey.InputId, InputKey.IsChannel, *Watermark) || !WatermarksTracker->HasPendingWatermark()) {
             return false;
         }
-        Y_DEBUG_ABORT_UNLESS(WatermarksTracker->HasPendingWatermark());
         WatermarkStorage->WatermarkIn = WatermarksTracker->GetPendingWatermark();
         return true;
     }

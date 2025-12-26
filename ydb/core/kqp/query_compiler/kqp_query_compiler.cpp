@@ -2228,6 +2228,10 @@ private:
                 dqSourceLookupCn.SetIsMultiGet(FromString<bool>(maybeMultiget.Cast()));
             }
 
+            if (const auto maybeIsMultiMatches = streamLookup.IsMultiMatches()) {
+                dqSourceLookupCn.SetIsMultiMatches(FromString<bool>(maybeIsMultiMatches.Cast()));
+            }
+
             for (const auto& key : streamLookup.LeftJoinKeyNames()) {
                 *dqSourceLookupCn.AddLeftJoinKeyNames() = leftLabel ? RemoveJoinAliases(key) : key;
             }

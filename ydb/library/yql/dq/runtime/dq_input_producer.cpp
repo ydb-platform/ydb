@@ -177,6 +177,7 @@ private:
                 return NUdf::EFetchStatus::Ok;
             }
             if (input->IsFinished()) {
+                UnregisterWatermarkedInput(InputKeys[currentIndex]);
                 std::swap(Inputs[currentIndex], Inputs[Alive - 1]);
                 std::swap(InputKeys[currentIndex], InputKeys[Alive - 1]);
                 --Alive;
@@ -198,6 +199,16 @@ private:
             return WatermarksTracker->NotifyInChannelWatermarkReceived(inputKey.InputId, watermark);
         } else {
             return WatermarksTracker->NotifyAsyncInputWatermarkReceived(inputKey.InputId, watermark);
+        }
+    }
+
+    void UnregisterWatermarkedInput(const TPartitionKey& inputKey) {
+        if (WatermarksEnabled()) {
+            if (inputKey.IsChannel) {
+                WatermarksTracker->UnregisterInputChannel(inputKey.InputId, true);
+            } else {
+                WatermarksTracker->UnregisterAsyncInput(inputKey.InputId, true);
+            }
         }
     }
 

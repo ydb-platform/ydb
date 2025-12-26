@@ -21,8 +21,8 @@ public:
     void RegisterAsyncInput(ui64 inputId, TDuration idleTimeout, TInstant systemTime);
     void RegisterInputChannel(ui64 inputId, TDuration idleTimeout, TInstant systemTime);
 
-    void UnregisterAsyncInput(ui64 inputId);
-    void UnregisterInputChannel(ui64 inputId);
+    void UnregisterAsyncInput(ui64 inputId, bool silent = false);
+    void UnregisterInputChannel(ui64 inputId, bool silent = false);
 
     // Will return true, if local watermark inside this async input was moved forward.
     bool NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark) {
@@ -57,7 +57,7 @@ public:
 
 private:
     void RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout, TInstant systemTime);
-    void UnregisterInput(ui64 inputId, bool isChannel);
+    void UnregisterInput(ui64 inputId, bool isChannel, bool silent = false);
     bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime);
 
 private:

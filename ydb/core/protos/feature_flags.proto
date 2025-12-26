@@ -223,7 +223,7 @@ message TFeatureFlags {
     optional bool EnableCompactionOverloadDetection = 197 [default = true];
     reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns
     optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
-    optional bool EnableMirroredTopicSplitMerge = 200 [default = false];
+    optional bool EnableMirroredTopicSplitMerge = 200 [default = true];
     optional bool EnableFulltextIndex = 201 [default = false];
     optional bool EnableSetColumnConstraint = 202 [default = false];
     optional bool EnableSchemaSecrets = 203 [default = true];

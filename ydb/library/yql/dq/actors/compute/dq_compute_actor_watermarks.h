@@ -55,10 +55,12 @@ public:
 
     void SetLogPrefix(const TString& logPrefix);
 
-private:
     void RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout, TInstant systemTime);
     void UnregisterInput(ui64 inputId, bool isChannel, bool silent = false);
     bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime);
+    bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark) {
+        return NotifyInputWatermarkReceived(inputId, isChannel, watermark, TInstant::Now());
+    }
 
 private:
     TString LogPrefix;

@@ -1178,12 +1178,61 @@ namespace NKikimr::NHttpProxy {
 
             void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
                 ReportLatencyCounters(ctx);
+                LogHttpRequestResponse(ctx);
 
                 if (issueCode.has_value()) {
                     HttpContext.DoReply(ctx, issueCode.value());
                 } else {
                     HttpContext.DoReply(ctx);
                 }
+            }
+
+            TString LogHttpRequestResponseCommonInfoString() {
+                const TDuration duration = TInstant::Now() - StartTime;
+                TStringBuilder logString;
+                logString << "Request done.";
+                if (!HttpContext.UserName.empty()) {
+                    logString << " User [" << HttpContext.UserName << "]";
+                }
+                if (!TopicPath.empty()) {
+                    logString << " Queue [" << TopicPath << "]";
+                }
+                if (!Method.empty()) {
+                    logString << " Action [" << Method << "]";
+                }
+                logString << " IP [" << HttpContext.SourceAddress << "] Duration [" << duration.MilliSeconds() << "ms]";
+                if (!UserSid_.empty()) {
+                    logString << " Subject [" << UserSid_ << "]";
+                }
+                return logString;
+            }
+
+            TString LogHttpRequestResponseDebugInfoString() {
+                TStringBuilder rec;
+                rec << "Http request: {user: " << HttpContext.UserName
+                    << ", action: " << Method
+                    << ", topic: " << TopicPath << "}";
+                rec << ", http response: {code=";
+                if (HttpContext.ResponseData.UseYmqStatusCode) {
+                    rec << HttpContext.ResponseData.YmqHttpCode;
+                    if (HttpContext.ResponseData.YmqHttpCode != 200) {
+                        rec << ", response=\"" << HttpContext.ResponseData.ErrorText << "\"";
+                    }
+                } else {
+                    rec << "200";
+                }
+                rec << "}";
+                return rec;
+            }
+
+            void LogHttpRequestResponse(const TActorContext& ctx) {
+                LOG_INFO_S(ctx, NKikimrServices::SQS, LogHttpRequestResponseCommonInfoString());
+
+                const bool is500 = HttpContext.ResponseData.UseYmqStatusCode &&
+                                   HttpContext.ResponseData.YmqHttpCode >= 500 &&
+                                   HttpContext.ResponseData.YmqHttpCode < 600;
+                auto priority = is500 ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_DEBUG;
+                LOG_LOG_S(ctx, priority, NKikimrServices::SQS, LogHttpRequestResponseDebugInfoString());
             }
 
             void ReportInputCounters(const TActorContext& ctx) {
@@ -1355,6 +1404,7 @@ namespace NKikimr::NHttpProxy {
 
             TActorId AuthActor;
             bool InputCountersReported = false;
+            TString UserSid_;
         };
     };
 

@@ -395,7 +395,7 @@ private:
     void SendReplies(const TActorContext& ctx);
     void CheckChangedTxStates(const TActorContext& ctx);
 
-    bool AllTransactionsHaveBeenProcessed() const;
+    bool ReadyForDroppedReply() const;
 
     void BeginWriteTabletState(const TActorContext& ctx, NKikimrPQ::ETabletState state);
     void EndWriteTabletState(const NKikimrClient::TResponse& resp,

@@ -992,8 +992,8 @@ void TPersQueue::ReturnTabletState(const TActorContext& ctx, const TChangeNotifi
 
 void TPersQueue::TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status)
 {
-    if (AllTransactionsHaveBeenProcessed() && (TabletState == NKikimrPQ::EDropped)) {
-        for (auto req : TabletStateRequests) {
+    if (ReadyForDroppedReply()) {
+        for (const auto& req : TabletStateRequests) {
             ReturnTabletState(ctx, req, status);
         }
         TabletStateRequests.clear();
@@ -4580,6 +4580,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         SendPlanStepAcks(ctx, tx);
         SendEvReadSetAckToSenders(ctx, tx);
+        TryReturnTabletStateAll(ctx);
 
         PQ_LOG_TX_I("delete partitions for TxId " << tx.TxId);
         BeginDeletePartitions(tx);
@@ -4744,34 +4745,31 @@ void TPersQueue::InitMediatorTimeCast(const TActorContext& ctx)
     }
 }
 
-bool TPersQueue::AllTransactionsHaveBeenProcessed() const
+bool TPersQueue::ReadyForDroppedReply() const 
 {
-    bool existDataTx = false;
-    bool existPlannedConfigTx = false;
-    bool existUnplannedConfigTx = false;
+    if (TabletState != NKikimrPQ::EDropped) {
+        return false;
+    }
 
     for (const auto& [_, tx] : Txs) {
         switch (tx.Kind) {
-        case NKikimrPQ::TTransaction::KIND_CONFIG:
-            ((tx.Step == Max<ui64>()) ? existUnplannedConfigTx : existPlannedConfigTx) = true;
-            break;
         case NKikimrPQ::TTransaction::KIND_DATA:
-            existDataTx = true;
+            if (tx.State < NKikimrPQ::TTransaction::EXECUTED) {
+                return false;
+            }
+            break;
+        case NKikimrPQ::TTransaction::KIND_CONFIG:
+            if ((tx.State < NKikimrPQ::TTransaction::EXECUTED) &&
+                (tx.Step != Max<ui64>())) {
+                return false;
+            }
             break;
         case NKikimrPQ::TTransaction::KIND_UNKNOWN:
             PQ_ENSURE(false);
         }
     }
 
-    if (existDataTx || existPlannedConfigTx) {
-        return false;
-    }
-
-    if (existUnplannedConfigTx) {
-        return true;
-    }
-
-    return EvProposeTransactionQueue.empty() && Txs.empty();
+    return EvProposeTransactionQueue.empty();
 }
 
 void TPersQueue::SendProposeTransactionResult(const TActorId& target,

@@ -1648,6 +1648,10 @@ private:
         return MakeFuture<IYtGateway::TDownloadTableResult>();
     }
 
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        return nullptr;
+    }
+
 private:
     TYtFileServices::TPtr Services_;
     TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> MkqlCompiler_;

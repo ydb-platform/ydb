@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_partitioner.h>
+#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_fmr_partitioner.h>
 
 namespace NYql::NFmr {
 

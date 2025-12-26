@@ -453,6 +453,7 @@ NProto::TMapOperationParams MapOperationParamsToProto(const TMapOperationParams&
         protoMapOperationParams.AddOutput()->Swap(&protoFmrTableRef);
     }
     protoMapOperationParams.SetSerializedMapJobState(mapOperationParams.SerializedMapJobState);
+    protoMapOperationParams.SetIsOrdered(mapOperationParams.IsOrdered);
     return protoMapOperationParams;
 }
 
@@ -465,7 +466,7 @@ TMapOperationParams MapOperationParamsFromProto(const NProto::TMapOperationParam
     for (auto& protoFmrTableRef: protoMapOperationParams.GetOutput()) {
         outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
     }
-    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState()};
+    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState(), .IsOrdered = protoMapOperationParams.GetIsOrdered()};
 }
 
 NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams) {
@@ -477,6 +478,7 @@ NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams)
         protoMapTaskParams.AddOutput()->Swap(&protoFmrTableOutputRef);
     }
     protoMapTaskParams.SetSerializedMapJobState(mapTaskParams.SerializedMapJobState);
+    protoMapTaskParams.SetIsOrdered(mapTaskParams.IsOrdered);
     return protoMapTaskParams;
 }
 
@@ -489,6 +491,7 @@ TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTask
     }
     mapTaskParams.Output = outputTables;
     mapTaskParams.SerializedMapJobState = protoMapTaskParams.GetSerializedMapJobState();
+    mapTaskParams.IsOrdered = protoMapTaskParams.GetIsOrdered();
     return mapTaskParams;
 }
 
@@ -503,8 +506,7 @@ NProto::TOperationParams OperationParamsToProto(const TOperationParams& operatio
     } else if (auto* mergeOperationParamsPtr = std::get_if<TMergeOperationParams>(&operationParams)) {
         NProto::TMergeOperationParams protoMergeOperationParams = MergeOperationParamsToProto(*mergeOperationParamsPtr);
         protoOperationParams.MutableMergeOperationParams()->Swap(&protoMergeOperationParams);
-    } else {
-        auto* mapOperationParamsPtr = std::get_if<TMapOperationParams>(&operationParams);
+    } else if (auto* mapOperationParamsPtr = std::get_if<TMapOperationParams>(&operationParams)) {
         NProto::TMapOperationParams protoMapOperationParams = MapOperationParamsToProto(*mapOperationParamsPtr);
         protoOperationParams.MutableMapOperationParams()->Swap(&protoMapOperationParams);
     }
@@ -518,9 +520,10 @@ TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoO
         return UploadOperationParamsFromProto(protoOperationParams.GetUploadOperationParams());
     } else if (protoOperationParams.HasMergeOperationParams()) {
         return MergeOperationParamsFromProto(protoOperationParams.GetMergeOperationParams());
-    } else {
+    } else if (protoOperationParams.HasMapOperationParams()) {
         return MapOperationParamsFromProto(protoOperationParams.GetMapOperationParams());
     }
+    return TOperationParams();
 }
 
 NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
@@ -534,8 +537,7 @@ NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
     } else if (auto* mergeTaskParamsPtr = std::get_if<TMergeTaskParams>(&taskParams)) {
         NProto::TMergeTaskParams protoMergeTaskParams = MergeTaskParamsToProto(*mergeTaskParamsPtr);
         protoTaskParams.MutableMergeTaskParams()->Swap(&protoMergeTaskParams);
-    } else {
-        auto* mapTaskParamsPtr = std::get_if<TMapTaskParams>(&taskParams);
+    } else if (auto* mapTaskParamsPtr = std::get_if<TMapTaskParams>(&taskParams)) {
         NProto::TMapTaskParams protoMapTaskParams = MapTaskParamsToProto(*mapTaskParamsPtr);
         protoTaskParams.MutableMapTaskParams()->Swap(&protoMapTaskParams);
     }
@@ -550,7 +552,7 @@ TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams) {
         taskParams = UploadTaskParamsFromProto(protoTaskParams.GetUploadTaskParams());
     } else if (protoTaskParams.HasMergeTaskParams()) {
         taskParams = MergeTaskParamsFromProto(protoTaskParams.GetMergeTaskParams());
-    } else {
+    } else if (protoTaskParams.HasMapTaskParams()) {
         taskParams = MapTaskParamsFromProto(protoTaskParams.GetMapTaskParams());
     }
     return taskParams;

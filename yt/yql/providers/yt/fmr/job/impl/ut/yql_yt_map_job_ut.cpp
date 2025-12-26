@@ -43,7 +43,8 @@ Y_UNIT_TEST_SUITE(MapTests) {
             .Input = TTaskTableInputRef{.Inputs ={taskTableRef}},
             .Output = {fmrOutputRef}
         };
-        FillMapFmrJob(mapJob, mapTaskParams, {}, tableDataServiceHostsFile.Name(), MakeFileYtJobSerivce());
+        TFmrUserJobSettings settings{.ThreadPoolSize = 3, .QueueSizeLimit = 100};
+        FillMapFmrJob(mapJob, mapTaskParams, {}, tableDataServiceHostsFile.Name(), settings, MakeFileYtJobSerivce());
 
         {
             auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());

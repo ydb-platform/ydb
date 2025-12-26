@@ -81,7 +81,8 @@ public:
 
             auto tableDataServiceReader = MakeIntrusive<TFmrTableDataServiceReader>(tableId, tableRanges, TableDataService_, neededColumns, columnGroups, Settings_.FmrReaderSettings);
             YQL_ENSURE(clusterConnections.size() == 1);
-            auto ytTableWriter = YtJobService_->MakeWriter(ytTable, clusterConnections.begin()->second, Settings_.YtWriterSettings);
+            auto& connection = clusterConnections.begin()->second;
+            auto ytTableWriter = YtJobService_->MakeWriter(ytTable, connection, Settings_.YtWriterSettings);
             ParseRecords(tableDataServiceReader, ytTableWriter, Settings_.ParseRecordSettings.UploadReadBlockCount, Settings_.ParseRecordSettings.UploadReadBlockSize, cancelFlag);
             ytTableWriter->Flush();
 
@@ -138,12 +139,12 @@ public:
         const std::vector<TYtResourceInfo>& jobYtResources,
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources
     ) override {
+        TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
         TFmrUserJob mapJob;
         // deserialize map job and fill params
         TStringStream serializedJobStateStream(params.SerializedMapJobState);
         mapJob.Load(serializedJobStateStream);
-        FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, YtJobService_);
-
+        FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, userJobSettings, YtJobService_);
         return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
     }
     // TODO - figure out how to how to use cancel flag to kill map job.
@@ -206,13 +207,16 @@ void FillMapFmrJob(
     const TMapTaskParams& mapTaskParams,
     const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
     const TString& tableDataServiceDiscoveryFilePath,
+    const TFmrUserJobSettings& userJobSettings,
     IYtJobService::TPtr jobService
 ) {
+    mapJob.SetSettings(userJobSettings);
     mapJob.SetTableDataService(tableDataServiceDiscoveryFilePath);
     mapJob.SetTaskInputTables(mapTaskParams.Input);
     mapJob.SetTaskFmrOutputTables(mapTaskParams.Output);
     mapJob.SetClusterConnections(clusterConnections);
     mapJob.SetYtJobService(jobService);
+    mapJob.SetIsOrdered(mapTaskParams.IsOrdered);
 }
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {
@@ -238,6 +242,11 @@ TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {
     fmrWriterSettings.MaxInflightChunks = jobIoSettings["fmr_table_writer"]["inflight_chunks"].AsInt64();
     fmrWriterSettings.ChunkSize = jobIoSettings["fmr_table_writer"]["chunk_size"].AsInt64();
     fmrWriterSettings.MaxRowWeight = jobIoSettings["fmr_table_writer"]["max_row_weight"].AsInt64();
+
+    auto& jobProcessSettings = jobSettings["job_process"];
+    auto& fmrUserJobSettings = resultSettings.FmrUserJobSettings;
+    fmrUserJobSettings.QueueSizeLimit = jobProcessSettings["queue_size_limit"].AsInt64();
+    fmrUserJobSettings.ThreadPoolSize = jobProcessSettings["num_threads"].AsInt64();
 
     resultSettings.YtWriterSettings.MaxRowWeight = jobIoSettings["yt_table_writer"]["max_row_weight"].AsInt64();
 

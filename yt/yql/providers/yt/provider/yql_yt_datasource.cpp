@@ -171,6 +171,18 @@ public:
         return &State_->Configuration->Tokens;
     }
 
+    TMaybe<TString> ResolveClusterToken(const TString& cluster) override {
+        if (!State_->Configuration->IsValidCluster(cluster)) {
+            return {};
+        }
+
+        return State_->ResolveClusterToken(cluster);
+    }
+
+    const THashSet<TString>& GetValidClusters() override {
+        return State_->Configuration->GetValidClusters();
+    }
+
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSource::CallableName())) {
             if (!EnsureArgsCount(node, 2, ctx)) {

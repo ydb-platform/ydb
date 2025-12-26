@@ -172,12 +172,14 @@ message TMapOperationParams {
     repeated TOperationTableRef Input = 1;
     repeated TFmrTableRef Output = 2;
     bytes SerializedMapJobState = 3;
+    bool IsOrdered = 4;
 }
 
 message TMapTaskParams {
     TTaskTableInputRef Input = 1;
     repeated TFmrTableOutputRef Output = 2;
     bytes SerializedMapJobState = 3;
+    bool IsOrdered = 4;
 }
 
 message TOperationParams {

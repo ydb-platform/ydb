@@ -64,6 +64,14 @@ struct TError {
     TString ErrorMessage;
 };
 
+struct TFmrUserJobSettings {
+    ui64 ThreadPoolSize = 3;
+    ui64 QueueSizeLimit = 100;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+};
+
 struct TYtTableRef {
     NYT::TRichYPath RichPath; // Path to yt table
     TMaybe<TString> FilePath; // Path to file corresponding to yt table, filled for file gateway
@@ -261,12 +269,14 @@ struct TMapOperationParams {
     std::vector<TOperationTableRef> Input;
     std::vector<TFmrTableRef> Output;
     TString SerializedMapJobState;
+    bool IsOrdered = false;
 };
 
 struct TMapTaskParams {
     TTaskTableInputRef Input;
     std::vector<TFmrTableOutputRef> Output;
     TString SerializedMapJobState;
+    bool IsOrdered;
 };
 
 using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TMapOperationParams>;

@@ -114,6 +114,13 @@ public:
         Underlying_->SetCredentials(credentials);
     }
 
+    void SetTokenResolver(std::function<TString(const TString&, const TString&)> tokenResolver) override {
+        if (QContext_.CanRead()) {
+            return;
+        }
+        Underlying_->SetTokenResolver(std::move(tokenResolver));
+    }
+
     void SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing) override {
         if (QContext_.CanRead()) {
             return;

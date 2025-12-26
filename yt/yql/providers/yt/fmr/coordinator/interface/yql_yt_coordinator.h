@@ -7,6 +7,8 @@
 
 namespace NYql::NFmr {
 
+using TOperationPartitions = std::vector<TTaskParams>;
+
 struct THeartbeatRequest {
     ui32 WorkerId;
     TString VolatileId;

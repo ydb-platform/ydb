@@ -2792,12 +2792,18 @@ namespace {
         }
 
         const TStructExprType* structType = nullptr;
-        if (auto status = InferUnionType(input->Pos(), input->ChildrenList(), structType, ctx, checkHashes);
+        bool isUniversal;
+        if (auto status = InferUnionType(input->Pos(), input->ChildrenList(), structType, ctx, checkHashes, isUniversal);
             status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(structType));
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        } else {
+            input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(structType));
+        }
+
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -2829,15 +2835,22 @@ namespace {
         const TExprNode::TListType& children,
         const TStructExprType*& resultStructType,
         TContext& ctx,
-        const bool areHashesChecked)
+        const bool areHashesChecked,
+        bool& isUniversal)
     {
+        isUniversal = false;
         std::unordered_map<std::string_view, std::pair<const TTypeAnnotationNode*, ui32>> members;
         const auto inputsCount = children.size();
-        const auto checkStructType = [&members, &ctx, inputsCount, pos](TExprNode& input) -> const TStructExprType* {
+        const auto checkStructType = [&members, &ctx, inputsCount, pos, &isUniversal](TExprNode& input) -> const TStructExprType* {
             if (!EnsureListType(input, ctx.Expr)) {
                 return nullptr;
             }
             const auto itemType = input.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            if (itemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+                isUniversal = true;
+                return nullptr;
+            }
+
             if (!EnsureStructType(input.Pos(), *itemType, ctx.Expr)) {
                 return nullptr;
             }
@@ -2878,7 +2891,7 @@ namespace {
         for (auto child : children) {
             auto structType = checkStructType(*child);
             if (!structType) {
-                return IGraphTransformer::TStatus::Error;
+                return isUniversal ? IGraphTransformer::TStatus::Ok : IGraphTransformer::TStatus::Error;
             }
 
             structTypes.push_back(structType);
@@ -4382,7 +4395,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ListWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus ListWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4403,12 +4416,17 @@ namespace {
 
         auto listType = type->Cast<TListExprType>();
         auto itemType = listType->GetItemType();
+        IGraphTransformer::TStatus combinedStatus = IGraphTransformer::TStatus::Ok;
         for (size_t i = 1; i < input->ChildrenSize(); ++i) {
-            if (!IsSameAnnotation(*itemType, *input->Child(i)->GetTypeAnn())) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(i)->Pos()), TStringBuilder() << "Mismatch type of list item, "
-                    << *itemType << " != " << *input->Child(i)->GetTypeAnn()));
+            auto convertStatus = TryConvertTo(input->ChildRef(i), *itemType, ctx.Expr, ctx.Types);
+            combinedStatus = combinedStatus.Combine(convertStatus);
+            if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
                 return IGraphTransformer::TStatus::Error;
             }
+        }
+
+        if (combinedStatus != IGraphTransformer::TStatus::Ok) {
+            return combinedStatus;
         }
 
         input->SetTypeAnn(listType);
@@ -4578,6 +4596,10 @@ namespace {
 
             extractedType = tupleType->GetItems()[index];
         }
+        else if (itemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
         else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
                 "Expected either list of struct or list tuples, but got: " << *input->Head().GetTypeAnn()));
@@ -4612,6 +4634,11 @@ namespace {
         const TTypeAnnotationNode* inputItemType = nullptr;
         if (!EnsureNewSeqType<true>(input->Head(), ctx.Expr, &inputItemType)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (inputItemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureStructType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
@@ -5042,6 +5069,10 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
         auto inputTypeKind = input->Head().GetTypeAnn()->GetKind();
+        if (inputItemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
 
         if (!EnsureStructType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;

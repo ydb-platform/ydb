@@ -23,6 +23,10 @@
             "max_row_weight" = 16777216;
         };
     };
+    "job_process" = {
+        "num_threads" = 3;
+        "queue_size_limit" = 100;
+    };
     "partition" = {
         "yt_table" = {
             "max_data_weight_per_part" = 104857600;

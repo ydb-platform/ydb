@@ -166,6 +166,14 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         return IGraphTransformer::TStatus::Ok;
     }
 
+    if (sourceType.GetKind() == ETypeAnnotationKind::Universal) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (sourceType.GetKind() == ETypeAnnotationKind::UniversalStruct && expectedType.GetKind() == ETypeAnnotationKind::Struct) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (expectedType.GetKind() == ETypeAnnotationKind::Stream) {
         switch (sourceType.GetKind()) {
             case ETypeAnnotationKind::List:

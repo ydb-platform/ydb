@@ -181,6 +181,7 @@ public:
     class TDescription {
         static constexpr char MemoryLabelDescribeResult[] = "SchemeBoard/Replica/DescribeSchemeResult";
 
+    public:
         void Notify() {
             if (!Subscribers) {
                 return;
@@ -200,6 +201,7 @@ public:
             MultiSend(subscribers, Owner->SelfId(), std::move(notify));
         }
 
+    private:
         void TrackMemory() const {
             NActors::NMemory::TLabel<MemoryLabelDescribeResult>::Add(
                 PathDescription.DescribeSchemeResultSerialized.size()
@@ -561,6 +563,23 @@ private:
         return Descriptions.Upsert(path, pathId, TDescription(this, path, pathId, std::move(pathDescription)));
     }
 
+    void UpsertDescriptionWithRelinkSubscribers(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription)
+    {
+        TDescription* oldDesc = Descriptions.FindPtr(path);
+        auto subscribers = oldDesc->GetSubscribers(SUBSCRIPTION_BY_PATH);
+
+        Descriptions.DeleteIndex(path);
+
+        UpsertDescription(path, pathId, std::move(pathDescription));
+
+        for (const auto& [subscriber, info] : subscribers) {
+            SubscribeBy(subscriber, path, info.GetDomainOwnerId(), info.GetCapabilities(), false);
+        }
+
+        TDescription* newDesc = Descriptions.FindPtr(path);
+        newDesc->Notify();
+    }
+
     void SoftDeleteDescription(const TPathId& pathId, bool createIfNotExists = false) {
         TDescription* desc = Descriptions.FindPtr(pathId);
 
@@ -612,7 +631,8 @@ private:
     }
 
     void RelinkSubscribers(TDescription* fromDesc, const TString& path) {
-        for (const auto& [subscriber, info] : fromDesc->GetSubscribers(SUBSCRIPTION_BY_PATH)) {
+        auto subscribers = fromDesc->GetSubscribers(SUBSCRIPTION_BY_PATH);
+        for (const auto& [subscriber, info] : subscribers) {
             fromDesc->Unsubscribe(subscriber);
             Subscribers.erase(subscriber);
             SubscribeBy(subscriber, path, info.GetDomainOwnerId(), info.GetCapabilities(), false);
@@ -627,11 +647,15 @@ private:
             return;
         }
 
+        std::vector<TPathId> deletePathIds;
         const auto endIt = pathIdIndex.upper_bound(end);
         while (it != endIt) {
-            SoftDeleteDescription(it->first);
+            deletePathIds.push_back(it->first);
             ++it;
         }
+
+        for(auto pathId: deletePathIds)
+            SoftDeleteDescription(pathId);
     }
 
     // call it _after_ Subscribe() & _before_ Unsubscribe()
@@ -793,7 +817,7 @@ private:
         const TString& path = ev->Get()->GetPath();
         const TPathId& pathId = ev->Get()->GetPathId();
 
-       {
+        {
             auto& record = *ev->Get()->MutableRecord();
             const ui64 owner = record.GetOwner();
             const ui64 generation = record.GetGeneration();
@@ -834,7 +858,7 @@ private:
                 SoftDeleteDescription(pathId, true);
                 return AckUpdate(ev);
             }
-       }
+        }
 
         if (TDescription* desc = Descriptions.FindPtr(pathId)) {
             if (desc->IsExplicitlyDeleted()) {
@@ -869,12 +893,12 @@ private:
             }
 
             if (curPathId < pathId) {
+                // If database changed (recreated)
                 SoftDeleteDescription(desc->GetPathId());
-                Descriptions.DeleteIndex(path);
-                RelinkSubscribers(desc, path);
+                UpsertDescriptionWithRelinkSubscribers(path, pathId, std::move(pathDescription));
+            } else {
+                UpsertDescription(path, pathId, std::move(pathDescription));
             }
-
-            UpsertDescription(path, pathId, std::move(pathDescription));
             return AckUpdate(ev);
         }
 
@@ -894,6 +918,7 @@ private:
         };
 
         if (curPathId == domainId) { // Update from TSS, GSS->TSS
+
             // it is only because we need to manage undo of upgrade subdomain, finally remove it
             const auto& abandonedSchemeShards = desc->GetAbandonedSchemeShardIds();
             if (abandonedSchemeShards.contains(pathId.OwnerId)) { // TSS is ignored, present GSS reverted it
@@ -904,26 +929,23 @@ private:
             }
 
             log("Replace GSS by TSS description");
-            // unlink GSS desc by path
-            Descriptions.DeleteIndex(path);
-            RelinkSubscribers(desc, path);
-            UpsertDescription(path, pathId, std::move(pathDescription));
+            UpsertDescriptionWithRelinkSubscribers(path, pathId, std::move(pathDescription));
             return AckUpdate(ev);
         }
 
         if (curDomainId == pathId) { // Update from GSS, TSS->GSS
+
             // it is only because we need to manage undo of upgrade subdomain, finally remove it
             const auto& abandonedSchemeShards = pathDescription.PathAbandonedTenantsSchemeShards;
             if (abandonedSchemeShards.contains(curPathId.OwnerId)) { // GSS reverts TSS
                 log("Replace TSS by GSS description, TSS was implicitly reverted by GSS");
                 // unlink TSS desc by path
-                Descriptions.DeleteIndex(path);
-                RelinkSubscribers(desc, path);
-                UpsertDescription(path, pathId, std::move(pathDescription));
+                UpsertDescriptionByPathId(path, pathId, std::move(pathDescription));
                 return AckUpdate(ev);
             }
 
             log("Inject description only by pathId, it is update from GSS");
+            // Don't use UpdateDescriptionWithRelinkSubscribers (relink is not required?)
             UpsertDescriptionByPathId(path, pathId, std::move(pathDescription));
             return AckUpdate(ev);
         }
@@ -937,17 +959,15 @@ private:
             if (curPathId < pathId) {
                 log("Update description by newest path form tenant schemeshard");
                 SoftDeleteDescription(desc->GetPathId());
-                Descriptions.DeleteIndex(path);
-                RelinkSubscribers(desc, path);
+                UpsertDescriptionWithRelinkSubscribers(path, pathId, std::move(pathDescription));
             }
+            else
+                UpsertDescription(path, pathId, std::move(pathDescription));
 
-            UpsertDescription(path, pathId, std::move(pathDescription));
             return AckUpdate(ev);
-        } else if (curDomainId < domainId) {
+        } else if (curDomainId < domainId) { // database migration or recreation
             log("Update description by newest path with newer domainId");
-            Descriptions.DeleteIndex(path);
-            RelinkSubscribers(desc, path);
-            UpsertDescription(path, pathId, std::move(pathDescription));
+            UpsertDescriptionWithRelinkSubscribers(path, pathId, std::move(pathDescription));
             return AckUpdate(ev);
         } else {
             log("Totally ignore description, path with obsolete domainId");

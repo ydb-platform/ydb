@@ -17,20 +17,18 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-<<<<<<< HEAD
 #define FS_LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 #define FS_LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 #define FS_LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 #define FS_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 #define FS_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 
-=======
->>>>>>> a0b474dfe81 (logs)
 namespace {
 
 class TFsOperationActor : public TActorBootstrapped<TFsOperationActor> {
 private:
-    const TString BasePath;
+    TString BasePath;
+    const TReplyAdapterContainer& ReplyAdapter;
 
     struct TMultipartUploadSession {
         const TString Key;
@@ -73,7 +71,7 @@ private:
         } else {
             response = std::make_unique<TEvResponse>(std::move(outcome));
         }
-        this->Send(sender, response.release());
+        ReplyAdapter.Reply(sender, std::move(response));
     }
 
     template<typename TEvResponse>
@@ -94,18 +92,13 @@ private:
         } else {
             response = std::make_unique<TEvResponse>(std::move(outcome));
         }
-        this->Send(sender, response.release());
+        ReplyAdapter.Reply(sender, std::move(response));
     }
 
 public:
     TFsOperationActor(const TString& basePath)
         : BasePath(basePath)
     {
-<<<<<<< HEAD
-=======
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor created"
-            << ": BasePath# " << BasePath);
->>>>>>> a0b474dfe81 (logs)
     }
 
     ~TFsOperationActor() {
@@ -113,11 +106,7 @@ public:
     }
 
     void Bootstrap() {
-<<<<<<< HEAD
         FS_LOG_T("TFsOperationActor Bootstrap called");
-=======
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor Bootstrap called");
->>>>>>> a0b474dfe81 (logs)
         Become(&TThis::StateWork);
     }
 
@@ -128,7 +117,6 @@ public:
 
 private:
     void CleanupActiveSessions() {
-<<<<<<< HEAD
         FS_LOG_T("TFsOperationActor: cleaning up"
             << ": active MPU sessions# " << ActiveUploads.size());
         for (auto& [uploadId, session] : ActiveUploads) {
@@ -144,22 +132,6 @@ private:
                 FS_LOG_W("Failed to cleanup MPU session"
                     << ": uploadId# " << uploadId
                     << ", error# " << ex.what());
-=======
-        if (!ActiveUploads.empty()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor: cleaning up"
-                << ": active MPU sessions# " << ActiveUploads.size());
-            for (auto& [uploadId, session] : ActiveUploads) {
-                try {
-                    session->File.Flush();
-                    session->File.Close();
-                    LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor: closed MPU session"
-                        << ": uploadId# " << uploadId);
-                } catch (const std::exception& ex) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "Failed to close MPU session"
-                        << ": uploadId# " << uploadId
-                        << ", error# " << ex.what());
-                }
->>>>>>> a0b474dfe81 (logs)
             }
         }
         ActiveUploads.clear();
@@ -168,11 +140,7 @@ private:
 public:
 
     STATEFN(StateWork) {
-<<<<<<< HEAD
         FS_LOG_D("TFsOperationActor StateWork received event type"
-=======
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor StateWork received event type"
->>>>>>> a0b474dfe81 (logs)
             << ": type# " << ev->GetTypeRewrite());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPutObjectRequest, Handle);
@@ -189,11 +157,7 @@ public:
             hFunc(TEvUploadPartCopyRequest, Handle);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
-<<<<<<< HEAD
                 FS_LOG_W("TFsOperationActor StateWork received unknown event type"
-=======
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,  "TFsOperationActor StateWork received unknown event type"
->>>>>>> a0b474dfe81 (logs)
                     << ": type# " << ev->GetTypeRewrite());
         }
     }
@@ -207,11 +171,7 @@ public:
         const auto& body = ev->Get()->Body;
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-<<<<<<< HEAD
         FS_LOG_D("PutObject"
-=======
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "PutObject"
->>>>>>> a0b474dfe81 (logs)
             << ": key# " << key
             << ", size# " << body.size());
 
@@ -226,11 +186,7 @@ public:
             file.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const std::exception& ex) {
-<<<<<<< HEAD
             FS_LOG_E("PutObject failed"
-=======
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "PutObject failed"
->>>>>>> a0b474dfe81 (logs)
                 << ": key# " << key
                 << ", error# " << ex.what());
             ReplyError<TEvPutObjectResponse>(ev->Sender, key, ex.what());
@@ -286,7 +242,7 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
 
             auto response = std::make_unique<TEvGetObjectResponse>(key, range, std::move(outcome), std::move(data));
-            ReplyAdapter.Reply(ev->Sender, std::move(response));
+            TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
 
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
@@ -320,7 +276,7 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvHeadObjectResponse>(key, std::move(outcome));
-            ReplyAdapter.Reply(ev->Sender, std::move(response));
+            TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
 
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
@@ -334,35 +290,21 @@ public:
     void Handle(TEvDeleteObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-<<<<<<< HEAD
         FS_LOG_W("DeleteObject: not implemented");
-=======
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-            "DeleteObject: not implemented");
->>>>>>> a0b474dfe81 (logs)
         ReplyError<TEvDeleteObjectResponse>(ev->Sender, key, "Not implemented");
     }
 
     void Handle(TEvCheckObjectExistsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-<<<<<<< HEAD
         FS_LOG_W("CheckObjectExists: not implemented");
-=======
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-            "CheckObjectExists: not implemented");
->>>>>>> a0b474dfe81 (logs)
         ReplyError<TEvCheckObjectExistsResponse>(ev->Sender, key, "Not implemented");
     }
 
     void Handle(TEvListObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString prefix = TString(request.GetPrefix().data(), request.GetPrefix().size());
-<<<<<<< HEAD
         FS_LOG_W("ListObjects"
-=======
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "ListObjects"
->>>>>>> a0b474dfe81 (logs)
             << ": prefix# " << prefix
             << ", not implemented");
         ReplyError<TEvListObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
@@ -370,12 +312,7 @@ public:
 
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-<<<<<<< HEAD
         FS_LOG_W("DeleteObjects: not implemented, objects count# " << request.GetDelete().GetObjects().size());
-=======
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-            "DeleteObjects: not implemented, objects count# " << request.GetDelete().GetObjects().size());
->>>>>>> a0b474dfe81 (logs)
         ReplyError<TEvDeleteObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
     }
 
@@ -394,11 +331,7 @@ public:
             auto session = std::make_unique<TMultipartUploadSession>(key);
             ActiveUploads[uploadId] = std::move(session);
 
-<<<<<<< HEAD
             FS_LOG_I("CreateMultipartUpload"
-=======
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "CreateMultipartUpload"
->>>>>>> a0b474dfe81 (logs)
                 << ": key# " << key
                 << ", uploadId# " << uploadId
                 << ", file opened with exclusive lock");
@@ -409,14 +342,9 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::CreateMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCreateMultipartUploadResponse>(key, std::move(outcome));
-            this->Send(ev->Sender, response.release());
+            ReplyAdapter.Reply(ev->Sender, std::move(response));
         } catch (const std::exception& ex) {
-<<<<<<< HEAD
             FS_LOG_E("CreateMultipartUpload failed"
-=======
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-                "CreateMultipartUpload failed"
->>>>>>> a0b474dfe81 (logs)
                 << ": key# " << key
                 << ", error# " << ex.what());
             ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, key, ex.what());
@@ -430,11 +358,7 @@ public:
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         const int partNumber = request.GetPartNumber();
 
-<<<<<<< HEAD
         FS_LOG_D("UploadPart"
-=======
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "UploadPart"
->>>>>>> a0b474dfe81 (logs)
             << ": key# " << key
             << ", uploadId# " << uploadId
             << ", part# " << partNumber
@@ -459,11 +383,7 @@ public:
             session->File.Write(body.data(), body.size());
             session->TotalSize += body.size();
 
-<<<<<<< HEAD
             FS_LOG_I("UploadPart: written under lock"
-=======
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "UploadPart: written under lock"
->>>>>>> a0b474dfe81 (logs)
                 << ": uploadId# " << uploadId
                 << ", part# " << partNumber
                 << ", total size# " << session->TotalSize);
@@ -475,7 +395,7 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
-            this->Send(ev->Sender, response.release());
+            ReplyAdapter.Reply(ev->Sender, std::move(response));
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"
                 << ": key# " << key
@@ -533,7 +453,7 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
-            this->Send(ev->Sender, response.release());
+            ReplyAdapter.Reply(ev->Sender, std::move(response));
         } catch (const std::exception& ex) {
             FS_LOG_E("CompleteMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
             ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender, key, ex.what());
@@ -591,6 +511,10 @@ public:
 TFsExternalStorage::TFsExternalStorage(const TString& basePath)
     : BasePath(basePath)
 {
+    InitReplyAdapter(nullptr);
+    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsExternalStorage created"
+        << ": BasePath# " << BasePath
+        << ", Verbose# " << Verbose);
 }
 
 TFsExternalStorage::~TFsExternalStorage() {

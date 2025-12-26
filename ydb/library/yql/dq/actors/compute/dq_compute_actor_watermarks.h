@@ -18,7 +18,7 @@ public:
     void UnregisterInputChannel(ui64 inputId, bool silent = false);
 
     // Will return true, if local watermark inside this async input was moved forward.
-    bool NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime= TInstant::Now());
+    bool NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime = TInstant::Now());
 
     // Will return true, if local watermark inside this input channel was moved forward.
     bool NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime = TInstant::Now());

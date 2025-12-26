@@ -10,7 +10,7 @@
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
-`resources.storage.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных в распределенном сетевом хранилище. `resources.storage.used_bytes` = `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`.
+`resources.storage.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных в распределенном  сетевом хранилище. `resources.storage.used_bytes` = `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`.
 `resources.storage.table.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных таблицами в распределенном сетевом хранилище. К служебным данным относятся данные первичного, [вторичных индексов](../../../concepts/glossary.md#secondary-index) и [векторных индексов](../../../concepts/glossary.md#vector-index).
 `resources.storage.topic.used_bytes`<br/>`IGAUGE`, байты  | Размер распределенного сетевого хранилища, используемого топиками. Равен сумме значений `topic.storage_bytes` всех топиков.
 `resources.storage.limit_bytes`<br/>`IGAUGE`, байты  | Ограничение на размер пользовательских и служебных данных, которые база данных может сохранить в распределенном сетевом хранилище.
@@ -193,9 +193,8 @@
 `topic.partition.committed_read_lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная (по всем партициям) разница между текущим временем и временем записи последнего закомиченного сообщения.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.partition.end_to_end_lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Разница между текущим временем и минимальным временем создания среди всех вычитанных за последнюю минуту сообщений во всех партициях.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.partition.lag_messages_max`<br/>`GAUGE`, штуки | Максимальная разница (по всем партициям) последнего оффсета в партиции и последнего вычитанного оффсета.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
-`topic.partition.read.lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Разница между текущим временем и минимальным временем записи среди всех вычитанных за последнюю минуту сообщений во всех партициях.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.partition.read.idle_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальное время простоя (сколько времени не читали из партиции) по всем партициям.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
-`topic.partition.read.lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная разница между временем записи и временем создания среди всех вычитанных за последнюю минуту сообщений.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
+`topic.partition.read.lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Разница между текущим временем и минимальным временем записи среди всех вычитанных за последнюю минуту сообщений во всех партициях.<br/>Метки:<br/>- _topic_ – название топика.<br/>- _consumer_ – имя читателя.
 `topic.partition.write.lag_milliseconds_max`<br/>`GAUGE`, миллисекунды | Максимальная разница между временем записи и временем создания среди всех записанных за последнюю минуту сообщений.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.write.speed_limit_bytes_per_second`<br/>`GAUGE`, байты в секунду | Квота на запись в байтах в секунду на одну партицию.<br/>Метки:<br/>- _topic_ – название топика.
 `topic.partition.write.throttled_nanoseconds_max`<br/>`GAUGE`, наносекунды | Максимальное время троттлинга записи (ожидания на квоте) по всем партициям. В пределе если `topic.partition.write.throttled_nanoseconds_maх` = 10^9, то это означает, что всю секунду ожидали на квоте.<br/>Метки:<br/>- _topic_ – название топика.

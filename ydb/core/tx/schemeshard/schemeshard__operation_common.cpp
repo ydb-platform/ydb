@@ -443,8 +443,7 @@ bool TDone::Process(TOperationContext& context) {
     const auto& pathId = txState->TargetPathId;
     Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
     TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-    bool isTruncate = (path->PathState == TPathElement::EPathState::EPathStateNoChanges && txState->TxType == TTxState::TxTruncateTable);
-    Y_VERIFY_S(TargetState || path->PathState != TPathElement::EPathState::EPathStateNoChanges || isTruncate, "with context"
+    Y_VERIFY_S(TargetState || path->PathState != TPathElement::EPathState::EPathStateNoChanges, "with context"
         << ", PathState: " << NKikimrSchemeOp::EPathState_Name(path->PathState)
         << ", PathId: " << path->PathId
         << ", TargetState: " << (TargetState ? NKikimrSchemeOp::EPathState_Name(*TargetState) : "null")

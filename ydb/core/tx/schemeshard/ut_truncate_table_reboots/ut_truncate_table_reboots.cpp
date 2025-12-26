@@ -11,29 +11,6 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TruncateTableReboots) {
     Y_UNIT_TEST_WITH_REBOOTS(Simple) {
-        // speed up the test: only check scheme shard reboots
-        t.TabletIds.clear();
-        t.TabletIds.push_back(t.SchemeShardTabletId);
-
-        t.NoRebootEventTypes.insert(TSchemeBoardEvents::EvUpdateAck);
-        t.NoRebootEventTypes.insert(TEvSchemeShard::EvNotifyTxCompletionRegistered);
-        t.NoRebootEventTypes.insert(TEvTabletPipe::EvServerDisconnected);
-        t.NoRebootEventTypes.insert(TEvTabletPipe::EvServerConnected);
-        t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientConnected);
-        t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientDestroyed);
-
-        t.NoRebootEventTypes.insert(TEvSchemeShard::EvModifySchemeTransaction);
-
-        t.NoRebootEventTypes.insert(TEvDataShard::EvPeriodicTableStats);
-        t.NoRebootEventTypes.insert(TEvDataShard::EvGetTableStatsResult);
-        t.NoRebootEventTypes.insert(TEvDataShard::EvGetTableStats);
-        t.NoRebootEventTypes.insert(TEvDataShard::EvProposeTransaction);
-        t.NoRebootEventTypes.insert(TEvDataShard::EvProposeTransactionResult);
-        t.NoRebootEventTypes.insert(TEvDataShard::EvSchemaChanged);
-        t.NoRebootEventTypes.insert(TEvPrivate::EvPersistTableStats);
-        t.NoRebootEventTypes.insert(TEvTxProxySchemeCache::EvNavigateKeySetResult);
-        t.NoRebootEventTypes.insert(TEvTxProxySchemeCache::EvResolveKeySetResult);
-        
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -82,29 +59,6 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(WithSplit) {
-        // speed up the test: only check scheme shard reboots
-        t.TabletIds.clear();
-        t.TabletIds.push_back(t.SchemeShardTabletId);
-
-        t.NoRebootEventTypes.insert(TSchemeBoardEvents::EvUpdateAck);
-        t.NoRebootEventTypes.insert(TEvSchemeShard::EvNotifyTxCompletionRegistered);
-        t.NoRebootEventTypes.insert(TEvTabletPipe::EvServerDisconnected);
-        t.NoRebootEventTypes.insert(TEvTabletPipe::EvServerConnected);
-        t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientConnected);
-        t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientDestroyed);
-
-        t.NoRebootEventTypes.insert(TEvSchemeShard::EvModifySchemeTransaction);
-
-        t.NoRebootEventTypes.insert(TEvDataShard::EvPeriodicTableStats);
-        t.NoRebootEventTypes.insert(TEvDataShard::EvGetTableStatsResult);
-        t.NoRebootEventTypes.insert(TEvDataShard::EvGetTableStats);
-        t.NoRebootEventTypes.insert(TEvDataShard::EvProposeTransaction);
-        t.NoRebootEventTypes.insert(TEvDataShard::EvProposeTransactionResult);
-        t.NoRebootEventTypes.insert(TEvDataShard::EvSchemaChanged);
-        t.NoRebootEventTypes.insert(TEvPrivate::EvPersistTableStats);
-        t.NoRebootEventTypes.insert(TEvTxProxySchemeCache::EvNavigateKeySetResult);
-        t.NoRebootEventTypes.insert(TEvTxProxySchemeCache::EvResolveKeySetResult);
-
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

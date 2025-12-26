@@ -266,14 +266,26 @@ public:
             }
         }
 
-        TString errStr;
-        if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
-            return result;
+        {
+            TString errStr;
+            if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+                return result;
+            }
         }
+
+        {
+            TString errStr;
+            if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
+                result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+                return result;
+            }
+        }
+
         // End check conditions
 
         // Begin create local transaction
+
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
         TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
         Y_ABORT_UNLESS(table->GetPartitions().size());
@@ -313,6 +325,7 @@ public:
             SetState(NextState());
             Y_ABORT_UNLESS(txState.Shards.size());
         }
+
         // End create local transaction
         // (but this does not mean that the local transaction has been executed or started)
 

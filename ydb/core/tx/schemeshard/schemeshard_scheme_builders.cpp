@@ -108,8 +108,8 @@ bool BuildTransferScheme(
     TString& scheme,
     const TString& database,
     const TString& backupRoot,
-    TString& error) {
-
+    TString& error)
+{
     const auto& pathDesc = describeResult.GetPathDescription();
     if (!pathDesc.HasReplicationDescription()) {
         error = "Path description does not contain a description of transfer";

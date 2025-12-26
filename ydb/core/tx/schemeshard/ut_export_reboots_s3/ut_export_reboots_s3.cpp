@@ -536,6 +536,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             return TransferScheme;
         }
 
+        static const TTypedScheme& ExternalDataSource() {
+            return ExternalDataSourceScheme;
+        }
+
         static TString Request(EPathType pathType = EPathType::EPathTypeTable) {
             switch (pathType) {
             case EPathType::EPathTypeTable:
@@ -544,6 +548,8 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 return RequestStringReplication;
             case EPathType::EPathTypeTransfer:
                 return RequestStringTransfer;
+            case EPathType::EPathTypeExternalDataSource:
+                return RequestStringExternalDataSource;
             default:
                 Y_ABORT("not supported");
             }
@@ -557,11 +563,13 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const TTypedScheme TopicScheme;
         static const TTypedScheme ReplicationScheme;
         static const TTypedScheme TransferScheme;
+        static const TTypedScheme ExternalDataSourceScheme;
         static const TTypedScheme IndexedTableScheme;
 
         static const TString RequestStringTable;
         static const TString RequestStringReplication;
         static const TString RequestStringTransfer;
+        static const TString RequestStringExternalDataSource;
 
     };
 
@@ -632,6 +640,39 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )"
     };
 
+    const TTypedScheme TTestData::ExternalDataSourceScheme = TTypedScheme {
+        EPathTypeExternalDataSource,
+        R"(
+            Name: "DataSource"
+            SourceType: "PostgreSQL"
+            Location: "https://postgesdb.net"
+            Auth {
+                Basic {
+                    Login: "login",
+                    PasswordSecretName: "pwd_secret"
+                }
+            }
+            Properties {
+                Properties {
+                    key: "mdb_cluster_id",
+                    value: "id"
+                }
+                Properties {
+                    key: "database_name",
+                    value: "postgres"
+                }
+                Properties {
+                    key: "protocol",
+                    value: "NATIVE"
+                }
+				Properties {
+                    key: "use_tls",
+                    value: "TRUE"
+                }
+            }
+        )"
+    };
+
     const TTypedScheme TTestData::IndexedTableScheme = TTypedScheme {
         EPathTypeTableIndex, // TODO: Replace with IndexedTable
         Sprintf(R"(
@@ -674,6 +715,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             scheme: HTTP
             items {
                 source_path: "/MyRoot/Transfer"
+                destination_prefix: ""
+            }
+        }
+    )";
+
+    const TString TTestData::RequestStringExternalDataSource = R"(
+        ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+                source_path: "/MyRoot/DataSource"
                 destination_prefix: ""
             }
         }
@@ -887,5 +939,24 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             TTestData::Table(),
             TTestData::Transfer(),
         }, TTestData::Request(EPathTypeTransfer));
+    }
+
+    // External Data Source
+    Y_UNIT_TEST(ShouldSucceedOnSingleExternalDataSource) {
+        RunS3({
+            TTestData::ExternalDataSource(),
+        }, TTestData::Request(EPathTypeExternalDataSource));
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleExternalDataSource) {
+        CancelS3({
+            TTestData::ExternalDataSource(),
+        }, TTestData::Request(EPathTypeExternalDataSource));
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleExternalDataSource) {
+        ForgetS3({
+            TTestData::ExternalDataSource(),
+        }, TTestData::Request(EPathTypeExternalDataSource));
     }
 }

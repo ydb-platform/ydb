@@ -788,7 +788,6 @@ namespace {
 
         void TestExternalDataSource(
             const TString& scheme,
-            const TString& expectedHeader,
             const TVector<TString>& expectedProperties)
         {
             Env();
@@ -815,9 +814,13 @@ namespace {
 
             UNIT_ASSERT(HasS3File("/DataSource/create_external_data_source.sql"));
             const auto content = GetS3FileContent("/DataSource/create_external_data_source.sql");
+
+            TString expectedHeader = "-- database: \"/MyRoot\"\n"
+                "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`\n"
+                "WITH (";
             UNIT_ASSERT_C(content.find(expectedHeader) != TString::npos,
-                TStringBuilder() << "Incorrect query header:\n"
-                << "\nExpected header:\n\n" << expectedHeader << "\n\nActual query:\n\n" << content);
+                TStringBuilder() << "\nExpected query to start from:\n\n"
+                    << expectedHeader << "\n\nActual query:\n\n" << content);
 
 			// Check if all expected properties are presented
             for (const auto& property : expectedProperties) {
@@ -3693,24 +3696,20 @@ WITH (
             }
         )";
 
-        TString expectedHeader = R"(-- database: "/MyRoot"
-CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
-WITH ()";
-
         TVector<TString> expectedProperties = {
             "SOURCE_TYPE = 'ObjectStorage'",
             "LOCATION = 'https://s3.cloud.net/bucket'",
             "AUTH_METHOD = 'NONE'",
         };
 
-        TestExternalDataSource(scheme, expectedHeader, expectedProperties);
+        TestExternalDataSource(scheme, expectedProperties);
     }
 
     Y_UNIT_TEST(ExternalDataSourceAuthBasic) {
         TString scheme = R"(
             Name: "DataSource"
-            SourceType: "PostgreSQL"
-            Location: "https://postgesdb.net"
+            SourceType: "ClickHouse"
+            Location: "https://clickhousedb.net"
             Auth {
                 Basic {
                     Login: "my_login",
@@ -3719,12 +3718,8 @@ WITH ()";
             }
             Properties {
                 Properties {
-                    key: "mdb_cluster_id",
-                    value: "id"
-                }
-                Properties {
                     key: "database_name",
-                    value: "postgres"
+                    value: "clickhouse"
                 }
 				Properties {
                     key: "protocol",
@@ -3737,23 +3732,18 @@ WITH ()";
             }
         )";
 
-        TString expectedHeader = R"(-- database: "/MyRoot"
-CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
-WITH ()";
-
         TVector<TString> expectedProperties = {
-            "SOURCE_TYPE = 'PostgreSQL'",
-            "LOCATION = 'https://postgesdb.net'",
-            "MDB_CLUSTER_ID = 'id'",
+            "SOURCE_TYPE = 'ClickHouse'",
+            "LOCATION = 'https://clickhousedb.net'",
             "PASSWORD_SECRET_NAME = 'password_secret'",
             "AUTH_METHOD = 'BASIC'",
-            "DATABASE_NAME = 'postgres'",
+            "DATABASE_NAME = 'clickhouse'",
             "LOGIN = 'my_login'",
 			"PROTOCOL = 'NATIVE'",
 			"USE_TLS = 'TRUE'",
         };
 
-        TestExternalDataSource(scheme, expectedHeader, expectedProperties);
+        TestExternalDataSource(scheme, expectedProperties);
     }
 
 	Y_UNIT_TEST(ExternalDataSourceAuthAWS) {
@@ -3770,10 +3760,6 @@ WITH ()";
             }
         )";
 
-        TString expectedHeader = R"(-- database: "/MyRoot"
-CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
-WITH ()";
-
         TVector<TString> expectedProperties = {
             "SOURCE_TYPE = 'ObjectStorage'",
             "LOCATION = 'https://s3.cloud.net/bucket'",
@@ -3783,7 +3769,71 @@ WITH ()";
             "AWS_REGION = 'ru-central-1'",
         };
 
-        TestExternalDataSource(scheme, expectedHeader, expectedProperties);
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthServiceAccount) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Auth {
+                ServiceAccount {
+                    Id: "id",
+					SecretName: "service_secret"
+                }
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'ObjectStorage'",
+            "LOCATION = 'https://s3.cloud.net/bucket'",
+            "AUTH_METHOD = 'SERVICE_ACCOUNT'",
+            "SERVICE_ACCOUNT_ID = 'id'",
+            "SERVICE_ACCOUNT_SECRET_NAME = 'service_secret'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceAuthMdbBasic) {
+        TString scheme = R"(
+            Name: "DataSource"
+            SourceType: "PostgreSQL"
+            Location: "https://postgesdb.net"
+            Auth {
+                MdbBasic {
+                    ServiceAccountId: "id",
+                    ServiceAccountSecretName: "service_secret",
+                    Login: "login",
+                    PasswordSecretName: "pwd_secret"
+                }
+            }
+            Properties {
+                Properties {
+                    key: "mdb_cluster_id",
+                    value: "id"
+                }
+                Properties {
+                    key: "database_name",
+                    value: "postgres"
+                }
+            }
+        )";
+
+        TVector<TString> expectedProperties = {
+            "SOURCE_TYPE = 'PostgreSQL'",
+            "LOCATION = 'https://postgesdb.net'",
+            "AUTH_METHOD = 'MDB_BASIC'",
+            "SERVICE_ACCOUNT_ID = 'id'",
+            "SERVICE_ACCOUNT_SECRET_NAME = 'service_secret'",
+            "LOGIN = 'login'",
+            "PASSWORD_SECRET_NAME = 'pwd_secret'",
+            "DATABASE_NAME = 'postgres'",
+            "MDB_CLUSTER_ID = 'id'",
+        };
+
+        TestExternalDataSource(scheme, expectedProperties);
     }
 
 }

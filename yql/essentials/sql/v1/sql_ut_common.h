@@ -9653,12 +9653,52 @@ Y_UNIT_TEST_SUITE(HoppingWindow) {
         UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(HoppingWindowWithoutSource) {
         ExpectFailWithError(
             R"sql(SELECT 1 + HoppingWindow(key, 39, 42);)sql",
             "<main>:1:12: Error: HoppingWindow requires data source\n"
         );
     }
+=======
+Y_UNIT_TEST(HoppingWindowNamedParameters) {
+    {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42,
+                                   "max" AS SizeLimit, "PT10S" AS TimeLimit,
+                                   "close" AS EarlyPolicy, "adjust" AS LatePolicy);
+            )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
+    {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42,
+                                   "drop" AS LatePolicy, "adjust" AS EarlyPolicy);
+            )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
+}
+
+Y_UNIT_TEST(HoppingWindowWithoutSource) {
+    ExpectFailWithError(
+        R"sql(SELECT 1 + HoppingWindow(key, 39, 42);)sql",
+        "<main>:1:12: Error: HoppingWindow requires data source\n");
+}
+>>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
 
     Y_UNIT_TEST(HoppingWindowInProjection) {
         ExpectFailWithError(
@@ -9694,10 +9734,44 @@ Y_UNIT_TEST_SUITE(HoppingWindow) {
                     key;
             )sql",
 
+<<<<<<< HEAD
             "<main>:7:21: Error: Source does not allow column references\n"
             "<main>:7:45: Error: Column reference 'subkey'\n"
         );
     }
+=======
+        "<main>:7:21: Error: Source does not allow column references\n"
+        "<main>:7:45: Error: Column reference 'subkey'\n");
+
+    ExpectFailWithError(
+        R"sql(
+                SELECT
+                    key,
+                    hopping_start
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39, 42, (subkey + 42) AS SizeLimit) AS hopping_start,
+                    key;
+            )sql",
+
+        "<main>:7:21: Error: Source does not allow column references\n"
+        "<main>:7:49: Error: Column reference 'subkey'\n");
+
+    ExpectFailWithError(
+        R"sql(
+                SELECT
+                    key,
+                    hopping_start
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39, 42, subkey AS LatePolicy) AS hopping_start,
+                    key;
+            )sql",
+
+        "<main>:7:21: Error: Source does not allow column references\n"
+        "<main>:7:48: Error: Column reference 'subkey'\n");
+}
+>>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
 
     Y_UNIT_TEST(HoppingWindowWithWrongNumberOfArgs) {
         ExpectFailWithError(
@@ -9708,8 +9782,12 @@ Y_UNIT_TEST_SUITE(HoppingWindow) {
                 GROUP BY HoppingWindow(key, 39);
             )sql",
 
+<<<<<<< HEAD
             "<main>:5:26: Error: HoppingWindow requires three arguments\n"
         );
+=======
+        "<main>:5:26: Error: HoppingWindow requires three positional arguments\n");
+>>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
 
         ExpectFailWithError(
             R"sql(
@@ -9719,9 +9797,42 @@ Y_UNIT_TEST_SUITE(HoppingWindow) {
                 GROUP BY HoppingWindow(key, 39, 42, 63);
             )sql",
 
+<<<<<<< HEAD
             "<main>:5:26: Error: HoppingWindow requires three arguments\n"
         );
     }
+=======
+        "<main>:5:26: Error: HoppingWindow requires three positional arguments\n");
+}
+
+Y_UNIT_TEST(HoppingWindowWithUnknownNamedArg) {
+    ExpectFailWithError(
+        R"sql(
+                SELECT
+                    *
+                FROM plato.Input
+                GROUP BY HoppingWindow(key, 39, 42, 13 AS Foobar);
+            )sql",
+
+        "<main>:5:53: Error: HoppingWindow: unsupported parameter: Foobar; expected: SizeLimit, TimeLimit, EarlyPolicy, LatePolicy\n");
+}
+
+Y_UNIT_TEST(HoppingWindowWithEvaluatedLimit) {
+    {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42, (Uint64("13") + Uint64("17")) AS SizeLimit);
+            )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
+}
+>>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
 
     Y_UNIT_TEST(DuplicateHoppingWindow) {
         ExpectFailWithError(

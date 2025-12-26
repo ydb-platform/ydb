@@ -24,7 +24,11 @@ namespace NMiniKQL {
 // 1. Bump this version every time incompatible runtime nodes are introduced.
 // 2. Make sure you provide runtime node generation for previous runtime versions.
 #ifndef MKQL_RUNTIME_VERSION
+<<<<<<< HEAD
 #define MKQL_RUNTIME_VERSION 59U
+=======
+    #define MKQL_RUNTIME_VERSION 70U
+>>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
 #endif
 
 // History:

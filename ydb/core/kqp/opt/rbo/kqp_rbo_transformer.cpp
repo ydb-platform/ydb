@@ -87,7 +87,6 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
     status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
-
             // PostgreSQL AST rewrtiting
             if (TCoPgSelect::Match(node.Get())) {
                 return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter,  true);

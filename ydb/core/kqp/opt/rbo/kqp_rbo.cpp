@@ -55,15 +55,15 @@ void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
  */
 void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     bool fired = true;
-    int nMatches = 0;
+    ui32 numMatches = 0;
+    const ui32 maxNumOfMatches = 1000;
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
 
-
-    while (fired && nMatches < 1000) {
+    while (fired && numMatches < maxNumOfMatches) {
         fired = false;
 
         for (auto iter : root) {
-            for (auto rule : Rules) {
+            for (const auto& rule : Rules) {
                 auto op = iter.Current;
 
                 if (rule->MatchAndAppy(op, ctx, root.PlanProps)) {
@@ -82,8 +82,7 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                     }
 
                     ComputeRequiredProps(root, Props, ctx);
-
-                    nMatches++;
+                    ++numMatches;
                     break;
                 }
             }
@@ -94,7 +93,7 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
     }
 
-    Y_ENSURE(nMatches < 100);
+    Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {

@@ -444,9 +444,10 @@ class TestTenants():
             dirname, basename = os.path.split(database_path)
             result = driver.scheme_client.list_directory(dirname)
             logger.debug("From root: list above database <%s> is %s", dirname, convert(result))
-            assert len(result.children) > 0
-            assert result.children[0].name == basename
-            assert result.children[0].type == ydb.scheme.SchemeEntryType.DATABASE
+            assert len(result.children) > 1
+            assert result.children[0].name == ".sys"
+            assert result.children[1].name == basename
+            assert result.children[1].type == ydb.scheme.SchemeEntryType.DATABASE
 
 
 def _initial_credit(pool):

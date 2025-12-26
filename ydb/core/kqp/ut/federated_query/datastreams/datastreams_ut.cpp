@@ -290,7 +290,7 @@ public:
             auto event = readSession->GetEvent(/* block */ true);
             if (const auto dataEvent = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                 for (const auto& message : dataEvent->GetMessages()) {
-                    received.push_back(message.GetData()); 
+                    received.push_back(message.GetData());
                 }
 
                 if (received.size() == expectedMessages.size()) {
@@ -542,7 +542,7 @@ public:
         UNIT_ASSERT_C(reply, "CreateScript response is empty");
         UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Status, Ydb::StatusIds::SUCCESS, reply->Get()->Issues.ToString());
 
-        const auto& executionId = reply->Get()->ExecutionId;    
+        const auto& executionId = reply->Get()->ExecutionId;
         UNIT_ASSERT(executionId);
         const auto& operationId = TOperation::TOperationId(ScriptExecutionOperationFromExecutionId(executionId));
 
@@ -778,6 +778,7 @@ public:
 public:
     void Setup() {
         LogSettings.AddLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_DEBUG);
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
         UNIT_ASSERT_C(!InputTopic, "Setup called twice");
         InputTopic = TStringBuilder() << INPUT_TOPIC_NAME << Name_;
@@ -842,7 +843,7 @@ public:
 
             const bool expectExecutions = row.Run && IsIn({"RUNNING", "COMPLETED", "CANCELLED", "FAILED"}, row.Status);
             if (expectExecutions || row.CheckPlan) {
-                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);                
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);
                 UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Ast").GetOptionalUtf8(), row.Ast ? *row.Ast : JoinPath({"/Root", PQ_SOURCE}));
             }
 
@@ -1904,10 +1905,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         LAST(V4.key) as v4
                     ONE ROW PER MATCH
                     PATTERN (V1 V? V4)
-                    DEFINE 
+                    DEFINE
                         V1 as V1.value = "value1",
                         V as True,
-                        V4 as V4.value = "value4" 
+                        V4 as V4.value = "value4"
                 );
 
                 INSERT INTO `{pq_source}`.`{output_topic}`

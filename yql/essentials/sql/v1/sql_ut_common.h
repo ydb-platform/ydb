@@ -10597,6 +10597,38 @@ Y_UNIT_TEST(HoppingWindow) {
     UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
 }
 
+Y_UNIT_TEST(HoppingWindowNamedParameters) {
+    {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42,
+                                   "max" AS SizeLimit, "PT10S" AS TimeLimit,
+                                   "close" AS EarlyPolicy, "adjust" AS LatePolicy);
+            )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
+    {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42,
+                                   "drop" AS LatePolicy, "adjust" AS EarlyPolicy);
+            )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
+}
+
 Y_UNIT_TEST(HoppingWindowWithoutSource) {
     ExpectFailWithError(
         R"sql(SELECT 1 + HoppingWindow(key, 39, 42);)sql",
@@ -10637,6 +10669,34 @@ Y_UNIT_TEST(HoppingWindowWithNonConstIntervals) {
 
         "<main>:7:21: Error: Source does not allow column references\n"
         "<main>:7:45: Error: Column reference 'subkey'\n");
+
+    ExpectFailWithError(
+        R"sql(
+                SELECT
+                    key,
+                    hopping_start
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39, 42, (subkey + 42) AS SizeLimit) AS hopping_start,
+                    key;
+            )sql",
+
+        "<main>:7:21: Error: Source does not allow column references\n"
+        "<main>:7:49: Error: Column reference 'subkey'\n");
+
+    ExpectFailWithError(
+        R"sql(
+                SELECT
+                    key,
+                    hopping_start
+                FROM plato.Input
+                GROUP BY
+                    HoppingWindow(key, 39, 42, subkey AS LatePolicy) AS hopping_start,
+                    key;
+            )sql",
+
+        "<main>:7:21: Error: Source does not allow column references\n"
+        "<main>:7:48: Error: Column reference 'subkey'\n");
 }
 
 Y_UNIT_TEST(HoppingWindowWithWrongNumberOfArgs) {
@@ -10648,7 +10708,7 @@ Y_UNIT_TEST(HoppingWindowWithWrongNumberOfArgs) {
                 GROUP BY HoppingWindow(key, 39);
             )sql",
 
-        "<main>:5:26: Error: HoppingWindow requires three arguments\n");
+        "<main>:5:26: Error: HoppingWindow requires three positional arguments\n");
 
     ExpectFailWithError(
         R"sql(
@@ -10658,7 +10718,35 @@ Y_UNIT_TEST(HoppingWindowWithWrongNumberOfArgs) {
                 GROUP BY HoppingWindow(key, 39, 42, 63);
             )sql",
 
-        "<main>:5:26: Error: HoppingWindow requires three arguments\n");
+        "<main>:5:26: Error: HoppingWindow requires three positional arguments\n");
+}
+
+Y_UNIT_TEST(HoppingWindowWithUnknownNamedArg) {
+    ExpectFailWithError(
+        R"sql(
+                SELECT
+                    *
+                FROM plato.Input
+                GROUP BY HoppingWindow(key, 39, 42, 13 AS Foobar);
+            )sql",
+
+        "<main>:5:53: Error: HoppingWindow: unsupported parameter: Foobar; expected: SizeLimit, TimeLimit, EarlyPolicy, LatePolicy\n");
+}
+
+Y_UNIT_TEST(HoppingWindowWithEvaluatedLimit) {
+    {
+        auto query = R"sql(
+            SELECT
+                *
+            FROM plato.Input
+            GROUP BY HoppingWindow(key, 39, 42, (Uint64("13") + Uint64("17")) AS SizeLimit);
+            )sql";
+
+        NYql::TAstParseResult res = SqlToYql(query);
+        UNIT_ASSERT_VALUES_UNEQUAL(nullptr, res.Root);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
+    }
 }
 
 Y_UNIT_TEST(DuplicateHoppingWindow) {

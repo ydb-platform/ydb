@@ -125,7 +125,7 @@ namespace NActors {
         Y_ABORT_UNLESS(count > 0);
         Y_ABORT_UNLESS(!Chunks.empty());
         TChunk& buf = Chunks.back();
-        Y_ABORT_UNLESS((size_t)count <= buf.second);
+        Y_ABORT_UNLESS((size_t)count <= buf.second, "count# %d buf.second# %zu", count, buf.second);
         Y_ABORT_UNLESS(buf.first + buf.second == BufferPtr, "buf# %p:%zu BufferPtr# %p SizeRemain# %zu NumChunks# %zu",
             buf.first, buf.second, BufferPtr, SizeRemain, Chunks.size());
         buf.second -= count;
@@ -188,6 +188,7 @@ namespace NActors {
         while (!CancelFlag) {
             Y_ABORT_UNLESS(Event);
             SerializationSuccess = !AbortFlag && Event->SerializeToArcadiaStream(this);
+            CodedOutputStream.reset();
             Event = nullptr;
             if (!CancelFlag) { // cancel flag may have been received during serialization
                 InnerContext.SwitchTo(BufFeedContext);

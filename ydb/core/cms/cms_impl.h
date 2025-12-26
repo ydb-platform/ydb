@@ -105,6 +105,7 @@ private:
     class TTxStoreWalleTask;
     class TTxUpdateConfig;
     class TTxUpdateDowntimes;
+    class TTxStoreFirstBootTimestamp;
 
     struct TActionOptions {
         TDuration PermissionDuration;
@@ -149,6 +150,7 @@ private:
     ITransaction *CreateTxUpdateConfig(TEvCms::TEvSetConfigRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     ITransaction *CreateTxUpdateDowntimes();
+    ITransaction *CreateTxStoreFirstBootTimestamp();
 
     static void AuditLog(const TActorContext &ctx, const TString &message) {
         NCms::AuditLog("CMS tablet", message, ctx);

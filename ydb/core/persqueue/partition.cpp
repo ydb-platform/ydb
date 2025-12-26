@@ -171,13 +171,11 @@ bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const 
 }
 
 struct TMirrorerInfo {
-    TMirrorerInfo(const TActorId& actor, const TTabletCountersBase& baseline)
+    TMirrorerInfo(const TActorId& actor)
     : Actor(actor) {
-        Baseline.Populate(baseline);
     }
 
     TActorId Actor;
-    TTabletCountersBase Baseline;
 };
 
 const TString& TPartition::TopicName() const {
@@ -339,9 +337,10 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
-    , SamplingControl(samplingControl) {
-
+    , SamplingControl(samplingControl)
+{
     TabletCounters.Populate(Counters);
+    TabletCounters.ResetCounters();
 }
 
 void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
@@ -437,6 +436,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     ctx.Schedule(WAKE_TIMEOUT, new TEvents::TEvWakeup());
     ctx.Send(Tablet, new TEvPQ::TEvPartitionCounters(Partition, TabletCounters));
+    TabletCounters.Cumulative().ResetCounters();
+    TabletCounters.Percentile().ResetCounters();
 
     ui64 usedStorage = GetUsedStorage(now);
     if (usedStorage > 0) {
@@ -592,9 +593,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
 void TPartition::Handle(TEvPQ::TEvMirrorerCounters::TPtr& ev, const TActorContext& /*ctx*/) {
     if (Mirrorer) {
-        auto diff = ev->Get()->Counters.MakeDiffForAggr(Mirrorer->Baseline);
-        TabletCounters.Populate(*diff.Get());
-        ev->Get()->Counters.RememberCurrentStateAsBaseline(Mirrorer->Baseline);
+        TabletCounters.Populate(ev->Get()->Counters);
     }
 }
 
@@ -1267,36 +1266,21 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
         }
     }
 
-    auto txIter = TransactionsInflight.begin();
-    if (txIter->second->ProposeConfig) {
-        Y_ABORT_UNLESS(!ChangeConfig);
-        ChangeConfig =
-            MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
-                                                              txIter->second->ProposeConfig->Config);
-        PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
-    }
-    if (ChangeConfig) {
-        Y_ABORT_UNLESS(TransactionsInflight.size() == 1,
-                       "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
-                       TabletID, Partition.OriginalPartitionId,
-                       ev->Step, ev->TxId);
-        PendingExplicitMessageGroups = ev->ExplicitMessageGroups;
-    } else {
-        Y_ABORT_UNLESS(!TransactionsInflight.empty(),
-                       "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
-                       TabletID, Partition.OriginalPartitionId,
-                       ev->Step, ev->TxId);
-        txIter = TransactionsInflight.find(ev->TxId);
-        Y_ABORT_UNLESS(!txIter.IsEnd(),
-                       "PQ: %" PRIu64 ", Partition: %" PRIu32 ", Step: %" PRIu64 ", TxId: %" PRIu64,
-                       TabletID, Partition.OriginalPartitionId,
-                       ev->Step, ev->TxId);
+    Y_ABORT_UNLESS(!TransactionsInflight.empty());
 
-        txIter->second->CommitSpan = std::move(ev->Span);
-    }
-    Y_ABORT_UNLESS(txIter->second->State == ECommitState::Pending);
+    auto txIter = TransactionsInflight.find(ev->TxId);
+    Y_ABORT_UNLESS(!txIter.IsEnd());
+    auto& tx = txIter->second;
 
-    txIter->second->State = ECommitState::Committed;
+    Y_ABORT_UNLESS(tx->State == ECommitState::Pending);
+
+    tx->State = ECommitState::Committed;
+    tx->ExplicitMessageGroups = std::move(ev->ExplicitMessageGroups);
+
+    if (!tx->ChangeConfig && !tx->ProposeConfig) {
+        tx->CommitSpan = std::move(ev->Span);
+    }
+
     ProcessTxsAndUserActs(ctx);
 }
 
@@ -2671,9 +2655,16 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
         SendChangeConfigReply = t->SendReply;
         BeginChangePartitionConfig(ChangeConfig->Config);
     } else if (t->ProposeConfig) {
-        Y_ABORT_UNLESS(ChangeConfig);
+        Y_ABORT_UNLESS(!ChangeConfig);
+        Y_ABORT_UNLESS(ChangingConfig);
+        ChangeConfig =
+            MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
+                                                              t->ProposeConfig->Config);
+        PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
+        PendingExplicitMessageGroups = t->ExplicitMessageGroups;
         SendChangeConfigReply = false;
     }
+
     CommitTransaction(t);
     return true;
 }
@@ -4092,8 +4083,7 @@ size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
 
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
-        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC,  EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
-        TabletCounters
+        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC,  EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
     );
 }
 

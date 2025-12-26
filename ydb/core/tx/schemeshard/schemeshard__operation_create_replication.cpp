@@ -27,6 +27,10 @@ struct TReplicationStrategy : public IStrategy {
     };
 
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext&) const override {
+        if (!AppData()->FeatureFlags.GetEnableReplication()) {
+            result.SetError(NKikimrScheme::StatusPreconditionFailed, "Asynchronous replication is disabled");
+            return true;
+        }
         if (desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong replication configuration");
             return true;

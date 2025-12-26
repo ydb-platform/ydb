@@ -22,3 +22,5 @@ items:
   include:
     mode: link
     path: transfer/toc_p.yaml
+- name: Импорт и экспорт данных в колоночные таблицы
+  href: import-export-column-tables.md

@@ -53,6 +53,7 @@ public:
         , WatermarkStorage(watermark)
         , WatermarksTracker(watermarksTracker)
     {
+        Y_ENSURE(!WatermarksTracker || WatermarkStorage);
         InputKeys.reserve(Inputs.size());
         for (const auto& input : Inputs) {
             if (const auto* inputChannel = dynamic_cast<const IDqInputChannel*>(input.Get())) {
@@ -193,7 +194,7 @@ private:
     }
 
     [[nodiscard]] bool WatermarksEnabled() const {
-        return WatermarksTracker && WatermarkStorage;
+        return WatermarksTracker;
     }
 
     bool TrySendWatermark() {

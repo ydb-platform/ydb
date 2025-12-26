@@ -434,9 +434,8 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
     return true;
 }
 
-
-std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    if (input->Kind != EOperator::Filter) {
+std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+    if (input->Kind != EOperator::Filter || props.PgSyntax) {
         return input;
     }
 
@@ -444,22 +443,14 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     auto filter = CastOperator<TOpFilter>(input);
     auto lambdaBody = filter->FilterLambda->ChildPtr(1);
 
-    if (!TCoAnd::Match(lambdaBody.Get()) 
-        && !TCoNot::Match(lambdaBody.Get()) 
-        && !TCoMember::Match(lambdaBody.Get())
-        && !lambdaBody->IsCallable("ToPg")) {
-            
+    if (!TCoAnd::Match(lambdaBody.Get()) && !TCoNot::Match(lambdaBody.Get()) && !TCoMember::Match(lambdaBody.Get())) {
         return input;
-    }
-
-    if (lambdaBody->IsCallable("ToPg")) {
-        lambdaBody = lambdaBody->ChildPtr(0);
     }
 
     // Decompose the conjunction into individual conjuncts
     TVector<TExprNode::TPtr> conjuncts;
     if (TCoAnd::Match(lambdaBody.Get())) {
-        for (auto child : lambdaBody->Children()) {
+        for (const auto& child : lambdaBody->Children()) {
             conjuncts.push_back(child);
         }
     } else {
@@ -472,21 +463,14 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     TSubplanEntry subplan;
     size_t conjunctIdx;
 
-    for (conjunctIdx=0; conjunctIdx<conjuncts.size(); conjunctIdx++) {
+    for (conjunctIdx = 0; conjunctIdx < conjuncts.size(); conjunctIdx++) {
         auto maybeSubplan = conjuncts[conjunctIdx];
 
-        while (maybeSubplan->IsCallable("ToPg") || maybeSubplan->IsCallable("FromPg")) {
-            maybeSubplan = maybeSubplan->ChildPtr(0);
-        }        
-        if (TCoNot::Match(maybeSubplan.Get())){
+        if (TCoNot::Match(maybeSubplan.Get())) {
             maybeSubplan = maybeSubplan->ChildPtr(0);
             negated = true;
         }
-        while (maybeSubplan->IsCallable("ToPg") || maybeSubplan->IsCallable("FromPg")) {
-            maybeSubplan = maybeSubplan->ChildPtr(0);
-        }
         if (TCoMember::Match(maybeSubplan.Get())) {
-
             auto name = TString(maybeSubplan->Child(1)->Content());
             iu = TInfoUnit(name);
             if (props.Subplans.PlanMap.contains(iu)) {
@@ -498,15 +482,13 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         }
     }
 
-    if (conjunctIdx==conjuncts.size()) {
+    if (conjunctIdx == conjuncts.size()) {
         return input;
     }
 
-    std::shared_ptr<TOpJoin> join;
-
+    std::shared_ptr<IOperator> join;
     // We build a semi-join or a left-only join when processing IN subplan
     if (subplan.Type == ESubplanType::IN) {
-
         auto leftJoinInput = filter->GetInput();
         TString joinKind;
         if (subplan.Type == ESubplanType::IN) {
@@ -520,48 +502,14 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         auto planIUs = subplan.Plan->GetOutputIUs();
         Y_ENSURE(subplan.Tuple.size() == planIUs.size());
 
-        if (props.PgSyntax) {
-            TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
-            for (size_t i=0; i<planIUs.size(); i++) {
-
-                auto arg = Build<TCoArgument>(ctx.ExprCtx, filter->Pos).Name("lambda_arg").Done();
-
-                // clang-format off
-                auto toPgMember = Build<TCoMember>(ctx.ExprCtx, filter->Pos)
-                    .Struct(arg)
-                    .Name<TCoAtom>().Value(subplan.Tuple[i].GetFullName()).Build()
-                    .Done().Ptr();
-                // clang-format on
-
-                toPgMember = ctx.ExprCtx.NewCallable(filter->Pos, "ToPg", {toPgMember});
-
-                // clang-format off
-                auto toPgLambda = Build<TCoLambda>(ctx.ExprCtx, filter->Pos)
-                    .Args({arg})
-                    .Body(toPgMember)
-                    .Done().Ptr();
-                // clang-format on
-
-                auto toPgVar = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
-                std::variant<TInfoUnit, TExprNode::TPtr> toPgElement = toPgLambda;
-                mapElements.push_back(std::make_pair(toPgVar, toPgElement));
-
-                joinKeys.push_back(std::make_pair(toPgVar, planIUs[i]));
-            }
-
-            leftJoinInput = std::make_shared<TOpMap>(leftJoinInput, filter->Pos, mapElements, false);
-        }
-        else {
-            for (size_t i=0; i<planIUs.size(); i++) {
-                joinKeys.push_back(std::make_pair(subplan.Tuple[i], planIUs[i]));
-            }
+        for (size_t i = 0; i < planIUs.size(); i++) {
+            joinKeys.push_back(std::make_pair(subplan.Tuple[i], planIUs[i]));
         }
 
         join = std::make_shared<TOpJoin>(leftJoinInput, subplan.Plan, input->Pos, joinKind, joinKeys);
         conjuncts.erase(conjuncts.begin() + conjunctIdx);
     }
-
-    // EXISTS and NOT EXISTS 
+    // EXISTS and NOT EXISTS
     // FIXME: Need to reimplement this part, maybe in another rule
     else {
         return input;
@@ -631,37 +579,29 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
 
     props.Subplans.Remove(iu);
-
     // If there was a single conjunct, we can get rid of the filter completely
     if (conjuncts.empty()) {
         return join;
     }
 
-    // Otherwise, we need to pack the remaining conjuncts back into the filter 
-    else {
-        auto arg = Build<TCoArgument>(ctx.ExprCtx, input->Pos).Name("lambda_arg").Done().Ptr();
-        TExprNode::TPtr newLambdaBody;
-        if (conjuncts.size()==1) {
-            newLambdaBody = conjuncts[0];
-        } else {
-            newLambdaBody = Build<TCoAnd>(ctx.ExprCtx, input->Pos).Add(conjuncts).Done().Ptr();
-            if (props.PgSyntax) {
-                newLambdaBody = ctx.ExprCtx.NewCallable(filter->Pos, "ToPg", {newLambdaBody});
-            }
-        }
-        newLambdaBody = ReplaceArg(newLambdaBody, arg, ctx.ExprCtx);
-
-        // clang-format off
-        auto newLambda = Build<TCoLambda>(ctx.ExprCtx, input->Pos)
-            .Args({arg})
-            .Body(newLambdaBody)
-            .Done().Ptr();
-        // clang-format on
-
-        filter->FilterLambda = newLambda;
-        filter->SetInput(join);
-        return filter;
+    // Otherwise, we need to pack the remaining conjuncts back into the filter
+    auto arg = Build<TCoArgument>(ctx.ExprCtx, input->Pos).Name("lambda_arg").Done().Ptr();
+    TExprNode::TPtr newLambdaBody;
+    if (conjuncts.size() == 1) {
+        newLambdaBody = conjuncts[0];
+    } else {
+        newLambdaBody = Build<TCoAnd>(ctx.ExprCtx, input->Pos).Add(conjuncts).Done().Ptr();
     }
+    newLambdaBody = ReplaceArg(newLambdaBody, arg, ctx.ExprCtx);
+
+    // clang-format off
+    auto newLambda = Build<TCoLambda>(ctx.ExprCtx, input->Pos)
+        .Args({arg})
+        .Body(newLambdaBody)
+    .Done().Ptr();
+    // clang-format on
+
+    return std::make_shared<TOpFilter>(join, filter->Pos, newLambda);
 }
 
 // We push the map operator only below join right now

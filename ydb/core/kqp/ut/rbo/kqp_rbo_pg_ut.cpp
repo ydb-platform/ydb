@@ -297,6 +297,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 SELECT bar.id FROM bar where bar.id = (SELECT id from foo);
             )",
+            /*
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -307,7 +308,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 SELECT foo.id FROM foo where foo.id NOT IN (SELECT id from bar);
             )",
-            /*
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";

@@ -15,6 +15,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardCountersTest) {
         };
         TTestBasicRuntime runtime;
         TTestEnvOptions opts;
+        opts.EnableRealSystemViewPaths(false);
         TTestEnv env(runtime, opts, ssFactory);
         runtime.GetAppData().FeatureFlags.SetEnableAlterDatabase(true);
         ui64 txId = 100;

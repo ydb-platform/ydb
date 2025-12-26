@@ -59,6 +59,7 @@ public:
     TDataSourceConstructor(TDataSourceConstructor&& other)
         : Start(std::move(other.Start))
         , Finish(std::move(other.Finish))
+        , IsOutOfOrder(other.IsOutOfOrder)
         , SourceIdx(other.SourceIdx)
         , SourceIdxInitialized(other.SourceIdxInitialized)
     {
@@ -67,6 +68,7 @@ public:
     TDataSourceConstructor& operator=(TDataSourceConstructor&& other) {
         Start = std::move(other.Start);
         Finish = std::move(other.Finish);
+        IsOutOfOrder = other.IsOutOfOrder;
         SourceIdx = other.SourceIdx;
         SourceIdxInitialized = other.SourceIdxInitialized;
         return *this;

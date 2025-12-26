@@ -38,6 +38,9 @@
         },
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.11"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt.12"
         }
     ],
     "test_canonical_requests.Test.test_essential": [

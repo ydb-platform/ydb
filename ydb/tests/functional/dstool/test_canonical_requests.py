@@ -194,4 +194,5 @@ class Test(TestBase):
             self._trace('cluster', 'set', '--enable-self-heal', '--enable-donor-mode'),
             self._trace('cluster', 'set', '--pdisk-space-margin-promille', '1001'),
             self._trace('cluster', 'set', '--pdisk-space-color-border', 'UNKNOWN'),
+            self._trace('--dry-run', 'cluster', 'set', '--disable-self-heal'),
         ]

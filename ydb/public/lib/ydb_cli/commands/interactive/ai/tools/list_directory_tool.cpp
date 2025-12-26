@@ -1,8 +1,8 @@
 #include "list_directory_tool.h"
 #include "tool_base.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
+#include <ydb/public/lib/ydb_cli/common/ydb_path.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
@@ -33,7 +33,7 @@ For example if called on directory "data/", which contains two tables "my_table1
 public:
     TListDirectoryTool(const TListDirectoryToolSettings& settings, const TInteractiveLogger& log)
         : TBase(CreateParametersSchema(), DESCRIPTION, log)
-        , Database(NKikimr::CanonizePath(settings.Database))
+        , Database(CanonizeYdbPath(settings.Database))
         , Client(settings.Driver)
     {}
 
@@ -43,9 +43,9 @@ protected:
 
         Directory = Strip(parser.GetKey(DIRECTORY_PROPERTY).GetString());
         if (!Directory.StartsWith('/')) {
-            Directory = NKikimr::JoinPath({Database, Directory});
+            Directory = JoinYdbPath({Database, Directory});
         }
-        Directory = NKikimr::CanonizePath(Directory);
+        Directory = CanonizeYdbPath(Directory);
     }
 
     bool AskPermissions() final {

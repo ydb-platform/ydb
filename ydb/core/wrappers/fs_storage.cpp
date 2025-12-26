@@ -11,7 +11,7 @@
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/system/fs.h>
-#include <util/random/random.h>
+#include <util/generic/guid.h>
 
 #include <type_traits>
 
@@ -22,7 +22,6 @@ namespace {
 class TFsOperationActor : public NActors::TActorBootstrapped<TFsOperationActor> {
 private:
     TString BasePath;
-    bool Verbose;
     const TReplyAdapterContainer& ReplyAdapter;
 
     struct TMultipartUploadSession {
@@ -91,9 +90,8 @@ private:
     }
 
 public:
-    TFsOperationActor(const TString& basePath, bool verbose, const TReplyAdapterContainer& replyAdapter)
+    TFsOperationActor(const TString& basePath, const TReplyAdapterContainer& replyAdapter)
         : BasePath(basePath)
-        , Verbose(verbose)
         , ReplyAdapter(replyAdapter)
     {
         LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor created"
@@ -116,23 +114,20 @@ public:
 
 private:
     void CleanupActiveSessions() {
-        if (!ActiveUploads.empty()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor: cleaning up"
-                << ": active MPU sessions# " << ActiveUploads.size());
-            for (auto& [uploadId, session] : ActiveUploads) {
-                try {
-                    session->File.Flush();
-                    session->File.Close();
-                    LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor: closed MPU session"
-                        << ": uploadId# " << uploadId);
-                } catch (const std::exception& ex) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "Failed to close MPU session"
-                        << ": uploadId# " << uploadId
-                        << ", error# " << ex.what());
-                }
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor: cleaning up"
+            << ": active MPU sessions# " << ActiveUploads.size());
+        for (auto& [uploadId, session] : ActiveUploads) {
+            try {
+                session->File.Close();
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor: closed MPU session"
+                    << ": uploadId# " << uploadId);
+            } catch (const std::exception& ex) {
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "Failed to close MPU session"
+                    << ": uploadId# " << uploadId
+                    << ", error# " << ex.what());
             }
-            ActiveUploads.clear();
         }
+        ActiveUploads.clear();
     }
 
 public:
@@ -160,6 +155,10 @@ public:
         }
     }
 
+    TString GetIncompletePath(const TString& key) {
+        return TStringBuilder() << key << ".incomplete";
+    }
+
     void Handle(TEvPutObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const auto& body = ev->Get()->Body;
@@ -170,7 +169,14 @@ public:
             << ", size# " << body.size());
 
         try {
-            WriteFile(key, body);
+            TFsPath fsPath(key);
+            fsPath.Parent().MkDirs();
+
+            TFile file(fsPath.GetPath(), CreateAlways | WrOnly);
+            file.Flock(LOCK_EX);
+            file.Write(body.data(), body.size());
+            file.Flush();
+            file.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "PutObject failed"
@@ -232,10 +238,10 @@ public:
 
     void Handle(TEvCreateMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        const TString key = TString(request.GetKey().data(), request.GetKey().size());
+        const TString key = GetIncompletePath(TString(request.GetKey().data(), request.GetKey().size()));
 
         try {
-            TString uploadId = TStringBuilder() << key << "_" << RandomNumber<ui64>();
+            TString uploadId = TStringBuilder() << key << "_" << CreateGuidAsString();
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
 
@@ -266,7 +272,7 @@ public:
     void Handle(TEvUploadPartRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const auto& body = ev->Get()->Body;
-        const TString key = TString(request.GetKey().data(), request.GetKey().size());
+        const TString key = GetIncompletePath(TString(request.GetKey().data(), request.GetKey().size()));
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         const int partNumber = request.GetPartNumber();
 
@@ -279,7 +285,7 @@ public:
         try {
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
-                throw yexception() << "Upload session not found: uploadId# " << uploadId;
+                it = ActiveUploads.emplace(uploadId, std::make_unique<TMultipartUploadSession>(key)).first;
             }
 
             auto& session = it->second;
@@ -313,6 +319,7 @@ public:
     void Handle(TEvCompleteMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
+        const TString incompleteKey = GetIncompletePath(key);
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
         LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "CompleteMultipartUpload"
@@ -326,13 +333,15 @@ public:
             }
 
             auto& session = it->second;
-
             session->File.Flush();
             session->File.Close();
 
+            NFs::Rename(incompleteKey, key);
+
             LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "CompleteMultipartUpload"
                 << ": uploadId# " << uploadId
-                << ", total size# " << session->TotalSize << ", file closed, lock released");
+                << ", total size# " << session->TotalSize
+                << ", file mv from# " << incompleteKey << " to# " << key);
 
             ActiveUploads.erase(it);
 
@@ -397,22 +406,6 @@ public:
             "UploadPartCopy: not implemented");
         ReplyError<TEvUploadPartCopyResponse>(ev->Sender, key, "Not implemented");
     }
-
-private:
-    void WriteFile(const TString& path, const TStringBuf& data, bool isAppend = false) {
-        TFsPath fsPath(path);
-        fsPath.Parent().MkDirs();
-
-        auto flags = CreateAlways | WrOnly;
-        if (isAppend) {
-            flags = OpenAlways | WrOnly | ForAppend;
-        }
-        TFile file(path, flags);
-        file.Flock(LOCK_EX);
-        file.Write(data.data(), data.size());
-        file.Flush();
-        file.Close();
-    }
 };
 
 } // anonymous namespace
@@ -422,8 +415,7 @@ TFsExternalStorage::TFsExternalStorage(const TString& basePath, bool verbose)
     , Verbose(verbose)
 {
     InitReplyAdapter(nullptr);
-    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-        "TFsExternalStorage created"
+    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsExternalStorage created"
         << ": BasePath# " << BasePath
         << ", Verbose# " << Verbose);
 }
@@ -437,7 +429,7 @@ void TFsExternalStorage::EnsureActor() const {
         return;
     }
 
-    auto actor = new TFsOperationActor(BasePath, Verbose, ReplyAdapter);
+    auto actor = new TFsOperationActor(BasePath, ReplyAdapter);
     OperationActorId = TlsActivationContext->AsActorContext().Register(
         actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     ActorCreated = true;

@@ -16,7 +16,7 @@ private:
 
 public:
     TFsExternalStorage(const TString& basePath, bool verbose = true);
-    ~TFsExternalStorage();
+    ~TFsExternalStorage() override;
 
     virtual void Execute(TEvCheckObjectExistsRequest::TPtr& ev) const override;
     virtual void Execute(TEvListObjectsRequest::TPtr& ev) const override;

@@ -319,7 +319,7 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
 TMaybe<std::pair<TCondenseInputResult, TMaybeNode<TDqPhyPrecompute>>>
 RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf> inputColumns,
     const THashSet<TString>& checkDefaults, const TKikimrTableDescription& table,
-    const TSecondaryIndexes& indexes, TPositionHandle pos, TExprContext& ctx)
+    const TSecondaryIndexes& indexes, const bool useStreamIndexes, TPositionHandle pos, TExprContext& ctx)
 {
     auto condenseResult = CondenseInput(inputRows, ctx);
     if (!condenseResult) {
@@ -336,6 +336,11 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
     THashSet<TString> usedIndexes;
     bool hasUniqIndex = false;
     for (const auto& [_, indexDesc] : indexes) {
+        if (useStreamIndexes
+                &&  (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+            continue;
+        }
         hasUniqIndex |= (indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique);
         for (const auto& indexKeyCol : indexDesc->KeyColumns) {
             if (inputColumns.contains(indexKeyCol)) {
@@ -617,6 +622,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     const bool isSink = NeedSinks(table, kqpCtx);
     const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
     const bool needPrecompute = !useStreamIndex
+        || !columnsWithDefaultsSet.empty()
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
             return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
                 || index.second->Type == TIndexDescription::EType::GlobalFulltext;
@@ -637,7 +643,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             .Done();
     }
 
-    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, pos, ctx);
+    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, useStreamIndex, pos, ctx);
 
     if (!checkedInput) {
         return {};

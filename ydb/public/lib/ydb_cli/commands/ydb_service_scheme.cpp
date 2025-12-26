@@ -17,17 +17,6 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-// Moved to common/describe.cpp but kept here for now if needed by other commands or refactoring?
-// No, I should remove it if duplicated.
-// Wait, PrintPermissions is used by PrintAllPermissions.
-// PrintAllPermissions is declared in header and used by TCommandList.
-// So I should keep PrintAllPermissions implementation here OR move it to common completely.
-// Ideally move to common/print_utils.cpp but I didn't edit print_utils.cpp yet.
-// For now, I will keep PrintAllPermissions here but remove duplicated static helpers if they are not used.
-
-namespace {
-}
-
 TCommandScheme::TCommandScheme()
     : TClientCommandTree("scheme", {}, "Scheme service operations")
 {

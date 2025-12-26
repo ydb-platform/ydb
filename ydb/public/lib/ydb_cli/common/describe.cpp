@@ -876,12 +876,6 @@ int TDescribeLogic::DescribeCoordinationNode(const TString& path, EDataFormat fo
     }
 
     const auto& desc = result.GetResult();
-    // Simplified printing for now as we don't have PrintCoordinationNodeResponsePretty moved fully or it is simple
-    // Actually PrintCoordinationNodeResponsePretty is simple, let's include it
-
-    // Using lambda or similar to adapt to PrintDescription?
-    // Let's implement PrintCoordinationNodeResponsePretty
-
     if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
         return PrintCoordinationNodeResponsePretty(desc);
     } else if (format == EDataFormat::Json) {

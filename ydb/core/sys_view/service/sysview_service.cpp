@@ -1046,6 +1046,11 @@ private:
 
         void Add(TQueryStatsPtr stats) {
             Metrics.Collect.Add(stats);
+            // Skip COMMIT queries for top queries system views - they should only appear in query_metrics_one_minute
+            if (stats->GetQueryText().StartsWith("COMMIT")) {
+                return;
+            }
+
             TopByDuration.Collect.Add(stats);
             TopByReadBytes.Collect.Add(stats);
             TopByCpuTime.Collect.Add(stats);

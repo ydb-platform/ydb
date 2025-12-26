@@ -916,7 +916,7 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
 
-        QueryState->TxCtx->OnBeginQuery();
+        QueryState->TxCtx->OnBeginQuery(QueryState->ExtractQueryText());
 
         if (QueryState->NeedPersistentSnapshot()) {
             AcquirePersistentSnapshot();
@@ -1037,7 +1037,7 @@ public:
 
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
-        QueryState->TxCtx->OnBeginQuery();
+        QueryState->TxCtx->OnBeginQuery(QueryState->ExtractQueryText());
 
         if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
@@ -2134,6 +2134,20 @@ public:
         }
     }
 
+
+    TString BuildCommitQueryText(const TIntrusivePtr<TKqpTransactionContext>& txCtx) {
+        if (!txCtx || txCtx->QueryTexts.empty()) {
+            return "";
+        }
+
+        TStringBuilder builder;
+        builder << std::accumulate(txCtx->QueryTexts.begin() + 1, txCtx->QueryTexts.end(), txCtx->QueryTexts[0],
+            [](const TString& acc, const TString& query) {
+                return acc + "; " + query;
+            });
+        return builder;
+    }
+
     void ProcessExecuterResult(TEvKqpExecuter::TEvTxResponse* ev) {
         QueryState->Orbit = std::move(ev->Orbit);
 
@@ -2155,6 +2169,18 @@ public:
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
         QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
+
+        if (ev->LocksBrokenAsBreaker > 0) {
+            // For commit operations that break locks, report them (both successful and aborted)
+            if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+                QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED) {
+
+                NDataIntegrity::LogTli("SessionActor", "Commit had broken other locks", QueryState->TxCtx->QueryTexts, TlsActivationContext->AsActorContext());
+            }
+            else {
+                NDataIntegrity::LogTli("SessionActor", "Query had broken other locks", QueryState->ExtractQueryText(), TlsActivationContext->AsActorContext());
+            }
+        }
 
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();

@@ -549,6 +549,117 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 TStringBuilder() << "AST should contain BlockHashJoin. Actual AST: " << ast);
         }
     }
+
+    Y_UNIT_TEST(BlockHashJoinLeftJoinNullCount) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/left_table` (
+                        id Int32 NOT NULL,
+                        value Int32 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/right_table` (
+                        id Int32 NOT NULL,
+                        value Int32 NOT NULL,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/left_table` (id, value) VALUES
+                        (1, 10),
+                        (2, 20),
+                        (3, 30),
+                        (4, 40),
+                        (5, 50);
+
+                    INSERT INTO `/Root/right_table` (id, value) VALUES
+                        (1, 100),
+                        (3, 300);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            TString hints = R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints=
+                    '
+                        Bytes(L # 10e12)
+                        Bytes(R # 10e12)
+                    ';
+            )";
+            TString blocks = "PRAGMA ydb.UseBlockHashJoin = \"true\";\n\n";
+            TString select = R"(
+                SELECT L.id AS left_id, L.value AS left_value, R.id AS right_id, R.value AS right_value
+                FROM `left_table` AS L
+                LEFT JOIN `right_table` AS R
+                ON L.id = R.id
+                ORDER BY left_id;
+            )";
+
+            TString joinQuery = TStringBuilder() << hints << blocks << select;
+
+            auto status = queryClient.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto resultSet = status.GetResultSets()[0];
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 5);
+
+            TResultSetParser parser(resultSet);
+            ui32 nullCount = 0;
+            ui32 nonNullCount = 0;
+            
+            while (parser.TryNextRow()) {
+                auto rightId = parser.ColumnParser("right_id").GetOptionalInt32();
+                auto rightValue = parser.ColumnParser("right_value").GetOptionalInt32();
+                
+                if (rightId.has_value()) {
+                    nonNullCount++;
+                    UNIT_ASSERT_C(rightValue.has_value(), "right_value should also be present when right_id is present");
+                } else {
+                    nullCount++;
+                    UNIT_ASSERT_C(!rightValue.has_value(), "right_value should also be NULL when right_id is NULL");
+                }
+            }
+            
+            // 3 left rows without matching right rows (ids: 2, 4, 5)
+            UNIT_ASSERT_VALUES_EQUAL_C(nullCount, 3, 
+                TStringBuilder() << "Expected 3 NULL rows, got " << nullCount);
+            // 2 left rows with matching right rows (ids: 1, 3)
+            UNIT_ASSERT_VALUES_EQUAL_C(nonNullCount, 2,
+                TStringBuilder() << "Expected 2 non-NULL rows, got " << nonNullCount);
+
+            auto explainResult = queryClient.ExecuteQuery(
+                joinQuery, 
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+            auto astOpt = explainResult.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            TString ast = TString(*astOpt);
+            UNIT_ASSERT_C(ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
+                TStringBuilder() << "AST should contain BlockHashJoin! Actual AST: " << ast);
+        }
+    }
 }
 
 } // namespace NKqp

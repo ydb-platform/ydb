@@ -242,10 +242,10 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TDecompressionQueueIte
 
 template<bool UseMigrationProtocol>
 TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionImpl() {
+    std::lock_guard guard(Lock);
+
     for (auto&& [_, partitionStream] : PartitionStreams) {
-        if (partitionStream) {
-            partitionStream->ExtractQueue();
-        }
+        partitionStream->ClearQueue();
     }
 
     for (auto& e : DecompressionQueue) {

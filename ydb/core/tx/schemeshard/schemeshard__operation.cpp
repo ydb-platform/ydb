@@ -1304,6 +1304,9 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterStreamingQuery:
         return CreateAlterStreamingQuery(NextPartId(), txState);
 
+    case TTxState::ETxType::TxTruncateTable:
+        return CreateTruncateTable(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1645,6 +1648,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return {CreateDropStreamingQuery(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
         return {CreateAlterStreamingQuery(op.NextPartId(), tx)};
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
+        return CreateConsistentTruncateTable(op.NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

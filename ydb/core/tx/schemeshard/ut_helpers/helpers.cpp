@@ -538,6 +538,32 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
+    TEvSchemeShard::TEvModifySchemeTransaction* TruncateTableRequest(ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard, const TApplyIf& applyIf) {
+        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
+        auto transaction = evTx->Record.AddTransaction();
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
+        transaction->SetWorkingDir(workingDir);
+        SetApplyIf(*transaction, applyIf);
+
+        auto descr = transaction->MutableTruncateTable();
+        descr->SetTableName(tableName);
+
+        return evTx.Release();
+    }
+
+    void AsyncTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard) {
+        AsyncSend(runtime, schemeShard, TruncateTableRequest(txId, workingDir, tableName, schemeShard, {}));
+    }
+
+    void TestTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults) {
+        TestTruncateTable(runtime, TTestTxConfig::SchemeShard, txId, workingDir, tableName, expectedResults);
+    }
+
+    void TestTruncateTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults) {
+        AsyncTruncateTable(runtime, txId, workingDir, tableName, schemeShard);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     // copy and rename *MoveTable* family
     //TODO: generalize all Move* stuff
     TEvSchemeShard::TEvModifySchemeTransaction* MoveSequenceRequest(ui64 txId, const TString& src, const TString& dst, ui64 schemeShard, const TApplyIf& applyIf) {

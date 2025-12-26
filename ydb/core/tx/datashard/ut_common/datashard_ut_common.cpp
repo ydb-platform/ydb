@@ -2872,4 +2872,17 @@ ui64 AsyncAlterSubDomain(
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
 }
 
+ui64 AsyncTruncateTable(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& tableName)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpTruncateTable, workingDir);
+    auto* op = request->Record.MutableTransaction()->MutableModifyScheme()->MutableTruncateTable();
+    op->SetTableName(tableName);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
+}
+
 }

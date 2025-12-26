@@ -512,6 +512,7 @@ class TestWorkloadManagerOltpTpch20s100(WorkloadManagerOltpTpch20Base):
     tables_size = tpch.TestTpch100.tables_size
     scale = tpch.TestTpch100.scale
     timeout = tpch.TestTpch100.timeout
+    iterations = 2
 
 
 class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):

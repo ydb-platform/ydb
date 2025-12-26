@@ -143,8 +143,13 @@ public:
                 if (hasDrop) {
                     auto& dropNotice = *combined.MutableDropCdcStreamNotice();
                     txState->SourcePathId.ToProto(dropNotice.MutablePathId());
-                    dropNotice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion + 1);
-                    
+                    // Use coordinated schema version if available, otherwise increment
+                    if (txState->CoordinatedSchemaVersion) {
+                        dropNotice.SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+                    } else {
+                        dropNotice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion + 1);
+                    }
+
                     for (const auto& id : streamsToDrop) {
                         id.ToProto(dropNotice.AddStreamPathId());
                     }
@@ -152,6 +157,10 @@ public:
 
                 if (hasCreate) {
                     NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+                    // Override table schema version if coordinated version is set
+                    if (txState->CoordinatedSchemaVersion) {
+                        combined.MutableCreateCdcStreamNotice()->SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+                    }
                 }
 
             } else {
@@ -768,6 +777,10 @@ public:
         }
         if (Transaction.GetCreateTable().HasPathState()) {
             txState.TargetPathTargetState = Transaction.GetCreateTable().GetPathState();
+        }
+        // Store coordinated schema version if available (from backup operations)
+        if (Transaction.GetCreateTable().HasCoordinatedSchemaVersion()) {
+            txState.CoordinatedSchemaVersion = Transaction.GetCreateTable().GetCoordinatedSchemaVersion();
         }
 
         TShardInfo datashardInfo = TShardInfo::DataShardInfo(OperationId.GetTxId(), newTable->PathId);

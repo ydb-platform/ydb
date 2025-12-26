@@ -350,6 +350,8 @@ message TTableDescription {
     // Skip automatic index/impl table copying - indexes will be handled separately
     optional bool OmitIndexes = 47 [default = false];
     optional TDropCdcStream DropSrcCdcStream = 48;
+    // Pre-calculated version for backup coordination (used in copy table for indexes)
+    optional uint64 CoordinatedSchemaVersion = 49;
 }
 
 message TDictionaryEncodingSettings {
@@ -1088,6 +1090,7 @@ message TAlterCdcStream {
 message TDropCdcStream {
     optional string TableName = 1;
     repeated string StreamName = 2;
+    optional uint64 CoordinatedSchemaVersion = 3; // Pre-calculated version for backup coordination
 }
 
 message TRotateCdcStream {

@@ -367,6 +367,12 @@ protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
         auto& notice = *tx.MutableCreateCdcStreamNotice();
         NCdcStreamAtTable::FillNotice(pathId, context, notice);
+
+        // Override table schema version if coordinated version is set
+        auto* txState = context.SS->FindTx(OperationId);
+        if (txState && txState->CoordinatedSchemaVersion) {
+            notice.SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+        }
     }
 
 public:
@@ -599,6 +605,11 @@ public:
                         << ", cdcPathId: " << streamPath.Base()->PathId
                         << ", streamName: " << streamName
                         << ", at schemeshard: " << context.SS->SelfTabletId());
+        }
+
+        // Store coordinated schema version if available (from backup operations)
+        if (op.HasCoordinatedSchemaVersion()) {
+            txState.CoordinatedSchemaVersion = op.GetCoordinatedSchemaVersion();
         }
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;

@@ -673,7 +673,6 @@ public:
     }
 
     TString FilterDatabase;
-    TSubDomainKey FilterDatabaseKey;
     THashMap<TSubDomainKey, std::optional<TString>> FilterDomainKey; // nullopt for serverless
     TVector<TActorId> PipeClients;
     int Requests = 0;

@@ -41,7 +41,7 @@ The storage volume multiplier specified above only applies to the fault toleranc
 
 {% endnote %}
 
-For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../reference/configuration/index.md#domains-blob).
+For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../reference/configuration/domains_config.md#domains-blob).
 
 ### Reduced configurations {#reduced}
 
@@ -85,8 +85,8 @@ To survive an entire data center outage at the database level, assuming a cluste
 ## See also
 
 * [Documentation for DevOps Engineers](../devops/index.md)
-* [{#T}](../reference/configuration/index.md#domains-blob)
-* [Example cluster configuration files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
+* [{#T}](../reference/configuration/domains_config.md#domains-blob)
+* [Example Cluster Configuration Files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
 * [{#T}](../contributor/distributed-storage.md)
 
 [*recommended-node-count]: Using fewer than this number of nodes will limit the cluster's ability to [self-heal](../maintenance/manual/selfheal.md).

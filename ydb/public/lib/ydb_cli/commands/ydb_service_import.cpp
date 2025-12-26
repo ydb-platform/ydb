@@ -359,7 +359,7 @@ static int PrintListObjectResultPretty(const NImport::TListObjectsInS3ExportResu
 }
 
 static int PrintListObjectResultProtoJsonBase64(const NImport::TListObjectsInS3ExportResult& result) {
-    return PrintProtoJsonBase64(TProtoAccessor::GetProto(result));
+    return PrintProtoJsonBase64(TProtoAccessor::GetProto(result), Cout);
 }
 
 static int PrintListObjectResult(const NImport::TListObjectsInS3ExportResult& result, EDataFormat format) {

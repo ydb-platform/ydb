@@ -7,9 +7,10 @@
 
 namespace NYdb::NConsoleClient {
 
-inline void ThrowOnError(const NYdb::Dev::TOperation& operation) {
-    if (!operation.Ready())
+inline void ThrowOnError(const NYdb::TOperation& operation) {
+    if (!operation.Ready()) {
         return;
+    }
     NStatusHelpers::ThrowOnError(operation.Status());
 }
 

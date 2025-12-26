@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
+#include <ydb/public/lib/ydb_cli/common/query_utils.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/stat_visualization/flame_graph_builder.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -22,8 +23,7 @@
 
 #include <math.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 TCommandTable::TCommandTable()
     : TClientCommandTree("table", {}, "Table service operations")
@@ -1020,38 +1020,10 @@ int TCommandExplain::Run(TConfig& config) {
             Cerr << "<INTERRUPTED>" << Endl;
         }
     } else if (QueryType == "generic") {
-        NQuery::TQueryClient client(CreateDriver(config));
-        NQuery::TExecuteQuerySettings settings;
-        settings.ClientTimeout(timeout.value_or(TDuration()));
-
-        if (Analyze) {
-            settings.StatsMode(NQuery::EStatsMode::Full);
-        } else {
-            settings.ExecMode(NQuery::EExecMode::Explain);
-        }
-
-        auto result = client.StreamExecuteQuery(
-            Query,
-            NQuery::TTxControl::BeginTx().CommitTx(),
-            settings).GetValueSync();
-        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
-        SetInterruptHandlers();
-        while (!IsInterrupted()) {
-            auto tablePart = result.ReadNext().GetValueSync();
-            if (ThrowOnErrorAndCheckEOS(tablePart)) {
-                break;
-            }
-            if (tablePart.GetStats()) {
-                auto proto = NYdb::TProtoAccessor::GetProto(*tablePart.GetStats());
-                planJson = proto.query_plan();
-                ast = proto.query_ast();
-            }
-        }
-
-        if (IsInterrupted()) {
-            Cerr << "<INTERRUPTED>" << Endl;
-        }
+        TExplainGenericQuery runner(CreateDriver(config));
+        const auto& result = runner.Explain(Query, timeout, Analyze);
+        planJson = result.PlanJson;
+        ast = result.Ast;
     } else if (QueryType == "data" && (Analyze || FlameGraphPath)) {
         NTable::TExecDataQuerySettings settings;
         settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
@@ -1096,16 +1068,14 @@ int TCommandExplain::Run(TConfig& config) {
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, Analyze);
         queryPlanPrinter.Print(planJson);
 
-        if( FlameGraphPath && !FlameGraphPath->empty() ) {
+        if (FlameGraphPath && !FlameGraphPath->empty()) {
             try {
                 NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphPath.GetRef(), planJson);
                 Cout << Endl << "Resource usage flame graph is successfully saved to " << FlameGraphPath.GetRef() << Endl;
-            }
-            catch (const yexception& ex) {
+            } catch (const yexception& ex) {
                 Cout << Endl << "Can't save resource usage flame graph, error: " << ex.what() << Endl;
             }
-        }
-        else if( FlameGraphPath && FlameGraphPath->empty() ) {
+        } else if (FlameGraphPath && FlameGraphPath->empty()) {
             Cout << Endl << "FlameGraph path can not be empty." << Endl;
         }
     }
@@ -1205,7 +1175,7 @@ namespace {
         typebuilder.EndTuple();
         return typebuilder.Build();
     }
-}
+} // anonymous namespace
 
 int TCommandReadTable::Run(TConfig& config) {
     NTable::TTableClient client(CreateDriver(config));
@@ -1592,5 +1562,4 @@ int TCommandTtlReset::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

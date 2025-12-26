@@ -45,15 +45,18 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    contrib/restricted/patched/replxx
     library/cpp/histogram/hdr
     library/cpp/protobuf/json
     library/cpp/regex/pcre
     library/cpp/threading/local_executor
+    ydb/core/base
     ydb/library/arrow_inference
     ydb/library/backup
     ydb/library/formats/arrow/csv/table
     ydb/library/workload
     ydb/library/yaml_config/public
+    ydb/library/yverify_stream
     ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/commands/command_base
     ydb/public/lib/ydb_cli/commands/interactive

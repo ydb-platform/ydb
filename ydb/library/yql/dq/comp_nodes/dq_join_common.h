@@ -268,7 +268,7 @@ template <typename Source> class TInMemoryHashJoin {
             FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Build.FetchRow();
             switch (AsStatus(var)) {
             case NYql::NUdf::EFetchStatus::Finish: {
-                Table_.BuildWith(Flatten(BuildChunks_));
+                Table_.BuildWith(Flatten(std::move(BuildChunks_)));
                 break;
             }
             case NYql::NUdf::EFetchStatus::Yield: {
@@ -288,11 +288,11 @@ template <typename Source> class TInMemoryHashJoin {
         }
 
         if (!Sources_.Probe.Finished()) {
-            const FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
+            FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
             const NKikimr::NMiniKQL::EFetchResult resEnum = AsResult(var);
 
             if (resEnum == EFetchResult::One) {
-                const IBlockLayoutConverter::TPackResult& thisPackResult =
+                IBlockLayoutConverter::TPackResult& thisPackResult =
                     std::get<One<IBlockLayoutConverter::TPackResult>>(var).Data;
                 thisPackResult.ForEachTuple([&](TSingleTuple probeTuple) {
                     Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {

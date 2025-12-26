@@ -157,7 +157,6 @@ void TReaderActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
     // TODO MLP Retry
     LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
-    PassAway();
 }
 
 void TReaderActor::HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -198,7 +197,7 @@ void TReaderActor::PassAway() {
         Send(ChildActorId, new TEvents::TEvPoison());
     }
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
-    TActor::PassAway();
+    TBaseActor::PassAway();
 }
 
 bool TReaderActor::OnUnhandledException(const std::exception& exc) {

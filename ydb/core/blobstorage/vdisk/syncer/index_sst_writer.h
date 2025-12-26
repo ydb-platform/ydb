@@ -26,11 +26,11 @@ class TIndexSstWriterActor :
         BLOCKS,
         BARRIERS,
     };
-    TQueue<EWriterType> ReserveQueue;
 
     TQueue<std::unique_ptr<NPDisk::TEvChunkWrite>> MsgQueue;
 
     ui32 CommitsInFlight = 0;
+    ui32 ReservesInFlight = 0;
     ui32 WritesInFlight = 0;
     static const ui32 MaxWritesInFlight = 5; // TODO: config
 
@@ -48,9 +48,9 @@ class TIndexSstWriterActor :
 
         STLOG(PRI_DEBUG, BS_SYNCER, BSFS01, VDISKP(VCtx->VDiskLogPrefix,
             "TIndexSstWriterActor: ProcessWrites"),
-            (WritesInFlight, WritesInFlight), (ReserveQueueSize, ReserveQueue.size()));
+            (WritesInFlight, WritesInFlight), (ReservesInFlight, ReservesInFlight));
 
-        if (WritesInFlight == 0 && ReserveQueue.empty()) {
+        if (WritesInFlight == 0 && ReservesInFlight == 0) {
             if (Finished) {
                 Commit();
                 return;
@@ -76,13 +76,12 @@ class TIndexSstWriterActor :
             "TIndexSstWriterActor: Send ReserveChunk"),
             (Type, (ui64)type));
 
-        ReserveQueue.push(type);
-
         auto msg = std::make_unique<NPDisk::TEvChunkReserve>(
             PDiskCtx->Dsk->Owner,
             PDiskCtx->Dsk->OwnerRound,
             1);
-        Send(PDiskCtx->PDiskId, msg.release());
+        Send(PDiskCtx->PDiskId, msg.release(), 0, (ui64)type);
+        ++ReservesInFlight;
     }
 
     void Commit() {
@@ -168,17 +167,17 @@ class TIndexSstWriterActor :
     void Handle(NPDisk::TEvChunkReserveResult::TPtr& ev) {
         CHECK_PDISK_RESPONSE(VCtx, ev, TActivationContext::AsActorContext());
 
-        Y_VERIFY_S(!ReserveQueue.empty(), VCtx->VDiskLogPrefix);
-        auto type = ReserveQueue.front();
-        ReserveQueue.pop();
+        Y_VERIFY_S(ReservesInFlight, VCtx->VDiskLogPrefix);
+        --ReservesInFlight;
 
         auto msg = ev->Get();
         Y_VERIFY_S(msg->ChunkIds.size() == 1, VCtx->VDiskLogPrefix);
         auto chunkId = msg->ChunkIds.front();
+        auto type = (EWriterType)ev->Cookie;
 
         STLOG(PRI_DEBUG, BS_SYNCER, BSFS10, VDISKP(VCtx->VDiskLogPrefix,
             "TIndexSstWriterActor: Handle TEvChunkReserveResult"),
-            (ChunkId, chunkId), (Type, (ui32)type));
+            (ChunkId, chunkId), (Type, (ui64)type));
 
         switch (type) {
             case EWriterType::LOGOBLOBS:

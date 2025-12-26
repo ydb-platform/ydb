@@ -543,7 +543,7 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
         }
     }
 
-    if (LWPROBE_ENABLED(ColumnEngineForLogsSelect)) {
+    if (calculateProbe) {
         LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfInsertedIsUsed.MilliSeconds(), timeOfCompactedIsUsed.MilliSeconds(), totalPortionsCount, totalFilteredPortionsCount, out.size());
     }
 

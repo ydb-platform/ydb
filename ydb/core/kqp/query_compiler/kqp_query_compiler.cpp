@@ -739,6 +739,9 @@ public:
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
 
+        queryProto.SetDefaultTxMode(
+            Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));
+
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
         queryProto.SetEnableWatermarks(Config->EnableWatermarks);
         for (const auto& queryBlock : dataQueryBlocks) {
@@ -1588,15 +1591,21 @@ private:
         *vectorTopK.MutableSettings() = kmeansDesc.GetSettings().Getsettings();
 
         // Column index
+        THashMap<TStringBuf, ui32> readColumnIndexes;
         ui32 columnIdx = 0;
         for (const auto& column: streamLookupProto.GetColumns()) {
-            if (column == settings.VectorTopColumn) {
-                break;
-            }
-            columnIdx++;
+            readColumnIndexes[column] = columnIdx++;
         }
-        YQL_ENSURE(columnIdx < streamLookup.Columns().Size());
-        vectorTopK.SetColumn(columnIdx);
+        YQL_ENSURE(readColumnIndexes.contains(settings.VectorTopColumn));
+        vectorTopK.SetColumn(readColumnIndexes.at(settings.VectorTopColumn));
+
+        // Unique columns - required when we read from the index posting table and overlap is enabled
+        if (settings.VectorTopDistinct) {
+            for (const auto& keyColumn: mainTable->Metadata->KeyColumnNames) {
+                YQL_ENSURE(readColumnIndexes.contains(keyColumn));
+                vectorTopK.AddDistinctColumns(readColumnIndexes.at(keyColumn));
+            }
+        }
 
         // Limit - may be a parameter which will be linked later
         TExprBase expr(settings.VectorTopLimit);
@@ -1910,6 +1919,8 @@ private:
             // Index settings
             auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
             *vectorResolveProto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
+            vectorResolveProto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
+            vectorResolveProto.SetOverlapRatio(kmeansDesc.GetSettings().overlap_ratio());
 
             // Main table
             FillTablesMap(vectorResolve.Table(), tablesMap);

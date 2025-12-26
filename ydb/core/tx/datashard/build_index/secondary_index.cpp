@@ -408,7 +408,7 @@ private:
 };
 
 class TBuildIndexScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_INDEX_SCAN_ACTOR> {
-    const ui32 TargetDataColumnPos; // positon of first data column in target table
+    const NTable::TPos TargetDataColumnPos; // position of first data column in target table
 
 public:
     TBuildIndexScan(ui64 buildIndexId,

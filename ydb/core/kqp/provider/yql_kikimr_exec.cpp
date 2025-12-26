@@ -820,7 +820,7 @@ namespace {
             } else if (name == "token") {
                 dstSettings.EnsureOAuthToken().Token =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "token_secret_name") {
+            } else if (name == "token_secret_name" || name == "token_secret_path") {
                 dstSettings.EnsureOAuthToken().TokenSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "user") {
@@ -829,7 +829,7 @@ namespace {
             } else if (name == "password") {
                 dstSettings.EnsureStaticCredentials().Password =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "password_secret_name") {
+            } else if (name == "password_secret_name" || name == "password_secret_path") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "service_account_id") {
@@ -838,7 +838,7 @@ namespace {
             } else if (name == "initial_token") {
                 dstSettings.EnsureIamCredentials().InitialToken.Token =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "initial_token_secret_name") {
+            } else if (name == "initial_token_secret_name" || name == "initial_token_secret_path") {
                 dstSettings.EnsureIamCredentials().InitialToken.TokenSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "resource_id") {

@@ -486,10 +486,10 @@ class TLocalTableWriter
         }
     }
 
-    void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
+    void Handle(TEvWorker::TEvTerminateWriter::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
-        NoMoreData = true;
+        Terminating = true;
         if (IsAllSendersReadyOrUninit()) {
             Leave(TEvWorker::TEvGone::DONE);
         }
@@ -596,7 +596,7 @@ class TLocalTableWriter
         LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
 
-        if (NoMoreData && IsAllSendersReadyOrUninit()) {
+        if (Terminating && IsAllSendersReadyOrUninit()) {
             Leave(TEvWorker::TEvGone::DONE);
         }
     }
@@ -657,7 +657,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
-            hFunc(TEvWorker::TEvDataEnd, Handle);
+            hFunc(TEvWorker::TEvTerminateWriter, Handle);
             hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
@@ -684,7 +684,7 @@ private:
     TLightweightSchema::TCPtr Schema;
     bool Resolving = false;
     bool Initialized = false;
-    bool NoMoreData = false;
+    bool Terminating = false;
 
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
     TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge

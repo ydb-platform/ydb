@@ -375,7 +375,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         } else if (col.HasFamily()) {
             columnFamily = columnFamilyMerger.Get(col.GetFamily(), errStr);
         } else if (col.HasFamilyName()) {
-            columnFamily = columnFamilyMerger.AddOrGet(col.GetFamilyName(), errStr);
+            columnFamily = columnFamilyMerger.Get(col.GetFamilyName(), errStr);
         }
 
         if ((col.HasFamily() || col.HasFamilyName()) && !columnFamily) {
@@ -887,11 +887,12 @@ NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TA
 bool TPartitionConfigMerger::ApplyChanges(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
+    const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
     const TAppData *appData, const bool isServerlessDomain, TString &errDescr)
 {
     result.CopyFrom(src); // inherit all data from src
 
-    if (!ApplyChangesInColumnFamilies(result, src, changes, isServerlessDomain, errDescr)) {
+    if (!ApplyChangesInColumnFamilies(result, src, changes, columns, isServerlessDomain, errDescr)) {
         return false;
     }
 
@@ -1091,6 +1092,7 @@ bool TPartitionConfigMerger::ApplyChanges(
 bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
+    const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
     const bool isServerlessDomain,
     TString &errDescr)
 {
@@ -1207,6 +1209,15 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
 
             if (srcStorage.HasExternalChannelsCount()) {
                 dstStorage.SetExternalChannelsCount(srcStorage.GetExternalChannelsCount());
+            }
+        }
+    }
+
+    // generate families from family names in column descriptions if needed
+    for (const auto& col : columns) {
+        if (!col.HasFamily() && col.HasFamilyName()) {
+            if (!merger.AddOrGet(col.GetFamilyName(), errDescr)) {
+                return false;
             }
         }
     }
@@ -2443,7 +2454,13 @@ void TIndexBuildInfo::TKMeans::Set(ui32 level,
 }
 
 NKikimrTxDataShard::EKMeansState TIndexBuildInfo::TKMeans::GetUpload() const {
-    if (Level == 1) {
+    if (State == Filter) {
+        if (NeedsAnotherLevel()) {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD;
+        } else {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING;
+        }
+    } else if (Level == 1) {
         if (NeedsAnotherLevel()) {
             return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD;
         } else {
@@ -2461,18 +2478,33 @@ NKikimrTxDataShard::EKMeansState TIndexBuildInfo::TKMeans::GetUpload() const {
 TString TIndexBuildInfo::TKMeans::WriteTo(bool needsBuildTable) const {
     using namespace NTableIndex::NKMeans;
     TString name = PostingTable;
-    if (needsBuildTable || NeedsAnotherLevel()) {
-        name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
+    if (needsBuildTable || NeedsAnotherLevel() || OverlapClusters > 1 && Levels > 1 && State != Filter && State != FilterBorders) {
+        name += NextBuildIndex() == 0 ? BuildSuffix0 : BuildSuffix1;
     }
     return name;
 }
 
 TString TIndexBuildInfo::TKMeans::ReadFrom() const {
-    Y_ENSURE(Level > 1);
+    Y_ENSURE(Level > 1 || OverlapClusters > 1 && Levels > 1);
     using namespace NTableIndex::NKMeans;
     TString name = PostingTable;
-    name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
+    name += NextBuildIndex() == 0 ? BuildSuffix1 : BuildSuffix0;
     return name;
+}
+
+int TIndexBuildInfo::TKMeans::NextBuildIndex() const {
+    if (OverlapClusters > 1 && Levels > 1) {
+        if (IsPrefixed && Level == 1) {
+            return 1;
+        }
+        return (State == Filter || State == FilterBorders ? 1 : 0);
+    }
+    return Level % 2 != 0 ? 0 : 1;
+}
+
+const char* TIndexBuildInfo::TKMeans::NextBuildSuffix() const {
+    using namespace NTableIndex::NKMeans;
+    return NextBuildIndex() == 1 ? BuildSuffix1 : BuildSuffix0;
 }
 
 std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> TIndexBuildInfo::TKMeans::RangeToBorders(const TSerializedTableRange& range) const {
@@ -2660,7 +2692,7 @@ bool TColumnFamiliesMerger::Has(ui32 familyId) const {
 NKikimrSchemeOp::TFamilyDescription *TColumnFamiliesMerger::Get(ui32 familyId, TString &errDescr) {
     if (!Has(familyId)) {
         errDescr = TStringBuilder()
-            << "Column family with id: " << familyId << " doesn't present"
+            << "Column family with id " << familyId << " is not present"
             << ", auto generation new column family is allowed only by name in column description";
         return nullptr;
     }
@@ -2677,6 +2709,18 @@ NKikimrSchemeOp::TFamilyDescription *TColumnFamiliesMerger::AddOrGet(ui32 family
 
     auto& dstFamily = TPartitionConfigMerger::MutableColumnFamilyById(Container, DeduplicationById, familyId);
     return &dstFamily;
+}
+
+NKikimrSchemeOp::TFamilyDescription *TColumnFamiliesMerger::Get(const TString &familyName, TString &errDescr) {
+    const auto& canonicFamilyName = CanonizeName(familyName);
+
+    if (IdByName.contains(canonicFamilyName)) {
+        return Get(IdByName.at(canonicFamilyName), canonicFamilyName, errDescr);
+    }
+
+    errDescr = TStringBuilder() << "Column family with name " << familyName << " is not present";
+
+    return nullptr;
 }
 
 NKikimrSchemeOp::TFamilyDescription *TColumnFamiliesMerger::AddOrGet(const TString &familyName, TString &errDescr) {

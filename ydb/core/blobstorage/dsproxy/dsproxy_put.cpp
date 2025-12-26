@@ -91,6 +91,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     TBlobStorageGroupInfo::TGroupVDisks ExpiredVDiskSet;
 
     TDuration LongRequestThreshold;
+    TDuration MaxTimeout;
 
     void SanityCheck() {
         if (RequestsSent <= MaxSaneRequests) {
@@ -310,6 +311,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                 GetVDiskTimeMs(record.GetTimestamps()));
         }
 
+        if (CheckForExternalCancellation()) {
+            return;
+        }
+
         if (status == NKikimrProto::BLOCKED || status == NKikimrProto::DEADLINE) {
             TString error = TStringBuilder() << "Got VPutResult status# " << status << " from VDiskId# " << vdiskId;
             TPutImpl::TPutResultVec putResults;
@@ -384,6 +389,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                         NKikimrBlobStorage::EPutHandleClass_Name(PutImpl.GetPutHandleClass()),
                         NKikimrProto::EReplyStatus_Name(itemStatus));
             }
+        }
+
+        if (CheckForExternalCancellation()) {
+            return;
         }
 
         // Handle put results
@@ -552,7 +561,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
                 item.Recipient,
-                put = new TEvBlobStorage::TEvPut(item.BlobId, TRcBuf(item.Buffer), item.Deadline, HandleClass, Tactic,
+                put = new TEvBlobStorage::TEvPut(item.BlobId, std::move(item.Buffer), item.Deadline, HandleClass, Tactic,
                     item.IssueKeepFlag, item.IgnoreBlock),
                 0 /*flags*/,
                 item.Cookie,
@@ -589,13 +598,18 @@ public:
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())
         , LongRequestThreshold(params.LongRequestThreshold)
+        , MaxTimeout(params.MaxTimeout)
     {
         if (params.Common.Event->Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;
         }
-        ReportBytes(PutImpl.Blobs[0].Buffer.capacity() + sizeof(*this));
 
-        RequestBytes = params.Common.Event->Buffer.size();
+        RequestBytes = 0;
+        for (auto &item: PutImpl.Blobs) {
+            ReportBytes(item.Buffer.capacity());
+            RequestBytes += item.BufferSize;
+        }
+        ReportBytes(sizeof(*this));
         RequestHandleClass = HandleClassToHandleClass(HandleClass);
         MaxSaneRequests = Info->Type.TotalPartCount() * (1ull + Info->Type.Handoff()) * 2;
     }
@@ -615,6 +629,7 @@ public:
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())
         , LongRequestThreshold(params.LongRequestThreshold)
+        , MaxTimeout(params.MaxTimeout)
     {
         Y_DEBUG_ABORT_UNLESS(params.Events.size() <= MaxBatchedPutRequests);
         for (auto &ev : params.Events) {
@@ -652,7 +667,7 @@ public:
         TInstant now = TActivationContext::Now();
 
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            TInstant deadline = std::min(now + DsMaximumPutTimeout, PutImpl.Blobs[blobIdx].Deadline);
+            TInstant deadline = std::min(now + MaxTimeout, PutImpl.Blobs[blobIdx].Deadline);
             PutDeadlineMasks[deadline].set(blobIdx);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
@@ -726,6 +741,10 @@ public:
             << " BlobIDs# " << BlobIdSequenceToString()
             << " Not answered in "
             << (TActivationContext::Monotonic() - RequestStartTime) << " seconds");
+
+        if (CheckForExternalCancellation()) {
+            return;
+        }
 
         const TInstant now = TActivationContext::Now();
         while (!PutDeadlineMasks.empty()) {
@@ -826,7 +845,7 @@ public:
         }
 
         if (deadline != TInstant::Max()) {
-            Schedule(deadline, new TKikimrEvents::TEvWakeup);
+            Schedule(std::min(now + DsMaximumDelayBetweenPutWakeups, deadline), new TKikimrEvents::TEvWakeup);
         }
     }
 

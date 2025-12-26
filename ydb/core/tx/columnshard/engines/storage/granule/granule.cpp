@@ -148,12 +148,16 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
 }
 
 void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion) {
+    if (portion->GetPortionType() == EPortionType::Written) {
+        auto writtenPortion = std::static_pointer_cast<TWrittenPortionInfo>(portion);
+        const TInsertWriteId insertWriteId = writtenPortion->GetInsertWriteId();
+        if (AtomicGet(LastInsertWriteId) < (i64)insertWriteId) {
+            AtomicSet(LastInsertWriteId, (i64)insertWriteId);
+        }
+    }
     if (!portion->IsCommitted()) {
         const std::shared_ptr<TWrittenPortionInfo> portionImpl = std::static_pointer_cast<TWrittenPortionInfo>(portion);
         const TInsertWriteId insertWriteId = portionImpl->GetInsertWriteId();
-        if (AtomicGet(LastInsertWriteId) < (i64)portionImpl->GetInsertWriteId()) {
-            AtomicSet(LastInsertWriteId, (i64)portionImpl->GetInsertWriteId());
-        }
         AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portionImpl).second);
         AFL_VERIFY(InsertedPortionsById.emplace(portionImpl->GetPortionId(), portionImpl).second);
         AFL_VERIFY(!Portions.contains(portionImpl->GetPortionId()));
@@ -188,14 +192,14 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema);
     OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
-    THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
+    std::vector<std::shared_ptr<TPortionInfo>> portions;
     for (auto&& i : Portions) {
         if (i.second->HasRemoveSnapshot()) {
             continue;
         }
-        portions.emplace(i.first, i.second);
+        portions.emplace_back(i.second);
     }
-    OptimizerPlanner->ModifyPortions(portions, {});
+    OptimizerPlanner->ModifyPortions(std::move(portions), {});
 }
 /*
 

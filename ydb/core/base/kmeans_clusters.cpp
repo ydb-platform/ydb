@@ -1,5 +1,7 @@
 #include "kmeans_clusters.h"
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
@@ -85,6 +87,14 @@ namespace {
         ValidateSettingInRange(name, result, minValue, maxValue, error);
         return result;
     }
+
+    double ParseDouble(const TString& name, const TString& value, TString& error) {
+        double result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+        }
+        return result;
+    }
 }
 
 template <typename TRes>
@@ -134,10 +144,9 @@ struct TCosineSimilarity : TMetric<TCoord> {
     {
         const auto r = CosineImpl<TRes>(reinterpret_cast<const TCoord*>(cluster),
                                         reinterpret_cast<const TCoord*>(embedding), dimensions);
-        // sqrt(ll) * sqrt(rr) computed instead of sqrt(ll * rr) to avoid precision issues
-        const auto norm = std::sqrt(r.LL) * std::sqrt(r.RR);
+        const auto norm = std::sqrt(r.LL * r.RR);
         const TRes similarity = norm != 0 ? static_cast<TRes>(r.LR) / static_cast<TRes>(norm) : 0;
-        return -similarity;
+        return 1-similarity;
     }
 };
 
@@ -345,6 +354,35 @@ public:
         return false;
     }
 
+    void FindClusters(TArrayRef<const char> embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        if (!IsExpectedSize(embedding)) {
+            return;
+        }
+        clusters.clear();
+        for (ui32 i = 0; const auto& cluster : Clusters) {
+            auto cl = std::make_pair(i, (double)TMetric::Distance(cluster.data(), embedding.data(), Dimensions));
+            auto it = std::lower_bound(clusters.begin(), clusters.end(), cl, [](const std::pair<ui32, double>& a, const std::pair<ui32, double>& b) {
+                return a.second < b.second;
+            });
+            if (clusters.size() < n) {
+                clusters.insert(it, cl);
+            } else if (it != clusters.end()) {
+                clusters.insert(it, cl);
+                clusters.pop_back();
+            }
+            ++i;
+        }
+        if (skipRatio > 0 && clusters.size() > 1) {
+            double thresh = (clusters[0].second < 0 ? clusters[0].second/skipRatio : clusters[0].second*skipRatio);
+            for (ui32 i = 1; i < clusters.size(); i++) {
+                if (clusters[i].second > thresh) {
+                    clusters.resize(i);
+                    break;
+                }
+            }
+        }
+    }
+
     std::optional<ui32> FindCluster(TArrayRef<const char> embedding) override {
         if (!IsExpectedSize(embedding)) {
             return {};
@@ -367,7 +405,7 @@ public:
         return FindCluster(row.at(embeddingPos).AsRef());
     }
 
-    double CalcDistance(const TStringBuf a, const TStringBuf b) override {
+    double CalcDistance(TArrayRef<const char> a, TArrayRef<const char> b) override {
         return TMetric::Distance(a.data(), b.data(), Dimensions);
     }
 
@@ -514,6 +552,11 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     error = "";
 
+    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+        return false;
+    }
+
     if (!settings.has_settings()) {
         error = TStringBuilder() << "vector index settings should be set";
         return false;
@@ -539,6 +582,18 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
         return false;
     }
 
+    if (settings.has_overlap_clusters() &&
+        settings.overlap_clusters() > settings.clusters()) {
+        error = TStringBuilder() << "overlap_clusters should be less than or equal to clusters";
+        return false;
+    }
+
+    if (settings.has_overlap_ratio() &&
+        settings.overlap_ratio() < 0) {
+        error = TStringBuilder() << "overlap_ratio should be >= 0";
+        return false;
+    }
+
     ui64 clustersPowLevels = 1;
     for (ui64 i = 0; i < settings.levels(); ++i) {
         clustersPowLevels *= settings.clusters();
@@ -558,7 +613,10 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
 }
 
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
-    error = "";
+    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+        return false;
+    }
 
     if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
         error = TStringBuilder() << "either distance or similarity should be set";
@@ -614,12 +672,64 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, 
         settings.set_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
     } else if (nameLower =="levels") {
         settings.set_levels(ParseUInt32(name, value, MinLevels, MaxLevels, error));
+    } else if (nameLower == "overlap_clusters") {
+        settings.set_overlap_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+    } else if (nameLower == "overlap_ratio") {
+        settings.set_overlap_ratio(ParseDouble(name, value, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << name;
         return false;
     }
 
     return !error;
+}
+
+void FilterOverlapRows(TVector<TSerializedCellVec>& rows, size_t distancePos, ui32 overlapClusters, double overlapRatio) {
+    if (rows.size() <= 1) {
+        return;
+    }
+    std::sort(rows.begin(), rows.end(), [&](const TSerializedCellVec& a, const TSerializedCellVec& b) {
+        auto da = a.GetCells().at(distancePos).AsValue<double>();
+        auto db = b.GetCells().at(distancePos).AsValue<double>();
+        return da < db;
+    });
+    if (rows.size() > overlapClusters) {
+        rows.resize(overlapClusters);
+    }
+    if (overlapRatio > 0) {
+        auto thresh = rows[0].GetCells().at(distancePos).AsValue<double>();
+        thresh = (thresh < 0 ? thresh/overlapRatio : thresh*overlapRatio);
+        for (size_t i = 1; i < rows.size(); i++) {
+            auto d = rows[i].GetCells().at(distancePos).AsValue<double>();
+            if (d > thresh) {
+                rows.resize(i);
+                break;
+            }
+        }
+    }
+}
+
+void FilterOverlapRows(TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>& rowClusters, ui32 overlapClusters, double overlapRatio) {
+    if (rowClusters.size() <= 1) {
+        return;
+    }
+    std::sort(rowClusters.begin(), rowClusters.end(),
+        [&](const std::pair<NTableIndex::NKMeans::TClusterId, double>& a,
+            const std::pair<NTableIndex::NKMeans::TClusterId, double>& b) {
+            return a.second < b.second;
+        });
+    if (rowClusters.size() > overlapClusters) {
+        rowClusters.resize(overlapClusters);
+    }
+    if (overlapRatio > 0) {
+        double thresh = (rowClusters[0].second < 0 ? rowClusters[0].second/overlapRatio : rowClusters[0].second*overlapRatio);
+        for (size_t i = 1; i < rowClusters.size(); i++) {
+            if (rowClusters[i].second > thresh) {
+                rowClusters.resize(i);
+                break;
+            }
+        }
+    }
 }
 
 }

@@ -282,8 +282,19 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
     }
 
     template<typename TLhsArg, typename TRhsArg>
-    std::shared_ptr<IBaseOptimizerNode> CrossJoin(const TLhsArg& lhsArg, const TRhsArg& rhsArg, TString on="") {
-        return Join(lhsArg, rhsArg, on, EJoinKind::Cross);
+    std::shared_ptr<IBaseOptimizerNode> CrossJoin(const TLhsArg& lhsArg, const TRhsArg& rhsArg) {
+        return std::make_shared<TJoinOptimizerNode>(
+            TJoinOptimizerNode(
+                GetJoinArg(lhsArg),
+                GetJoinArg(rhsArg),
+                {},
+                {},
+                EJoinKind::Cross,
+                EJoinAlgoType::Undefined,
+                false,
+                false
+            )
+        );
     }
 
     Y_UNIT_TEST(SimpleDimpleJoin) {
@@ -382,6 +393,120 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         Enumerate(join);
     }
 
+    Y_UNIT_TEST(CrossJoinEliminationSimple) {
+        // A simple tree A - C - B. The inner join A=C,B=C will be split
+        // into two inner joins. And cross join {A}->{B} should be
+        // eliminated completely, leaving only two edges.
+
+        auto join = Join(CrossJoin("A", "B"), "C", "C=A,C=B");
+
+        auto graph = MakeJoinHypergraph<TNodeSet64>(join);
+        Cout << graph.String() << Endl;
+
+        UNIT_ASSERT(graph.GetEdges().size() == 2*2);
+
+        auto A = graph.GetNodesByRelNames({"A"});
+        auto B = graph.GetNodesByRelNames({"B"});
+        auto C = graph.GetNodesByRelNames({"C"});
+
+        // Inner join should split into two:
+        UNIT_ASSERT(graph.FindEdgeBetween(A, C));
+        UNIT_ASSERT(graph.FindEdgeBetween(C, B));
+
+        // Cross join should be eliminated:
+        UNIT_ASSERT(!graph.FindEdgeBetween(A, B));
+
+        Enumerate(join);
+    }
+
+    Y_UNIT_TEST(CrossJoinEliminationComplex) {
+        // Significantly more elaborate example, which contains
+        // 5 cross joins, only two of which are real.
+
+        // Not only that, it requires two passes of AddCrossJoins method,
+        // which makes it a good test of correctness of connectivity logic.
+        //
+        // Why does it require two passes?
+        //
+        // 1. First edge that will be generated in the hypergraph is
+        //    left join  {A, B}->{M}. This happens because the tree
+        //    is traversed depth-first left-to-right and all cross
+        //    joins are skipped in the initial hypergraph (and added
+        //    back later only if it is absolutely necessary).
+        // 2. This edge is disabled on the first pass, because A and B
+        //    are not yet connected (they will be connected later
+        //    by outside inner joins {F}->{A}, {F}->{B})
+        // 3. Because of that no cross joins can be enabled on the
+        //    first connectivity pass (both of them depend on A,B,M
+        //    all being connected). Therefore single pass will not
+        //    suffice -- if we stopped there, resulting graph would
+        //    have 3 separate connected components.
+        // 4. On the second pass {A, B}->{M} will be enabled, which
+        //    then will allow both real cross joins to be added too
+
+
+        // So this example has real and fake cross joins below and
+        // above a hyperedge (caused by left join)
+
+        auto join =
+            CrossJoin(
+                Join(
+                    CrossJoin(
+                        CrossJoin(
+                            LeftJoin(
+                                CrossJoin(
+                                    CrossJoin(
+                                        CrossJoin("A", "B"),
+                                        "C"
+                                    ),
+                                    "D"
+                                ),
+                                "M",
+                                "M=A,M=B"
+                            ),
+                            "H"
+                        ),
+                        "E"
+                    ),
+                    "F",
+                    "A=F,B=F,C=F,D=F,E=F"
+                ),
+                "N"
+            );
+
+        auto graph = MakeJoinHypergraph<TNodeSet64>(join);
+        Cout << graph.String() << Endl;
+
+        UNIT_ASSERT(graph.GetEdges().size() == 2*8);
+
+        auto A = graph.GetNodesByRelNames({"A"});
+        auto B = graph.GetNodesByRelNames({"B"});
+        auto C = graph.GetNodesByRelNames({"C"});
+        auto D = graph.GetNodesByRelNames({"D"});
+        auto M = graph.GetNodesByRelNames({"M"});
+        auto H = graph.GetNodesByRelNames({"H"});
+        auto E = graph.GetNodesByRelNames({"E"});
+        auto F = graph.GetNodesByRelNames({"F"});
+        auto N = graph.GetNodesByRelNames({"N"});
+
+        auto assertEdge = [&](TNodeSet64 lhs, TNodeSet64 rhs, EJoinKind kind) {
+            auto* edge = graph.FindEdgeBetween(lhs, rhs);
+            UNIT_ASSERT(edge);
+            UNIT_ASSERT(edge->JoinKind == kind);
+        };
+
+        assertEdge(A | B, M, EJoinKind::LeftJoin);
+        assertEdge(A, F, EJoinKind::InnerJoin);
+        assertEdge(B, F, EJoinKind::InnerJoin);
+        assertEdge(C, F, EJoinKind::InnerJoin);
+        assertEdge(D, F, EJoinKind::InnerJoin);
+        assertEdge(E, F, EJoinKind::InnerJoin);
+        assertEdge(A | B | C | D | M, H, EJoinKind::Cross);
+        assertEdge(A | B | C | D | M | H | E | F, N, EJoinKind::Cross);
+
+        Enumerate(join);
+    }
+
     Y_UNIT_TEST(SimpleCycle) {
         auto join = Join("A", Join("B", "C"), "A=B,A=C");
 
@@ -460,6 +585,55 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             auto optimizedJoin = Enumerate(join, TOptimizerHints::Parse("Rows(B C # 0)"));
             UNIT_ASSERT(HaveSameConditionCount(optimizedJoin, join));
         }
+    }
+
+    Y_UNIT_TEST(TwoJoinsTwoTheSameKeyInCyclicGraphTransitiveClosure) {
+        auto join = Join(Join("A", "B", "A.a_a=B.b_a"), "C", "A.a_a=C.c_a,B.b_b=C.c_a");
+
+        auto graph = MakeJoinHypergraph<TNodeSet64>(join);
+        Cout << graph.String() << Endl;
+
+        auto A = graph.GetNodesByRelNames({"A"});
+        auto B = graph.GetNodesByRelNames({"B"});
+        auto C = graph.GetNodesByRelNames({"C"});
+
+        // Check that edge lhsNodes -> rhsNodes exists and has the same
+        // condition as specified in expectedCondition in format:
+        // "a_a=b_b,a_b=b_b" (note lhs, rhs are sorted and conditions are sorted)
+        auto checkConditions = [&graph](auto lhsNodes, auto rhsNodes, const std::string& expectedCondition) {
+            auto* edge = graph.FindEdgeBetween(lhsNodes, rhsNodes);
+            UNIT_ASSERT(edge);
+
+            // Extract actual join key names from hyperedge
+            UNIT_ASSERT_EQUAL(edge->LeftJoinKeys.size(), edge->RightJoinKeys.size());
+            std::vector<std::pair<std::string, std::string>> actualJoinKeys;
+            for (ui32 i = 0; i < edge->LeftJoinKeys.size(); ++ i) {
+                std::string lhs = edge->LeftJoinKeys[i].AttributeName.c_str();
+                std::string rhs = edge->RightJoinKeys[i].AttributeName.c_str();
+                actualJoinKeys.emplace_back(std::min(lhs, rhs), std::max(lhs, rhs));
+            }
+
+            std::sort(actualJoinKeys.begin(), actualJoinKeys.end());
+
+            std::string actualCondition = "";
+            for (auto [lhs, rhs] : actualJoinKeys) {
+                if (!actualCondition.empty()) {
+                    actualCondition += ",";
+                }
+
+                actualCondition += lhs + "=" + rhs;
+            }
+
+            // Ensure expected and actual join keys are the same
+            UNIT_ASSERT_STRINGS_EQUAL(actualCondition, expectedCondition);
+        };
+
+        checkConditions(A, B, "a_a=b_a,a_a=b_b");
+        checkConditions(B, A, "a_a=b_a,a_a=b_b");
+        checkConditions(A, C, "a_a=c_a");
+        checkConditions(C, A, "a_a=c_a");
+        checkConditions(B, C, "b_a=c_a,b_b=c_a");
+        checkConditions(C, B, "b_a=c_a,b_b=c_a");
     }
 
     auto MakeClique(size_t size) {

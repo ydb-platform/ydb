@@ -4699,8 +4699,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         TIndexBuildInfo::FillFromRow(rowset, &buildInfo);
                     });
 
-                    if (!Self->EnableVectorIndex) { // prevent build index from progress
+                    if (buildInfo->IsBuildColumns()) {
+                        if (!Self->PathsById.contains(buildInfo->TablePathId)) {
+                            buildInfo->IsBroken = true;
+                            buildInfo->AddIssue(TStringBuilder() << "Table path id not found: " << buildInfo->TablePathId.ToString());
+                        }
+
+                        buildInfo->TargetName = TPath::Init(buildInfo->TablePathId, Self).PathString();
+                    }
+
+                    // prevent build index from progress
+                    if (buildInfo->IsBuildVectorIndex() && !Self->EnableVectorIndex) {
                         buildInfo->IsBroken = true;
+                        buildInfo->AddIssue(TStringBuilder() << "Vector index is not enabled");
                     }
 
                     // Note: broken build are also added to IndexBuilds
@@ -4770,10 +4781,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeSample::Id>();
                     fillBuildInfoByIdSafe(id, "KMeansTreeSample", [&](TIndexBuildInfo& buildInfo) {
-                        buildInfo.Sample.Add(
-                            rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
-                            rowset.GetValue<Schema::KMeansTreeSample::Data>()
-                        );
+                        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Filter ||
+                            buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::FilterBorders) {
+                            buildInfo.KMeans.FilterBorderRows.push_back(rowset.GetValue<Schema::KMeansTreeSample::Data>());
+                        } else {
+                            buildInfo.Sample.Add(
+                                rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
+                                rowset.GetValue<Schema::KMeansTreeSample::Data>()
+                            );
+                        }
                     });
                     sampleCount++;
 

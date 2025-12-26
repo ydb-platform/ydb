@@ -78,7 +78,12 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
             return;
         }
 
-        const auto maxInFlight = tableInfo->TTLSettings().GetEnabled().GetSysSettings().GetMaxShardsInFlight();
+        // table-level MaxShardsInFlight overrides database-level MaxTTLShardsInFlight
+        const auto& sysSettings = tableInfo->TTLSettings().GetEnabled().GetSysSettings();
+        const auto maxInFlight = (sysSettings.HasMaxShardsInFlight()
+            ? sysSettings.GetMaxShardsInFlight()
+            : Self->MaxTTLShardsInFlight
+        );
 
         while (true) {
             if (maxInFlight && tableInfo->GetInFlightCondErase().size() >= maxInFlight) {

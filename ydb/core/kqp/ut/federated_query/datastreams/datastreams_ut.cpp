@@ -135,11 +135,6 @@ public:
                 .UseLocalCheckpointsInStreamingQueries = true,
             });
 
-            if (GetTestParam("DEFAULT_LOG", "enabled") == "enabled") {
-                auto& runtime = *Kikimr->GetTestServer().GetRuntime();
-                runtime.SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
-                runtime.SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
-            }
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableStreamingQueries(true);
         }
@@ -577,7 +572,10 @@ public:
         UNIT_ASSERT_C(graph, "Empty graph response");
         UNIT_ASSERT_VALUES_EQUAL_C(graph->Get()->Status, Ydb::StatusIds::SUCCESS, graph->Get()->Issues.ToOneLineString());
 
-        return graph->Get()->PhysicalGraph;
+        const auto& graphProto = graph->Get()->PhysicalGraph;
+        UNIT_ASSERT(graphProto);
+
+        return *graphProto;
     }
 
     void CheckScriptExecutionsCount(ui64 expectedExecutionsCount, ui64 expectedLeasesCount) {
@@ -905,6 +903,66 @@ protected:
 protected:
     TString InputTopic;
     TString OutputTopic;
+};
+
+class TTestTopicLoader : public TActorBootstrapped<TTestTopicLoader> {
+public:
+    TTestTopicLoader(const TString& endpoint, const TString& database, const TString& topic, NThreading::TFuture<void> feature)
+        : Client(TDriver(TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetDatabase(database)
+        ))
+        , WriteSession(Client.CreateWriteSession(NTopic::TWriteSessionSettings().Path(topic)))
+        , Feature(feature)
+        , Message(1_KB, 'x')
+    {}
+
+    STRICT_STFUNC(StateFunc, 
+        sFunc(TEvents::TEvWakeup, WriteMessages)
+    )
+
+    void Bootstrap() {
+        Become(&TTestTopicLoader::StateFunc);
+        Schedule(Timeout, new TEvents::TEvWakeup());
+        WriteMessages();
+    }
+
+    void WriteMessages() {
+        if (Feature.HasValue() || Timeout <= TInstant::Now()) {
+            PassAway();
+            WriteSession->Close(TDuration::Zero());
+            return;
+        }
+
+        const auto event = WriteSession->GetEvent();
+        if (!event) {
+            WriteSession->WaitEvent().Subscribe([actorSystem = ActorContext().ActorSystem(), selfId = SelfId()](const auto&) {
+                actorSystem->Send(selfId, new TEvents::TEvWakeup());
+            });
+            return;
+        }
+
+        if (std::holds_alternative<NTopic::TSessionClosedEvent>(*event)) {
+            const auto& status = std::get<NTopic::TSessionClosedEvent>(*event);
+            UNIT_FAIL(status.GetStatus() << ", issues: " << status.GetIssues().ToOneLineString());
+        }
+
+        if (std::holds_alternative<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(*event)) {
+            WriteSession->Write(
+                std::move(std::get<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(*event).ContinuationToken),
+                Message
+            );
+        }
+
+        Schedule(TDuration::Zero(), new TEvents::TEvWakeup());
+    }
+
+private:
+    NTopic::TTopicClient Client;
+    const std::shared_ptr<NTopic::IWriteSession> WriteSession;
+    const NThreading::TFuture<void> Feature;
+    const TString Message;
+    const TInstant Timeout = TInstant::Now() + TDuration::Seconds(60);
 };
 
 } // anonymous namespace
@@ -2715,6 +2773,88 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         testNoAccess();
     }
 
+    Y_UNIT_TEST_F(OffsetsRecoveryAfterManualAndInternalRetry, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,InputTopic";
+        constexpr char outputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,OutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char consumerName[] = "unknownConsumer";
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.Consumer = "{consumer_name}";
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "consumer_name"_a = consumerName
+        ));
+
+        WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            TString issues;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                issues = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+            });
+
+            error = TStringBuilder() << "Query issues: " << issues;
+            return issues.Contains("no read rule provided for consumer 'unknownConsumer' in topic");
+        });
+
+        ExecExternalQuery(fmt::format(R"(
+            ALTER TOPIC `{input_topic}` ADD CONSUMER `{consumer_name}`;)",
+            "input_topic"_a = inputTopicName,
+            "consumer_name"_a = consumerName
+        ));
+
+        WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            TString status;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                status = *resultSet.ColumnParser("Status").GetOptionalUtf8();
+            });
+
+            error = TStringBuilder() << "Query status: " << status;
+            return status == "RUNNING";
+        });
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
+        ReadTopicMessage(outputTopicName, R"({"key": "key1", "value": "value1"})");
+        Sleep(TDuration::Seconds(1));
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+
+        const auto disposition = TInstant::Now();
+        WriteTopicMessage(inputTopicName, R"({"key": "key2", "value": "value2"})");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+
+        ReadTopicMessage(outputTopicName, R"({"key": "key2", "value": "value2"})", disposition);
+    }
+
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnInternalRetry, TStreamingTestFixture) {
         QueryClientSettings = TClientSettings();
 
@@ -3394,7 +3534,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(pqSourceName);
 
         for (const bool rowTables : {true, false}) {
-            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
+            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbTablesWithProjection" << rowTables;
             CreateTopic(inputTopicName);
 
             const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
@@ -3443,6 +3583,72 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ));
             CheckScriptExecutionsCount(0, 0);
         }
+    }
+
+    Y_UNIT_TEST_F(DropStreamingQueryUnderLoad, TStreamingTestFixture) {
+        LogSettings.Freeze = true;
+        SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(1);
+
+        constexpr char inputTopicName[] = "inputTopic";
+        constexpr char outputTopicName[] = "outputTopic";
+        constexpr char pqSourceName[] = "pqSource";
+        ExecQuery(fmt::format(R"(
+            CREATE TOPIC `{input_topic}` WITH (
+                min_active_partitions = 100,
+                partition_count_limit = 100
+            );
+            CREATE TOPIC `{output_topic}` WITH (
+                min_active_partitions = 100,
+                partition_count_limit = 100
+            );
+            CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{pq_location}",
+                DATABASE_NAME = "{pq_database_name}",
+                AUTH_METHOD = "NONE"
+            );)",
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "pq_source"_a = pqSourceName,
+            "pq_location"_a = GetKikimrRunner()->GetEndpoint(),
+            "pq_database_name"_a = "/Root"
+        ));
+
+        const auto queryName = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.MaxTasksPerStage = "100";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 100 }}
+                ] @@;
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        auto promise = NThreading::NewPromise();
+        Y_DEFER {
+            promise.SetValue();
+        };
+
+        for (ui32 i = 0; i < 10; ++i) {
+            GetRuntime().Register(new TTestTopicLoader(GetKikimrRunner()->GetEndpoint(), "/Root", inputTopicName, promise.GetFuture()));
+        }
+
+        Sleep(TDuration::Seconds(2));
+        CheckScriptExecutionsCount(1, 1);
+
+        ExecQuery(fmt::format(R"(
+            DROP STREAMING QUERY `{query_name}`;)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(0, 0);
     }
 }
 

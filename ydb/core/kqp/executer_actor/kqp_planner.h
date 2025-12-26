@@ -73,7 +73,7 @@ public:
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
-    bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
+    bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target, bool isShutdown = false);
     std::unique_ptr<IEventHandle> PlanExecution();
     std::unique_ptr<IEventHandle> AssignTasksToNodes();
     bool AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state);
@@ -87,6 +87,7 @@ public:
 
     const THashMap<TActorId, TProgressStat>& GetPendingComputeActors();
     const THashSet<ui64>& GetPendingComputeTasks();
+    TMaybe<ui64> GetActualNodeIdForTask(ui64 taskId) const;
 
     ui32 GetnScanTasks();
     ui32 GetnComputeTasks();

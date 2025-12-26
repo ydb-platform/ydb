@@ -7,6 +7,7 @@
 #include "object_processing.h"
 #include "source.h"
 #include "antlr_token.h"
+#include "secret_settings.h"
 
 #include <yql/essentials/sql/settings/partitioning.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
@@ -107,7 +108,6 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& con
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv1LexerTokens;
 using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
@@ -3546,6 +3546,8 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     //    | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     //    | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
     //    | WATERMARK AS LPAREN expr RPAREN
+    //    | WATERMARK EQUALS expr
+
     switch (rule.Alt_case()) {
     case TRule_table_hint::kAltTableHint1: {
         const auto& alt = rule.GetAlt_table_hint1();
@@ -3667,6 +3669,18 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         const auto pos = Ctx_.TokenPosition(alt.GetToken1());
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4());
+        if (!expr) {
+            return false;
+        }
+        hints["watermark"] = { BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr)) };
+        break;
+    }
+
+    case TRule_table_hint::kAltTableHint5: {
+        const auto& alt = rule.GetAlt_table_hint5();
+        const auto pos = Ctx_.TokenPosition(alt.GetToken1());
+        TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
+        auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr3());
         if (!expr) {
             return false;
         }
@@ -5204,7 +5218,7 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
         Ctx_.Error() << "SOURCE_TYPE requires key";
         return false;
     }
-    if (!ValidateAuthMethod(result)) {
+    if (!ValidateExternalDataSourceAuthMethod(result, Ctx_)) {
         return false;
     }
     return true;
@@ -5244,6 +5258,8 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
         case TRule_alter_external_data_source_action::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
+
+    // no ValidateExternalDataSourceAuthMethod is called b/c its impossible to check format with previously saved settings
 }
 
 bool TSqlTranslation::StoreSecretInheritPermissions(
@@ -5382,50 +5398,6 @@ bool TSqlTranslation::ParseSecretId(const TRule_id_or_at& node, TString& objectI
     if (objectId.empty()) {
         Error() << "Empty secret name";
         return false;
-    }
-    return true;
-}
-
-bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {
-    const static TSet<TStringBuf> allAuthFields{
-        "service_account_id",
-        "service_account_secret_name",
-        "login",
-        "password_secret_name",
-        "aws_access_key_id_secret_name",
-        "aws_secret_access_key_secret_name",
-        "aws_region",
-        "token_secret_name"
-    };
-    const static TMap<TStringBuf, TSet<TStringBuf>> authMethodFields{
-        {"NONE", {}},
-        {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}},
-        {"BASIC", {"login", "password_secret_name"}},
-        {"AWS", {"aws_access_key_id_secret_name", "aws_secret_access_key_secret_name", "aws_region"}},
-        {"MDB_BASIC", {"service_account_id", "service_account_secret_name", "login", "password_secret_name"}},
-        {"TOKEN", {"token_secret_name"}}
-    };
-    auto authMethodIt = result.find("auth_method");
-    if (authMethodIt == result.end() || authMethodIt->second.GetLiteral() == nullptr) {
-        Ctx_.Error() << "AUTH_METHOD requires key";
-        return false;
-    }
-    const auto& authMethod = *authMethodIt->second.GetLiteral();
-    auto it = authMethodFields.find(authMethod);
-    if (it == authMethodFields.end()) {
-        Ctx_.Error() << "Unknown AUTH_METHOD = " << authMethod;
-        return false;
-    }
-    const auto& currentAuthFields = it->second;
-    for (const auto& authField: allAuthFields) {
-        if (currentAuthFields.contains(authField) && !result.contains(TString{authField})) {
-            Ctx_.Error() << to_upper(TString{authField}) << " requires key";
-            return false;
-        }
-        if (!currentAuthFields.contains(authField) && result.contains(TString{authField})) {
-            Ctx_.Error() << to_upper(TString{authField}) << " key is not supported for AUTH_METHOD = " << authMethod;
-            return false;
-        }
     }
     return true;
 }

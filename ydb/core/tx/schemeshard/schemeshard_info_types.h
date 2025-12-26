@@ -152,6 +152,7 @@ struct TColumnFamiliesMerger {
     bool Has(ui32 familyId) const;
     NKikimrSchemeOp::TFamilyDescription* Get(ui32 familyId, TString &errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(ui32 familyId, TString& errDescr);
+    NKikimrSchemeOp::TFamilyDescription* Get(const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* Get(ui32 familyId, const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(ui32 familyId, const TString&  familyName, TString& errDescr);
@@ -175,11 +176,13 @@ struct TPartitionConfigMerger {
     static bool ApplyChanges(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
+        const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
         const TAppData* appData, const bool isServerlessDomain, TString& errDescr);
 
     static bool ApplyChangesInColumnFamilies(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
+        const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
         const bool isServerlessDomain, TString& errDescr);
 
     static THashMap<ui32, size_t> DeduplicateColumnFamiliesById(NKikimrSchemeOp::TPartitionConfig& config);
@@ -3173,6 +3176,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 K = 0;
         ui32 Levels = 0;
         ui32 Rounds = 0;
+        ui32 OverlapClusters = 0;
+        double OverlapRatio = 0;
+        bool IsPrefixed = false;
 
         // progress
         enum EState : ui32 {
@@ -3180,6 +3186,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Reshuffle,
             MultiLocal,
             Recompute,
+            Filter,
+            FilterBorders,
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -3194,6 +3202,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         NTableIndex::NKMeans::TClusterId ChildBegin = 1;  // included
         NTableIndex::NKMeans::TClusterId Child = ChildBegin;
+
+        TVector<TString> FilterBorderRows;
 
         ui64 TableSize = 0;
 
@@ -3220,6 +3230,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TString WriteTo(bool needsBuildTable = false) const;
         TString ReadFrom() const;
+        int NextBuildIndex() const;
+        const char* NextBuildSuffix() const;
 
         std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> RangeToBorders(const TSerializedTableRange& range) const;
 
@@ -3635,7 +3647,14 @@ public:
                     Y_ENSURE(NKikimr::NKMeans::ValidateSettings(desc.settings(), createError), createError);
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
+                    indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
                     indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
+                    indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()
+                        ? desc.settings().overlap_clusters()
+                        : NTableIndex::NKMeans::DefaultOverlapClusters;
+                    indexInfo->KMeans.OverlapRatio = desc.settings().has_overlap_ratio()
+                        ? desc.settings().overlap_ratio()
+                        : NTableIndex::NKMeans::DefaultOverlapRatio;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
                     Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
@@ -3666,7 +3685,9 @@ public:
         TSerializedTableRange bound{range};
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
             "AddShardStatus id# " << Id << " shard " << shardIdx);
-        if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex) {
+        if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
+            KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
+            KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders) {
             AddParent(bound, shardIdx);
         }
         Shards.emplace(

@@ -500,11 +500,11 @@ namespace NKikimr::NGRpcProxy::V1 {
                               const Ydb::StatusIds::StatusCode dubsStatus)
     {
         if (config.GetPartitionConfig().HasStorageLimitBytes() && config.GetPartitionConfig().GetStorageLimitBytes() > 0) {
-            auto hasMLP = AnyOf(config.GetConsumers(), [](auto& consumer) {
+            auto hasMLP = AnyOf(config.GetConsumers(), [](const auto& consumer) {
                 return consumer.GetType() == ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
             });
             if (hasMLP) {
-                error = TStringBuilder() << "Storage limit bytes is not supported for MLP consumers";
+                error = TStringBuilder() << "Retention by storage size is not supported for shared consumers";
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }

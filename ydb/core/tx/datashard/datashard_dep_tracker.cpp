@@ -370,14 +370,17 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
 
     auto processImmediatePlanned = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
         onImmediateConflict(*conflict);
+        return true;
     };
 
     auto processPlannedPlanned = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
         op->AddDependency(conflict);
+        return true;
     };
 
     auto processPlannedImmediate = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
         op->AddImmediateConflict(conflict);
+        return true;
     };
 
     // Second pass, add dependencies

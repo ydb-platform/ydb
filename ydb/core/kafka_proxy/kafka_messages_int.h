@@ -492,6 +492,8 @@ public:
 
                 value->Magic = 2;
                 value->Attributes = v0.Record.Attributes & 0x07;
+                value->BaseTimestamp = 0;
+                value->BaseOffset = 0;
 
                 value->Records.resize(1);
                 auto& record = value->Records.front();

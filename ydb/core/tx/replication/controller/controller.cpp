@@ -293,7 +293,6 @@ void TController::Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActo
 }
 
 void TController::Handle(TEvDiscovery::TEvDiscoveryData::TPtr& ev, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
     CLOG_T(ctx, "Handle " << ev->Get()->ToString());
 
     auto result = NodesManager.ProcessResponse(ev, ctx);

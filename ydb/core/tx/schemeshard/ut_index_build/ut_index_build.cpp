@@ -431,7 +431,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
                             NLs::PathVersionEqual(3)});
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        runtime.GetAppData().DataShardConfig.SetStatsReportIntervalSeconds(0);
         NDataShard::gDbStatsDataSizeResolution = 80000;
 
         auto upgradeEvent = [&](TAutoPtr<IEventHandle>& ev) -> auto {
@@ -828,10 +828,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
         opts.DisableStatsBatching(true);
+        opts.DataShardStatsReportIntervalSeconds(0);
         TTestEnv env(runtime, opts);
         runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
-
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         ui64 txId = 100;
 

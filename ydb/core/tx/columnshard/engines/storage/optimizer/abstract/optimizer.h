@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
@@ -151,18 +152,31 @@ public:
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
     }
 
-    bool IsOverloaded() const {
+    bool IsOverloaded(const NMonitoring::TDynamicCounters::TCounterPtr& badPortions) const {
         if (!AppDataVerified().FeatureFlags.GetEnableCompactionOverloadDetection()) {
             return false;
         }
-        if (NodePortionsCountLimit) {
-            if (std::cmp_less_equal(*NodePortionsCountLimit, NodePortionsCounter.Val())) {
-                return true;
-            }
-        } else if (std::cmp_less_equal(DynamicPortionsCountLimit.load(), NodePortionsCounter.Val())) {
+
+        if (std::cmp_less_equal(GetBadPortionsLimit(), badPortions->Val())) {
             return true;
         }
+
+        if (std::cmp_less_equal(GetNodePortionsCountLimit(), NodePortionsCounter.Val())) {
+            return true;
+        }
+
         return DoIsOverloaded();
+    }
+
+    ui64 GetBadPortionsLimit() const {
+        if (AppDataVerified().ColumnShardConfig.GetBadPortionsLimit()) {
+            return AppDataVerified().ColumnShardConfig.GetBadPortionsLimit();
+        }
+        return 2 * GetNodePortionsCountLimit();
+    }
+
+    ui64 GetNodePortionsCountLimit() const {
+        return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
     }
 
     bool IsHighPriority() const {

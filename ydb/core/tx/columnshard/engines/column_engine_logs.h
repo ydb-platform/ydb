@@ -65,6 +65,9 @@ private:
     TVersionedPresetSchemas VersionedSchemas;
 
 public:
+    NMonitoring::TDynamicCounters::TCounterPtr GetBadPortionsCounter() const {
+        return SignalCounters.BadPortionsCount;
+    }
 
     const TVersionedPresetSchemas& GetVersionedSchemas() const {
         return VersionedSchemas;

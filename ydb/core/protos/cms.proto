@@ -471,6 +471,7 @@ message TCmsConfig {
         optional EEvictVDisksStatus EvictVDisksStatus = 15;
         
         optional uint32 GoodStateLimit = 16 [default = 5];
+        optional uint64 InitialDeploymentGracePeriod = 20 [default = 600000000];
     }
 
     message TLogConfig {

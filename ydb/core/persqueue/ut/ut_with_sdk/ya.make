@@ -33,6 +33,7 @@ SRCS(
     balancing_ut.cpp
     commitoffset_ut.cpp
     mirrorer_ut.cpp
+    topic_ut.cpp
 )
 
 END()

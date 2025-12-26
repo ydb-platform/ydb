@@ -47,11 +47,12 @@ void TActor::Handle(TEvFlushBuffer::TPtr& /*ev*/) {
 void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     auto* evBase = ev->Get();
     AFL_VERIFY(evBase->GetWriteData()->GetBlobsAction()->GetStorageId() == NOlap::IStoragesManager::DefaultStorageId);
+    bool isBulkUpsert = evBase->GetContext()->GetIsBulk();
 
     SumSize += evBase->GetWriteData()->GetSize();
     const auto& pathId = evBase->GetWriteData()->GetWriteMeta().GetPathId().InternalPathId;
     const ui64 schemaVersion = evBase->GetContext()->GetActualSchema()->GetVersion();
-    TAggregationId aggrId(pathId, schemaVersion, evBase->GetWriteData()->GetWriteMeta().GetModificationType());
+    TAggregationId aggrId(pathId, schemaVersion, evBase->GetWriteData()->GetWriteMeta().GetModificationType(), isBulkUpsert);
     auto it = Aggregations.find(aggrId);
     if (it == Aggregations.end()) {
         it = Aggregations
@@ -60,8 +61,10 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     } else {
         it->second.MergeContext(*evBase->GetContext());
     }
+    auto& columnShardConfig = AppDataVerified().ColumnShardConfig;
     it->second.AddUnit(TWriteUnit(evBase->GetWriteData(), evBase->GetRecordBatch()));
-    if (it->second.GetSumSize() > (ui64)AppDataVerified().ColumnShardConfig.GetWritingBufferVolumeMb() * 1024 * 1024 || !FlushDuration) {
+    const bool forceFlush = columnShardConfig.GetOnlyBulkUpsertWritingBuffer() ? !isBulkUpsert || !columnShardConfig.GetBulkUpsertRequireAllColumns() : false;
+    if (it->second.GetSumSize() > (ui64)columnShardConfig.GetWritingBufferVolumeBytes() || !FlushDuration || forceFlush) {
         SumSize -= it->second.GetSumSize();
         it->second.Flush(TabletId);
     }

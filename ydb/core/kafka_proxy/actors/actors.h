@@ -44,6 +44,7 @@ struct TContext {
     TString FolderId;
     TString CloudId;
     TString DatabaseId;
+    TString ResourceDatabasePath;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientDC;
     bool IsServerless = false;

@@ -31,19 +31,6 @@ namespace NWilson {
         static constexpr ui32 MAX_TIME_TO_LIVE = 4095;
 
     private:
-        TTraceId(TTrace traceId, ui64 spanId, ui8 verbosity, ui32 timeToLive)
-            : TraceId(traceId)
-        {
-            if (timeToLive == Max<ui32>()) {
-                timeToLive = MAX_TIME_TO_LIVE;
-            }
-            Y_ABORT_UNLESS(verbosity <= MAX_VERBOSITY);
-            Y_ABORT_UNLESS(timeToLive <= MAX_TIME_TO_LIVE);
-            SpanId = spanId;
-            Verbosity = verbosity;
-            TimeToLive = timeToLive;
-        }
-
         static TTrace GenerateTraceId() {
             for (;;) {
                 TTrace res;
@@ -73,6 +60,19 @@ namespace NWilson {
         using TSerializedTraceId = char[sizeof(TTrace) + sizeof(ui64) + sizeof(ui32)];
 
     public:
+        TTraceId(TTrace traceId, ui64 spanId, ui8 verbosity, ui32 timeToLive)
+            : TraceId(traceId)
+        {
+            if (timeToLive == Max<ui32>()) {
+                timeToLive = MAX_TIME_TO_LIVE;
+            }
+            Y_ABORT_UNLESS(verbosity <= MAX_VERBOSITY);
+            Y_ABORT_UNLESS(timeToLive <= MAX_TIME_TO_LIVE);
+            SpanId = spanId;
+            Verbosity = verbosity;
+            TimeToLive = timeToLive;
+        }
+
         TTraceId(ui64) // NBS stub
             : TTraceId()
         {}

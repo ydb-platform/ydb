@@ -29,6 +29,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/persqueue/obfuscate
 #    ydb/library/persqueue/tests
     ydb/library/persqueue/topic_parser
+    ydb/library/cloud_permissions
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos

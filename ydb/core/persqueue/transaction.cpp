@@ -248,6 +248,14 @@ void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPred
     }
 
     OnPartitionResult(event, decision);
+
+    if (!event.IssueMsg.empty()) {
+        NKikimrPQ::TError error;
+        error.SetKind(NKikimrPQ::TError::BAD_REQUEST);
+        error.SetReason(event.IssueMsg);
+
+        Error = std::move(error);
+    }
 }
 
 void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, NKikimrPQ::TPartitions::TPartitionInfo& partition) {

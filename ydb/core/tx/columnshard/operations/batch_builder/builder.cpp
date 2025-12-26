@@ -102,7 +102,7 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         }
     }
     std::shared_ptr<NDataReader::IRestoreTask> task =
-        std::make_shared<NOlap::TModificationRestoreTask>(std::move(WriteData), merger, ActualSnapshot, batch, Context);
+        std::make_shared<NOlap::TModificationRestoreTask>(std::move(WriteData), merger, batch, Context);
     NActors::TActivationContext::AsActorContext().Register(new NDataReader::TActor(task));
 }
 

@@ -38,6 +38,25 @@ static const TString CLIENTID_COMPACTION_CONSUMER = "__ydb_compaction_consumer";
 
 typedef TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor> TUserLabeledCounters;
 
+struct TMessageInfo {
+    TInstant CreateTimestamp;
+    TInstant WriteTimestamp;
+};
+
+struct TConsumerSnapshot {
+    TInstant Now;
+
+    TMessageInfo LastCommittedMessage;
+
+    i64 ReadOffset;
+    TInstant LastReadTimestamp;
+    TMessageInfo LastReadMessage;
+
+    TDuration ReadLag;
+    TDuration CommitedLag;
+    TDuration TotalLag;
+};
+
 struct TUserInfoBase {
     TString User;
     ui64 ReadRuleGeneration = 0;
@@ -58,13 +77,20 @@ struct TUserInfoBase {
 };
 
 struct TUserInfo: public TUserInfoBase {
-    TInstant WriteTimestamp;
-    TInstant CreateTimestamp;
-    TInstant ReadTimestamp;
     bool ActualTimestamps = false;
+    // WriteTimestamp of the last committed message
+    TInstant WriteTimestamp;
+    // CreateTimestamp of the last committed message
+    TInstant CreateTimestamp;
+
+    // Timstamp of the last read
+    TInstant ReadTimestamp;
 
     i64 ReadOffset = -1;
+
+    // WriteTimestamp of the last read message
     TInstant ReadWriteTimestamp;
+    // CreateTimestamp of the last read message
     TInstant ReadCreateTimestamp;
     ui64 ReadOffsetRewindSum = 0;
 
@@ -179,13 +205,13 @@ struct TUserInfo: public TUserInfoBase {
     )
         : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
                         readFromTimestamp, partitionSession, pipeClient, committedMetadata}
+        , ActualTimestamps(false)
         , WriteTimestamp(TAppData::TimeProvider->Now())
         , CreateTimestamp(TAppData::TimeProvider->Now())
         , ReadTimestamp(TAppData::TimeProvider->Now())
-        , ActualTimestamps(false)
         , ReadOffset(-1)
-        , ReadWriteTimestamp(TAppData::TimeProvider->Now())
-        , ReadCreateTimestamp(TAppData::TimeProvider->Now())
+        , ReadWriteTimestamp(TInstant::Zero())
+        , ReadCreateTimestamp(TInstant::Zero())
         , ReadOffsetRewindSum(readOffsetRewindSum)
         , ReadScheduled(false)
         , HasReadRule(false)
@@ -338,30 +364,9 @@ struct TUserInfo: public TUserInfoBase {
         return ReadTimestamp;
     }
 
-    TInstant GetWriteTimestamp(i64 endOffset) const {
-        return Offset == endOffset ? TAppData::TimeProvider->Now() : WriteTimestamp;
-    }
-
-    TInstant GetCreateTimestamp(i64 endOffset) const {
-        return Offset == endOffset ? TAppData::TimeProvider->Now() : CreateTimestamp;
-    }
-
-    TInstant GetReadWriteTimestamp(i64 endOffset) const {
-        TInstant ts =  ReadOffset == -1 ? WriteTimestamp : ReadWriteTimestamp;
-        ts = GetReadOffset() >= endOffset ? TAppData::TimeProvider->Now() : ts;
-        return ts;
-    }
-
     ui64 GetWriteLagMs() const {
         return WriteLagMs.GetValue();
     }
-
-    TInstant GetReadCreateTimestamp(i64 endOffset) const {
-        TInstant ts = ReadOffset == -1 ? CreateTimestamp : ReadCreateTimestamp;
-        ts = GetReadOffset() >= endOffset ? TAppData::TimeProvider->Now() : ts;
-        return ts;
-    }
-
 };
 
 class TUsersInfoStorage {

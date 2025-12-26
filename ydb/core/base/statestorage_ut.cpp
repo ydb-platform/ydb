@@ -57,31 +57,31 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
 
     Y_UNIT_TEST(TestReplicaSelection) {
         UNIT_ASSERT(StabilityRun(3, 3, 1, false) == 17606246762804570019ULL);
-        UNIT_ASSERT(StabilityRun(13, 3, 1, false) == 421354124534079828ULL);
-        UNIT_ASSERT(StabilityRun(13, 9, 1, false) == 10581416019959162949ULL);
+        UNIT_ASSERT(StabilityRun(13, 3, 1, false) == 6799095354188407094ULL);
+        UNIT_ASSERT(StabilityRun(13, 9, 1, false) == 9959984117877048199ULL);
         UNIT_ASSERT(StabilityRun(3, 3, 1, true) == 17606246762804570019ULL);
-        UNIT_ASSERT(StabilityRun(13, 3, 1, true) == 421354124534079828ULL);
-        UNIT_ASSERT(StabilityRun(13, 9, 1, true) == 10581416019959162949ULL);
+        UNIT_ASSERT(StabilityRun(13, 3, 1, true) == 6799095354188407094ULL);
+        UNIT_ASSERT(StabilityRun(13, 9, 1, true) == 9959984117877048199ULL);
     }
 
     Y_UNIT_TEST(TestMultiReplicaFailDomains) {
         UNIT_ASSERT(StabilityRun(3, 3, 3, false) == 12043409773822600429ULL);
-        UNIT_ASSERT(StabilityRun(13, 3, 5, false) == 3265154396592024904ULL);
-        UNIT_ASSERT(StabilityRun(13, 9, 8, false) == 12079940289459527060ULL);
+        UNIT_ASSERT(StabilityRun(13, 3, 5, false) == 16389704234708466102ULL);
+        UNIT_ASSERT(StabilityRun(13, 9, 8, false) == 15827315848675537518ULL);
         UNIT_ASSERT(StabilityRun(3, 3, 3, true) == 7845257406715748850ULL);
-        UNIT_ASSERT(StabilityRun(13, 3, 5, true) == 1986618578793030392ULL);
-        UNIT_ASSERT(StabilityRun(13, 9, 8, true) == 6173011524598124144ULL);
+        UNIT_ASSERT(StabilityRun(13, 3, 5, true) == 16411438521907095913ULL);
+        UNIT_ASSERT(StabilityRun(13, 9, 8, true) == 5026957911653120252ULL);
     }
 
     Y_UNIT_TEST(TestReplicaSelectionUniqueCombinations) {
-        UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(13, 3, 1, false), 0.000206, 1e-7);
-        UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(13, 3, 3, false), 0.000519, 1e-7);
+        UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(13, 3, 1, false), 0.000205, 1e-7);
+        UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(13, 3, 3, false), 0.000518, 1e-7);
         UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(113, 3, 1, false), 0.009091, 1e-7);
         UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(113, 3, 5, false), 0.045251, 1e-7);
         UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(113, 9, 1, false), 0.009237, 1e-7);
         UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(113, 9, 8, false), 0.01387, 1e-7);
-        UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(13, 3, 1, true), 0.000206, 1e-7);
-        UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(13, 3, 3, true), 0.004263, 1e-7);
+        UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(13, 3, 1, true), 0.000205, 1e-7);
+        UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(13, 3, 3, true), 0.004262, 1e-7);
         UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(113, 3, 1, true), 0.009091, 1e-7);
         UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(113, 3, 5, true), 0.63673, 1e-7);
         UNIT_ASSERT_DOUBLES_EQUAL(UniqueCombinationsRun(113, 9, 1, true), 0.009237, 1e-7);
@@ -129,6 +129,17 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
         UNIT_ASSERT(UniformityRun(113, 3, 5, true) < 0.10);
         UNIT_ASSERT(UniformityRun(113, 9, 1, true) < 0.10);
         UNIT_ASSERT(UniformityRun(113, 9, 8, true) < 0.10);
+    }
+
+    Y_UNIT_TEST(Tablet72075186224040026Test) {
+        TStateStorageInfo info;
+        FillStateStorageInfo(&info, 9, 5, 1, false);
+        NKikimr::TStateStorageInfo::TSelection selection;
+        info.SelectReplicas(72075186224040026UL, &selection);
+        ui32 expected[] = {0, 2, 1, 3, 4};
+        for (ui32 i : xrange(5)) {
+            UNIT_ASSERT_EQUAL(selection.SelectedReplicas[i].NodeId(), expected[i]);
+        }
     }
 }
 

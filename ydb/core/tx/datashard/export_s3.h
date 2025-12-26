@@ -4,6 +4,8 @@
 
 #include "export_iface.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 
 namespace NKikimr {

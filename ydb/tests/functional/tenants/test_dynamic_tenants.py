@@ -447,7 +447,7 @@ def test_check_access(ydb_cluster):
             calling(client.list_directory).with_args(
                 user_2['path']
             ),
-            raises(ydb.Unauthorized)
+            raises(ydb.SchemeError)
         )
 
         assert_that(

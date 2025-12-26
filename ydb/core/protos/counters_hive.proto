@@ -36,6 +36,8 @@ enum ESimpleCounters {
     COUNTER_AVG_CPU_UTILIZATION = 26 [(CounterOpts) = {Name: "AvgCPUUtilization"}];
     COUNTER_NODES_DOWN = 27 [(CounterOpts) = {Name: "NodesDown"}];
     COUNTER_NODES_FROZEN = 28 [(CounterOpts) = {Name: "NodesFrozen"}];
+    COUNTER_DELETE_TABLET_QUEUE_SIZE = 29 [(CounterOpts) = {Name: "DeleteTabletQueueSize"}];
+    COUNTER_TABLETS_DELETING = 30 [(CounterOpts) = {Name: "TabletsDeleting"}];
 }
 
 enum ECumulativeCounters {

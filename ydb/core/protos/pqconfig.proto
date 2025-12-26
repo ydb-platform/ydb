@@ -757,6 +757,7 @@ message TClientInfo {
     optional uint64 ReadLagMs = 5;
     optional uint64 LastReadTimestampMs = 8;
     optional uint64 TotalLagMs = 9;
+    optional uint64 CommitedLagMs = 10;
 }
 
 
@@ -1143,6 +1144,9 @@ message TTransaction {
         EXECUTED = 9;     // persist
         WAIT_RS_ACKS = 11;
         DELETING = 10;
+
+        EXPIRED = 12;
+        CANCELED = 13;
     };
 
     message TPredicateReceived {

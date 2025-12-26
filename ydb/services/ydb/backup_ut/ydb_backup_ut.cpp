@@ -2889,7 +2889,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreReplicationWithoutSecret, IsOlap) {
+    Y_UNIT_TEST_QUAD(RestoreReplicationWithoutSecret, IsOlap, UseSchemeSecret) {
         if (IsOlap) {
             return; // TODO: fix me issue@26498
         }
@@ -2913,15 +2913,24 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        if (UseSchemeSecret) {
+            ExecuteQuery(session, "CREATE SECRET `secret` WITH (value = 'root@builtin');", true);
+        } else {
+            ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        }
         ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k)) WITH (STORE = {store});", "store"_a = IsOlap ? "COLUMN" : "ROW"), true);
-        ExecuteQuery(session, Sprintf(R"(
-            CREATE ASYNC REPLICATION `/Root/replication` FOR
-                `/Root/table` AS `/Root/replica`
-            WITH (
-                CONNECTION_STRING = 'grpc://%s/?database=/Root',
-                TOKEN_SECRET_NAME = 'secret'
-            );)", endpoint.c_str()), true
+        ExecuteQuery(session,
+            Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = 'grpc://%s/?database=/Root',
+                    %s = 'secret'
+                );)",
+                endpoint.c_str(),
+                UseSchemeSecret ? "TOKEN_SECRET_PATH" : "TOKEN_SECRET_NAME"
+            ),
+            true
         );
         WaitReplicationInit(replicationClient, "/Root/replication");
 
@@ -2930,7 +2939,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        ExecuteQuery(session, "DROP OBJECT `secret` (TYPE SECRET);", true);
+        if (UseSchemeSecret) {
+            ExecuteQuery(session, "DROP SECRET `secret`;", true);
+        } else {
+            ExecuteQuery(session, "DROP OBJECT `secret` (TYPE SECRET);", true);
+        }
         ExecuteQuery(session, "DROP ASYNC REPLICATION `/Root/replication` CASCADE;", true);
         {
             const auto result = backupClient.Restore(pathToBackup, "/Root");
@@ -3599,7 +3612,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         });
     }
 
-    Y_UNIT_TEST_TWIN(ReplicasAreNotBackedUp, IsOlap) {
+    Y_UNIT_TEST_QUAD(ReplicasAreNotBackedUp, IsOlap, UseSchemeSecret) {
         if (IsOlap) {
             return; // TODO: fix me issue@26498
         }
@@ -3623,15 +3636,24 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        if (UseSchemeSecret) {
+            ExecuteQuery(session, "CREATE SECRET `secret` WITH (value = 'root@builtin');", true);
+        } else {
+            ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        }
         ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k)) WITH (STORE = {store});", "store"_a = IsOlap ? "COLUMN" : "ROW"), true);
-        ExecuteQuery(session, Sprintf(R"(
-            CREATE ASYNC REPLICATION `/Root/replication` FOR
-                `/Root/table` AS `/Root/replica`
-            WITH (
-                CONNECTION_STRING = 'grpc://%s/?database=/Root',
-                TOKEN_SECRET_NAME = 'secret'
-            );)", endpoint.c_str()), true
+        ExecuteQuery(session,
+            Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = 'grpc://%s/?database=/Root',
+                    %s = 'secret'
+                );)",
+                endpoint.c_str(),
+                UseSchemeSecret ? "TOKEN_SECRET_PATH" : "TOKEN_SECRET_NAME"
+            ),
+            true
         );
         WaitReplicationInit(replicationClient, "/Root/replication");
 

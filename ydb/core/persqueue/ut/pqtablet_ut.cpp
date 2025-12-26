@@ -1904,7 +1904,13 @@ Y_UNIT_TEST_F(Cancel_Tx, TPQTabletFixture)
 
     StartPQWriteTxsObserver();
 
+    // запись о транзакции не удаляется сразу
     SendCancelTransactionProposal({.TxId=txId});
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
 
     WaitForPQWriteTxs();
 }

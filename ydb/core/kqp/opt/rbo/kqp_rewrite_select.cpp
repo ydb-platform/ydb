@@ -292,6 +292,7 @@ void ToCamelCase(std::string& s) {
     std::transform(s.begin(), s.end(), s.begin(), f);
 }
 
+// FIXME: This function has a bug.
 TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext &ctx) {
     if (input->IsLambda()) {
         auto lambda = TCoLambda(input);
@@ -645,7 +646,6 @@ namespace NKqp {
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, const TKqpOptimizeContext& kqpCtx, ui64& uniqueSourceIdCounter, bool pgSyntax) {
     Y_UNUSED(typeCtx);
     Y_UNUSED(pgSyntax);
-
     TVector<TString> finalColumnOrder;
 
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
@@ -861,7 +861,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
 
         if (where) {
             TExprNode::TPtr lambda = where->Child(1)->Child(1);
-            lambda = ReplacePgOps(lambda, ctx);
+            if (pgSyntax) {
+                lambda = ReplacePgOps(lambda, ctx);
+            }
             lambda = FlattenNestedConjunctions(lambda, ctx);
             // clang-format off
             filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
@@ -1385,8 +1387,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
     }
 
     TVector<TCoAtom> columnAtomList;
-    for (auto c : finalColumnOrder) {
-        columnAtomList.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(c).Done());
+    for (const auto& column : finalColumnOrder) {
+        columnAtomList.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(column).Done());
     }
     auto columnOrder = Build<TCoAtomList>(ctx, node->Pos()).Add(columnAtomList).Done().Ptr();
 

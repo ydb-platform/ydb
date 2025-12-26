@@ -262,10 +262,11 @@ private:
         }
 
         // Add materialized index items to the end
-        exportInfo.Items.reserve(exportInfo.Items.size() + indexItems.size());
+        exportInfo->Items.reserve(exportInfo.Items.size() + indexItems.size());
         for (auto& item : indexItems) {
-            exportInfo->Items.push_back(std::move(item));
-            exportInfo->PendingItems.push_back(exportInfo.Items.size() - 1);
+            auto& refItems = exportInfo->Items;
+            refItems.push_back(std::move(item));
+            exportInfo->PendingItems.push_back(refItems.size() - 1);
         }
 
         return true;

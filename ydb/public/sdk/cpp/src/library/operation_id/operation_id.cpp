@@ -130,8 +130,12 @@ public:
         if (er != TState::ParsedOK) {
             ythrow yexception() << "Unable to parse input string";
         }
-        std::string path = uri.PrintS(TField::FlagPath).substr(1); // start from 1 to remove first '/'
-        if (path.length() < 1) {
+        std::string path = uri.PrintS(TField::FlagPath);
+        if (path.empty() || path[0] != '/') {
+            ythrow yexception() << "Operation ID must have a path";
+        }
+        path = path.substr(1); // start from 1 to remove first '/'
+        if (path.empty()) {
             ythrow yexception() << "Invalid path length";
         }
         int kind;

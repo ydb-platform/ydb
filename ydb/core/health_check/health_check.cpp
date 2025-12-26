@@ -673,6 +673,7 @@ public:
     }
 
     TString FilterDatabase;
+    TSubDomainKey FilterDatabaseKey;
     THashMap<TSubDomainKey, std::optional<TString>> FilterDomainKey; // nullopt for serverless
     TVector<TActorId> PipeClients;
     int Requests = 0;
@@ -1101,9 +1102,12 @@ public:
         return RequestTabletPipe<TEvSysView::TEvGetPartitionStatsResult>(schemeShardId, request.Release(), TTabletRequestsState::RequestGetPartitionStats);
     }
 
-    [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveInfo> RequestHiveInfo(TTabletId hiveId) {
+    [[nodiscard]] TRequestResponse<TEvHive::TEvResponseHiveInfo> RequestHiveInfo(TTabletId hiveId, std::optional<TSubDomainKey> filterDomain) {
         THolder<TEvHive::TEvRequestHiveInfo> request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
         request->Record.SetReturnFollowers(true);
+        if (filterDomain) {
+            request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(*filterDomain);
+        }
         return RequestTabletPipe<TEvHive::TEvResponseHiveInfo>(hiveId, request.Release());
     }
 
@@ -1708,7 +1712,7 @@ public:
         return HiveNodeStats.count(hiveId) == 0 || HiveInfo.count(hiveId) == 0;
     }
 
-    void AskHive(const TString& database, TTabletId hiveId) {
+    void AskHive(const TString& database, TTabletId hiveId, std::optional<TSubDomainKey> filterDomain) {
         TabletRequests.TabletStates[hiveId].Database = database;
         TabletRequests.TabletStates[hiveId].Type = TTabletTypes::Hive;
         if (HiveNodeStats.count(hiveId) == 0) {
@@ -1716,7 +1720,7 @@ public:
             ++HiveNodeStatsToGo;
         }
         if (HiveInfo.count(hiveId) == 0) {
-            HiveInfo[hiveId] = RequestHiveInfo(hiveId);
+            HiveInfo[hiveId] = RequestHiveInfo(hiveId, filterDomain);
         }
     }
 
@@ -1747,14 +1751,15 @@ public:
             FilterDomainKey[subDomainKey] = path;
 
             TTabletId hiveId = domainInfo->Params.GetHive();
+            auto filterDomain = IsSpecificDatabaseFilter() ? std::make_optional(subDomainKey) : std::nullopt;
             if (hiveId) {
                 DatabaseState[path].HiveId = hiveId;
                 if (NeedToAskHive(hiveId)) {
-                    AskHive(path, hiveId);
+                    AskHive(path, hiveId, filterDomain);
                 }
             } else if (RootHiveId && NeedToAskHive(RootHiveId)) {
                 DatabaseState[DomainPath].HiveId = RootHiveId;
-                AskHive(DomainPath, RootHiveId);
+                AskHive(DomainPath, RootHiveId, filterDomain);
             }
 
             TTabletId schemeShardId = domainInfo->Params.GetSchemeShard();

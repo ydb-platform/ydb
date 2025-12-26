@@ -4,6 +4,7 @@
 #include "event_load.h"
 
 #include <google/protobuf/io/zero_copy_stream.h>
+#include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/arena.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/deque.h>
@@ -49,6 +50,7 @@ namespace NActors {
 
         virtual bool WriteRope(const TRope *rope) = 0;
         virtual bool WriteString(const TString *s) = 0;
+        virtual NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() = 0;
     };
 
     class TAllocChunkSerializer final : public TChunkSerializer {
@@ -63,6 +65,10 @@ namespace NActors {
         // WARNING: these methods require owner to retain ownership and immutability of passed objects
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
+
+        NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
+            return nullptr;
+        }
 
         inline TIntrusivePtr<TEventSerializedData> Release(TEventSerializationInfo&& serializationInfo) {
             Buffers->SetSerializationInfo(std::move(serializationInfo));
@@ -106,6 +112,13 @@ namespace NActors {
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
 
+        NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
+            if (!CodedOutputStream) {
+                CodedOutputStream.reset(new NProtoBuf::io::CodedOutputStream(this));
+            }
+            return CodedOutputStream.get();
+        }
+
     protected:
         void DoRun() override;
         void Resume();
@@ -124,6 +137,7 @@ namespace NActors {
         bool AbortFlag;
         bool SerializationSuccess;
         bool Finished = false;
+        std::unique_ptr<NProtoBuf::io::CodedOutputStream> CodedOutputStream;
     };
 
     struct TProtoArenaHolder : public TAtomicRefCount<TProtoArenaHolder> {
@@ -198,7 +212,13 @@ namespace NActors {
             if (!SerializeToArcadiaStreamImpl(chunker, Payload)) {
                 return false;
             }
-            return Record.SerializeToZeroCopyStream(chunker);
+            if (auto *stream = chunker->GetCodedOutputStream()) {
+                Record.SerializeWithCachedSizes(stream);
+                stream->Trim();
+                return !stream->HadError();
+            } else {
+                return Record.SerializeToZeroCopyStream(chunker);
+            }
         }
 
         ui32 CalculateSerializedSize() const override {
@@ -423,8 +443,13 @@ namespace NActors {
                 return false;
             }
 
-            return Record.SerializeToZeroCopyStream(chunker);
-            
+            if (auto *stream = chunker->GetCodedOutputStream()) {
+                Record.SerializeWithCachedSizes(stream);
+                stream->Trim();
+                return !stream->HadError();
+            } else {
+                return Record.SerializeToZeroCopyStream(chunker);
+            }
         }
 
         ui32 CalculateSerializedSize() const override {

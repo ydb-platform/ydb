@@ -129,4 +129,13 @@ namespace NKikimr::NSqsTopic {
         );
     }
 
+
+    ui64 SampleIdFromRequestId(const TStringBuf requestId) {
+        if (sizeof(ui64) <= requestId.size()) [[likely]] {
+            return ReadUnaligned<ui64>(requestId.data());
+        }
+        ui64 result = 0;
+        memcpy(&result, requestId.data(), Min(sizeof(result), requestId.size()));
+        return result;
+    }
 } // namespace NKikimr::NSqsTopic

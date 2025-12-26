@@ -31,7 +31,7 @@ bool TLockableItem::IsLockedByPriorityLock() const {
         return false;
     }
 
-    if (AppData()->FeatureFlags.GetEnableCmsLocksPriority()) {
+    if (HasAppData() && AppData()->FeatureFlags.GetEnableCmsLocksPriority()) {
         return Locks.begin()->Priority <= DeactivatedLocksPriority;
     } else {
         return true; // only one lock is allowed despite of its priority

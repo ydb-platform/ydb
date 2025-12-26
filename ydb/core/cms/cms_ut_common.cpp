@@ -625,7 +625,8 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     runtime.GetAppData().DynamicNameserviceConfig = dnsConfig;
     runtime.GetAppData().DisableCheckingSysNodesCms = true;
     runtime.GetAppData().BootstrapConfig = TFakeNodeWhiteboardService::BootstrapConfig;
-    
+    runtime.GetAppData().FeatureFlags.SetEnableCmsLocksPriority(options.EnableCmsLocksPriority);
+
     if (options.IsBridgeMode) {
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             for (ui32 pileId = 0; pileId < options.PileCount; ++pileId) {

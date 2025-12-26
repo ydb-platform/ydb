@@ -69,7 +69,7 @@ bool TNodesCounterBase::IsNodeLocked(ui32 nodeId, i32 priority) const {
         return false;
     }
 
-    if (AppData()->FeatureFlags.GetEnableCmsLocksPriority()) {
+    if (HasAppData() && AppData()->FeatureFlags.GetEnableCmsLocksPriority()) {
         return node.Locks.begin()->Priority <= priority;
     } else {
         return true; // only one lock is allowed despite of its priority

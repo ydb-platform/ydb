@@ -2878,7 +2878,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckListPermissions("user", 1);
 
         // Middle priority request can continue
-        env.CheckRequest("user", r3.GetRequestId(), false, TStatus::ALLOW, 1);
+        r3 = env.CheckRequest("user", r3.GetRequestId(), false, TStatus::ALLOW, 1);
         env.CheckListPermissions("user", 2);
 
         // Done with basic request

@@ -7,7 +7,6 @@ metadata:
   cluster: ""
   version: 0
 config:
-  yaml_config_enabled: true
   erasure: mirror-3-dc
   fail_domain_type: disk
   self_management_config:
@@ -79,34 +78,37 @@ config:
       - member_groups: ["databaseNodes@cert"]
         subject_terms:
         - short_name: "O"
-          values: ["YDB"]
 ```
 
-Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN на актуальные в разделах `hosts` и `blob_storage_config`.
+Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN в разделе `hosts` и пути к дискам на актуальные в разделе `hosts_configs`.
 
 * Раздел `hosts`:
 
   ```yaml
   ...
   hosts:
-    - host: static-node-1.ydb-cluster.com #FQDN ВМ
-      host_config_id: 1
-      walle_location:
-        body: 1
-        data_center: 'zone-a'
-        rack: '1'
+  - host: ydb-node-zone-a.local
+    host_config_id: 1
+    location:
+      body: 1
+      data_center: 'zone-a'
+      rack: '1'
   ...
   ```
 
-* Раздел `blob_storage_config`:
+* Раздел `hosts_configs`:
 
   ```yaml
   ...
-  - fail_domains:
-    - vdisk_locations:
-      - node_id: static-node-1.ydb-cluster.com #FQDN ВМ
-        pdisk_category: SSD
-        path: /dev/disk/by-partlabel/ydb_disk_1
+  host_configs:
+  - host_config_id: 1
+    drive:
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+      type: SSD
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+      type: SSD
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+      type: SSD
   ...
   ```
 
@@ -221,19 +223,20 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
 На одном из серверов хранения в составе кластера выполните команды:
 
-Сначала получите авторизационный токен для регистрации запросов. Для этого выполните приведённую ниже команду.
-
-```bash
-/opt/ydb/bin/ydb --ca-file ca.crt -e grpcs://`hostname -f`:2135 -d /Root --user root --no-password auth get-token -f > auth_token
-```
-
 Инициализируйте кластер используя полученный токен
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydb --ca-file ca.crt -s grpcs://`hostname -f`:2135 -f auth_token \
+/opt/ydb/bin/ydb --ca-file ca.crt --client-cert-file node.crt \
+    --client-cert-key-file node.key -s grpcs://`hostname -f`:2135 -f auth_token \
     admin cluster bootstrap --uuid <строка>
 echo $?
+```
+
+После инициализации кластера для выполнения дальнейших административных команд необходимо предварительно получить аутентификационный токен.
+
+```bash
+/opt/ydb/bin/ydb --ca-file ca.crt -e grpcs://`hostname -f`:2135 -d /Root --user root --no-password auth get-token -f > auth_token
 ```
 
 При успешном выполнении инициализации кластера выведенный на экран код завершения команды инициализации кластера должен быть нулевым.

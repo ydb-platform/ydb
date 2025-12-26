@@ -17,15 +17,6 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-#define FS_LOG(verbose, stream) \
-    do { \
-        if (verbose) { \
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream); \
-        } else { \
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream); \
-        } \
-    } while (false)
-
 namespace {
 
 class TFsOperationActor : public NActors::TActorBootstrapped<TFsOperationActor> {
@@ -105,7 +96,8 @@ public:
         , Verbose(verbose)
         , ReplyAdapter(replyAdapter)
     {
-        FS_LOG(Verbose, "TFsOperationActor created: BasePath# " << BasePath);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor created"
+            << ": BasePath# " << BasePath);
     }
 
     ~TFsOperationActor() {
@@ -113,7 +105,7 @@ public:
     }
 
     void Bootstrap() {
-        FS_LOG(Verbose, "TFsOperationActor Bootstrap called");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor Bootstrap called");
         Become(&TThis::StateWork);
     }
 
@@ -125,15 +117,18 @@ public:
 private:
     void CleanupActiveSessions() {
         if (!ActiveUploads.empty()) {
-            FS_LOG(Verbose, "TFsOperationActor: cleaning up " << ActiveUploads.size() << " active MPU sessions");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor: cleaning up"
+                << ": active MPU sessions# " << ActiveUploads.size());
             for (auto& [uploadId, session] : ActiveUploads) {
                 try {
                     session->File.Flush();
                     session->File.Close();
-                    FS_LOG(Verbose, "TFsOperationActor: closed MPU session: uploadId# " << uploadId);
+                    LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor: closed MPU session"
+                        << ": uploadId# " << uploadId);
                 } catch (const std::exception& ex) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-                        "Failed to close MPU session: uploadId# " << uploadId << ", error# " << ex.what());
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "Failed to close MPU session"
+                        << ": uploadId# " << uploadId
+                        << ", error# " << ex.what());
                 }
             }
             ActiveUploads.clear();
@@ -143,7 +138,8 @@ private:
 public:
 
     STATEFN(StateWork) {
-        FS_LOG(Verbose, "TFsOperationActor StateWork received event type# " << ev->GetTypeRewrite());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsOperationActor StateWork received event type"
+            << ": type# " << ev->GetTypeRewrite());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPutObjectRequest, Handle);
             hFunc(TEvGetObjectRequest, Handle);
@@ -159,8 +155,8 @@ public:
             hFunc(TEvUploadPartCopyRequest, Handle);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-                    "TFsOperationActor StateWork received unknown event type# " << ev->GetTypeRewrite());
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,  "TFsOperationActor StateWork received unknown event type"
+                    << ": type# " << ev->GetTypeRewrite());
         }
     }
 
@@ -169,14 +165,17 @@ public:
         const auto& body = ev->Get()->Body;
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG(Verbose, "FS PutObject: key# " << key << ", size# " << body.size());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "PutObject"
+            << ": key# " << key
+            << ", size# " << body.size());
 
         try {
             WriteFile(key, body);
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const std::exception& ex) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-                "FS PutObject failed: key# " << key << ", error# " << ex.what());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "PutObject failed"
+                << ": key# " << key
+                << ", error# " << ex.what());
             ReplyError<TEvPutObjectResponse>(ev->Sender, key, ex.what());
         }
     }
@@ -186,7 +185,7 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
         LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-            "FS GetObject: not implemented");
+            "GetObject: not implemented");
         ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Not implemented");
     }
 
@@ -195,7 +194,7 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
         LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-            "FS HeadObject: not implemented");
+            "HeadObject: not implemented");
         ReplyError<TEvHeadObjectResponse>(ev->Sender, key, "Not implemented");
     }
 
@@ -203,7 +202,7 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-            "FS DeleteObject: not implemented");
+            "DeleteObject: not implemented");
         ReplyError<TEvDeleteObjectResponse>(ev->Sender, key, "Not implemented");
     }
 
@@ -211,22 +210,23 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-            "FS CheckObjectExists: not implemented");
+            "CheckObjectExists: not implemented");
         ReplyError<TEvCheckObjectExistsResponse>(ev->Sender, key, "Not implemented");
     }
 
     void Handle(TEvListObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString prefix = TString(request.GetPrefix().data(), request.GetPrefix().size());
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-            "FS ListObjects: prefix# " << prefix << ", not implemented");
-        ReplyError  <TEvListObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "ListObjects"
+            << ": prefix# " << prefix
+            << ", not implemented");
+        ReplyError<TEvListObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
     }
 
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-            "FS DeleteObjects: not implemented, objects count# " << request.GetDelete().GetObjects().size());
+            "DeleteObjects: not implemented, objects count# " << request.GetDelete().GetObjects().size());
         ReplyError<TEvDeleteObjectsResponse>(ev->Sender, std::nullopt, "Not implemented");
     }
 
@@ -242,7 +242,9 @@ public:
             auto session = std::make_unique<TMultipartUploadSession>(key);
             ActiveUploads[uploadId] = std::move(session);
 
-            FS_LOG(Verbose, "FS CreateMultipartUpload: key# " << key << ", uploadId# " << uploadId
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "CreateMultipartUpload"
+                << ": key# " << key
+                << ", uploadId# " << uploadId
                 << ", file opened with exclusive lock");
 
             Aws::S3::Model::CreateMultipartUploadResult awsResult;
@@ -254,7 +256,9 @@ public:
             ReplyAdapter.Reply(ev->Sender, std::move(response));
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-                "FS CreateMultipartUpload failed: key# " << key << ", error# " << ex.what());
+                "CreateMultipartUpload failed"
+                << ": key# " << key
+                << ", error# " << ex.what());
             ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, key, ex.what());
         }
     }
@@ -266,8 +270,11 @@ public:
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         const int partNumber = request.GetPartNumber();
 
-        FS_LOG(Verbose, "FS UploadPart: key# " << key << ", uploadId# " << uploadId
-            << ", part# " << partNumber << ", size# " << body.size());
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "UploadPart"
+            << ": key# " << key
+            << ", uploadId# " << uploadId
+            << ", part# " << partNumber
+            << ", size# " << body.size());
 
         try {
             auto it = ActiveUploads.find(uploadId);
@@ -280,8 +287,10 @@ public:
             session->File.Write(body.data(), body.size());
             session->TotalSize += body.size();
 
-            FS_LOG(Verbose, "FS UploadPart written under lock: uploadId# " << uploadId
-                << ", part# " << partNumber << ", total size# " << session->TotalSize);
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "UploadPart: written under lock"
+                << ": uploadId# " << uploadId
+                << ", part# " << partNumber
+                << ", total size# " << session->TotalSize);
 
             TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
 
@@ -293,7 +302,10 @@ public:
             ReplyAdapter.Reply(ev->Sender, std::move(response));
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-                "FS UploadPart failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
+                "UploadPart failed"
+                << ": key# " << key
+                << ", uploadId# " << uploadId
+                << ", error# " << ex.what());
             ReplyError<TEvUploadPartResponse>(ev->Sender, key, ex.what());
         }
     }
@@ -303,7 +315,9 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
-        FS_LOG(Verbose, "FS CompleteMultipartUpload: key# " << key << ", uploadId# " << uploadId);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "CompleteMultipartUpload"
+            << ": key# " << key
+            << ", uploadId# " << uploadId);
 
         try {
             auto it = ActiveUploads.find(uploadId);
@@ -316,7 +330,8 @@ public:
             session->File.Flush();
             session->File.Close();
 
-            FS_LOG(Verbose, "FS CompleteMultipartUpload: uploadId# " << uploadId
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "CompleteMultipartUpload"
+                << ": uploadId# " << uploadId
                 << ", total size# " << session->TotalSize << ", file closed, lock released");
 
             ActiveUploads.erase(it);
@@ -331,7 +346,7 @@ public:
             ReplyAdapter.Reply(ev->Sender, std::move(response));
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-                "FS CompleteMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
+                "CompleteMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
             ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender, key, ex.what());
         }
     }
@@ -341,12 +356,16 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
-        FS_LOG(Verbose, "FS AbortMultipartUpload: key# " << key << ", uploadId# " << uploadId);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "AbortMultipartUpload"
+            << ": key# " << key
+            << ", uploadId# " << uploadId);
 
         try {
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
-                FS_LOG(Verbose, "FS AbortMultipartUpload: session not found (already closed?): uploadId# " << uploadId);
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "AbortMultipartUpload"
+                    << ": session not found (already closed?)"
+                    << ": uploadId# " << uploadId);
             } else {
                 auto& session = it->second;
                 TString filePath = session->Key;
@@ -354,14 +373,18 @@ public:
                 ActiveUploads.erase(it);
                 NFs::Remove(filePath);
 
-                FS_LOG(Verbose, "FS AbortMultipartUpload: uploadId# " << uploadId
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "AbortMultipartUpload"
+                    << ": uploadId# " << uploadId
                     << ", file deleted, lock released");
             }
 
             ReplySuccess<TEvAbortMultipartUploadResponse>(ev->Sender, key);
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-                "FS AbortMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
+                "AbortMultipartUpload failed"
+                << ": key# " << key
+                << ", uploadId# " << uploadId
+                << ", error# " << ex.what());
             ReplyError<TEvAbortMultipartUploadResponse>(ev->Sender, key, ex.what());
         }
     }
@@ -371,7 +394,7 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
         LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-            "FS UploadPartCopy: not implemented");
+            "UploadPartCopy: not implemented");
         ReplyError<TEvUploadPartCopyResponse>(ev->Sender, key, "Not implemented");
     }
 
@@ -400,11 +423,12 @@ TFsExternalStorage::TFsExternalStorage(const TString& basePath, bool verbose)
 {
     InitReplyAdapter(nullptr);
     LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-        "TFsExternalStorage created: BasePath# " << BasePath << ", Verbose# " << Verbose);
+        "TFsExternalStorage created"
+        << ": BasePath# " << BasePath
+        << ", Verbose# " << Verbose);
 }
 
-TFsExternalStorage::~TFsExternalStorage()
-{
+TFsExternalStorage::~TFsExternalStorage() {
     Shutdown();
 }
 
@@ -418,12 +442,14 @@ void TFsExternalStorage::EnsureActor() const {
         actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     ActorCreated = true;
 
-    FS_LOG(Verbose, "TFsExternalStorage: Created persistent actor# " << OperationActorId);
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsExternalStorage: Created persistent actor"
+        << ": OperationActorId# " << OperationActorId);
 }
 
 void TFsExternalStorage::Shutdown() {
     if (ActorCreated && TlsActivationContext) {
-        FS_LOG(Verbose, "TFsExternalStorage: Shutting down actor# " << OperationActorId);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsExternalStorage: Shutting down actor"
+            << ": OperationActorId# " << OperationActorId);
         TlsActivationContext->AsActorContext().Send(OperationActorId, new NActors::TEvents::TEvPoison());
         ActorCreated = false;
     }
@@ -488,7 +514,5 @@ void TFsExternalStorage::Execute(TEvUploadPartCopyRequest::TPtr& ev) const {
     EnsureActor();
     TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
-
-#undef FS_LOG
 
 } // NKikimr::NWrappers::NExternalStorage

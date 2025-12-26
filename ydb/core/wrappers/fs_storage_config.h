@@ -2,7 +2,6 @@
 
 #include "abstract.h"
 
-#include <ydb/core/base/events.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/accessor/accessor.h>
 

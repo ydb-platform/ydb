@@ -117,7 +117,8 @@ public:
         Y_VALIDATE(Rx, "Can not read lines before Setup call");
 
         if (defaultValue) {
-            Rx->set_preload_buffer_without_changes(defaultValue);
+            // TODO use set_preload_buffer_without_changes
+            Rx->set_preload_buffer(defaultValue);
         }
 
         while (true) {

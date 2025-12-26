@@ -697,7 +697,8 @@ private:
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
-    const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool)
+    const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool,
+    bool rememberNullBitmaps)
 {
     TVector<IColumnDataExtractor::TPtr> extractors;
 
@@ -705,7 +706,7 @@ IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
         extractors.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, pool, type));
     }
 
-    return std::make_unique<TBlockLayoutConverter>(std::move(extractors), roles);
+    return std::make_unique<TBlockLayoutConverter>(std::move(extractors), roles, rememberNullBitmaps);
 }
 
 } // namespace NKikimr::NMiniKQL

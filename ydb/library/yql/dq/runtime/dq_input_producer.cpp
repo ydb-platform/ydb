@@ -178,7 +178,8 @@ private:
             }
             if (input->IsFinished()) {
                 if (WatermarksEnabled()) {
-                    WatermarksTracker->UnregisterInput(InputKeys[currentIndex].InputId, InputKeys[currentIndex].IsChannel, true);
+                    WatermarksTracker->UnregisterInput(InputKeys[currentIndex].InputId, InputKeys[currentIndex].IsChannel, /*silent=*/true);
+                    // silent because it can be called on inputs/channels without watermarks
                 }
                 std::swap(Inputs[currentIndex], Inputs[Alive - 1]);
                 std::swap(InputKeys[currentIndex], InputKeys[Alive - 1]);

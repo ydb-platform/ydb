@@ -165,7 +165,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 for (auto& [consumerName, _] : MLPConsumers) {
                                     TABLER() {
                                         TABLED() {
-                                            HREF(TStringBuilder() << "app?TabletID=" << TabletActorId << "&consumer=" << NHtml::EscapeAttributeValue(consumerName) << "&partitionId=" << Partition.OriginalPartitionId) {
+                                            HREF(TStringBuilder() << "app?TabletID=" << TabletId << "&consumer=" << NHtml::EscapeAttributeValue(consumerName) << "&partitionId=" << Partition.OriginalPartitionId) {
                                                 out <<  EncodeHtmlPcdata(consumerName);
                                             }
                                         }

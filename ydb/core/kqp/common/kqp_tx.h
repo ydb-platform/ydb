@@ -220,9 +220,15 @@ public:
         LastAccessTime = TInstant::Now();
     }
 
-    void OnBeginQuery() {
+    void OnBeginQuery(const TString& queryText = "") {
         ++QueriesCount;
         BeginQueryTime = TInstant::Now();
+        if (!queryText.empty()) {
+            // Only add if it's different from the previous query to avoid duplicates
+            if (QueryTexts.empty() || QueryTexts.back() != queryText) {
+                QueryTexts.push_back(queryText);
+            }
+        }
     }
 
     void OnEndQuery() {
@@ -242,6 +248,7 @@ public:
         HasTableWrite = false;
         HasTableRead = false;
         NeedUncommittedChangesFlush = false;
+        QueryTexts.clear();
     }
 
     TKqpTransactionInfo GetInfo() const;
@@ -345,6 +352,7 @@ public:
     TDuration QueriesDuration;
     ui32 QueriesCount = 0;
     ui32 ExecutorId = 0;
+    TVector<TString> QueryTexts;
 
     TKqpTxLocks Locks;
 

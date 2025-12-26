@@ -11,7 +11,7 @@ class TestYdbTestShardWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
-            erasure=Erasure.MIRROR_3_DC,
+            erasure=Erasure.NONE,
             extra_grpc_services=['test_shard'],
         )
 

@@ -3555,11 +3555,6 @@ bool TPersQueue::CanProcessWriteTxs() const
     return !WriteTxs.empty();
 }
 
-bool TPersQueue::CanProcessDeleteTxs() const
-{
-    return !DeleteTxs.empty();
-}
-
 bool TPersQueue::CanProcessTxWrites() const
 {
     return !NewSupportivePartitions.empty();
@@ -3597,7 +3592,6 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     bool canProcess =
         CanProcessProposeTransactionQueue() ||
         CanProcessWriteTxs() ||
-        CanProcessDeleteTxs() ||
         CanProcessTxWrites() ||
         TxWritesChanged
         ;
@@ -3608,9 +3602,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     auto request = MakeHolder<TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(WRITE_TX_COOKIE);
 
-    ProcessProposeTransactionQueue(ctx);
+    ProcessProposeTransactionQueue(ctx, request->Record);
     ProcessWriteTxs(ctx, request->Record);
-    ProcessDeleteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
 
     WriteTxsInProgress = true;
@@ -3666,9 +3659,14 @@ void TPersQueue::TryWriteTxs(const TActorContext& ctx)
     }
 }
 
-void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
+void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx,
+                                                NKikimrClient::TKeyValueRequest& request)
 {
     PQ_ENSURE(!WriteTxsInProgress);
+
+    if (CanProcessProposeTransactionQueue()) {
+        ProcessDeleteTxs(ctx, request);
+    }
 
     while (CanProcessProposeTransactionQueue()) {
         const auto front = std::move(EvProposeTransactionQueue.front());

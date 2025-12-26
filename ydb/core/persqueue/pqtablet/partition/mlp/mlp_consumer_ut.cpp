@@ -378,7 +378,6 @@ void HtmlApp(std::string_view consumer, size_t partitionId, std::string_view exp
     auto client = TTopicClient(driver);
 
     client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
-            .RetentionStorageMb(8)
             .BeginAddSharedConsumer("mlp-consumer")
                 .KeepMessagesOrder(false)
             .EndAddConsumer()).GetValueSync();

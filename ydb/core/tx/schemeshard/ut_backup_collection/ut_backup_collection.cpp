@@ -2848,4 +2848,117 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TString streamNameV3 = getCurrentStreamName(tablePath);
         UNIT_ASSERT_C(streamNameV2 != streamNameV3, "Stream name changed again");
     }
+
+    Y_UNIT_TEST(StreamRotationSafetyWithUserStreams) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString collectionSettings = R"(
+            Name: "SafetyCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/SafetyCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        TString prevSystemStreamName;
+        {
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/Table1", true, true);
+            for (const auto& stream : desc.GetPathDescription().GetTable().GetCdcStreams()) {
+                if (stream.GetName().EndsWith("_continuousBackupImpl")) {
+                    prevSystemStreamName = stream.GetName();
+                    break;
+                }
+            }
+        }
+        UNIT_ASSERT_C(!prevSystemStreamName.empty(), "Initial system stream must exist");
+
+        THashSet<TString> knownUserStreams;
+        TVector<TString> trickyNames = {
+            "000000000000000A_continuousBackupImpl",
+            "09700101000000Z_continuousBackupImpl",
+            "_continuousBackupImpl"
+        };
+
+        for (const auto& name : trickyNames) {
+            // User cannot set PROTO format
+            TString request = TStringBuilder() << R"(
+                TableName: "Table1"
+                StreamDescription {
+                  Name: ")" << name << R"("
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatJson
+                }
+            )";
+
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", request);
+            env.TestWaitNotification(runtime, txId);
+            knownUserStreams.insert(name);
+        }
+
+        const int iterations = 3;
+        for (int i = 0; i < iterations; ++i) {
+            runtime.AdvanceCurrentTime(TDuration::Seconds(5));
+
+            TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/SafetyCollection")");
+            env.TestWaitNotification(runtime, txId);
+
+            env.SimulateSleep(runtime, TDuration::Seconds(2));
+
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/Table1", true, true);
+            const auto& allStreams = desc.GetPathDescription().GetTable().GetCdcStreams();
+
+            TString newSystemStreamName;
+            int systemStreamsCount = 0;
+            int foundUserStreamsCount = 0;
+
+            for (const auto& stream : allStreams) {
+                TString name = stream.GetName();
+
+                if (knownUserStreams.contains(name)) {
+                    foundUserStreamsCount++;
+                } else {
+                    systemStreamsCount++;
+                    newSystemStreamName = name;
+                    
+                    UNIT_ASSERT_C(name.EndsWith("_continuousBackupImpl"), 
+                        "Unknown stream " << name << " found, expected system stream ending with _continuousBackupImpl");
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(foundUserStreamsCount, knownUserStreams.size(), 
+                "All user streams must survive the backup rotation");
+
+            UNIT_ASSERT_VALUES_EQUAL_C(systemStreamsCount, 1, 
+                "There must be exactly one system stream visible after rotation");
+
+            UNIT_ASSERT_VALUES_UNEQUAL_C(prevSystemStreamName, newSystemStreamName, 
+                "System stream must be rotated");
+
+            prevSystemStreamName = newSystemStreamName;
+        }
+    }
 } // TBackupCollectionTests

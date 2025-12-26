@@ -116,22 +116,23 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                 if (childName.EndsWith("_continuousBackupImpl")) {
                     TPath child = sPath.Child(childName);
                     if (!child.IsDeleted() && child.IsCdcStream()) {
-                        oldStreamName = childName;
+                        if (context.SS->CdcStreams.contains(childId)) {
+                            const auto& streamInfo = context.SS->CdcStreams.at(childId);
+                            if (streamInfo->Format == NKikimrSchemeOp::ECdcStreamFormatProto) {
+                                oldStreamName = childName;
+                            }
+                        }
                     }
                 }
             }
 
-            if (!oldStreamName.empty()) {
-                NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
+            NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
+            desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
 
-                desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
-                
+            if (!oldStreamName.empty()) {
                 auto* dropOp = desc.MutableDropSrcCdcStream();
                 dropOp->SetTableName(item.GetPath());
                 dropOp->AddStreamName(oldStreamName);
-            } else {
-                NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
-                desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
             }
             
             if (incrBackupEnabled && !omitIndexes) {
@@ -164,7 +165,12 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                         if (childNameInIndex.EndsWith("_continuousBackupImpl")) {
                             TPath child = indexTablePath.Child(childNameInIndex);
                             if (!child.IsDeleted() && child.IsCdcStream()) {
-                                oldIndexStreamName = childNameInIndex;
+                                if (context.SS->CdcStreams.contains(childIdInIndex)) {
+                                    const auto& streamInfo = context.SS->CdcStreams.at(childIdInIndex);
+                                    if (streamInfo->Format == NKikimrSchemeOp::ECdcStreamFormatProto) {
+                                        oldIndexStreamName = childNameInIndex;
+                                    }
+                                }
                             }
                         }
                     }

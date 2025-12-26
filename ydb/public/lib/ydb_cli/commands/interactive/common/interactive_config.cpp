@@ -321,12 +321,14 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupApiEndpoint(const std::o
                 return false;
             }
 
+#if defined(YDB_CLI_AI_ENABLED)
             try {
                 NAi::CreateApiUrl(url, "/");
             } catch (const std::exception& e) {
                 error = e.what();
                 return false;
             }
+#endif
 
             endpoint = url;
             return true;

@@ -76,7 +76,7 @@ const TBusNetworkCountersPtr& TTcpDispatcher::TImpl::GetCounters(const std::stri
 IPollerPtr TTcpDispatcher::TImpl::GetOrCreatePoller(
     IThreadPoolPollerPtr* pollerPtr,
     bool isXfer,
-    std::string threadNamePrefix)
+    TStringBuf threadNamePrefix)
 {
     {
         auto guard = ReaderGuard(PollersLock_);
@@ -169,13 +169,13 @@ int TTcpDispatcher::TImpl::GetMultiplexingParallelism(EMultiplexingBand band, in
 
 IPollerPtr TTcpDispatcher::TImpl::GetAcceptorPoller()
 {
-    static const TString ThreadNamePrefix("BusAcpt");
+    static const TStringBuf ThreadNamePrefix("BusAcpt");
     return GetOrCreatePoller(&AcceptorPoller_, false, ThreadNamePrefix);
 }
 
 IPollerPtr TTcpDispatcher::TImpl::GetXferPoller()
 {
-    static const TString ThreadNamePrefix("BusXfer");
+    static const TStringBuf ThreadNamePrefix("BusXfer");
     return GetOrCreatePoller(&XferPoller_, true, ThreadNamePrefix);
 }
 

@@ -36,9 +36,7 @@ public:
               TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
                   sorting == NReader::ERequestSorting::DESC),
               TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyStart() : portion->IndexKeyEnd(),
-                  sorting == NReader::ERequestSorting::DESC),
-              isVisible ? std::make_optional<ui64>()
-                        : static_cast<ui64>(VerifyDynamicCast<TWrittenPortionInfo*>(portion.get())->GetInsertWriteId()))
+                  sorting == NReader::ERequestSorting::DESC), !isVisible)
         , Portion(std::move(portion))
         , RecordsCount(portion->GetRecordsCount())
     {

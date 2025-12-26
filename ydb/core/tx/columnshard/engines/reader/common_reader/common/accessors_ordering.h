@@ -11,7 +11,7 @@ class TDataSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
     TReplaceKeyAdapter Start;
     TReplaceKeyAdapter Finish;
-    std::optional<ui64> SortingKey;
+    bool IsOutOfOrder;
     ui32 SourceIdx = 0;
     bool SourceIdxInitialized = false;
 
@@ -39,10 +39,10 @@ public:
         return std::move(Finish);
     }
 
-    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const std::optional<ui64>& specialSortingKey)
+    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const bool isOutOfOrder)
         : Start(std::move(start))
         , Finish(std::move(finish))
-        , SortingKey(specialSortingKey)
+        , IsOutOfOrder(isOutOfOrder)
     {
     }
 
@@ -104,14 +104,13 @@ public:
         }
 
         bool operator()(const TDataSourceConstructor& l, const TDataSourceConstructor& r) const {
-            if (l.SortingKey != r.SortingKey) {
-                if (!!l.SortingKey && !!r.SortingKey) {
-                    return l.SortingKey > r.SortingKey;
-                }
-                if (!!l.SortingKey) {
+            if (l.IsOutOfOrder || r.IsOutOfOrder) {
+                if (!r.IsOutOfOrder) {
                     return true;
                 }
-                AFL_VERIFY(!!r.SortingKey);
+                if (!l.IsOutOfOrder) {
+                    return false;
+                }
                 return false;
             }
             switch (Sorting) {

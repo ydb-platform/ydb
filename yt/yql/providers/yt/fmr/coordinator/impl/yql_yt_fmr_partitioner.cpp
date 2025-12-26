@@ -1,4 +1,4 @@
-#include "yql_yt_partitioner.h"
+#include "yql_yt_fmr_partitioner.h"
 #include <library/cpp/iterator/enumerate.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -159,6 +159,7 @@ TPartitionResult PartitionInputTablesIntoTasks(
         return TPartitionResult{.PartitionStatus = false};
     }
     settings.MaxParts = ytPartitionSettings.MaxParts - gottenFmrTasks.size();
+    Y_ENSURE(settings.PartitionMode == NYT::ETablePartitionMode::Unordered);
     auto [gottenYtTasks, ytPartitionStatus] = ytCoordinatorService->PartitionYtTables(ytInputTables, clusterConnections, settings);
     for (auto& ytTask: gottenYtTasks) {
         currentTasks.emplace_back(TTaskTableInputRef{.Inputs = {ytTask}});

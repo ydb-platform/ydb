@@ -389,6 +389,12 @@ TString TExecContextBaseSimple::GetAuth(const TYtSettings::TConstPtr& config) co
          auth = Clusters_->GetAuth(Cluster_);
     }
 
+    if (!auth || auth->empty()) {
+        if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
+            auth = ytTokenResolver->ResolveClusterToken(Cluster_);
+        }
+    }
+
     return auth.GetOrElse(TString());
 }
 

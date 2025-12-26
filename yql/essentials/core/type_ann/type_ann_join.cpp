@@ -271,6 +271,11 @@ namespace NTypeAnnImpl {
             }
 
             const TTypeAnnotationNode* itemType = list.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            if (itemType->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
                 ctx.Expr.AddError(TIssue(
                     ctx.Expr.GetPosition(list.Pos()),

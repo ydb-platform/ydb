@@ -5,6 +5,22 @@
 
 namespace NYql::NFmr {
 
+void TFmrUserJobSettings::Save(IOutputStream* buffer) const {
+    ::SaveMany(
+        buffer,
+        ThreadPoolSize,
+        QueueSizeLimit
+    );
+}
+
+void TFmrUserJobSettings::Load(IInputStream* buffer) {
+    ::LoadMany(
+        buffer,
+        ThreadPoolSize,
+        QueueSizeLimit
+    );
+}
+
 TYtTableRef::TYtTableRef()
 {
 }

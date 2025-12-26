@@ -3783,7 +3783,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         return IsIn({
             NYdb::NScheme::ESchemeEntryType::Table,
             NYdb::NScheme::ESchemeEntryType::View,
-        }, entry.Type);
+            NYdb::NScheme::ESchemeEntryType::Replication,
+        }, entry.Type) && entry.Name != "replica"; // Hack to avoid replica table export
     }
 
     void RecursiveListSourceToItems(TSchemeClient& schemeClient, const TString& source, const TString& destination,
@@ -4236,6 +4237,41 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    void TestReplicationBackupRestore(const bool isOlap, const TMaybe<ESecretType>& tokenSecretType) {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+        if (tokenSecretType) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+        auto driver = TDriver(driverConfig);
+        TSchemeClient schemeClient(driver);
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TReplicationClient replicationClient(driver);
+
+        if (tokenSecretType) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TestReplicationSettingsArePreserved(
+            endpoint,
+            session,
+            replicationClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), {"replication"}),
+            tokenSecretType, isOlap
+        );
+
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType, IsOlap) {
         if (IsOlap) {
             return; // TODO: fix me issue@26498
@@ -4266,6 +4302,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 TestChangefeedBackupRestore(IsOlap);
                 break;
             case EPathTypeReplication:
+                TestReplicationBackupRestore(IsOlap, ESecretType::SecretTypeOld);
+                TestReplicationBackupRestore(IsOlap, ESecretType::SecretTypeScheme);
+                return;
             case EPathTypeTransfer:
                 break; // https://github.com/ydb-platform/ydb/issues/10436
             case EPathTypeExternalTable:

@@ -1154,7 +1154,7 @@ TMaybeNode<TCoApply> FindMatchingApply(const TExprBase& node) {
             }
 
             auto udf = apply.Callable().Maybe<TCoUdf>().Cast();
-            if (IsIn({"FullText.Contains", "FullText.Relevance"}, udf.MethodName().Value())) {
+            if (IsIn({"FullText.Contains", "FullText.Relevance", "FullText.ContainsUtf8", "FullText.RelevanceUtf8"}, udf.MethodName().Value())) {
                 matchingApply = apply;
                 return false;
             }
@@ -1289,7 +1289,7 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
     auto searchQuery = args.Get(2);
     auto searchColumn = args.Get(1).Maybe<TCoMember>().Cast();
 
-    bool isRelevance = apply.Callable().Maybe<TCoUdf>().Cast().MethodName().Value() == "FullText.Relevance";
+    bool isRelevance = IsIn({"FullText.Relevance", "FullText.RelevanceUtf8"}, apply.Callable().Maybe<TCoUdf>().Cast().MethodName().Value());
 
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
         .Add(Build<TCoAtom>(ctx, node.Pos())

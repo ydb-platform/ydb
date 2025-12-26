@@ -354,7 +354,8 @@ public:
             itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) override {
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands,
+                   const TString& userSID) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).UpdateRow(row, commands);
             return;
@@ -368,34 +369,40 @@ public:
         TSmallVec<NTable::TUpdateOp> ops;
         ConvertTableValues(Scheme, tableInfo, commands, ops, nullptr);
 
-        UserDb.UpsertRow(tableId, key, ops);
+        UserDb.UpsertRow(tableId, key, ops, userSID);
     }
 
-    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const ui32 defaultFilledColumnCount) override {
-        UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount);
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
+                   const ui32 defaultFilledColumnCount, const TString& userSID) override {
+        UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount, userSID);
     }
 
-    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.UpsertRow(tableId, key, ops);
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
+                   const TString& userSID) override {
+        UserDb.UpsertRow(tableId, key, ops, userSID);
     }
 
-    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.ReplaceRow(tableId, key, ops);
+    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
+                    const TString& userSID) override {
+        UserDb.ReplaceRow(tableId, key, ops, userSID);
     }
 
-    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.InsertRow(tableId, key, ops);
+    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
+                   const TString& userSID) override {
+        UserDb.InsertRow(tableId, key, ops, userSID);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.UpdateRow(tableId, key, ops);
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
+                   const TString& userSID) override {
+        UserDb.UpdateRow(tableId, key, ops, userSID);
     }
 
-    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
-        UserDb.IncrementRow(tableId, key, ops);
+    void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
+                      const TString& userSID) override {
+        UserDb.IncrementRow(tableId, key, ops, userSID);
     }
     
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TString& userSID) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
             return;
@@ -406,12 +413,12 @@ public:
         TSmallVec<TRawTypeValue> key;
         ConvertTableKeys(Scheme, tableInfo, row, key, nullptr);
 
-        UserDb.EraseRow(tableId, key);
+        UserDb.EraseRow(tableId, key, userSID);
     }
 
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key) override
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TString& userSID) override
     {
-        UserDb.EraseRow(tableId, key);
+        UserDb.EraseRow(tableId, key, userSID);
     }    
 
     // Returns whether row belong this shard.

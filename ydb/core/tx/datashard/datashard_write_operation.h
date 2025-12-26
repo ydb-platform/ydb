@@ -149,8 +149,8 @@ public:
     static TWriteOperation* CastWriteOperation(TOperation::TPtr op);
     static TWriteOperation* TryCastWriteOperation(TOperation::TPtr op);
 
-    explicit TWriteOperation(const TBasicOpInfo& op, ui64 tabletId);
-    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self);
+    explicit TWriteOperation(const TBasicOpInfo& op, ui64 tabletId, const TString& userSID);
+    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self, const TString& userSID);
     ~TWriteOperation();
 
     void FillTxData(TValidatedWriteTx::TPtr dataTx);
@@ -281,6 +281,9 @@ public:
     bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
     void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) override;
 
+    const TString& GetUsedSID() const{
+        return UserSID;
+    }
 private:
     void TrackMemory() const;
     void UntrackMemory() const;
@@ -302,6 +305,8 @@ private:
     YDB_ACCESSOR_DEF(NKikimrSubDomains::TProcessingParams, ProcessingParams);
     
     ui64 PageFaultCount = 0;
+
+    const TString UserSID;
 };
 
 } // NDataShard

@@ -36,10 +36,12 @@ class TAsyncIndexChangeCollector: public TBaseChangeCollector {
     void AddNullValue(TVector<NTable::TUpdateOp>& out, NTable::TTag tag, const NScheme::TTypeInfo& type);
 
     void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
-        TArrayRef<const NTable::TUpdateOp> key, TArrayRef<const NTable::TUpdateOp> data);
+        TArrayRef<const NTable::TUpdateOp> key, TArrayRef<const NTable::TUpdateOp> data,
+        const TString& userSID);
     void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags,
-        TArrayRef<const NTable::TUpdateOp> updates);
+        TArrayRef<const NTable::TUpdateOp> updates,
+        const TString& userSID);
 
     void Clear();
 
@@ -50,7 +52,8 @@ public:
     bool NeedToReadKeys() const override;
 
     bool Collect(const TTableId& tableId, NTable::ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates) override;
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates,
+        const TString& userSID) override;
 
 private:
     mutable THashMap<TTableId, TCachedTags> CachedTags;

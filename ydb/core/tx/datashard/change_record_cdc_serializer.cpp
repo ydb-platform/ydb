@@ -327,6 +327,10 @@ protected:
             SerializeJsonValue(record.GetSchema(), json["newImage"], body.GetNewImage());
         }
 
+        if (!record.GetUser().empty()) {
+            json["user"] = record.GetUser();
+        }
+
         const auto hasAnyImage = body.HasOldImage() || body.HasNewImage();
         switch (body.GetRowOperationCase()) {
         case NKikimrChangeExchange::TDataChange::kUpsert:
@@ -529,6 +533,12 @@ protected:
         default:
             Y_ENSURE(false, "Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
         }
+
+        if (!record.GetUser().empty()) {
+            auto& userIdentityJson = json["userIdentity"];
+            userIdentityJson["type"] = "service";
+            userIdentityJson["principalId"] = record.GetUser();
+        }
     }
 
 public:
@@ -581,7 +591,8 @@ protected:
             }
         }
 
-        valueJson["payload"]["source"] = NJson::TJsonMap({
+        auto& payloadJson = valueJson["payload"];
+        payloadJson["source"] = NJson::TJsonMap({
             {"version", "1.0.0"},
             {"connector", "ydb"},
             {"ts_ms", record.GetApproximateCreationDateTime().MilliSeconds()},
@@ -590,6 +601,10 @@ protected:
             {"txId", record.GetTxId()},
             // TODO: db & table
         });
+
+        if (!record.GetUser().empty()) {
+            payloadJson["user"] = record.GetUser();
+        }
     }
 
     void FillDataChunk(NKikimrPQClient::TDataChunk& data, const TChangeRecord& record) override {

@@ -68,7 +68,8 @@ bool TAsyncIndexChangeCollector::NeedToReadKeys() const {
 }
 
 bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates,
+        const TString& userSID)
 {
     Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
 
@@ -128,7 +129,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             }
 
             if (needDeletion) {
-                Persist(tableId, pathId, ERowOp::Erase, KeyVals, {});
+                Persist(tableId, pathId, ERowOp::Erase, KeyVals, {}, userSID);
             }
 
             Clear();
@@ -191,7 +192,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             }
 
             if (needUpdate) {
-                Persist(tableId, pathId, ERowOp::Upsert, KeyVals, DataVals);
+                Persist(tableId, pathId, ERowOp::Upsert, KeyVals, DataVals, userSID);
             }
 
             Clear();
@@ -250,7 +251,8 @@ void TAsyncIndexChangeCollector::AddNullValue(TVector<TUpdateOp>& out, TTag tag,
 }
 
 void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
-        TArrayRef<const TUpdateOp> keyVals, TArrayRef<const TUpdateOp> dataVals)
+        TArrayRef<const TUpdateOp> keyVals, TArrayRef<const TUpdateOp> dataVals,
+        const TString& userSID)
 {
     TVector<TRawTypeValue> key(Reserve(keyVals.size()));
     TVector<TTag> keyTags(Reserve(keyVals.size()));
@@ -259,15 +261,16 @@ void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId&
         keyTags.push_back(v.Tag);
     }
 
-    Persist(tableId, pathId, rop, key, keyTags, dataVals);
+    Persist(tableId, pathId, rop, key, keyTags, dataVals, userSID);
 }
 
 void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId& pathId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates,
+        const TString& userSID)
 {
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
-    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body);
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body, userSID);
 }
 
 void TAsyncIndexChangeCollector::Clear() {

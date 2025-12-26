@@ -52,7 +52,7 @@ public:
 
             ui64 nEraseRow = engineCtx.ShardTableStats->NEraseRow;
 
-            engineCtx.Host->EraseRow(Owner.TableId, keyTuple);
+            engineCtx.Host->EraseRow(Owner.TableId, keyTuple, "cdcuser@kqp_delete_rows");
 
             if (i64 delta = engineCtx.ShardTableStats->NEraseRow - nEraseRow; delta > 0) {
                 engineCtx.TaskTableStats->NEraseRow += delta;

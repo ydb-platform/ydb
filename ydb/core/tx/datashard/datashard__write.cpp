@@ -301,7 +301,7 @@ TOperation::TPtr NEvWrite::TConvertor::MakeOperation(EOperationKind kind, const 
         case EOperationKind::ReadTable:
             return MakeIntrusive<TActiveTransaction>(info);
         case EOperationKind::WriteTx:
-            return MakeIntrusive<TWriteOperation>(info, tabletId);
+            return MakeIntrusive<TWriteOperation>(info, tabletId, "cdcuser@write_operation1");
         case EOperationKind::DirectTx:
         case EOperationKind::ReadTx:
         case EOperationKind::Unknown:

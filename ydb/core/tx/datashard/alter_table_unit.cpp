@@ -184,6 +184,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                 .WithPathId(streamPathId)
                 .WithTableId(tableId)
                 .WithSchemaVersion(newInfo->GetTableSchemaVersion())
+                .WithUser("cdcuser@alter_table")
                 .Build();
 
             const auto& record = *recordPtr;

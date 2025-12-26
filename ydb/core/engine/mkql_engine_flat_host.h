@@ -54,10 +54,10 @@ public:
 
     // Updates the single row. Column in commands must be unique.
     virtual void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
-        const TArrayRef<const TUpdateCommand>& commands) = 0;
+        const TArrayRef<const TUpdateCommand>& commands, const TString& userSID) = 0;
 
     // Erases the single row.
-    virtual void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) = 0;
+    virtual void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TString& userSID) = 0;
 
     // Check that table is erased
     virtual bool IsPathErased(const TTableId& tableId) const = 0;

@@ -341,7 +341,7 @@ TWriteOperation* TWriteOperation::TryCastWriteOperation(TOperation::TPtr op)
     return writeOp;
 }
 
-TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId)
+TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId, const TString& userSID)
     : TOperation(op)
     , TabletId(tabletId)
     , ArtifactFlags(0)
@@ -349,12 +349,13 @@ TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId)
     , ReleasedTxDataSize(0)
     , SchemeShardId(0)
     , SubDomainPathId(0)
+    , UserSID(userSID)
 {
     TrackMemory();
 }
 
-TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self)
-    : TWriteOperation(op, self->TabletID())
+TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self, const TString& userSID)
+    : TWriteOperation(op, self->TabletID(), userSID)
 {
     Recipient = ev->Recipient;
     SetTarget(ev->Sender);

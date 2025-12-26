@@ -233,7 +233,7 @@ namespace {
                 ExtractRow(Row, Owner->RowType, row, *engineCtx.Env);
 
                 if (!engineCtx.Host->IsPathErased(Owner->TableId) && engineCtx.Host->IsMyKey(Owner->TableId, row)) {
-                    engineCtx.Host->EraseRow(Owner->TableId, row);
+                    engineCtx.Host->EraseRow(Owner->TableId, row, "cdcuser@flat_extfunc1");
                 }
             }
 
@@ -314,7 +314,7 @@ namespace {
                         }
                     }
 
-                    engineCtx.Host->UpdateRow(Owner->TableId, row, commands);
+                    engineCtx.Host->UpdateRow(Owner->TableId, row, commands, "cdcuser@flat_extfunc2");
                 }
             }
 

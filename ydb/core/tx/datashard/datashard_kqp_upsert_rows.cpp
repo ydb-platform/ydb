@@ -94,7 +94,7 @@ public:
             ui64 nUpdateRow = dsApplyCtx.ShardTableStats->NUpdateRow;
             ui64 updateRowBytes = dsApplyCtx.ShardTableStats->UpdateRowBytes;
 
-            dsApplyCtx.Host->UpdateRow(Owner.TableId, keyTuple, commands);
+            dsApplyCtx.Host->UpdateRow(Owner.TableId, keyTuple, commands, "cdcuser@kqp_upsert_rows");
 
             if (i64 delta = dsApplyCtx.ShardTableStats->NUpdateRow - nUpdateRow; delta > 0) {
                 dsApplyCtx.TaskTableStats->NUpdateRow += delta;

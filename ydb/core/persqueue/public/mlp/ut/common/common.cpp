@@ -43,17 +43,15 @@ void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query) {
     driver.Stop(true);
 }
 
-void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
+TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
     NYdb::NTopic::TCreateTopicSettings& settings) {
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    client.CreateTopic(topicName, settings).GetValueSync();
-
-    setup->GetServer().WaitInit(GetTopicPath(topicName));
+    return client.CreateTopic(topicName, settings).GetValueSync();
 }
 
-void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount, bool keepMessagesOrder) {
+TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount, bool keepMessagesOrder) {
     return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
             .PartitioningSettings(partitionCount, partitionCount)
             .BeginAddSharedConsumer(consumerName)
@@ -67,6 +65,15 @@ void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topi
                 .EndDeadLetterPolicy()
             .EndAddConsumer()
         );
+}
+
+TStatus AlterTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
+    NYdb::NTopic::TAlterTopicSettings& settings) {
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    return client.AlterTopic(topicName, settings).GetValueSync();
 }
 
 TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings) {

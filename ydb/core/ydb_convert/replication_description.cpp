@@ -215,7 +215,7 @@ void ConvertTransferSpecific(
     to.mutable_batch_settings()->mutable_flush_interval()->set_seconds(from.GetBatching().GetFlushIntervalMilliSeconds() / 1000);
 }
 
-constexpr auto CheckTransferConfig = CheckConfig<NKikimrReplication::TReplicationConfig::TargetCase::kSpecific>;
+constexpr auto CheckTransferConfig = CheckConfig<NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific>;
 
 } // anonymous namespace
 

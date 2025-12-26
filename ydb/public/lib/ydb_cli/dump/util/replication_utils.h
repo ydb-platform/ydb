@@ -40,9 +40,9 @@ bool RewriteCreateTransferQueryNoSecrets(
     NYql::TIssues& issues);
 
 bool RewriteCreateAsyncReplicationQuery(
-        TString& query,
-        const TString& dbRestoreRoot,
-        const TString& dbPath,
-        NYql::TIssues& issues);
+    TString& query,
+    const TString& dbRestoreRoot,
+    const TString& dbPath,
+    NYql::TIssues& issues);
 
 } // namespace NYdb::NDump

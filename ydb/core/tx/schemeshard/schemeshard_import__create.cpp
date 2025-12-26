@@ -85,7 +85,6 @@ bool RewriteCreateQuery(
 
     issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
     return false;
-
 }
 
 TString GetDatabase(TSchemeShard& ss) {
@@ -619,7 +618,7 @@ private:
         }
         if (!retriedItems.empty()) {
             importInfo.WaitingSchemeObjects = std::ssize(retriedItems);
-            LOG_D("TImport::TTxProgress: retry view creation"
+            LOG_D("TImport::TTxProgress: retry scheme object query execution"
                 << ": id# " << importInfo.Id
                 << ", retried items# " << JoinSeq(", ", retriedItems)
             );
@@ -1272,7 +1271,7 @@ private:
                 return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
             } else if (AllDoneOrWaiting(stateCounts)) {
                 if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
-                    // No progress has been made since the last view creation retry.
+                    // No progress has been made since the last query execution retry.
                     return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
                 }
                 RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);

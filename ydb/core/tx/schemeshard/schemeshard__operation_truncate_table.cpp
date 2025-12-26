@@ -142,7 +142,9 @@ public:
 
         const auto path = TPath::Init(txState->TargetPathId, context.SS);
 
-        IncParentDirAlterVersionWithRepublish(OperationId, path, context);
+        if (path.Parent()->IsTableIndex()) {
+            IncParentDirAlterVersionWithRepublish(OperationId, path, context);
+        }
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
@@ -315,7 +317,9 @@ public:
 
             context.SS->PersistTxState(db, OperationId);
 
-            IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, tablePath, context.SS, context.OnComplete);
+            if (tablePath.Parent()->IsTableIndex()) {
+                IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, tablePath, context.SS, context.OnComplete);
+            }
 
             for (auto splitTx : table->GetSplitOpsInFlight()) {
                 context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());

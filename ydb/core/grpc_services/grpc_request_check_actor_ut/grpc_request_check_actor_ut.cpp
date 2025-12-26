@@ -188,7 +188,8 @@ Y_UNIT_TEST(CanSetAllPermissions) {
     std::unique_ptr<NGRpcService::TEvRequestAuthAndCheck> ev = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
         setup.DbPath,
         TMaybe<TString>(userToken),
-        setup.FakeMonActor);
+        setup.FakeMonActor,
+        NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin));
 
     setup.RequestCheckActor(std::move(ev));
 

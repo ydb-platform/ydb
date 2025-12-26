@@ -96,6 +96,7 @@ struct TTestEnvOpts {
     bool EnableDynamicGroups;
     bool IsBridgeMode;
     bool EnableSimpleStateStorageConfig;
+    bool EnableCmsLocksPriority;
 
     using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
     TNodeLocationCallback NodeLocationCallback;
@@ -122,6 +123,7 @@ struct TTestEnvOpts {
         , EnableDynamicGroups(false)
         , IsBridgeMode(false)
         , EnableSimpleStateStorageConfig(false)
+        , EnableCmsLocksPriority(false)
     {
     }
 
@@ -137,6 +139,11 @@ struct TTestEnvOpts {
 
     TTestEnvOpts& WithoutEnableCMSRequestPriorities() {
         EnableCMSRequestPriorities = false;
+        return *this;
+    }
+
+    TTestEnvOpts& WithEnableCmsLocksPriority() {
+        EnableCmsLocksPriority = true;
         return *this;
     }
 

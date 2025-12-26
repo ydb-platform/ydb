@@ -242,10 +242,11 @@ bool IColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeInfo) {
 
 template<>
 void Out<NKikimr::NStat::TBorder>(IOutputStream& os, const NKikimr::NStat::TBorder& x) {
+    // Serialize as a YQL literal with a correct type.
     struct TVisitor {
         IOutputStream& Os;
-        void operator()(ui64 val) { Os << val; }
-        void operator()(i64 val) { Os << val; }
+        void operator()(ui64 val) { Os << val << "ul"; }
+        void operator()(i64 val) { Os << val << "l"; }
         void operator()(float val) { Os << "CAST(" << val << " AS Float)"; }
         void operator()(double val) { Os << "CAST(" << val << " AS Double)"; }
     };

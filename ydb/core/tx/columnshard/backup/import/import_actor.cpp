@@ -49,7 +49,7 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
     }
     
     AFL_VERIFY(ev->Get()->Data)("error", "empty record batch");
-    NArrow::TBatchSplitttingContext context(48 * 1024 * 1024);
+    NArrow::TBatchSplittingContext context(48 * 1024 * 1024);
     auto blobsSplittedConclusion = NArrow::SplitByBlobSize(ev->Get()->Data, context);
     AFL_VERIFY(blobsSplittedConclusion.IsSuccess());
     AFL_VERIFY(blobsSplittedConclusion.GetResult().size() == 1);

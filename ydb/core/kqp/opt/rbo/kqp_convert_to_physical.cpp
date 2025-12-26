@@ -1258,9 +1258,7 @@ TVector<TString> GetKeyFields(const TVector<TInfoUnit>& keyColumns) {
 namespace NKikimr {
 namespace NKqp {
 
-TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<IGraphTransformer> typeAnnTransformer, 
-                                 TAutoPtr<IGraphTransformer> peepholeTransformer) {
-    Y_UNUSED(peepholeTransformer);
+TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
 
     THashMap<int, TExprNode::TPtr> stages;
@@ -1778,10 +1776,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
     // clang-format on
 
     // Build result type
-    typeAnnTransformer->Rewind();
+    rboCtx.TypeAnnTransformer->Rewind();
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     do {
-        status = typeAnnTransformer->Transform(dqResult, dqResult, ctx);
+        status = rboCtx.TypeAnnTransformer->Transform(dqResult, dqResult, ctx);
     } while (status == IGraphTransformer::TStatus::Repeat);
 
     if (status != IGraphTransformer::TStatus::Ok) {

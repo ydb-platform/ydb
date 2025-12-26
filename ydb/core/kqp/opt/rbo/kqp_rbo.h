@@ -84,25 +84,23 @@ class TRuleBasedStage : public IRBOStage {
  */
 class TRuleBasedOptimizer {
 public:
-    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
-                        TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole, const NMiniKQL::IFunctionRegistry& funcRegistry,
+    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
+                        TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry,
                         TVector<std::shared_ptr<IRBOStage>> stages)
         : KqpCtx(*kqpCtx)
         , TypeCtx(typeCtx)
-        , RBOTypeAnnTransformer(rboTypeAnnTransformer)
-        , TypeAnnTransformer(typeAnnTransformer)
-        , PeepholeTransformer(peephole)
+        , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
+        , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
         , FuncRegistry(funcRegistry)
         , Stages(stages) {
     }
 
-    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
-                        TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole, const NMiniKQL::IFunctionRegistry& funcRegistry)
+    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
+                        TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry)
         : KqpCtx(*kqpCtx)
         , TypeCtx(typeCtx)
-        , RBOTypeAnnTransformer(rboTypeAnnTransformer)
-        , TypeAnnTransformer(typeAnnTransformer)
-        , PeepholeTransformer(peephole)
+        , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
+        , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
         , FuncRegistry(funcRegistry) {
     }
 
@@ -114,8 +112,7 @@ public:
     TKqpOptimizeContext& KqpCtx;
     TTypeAnnotationContext& TypeCtx;
     TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> TypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> PeepholeTransformer;
+    TAutoPtr<IGraphTransformer> PeepholeTypeAnnTransformer;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     TVector<std::shared_ptr<IRBOStage>> Stages;
 };
@@ -124,8 +121,7 @@ public:
  * After the rule-based optimizer generates a final plan (logical plan with detailed physical properties)
  * we convert it into a final physical representation that directly correpsonds to the exection plan
  */
-TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& ctx, TAutoPtr<IGraphTransformer> typeAnnTransformer, 
-                                  TAutoPtr<IGraphTransformer> peepholeTransformer);
+TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& ctx);
 
 } // namespace NKqp
 } // namespace NKikimr

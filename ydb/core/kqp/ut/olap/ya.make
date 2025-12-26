@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(1000)
+SPLIT_FACTOR(50)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
@@ -22,7 +22,6 @@ SRCS(
     decimal_ut.cpp
     delete_ut.cpp
     dictionary_ut.cpp
-    indexes_ut.cpp
     json_ut.cpp
     kqp_olap_stats_ut.cpp
     locks_ut.cpp
@@ -53,3 +52,7 @@ YQL_LAST_ABI_VERSION()
 GENERATE_ENUM_SERIALIZATION(bool_test_enums.h)
 
 END()
+
+RECURSE_FOR_TESTS(
+    indexes
+)

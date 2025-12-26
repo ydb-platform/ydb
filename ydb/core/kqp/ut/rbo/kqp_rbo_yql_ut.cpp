@@ -102,6 +102,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             CREATE TABLE `/Root/foo` (
                 id Int64 NOT NULL,
 	            name String,
+                b Int64,
                 primary key(id)
             )
         )";
@@ -121,6 +122,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 .BeginStruct()
                 .AddMember("id").Int64(i)
                 .AddMember("name").String(std::to_string(i) + "_name")
+                .AddMember("b").Int64(i)
                 .EndStruct();
         }
         rows.EndList();
@@ -129,7 +131,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
 
         std::vector<std::string> queries = {
-            R"(
+             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT id as id2 FROM `/Root/foo` WHERE name != '3_name' order by id;
             )",
@@ -139,14 +141,24 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
-                SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
+                SELECT id, name FROM `/Root/foo` WHERE name = '3_name' order by id;
             )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id, b FROM `/Root/foo` WHERE b not in [1, 2] order by b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id, b FROM `/Root/foo` WHERE b in [1, 2] order by b;
+            )"
         };
 
         std::vector<std::string> results = {
             R"([[0];[1];[2];[4];[5];[6];[7];[8];[9]])",
             R"([[3]])",
-            R"([[3;["3_name"]]])"
+            R"([[3;["3_name"]]])",
+            R"([[0;[0]];[3;[3]];[4;[4]];[5;[5]];[6;[6]];[7;[7]];[8;[8]];[9;[9]]])",
+            R"([[1;[1]];[2;[2]]])"
         };
 
         auto tableClient = kikimr.GetTableClient();
@@ -157,6 +169,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
         }
     }
 
@@ -811,7 +824,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCH_YQL) {
        //RunTPCHYqlBenchmark(/*columnstore*/ true, {}, /*new rbo*/ false);
-       RunTPCHYqlBenchmark(/*columnstore*/ true, {1, 3, 5, 6, 7, 9, 10, 13, 14}, /*new rbo*/ true);
+       RunTPCHYqlBenchmark(/*columnstore*/ true, {1, 3, 5, 6, 7, 8, 9, 10, 12, 13, 14, 19}, /*new rbo*/ true);
     }
 
     /*

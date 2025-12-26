@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/library/actors/core/mon.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -367,6 +368,47 @@ Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
 
         break;
     }
+}
+
+void HtmlApp(std::string_view consumer, size_t partitionId, std::string_view expected) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionStorageMb(8)
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+            .EndAddConsumer()).GetValueSync();
+
+    Sleep(TDuration::Seconds(1));
+
+    auto tabletId = GetTabletId(setup, "/Root", "/Root/topic1", 0);
+    auto url = TStringBuilder() << "/app?TabletID=" << tabletId 
+        << "&consumer=" << consumer 
+        << "&partitionId=" << partitionId;
+    runtime.SendToPipe(tabletId, runtime.AllocateEdgeActor(),
+        new NMon::TEvRemoteHttpInfo(url, HTTP_METHOD_GET));
+
+    auto response = runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>();
+    UNIT_ASSERT(response);
+
+    Cerr << (TStringBuilder() <<">>>>> " << response->Html << Endl);
+    UNIT_ASSERT(response->Html.find(expected) != TString::npos);
+}
+
+Y_UNIT_TEST(HtmlApp_Success) {
+    HtmlApp("mlp-consumer", 0, "Total metrics");
+}
+
+Y_UNIT_TEST(HtmlApp_BadConsumer) {
+    HtmlApp("mlp-consumer-not-exists", 0, "MLP consumer 'mlp-consumer-not-exists' not found");
+}
+
+Y_UNIT_TEST(HtmlApp_BadPartition) {
+    HtmlApp("mlp-consumer", 13, "Tablet info");
 }
 
 }

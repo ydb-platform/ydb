@@ -699,7 +699,9 @@ TString TOpProject::ToString(TExprContext& ctx) {
  */
 
 TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprNode::TPtr filterLambda)
-    : IUnaryOperator(EOperator::Filter, pos, input), FilterLambda(filterLambda) {}
+    : IUnaryOperator(EOperator::Filter, pos, input)
+    , FilterLambda(filterLambda) {
+}
 
 TVector<TInfoUnit> TOpFilter::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 

@@ -1946,14 +1946,10 @@ message TModifyScheme {
 
     optional TStreamingQueryDescription CreateStreamingQuery = 90;
 
-
-    // The default behavior, which was implemented in the first version 
-    // of the "truncate table" statement, 
-    // does not provide for schema modification.
-    //
-    // However, the "truncate table" can potentially change the scheme: 
-    // for example, to reset sequences
-    // (perhaps this option is not implemented at the time of reading this comment).
+    // This field is needed, because the "truncate table" feature is implemented as a schema operation.
+    // As of right now, it does not actually change the schema,
+    // but in the future it may have an indirect impact on the schema,
+    // for example, by resetting all sequences.
     optional TTruncateTable TruncateTable = 92;
 
     // Some entries are grouped by semantics, so are out of order

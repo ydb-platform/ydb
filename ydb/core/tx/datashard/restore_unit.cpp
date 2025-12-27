@@ -28,8 +28,16 @@ protected:
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
         Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TRestoreUnit::Run"
+            << ": TxId# " << op->GetTxId());
+
         Y_ENSURE(tx->GetSchemeTx().HasRestore());
         const auto& restore = tx->GetSchemeTx().GetRestore();
+
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TRestoreUnit::Run restore task"
+            << ": settingsCase# " << static_cast<ui32>(restore.GetSettingsCase())
+            << ", tableId# " << restore.GetTableId()
+            << ", TxId# " << op->GetTxId());
 
         const ui64 tableId = restore.GetTableId();
         Y_ENSURE(DataShard.GetUserTables().contains(tableId));
@@ -39,25 +47,26 @@ protected:
         const auto settingsKind = restore.GetSettingsCase();
         switch (settingsKind) {
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
+        case NKikimrSchemeOp::TRestoreTask::kFSSettings:
         #ifndef KIKIMR_DISABLE_S3_OPS
+            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TRestoreUnit::Run creating downloader"
+                << ": settingsKind# " << static_cast<ui32>(settingsKind)
+                << ", TxId# " << op->GetTxId());
             tx->SetAsyncJobActor(ctx.Register(CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo),
                 TMailboxType::HTSwap, AppData(ctx)->BatchPoolId));
             break;
         #else
-            Abort(op, ctx, "Imports from S3 are disabled");
+            Abort(op, ctx, "Restore from S3/FS requires S3_OPS support");
             return false;
         #endif
-
-        case NKikimrSchemeOp::TRestoreTask::kFSSettings:
-            // TODO(st-shchetinin): Implement FS restore in DataShard
-            // https://github.com/ydb-platform/ydb/issues/28596
-            op->SetAsyncJobResult(new TImportJobProduct(true, TString(), 0, 0));
-            break;
 
         default:
             Abort(op, ctx, TStringBuilder() << "Unknown settings: " << static_cast<ui32>(settingsKind));
             return false;
         }
+
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TRestoreUnit::Run downloader created"
+            << ": TxId# " << op->GetTxId());
 
         return true;
     }

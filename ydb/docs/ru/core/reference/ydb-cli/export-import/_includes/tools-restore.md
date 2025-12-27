@@ -41,6 +41,8 @@
 
 {% include [limitation](./limitation-restore-column-tables.md) %}
 
+{% include [limitation](./limitation-restore-secrets.md) %}
+
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 {% include [restore-database-nodes.md](./restore-database-nodes.md) %}
@@ -71,6 +73,8 @@
 ```
 
 {% include [limitation](./limitation-restore-column-tables.md) %}
+
+{% include [limitation](./limitation-restore-secrets.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 

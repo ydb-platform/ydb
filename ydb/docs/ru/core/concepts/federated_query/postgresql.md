@@ -7,7 +7,7 @@
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
 
     ```yql
-    CREATE OBJECT postgresql_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
+    CREATE SECRET postgresql_datasource_user_password WITH (value = "<password>");
     ```
 
 1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера PostgreSQL. При чтении по умолчанию используется [пространство имен](https://www.postgresql.org/docs/current/catalog-pg-namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Сетевое подключение выполняется по стандартному ([Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html)) по транспорту TCP (`PROTOCOL="NATIVE"`). Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
@@ -19,7 +19,7 @@
         DATABASE_NAME="<database>",
         AUTH_METHOD="BASIC",
         LOGIN="user",
-        PASSWORD_SECRET_NAME="postgresql_datasource_user_password",
+        PASSWORD_SECRET_PATH="postgresql_datasource_user_password",
         PROTOCOL="NATIVE",
         USE_TLS="TRUE",
         SCHEMA="<schema>"

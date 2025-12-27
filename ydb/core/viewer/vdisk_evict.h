@@ -162,13 +162,7 @@ public:
                 json["result"] = true;
             } else {
                 json["result"] = false;
-                TString error;
-                bool forceRetryPossible = false;
-                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), error, forceRetryPossible);
-                json["error"] = error;
-                if (forceRetryPossible && Viewer->CheckAccessAdministration(Event->Get())) {
-                    json["forceRetryPossible"] = true;
-                }
+                Viewer->BSCError2JSON(Response->Record.GetResponse(), GetRequest(), json, Force);
             }
             json["debugMessage"] = Response->Record.ShortDebugString();
         } else {

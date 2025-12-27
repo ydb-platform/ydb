@@ -158,7 +158,7 @@ namespace NKikimr::NStorage {
                         pdiskInfo.Usable = false;
                         pdiskInfo.WhyUnusable += 'S';
                     }
-                    const bool usableInTermsOfDecommission = 
+                    const bool usableInTermsOfDecommission =
                         pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE ||
                         pdisk.GetDecommitStatus() == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED && !isSelfHealReasonDecommit;
                     if (!usableInTermsOfDecommission) {
@@ -380,9 +380,9 @@ namespace NKikimr::NStorage {
             return s.Str();
         };
 
-        TString error;
+        NBsController::TGroupMapperError error;
         if (!mapper.AllocateGroup(groupId, groupDefinition, replacedDisks, forbid, requiredSpace, false, error)) {
-            throw TExConfigError() << "group allocation failed Error# " << error
+            throw TExConfigError() << "group allocation failed Error# " << error.ErrorMessage
                 << " groupDefinition# " << dumpGroupDefinition();
         }
 

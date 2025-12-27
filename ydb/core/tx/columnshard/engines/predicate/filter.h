@@ -195,53 +195,14 @@ public:
     }
 };
 
-class TSimpleScanCursor: public IScanCursor {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::TSimpleRow>, PrimaryKey);
+class ISimpleScanCursor: public IScanCursor {
+protected:
     std::optional<ui32> SourceIdx;
-    YDB_READONLY(ui32, RecordIndex, 0);
-
-    virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
-        AFL_VERIFY(SourceIdx);
-        proto.MutableColumnShardSimple()->SetSourceIdx(*SourceIdx);
-        proto.MutableColumnShardSimple()->SetStartRecordIndex(RecordIndex);
-    }
-
-    virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const override {
-        return PrimaryKey;
-    }
+    YDB_READONLY_PROTECT(ui32, RecordIndex, 0);
+    YDB_READONLY_PROTECT_DEF(std::optional<ui64>, PortionId);
 
     virtual bool IsInitialized() const override {
         return !!SourceIdx;
-    }
-
-    virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
-        AFL_VERIFY(SourceIdx);
-        if (*SourceIdx != entity.GetEntityId()) {
-            return false;
-        }
-        if (!entity.GetEntityRecordsCount()) {
-            usage = false;
-        } else {
-            AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount());
-            usage = RecordIndex < entity.GetEntityRecordsCount();
-        }
-        return true;
-    }
-
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) override {
-        if (!proto.HasColumnShardSimple()) {
-            return TConclusionStatus::Fail("absent sorted cursor data");
-        }
-        if (!proto.GetColumnShardSimple().HasSourceIdx()) {
-            return TConclusionStatus::Fail("incorrect source id for cursor initialization");
-        }
-        SourceIdx = proto.GetColumnShardSimple().GetSourceIdx();
-        if (!proto.GetColumnShardSimple().HasStartRecordIndex()) {
-            return TConclusionStatus::Fail("incorrect record index for cursor initialization");
-        }
-        RecordIndex = proto.GetColumnShardSimple().GetStartRecordIndex();
-        return TConclusionStatus::Success();
     }
 
     virtual bool DoCheckSourceIntervalUsage(const ui32 sourceIdx, const ui32 indexStart, const ui32 recordsCount) const override {
@@ -252,37 +213,6 @@ private:
         }
         AFL_VERIFY(indexStart + recordsCount <= RecordIndex);
         return false;
-    }
-
-public:
-    TSimpleScanCursor() = default;
-
-    TSimpleScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk, const ui32 sourceIdx, const ui32 recordIndex)
-        : PrimaryKey(pk)
-        , SourceIdx(sourceIdx)
-        , RecordIndex(recordIndex)
-    {
-    }
-};
-
-class TNotSortedSimpleScanCursor: public TSimpleScanCursor {
-private:
-    std::optional<ui32> SourceIdx;
-    YDB_READONLY(ui32, RecordIndex, 0);
-
-    virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
-        auto& data = *proto.MutableColumnShardNotSortedSimple();
-        AFL_VERIFY(SourceIdx);
-        data.SetSourceIdx(*SourceIdx);
-        data.SetStartRecordIndex(RecordIndex);
-    }
-
-    virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const override {
-        return Default<std::shared_ptr<NArrow::TSimpleRow>>();
-    }
-
-    virtual bool IsInitialized() const override {
-        return !!SourceIdx;
     }
 
     virtual bool DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const override {
@@ -299,6 +229,80 @@ private:
         return true;
     }
 
+public:
+    ISimpleScanCursor() = default;
+    ISimpleScanCursor(const ui32 sourceIdx, const ui32 recordIndex, const std::optional<ui64>& portionId)
+        : SourceIdx(sourceIdx)
+        , RecordIndex(recordIndex)
+        , PortionId(portionId)
+    {
+    }
+};
+
+class TSimpleScanCursor: public ISimpleScanCursor {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TSimpleRow>, PrimaryKey);
+
+    virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
+        AFL_VERIFY(SourceIdx);
+        auto& data = *proto.MutableColumnShardSimple();
+        data.SetSourceIdx(*SourceIdx);
+        data.SetStartRecordIndex(RecordIndex);
+        if (PortionId) {
+            data.SetOptionalPortionId(*PortionId);
+        }
+    }
+
+    virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const override {
+        return PrimaryKey;
+    }
+
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) override {
+        if (!proto.HasColumnShardSimple()) {
+            return TConclusionStatus::Fail("absent sorted cursor data");
+        }
+        auto& data = proto.GetColumnShardSimple();
+        if (!data.HasSourceIdx()) {
+            return TConclusionStatus::Fail("incorrect source id for cursor initialization");
+        }
+        SourceIdx = data.GetSourceIdx();
+        if (!data.HasStartRecordIndex()) {
+            return TConclusionStatus::Fail("incorrect record index for cursor initialization");
+        }
+        RecordIndex = data.GetStartRecordIndex();
+        if (data.HasOptionalPortionId()) {
+            PortionId = data.GetOptionalPortionId();
+        }
+        return TConclusionStatus::Success();
+    }
+
+public:
+    TSimpleScanCursor() = default;
+
+    TSimpleScanCursor(
+        const std::shared_ptr<NArrow::TSimpleRow>& pk, const ui32 sourceIdx, const ui32 recordIndex, const std::optional<ui64>& optonalPortionId)
+        : ISimpleScanCursor(sourceIdx, recordIndex, optonalPortionId)
+        , PrimaryKey(pk)
+    {
+    }
+};
+
+class TNotSortedSimpleScanCursor: public ISimpleScanCursor {
+private:
+    virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
+        auto& data = *proto.MutableColumnShardNotSortedSimple();
+        AFL_VERIFY(SourceIdx);
+        data.SetSourceIdx(*SourceIdx);
+        data.SetStartRecordIndex(RecordIndex);
+        if (PortionId) {
+            data.SetOptionalPortionId(*PortionId);
+        }
+    }
+
+    virtual const std::shared_ptr<NArrow::TSimpleRow>& DoGetPKCursor() const override {
+        return Default<std::shared_ptr<NArrow::TSimpleRow>>();
+    }
+
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) override {
         if (!proto.HasColumnShardNotSortedSimple()) {
             return TConclusionStatus::Fail("absent unsorted cursor data");
@@ -312,25 +316,17 @@ private:
             return TConclusionStatus::Fail("incorrect record index for cursor initialization");
         }
         RecordIndex = data.GetStartRecordIndex();
-        return TConclusionStatus::Success();
-    }
-
-    virtual bool DoCheckSourceIntervalUsage(const ui32 sourceIdx, const ui32 indexStart, const ui32 recordsCount) const override {
-        AFL_VERIFY(SourceIdx);
-        AFL_VERIFY(sourceIdx == *SourceIdx);
-        if (indexStart >= RecordIndex) {
-            return true;
+        if (data.HasOptionalPortionId()) {
+            PortionId = data.GetOptionalPortionId();
         }
-        AFL_VERIFY(indexStart + recordsCount <= RecordIndex);
-        return false;
+        return TConclusionStatus::Success();
     }
 
 public:
     TNotSortedSimpleScanCursor() = default;
 
-    TNotSortedSimpleScanCursor(const ui32 sourceIdx, const ui32 recordIndex)
-        : SourceIdx(sourceIdx)
-        , RecordIndex(recordIndex)
+    TNotSortedSimpleScanCursor(const ui32 sourceIdx, const ui32 recordIndex, const std::optional<ui64>& optionalPortionId)
+        : ISimpleScanCursor(sourceIdx, recordIndex, optionalPortionId)
     {
     }
 };

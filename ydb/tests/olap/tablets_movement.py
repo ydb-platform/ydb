@@ -54,7 +54,7 @@ class TestTabletsMovement(object):
                 {
                     "ts": timestamp_from_ms + i,
                     "s": bytes(i) * 100,
-                    "val": value,
+                    "val": value + i,
                 }
                 for i in range(current_chunk_size)
             ]
@@ -64,6 +64,7 @@ class TestTabletsMovement(object):
                 data,
             )
             timestamp_from_ms += current_chunk_size
+            value += current_chunk_size
             rows -= current_chunk_size
             assert rows >= 0
 
@@ -125,12 +126,13 @@ class TestTabletsMovement(object):
                 f"""
                     select
                         String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS data_hash,
+                        SUM(val) AS value_sum,
                         COUNT(*) AS rows_count
                     from `{table_path}`
                 """
             )
             assert result_sets[0].rows[0]['rows_count'] == 10000, iteration
-            assert result_sets[0].rows[0]['data_hash'] == b'0x00001399F54C3FE9', iteration
+            assert result_sets[0].rows[0]['value_sum'] == 10000 * 10001 / 2, iteration
             iteration += 1
 
         backgroundThreads.join_all()

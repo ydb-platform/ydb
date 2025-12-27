@@ -191,7 +191,7 @@ public:
     }
 };
 
-class TPortionDataSource: public IDataSource, public NCommon::IPortionDataSource {
+class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     const TPortionInfo::TConstPtr Portion;
@@ -292,7 +292,7 @@ public:
         return Portion;
     }
 
-    ui64 GetPortionId() const override {
+    std::optional<ui64> GetPortionIdOptional() const override {
         return Portion->GetPortionId();
     }
 

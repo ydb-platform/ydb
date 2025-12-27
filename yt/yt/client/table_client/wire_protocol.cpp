@@ -1080,20 +1080,20 @@ class TWireProtocolRowsetReader
 {
 public:
     TWireProtocolRowsetReader(
-        const std::vector<TSharedRef>& compressedBlocks,
+        std::vector<TSharedRef> compressedBlocks,
         NCompression::ECodec codecId,
         TTableSchemaPtr schema,
         bool schemaful,
         IMemoryChunkProviderPtr memoryChunkProvider,
         const NLogging::TLogger& logger,
         TWireProtocolOptions options)
-        : CompressedBlocks_(compressedBlocks)
-        , Codec_(NCompression::GetCodec(codecId))
+        : Codec_(NCompression::GetCodec(codecId))
         , Schema_(std::move(schema))
         , Schemaful_(schemaful)
         , MemoryChunkProvider_(std::move(memoryChunkProvider))
         , Logger(logger.WithTag("ReaderId: %v", TGuid::Create()))
         , Options_(std::move(options))
+        , CompressedBlocks_(std::move(compressedBlocks))
     {
         YT_LOG_DEBUG("Wire protocol rowset reader created (BlockCount: %v, TotalCompressedSize: %v)",
             CompressedBlocks_.size(),
@@ -1112,11 +1112,13 @@ public:
             return nullptr;
         }
 
-        const auto& compressedBlock = CompressedBlocks_[BlockIndex_];
         YT_LOG_DEBUG("Started decompressing rowset reader block (BlockIndex: %v, CompressedSize: %v)",
             BlockIndex_,
-            compressedBlock.Size());
-        auto uncompressedBlock = Codec_->Decompress(compressedBlock);
+            CompressedBlocks_[BlockIndex_].Size());
+
+        auto uncompressedBlock = Codec_->Decompress(CompressedBlocks_[BlockIndex_]);
+        CompressedBlocks_[BlockIndex_].Reset();
+
         YT_LOG_DEBUG("Finished decompressing rowset reader block (BlockIndex: %v, UncompressedSize: %v)",
             BlockIndex_,
             uncompressedBlock.Size());
@@ -1125,7 +1127,7 @@ public:
             GetRefCountedTypeCookie<TWireProtocolReaderTag>(),
             MemoryChunkProvider_,
             ReaderBufferChunkSize);
-        WireReader_ = CreateWireProtocolReader(uncompressedBlock, std::move(rowBuffer), Options_);
+        WireReader_ = CreateWireProtocolReader(std::move(uncompressedBlock), std::move(rowBuffer), Options_);
 
         if (!SchemaChecked_) {
             auto actualSchema = WireReader_->ReadTableSchema();
@@ -1182,13 +1184,13 @@ public:
     }
 
 private:
-    const std::vector<TSharedRef> CompressedBlocks_;
     NCompression::ICodec* const Codec_;
     const TTableSchemaPtr Schema_;
     const bool Schemaful_;
     const IMemoryChunkProviderPtr MemoryChunkProvider_;
     const NLogging::TLogger Logger;
     const TWireProtocolOptions Options_;
+    std::vector<TSharedRef> CompressedBlocks_;
 
     int BlockIndex_ = 0;
     std::unique_ptr<IWireProtocolReader> WireReader_;
@@ -1197,7 +1199,7 @@ private:
 };
 
 IWireProtocolRowsetReaderPtr CreateWireProtocolRowsetReader(
-    const std::vector<TSharedRef>& compressedBlocks,
+    std::vector<TSharedRef> compressedBlocks,
     NCompression::ECodec codecId,
     TTableSchemaPtr schema,
     bool schemaful,
@@ -1206,7 +1208,7 @@ IWireProtocolRowsetReaderPtr CreateWireProtocolRowsetReader(
     TWireProtocolOptions options)
 {
     return New<TWireProtocolRowsetReader>(
-        compressedBlocks,
+        std::move(compressedBlocks),
         codecId,
         std::move(schema),
         schemaful,

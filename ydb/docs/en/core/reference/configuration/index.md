@@ -13,6 +13,7 @@ The following top-level configuration sections are available, listed in alphabet
 || **Section** | **Required** | **Description** ||
 || [{#T}](actor_system_config.md) | Yes | CPU resource allocation across actor system pools ||
 || [{#T}](auth_config.md) | No | Authentication and authorization settings ||
+|| [{#T}](audit_config.md) | No | Audit config settings ||
 || [{#T}](blob_storage_config.md) | No | Static cluster group configuration for system tablets ||
 || [{#T}](client_certificate_authorization.md) | No | Client certificate authentication ||
 || [{#T}](domains_config.md) | No | Cluster domain configuration including Blob Storage and State Storage ||

@@ -64,3 +64,5 @@ items:
   include:
     mode: link
     path: docker/toc_p.yaml
+- name: Audit log attributes
+  href: audit-log-attributes.md

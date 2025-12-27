@@ -279,7 +279,7 @@ private:
 
     [[nodiscard]] bool ReadFromStreamOrDie(const TActorContext& ctx);
     [[nodiscard]] bool WriteToStreamOrDie(const TActorContext& ctx, TServerMessage&& response, bool finish = false);
-    bool SendControlMessage(TPartitionId id, TServerMessage&& message, const TActorContext& ctx);
+    bool SendControlMessage(TPartitionId id, TServerMessage&& message, const TActorContext& ctx, bool buffer = true);
 
     // grpc events
     void Handle(typename IContext::TEvReadFinished::TPtr& ev, const TActorContext &ctx);

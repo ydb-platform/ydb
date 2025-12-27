@@ -4,6 +4,6 @@
 
 Основные материалы:
 
-- [{#T}](initial-deployment.md)
+- [{#T}](initial-deployment/index.md)
 - [{#T}](../../../maintenance/manual/index.md)
 - [{#T}](../../../reference/embedded-ui/index.md)

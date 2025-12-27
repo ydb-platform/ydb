@@ -261,15 +261,15 @@ public:
             srcPath->LastTxId = InvalidTxId;
             context.SS->PersistPath(db, srcPathId);
             context.SS->ClearDescribePathCaches(srcPath);
-            context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
+            // Determine hasCdcChanges BEFORE publishing so we can update version first
             bool hasCdcChanges = (txState->CdcPathId != InvalidPathId);
 
             if (!hasCdcChanges) {
                 for (const auto& [name, id] : srcPath->GetChildren()) {
                     if (context.SS->CdcStreams.contains(id)) {
                         auto streamPath = context.SS->PathsById.at(id);
-                        if (streamPath->IsCdcStream() && 
+                        if (streamPath->IsCdcStream() &&
                             streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                             streamPath->DropTxId == OperationId.GetTxId()) {
                             hasCdcChanges = true;
@@ -279,12 +279,15 @@ public:
                 }
             }
 
+            // Update version BEFORE publishing if there are CDC changes
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
                 auto srcTable = context.SS->Tables.at(srcPathId);
 
                 // Use coordinated version if available (from backup operations)
+                // Use Max() to ensure we never go backwards (coordinated version might be stale
+                // if calculated before other operations incremented the version)
                 if (txState->CoordinatedSchemaVersion) {
-                    srcTable->AlterVersion = *txState->CoordinatedSchemaVersion;
+                    srcTable->AlterVersion = Max(srcTable->AlterVersion + 1, *txState->CoordinatedSchemaVersion);
                 } else {
                     srcTable->AlterVersion += 1;
                 }
@@ -323,6 +326,9 @@ public:
                     }
                 }
             }
+
+            // Publish srcPath after any version updates (so we publish with correct version)
+            context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
                 context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);

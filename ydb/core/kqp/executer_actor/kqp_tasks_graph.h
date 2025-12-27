@@ -239,7 +239,7 @@ struct TGraphMeta {
     TMap<ui64 /* shardId */, ui64 /* nodeId */> ShardIdToNodeId;
     TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
 
-    bool UseFastChannels = false;
+    ui32 DqChannelVersion = 1u;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;

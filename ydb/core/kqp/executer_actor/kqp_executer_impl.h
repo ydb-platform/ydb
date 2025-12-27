@@ -369,7 +369,7 @@ protected:
         for (auto& output : task.Outputs) {
             for (auto channelId : output.Channels) {
                 auto& channel = TasksGraph.GetChannel(channelId);
-                if (!channel.DstTask && TasksGraph.GetMeta().UseFastChannels) {
+                if (!channel.DstTask && TasksGraph.GetMeta().DqChannelVersion >= 2u) {
                     Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
                     auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0));
                     ReadResultFromInputBuffer(channelId, inputBuffer);
@@ -506,7 +506,7 @@ protected:
         if (ev->Get()->Record.GetChannelId() == std::numeric_limits<ui32>::max())
             return;
 
-        if (TasksGraph.GetMeta().UseFastChannels) {
+        if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
             return;
         }
 
@@ -996,7 +996,7 @@ protected:
 
                     KQP_STLOG_D(KQPEX, "Received NODE_SHUTTING_DOWN, attempting run tasks locally",
                         (trace_id, TraceId()));
-                    
+
                     ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
                     auto localNode = MakeKqpNodeServiceID(SelfId().NodeId());
 
@@ -1146,7 +1146,7 @@ protected:
             return false;
         }
 
-        if (TasksGraph.GetMeta().UseFastChannels) {
+        if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
             Y_ENSURE(ChannelService);
             for (auto& [channelId, outputActorId] : Planner->ResultChannels) {
                 auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, outputActorId, SelfId(), 0, 0));

@@ -394,8 +394,9 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                         auto oldVersion = context.SS->Indexes[indexPathId]->AlterVersion;
 
                         // Use per-table coordinated version if available
+                        // Fallback to impl table's version to ensure index stays in sync
                         ui64 coordinatedVersion = GetCoordinatedVersionForPath(path, finalize);
-                        ui64 targetVersion = (coordinatedVersion > 0) ? coordinatedVersion : oldVersion + 1;
+                        ui64 targetVersion = (coordinatedVersion > 0) ? coordinatedVersion : table->AlterVersion;
 
                         if (context.SS->Indexes[indexPathId]->AlterVersion < targetVersion) {
                             context.SS->Indexes[indexPathId]->AlterVersion = targetVersion;

@@ -430,7 +430,7 @@ private:
 
             for (auto i = 0U; i < keysCount; ++i) {
                 const auto key = keys[i];
-                TIssueScopeGuard issueScopeRead(ctx.IssueManager, [&]() {
+                TIssueScopeGuard issueScopePartitionKey(ctx.IssueManager, [&]() {
                     return MakeIntrusive<TIssue>(ctx.GetPosition(key->Pos()), TStringBuilder() << "At partition key: '" << key->Content() << "'");
                 });
 

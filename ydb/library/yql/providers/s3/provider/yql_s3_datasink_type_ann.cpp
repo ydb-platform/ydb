@@ -430,12 +430,16 @@ private:
 
             for (auto i = 0U; i < keysCount; ++i) {
                 const auto key = keys[i];
+                TIssueScopeGuard issueScopeRead(ctx.IssueManager, [&]() {
+                    return MakeIntrusive<TIssue>(ctx.GetPosition(key->Pos()), TStringBuilder() << "At partition key: '" << key->Content() << "'");
+                });
+
                 if (const auto keyType = structType->FindItemType(key->Content())) {
                     if (!EnsureDataType(key->Pos(), *keyType, ctx)) {
                         return nullptr;
                     }
                 } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder() << "Missing key column for partitioning: '" << key->Content() << "'. Please ensure the column is included in the schema."));
+                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder() << "Missing key column for partitioning. Please ensure the column is included in the schema."));
                     return nullptr;
                 }
             }

@@ -2787,19 +2787,38 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
 
         auto db = kikimr->GetQueryClient();
-        const TString query = R"(
-            INSERT INTO test_bucket.`/result/` WITH (
-                FORMAT = "csv_with_names",
-                PARTITIONED_BY = (data)
-            )
-                (data)
-            VALUES
-                ("some_string")
-        )";
-        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-        const auto& issues = result.GetIssues().ToString();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
-        UNIT_ASSERT_STRING_CONTAINS(issues, "Write schema contains no columns except partitioning columns.");
+        {
+            const TString query = R"(
+                INSERT INTO test_bucket.`/result/` WITH (
+                    FORMAT = "csv_with_names",
+                    PARTITIONED_BY = (data)
+                )
+                    (data)
+                VALUES
+                    ("some_string")
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Write schema contains no columns except partitioning columns.");
+        }
+
+        {
+            const TString query = R"(
+                INSERT INTO test_bucket.`/result/` WITH (
+                    FORMAT = "csv_with_names",
+                    PARTITIONED_BY = (data)
+                )
+                    (data)
+                VALUES
+                    (CurrentUtcTimestamp() + Interval("PT2H"))
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "At partition key: 'data'");
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Expected data type, but got: Optional<Timestamp>");
+        }
     }
 
     Y_UNIT_TEST(TestVariantTypeValidation) {

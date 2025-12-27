@@ -19,7 +19,8 @@ public:
                              TPathId item,
                              const TString& workingDir,
                              const TString& tableName,
-                             const TString& streamName)
+                             const TString& streamName,
+                             TMaybe<ui64> coordinatedSchemaVersion)
         : TxAllocatorClient(txAllocatorClient)
         , SchemeShard(schemeShard)
         , BackupId(backupId)
@@ -27,6 +28,7 @@ public:
         , WorkingDir(workingDir)
         , TableName(tableName)
         , StreamName(streamName)
+        , CoordinatedSchemaVersion(coordinatedSchemaVersion)
     {}
 
     void Bootstrap() {
@@ -61,6 +63,10 @@ public:
         auto& drop = *modifyScheme.MutableDropCdcStream();
         drop.SetTableName(TableName);
         drop.AddStreamName(StreamName);
+
+        if (CoordinatedSchemaVersion) {
+            drop.SetCoordinatedSchemaVersion(*CoordinatedSchemaVersion);
+        }
 
         return propose;
     }
@@ -116,6 +122,7 @@ private:
     TString WorkingDir;
     TString TableName;
     TString StreamName;
+    TMaybe<ui64> CoordinatedSchemaVersion;
 
     TTxId TxId;
 
@@ -127,9 +134,10 @@ IActor* CreateContinuousBackupCleaner(TActorId txAllocatorClient,
                                       TPathId item,
                                       const TString& workingDir,
                                       const TString& tableName,
-                                      const TString& streamName)
+                                      const TString& streamName,
+                                      TMaybe<ui64> coordinatedSchemaVersion)
 {
-    return new TContinuousBackupCleaner(txAllocatorClient, schemeShard, backupId, item, workingDir, tableName, streamName);
+    return new TContinuousBackupCleaner(txAllocatorClient, schemeShard, backupId, item, workingDir, tableName, streamName, coordinatedSchemaVersion);
 }
 
 } // namespace NKikimr::NSchemeShard

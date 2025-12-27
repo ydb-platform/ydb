@@ -284,10 +284,8 @@ public:
                 auto srcTable = context.SS->Tables.at(srcPathId);
 
                 // Use coordinated version if available (from backup operations)
-                // Use Max() to ensure we never go backwards (coordinated version might be stale
-                // if calculated before other operations incremented the version)
                 if (txState->CoordinatedSchemaVersion) {
-                    srcTable->AlterVersion = Max(srcTable->AlterVersion + 1, *txState->CoordinatedSchemaVersion);
+                    srcTable->AlterVersion = *txState->CoordinatedSchemaVersion;
                 } else {
                     srcTable->AlterVersion += 1;
                 }

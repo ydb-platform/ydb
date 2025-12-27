@@ -44,6 +44,15 @@ public:
         const auto& tablePath = Self->PathsById.at(streamPath->ParentPathId);
         const auto& workingDir = Self->PathToString(Self->PathsById.at(tablePath->ParentPathId));
 
+        // Get the next version for the DROP operation
+        // The cleaner runs as a separate transaction (allocates its own TxId),
+        // so we must increment the version - datashards expect proposed == current + 1
+        TMaybe<ui64> coordinatedVersion;
+        TPathId tablePathId = streamPath->ParentPathId;
+        if (Self->Tables.contains(tablePathId)) {
+            coordinatedVersion = Self->Tables.at(tablePathId)->AlterVersion + 1;
+        }
+
         NewCleaners.emplace_back(
             CreateContinuousBackupCleaner(
                 Self->TxAllocatorClient,
@@ -52,7 +61,8 @@ public:
                 item.PathId,
                 workingDir,
                 tablePath->Name,
-                streamPath->Name
+                streamPath->Name,
+                coordinatedVersion
         ));
     }
 

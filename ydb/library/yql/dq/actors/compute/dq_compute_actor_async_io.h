@@ -139,12 +139,12 @@ struct IDqComputeActorAsyncInput {
     virtual void FillExtraStats(NDqProto::TDqTaskStats* /* stats */, bool /* finalized stats */, const NYql::NDq::TDqMeteringStats*) { }
 
     // The same signature as IActor::PassAway().
-    // It is guaranted that this method will be called with bound MKQL allocator.
+    // It is guaranteed that this method will be called with bound MKQL allocator.
     // So, it is the right place to destroy all internal UnboxedValues.
     virtual void PassAway() = 0;
 
-    // Do not destroy UnboxedValues inside destructor!!!
-    // It is called from actor system thread, and MKQL allocator is not bound in this case.
+    // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
+    // But you should explicitly bound MKQL allocator here, because it is called from actor system thread.
     virtual ~IDqComputeActorAsyncInput() = default;
 };
 
@@ -205,6 +205,8 @@ struct IDqComputeActorAsyncOutput {
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
+    // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
+    // But you should explicitly bound MKQL allocator here, because it is called from actor system thread.
     virtual ~IDqComputeActorAsyncOutput() = default;
 };
 

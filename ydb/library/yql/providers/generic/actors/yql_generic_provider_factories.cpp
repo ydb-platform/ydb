@@ -24,7 +24,8 @@ namespace NYql::NDq {
                 args.ReadRanges,
                 args.ComputeActorId,
                 securedServiceAccountCredentialsFactory,
-                args.HolderFactory);
+                args.HolderFactory,
+                std::move(args.Alloc));
         };
 
         auto lookupActorFactory = [securedServiceAccountCredentialsFactory, genericClient](Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {

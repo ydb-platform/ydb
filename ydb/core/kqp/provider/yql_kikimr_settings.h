@@ -231,7 +231,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
     bool EnableDqHashCombineByDefault = true;
     bool EnableWatermarks = false;
-    ui32 DefaultDqChannelVersion = 1;
+    ui32 DefaultDqChannelVersion = 1u;
     bool EnableDiscardSelect = false;
 
     bool Antlr4ParserIsAmbiguityError = false;

@@ -236,5 +236,5 @@ message TDqTask {
     optional uint64 BufferPageAllocSize = 23;
     EValuePackerVersion ValuePackerVersion = 24;
     string RateLimiterDatabase = 25;
-    optional bool FastChannels = 26;
+    uint32 DqChannelVersion = 26;
 }

@@ -64,8 +64,8 @@ public:
         return Proto->GetEnableShuffleElimination();
     }
 
-    bool EnableFastChannels() const {
-        return Proto->GetEnableFastChannels();
+    bool DqChannelVersion() const {
+        return Proto->GetDqChannelVersion();
     }
 
     const NKqpProto::TKqpPhyStage& GetStages(size_t index) const {

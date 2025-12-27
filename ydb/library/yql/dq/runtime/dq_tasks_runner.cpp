@@ -642,7 +642,7 @@ public:
                     };
 
                     IDqInputChannel::TPtr inputChannel;
-                    if (task.GetFastChannels()) {
+                    if (task.GetDqChannelVersion() >= 2u) {
                         Y_ENSURE(Context.ChannelService);
                         inputChannel = Context.ChannelService->GetInputChannel(settings);
                     } else {
@@ -772,7 +772,7 @@ public:
                     };
 
                     IDqOutputChannel::TPtr outputChannel;
-                    if (task.GetFastChannels()) {
+                    if (task.GetDqChannelVersion() >= 2u) {
                         Y_ENSURE(Context.ChannelService);
                         outputChannel = Context.ChannelService->GetOutputChannel(settings);
                     } else {

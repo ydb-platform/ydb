@@ -1167,7 +1167,7 @@ private:
 
         txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
         txProto.SetHasEffects(hasEffectStage);
-        txProto.SetEnableFastChannels(Config->UseFastChannels.Get().GetOrElse(Config->DefaultUseFastChannels));
+        txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->DefaultDqChannelVersion));
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
             const auto& binding = paramBinding.Binding();

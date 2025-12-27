@@ -143,7 +143,7 @@ public:
             InitializeLogPrefix(); // re-initialize with SelfId
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
-            if (!Task.GetFastChannels()) {
+            if (Task.GetDqChannelVersion() <= 1u) {
                 Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
                     RuntimeSettings.StatsMode, MemoryLimits.ChannelBufferSize, this, this->GetActivityType());
                 this->RegisterWithSameMailbox(Channels);
@@ -1115,7 +1115,7 @@ protected:
 
                 inputChannel->HasPeer = true;
                 inputChannel->PeerId = peer;
-                if (Task.GetFastChannels()) {
+                if (Task.GetDqChannelVersion() >= 2u) {
                     Y_ENSURE(inputChannel->Channel);
                     inputChannel->Channel->Bind(peer, this->SelfId());
                 } else {
@@ -1137,7 +1137,7 @@ protected:
 
                 outputChannel->HasPeer = true;
                 outputChannel->PeerId = peer;
-                if (Task.GetFastChannels()) {
+                if (Task.GetDqChannelVersion() >= 2u) {
                     Y_ENSURE(outputChannel->Channel);
                     outputChannel->Channel->Bind(this->SelfId(), peer);
                 } else {

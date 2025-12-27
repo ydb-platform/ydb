@@ -81,7 +81,7 @@ public:
         EnsureNotInitialized("AppConfig");
 
         auto& result = AppConfig.emplace();
-        result.MutableTableServiceConfig()->SetEnableFastChannels(false);
+        result.MutableTableServiceConfig()->SetDqChannelVersion(1u);
         return result;
     }
 
@@ -121,7 +121,7 @@ public:
             queryServiceConfig.SetEnableMatchRecognize(true);
 
             auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
-            tableServiceConfig.SetEnableFastChannels(false);
+            tableServiceConfig.SetDqChannelVersion(1u);
 
             LogSettings
                 .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)

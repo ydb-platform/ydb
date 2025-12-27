@@ -2422,7 +2422,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto streamSender = runtime->AllocateEdgeActor();
         NDataShard::NKqpHelpers::SendRequest(*runtime, streamSender,
             NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, R"(
-                pragma ydb.UseFastChannels = "false";
+                pragma ydb.DqChannelVersion = "1";
                 SELECT * FROM `/Root/selectStore/selectTable` LIMIT 1;
             )", false));
         auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);

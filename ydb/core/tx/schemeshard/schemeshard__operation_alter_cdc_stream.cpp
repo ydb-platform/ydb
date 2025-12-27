@@ -245,7 +245,14 @@ protected:
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
-        notice.SetTableSchemaVersion(table->AlterVersion + 1);
+
+        // Use coordinated schema version if available, otherwise increment
+        auto* txState = context.SS->FindTx(OperationId);
+        if (txState && txState->CoordinatedSchemaVersion) {
+            notice.SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+        } else {
+            notice.SetTableSchemaVersion(table->AlterVersion + 1);
+        }
 
         bool found = false;
         for (const auto& [childName, childPathId] : path->GetChildren()) {
@@ -459,6 +466,10 @@ public:
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
         txState.CdcPathId = streamPath.Base()->PathId;  // Store CDC stream PathId for later use
+
+        if (op.HasCoordinatedSchemaVersion()) {
+            txState.CoordinatedSchemaVersion = op.GetCoordinatedSchemaVersion();
+        }
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
         tablePath.Base()->LastTxId = OperationId.GetTxId();

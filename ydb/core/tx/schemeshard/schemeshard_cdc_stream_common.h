@@ -36,19 +36,8 @@ void CheckSrcDirOnPropose(
 
 namespace NKikimr::NSchemeShard::NCdcStreamState {
 
-// Synchronize child index versions when parent table version is updated for continuous backup
-void SyncIndexEntityVersion(
-    const TPathId& indexPathId,
-    ui64 targetVersion,
-    TOperationId operationId,
-    TOperationContext& context,
-    NIceDb::TNiceDb& db);
-
-void SyncChildIndexes(
-    TPathElement::TPtr parentPath,
-    ui64 targetVersion,
-    TOperationId operationId,
-    TOperationContext& context,
-    NIceDb::TNiceDb& db);
+// Note: Sync functions (SyncIndexEntityVersion, SyncChildIndexes, HelpSyncSiblingVersions)
+// have been removed. Version coordination is now done upfront via CoordinatedSchemaVersion
+// proto field, which is calculated at the Propose phase and used by all SubOps.
 
 } // namespace NKikimr::NSchemeShard::NCdcStreamState

@@ -441,11 +441,18 @@ protected:
 
         auto& notice = *tx.MutableRotateCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
-        notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxRotateCdcStreamAtTable);
+
+        // Use coordinated version if available (from backup operations)
+        if (txState->CoordinatedSchemaVersion) {
+            notice.SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+        } else {
+            notice.SetTableSchemaVersion(table->AlterVersion + 1);
+        }
+
         auto newStreamPathId = txState->CdcPathId;
         auto oldStreamPathId = txState->SourcePathId;
         oldStreamPathId.ToProto(notice.MutableOldStreamPathId());
@@ -648,6 +655,11 @@ public:
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId, oldStreamPath.Base()->PathId);
         txState.CdcPathId = newStreamPath.Base()->PathId;
         txState.State = TTxState::ConfigureParts;
+
+        // Store coordinated schema version if available (from backup operations)
+        if (op.HasCoordinatedSchemaVersion()) {
+            txState.CoordinatedSchemaVersion = op.GetCoordinatedSchemaVersion();
+        }
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
         tablePath.Base()->LastTxId = OperationId.GetTxId();

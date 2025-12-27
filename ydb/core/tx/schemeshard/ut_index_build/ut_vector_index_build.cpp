@@ -1801,15 +1801,12 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
         }
 
-        const auto maxShards = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/vectors")
-            .GetPathDescription().GetDomainDescription().GetSchemeLimits().GetMaxShardsInPath();
-
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
             auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
                 auto& op = *modifyScheme.MutableCreateTable();
-                // make shard count exceed the limit to fail the operation
-                op.SetUniformPartitionsCount(maxShards+1);
+                // specify invalid shard count to fail the operation
+                op.SetUniformPartitionsCount(0);
             }
             return false;
         });
@@ -1826,7 +1823,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED,
                 buildIndexOperation.DebugString()
             );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Invalid partition count specified");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Invalid table partition count specified");
         }
 
         blocker.Stop().Unblock();

@@ -1463,7 +1463,6 @@ private:
         }
     }
 
-private:
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
     bool LinkedPipeCache = false;
 

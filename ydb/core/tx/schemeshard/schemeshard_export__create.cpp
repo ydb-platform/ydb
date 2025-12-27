@@ -37,9 +37,15 @@ bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& it
 }
 
 bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
-    return item.SourcePathType == NKikimrSchemeOp::EPathTypeView
-        || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup
-        || item.SourcePathType == NKikimrSchemeOp::EPathTypeReplication;
+    switch (item.SourcePathType) {
+    case NKikimrSchemeOp::EPathTypeView:
+    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+    case NKikimrSchemeOp::EPathTypeReplication:
+    case NKikimrSchemeOp::EPathTypeTransfer:
+        return true;
+    default:
+        return false;
+    }
 }
 
 template <typename T>

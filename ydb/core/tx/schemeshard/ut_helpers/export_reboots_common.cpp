@@ -22,6 +22,7 @@ void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NK
         {EPathTypePersQueueGroup, &TestCreatePQGroup},
         {EPathTypeTableIndex, &TestCreateIndexedTable},
         {EPathTypeReplication, &TestCreateReplication},
+        {EPathTypeTransfer, &TestCreateTransfer},
     };
 
     auto it = functions.find(pathType);

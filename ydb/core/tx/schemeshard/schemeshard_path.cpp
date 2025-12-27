@@ -968,6 +968,7 @@ bool CheckAvailableInExports(NKikimrSchemeOp::EPathType pathType) {
         case NKikimrSchemeOp::EPathTypeTable:
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
         case NKikimrSchemeOp::EPathTypeReplication:
+        case NKikimrSchemeOp::EPathTypeTransfer:
             return true;
         default:
             return false;

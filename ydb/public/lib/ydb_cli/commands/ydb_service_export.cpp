@@ -34,6 +34,7 @@ namespace {
             NScheme::ESchemeEntryType::View,
             NScheme::ESchemeEntryType::Topic,
             NScheme::ESchemeEntryType::Replication,
+            NScheme::ESchemeEntryType::Transfer,
         }, entry.Type);
     }
 

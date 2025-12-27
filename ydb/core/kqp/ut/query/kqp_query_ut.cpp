@@ -3498,7 +3498,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
 
         auto failingEnsureQuery = std::vector{R"(
             DISCARD SELECT Ensure(Data, Data > 1000000, "some error message") AS value
-            FROM `/Root/EightShard`)", 
+            FROM `/Root/EightShard`)",
             R"(DISCARD SELECT Ensure(r2, r2 > 100, "some error message") AS final
                 FROM (SELECT Ensure(r1, r1 IS NOT NULL, "ok") AS r2
                 FROM (SELECT Ensure(1, true, "ok") AS r1) AS t1) AS t2;)"
@@ -3542,9 +3542,9 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
             }
             if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvChannelData::EventType) {
                 auto& record = ev->Get<NYql::NDq::TEvDqCompute::TEvChannelData>()->Record;
-                    Cerr << "ChannelData event detected, channelId: " << record.GetChannelData().GetChannelId() 
+                    Cerr << "ChannelData event detected, channelId: " << record.GetChannelData().GetChannelId()
                         << ", sender: " << ev->Sender << ", recipient: " << ev->Recipient << Endl;
-                    
+
                     if (executerIdCaptured && ev->Recipient == executerId) {
                         ++channelDataCount;
                         Cerr << "ChannelData sent to Executer! Count: " << channelDataCount << Endl;
@@ -3554,7 +3554,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
             return TTestActorRuntime::EEventAction::PROCESS;
         };
         runtime.SetObserverFunc(observer);
-        
+
         Y_DEFER {
             runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
         };
@@ -3562,6 +3562,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
         {
             auto result = kikimr.RunCall([&] {
                 return db.ExecuteQuery(R"(
+                    pragma ydb.DqChannelVersion = "1";
                     DISCARD SELECT COUNT(*) FROM `/Root/TwoShard`;
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             });
@@ -3570,7 +3571,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
                 "DISCARD SELECT should return no result sets");
 
-            UNIT_ASSERT_VALUES_EQUAL_C(channelDataCount, 0, 
+            UNIT_ASSERT_VALUES_EQUAL_C(channelDataCount, 0,
                 "ChannelData should not be sent when DISCARD is used, count: " << channelDataCount);
         }
         {
@@ -3579,13 +3580,14 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
 
             auto result = kikimr.RunCall([&] {
                 return db.ExecuteQuery(R"(
+                    pragma ydb.DqChannelVersion = "1";
                     SELECT COUNT(*) FROM `/Root/TwoShard`;
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             });
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT(result.GetResultSets().size() > 0);
 
-            UNIT_ASSERT_C(channelDataCount > 0, 
+            UNIT_ASSERT_C(channelDataCount > 0,
                 "ChannelDataCount for SELECT: " << channelDataCount);
         }
     }
@@ -3593,10 +3595,10 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
     Y_UNIT_TEST(DiscardSelectMultiLine) {
         auto kikimr = CreateKikimrWithDiscardSelect();
         auto db = kikimr.GetQueryClient();
-        
+
         auto verifyResultValue = [](auto& result, ui32 resultSetIndex, i32 expectedValue) {
             TResultSetParser parser(result.GetResultSet(resultSetIndex));
-            UNIT_ASSERT_C(parser.TryNextRow(), 
+            UNIT_ASSERT_C(parser.TryNextRow(),
                 "Failed to get row from result set " << resultSetIndex);
             UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(0).GetInt32(), expectedValue,
                 "Result set " << resultSetIndex << " has wrong value");
@@ -3608,7 +3610,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
 
         ExecuteQueryAndCheckResultSets(db, R"(
             SELECT 1;
-            DISCARD SELECT Ensure(Data, Data < 1000000, "Data value too large") 
+            DISCARD SELECT Ensure(Data, Data < 1000000, "Data value too large")
                 FROM `/Root/EightShard`;
             SELECT 2
         )", 2, "DISCARD with Ensure");
@@ -3652,8 +3654,8 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
             )", 2, "Data Executor only");
         }
         {
-            auto result = ExecuteQueryAndCheckResultSets(db, R"(SELECT 1; DISCARD SELECT 2; SELECT 3; 
-                                                                DISCARD SELECT 4; SELECT 5; DISCARD SELECT 6; 
+            auto result = ExecuteQueryAndCheckResultSets(db, R"(SELECT 1; DISCARD SELECT 2; SELECT 3;
+                                                                DISCARD SELECT 4; SELECT 5; DISCARD SELECT 6;
                                                                 SELECT 7)", 4, "Many transactions (> 2)");
             auto resultValues = std::vector{1, 3, 5, 7};
             for (auto&& [i, value] : Enumerate(resultValues)) {

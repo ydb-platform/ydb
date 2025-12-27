@@ -532,6 +532,9 @@ protected:
                     }
                 } else {
                     for (auto& [channelId, info] : InputChannelsMap) {
+                        if (!info.HasPeer) {
+                            return;
+                        }
                         if (!info.Channel->IsFinished()) {
                             info.Channel->Finish();
                             // TBD: wait for confirmation?
@@ -1594,6 +1597,7 @@ protected:
                     str << "Run";
                 }
                 str << Endl;
+                str << "  TaskId: " << Task.GetId() << Endl;
                 str << "  State: " << (unsigned int)State << Endl;
 
                 TaskRunnerMonitoringInfo(str);

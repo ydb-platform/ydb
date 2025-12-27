@@ -24,6 +24,9 @@ class TestYdbWorkload(StressFixture):
                 'FQ_ROW_DISPATCHER': LogLevels.TRACE,
                 'KQP_PROXY': LogLevels.DEBUG,
                 'KQP_EXECUTOR': LogLevels.DEBUG},
+            table_service_config={
+                "dq_channel_version": 1
+            },
         )
 
     def test(self):

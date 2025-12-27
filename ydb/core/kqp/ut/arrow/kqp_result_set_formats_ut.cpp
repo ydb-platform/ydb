@@ -27,6 +27,8 @@ TKikimrRunner CreateKikimrRunner(bool withSampleTables, ui64 channelBufferSize =
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(channelBufferSize);
+    appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(std::min(2_KB, channelBufferSize));
+    appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelChunkSizeLimit(channelBufferSize);
 
     auto settings = TKikimrSettings(appConfig).SetFeatureFlags(featureFlags).SetWithSampleTables(withSampleTables);
     return TKikimrRunner(settings);
@@ -1851,7 +1853,7 @@ R"(column0:   -- is_valid: all not null
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
             UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
-            const TString expected = 
+            const TString expected =
 R"(column0:   [
     -- is_valid: all not null
     -- child 0 type: binary

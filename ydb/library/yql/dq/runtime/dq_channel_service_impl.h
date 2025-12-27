@@ -147,7 +147,7 @@ public:
     }
 
     bool IsEarlyFinished() final {
-        return false;
+        return EarlyFinished;
     }
 
     bool IsFlushed() final {
@@ -163,10 +163,11 @@ public:
     }
 
     void EarlyFinish() final {
-        YQL_ENSURE(false, "Stub must be binded before EarlyFinish");
+        EarlyFinished = true;
     }
 
     std::shared_ptr<TDqFillAggregator> Aggregator;
+    bool EarlyFinished = false;
 };
 
 struct TLoadingInfo {
@@ -652,7 +653,7 @@ public:
         LocalBufferLatency = counters->GetCounter("LocalBuffer/Latency", true);
     }
     ~TLocalBufferRegistry();
-    std::shared_ptr<TLocalBuffer> GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info);
+    std::shared_ptr<TLocalBuffer> GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info, bool& created);
     void DeleteLocalBufferInfo(const TChannelInfo& info);
 
     NActors::TActorSystem* ActorSystem;
@@ -705,8 +706,11 @@ public:
     ui32 PoolId;
     std::weak_ptr<TDqChannelService> Self;
     std::shared_ptr<TLocalBufferRegistry> LocalBufferRegistry;
+    mutable std::unordered_map<TChannelInfo, std::shared_ptr<TLocalBuffer>> LocalBufferHolders;
+    mutable std::queue<std::pair<TChannelInfo, TInstant>> UnbindedInputs;
     mutable std::unordered_map<ui32, std::shared_ptr<TNodeState>> NodeStates;
     mutable std::mutex Mutex;
+    const TDuration UnbindedWaitPeriod = TDuration::Minutes(10);
 };
 
 class TFastDqOutputChannel : public IDqOutputChannel {
@@ -866,7 +870,7 @@ public:
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override;
 
     bool IsFinished() const override {
-        return Buffer->IsEarlyFinished() || Finished;
+        return Finished || Buffer->IsEarlyFinished();
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {

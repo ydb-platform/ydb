@@ -378,7 +378,7 @@ namespace NYql::NDq {
             return IngressStats_;
         }
 
-        // Should be called under bind MKQL alloc
+        // Should be called with bound MKQL alloc
         void ClearMkqlData() {
             ArrowRowContainerCache_.Clear();
         }

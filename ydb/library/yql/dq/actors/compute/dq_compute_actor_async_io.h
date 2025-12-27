@@ -144,7 +144,7 @@ struct IDqComputeActorAsyncInput {
     virtual void PassAway() = 0;
 
     // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
-    // But you should explicitly bound MKQL allocator here, because it is called from actor system thread.
+    // But you should explicitly bind MKQL allocator here, because it is called from actor system thread.
     virtual ~IDqComputeActorAsyncInput() = default;
 };
 
@@ -206,7 +206,7 @@ struct IDqComputeActorAsyncOutput {
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
     // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
-    // But you should explicitly bound MKQL allocator here, because it is called from actor system thread.
+    // But you should explicitly bind MKQL allocator here, because it is called from actor system thread.
     virtual ~IDqComputeActorAsyncOutput() = default;
 };
 

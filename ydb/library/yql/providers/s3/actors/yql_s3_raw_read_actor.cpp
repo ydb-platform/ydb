@@ -459,7 +459,7 @@ private:
         Send(ComputeActorId, ev.release());
     }
 
-    // Should be called under bind MKQL alloc
+    // Should be called with bound MKQL alloc
     void ClearMkqlData() {
         ContainerCache.Clear();
     }

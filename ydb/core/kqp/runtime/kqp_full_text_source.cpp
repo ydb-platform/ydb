@@ -245,19 +245,21 @@ class TDocumentInfo : public TAtomicRefCount<TDocumentInfo> {
     size_t NumContainingWords = 0;
     ui64 DocumentLength = 0;
 
-    bool NeedFullTextRelevance = false;
+    i32 RelevanceColumnIdx = -1;
 
 public:
     ui64 DocumentNumId = 0;
 
-    TDocumentInfo(TOwnedCellVec&& keyCells, const TConstArrayRef<NScheme::TTypeInfo> documentKeyColumnTypes, TIntrusivePtr<TTableReader> mainTableReader, TIntrusivePtr<TTableReader> docsTableReader, bool needFullTextRelevance, size_t numWords)
+    TDocumentInfo(TOwnedCellVec&& keyCells,
+        const TConstArrayRef<NScheme::TTypeInfo> documentKeyColumnTypes, TIntrusivePtr<TTableReader> mainTableReader,
+        TIntrusivePtr<TTableReader> docsTableReader, i32 relevanceColumnIdx, size_t numWords)
         : KeyCells(std::move(keyCells))
         , DocumentKeyColumnTypes(documentKeyColumnTypes)
         , MainTableReader(mainTableReader)
         , DocsTableReader(docsTableReader)
         , DocumentId(KeyCells)
         , ContainingWords(numWords)
-        , NeedFullTextRelevance(needFullTextRelevance)
+        , RelevanceColumnIdx(relevanceColumnIdx)
     {}
 
     bool AllWordsContained() const {
@@ -324,17 +326,21 @@ public:
     NUdf::TUnboxedValue GetRow(const NKikimr::NMiniKQL::THolderFactory& holderFactory, ui64 totalDocLength, ui64 docCount, i64& computeBytes) const {
         NUdf::TUnboxedValue* rowItems = nullptr;
         const auto& resultRowTypes = MainTableReader->GetResultColumnTypes();
+        i32 needRelevance = RelevanceColumnIdx != -1;
         auto row = holderFactory.CreateDirectArrayHolder(
-            resultRowTypes.size() + (NeedFullTextRelevance ? 1 : 0), rowItems);
-        for(size_t i = 0; i < RowCells.size(); ++i) {
-            rowItems[i] = NMiniKQL::GetCellValue(RowCells[i], resultRowTypes[i]);
-            computeBytes += NMiniKQL::GetUnboxedValueSize(rowItems[i], resultRowTypes[i]).AllocatedBytes;
-        }
+            resultRowTypes.size() + needRelevance, rowItems);
 
-        if (NeedFullTextRelevance) {
-            double score = GetBM25Score(totalDocLength, docCount);
-            rowItems[resultRowTypes.size()] = NUdf::TUnboxedValuePod(score);
-            computeBytes += 8;
+        for(i32 i = 0, cellIndex = 0; i < static_cast<i32>(RowCells.size()) + needRelevance; ++i) {
+            if (i == RelevanceColumnIdx) {
+                double score = GetBM25Score(totalDocLength, docCount);
+                rowItems[i] = NUdf::TUnboxedValuePod(score);
+                computeBytes += 8;
+                continue;
+            }
+
+            rowItems[i] = NMiniKQL::GetCellValue(RowCells[cellIndex], resultRowTypes[cellIndex]);
+            computeBytes += NMiniKQL::GetUnboxedValueSize(rowItems[cellIndex], resultRowTypes[cellIndex]).AllocatedBytes;
+            cellIndex++;
         }
 
         return row;
@@ -557,7 +563,7 @@ public:
         }
     }
 
-    std::pair<ui32, TIntrusivePtr<TDocumentInfo>> BuildDocumentInfo(TIntrusivePtr<TTableReader> mainTableReader, TIntrusivePtr<TTableReader> docsTableReader, bool needFullTextRelevance, size_t wordCount, const TConstArrayRef<TCell>& row) {
+    std::pair<ui32, TIntrusivePtr<TDocumentInfo>> BuildDocumentInfo(TIntrusivePtr<TTableReader> mainTableReader, TIntrusivePtr<TTableReader> docsTableReader, i32 relevanceColumnIdx, size_t wordCount, const TConstArrayRef<TCell>& row) {
         if (Layout == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
             YQL_ENSURE(row.size() == GetResultColumnTypes().size());
             // at least it contains document id (which is at least 1 column) and frequency (which is at least 1 column)
@@ -568,7 +574,7 @@ public:
         ui32 freq = GetFrequency(row);
         TConstArrayRef<NScheme::TTypeInfo> documentKeyColumnTypes = GetDocumentKeyColumnTypes();
         auto docInfo = MakeIntrusive<TDocumentInfo>(
-            TOwnedCellVec(docId), documentKeyColumnTypes, mainTableReader, docsTableReader, needFullTextRelevance, wordCount);
+            TOwnedCellVec(docId), documentKeyColumnTypes, mainTableReader, docsTableReader, relevanceColumnIdx, wordCount);
 
         return std::make_pair(freq, std::move(docInfo));
     }
@@ -922,7 +928,7 @@ private:
     absl::flat_hash_map<ui64, TIntrusivePtr<TDocumentInfo>> DocumentById;
     absl::flat_hash_map<TDocumentId, TIntrusivePtr<TDocumentInfo>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> DocumentInfos;
 
-    bool NeedFullTextRelevance = false;
+    i32 RelevanceColumnIdx = -1;
 
     bool ResolveInProgress = true;
     bool NavigateIndexInProgress = false;
@@ -1074,15 +1080,12 @@ private:
             }
         }
 
+        i32 relevanceIndex = 0;
         for(const auto& column : Settings->GetColumns()) {
             const auto it = columnNameToIndex.find(column.GetName());
 
-            if (NeedFullTextRelevance) {
-                YQL_ENSURE(false, "unexpected columns order, relevance is reported a last column, but " << column.GetName() << " found.");
-            }
-
             if (column.GetName() == "_yql_full_text_relevance") {
-                NeedFullTextRelevance = true;
+                RelevanceColumnIdx = relevanceIndex;
                 continue;
             }
 
@@ -1091,6 +1094,7 @@ private:
             YQL_ENSURE(columnInfo);
             resultKeyColumnTypes.push_back(columnInfo->PType);
             resultKeyColumnIds.push_back(columnInfo->Id);
+            relevanceIndex++;
         }
 
         for (const auto& [_, index] : keyPositionToIndex) {
@@ -1469,7 +1473,7 @@ public:
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
             YQL_ENSURE(IndexTableReader);
-            auto [freq, docInfo] = IndexTableReader->BuildDocumentInfo(MainTableReader, DocsTableReader, NeedFullTextRelevance, Words.size(), row);
+            auto [freq, docInfo] = IndexTableReader->BuildDocumentInfo(MainTableReader, DocsTableReader, RelevanceColumnIdx, Words.size(), row);
             const auto docId = docInfo->GetDocumentId();
             auto [it, success] = DocumentInfos.emplace(docId, std::move(docInfo));
             if (success) {

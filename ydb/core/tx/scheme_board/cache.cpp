@@ -12,6 +12,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
+#include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -221,6 +222,7 @@ namespace {
             entry.SecurityObject.Drop();
             entry.DomainInfo.Drop();
             entry.Kind = TNavigate::KindUnknown;
+            entry.TableInfo.Drop();
             entry.Attributes.clear();
             entry.ListNodeEntry.Drop();
             entry.DomainDescription.Drop();
@@ -746,13 +748,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             SecurityObject.Drop();
             DomainInfo.Drop();
             Attributes.clear();
-
             ListNodeEntry.Drop();
 
             IsPrivatePath = false;
 
             // virtual must be kept
 
+            TableInfo.Drop();
             Columns.clear();
             KeyColumnTypes.clear();
             NotNullColumns.clear();
@@ -787,8 +789,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
-            const auto& tableDesc = pathDesc.GetTable();
-
+            const NKikimrSchemeOp::TTableDescription& tableDesc = pathDesc.GetTable();
             for (const auto& columnDesc : tableDesc.GetColumns()) {
                 auto& column = Columns[columnDesc.GetId()];
                 column.Id = columnDesc.GetId();
@@ -854,6 +855,27 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             if (pathDesc.HasDomainDescription()) {
                 DomainInfo = new NSchemeCache::TDomainInfo(pathDesc.GetDomainDescription());
+            }
+        }
+
+        void AddTableSplitBoundaries() {
+            Y_ABORT_UNLESS(Partitioning);
+            Y_ABORT_UNLESS(TableInfo);
+            // see schemeshard_path_describer.cpp:FillTableBoundaries()
+            TString errStr;
+            const auto& partitions = *Partitioning;
+            auto& tableDesc = TableInfo->Description;
+            tableDesc.MutableSplitBoundary()->Reserve(partitions.size() - 1);
+            for (size_t p = 0; p < partitions.size() - 1; ++p) {
+                const auto& endKeyPrefix = partitions[p].Range->EndKeyPrefix;
+                auto& boundaryValue = *tableDesc.AddSplitBoundary()->MutableKeyPrefix()->AddTuple();
+                const auto& cells = endKeyPrefix.GetCells();
+                for (ui32 i = 0; i < cells.size(); ++i) {
+                    const auto& cell = cells[i];
+                    const auto type = KeyColumnTypes[i];
+                    bool ok = NMiniKQL::CellToValue(type, cell, boundaryValue, errStr);
+                    Y_ABORT_UNLESS(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", i, errStr.data());
+                }
             }
         }
 
@@ -1305,6 +1327,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     root.WriteKey(#name).UnsafeWriteValue(ProtoJsonString(name->Description)); \
                 }
 
+            DESCRIPTION_PART(TableInfo);
             DESCRIPTION_PART(DomainDescription);
             DESCRIPTION_PART(RtmrVolumeInfo);
             DESCRIPTION_PART(KesusInfo);
@@ -1562,6 +1585,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType());
                 if (Created) {
                     FillTableInfo(pathDesc);
+                    if (AppData()->FeatureFlags.GetEnableDescribeFromSchemeCache()) {
+                        FillInfo(Kind, TableInfo, std::move(*pathDesc.MutableTable()));
+                        AddTableSplitBoundaries();
+                    }
                     SchemaVersion = tableSchemaVersion(entryDesc);
                 }
                 break;
@@ -1985,6 +2012,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             // specific (it's safe to fill them all)
             entry.Self = Self;
+            entry.TableInfo = TableInfo;
             entry.Columns = Columns;
             entry.NotNullColumns = NotNullColumns;
             entry.Indexes = Indexes;
@@ -2263,6 +2291,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         TIntrusivePtr<TNavigate::TDomainDescription> DomainDescription;
 
         // table specific
+        TIntrusivePtr<TNavigate::TTableInfo> TableInfo;
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         THashSet<TString> NotNullColumns;

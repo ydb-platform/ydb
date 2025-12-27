@@ -245,6 +245,9 @@ def describe_table_request_factory(session_state, path, settings=None):
     if settings is not None and hasattr(settings, "include_shard_key_bounds") and settings.include_shard_key_bounds:
         request.include_shard_key_bounds = settings.include_shard_key_bounds
 
+    if settings is not None and hasattr(settings, "return_cached_result") and settings.return_cached_result:
+        request.return_cached_result = settings.return_cached_result
+
     if settings is not None and hasattr(settings, "include_table_stats") and settings.include_table_stats:
         request.include_table_stats = settings.include_table_stats
 

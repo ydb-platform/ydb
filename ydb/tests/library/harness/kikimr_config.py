@@ -157,6 +157,7 @@ class KikimrConfigGenerator(object):
             use_legacy_pq=False,
             dc_mapping={},
             enable_alter_database_create_hive_first=False,
+            enable_describe_from_scheme_cache=False,
             overrided_actor_system_config=None,
             default_users=None,  # dict[user]=password
             extra_feature_flags=None,     # list[str]
@@ -348,6 +349,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"][disabled_feature_flag] = False
         if enable_alter_database_create_hive_first:
             self.yaml_config["feature_flags"]["enable_alter_database_create_hive_first"] = enable_alter_database_create_hive_first
+        if enable_describe_from_scheme_cache:
+            self.yaml_config["feature_flags"]["enable_describe_from_scheme_cache"] = enable_describe_from_scheme_cache
         self.yaml_config['pqconfig']['enabled'] = enable_pq
         self.yaml_config['pqconfig']['enable_proto_source_id_info'] = True
         self.yaml_config['pqconfig']['max_storage_node_port'] = 65535

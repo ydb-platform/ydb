@@ -180,12 +180,18 @@ public:
     std::deque<TKeyRecord> Keys; // it's always ordered by KeyId
     std::chrono::time_point<std::chrono::system_clock> KeysRotationTime;
 
+    struct THashRecord {
+        TString HashInitParams;
+        TString ComputedHash;
+    };
+
     struct TSidRecord {
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
 
         TString ArgonHash;
         TString PasswordHashes;
+        THashMap<NLoginProto::EHashType, THashRecord> HashStorage;
 
         bool IsEnabled;
         std::unordered_set<TString> Members;
@@ -193,6 +199,8 @@ public:
         ui32 FailedLoginAttemptCount = 0;
         std::chrono::system_clock::time_point LastFailedLogin;
         std::chrono::system_clock::time_point LastSuccessfulLogin;
+
+        void FillHashStorage();
     };
 
     struct TCacheSettings {

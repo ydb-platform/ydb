@@ -18,6 +18,7 @@ namespace NKikimr::NSasl {
 
 using namespace NActors;
 using namespace NLogin;
+using namespace NLoginProto;
 
 class THasher : public TActorBootstrapped<THasher> {
 public:

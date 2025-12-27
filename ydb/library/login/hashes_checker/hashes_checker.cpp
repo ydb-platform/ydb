@@ -99,7 +99,7 @@ TMaybe<THashes> ConvertHashes(const TString& hash) {
     }
 }
 
-NLogin::TScramSecret ParseScramHash(const TStringBuf hash) {
+TScramSecret ParseScramHash(const TStringBuf hash) {
     size_t pos = hash.find('$');
     if (pos == NPOS) {
         return {};
@@ -134,6 +134,24 @@ NLogin::TScramSecret ParseScramHash(const TStringBuf hash) {
     }
 
     return { TString(iterationsCount), TString(salt), TString(storedKey), TString(serverKey) };
+}
+
+THashMap<NLoginProto::EHashType, TString> MakePasswordHashesMap(const TString& hashes) {
+    THashMap<NLoginProto::EHashType, TString> result;
+
+    NJson::TJsonValue json;
+    NJson::ReadJsonTree(Base64StrictDecode(hashes), &json);
+
+    for (const auto& [fieldName, value] : json.GetMap()) {
+        if (fieldName == "version") {
+            continue;
+        }
+
+        const auto& hashTypeDescription = HashesRegistry.HashNamesMap.at(fieldName);
+        result[hashTypeDescription.Type] = value.GetString();
+    }
+
+    return result;
 }
 
 THashesChecker::TResult THashesChecker::OldFormatCheck(const TString& hash) {

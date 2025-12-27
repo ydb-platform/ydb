@@ -10,34 +10,32 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "Effect",
+                        "Node Type": "Sink",
+                        "Operators": [
+                            {
+                                "Inputs": [],
+                                "Name": "Upsert",
+                                "Path": "/local/base_simple_ct_script_script/Questions",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_simple_ct_script_script/Questions"
+                            }
+                        ],
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "CTE Name": "precompute_0_0",
-                                "Node Type": "Upsert-ConstantExpr",
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
-                                        "Inputs": [
-                                            {
-                                                "InternalOperatorId": 1
-                                            }
-                                        ],
-                                        "Name": "Upsert",
-                                        "Path": "/local/base_simple_ct_script_script/Questions",
-                                        "Table": "base_simple_ct_script_script/Questions"
-                                    },
-                                    {
                                         "Inputs": [],
-                                        "Iterator": "precompute_0_0",
+                                        "Iterator": "[{idx: 1,text: \"to do or not to do\"}]",
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 1,
-                                "Tables": [
-                                    "base_simple_ct_script_script/Questions"
-                                ]
+                                "PlanNodeId": 1
                             }
+                        ],
+                        "Tables": [
+                            "base_simple_ct_script_script/Questions"
                         ]
                     }
                 ],

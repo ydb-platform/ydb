@@ -2059,8 +2059,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         )");
 
         WaitForContent(server, edgeActor, "/Root/Table/0_continuousBackupImpl", {
-            MakeUpsert(1, 100),
-            MakeUpsert(3, 300),
+            MakeReset(1, 100),
+            MakeReset(3, 300),
         });
     }
 
@@ -2096,8 +2096,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         )");
 
         WaitForContent(server, edgeActor, "/Root/Table/0_continuousBackupImpl", {
-            MakeUpsert(1, 100),
-            MakeUpsert(4, 400),
+            MakeReset(1, 100),
+            MakeReset(4, 400),
         });
     }
 
@@ -2145,7 +2145,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         // Parse the second record (Reset if EvWrite, Upsert is ProposeTx)
         NKikimrChangeExchange::TChangeRecord secondRecord;
         UNIT_ASSERT(secondRecord.ParseFromString(records[1].second));
-        UNIT_ASSERT_C(secondRecord.GetCdcDataChange().HasUpsert(), "Second record should be a reset");
+        UNIT_ASSERT_C(secondRecord.GetCdcDataChange().HasReset(), "Second record should be a reset");
     }
 
     Y_UNIT_TEST(ResetVsUpsertColumnStateSerialization) {

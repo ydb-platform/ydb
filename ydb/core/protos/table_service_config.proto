@@ -252,7 +252,7 @@ message TTableServiceConfig {
     reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     optional bool EnablePublishKqpProxyByRM = 34 [default = true];
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false];
-    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = false];
+    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = true];
     reserved 36; //optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     reserved 37; //optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     reserved 38; // optional bool EnableKqpImmediateEffects = 38 [default = true];
@@ -298,7 +298,7 @@ message TTableServiceConfig {
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
-    optional bool EnableOltpSink = 60 [default = false];
+    optional bool EnableOltpSink = 60 [default = true];
 
     enum EBlockChannelsMode {
         BLOCK_CHANNELS_SCALAR = 0;
@@ -371,7 +371,7 @@ message TTableServiceConfig {
 
     optional bool EnableSnapshotIsolationRW = 76 [default = false];
     optional bool EnableStreamWrite = 77 [default = false];
-    optional bool EnableBatchUpdates = 78 [default = false];
+    optional bool EnableBatchUpdates = 78 [default = true];
 
     optional bool AllowMultiBroadcasts = 79 [default = false];
 
@@ -425,8 +425,8 @@ message TTableServiceConfig {
 
     optional bool EnableOrderOptimizaionFSM = 99 [ default = false ];
 
-    optional bool EnableTopSortSelectIndex = 100 [ default = false ];
-    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = false ];
+    optional bool EnableTopSortSelectIndex = 100 [ default = true ];
+    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true ];
 
     optional bool EnableDataShardCreateTableAs = 102 [default = false];
 

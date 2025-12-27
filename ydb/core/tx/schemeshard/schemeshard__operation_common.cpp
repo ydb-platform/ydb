@@ -1129,9 +1129,20 @@ bool TProposedWaitParts::ProgressState(TOperationContext& context) {
             shard.Operation = TTxState::ProposedWaitParts;
             context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
         }
+
         Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
-        context.OnComplete.RouteByTablet(OperationId,  context.SS->ShardInfos.at(shard.Idx).TabletID);
+        TTabletId tablet = context.SS->ShardInfos.at(shard.Idx).TabletID;
+
+        const TShardInfo& shardInfo = context.SS->ShardInfos.at(shard.Idx);
+
+        if (shardInfo.TabletType == ETabletType::ColumnShard) {
+            auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+            context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
+        }
+        
+        context.OnComplete.RouteByTablet(OperationId, tablet);
     }
+
     txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
 
     // Move all notifications that were already received

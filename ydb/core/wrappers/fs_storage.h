@@ -7,7 +7,6 @@ namespace NKikimr::NWrappers::NExternalStorage {
 class TFsExternalStorage: public IExternalStorageOperator {
 private:
     TString BasePath;
-    bool Verbose = true;
     mutable NActors::TActorId OperationActorId;
     mutable bool ActorCreated = false;
 

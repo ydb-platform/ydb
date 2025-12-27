@@ -6,9 +6,9 @@
 namespace NKikimr {
 namespace NKqp {
 
-bool ISimplifiedRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool ISimplifiedRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
-    auto output = SimpleMatchAndAppy(input, ctx, props);
+    auto output = SimpleMatchAndApply(input, ctx, props);
     if (input != output) {
         input = output;
         return true;
@@ -66,7 +66,7 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
             for (const auto& rule : Rules) {
                 auto op = iter.Current;
 
-                if (rule->MatchAndAppy(op, ctx, root.PlanProps)) {
+                if (rule->MatchAndApply(op, ctx, root.PlanProps)) {
                     fired = true;
 
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;

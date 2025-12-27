@@ -20,7 +20,7 @@ enum ERuleProperties: ui32 {
  * Interface for transformation rule:
  *
  * The rule may contain various metadata such as its name and a list of properties it requires to be computed
- * And it currently has a MatchAndAppy method that checks if the rule can be applied and makes in-place modifications
+ * And it currently has a MatchAndApply method that checks if the rule can be applied and makes in-place modifications
  * to the plan.
  */
 class IRule {
@@ -28,7 +28,7 @@ class IRule {
     IRule(TString name) : RuleName(name) {}
     IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
 
-    virtual bool MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
+    virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;
 
@@ -46,9 +46,9 @@ class ISimplifiedRule : public IRule {
     ISimplifiedRule(TString name) : IRule(name) {}
     ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
 
-    virtual std::shared_ptr<IOperator> SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
+    virtual std::shared_ptr<IOperator> SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
-    virtual bool MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+    virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
 /**

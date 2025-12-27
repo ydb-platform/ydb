@@ -134,6 +134,12 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     THashSet<std::pair<int, TInfoUnit>, TIntTUnitPairHash> poison;
 
     for (auto iter : root) {
+        // FIXME: If there is no scope for this operator, that means it from a subplan that we didn't process
+        // while building the scope map. We skip them for now
+        if (!scopes.RevScopeMap.contains(iter.Current)) {
+            continue;
+        }
+
         TVector<TInfoUnit> mapsTo;
         THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> mapsFrom;
         
@@ -303,6 +309,12 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     // Iterate through the plan, applying renames to one operator at a time
 
     for (auto it : root) {
+        // FIXME: If there is no scope for this operator, that means it from a subplan that we didn't process
+        // while building the scope map. We skip them for now
+        if (!scopes.RevScopeMap.contains(it.Current)) {
+            continue;
+        }
+
         // Build a subset of the map for the current scope only
         auto scopeId = scopes.RevScopeMap.at(it.Current);
 

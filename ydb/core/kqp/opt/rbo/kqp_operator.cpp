@@ -161,17 +161,23 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
 }
 
 /**
- * Scan expression and retrieve all members while respecting scalar context variables:
- *   If `withScalarContext` is true - retrieve all members including all scalar context IUs
+ * Scan expression and retrieve all members while respecting subplan context variables:
+ *   If `withSubplanContext` is true - retrieve all members including all subplan context IUs
  */
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& props, bool withScalarContext) {
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& props, bool withSubplanContext, bool withDependencies) {
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);
         auto iu = TInfoUnit(member.Name().StringValue());
-        if (props.ScalarSubplans.PlanMap.contains(iu)){
-            if (withScalarContext) {
-                iu.SetScalarContext(true);
+        if (props.Subplans.PlanMap.contains(iu)){
+            if (withSubplanContext) {
+                iu.SetSubplanContext(true);
+                iu.AddDependencies(props.Subplans.PlanMap.at(iu).Tuple);
                 IUs.push_back(iu);
+            }
+            if (withDependencies) {
+                for (auto dep : props.Subplans.PlanMap.at(iu).Tuple) {
+                    IUs.push_back(dep);
+                }
             }
         }
         else {
@@ -181,11 +187,11 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& pr
     }
 
     for (auto c : node->Children()) {
-        GetAllMembers(c, IUs, props, withScalarContext);
+        GetAllMembers(c, IUs, props, withSubplanContext, withDependencies);
     }
 }
 
-TInfoUnit::TInfoUnit(TString name, bool scalarContext) : ScalarContext(scalarContext) {
+TInfoUnit::TInfoUnit(TString name, bool subplanContext) : SubplanContext(subplanContext) {
     if (auto idx = name.find('.'); idx != TString::npos) {
         Alias = name.substr(0, idx);
         if (Alias.StartsWith("_alias_")) {
@@ -505,12 +511,12 @@ TVector<TInfoUnit> TOpMap::GetOutputIUs() {
     return res;
 }
 
-TVector<TInfoUnit> TOpMap::GetUsedIUs() {
+TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
     TVector<TInfoUnit> result;
 
     for (auto lambda : GetLambdas()) {
         TVector<TInfoUnit> lambdaIUs;
-        GetAllMembers(lambda, lambdaIUs);
+        GetAllMembers(lambda, lambdaIUs, props, false, true);
         result.insert(result.begin(), lambdaIUs.begin(), lambdaIUs.end());
     }
 
@@ -527,7 +533,7 @@ TVector<TExprNode::TPtr> TOpMap::GetLambdas() {
     return result;
 }
 
-TVector<TInfoUnit> TOpMap::GetScalarSubplanIUs(TPlanProps& props) {
+TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
     TVector<TInfoUnit> allVars;
     TVector<TInfoUnit> res;
 
@@ -540,7 +546,7 @@ TVector<TInfoUnit> TOpMap::GetScalarSubplanIUs(TPlanProps& props) {
     }
 
     for (const auto& iu : allVars) {
-        if (iu.IsScalarContext()) {
+        if (iu.IsSubplanContext()) {
             res.push_back(iu);
         }
     }
@@ -723,20 +729,20 @@ TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {
     TVector<TInfoUnit> res;
 
     auto lambdaBody = TCoLambda(FilterLambda).Body();
-    GetAllMembers(lambdaBody.Ptr(), res, props, true);
+    GetAllMembers(lambdaBody.Ptr(), res, props, true, true);
     return res;
 }
 
-TVector<TInfoUnit> TOpFilter::GetUsedIUs() {
+TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
     TVector<TInfoUnit> res;
-    GetAllMembers(FilterLambda, res);
+    GetAllMembers(FilterLambda, res, props, false, true);
     return res;
 }
 
-TVector<TInfoUnit> TOpFilter::GetScalarSubplanIUs(TPlanProps& props) {
+TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
     TVector<TInfoUnit> res;
     for (const auto& iu : GetFilterIUs(props)) {
-        if (iu.IsScalarContext()) {
+        if (iu.IsSubplanContext()) {
             res.push_back(iu);
         }
     }
@@ -786,23 +792,23 @@ TConjunctInfo TOpFilter::GetConjunctInfo(TPlanProps& props) const {
         TExprNode::TPtr rightArg;
         if (TestAndExtractEqualityPredicate(conjObj, leftArg, rightArg)) {
             TVector<TInfoUnit> conjIUs;
-            GetAllMembers(conj, conjIUs, props);
+            GetAllMembers(conj, conjIUs, props, false, true);
 
             if (leftArg->IsCallable("Member") && rightArg->IsCallable("Member") && conjIUs.size() >= 2) {
                 TVector<TInfoUnit> leftIUs;
                 TVector<TInfoUnit> rightIUs;
-                GetAllMembers(leftArg, leftIUs, props);
-                GetAllMembers(rightArg, rightIUs, props);
+                GetAllMembers(leftArg, leftIUs, props, false, true);
+                GetAllMembers(rightArg, rightIUs, props, false, true);
                 res.JoinConditions.push_back(TJoinConditionInfo(conjObj, leftIUs[0], rightIUs[0]));
             }
             else {
                 TVector<TInfoUnit> conjIUs;
-                GetAllMembers(conj, conjIUs);
+                GetAllMembers(conj, conjIUs, props, false, true);
                 res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
             }
         } else {
             TVector<TInfoUnit> conjIUs;
-            GetAllMembers(conj, conjIUs, props);
+            GetAllMembers(conj, conjIUs, props, false, true);
             res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
         }
     }
@@ -830,7 +836,8 @@ TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
     return res;
 }
 
-TVector<TInfoUnit> TOpJoin::GetUsedIUs() {
+TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
     TVector<TInfoUnit> result;
     for (auto & [leftKey, rightKey]: JoinKeys) {
         result.push_back(leftKey);
@@ -921,7 +928,8 @@ TOpSort::TOpSort(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<
 
 TVector<TInfoUnit> TOpSort::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 
-TVector<TInfoUnit> TOpSort::GetUsedIUs() {
+TVector<TInfoUnit> TOpSort::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
     TVector<TInfoUnit> result;
     for (auto el : SortElements) {
         result.push_back(el.SortColumn);
@@ -995,7 +1003,8 @@ TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
     return outputIU;
 }
 
-TVector<TInfoUnit> TOpAggregate::GetUsedIUs() {
+TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
     return GetOutputIUs();
 }
 
@@ -1119,8 +1128,8 @@ void TOpRoot::ComputeParents() {
     std::shared_ptr<TOpRoot> noParent;
     ComputeParentsRec(GetInput(), noParent);
 
-    for (auto subplan : PlanProps.ScalarSubplans.Get()) {
-        ComputeParentsRec(subplan, noParent);
+    for (auto subplan : PlanProps.Subplans.Get()) {
+        ComputeParentsRec(subplan.Plan, noParent);
     }
 }
 

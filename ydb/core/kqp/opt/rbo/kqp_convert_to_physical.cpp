@@ -337,7 +337,16 @@ TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TEx
     TVector<TCoAtom> rightKeyColumnNames;
 
     auto leftIUs = join.GetLeftInput()->GetOutputIUs();
+
+    bool leftSideOnly = (join.JoinKind == "LeftSemi" || join.JoinKind == "LeftOnly");
+
     auto rightIUs = join.GetRightInput()->GetOutputIUs();
+    if (leftSideOnly) {
+        rightIUs.clear();
+        for ( auto &[left, right] : join.JoinKeys) {
+            rightIUs.push_back(right);
+        }
+    }
 
     auto leftTupleSize = leftIUs.size();
     for (size_t i = 0; i < leftIUs.size(); i++) {
@@ -377,7 +386,7 @@ TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TEx
     .Done().Ptr();
     // clang-format on
 
-    rightInput = ExpandJoinInput(rightInput, join.GetRightInput()->GetOutputIUs(), ctx);
+    rightInput = ExpandJoinInput(rightInput, rightIUs, ctx);
 
     // clang-format off
     auto graceJoin = Build<TCoGraceJoinCore>(ctx, pos)
@@ -1575,7 +1584,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
             stageArgs[opStageId].push_back(rightArg);
             if (join->JoinKind == "Cross") {
                 currentStageBody = BuildCrossJoin(*join, leftInput, rightInput, ctx, op->Pos);
-            } else if (const auto joinKind = to_lower(join->JoinKind); (joinKind == "inner" || joinKind == "left")) {
+            } else if (const auto joinKind = to_lower(join->JoinKind); (joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi")) {
                 currentStageBody = BuildGraceJoinCore(*join, leftInput, rightInput, ctx, op->Pos);
             } else {
                 TStringBuilder builder;

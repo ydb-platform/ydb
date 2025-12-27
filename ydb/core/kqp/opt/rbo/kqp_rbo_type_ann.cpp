@@ -82,18 +82,27 @@ TStatus ComputeTypes(std::shared_ptr<TOpEmptySource> emptySource, TRBOContext & 
     return TStatus::Ok;
 }
 
-const TStructExprType* AddScalarTypes(const TStructExprType* itemType, TVector<TInfoUnit> scalarContextIUs, TRBOContext& ctx, TPlanProps& props) {
+const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<TInfoUnit> subplanContextIUs, TRBOContext& ctx, TPlanProps& props) {
     TVector<const TItemExprType*> structItemTypes;
     for (const auto *item : itemType->GetItems()) {
         structItemTypes.push_back(item);
     }
 
-    for (const auto& iu : scalarContextIUs) {
-        auto subplan = props.ScalarSubplans.PlanMap.at(iu);
-        auto subplanType = subplan->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        auto scalarExprType = subplanType->GetItems()[0];
-
-        auto newType = ctx.ExprCtx.MakeType<TItemExprType>(iu.GetFullName(), scalarExprType->GetItemType());
+    for (const auto& iu : subplanContextIUs) {
+        const TTypeAnnotationNode* subplanType;
+        auto subplanEntry = props.Subplans.PlanMap.at(iu);
+        if (subplanEntry.Type == ESubplanType::EXPR) {
+            auto subplan = subplanEntry.Plan;
+            auto subplanTupleType = subplan->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            subplanType = subplanTupleType->GetItems()[0]->GetItemType();
+        } else {
+            if (!props.PgSyntax) {
+                subplanType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Bool);
+            } else {
+                subplanType = ctx.ExprCtx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId);
+            }
+        }
+        auto newType = ctx.ExprCtx.MakeType<TItemExprType>(iu.GetFullName(), subplanType);
         structItemTypes.push_back(newType);
     }
 
@@ -108,14 +117,14 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanP
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, itemType: " << *(TTypeAnnotationNode*)itemType;
 
     auto filterIUs = filter->GetFilterIUs(props);
-    TVector<TInfoUnit> scalarContextIUs;
+    TVector<TInfoUnit> subplanContextIUs;
     for (const auto& iu : filterIUs) {
-        if (iu.IsScalarContext()) {
-            scalarContextIUs.push_back(iu);
+        if (iu.IsSubplanContext()) {
+            subplanContextIUs.push_back(iu);
         }
     }
-    if (!scalarContextIUs.empty()) {
-        itemType = AddScalarTypes(itemType, scalarContextIUs, ctx, props);
+    if (!subplanContextIUs.empty()) {
+        itemType = AddSubplanTypes(itemType, subplanContextIUs, ctx, props);
     }
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, itemType after scalars: " << *(TTypeAnnotationNode*)itemType;
 

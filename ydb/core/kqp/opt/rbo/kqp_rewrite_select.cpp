@@ -334,18 +334,30 @@ TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext &ctx) {
                 .Seal()
             .Build();
             // clnag-format on
-        }
-        else if (input->IsCallable()){
-            TVector<TExprNode::TPtr> newChildren;
-            for (auto c : input->Children()) {
-                newChildren.push_back(ReplacePgOps(c, ctx));
-            }
-            // clang-format off
+    } else if (input->IsCallable("PgNot")) {
+        // clang-format off
             return ctx.Builder(input->Pos())
-                .Callable(input->Content())
-                    .Add(std::move(newChildren))
+                .Callable("ToPg")
+                    .Callable(0, "Not")
+                        .Callable(0, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(0), ctx))
+                        .Seal()
+                    .Seal()
                 .Seal()
             .Build();
+            // clnag-format on
+    }
+    else if (input->IsCallable()){
+        TVector<TExprNode::TPtr> newChildren;
+        for (auto c : input->Children()) {
+            newChildren.push_back(ReplacePgOps(c, ctx));
+        }
+        // clang-format off
+        return ctx.Builder(input->Pos())
+            .Callable(input->Content())
+                .Add(std::move(newChildren))
+            .Seal()
+        .Build();
         // clang-format on
     } else if (input->IsList()) {
         TVector<TExprNode::TPtr> newChildren;
@@ -628,10 +640,10 @@ TExprNode::TPtr BuildFilter(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TV
     return Build<TKqpOpFilter>(ctx, pos)
         .Input(input)
         .Lambda<TCoLambda>()
-            .Args({"arg"})
+            .Args({"_filter_arg_"})
             .Body<TExprApplier>()
                 .Apply(TExprBase(predicate))
-                .With(TExprBase(lambdaArg), "arg")
+                .With(TExprBase(lambdaArg), "_filter_arg_")
             .Build()
         .Build()
     .Done().Ptr();
@@ -860,15 +872,21 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         auto where = GetSetting(setItem->Tail(), "where");
 
         if (where) {
-            TExprNode::TPtr lambda = where->Child(1)->Child(1);
+            TExprNode::TPtr lambdaPtr = ctx.DeepCopyLambda(*(where->Child(1)->Child(1)));
             if (pgSyntax) {
-                lambda = ReplacePgOps(lambda, ctx);
+                lambdaPtr = ReplacePgOps(lambdaPtr, ctx);
             }
-            lambda = FlattenNestedConjunctions(lambda, ctx);
+            auto lambda = TCoLambda(FlattenNestedConjunctions(lambdaPtr, ctx));
             // clang-format off
             filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
                 .Input(filterExpr)
-                .Lambda(lambda)
+                .Lambda<TCoLambda>()
+                    .Args({"_filter_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(lambda.Body())
+                        .With(lambda.Args().Arg(0), "_filter_arg_")
+                    .Build()
+                .Build()
             .Done().Ptr();
             // clang-format on
         }
@@ -1231,7 +1249,13 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             resultElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
                 .Input(resultExpr)
                 .Variable(variable)
-                .Lambda(lambda)
+                .Lambda<TCoLambda>()
+                    .Args({"_map_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(TCoLambda(lambda))
+                        .With(TCoLambda(lambda).Args().Arg(0), "_map_arg_")
+                    .Build()
+                .Build()
             .Done().Ptr());
             // clang-format on
             

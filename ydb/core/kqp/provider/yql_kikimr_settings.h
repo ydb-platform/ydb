@@ -63,7 +63,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
-    NCommon::TConfSetting<bool, Static> DqChannelVersion;
+    NCommon::TConfSetting<ui32, Static> DqChannelVersion;
 
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
 

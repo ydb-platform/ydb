@@ -250,6 +250,9 @@ TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources, TVector<b
 TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped);
 TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1);
 bool IsSubqueryRef(const TSourcePtr& source);
+TNodePtr BuildYqlSubquery(TNodePtr source, TString alias);
+TNodePtr BuildYqlSubqueryRef(TNodePtr subquery, TString ref);
+bool IsYqlSubqueryRef(const TNodePtr& source);
 
 TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos);
 TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false, bool withTables = false);

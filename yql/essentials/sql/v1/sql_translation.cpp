@@ -3,6 +3,8 @@
 #include "sql_call_expr.h"
 #include "sql_query.h"
 #include "sql_values.h"
+#include "sql_select_yql.h"
+#include "select_yql.h"
 #include "sql_select.h"
 #include "object_processing.h"
 #include "source.h"
@@ -3922,25 +3924,58 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
     TNodePtr nodeExpr = nullptr;
     switch (rule.GetBlock3().Alt_case()) {
         case TRule_named_nodes_stmt::TBlock3::kAlt1: {
-            TSqlExpression expr(Ctx_, Mode_);
-            TNodePtr result = Unwrap(expr.BuildSourceOrNode(rule.GetBlock3().GetAlt1().GetRule_expr1()));
-            if (TSourcePtr source = MoveOutIfSource(result)) {
-                result = BuildSourceNode(Ctx_.Pos(), std::move(source));
-            }
-            return result;
+            const auto& alt = rule.GetBlock3().GetAlt1().GetRule_expr1();
+            return YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    TSqlExpression expr(Ctx_, Mode_);
+                    expr.SetYqlSelectProduced(true);
+
+                    TNodeResult node = expr.Build(alt);
+                    if (!node) {
+                        return std::unexpected(node.error());
+                    }
+
+                    if (TNodePtr source = GetYqlSource(*node)) {
+                        node = TNonNull(source);
+                    }
+
+                    return node;
+                },
+                [&]() -> TNodePtr {
+                    TSqlExpression expr(Ctx_, Mode_);
+                    expr.SetYqlSelectProduced(false);
+
+                    TNodePtr result = Unwrap(expr.BuildSourceOrNode(alt));
+                    if (TSourcePtr source = MoveOutIfSource(result)) {
+                        result = BuildSourceNode(Ctx_.Pos(), std::move(source));
+                    }
+
+                    return result;
+                });
         }
 
         case TRule_named_nodes_stmt::TBlock3::kAlt2: {
-            const auto& subselect_rule = rule.GetBlock3().GetAlt2().GetRule_select_unparenthesized_stmt1();
+            const auto& alt = rule.GetBlock3().GetAlt2().GetRule_select_unparenthesized_stmt1();
+            return YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    TNodeResult node = BuildYqlSelectSubExpr(Ctx_, Mode_, alt);
+                    if (!node) {
+                        return std::unexpected(node.error());
+                    }
 
-            TPosition pos;
-            TSourcePtr source = TSqlSelect(Ctx_, Mode_).Build(subselect_rule, pos);
+                    return TNonNull(GetYqlSource(std::move(*node)));
+                },
+                [&]() -> TNodePtr {
+                    TSqlSelect select(Ctx_, Mode_);
 
-            if (!source) {
-                return {};
-            }
+                    TPosition pos;
+                    TSourcePtr source = select.Build(alt, pos);
+                    if (!source) {
+                        return nullptr;
+                    }
 
-            return BuildSourceNode(pos, std::move(source));
+                    return BuildSourceNode(pos, std::move(source));
+                });
         }
 
         case TRule_named_nodes_stmt::TBlock3::ALT_NOT_SET:
@@ -6021,6 +6056,44 @@ bool TSqlTranslation::ParseAlterStreamingQueryAction(const TRule_alter_streaming
     }
 
     return true;
+}
+
+TNodePtr TSqlTranslation::YqlSelectOrLegacy(
+    std::function<TNodeResult()> yqlSelect,
+    std::function<TNodePtr()> legacy)
+{
+    const EYqlSelectMode mode = Ctx_.GetYqlSelectMode();
+    if (mode == EYqlSelectMode::Disable) {
+        return legacy();
+    }
+
+    const NYql::TLangVersion langVer = YqlSelectLangVersion();
+    if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
+        Error() << "YqlSelect is not available before "
+                << FormatLangVersion(langVer);
+        return nullptr;
+    }
+
+    TNodeResult result = yqlSelect();
+    if (result) {
+        return std::move(*result);
+    }
+
+    switch (result.error()) {
+        case ESQLError::Basic: {
+            return nullptr;
+        }
+        case ESQLError::UnsupportedYqlSelect: {
+            if (mode == EYqlSelectMode::Force) {
+                Error() << "Translation of the statement "
+                        << "to YqlSelect was forced, but unsupported";
+                return nullptr;
+            }
+
+            YQL_ENSURE(mode == EYqlSelectMode::Auto);
+            return legacy();
+        }
+    }
 }
 
 } // namespace NSQLTranslationV1

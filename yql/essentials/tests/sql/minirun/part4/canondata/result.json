@@ -1933,6 +1933,20 @@
             "uri": "https://{canondata_backend}/937458/7d5fe8c90d2c6ae42045aa9fc2babd60f26d3828/resource.tar.gz#test.test_select_yql-group_by_a_sum_distinct_b-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-named_node_subquery_from-default.txt-Debug]": [
+        {
+            "checksum": "7133c18d5101e87443bd9ca5439b817b",
+            "size": 556,
+            "uri": "https://{canondata_backend}/1942525/4e023f4fd838597599ae63f76f145d49befb7eb2/resource.tar.gz#test.test_select_yql-named_node_subquery_from-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-named_node_subquery_from-default.txt-Results]": [
+        {
+            "checksum": "df04585c1a71220e34da88762b97509a",
+            "size": 976,
+            "uri": "https://{canondata_backend}/1942525/4e023f4fd838597599ae63f76f145d49befb7eb2/resource.tar.gz#test.test_select_yql-named_node_subquery_from-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-projection_alias_case_sensivity-default.txt-Debug]": [
         {
             "checksum": "c1bd67e1e4d01926ec04f57df3fbc9a7",

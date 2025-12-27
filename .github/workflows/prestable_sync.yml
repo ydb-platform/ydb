@@ -17,7 +17,7 @@ jobs:
       
         include:
           - base_branch: prestable-26-1
-            head_branch: stable-25-4
+            head_branch: main
             label: sync-prestable
     steps:
       - name: checkout

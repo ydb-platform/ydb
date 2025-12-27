@@ -154,9 +154,25 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     // Use target version for AlterData
                     table->AlterData->AlterVersion = targetVersion;
                 }
-                
-                LOG_I(DebugHint() << " Preparing ALTER for table " << tablePathId 
+
+                LOG_I(DebugHint() << " Preparing ALTER for table " << tablePathId
                       << " version: " << table->AlterVersion << " -> " << table->AlterData->AlterVersion);
+
+                // Also update parent index version NOW to ensure consistency
+                // This prevents version mismatch if SyncIndexSchemaVersions fails to process this table
+                TPath indexPath = tablePath.Parent();
+                if (indexPath.IsResolved() && indexPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
+                    TPathId indexPathId = indexPath.Base()->PathId;
+                    if (context.SS->Indexes.contains(indexPathId)) {
+                        auto index = context.SS->Indexes.at(indexPathId);
+                        if (index->AlterVersion < targetVersion) {
+                            index->AlterVersion = targetVersion;
+                            context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
+                            LOG_I(DebugHint() << " Updated parent index " << indexPathId
+                                  << " version to " << targetVersion);
+                        }
+                    }
+                }
 
                 // Add all shards of this table to txState
                 for (const auto& shard : table->GetPartitions()) {

@@ -7,8 +7,8 @@ TString TFsExternalStorageConfig::DoGetStorageId() const {
     return BasePath;
 }
 
-IExternalStorageOperator::TPtr TFsExternalStorageConfig::DoConstructStorageOperator(bool verbose) const {
-    return std::make_shared<TFsExternalStorage>(BasePath, verbose);
+IExternalStorageOperator::TPtr TFsExternalStorageConfig::DoConstructStorageOperator(bool) const {
+    return std::make_shared<TFsExternalStorage>(BasePath);
 }
 
 TFsExternalStorageConfig::TFsExternalStorageConfig(const NKikimrSchemeOp::TFSSettings& settings)

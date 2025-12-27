@@ -19,6 +19,7 @@ namespace NKikimr::NWrappers::NExternalStorage {
 
 #define FS_LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 #define FS_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
+#define FS_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 
 namespace {
 
@@ -418,13 +419,9 @@ public:
 
 } // anonymous namespace
 
-TFsExternalStorage::TFsExternalStorage(const TString& basePath, bool verbose)
+TFsExternalStorage::TFsExternalStorage(const TString& basePath)
     : BasePath(basePath)
-    , Verbose(verbose)
 {
-    FS_LOG_N("TFsExternalStorage created"
-        << ": BasePath# " << BasePath
-        << ", Verbose# " << Verbose);
 }
 
 TFsExternalStorage::~TFsExternalStorage() {

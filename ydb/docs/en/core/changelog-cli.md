@@ -1,5 +1,6 @@
 # {{ ydb-short-name }} CLI changelog
 
+<<<<<<< HEAD
 ## Version 2.29.0 {#2-29-0}
 
 Released on February 11, 2026. To update to version **2.29.0**, select the [Downloads](downloads/ydb-cli.md) section.
@@ -29,6 +30,8 @@ Released on February 11, 2026. To update to version **2.29.0**, select the [Down
 * Fixed an out-of-memory issue in the `{{ ydb-cli }} workload query run` [command](./reference/ydb-cli/commands/workload/index.md) for queries with large result sets.
 * Fixed static credentials parsing to avoid using a [profile](./reference/ydb-cli/profile/index.md) password when the username comes from another source.
 
+=======
+>>>>>>> 9c3f9be787b (Add release notes for YDB CLI 2.28.0 (#31185))
 ## Version 2.28.0 {#2-28-0}
 
 Released on December 19, 2025. To update to version **2.28.0**, select the [Downloads](downloads/ydb-cli.md) section.
@@ -59,11 +62,11 @@ Released on October 30, 2025. To update to version **2.27.0**, select the [Downl
 ### Features
 
 * Added the `--exclude` option to the `{{ ydb-cli }} import s3` [command](./reference/ydb-cli/export-import/import-s3.md), allowing schema objects to be excluded from the import if their names match a pattern.
-* Added the `{{ ydb-cli }} admin cluster state fetch` command to collect information about cluster nodes' state and metrics.
 * Added [transfer](./concepts/transfer.md) objects support to the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md) and `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md).
 * Added a new `--retention-period` option to the `{{ ydb-cli }} topic` subcommands. Usage of the legacy `--retention-period-hours` option is discouraged.
 * The `{{ ydb-cli }} topic consumer add` [command](./reference/ydb-cli/topic-consumer-add.md) now has a new `--availability-period` option, which overrides the consumer's retention guarantee.
 * The `{{ ydb-cli }} workload vector` [commands](./reference/ydb-cli/commands/workload/index.md) now support `build-index` and `drop-index` subcommands.
+* **_(Requires server v26.1+)_** Added the `{{ ydb-cli }} admin cluster state fetch` command to collect information about cluster nodes' state and metrics.
 
 ### Bug fixes
 

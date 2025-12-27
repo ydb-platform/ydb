@@ -1,5 +1,6 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+<<<<<<< HEAD
 ## Версия 2.29.0 {#2-29-0}
 
 Дата выхода 11 февраля 2026. Для обновления до версии **2.29.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
@@ -29,6 +30,8 @@
 * Исправлена ошибка Out Of Memory в [команде](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload query run` при выполнении запросов с большими наборами результатов.
 * Исправлен разбор параметров аутентификации по логину и паролю: пароль из [профиля](./reference/ydb-cli/profile/index.md) больше не используется, если имя пользователя получено из другого источника.
 
+=======
+>>>>>>> 9c3f9be787b (Add release notes for YDB CLI 2.28.0 (#31185))
 ## Версия 2.28.0 {#2-28-0}
 
 Дата выхода 19 декабря 2025. Для обновления до версии **2.28.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
@@ -58,11 +61,11 @@
 ### Функциональность
 
 * Добавлена опция `--exclude` в [команду](./reference/ydb-cli/export-import/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая исключать схемные объекты из импорта по шаблону имени.
-* Добавлена команда `{{ ydb-cli }} admin cluster state fetch` для сбора информации о состоянии узлов кластера и метриках.
 * Добавлена поддержка объектов типа [трансфер](./concepts/transfer.md) при выполнении [команды](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и [команды](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`.
 * Добавлена новая опция `--retention-period` в подкоманды `{{ ydb-cli }} topic`. Использование устаревшей опции `--retention-period-hours` не рекомендуется.
 * В [команде](./reference/ydb-cli/topic-consumer-add.md) `{{ ydb-cli }} topic consumer add` появилась новая опция `--availability-period`, которая переопределяет гарантию удержания для читателя.
 * В [командах](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload vector` добавлены подкоманды `build-index` и `drop-index`.
+* **_(Требуется сервер v26.1+)_** Добавлена команда `{{ ydb-cli }} admin cluster state fetch` для сбора информации о состоянии узлов кластера и метриках.
 
 ### Исправления ошибок
 

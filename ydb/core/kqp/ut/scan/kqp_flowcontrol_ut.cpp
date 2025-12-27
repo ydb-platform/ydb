@@ -77,7 +77,7 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
     settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
     auto it = db.StreamExecuteScanQuery(R"(
-            pragma ydb.UseFastChannels = "false";
+            pragma ydb.DqChannelVersion = "1";
 
             $r = (select * from `/Root/FourShard` where Key > 201);
 

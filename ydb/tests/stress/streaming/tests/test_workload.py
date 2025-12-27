@@ -25,7 +25,7 @@ class TestYdbWorkload(StressFixture):
                 'KQP_PROXY': LogLevels.DEBUG,
                 'KQP_EXECUTOR': LogLevels.DEBUG},
             table_service_config={
-                "enable_fast_channels": False
+                "dq_channel_version": 1
             },
         )
 

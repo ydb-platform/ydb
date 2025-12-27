@@ -3562,7 +3562,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
         {
             auto result = kikimr.RunCall([&] {
                 return db.ExecuteQuery(R"(
-                    pragma ydb.UseFastChannels = "false";
+                    pragma ydb.DqChannelVersion = "1";
                     DISCARD SELECT COUNT(*) FROM `/Root/TwoShard`;
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             });
@@ -3580,7 +3580,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
 
             auto result = kikimr.RunCall([&] {
                 return db.ExecuteQuery(R"(
-                    pragma ydb.UseFastChannels = "false";
+                    pragma ydb.DqChannelVersion = "1";
                     SELECT COUNT(*) FROM `/Root/TwoShard`;
                 )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             });

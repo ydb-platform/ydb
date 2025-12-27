@@ -14,7 +14,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-      
         include:
           - base_branch: prestable-26-1
             head_branch: main

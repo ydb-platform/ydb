@@ -322,7 +322,7 @@ public:
     virtual bool CheckAccessViewer(const TRequestState& request) = 0;
     virtual bool CheckAccessMonitoring(const TRequestState& request) = 0;
     virtual bool CheckAccessAdministration(const TRequestState& request) = 0;
-    virtual void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, const TRequestState& request, TString& bscError, bool& forceRetryPossible) = 0;
+    virtual void BSCError2JSON(const NKikimrBlobStorage::TConfigResponse& response, const TRequestState& request, NJson::TJsonValue& json, bool forced) = 0;
     virtual TString MakeForward(const TRequestState& request, const std::vector<ui32>& nodes) = 0;
 
     virtual void AddRunningQuery(const TString& queryId, const TActorId& actorId) = 0;

@@ -506,7 +506,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << " expectedRequestUnits = " << formulaRequestUnitsApproximation
                 << " actualRequestUnits = " << actualRequestUnits
                 << Endl;
-            
+
             // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
             // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             // or ensure manually that the difference is not really big
@@ -776,7 +776,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             meteringBlocker.Unblock();
         }
@@ -842,7 +842,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(336, TInstant::Seconds(10), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             meteringBlocker.Stop().Unblock();
         }
@@ -932,7 +932,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 1 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
         }
@@ -951,7 +951,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             billedStats = expectedBillingStats;
             meteringBlocker.Unblock();
@@ -963,7 +963,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 2 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
         }
@@ -979,7 +979,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 3 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>" + shardReshuffleBillingStats.ShortDebugString());
@@ -999,7 +999,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(20))
                 .Usage(TBillRecord::RequestUnits(153, TInstant::Seconds(10), TInstant::Seconds(20)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             billedStats = expectedBillingStats;
             meteringBlocker.Unblock();
@@ -1011,7 +1011,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 4 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>" + shardReshuffleBillingStats.ShortDebugString());
@@ -1022,7 +1022,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         expectedBillingStats -= shardReshuffleBillingStats; // already added
         AddUpload(expectedBillingStats, tableRows, buildBytes);
         AddRead(expectedBillingStats, tableRows, tableBytes);
-    
+
         if (doRestarts) {
             runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
             RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
@@ -1039,7 +1039,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
             Cout << expectedBillingStats.ShortDebugString() << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + expectedBillingStats.ShortDebugString());
         }
@@ -1058,7 +1058,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(20))
                 .Usage(TBillRecord::RequestUnits(311, TInstant::Seconds(20), TInstant::Seconds(20)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             billedStats = expectedBillingStats;
             meteringBlocker.Unblock();
@@ -1070,7 +1070,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 6 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + expectedBillingStats.ShortDebugString());
         }

@@ -993,7 +993,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(LeftJoins) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());

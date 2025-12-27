@@ -70,7 +70,7 @@ Example of enabling TLS on the HTTP port, making it HTTPS:
 
 ```yaml
 monitoring_config:
-    monitoring_certificate_file: "/opt/ydb/certs/node.crt"
+    monitoring_certificate_file: "/opt/ydb/certs/web.pem"
 ```
 
 ## {{ ydb-short-name }} as a client

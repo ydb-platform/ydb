@@ -15,6 +15,7 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/config/yql_config_provider.h>
 
 #include <library/cpp/resource/resource.h>
 
@@ -167,7 +168,9 @@ private:
     }
 
     bool DoTypeCheck(TAstNode* astRoot, TLangVersion langver, TIssues& issues) {
-        return PartialAnnonateTypes(astRoot, langver, issues);
+        return PartialAnnonateTypes(astRoot, langver, issues, [](TTypeAnnotationContext& newTypeCtx) {
+            return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
+        });
     }
 
     void FillClusters(const TChecksRequest& request, NSQLTranslation::TTranslationSettings& settings) {

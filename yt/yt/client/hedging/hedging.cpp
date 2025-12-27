@@ -254,7 +254,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, PausePipeline, (const TYPath&, const TPausePipelineOptions&));
     UNSUPPORTED_METHOD(TFuture<TPipelineState>, GetPipelineState, (const TYPath&, const TGetPipelineStateOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (const NYPath::TYPath&, const NYPath::TYPath&, const TGetFlowViewOptions&));
-    UNSUPPORTED_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (const NYPath::TYPath&, const TString&, const NYson::TYsonString&, const TFlowExecuteOptions&));
+    UNSUPPORTED_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (const NYPath::TYPath&, const std::string&, const NYson::TYsonString&, const TFlowExecuteOptions&));
     UNSUPPORTED_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (const std::string&, int, NObjectClient::TTransactionId, const TStartShuffleOptions&));
     UNSUPPORTED_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (const TSignedShuffleHandlePtr&, int, std::optional<TIndexRange>, const TShuffleReaderOptions&));
     UNSUPPORTED_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (const TSignedShuffleHandlePtr&, const std::string&, std::optional<int>, const TShuffleWriterOptions&));

@@ -130,8 +130,10 @@ public:
         }
     };
 
-    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username, const TAllowSettingPolicy& policy)
+    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
+                    const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
         : Types_(types)
+        , ForPartialTypeCheck_(forPartialTypeCheck)
         , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
         , Username_(username)
         , Policy_(policy)
@@ -578,6 +580,10 @@ private:
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                 return false;
+            }
+
+            if (ForPartialTypeCheck_) {
+                return true;
             }
 
             auto dataSource = args[0];
@@ -1155,6 +1161,10 @@ private:
             return false;
         }
 
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         // file alias
         const auto& fileAlias = args[0];
         TString customUdfPrefix = args.size() > 1 ? TString(args[1]) : "";
@@ -1407,6 +1417,7 @@ private:
 
 private:
     TTypeAnnotationContext& Types_;
+    const bool ForPartialTypeCheck_;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer_;
     TAutoPtr<IGraphTransformer> ConfigurationTransformer_;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer_;
@@ -1418,9 +1429,9 @@ private:
 } // namespace
 
 TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
-                                                  const TAllowSettingPolicy& policy)
+                                                  const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
 {
-    return new TConfigProvider(types, config, username, policy);
+    return new TConfigProvider(types, config, username, policy, forPartialTypeCheck);
 }
 
 const THashSet<TStringBuf>& ConfigProviderFunctions() {

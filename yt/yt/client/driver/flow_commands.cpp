@@ -361,7 +361,7 @@ void TFlowExecuteCommand::Register(TRegistrar registrar)
 TYsonString TFlowExecuteCommand::DoFlowExecute(ICommandContextPtr context, const TYsonString& argument)
 {
     auto client = context->GetClient();
-    return WaitFor(client->FlowExecute(PipelinePath, TString(FlowCommand), argument, Options))
+    return WaitFor(client->FlowExecute(PipelinePath, FlowCommand, argument, Options))
         .ValueOrThrow()
         .Result;
 }

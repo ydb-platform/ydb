@@ -482,8 +482,8 @@ void TTraceContext::AddErrorTag()
         return;
     }
 
-    static const TString ErrorAnnotationName("error");
-    static const TString ErrorAnnotationValue("true");
+    static const std::string ErrorAnnotationName("error");
+    static const std::string ErrorAnnotationValue("true");
     AddTag(ErrorAnnotationName, ErrorAnnotationValue);
 }
 

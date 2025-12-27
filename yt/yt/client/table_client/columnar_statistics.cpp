@@ -107,11 +107,17 @@ void UpdateColumnarStatistics(
             minValue = MakeSentinelValue<TUnversionedValue>(EValueType::Min);
             maxValue = MakeSentinelValue<TUnversionedValue>(EValueType::Max);
         } else if (value.Type != EValueType::Null) {
-            if (minValue == NullUnversionedValue || value < minValue) {
+            if (Y_UNLIKELY(minValue.Type == EValueType::Null)) {
+                // minValue has not been initialized yet, so this is the first value.
                 minValue = value;
-            }
-            if (maxValue == NullUnversionedValue || value > maxValue) {
                 maxValue = value;
+            } else {
+                if (value < minValue) {
+                    minValue = value;
+                }
+                if (value > maxValue) {
+                    maxValue = value;
+                }
             }
         }
 
@@ -132,14 +138,14 @@ void UpdateMinAndMax(
     YT_VERIFY(std::ssize(minValues) == statistics->GetColumnCount());
 
     for (int index = 0; index < std::ssize(minValues); ++index) {
-        if (minValues[index] != NullUnversionedValue &&
-            (statistics->ColumnMinValues[index] == NullUnversionedValue || statistics->ColumnMinValues[index] > minValues[index]))
+        if (minValues[index].Type != EValueType::Null &&
+            (statistics->ColumnMinValues[index].Type() == EValueType::Null || statistics->ColumnMinValues[index] > minValues[index]))
         {
             statistics->ColumnMinValues[index] = ApproximateMinValue(minValues[index]);
         }
 
-        if (maxValues[index] != NullUnversionedValue &&
-            (statistics->ColumnMaxValues[index] == NullUnversionedValue || statistics->ColumnMaxValues[index] < maxValues[index]))
+        if (maxValues[index].Type != EValueType::Null &&
+            (statistics->ColumnMaxValues[index].Type() == EValueType::Null || statistics->ColumnMaxValues[index] < maxValues[index]))
         {
             statistics->ColumnMaxValues[index] = ApproximateMaxValue(maxValues[index]);
         }

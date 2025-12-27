@@ -24,7 +24,7 @@ bool IsCurrentRow(const NNodes::TCoFrameBound& bound);
 class TWindowFrameSettings {
 public:
     static TWindowFrameSettings Parse(const TExprNode& node, TExprContext& ctx);
-    static TMaybe<TWindowFrameSettings> TryParse(const TExprNode& node, TExprContext& ctx);
+    static TMaybe<TWindowFrameSettings> TryParse(const TExprNode& node, TExprContext& ctx, bool& isUniversal);
 
     // This two functions can only be used for FrameByRows or FrameByGroups
     TMaybe<i32> GetFirstOffset() const;

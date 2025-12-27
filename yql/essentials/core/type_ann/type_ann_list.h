@@ -18,7 +18,7 @@ namespace NTypeAnnImpl {
         bool& isUniversal);
 
     IGraphTransformer::TStatus InferPositionalUnionType(TPositionHandle pos, const TExprNode::TListType& children,
-        TColumnOrder& resultColumnOrder, const TStructExprType*& resultStructType, TExtContext& ctx);
+        TColumnOrder& resultColumnOrder, const TStructExprType*& resultStructType, TExtContext& ctx, bool& isUniversal);
     TExprNode::TPtr ExpandToWindowTraits(const TExprNode& input, TExprContext& ctx);
     bool ValidateAggManyStreams(const TExprNode& value, ui32 aggCount, TExprContext& ctx);
 
@@ -135,7 +135,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus WinNTileWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
     IGraphTransformer::TStatus HoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus MultiHoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-    IGraphTransformer::TStatus HoppingTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus HoppingTraitsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
     IGraphTransformer::TStatus ListMinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ListMaxWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ListSumWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

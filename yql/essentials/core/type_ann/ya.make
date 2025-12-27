@@ -38,6 +38,7 @@ PEERDIR(
     yql/essentials/core/issue/protos
     yql/essentials/core/sql_types
     yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/common/provider
     yql/essentials/parser/pg_catalog
     yql/essentials/core/sql_types
     yql/essentials/parser/pg_wrapper/interface

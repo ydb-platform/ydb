@@ -34,6 +34,6 @@ struct TKqpPartitionedExecuterSettings {
     ui64 WriteBufferMemoryLimit;
 };
 
-NActors::IActor* CreateKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings);
+NActors::IActor* CreateKqpPartitionedExecuter(TKqpPartitionedExecuterSettings settings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 }  // namespace NKikimr::NKqp

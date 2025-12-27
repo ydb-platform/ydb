@@ -50,12 +50,10 @@ namespace NActors {
             return Config.Basic[a].PoolId < Config.Basic[b].PoolId;
         });
 
-        i16 sht = 1;
+
         for (ui32 i = 0; i < Config.Basic.size(); ++i) {
-            i16 sharedThreadCount = Config.Basic[poolIds[i]].HasSharedThread ? sht : 0;
-            if (sharedThreadCount) {
-                sht = 1;
-            }
+            auto &cfg = Config.Basic[poolIds[i]];
+            i16 sharedThreadCount = cfg.AllThreadsAreShared ? cfg.DefaultThreadCount : cfg.MaxThreadCount ? 1 : 0;
             poolInfos.push_back(TPoolShortInfo{
                 .PoolId = static_cast<i16>(Config.Basic[poolIds[i]].PoolId),
                 .SharedThreadCount = sharedThreadCount,

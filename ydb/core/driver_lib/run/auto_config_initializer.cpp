@@ -241,6 +241,7 @@ namespace NKikimr::NAutoConfigInitializer {
         config->SetCpuCount(cpuCount);
 
         bool useSharedThreads = config->GetUseSharedThreads();
+        bool useUnitedPool = config->GetUseUnitedPool();
 
         if (!config->HasScheduler()) {
             auto *scheduler = config->MutableScheduler();
@@ -272,20 +273,20 @@ namespace NKikimr::NAutoConfigInitializer {
             ioExecutor->SetThreads(config->HasForceIOPoolThreads() ? config->GetForceIOPoolThreads() : 1);
             ioExecutor->SetName("IO");
 
-            auto assignPool = [&](auto *executor, TString name, i16 priority, bool hasSharedThread) {
+            auto assignPool = [&](auto *executor, TString name, i16 priority, bool hasSharedThread, i16 maxThreads) {
                 executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
                 executor->SetThreads(hasSharedThread);
-                executor->SetMaxThreads(hasSharedThread);
+                executor->SetMaxThreads(maxThreads);
                 executor->SetName(name);
                 executor->SetPriority(priority);
                 executor->SetSpinThreshold(0);
                 executor->SetHasSharedThread(hasSharedThread);
             };
 
-            assignPool(systemExecutor, "System", 30, cpuCount >= 3);
-            assignPool(userExecutor, "User", 20, cpuCount >= 2);
-            assignPool(batchExecutor, "Batch", 10, false);
-            assignPool(icExecutor, "IC", 40, true);
+            assignPool(systemExecutor, "System", 30, cpuCount >= 3, cpuCount);
+            assignPool(userExecutor, "User", 20, cpuCount >= 2, cpuCount);
+            assignPool(batchExecutor, "Batch", 10, false, 1);
+            assignPool(icExecutor, "IC", 40, true, cpuCount);
 
             batchExecutor->SetForcedForeignSlots(1);
             userExecutor->SetForcedForeignSlots(2);
@@ -380,6 +381,7 @@ namespace NKikimr::NAutoConfigInitializer {
             executor->SetMaxThreads(Max(cfg.MaxThreadCount, threadsCount));
             executor->SetPriority(priorities[poolIdx]);
             executor->SetName(names[poolIdx]);
+            executor->SetAllThreadsAreShared(useUnitedPool);
 
             if (names[poolIdx] == TASPools::CommonPoolName) {
                 executor->SetSpinThreshold(0);

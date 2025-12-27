@@ -13,6 +13,9 @@ private:
     void EnsureActor() const;
     void Shutdown();
 
+    template <typename TEvPtr>
+    void ExecuteImpl(TEvPtr& ev) const;
+
 public:
     explicit TFsExternalStorage(const TString& basePath);
     ~TFsExternalStorage() override;

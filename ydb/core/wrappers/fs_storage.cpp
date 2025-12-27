@@ -451,64 +451,58 @@ void TFsExternalStorage::Shutdown() {
     }
 }
 
-void TFsExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {
+template <typename TEvPtr>
+void TFsExternalStorage::ExecuteImpl(TEvPtr& ev) const {
     EnsureActor();
     TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+}
+
+void TFsExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvHeadObjectRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvDeleteObjectRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvCheckObjectExistsRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvListObjectsRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvDeleteObjectsRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvUploadPartRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 void TFsExternalStorage::Execute(TEvUploadPartCopyRequest::TPtr& ev) const {
-    EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    ExecuteImpl(ev);
 }
 
 } // NKikimr::NWrappers::NExternalStorage

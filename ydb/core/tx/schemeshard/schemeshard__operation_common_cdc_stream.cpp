@@ -222,6 +222,7 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
     // This ensures index version stays in sync with impl table version
     auto versionCtx = BuildTableVersionContext(*txState, path, context);
     bool shouldPublishParentIndex = false;
+    TPathId mainTablePathId;
     if (versionCtx.IsIndexImplTable) {
         if (context.SS->Indexes.contains(versionCtx.ParentPathId)) {
             auto index = context.SS->Indexes.at(versionCtx.ParentPathId);
@@ -231,17 +232,34 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
                 index->AlterVersion = targetVersion;
                 context.SS->PersistTableIndexAlterVersion(db, versionCtx.ParentPathId, index);
                 shouldPublishParentIndex = true;
+
+                // Also need to publish the main table (grandparent) because its
+                // TIndexDescription.SchemaVersion is populated from index->AlterVersion
+                if (context.SS->PathsById.contains(versionCtx.ParentPathId)) {
+                    auto indexPath = context.SS->PathsById.at(versionCtx.ParentPathId);
+                    if (indexPath->ParentPathId && context.SS->PathsById.contains(indexPath->ParentPathId)) {
+                        auto mainTablePath = context.SS->PathsById.at(indexPath->ParentPathId);
+                        if (mainTablePath->IsTable()) {
+                            mainTablePathId = indexPath->ParentPathId;
+                            context.SS->ClearDescribePathCaches(mainTablePath);
+                        }
+                    }
+                }
             }
         }
     }
 
     context.SS->PersistTableAlterVersion(db, pathId, table);
     context.SS->ClearDescribePathCaches(path);
-    // Publish impl table FIRST, then parent index
+    // Publish impl table FIRST, then parent index, then main table
     // This prevents race window where queries see updated index version but old impl table version
     context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
     if (shouldPublishParentIndex) {
         context.OnComplete.PublishToSchemeBoard(OperationId, versionCtx.ParentPathId);
+        // Publish main table so its TIndexDescription.SchemaVersion is updated in scheme cache
+        if (mainTablePathId) {
+            context.OnComplete.PublishToSchemeBoard(OperationId, mainTablePathId);
+        }
     }
 
     context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);

@@ -389,7 +389,7 @@ public:
             DocumentInfo->GetDocumentId().data(), other.DocumentInfo->GetDocumentId().data(),
             other.DocumentInfo->GetDocumentKeyColumnTypes().data(),
             other.DocumentInfo->GetDocumentKeyColumnTypes().size());
-        return cmp < 0;
+        return cmp > 0;
     }
 };
 

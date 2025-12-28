@@ -1,6 +1,6 @@
 # Query plan optimization
 
-It's very useful to to analyze execution plans for queries in order to detect and eliminate the causes of possible inefficiencies. {{ ydb-short-name }} provides two types of query plans: logical plan and execution plan. Logical plan is better suited for analyzing complex queries with a large number of [JOIN](../yql/reference/syntax/select/join.md) operators. Execution plan is more detailed: it additionally shows the stages of the distributed plan and connectors between them, which makes it more convenient for analyzing simple OLTP queries.
+It's very useful to to analyze execution plans for queries in order to detect and eliminate the causes of possible inefficiencies. {{ ydb-short-name }} provides two types of query plans: logical plan and execution plan. Logical plan is better suited for analyzing complex queries with a large number of [JOIN](../yql/reference/syntax/join.md) operators. Execution plan is more detailed: it additionally shows the stages of the distributed plan and connectors between them, which makes it more convenient for analyzing simple OLTP queries.
 
 ## Logical Query Plan
 

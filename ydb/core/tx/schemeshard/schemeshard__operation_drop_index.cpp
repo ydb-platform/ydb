@@ -172,6 +172,25 @@ public:
         table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, pathId, table);
 
+        // Sync remaining child index versions with main table
+        // (excluding the one being dropped)
+        for (const auto& [childName, childPathId] : path->GetChildren()) {
+            if (context.SS->PathsById.contains(childPathId)) {
+                auto childPath = context.SS->PathsById.at(childPathId);
+                if (childPath->IsTableIndex() && !childPath->PlannedToDrop() && !childPath->Dropped()) {
+                    if (context.SS->Indexes.contains(childPathId)) {
+                        auto index = context.SS->Indexes.at(childPathId);
+                        if (index->AlterVersion < table->AlterVersion) {
+                            index->AlterVersion = table->AlterVersion;
+                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                            context.SS->ClearDescribePathCaches(childPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
+                        }
+                    }
+                }
+            }
+        }
+
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
 

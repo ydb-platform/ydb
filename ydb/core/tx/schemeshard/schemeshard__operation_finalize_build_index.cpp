@@ -176,9 +176,27 @@ public:
 
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
 
+        // Sync child index versions with main table after build finalization
+        auto tablePath = context.SS->PathsById.at(tableId);
+        for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
+            if (context.SS->PathsById.contains(childPathId)) {
+                auto childPath = context.SS->PathsById.at(childPathId);
+                if (childPath->IsTableIndex() && !childPath->Dropped()) {
+                    if (context.SS->Indexes.contains(childPathId)) {
+                        auto index = context.SS->Indexes.at(childPathId);
+                        if (index->AlterVersion < tableInfo->AlterVersion) {
+                            index->AlterVersion = tableInfo->AlterVersion;
+                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                            context.SS->ClearDescribePathCaches(childPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
+                        }
+                    }
+                }
+            }
+        }
+
         context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
 
-        auto tablePath = context.SS->PathsById.at(tableId);
         context.SS->ClearDescribePathCaches(tablePath);
         context.OnComplete.PublishToSchemeBoard(OperationId, tableId);
 

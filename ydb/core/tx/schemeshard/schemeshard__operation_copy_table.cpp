@@ -231,6 +231,21 @@ public:
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
         context.SS->PersistTableCreated(db, pathId);
 
+        // Sync destination's parent index if this is an index impl table
+        // This ensures index version stays in sync with impl table version from creation
+        if (path->ParentPathId && context.SS->PathsById.contains(path->ParentPathId)) {
+            auto dstParentPath = context.SS->PathsById.at(path->ParentPathId);
+            if (dstParentPath->IsTableIndex() && context.SS->Indexes.contains(path->ParentPathId)) {
+                auto dstIndex = context.SS->Indexes.at(path->ParentPathId);
+                if (dstIndex->AlterVersion < table->AlterVersion) {
+                    dstIndex->AlterVersion = table->AlterVersion;
+                    context.SS->PersistTableIndexAlterVersion(db, path->ParentPathId, dstIndex);
+                    context.SS->ClearDescribePathCaches(dstParentPath);
+                    context.OnComplete.PublishToSchemeBoard(OperationId, path->ParentPathId);
+                }
+            }
+        }
+
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
 
         if (table->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(pathId)) {

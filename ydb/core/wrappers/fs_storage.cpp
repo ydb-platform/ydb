@@ -444,7 +444,7 @@ void TFsExternalStorage::EnsureActor() const {
     }
 
     auto actor = new TFsOperationActor(BasePath);
-    OperationActorId = this->Register(
+    OperationActorId = TlsActivationContext->AsActorContext().Register(
         actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     ActorCreated = true;
 
@@ -456,7 +456,7 @@ void TFsExternalStorage::Shutdown() {
     if (ActorCreated && TlsActivationContext) {
         FS_LOG_I("TFsExternalStorage: Shutting down actor"
             << ": OperationActorId# " << OperationActorId);
-        this->Send(OperationActorId, new NActors::TEvents::TEvPoison());
+        TlsActivationContext->AsActorContext().Send(OperationActorId, new NActors::TEvents::TEvPoison());
         ActorCreated = false;
     }
 }
@@ -464,7 +464,7 @@ void TFsExternalStorage::Shutdown() {
 template <typename TEvPtr>
 void TFsExternalStorage::ExecuteImpl(TEvPtr& ev) const {
     EnsureActor();
-    this->Send(ev->Forward(OperationActorId));
+    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {

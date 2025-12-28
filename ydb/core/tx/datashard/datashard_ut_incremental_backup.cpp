@@ -66,6 +66,13 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::CONTINUOUS_BACKUP, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
+        // VERSION_TRACK: Enable scheme cache and KQP logging for debugging
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_GATEWAY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
     }
 
     TShardedTableOptions SimpleTable() {

@@ -181,6 +181,25 @@ public:
         context.SS->ClearDescribePathCaches(tablePath);
         context.OnComplete.PublishToSchemeBoard(OperationId, tablePath->PathId);
 
+        // Sync child index versions with main table to prevent version mismatch
+        // This ensures TIndexDescription.SchemaVersion matches the table version
+        for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
+            if (context.SS->PathsById.contains(childPathId)) {
+                auto childPath = context.SS->PathsById.at(childPathId);
+                if (childPath->IsTableIndex() && !childPath->Dropped()) {
+                    if (context.SS->Indexes.contains(childPathId)) {
+                        auto index = context.SS->Indexes.at(childPathId);
+                        if (index->AlterVersion < tableInfo->AlterVersion) {
+                            index->AlterVersion = tableInfo->AlterVersion;
+                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                            context.SS->ClearDescribePathCaches(childPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
+                        }
+                    }
+                }
+            }
+        }
+
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
     }

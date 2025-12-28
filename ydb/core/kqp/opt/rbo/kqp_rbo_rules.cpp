@@ -487,19 +487,17 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
 
     std::shared_ptr<IOperator> join;
+
     // We build a semi-join or a left-only join when processing IN subplan
     if (subplan.Type == ESubplanType::IN) {
         auto leftJoinInput = filter->GetInput();
-        TString joinKind;
-        if (subplan.Type == ESubplanType::IN) {
-            joinKind = negated ? "LeftOnly" : "LeftSemi";
-        } else {
-            joinKind = "Cross";
-        }
+        auto joinKind = negated ? "LeftOnly" : "LeftSemi";
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
         auto planIUs = subplan.Plan->GetOutputIUs();
+        YQL_CLOG(TRACE, CoreDq) << "In tuple size: " << subplan.Tuple.size() << ", subplan tuple size: " << planIUs.size();
+
         Y_ENSURE(subplan.Tuple.size() == planIUs.size());
 
         for (size_t i = 0; i < planIUs.size(); i++) {
@@ -1063,7 +1061,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const std::sh
             if (!findCBOTree(rightInput, cboTree, maybeFilter)) {
                 return input;
             } else {
-                leftSideCBOTree = true;
+                leftSideCBOTree = false;
             }
         }
 

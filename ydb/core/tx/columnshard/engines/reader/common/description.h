@@ -79,9 +79,7 @@ public:
         // do not check conflicts for Snapshot isolated txs or txs with no lock
         readConflictingPortions = (LockId.has_value() && !snapshotIsolation) || readOnlyConflicts;
 
-        // if we do not need conflicting portions, we need to remember own portions ids,
-        // so that we can pick only own uncommitted portions for the read
-        if (readNonconflictingPortions && lock != nullptr && lock->GetWriteOperations().size() > 0) {
+        if (lock != nullptr && lock->GetWriteOperations().size() > 0) {
             ownPortions = THashSet<TInsertWriteId>();
             for (auto& writeOperation : lock->GetWriteOperations()) {
                 for (auto insertWriteId : writeOperation->GetInsertWriteIds()) {

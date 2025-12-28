@@ -5690,7 +5690,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TSchemeLimits basicLimits;
         basicLimits.MaxShards = 4;
-        basicLimits.MaxShardsInPath = 2;
+        basicLimits.MaxShardsInPath = 1;
         SetSchemeshardSchemaLimits(runtime, basicLimits, tenantSchemeShard);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice"), {

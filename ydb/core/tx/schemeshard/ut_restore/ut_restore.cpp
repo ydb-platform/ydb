@@ -5145,16 +5145,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath + "/streamImpl", false, false, true), {
                     NLs::ConsumerExist("my_consumer"),
                     NLs::MinTopicPartitionsCountEqual(isPartitioningAvailable ? 2 : 1),
-                    NLs::MaxTopicPartitionsCountEqual(3),
+                    NLs::MaxTopicPartitionsCountEqual(runtime.GetAppData().FeatureFlags.GetEnableTopicAutopartitioningForCDC() ? 3 : 1),
                 });
             }
         };
     }
 
     TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(
-        THashMap<TString, TTestDataWithScheme>& bucketContent, 
-        ui64 count = 1, 
-        bool isPartitioningAvailable = true) 
+        THashMap<TString, TTestDataWithScheme>& bucketContent,
+        ui64 count = 1,
+        bool isPartitioningAvailable = true)
     {
         TVector<std::function<void(TTestBasicRuntime&)>> checkers;
         checkers.reserve(count);
@@ -5200,7 +5200,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     std::function<void(TTestBasicRuntime&)> AddedSchemeWithPermissions(
         THashMap<TString, TTestDataWithScheme>& bucketContent,
-        const TString& pkType) 
+        const TString& pkType)
     {
         const auto permissions = R"(
             actions {
@@ -5230,17 +5230,20 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&, const TString&)>;
 
+    template<bool EnableAutopartitioning = false>
     void TestImportChangefeeds(ui64 countChangefeed, SchemeFunction addedScheme, const TString& pkType = "UTF8") {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTopicAutopartitioningForCDC(EnableAutopartitioning);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
         THashMap<TString, TTestDataWithScheme> bucketContent(countChangefeed + 1);
 
         auto checkerTable = addedScheme(bucketContent, pkType);
-        auto checkersChangefeeds = GenChangefeeds(bucketContent, countChangefeed, pkType == "UINT32" || pkType == "UINT64");
+        auto checkersChangefeeds = GenChangefeeds(bucketContent, countChangefeed,
+            (pkType == "UINT32" || pkType == "UINT64") && runtime.GetAppData().FeatureFlags.GetEnableTopicAutopartitioningForCDC());
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -5271,14 +5274,14 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     // Explicit specification of the number of partitions when creating CDC
-    // is possible only if the first component of the primary key 
-    // of the source table is Uint32 or Uint64 
-    Y_UNIT_TEST(ChangefeedWithPartitioning) {
-        TestImportChangefeeds(1, AddedScheme, "UINT32");
+    // is possible only if the first component of the primary key
+    // of the source table is Uint32 or Uint64
+    Y_UNIT_TEST_FLAG(ChangefeedWithPartitioning, EnableAutopartitioning) {
+        TestImportChangefeeds<EnableAutopartitioning>(1, AddedScheme, "UINT32");
     }
 
-    Y_UNIT_TEST(ChangefeedsWithPartitioning) {
-        TestImportChangefeeds(3, AddedScheme, "UINT64");
+    Y_UNIT_TEST_FLAG(ChangefeedsWithPartitioning, EnableAutopartitioning) {
+        TestImportChangefeeds<EnableAutopartitioning>(3, AddedScheme, "UINT64");
     }
 
     Y_UNIT_TEST(Changefeeds) {

@@ -292,9 +292,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     Y_ABORT_UNLESS(!tableDesc.GetKeyColumnIds().empty());
     const auto& keyId = tableDesc.GetKeyColumnIds()[0];
     bool isPartitioningAvailable = false;
-    
+
     // Explicit specification of the number of partitions when creating CDC
-    // is possible only if the first component of the primary key 
+    // is possible only if the first component of the primary key
     // of the source table is Uint32 or Uint64
     for (const auto& column : tableDesc.GetColumns()) {
         if (column.GetId() == keyId) {
@@ -316,7 +316,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
             cdcStream.SetTopicPartitions(minActivePartitions);
         }
 
-        if (topic.partitioning_settings().has_auto_partitioning_settings()) {
+        if (AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() &&
+            topic.partitioning_settings().has_auto_partitioning_settings())
+        {
             auto& partitioningSettings = topic.partitioning_settings().auto_partitioning_settings();
             cdcStream.SetTopicAutoPartitioning(partitioningSettings.strategy() != ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_DISABLED);
 
@@ -368,7 +370,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
 
     auto* tabletConfig = pqGroup.MutablePQTabletConfig();
     const auto& pqConfig = AppData()->PQConfig;
-    
+
     for (const auto& consumer : topic.consumers()) {
         auto& addedConsumer = *tabletConfig->AddConsumers();
         auto consumerName = NPersQueue::ConvertNewConsumerName(consumer.name(), pqConfig);
@@ -377,7 +379,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
             addedConsumer.SetImportant(true);
         }
     }
-    
+
     return propose;
 }
 

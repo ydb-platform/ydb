@@ -508,11 +508,8 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         conjuncts.erase(conjuncts.begin() + conjunctIdx);
     }
     // EXISTS and NOT EXISTS
-    // FIXME: Need to reimplement this part, maybe in another rule
     else {
-        return input;
 
-        /*
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
 
         TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> countMapElements;
@@ -530,7 +527,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         auto countMap = std::make_shared<TOpMap>(subplan.Plan, filter->Pos, countMapElements, true);
 
 
-        TOpAggregationTraits aggFunction(countResult, "count");
+        TOpAggregationTraits aggFunction(countResult, "count", false);
         TVector<TOpAggregationTraits> aggs = {aggFunction};
         TVector<TInfoUnit> keyColumns;
 
@@ -573,7 +570,6 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         // clang-format on
 
         conjuncts[conjunctIdx] = resultMember;
-        */
     }
 
     props.Subplans.Remove(iu);

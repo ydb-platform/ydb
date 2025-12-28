@@ -171,8 +171,8 @@ std::shared_ptr<TOpCBOTree> AddJoinToCBOTree(std::shared_ptr<TOpCBOTree> & cboTr
     } 
     else {
         join->SetRightInput(cboTree->TreeRoot);
-        treeNodes.push_back(join);
         treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
+        treeNodes.push_back(join);
     }
 
     return std::make_shared<TOpCBOTree>(join, treeNodes, join->Pos);

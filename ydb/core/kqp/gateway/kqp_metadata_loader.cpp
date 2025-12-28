@@ -1136,7 +1136,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             if (!table.EndsWith(child.Name)) {
                                 continue;
                             }
-                            TIndexId pathId = TIndexId(child.PathId, child.SchemaVersion);
+                            // Don't use child.SchemaVersion from cached Children list - it may be stale.
+                            // When index impl table's schema changes, the parent index entity's cached
+                            // Children list may not be updated. Using 0 skips the version check and
+                            // accepts whatever version the scheme cache returns for the impl table.
+                            TIndexId pathId = TIndexId(child.PathId, 0);
 
                             locked->LoadTableMetadataCache(cluster, std::make_pair(pathId, table), settings, database, userToken)
                                 .Apply([promise](const TFuture<TTableMetadataResult>& result) mutable

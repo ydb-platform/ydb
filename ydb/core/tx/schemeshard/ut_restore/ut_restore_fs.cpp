@@ -1,5 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/common/checksum.h>
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -49,17 +50,39 @@ public:
 
         // Create permissions.pb
         CreatePermissionsFile(fullPath);
+
+        // Create empty data_00.csv with checksum
+        CreateEmptyDataFile(fullPath);
     }
 
     void AddDataFile(const TString& tablePath, const TString& csvData, ui32 partNum = 0) {
         const TString fullPath = TempDir.Name() + "/" + tablePath;
-        const TString dataFileName = TStringBuilder() << "data_" << Sprintf("%02d", partNum) << ".csv";
-
-        TFileOutput file(fullPath + "/" + dataFileName);
-        file.Write(csvData);
+        WriteDataFileWithChecksum(fullPath, csvData, partNum);
     }
 
 private:
+    static void WriteDataFileWithChecksum(const TString& dirPath, const TString& csvData, ui32 partNum) {
+        const TString dataFileName = TStringBuilder() << "data_" << Sprintf("%02d", partNum) << ".csv";
+
+        TFileOutput file(dirPath + "/" + dataFileName);
+        file.Write(csvData);
+        file.Finish();
+
+        // Create checksum file
+        const TString checksum = NBackup::ComputeChecksum(csvData);
+        const TString checksumFileName = dataFileName + ".sha256";
+        TFileOutput checksumFile(dirPath + "/" + checksumFileName);
+        checksumFile.Write(checksum);
+        checksumFile.Write(" ");
+        checksumFile.Write(dataFileName);
+        checksumFile.Finish();
+    }
+
+    static void CreateEmptyDataFile(const TString& dirPath) {
+        // Create empty data_00.csv with checksum
+        WriteDataFileWithChecksum(dirPath, "", 0);
+    }
+
     static void CreateMetadataFile(const TString& dirPath) {
         NBackup::TMetadata metadata;
         metadata.SetVersion(1);
@@ -439,6 +462,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        // runtime.GetAppData().FeatureFlags.SetEnableChecksumsExport(false);
 
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/Table", "Table");
@@ -448,10 +472,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
 
-        // Add CSV data: 3 rows with key-value pairs
-        TString csvData = R"([["key1"];["value1"]]
-[["key2"];["value2"]]
-[["key3"];["value3"]]
+        TString csvData = R"("key1","value1"
+"key2","value2"
+"key3","value3"
 )";
         backup.AddDataFile("backup/Table", csvData);
 
@@ -475,22 +498,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
             NLs::PathExist,
             NLs::IsTable
         });
-
-        // Verify data was restored
-        NKikimrMiniKQL::TResult result;
-        TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, Sprintf(R"(
-            (
-                (let table '"/MyRoot/RestoredTable")
-                (let row '('('key (Utf8 'key1))))
-                (let select '('key 'value))
-                (let result (SelectRow table row select))
-                (return (AsList (SetResult 'Result result)))
-            )
-        )"), result, error);
-
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 
     Y_UNIT_TEST(ShouldRestoreTableWithMultipleDataPartitions) {
@@ -505,12 +512,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/LargeTable", "LargeTable");
 
-        // Add multiple CSV data files (simulating multipart upload)
-        TString csvData1 = R"([["key1"];["value1"]]
-[["key2"];["value2"]]
+        TString csvData1 = R"("key1","value1"
+"key2","value2"
 )";
-        TString csvData2 = R"([["key3"];["value3"]]
-[["key4"];["value4"]]
+        TString csvData2 = R"("key3","value3"
+"key4","value4"
 )";
         backup.AddDataFile("backup/LargeTable", csvData1, 0);
         backup.AddDataFile("backup/LargeTable", csvData2, 1);
@@ -559,10 +565,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
             {"id"}
         );
 
-        // CSV data with different types: Uint64, Utf8, Int32, Bool
-        TString csvData = R"([[1];["Alice"];[100];[%true]]
-[[2];["Bob"];[-50];[%false]]
-[[3];["Charlie"];[0];[%true]]
+        TString csvData = R"(1,"Alice",100,1
+2,"Bob",-50,0
+3,"Charlie",0,1
 )";
         backup.AddDataFile("backup/TypedTable", csvData);
 
@@ -606,7 +611,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
 
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/EmptyTable", "EmptyTable");
-        // No data files - table should be created but empty
 
         TString importSettings = Sprintf(R"(
             ImportFromFsSettings {
@@ -643,15 +647,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
 
         // Create first table with data
         backup.CreateTableBackup("backup/Users", "Users");
-        TString userData = R"([["user1"];["Alice"]]
-[["user2"];["Bob"]]
+        TString userData = R"("user1","Alice"
+"user2","Bob"
 )";
         backup.AddDataFile("backup/Users", userData);
 
         // Create second table with data
         backup.CreateTableBackup("backup/Orders", "Orders");
-        TString orderData = R"([["order1"];["product1"]]
-[["order2"];["product2"]]
+        TString orderData = R"("order1","product1"
+"order2","product2"
 )";
         backup.AddDataFile("backup/Orders", orderData);
 

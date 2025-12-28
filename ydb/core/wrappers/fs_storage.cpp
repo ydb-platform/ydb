@@ -27,8 +27,7 @@ namespace {
 
 class TFsOperationActor : public TActorBootstrapped<TFsOperationActor> {
 private:
-    TString BasePath;
-    const TReplyAdapterContainer& ReplyAdapter;
+    const TString BasePath;
 
     struct TMultipartUploadSession {
         const TString Key;
@@ -71,13 +70,14 @@ private:
         } else {
             response = std::make_unique<TEvResponse>(std::move(outcome));
         }
-        ReplyAdapter.Reply(sender, std::move(response));
+        this->Send(sender, response.release());
     }
 
     template<typename TEvResponse>
-    void ReplyError(const NActors::TActorId& sender, const std::optional<TString>& key, const TString& errorMessage) {
+    void ReplyError(const NActors::TActorId& sender, const std::optional<TString>& key, const TString& errorMessage,
+                    Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE) {
         Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
-            Aws::S3::S3Errors::INTERNAL_FAILURE,
+            errorType,
             "FsStorageError",
             errorMessage,
             false // not retryable for FS errors
@@ -92,7 +92,7 @@ private:
         } else {
             response = std::make_unique<TEvResponse>(std::move(outcome));
         }
-        ReplyAdapter.Reply(sender, std::move(response));
+        this->Send(sender, response.release());
     }
 
 public:
@@ -239,6 +239,7 @@ public:
 
             Aws::S3::Model::GetObjectResult awsResult;
             awsResult.SetContentLength(bytesRead);
+            awsResult.SetETag("\"fs-file\"");
             Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
 
             auto response = std::make_unique<TEvGetObjectResponse>(key, range, std::move(outcome), std::move(data));
@@ -278,6 +279,11 @@ public:
             auto response = std::make_unique<TEvHeadObjectResponse>(key, std::move(outcome));
             TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
 
+        } catch (const TFileError& ex) {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
+                "HeadObject file not found"
+                << ": key# " << key);
+            ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TString("File not found: ") + ex.what(), Aws::S3::S3Errors::NO_SUCH_KEY);
         } catch (const std::exception& ex) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
                 "HeadObject error"
@@ -342,7 +348,7 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::CreateMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCreateMultipartUploadResponse>(key, std::move(outcome));
-            ReplyAdapter.Reply(ev->Sender, std::move(response));
+            this->Send(ev->Sender, response.release());
         } catch (const std::exception& ex) {
             FS_LOG_E("CreateMultipartUpload failed"
                 << ": key# " << key
@@ -395,7 +401,7 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
-            ReplyAdapter.Reply(ev->Sender, std::move(response));
+            this->Send(ev->Sender, response.release());
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"
                 << ": key# " << key
@@ -453,7 +459,7 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
-            ReplyAdapter.Reply(ev->Sender, std::move(response));
+            this->Send(ev->Sender, response.release());
         } catch (const std::exception& ex) {
             FS_LOG_E("CompleteMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
             ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender, key, ex.what());
@@ -511,10 +517,6 @@ public:
 TFsExternalStorage::TFsExternalStorage(const TString& basePath)
     : BasePath(basePath)
 {
-    InitReplyAdapter(nullptr);
-    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "TFsExternalStorage created"
-        << ": BasePath# " << BasePath
-        << ", Verbose# " << Verbose);
 }
 
 TFsExternalStorage::~TFsExternalStorage() {

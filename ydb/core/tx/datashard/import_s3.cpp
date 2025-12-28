@@ -61,7 +61,7 @@ using namespace Aws::S3;
 using namespace Aws;
 
 template <typename TSettings>
-inline constexpr bool RequiresHttpResolver = std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>;
+constexpr bool RequiresHttpResolver = std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>;
 
 template <typename TSettings>
 class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {

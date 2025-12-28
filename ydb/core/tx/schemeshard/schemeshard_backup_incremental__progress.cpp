@@ -47,10 +47,26 @@ public:
         // Get the next version for the DROP operation
         // The cleaner runs as a separate transaction (allocates its own TxId),
         // so we must increment the version - datashards expect proposed == current + 1
+        // IMPORTANT: For index impl tables, we must also consider the parent index version
+        // to avoid version mismatches (the index and impl table must stay in sync)
         TMaybe<ui64> coordinatedVersion;
         TPathId tablePathId = streamPath->ParentPathId;
         if (Self->Tables.contains(tablePathId)) {
-            coordinatedVersion = Self->Tables.at(tablePathId)->AlterVersion + 1;
+            ui64 maxVersion = Self->Tables.at(tablePathId)->AlterVersion;
+
+            // Check if this is an index impl table and include parent index version
+            if (Self->PathsById.contains(tablePathId)) {
+                auto tablePathInfo = Self->PathsById.at(tablePathId);
+                if (tablePathInfo->ParentPathId && Self->PathsById.contains(tablePathInfo->ParentPathId)) {
+                    auto parentPath = Self->PathsById.at(tablePathInfo->ParentPathId);
+                    if (parentPath->IsTableIndex() && Self->Indexes.contains(tablePathInfo->ParentPathId)) {
+                        auto index = Self->Indexes.at(tablePathInfo->ParentPathId);
+                        maxVersion = Max(maxVersion, index->AlterVersion);
+                    }
+                }
+            }
+
+            coordinatedVersion = maxVersion + 1;
         }
 
         NewCleaners.emplace_back(

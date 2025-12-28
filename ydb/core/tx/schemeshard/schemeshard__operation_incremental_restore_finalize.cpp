@@ -161,9 +161,16 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 // Also update parent index version NOW to ensure consistency
                 // This prevents version mismatch if SyncIndexSchemaVersions fails to process this table
                 TPath indexPath = tablePath.Parent();
-                if (indexPath.IsResolved() && indexPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
+                if (!indexPath.IsResolved()) {
+                    LOG_W(DebugHint() << " Parent index path not resolved for impl table " << tablePathId);
+                } else if (indexPath.Base()->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
+                    LOG_W(DebugHint() << " Parent path is not a TableIndex for impl table " << tablePathId
+                          << " (type: " << indexPath.Base()->PathType << ")");
+                } else {
                     TPathId indexPathId = indexPath.Base()->PathId;
-                    if (context.SS->Indexes.contains(indexPathId)) {
+                    if (!context.SS->Indexes.contains(indexPathId)) {
+                        LOG_W(DebugHint() << " Index not found in Indexes map: " << indexPathId);
+                    } else {
                         auto index = context.SS->Indexes.at(indexPathId);
                         if (index->AlterVersion < targetVersion) {
                             index->AlterVersion = targetVersion;
@@ -410,9 +417,9 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                         auto oldVersion = context.SS->Indexes[indexPathId]->AlterVersion;
 
                         // Use per-table coordinated version if available
-                        // Fallback to impl table's version to ensure index stays in sync
+                        // Fallback to impl table's version + 1 to match TConfigureParts fallback logic
                         ui64 coordinatedVersion = GetCoordinatedVersionForPath(path, finalize);
-                        ui64 targetVersion = (coordinatedVersion > 0) ? coordinatedVersion : table->AlterVersion;
+                        ui64 targetVersion = (coordinatedVersion > 0) ? coordinatedVersion : table->AlterVersion + 1;
 
                         if (context.SS->Indexes[indexPathId]->AlterVersion < targetVersion) {
                             context.SS->Indexes[indexPathId]->AlterVersion = targetVersion;

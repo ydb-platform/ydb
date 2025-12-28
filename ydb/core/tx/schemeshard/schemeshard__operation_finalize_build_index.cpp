@@ -155,7 +155,13 @@ public:
         context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
 
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
-        tableInfo->AlterVersion += 1;
+        // Use coordinated version if available (from backup operations)
+        // Otherwise, increment by 1 for backward compatibility
+        if (txState->CoordinatedSchemaVersion.Defined()) {
+            tableInfo->AlterVersion = *txState->CoordinatedSchemaVersion;
+        } else {
+            tableInfo->AlterVersion += 1;
+        }
 
         for(auto& column: tableInfo->Columns) {
             if (column.second.IsDropped())

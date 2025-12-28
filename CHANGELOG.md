@@ -76,6 +76,11 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 31313:Allow running the ANALYZE command on row tables. [#31313](https://github.com/ydb-platform/ydb/pull/31313) ([Alexey Zatelepin](https://github.com/ztlpn))
+* 31217:Optimizer now fetches histograms for better CBO quality. [#31217](https://github.com/ydb-platform/ydb/pull/31217) ([Alexey Zatelepin](https://github.com/ztlpn))
+* 30547:Add structured logs to kqp components [#30547](https://github.com/ydb-platform/ydb/pull/30547) ([Iuliia Sidorina ](https://github.com/ulya-sidorina))
+* 30375:Added new KIKIMR_STATUS_DISK_GROUP_OUT_OF_SPACE issue [#30375](https://github.com/ydb-platform/ydb/pull/30375) ([Nikita Vasilev](https://github.com/nikvas0))
+* 30199:Async Replication export to S3. Replications are exported as `CREATE ASYNC REPLICATION` SQL queries and are enabled by default. [#30199](https://github.com/ydb-platform/ydb/pull/30199) ([Ilya Syresenkov](https://github.com/maybenotilya))
 
 ### Bug fixes
 
@@ -146,12 +151,13 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 31380:Issue #31381
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+Recursive calls to `ProcessRequests` are possible. As a result, the loop for `canProcess` works with outdated data and does not take into account that the `Requests` queue has already changed. As a result, `Requests.front` is called for an empty queue. [#31380](https://github.com/ydb-platform/ydb/pull/31380) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 31062:Fix BSController handling `dstool cluster set --dry-run` used to ignore `--dry-run` option and produced side-effects [#31062](https://github.com/ydb-platform/ydb/pull/31062) ([Yaroslav Dynnikov](https://github.com/rosik))
+* 30983:Fixes [30460](https://github.com/ydb-platform/ydb/issues/30460) [#30983](https://github.com/ydb-platform/ydb/pull/30983) ([Ilia Shakhov](https://github.com/pixcc))
+* 30962:Fix validation of automatic column family creation by name. Fixes #28219 [#30962](https://github.com/ydb-platform/ydb/pull/30962) ([Ivan Nikolaev](https://github.com/lex007in))
 
 ### YDB UI
 
@@ -178,4 +184,6 @@ Also increased default test logs level [#25408](https://github.com/ydb-platform/
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
 * 25668:Used AS threads in topic sdk IO operations [#25668](https://github.com/ydb-platform/ydb/pull/25668) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 31231:Optimized data copy in topic sdk (~ 1 CPU on flame graph for 450 MB / s topic read) [#31231](https://github.com/ydb-platform/ydb/pull/31231) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 30996:improve hive performance on large databases [#30996](https://github.com/ydb-platform/ydb/pull/30996) ([vporyadke](https://github.com/vporyadke))
 

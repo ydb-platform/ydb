@@ -971,11 +971,37 @@
             ]
         },
         {
+            "Name": "TKqpSublinkBase",
+            "Base": "TCallable",
+            "Match":  {"Type": "CallableBase"},
+            "Children" : [
+                {"Index": 0, "Name": "Subquery", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpExprSublink",
-            "Base": "TExprBase",
-            "Match" : {"Type": "Callable", "Name": "KqpExprSublink"},
-            "Children": [
-                {"Index": 0, "Name": "Expr", "Type": "TExprBase"}
+            "Base": "TKqpSublinkBase",
+            "Match" : {"Type": "Callable", "Name": "KqpExprSublink"}
+        },
+        {
+            "Name": "TKqpBooleanSublink",
+            "Base": "TKqpSublinkBase",
+            "Match" : {"Type": "CallableBase"},
+            "Children" : [
+                {"Index": 1, "Name": "ReturnPgBool", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpExistsSublink",
+            "Base": "TKqpBooleanSublink",
+            "Match" : {"Type": "Callable", "Name": "KqpExistsSublink"}
+        },
+        {
+            "Name": "TKqpInSublink",
+            "Base": "TKqpBooleanSublink",
+            "Match" : {"Type": "Callable", "Name": "KqpInSublink"},
+            "Children" : [
+                {"Index": 2, "Name": "InTuple", "Type": "TExprBase"}
             ]
         }
     ]

@@ -39,7 +39,6 @@ class TKqpNewRBOTransformer: public TSyncTransformerBase {
 public:
     TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
                           TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry);
-
     // Main method of the transformer
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
     void Rewind() override;

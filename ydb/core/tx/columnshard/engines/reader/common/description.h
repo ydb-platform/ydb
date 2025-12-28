@@ -90,9 +90,6 @@ public:
 
         // we want to read something, don't we?
         AFL_VERIFY(readNonconflictingPortions || readConflictingPortions);
-        if (ownPortions.has_value() && !ownPortions->empty()) {
-            AFL_VERIFY(readNonconflictingPortions);
-        }
         // we do not have cases (at the moment) when we need to read only conflicts for a scan with no transaction
         if (!LockId.has_value()) {
             AFL_VERIFY(!readOnlyConflicts);

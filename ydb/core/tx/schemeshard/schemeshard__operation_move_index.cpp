@@ -285,6 +285,28 @@ public:
 
         context.SS->PersistTableAlterVersion(db, path->PathId, table);
 
+        // Sync child index versions with main table to prevent version mismatch
+        // CRITICAL: Must sync and publish indexes BEFORE publishing main table
+        // so that main table's TIndexDescription.SchemaVersion values are current
+        for (const auto& [childName, childPathId] : path->GetChildren()) {
+            if (context.SS->PathsById.contains(childPathId)) {
+                auto childPath = context.SS->PathsById.at(childPathId);
+                if (childPath->IsTableIndex() && !childPath->Dropped()) {
+                    if (context.SS->Indexes.contains(childPathId)) {
+                        auto index = context.SS->Indexes.at(childPathId);
+                        if (index->AlterVersion < table->AlterVersion) {
+                            index->AlterVersion = table->AlterVersion;
+                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                            context.SS->ClearDescribePathCaches(childPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Publish main table LAST so its TIndexDescription.SchemaVersion values are current
+        context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;

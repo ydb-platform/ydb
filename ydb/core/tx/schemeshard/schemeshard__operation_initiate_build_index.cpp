@@ -179,10 +179,11 @@ public:
 
         auto tablePath = context.SS->PathsById.at(txState->TargetPathId);
         context.SS->ClearDescribePathCaches(tablePath);
-        context.OnComplete.PublishToSchemeBoard(OperationId, tablePath->PathId);
 
         // Sync child index versions with main table to prevent version mismatch
         // This ensures TIndexDescription.SchemaVersion matches the table version
+        // CRITICAL: Must sync and publish indexes BEFORE publishing main table
+        // so that main table's description includes current index versions
         for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
             if (context.SS->PathsById.contains(childPathId)) {
                 auto childPath = context.SS->PathsById.at(childPathId);
@@ -199,6 +200,9 @@ public:
                 }
             }
         }
+
+        // Publish main table LAST so its TIndexDescription.SchemaVersion values are current
+        context.OnComplete.PublishToSchemeBoard(OperationId, tablePath->PathId);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;

@@ -226,18 +226,21 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
         << " newVersion# " << table->AlterVersion
         << " coordinatedVersion# " << (txState->CoordinatedSchemaVersion.Defined() ? ToString(*txState->CoordinatedSchemaVersion) : "none"));
 
-    // Update parent index entity version if this is an index impl table
-    // This ensures index version stays in sync with impl table version
+    // Sync versions and prepare for publication
+    // Key invariant: child indexes must be updated and published BEFORE parent table
+    // so that parent table's TIndexDescription.SchemaVersion includes current index versions
     auto versionCtx = BuildTableVersionContext(*txState, path, context);
-    bool shouldPublishParentIndex = false;
-    TPathId mainTablePathId;
+    TVector<TPathId> indexesToPublish;
+    TPathId mainTableToPublish;
+
     if (versionCtx.IsIndexImplTable) {
+        // Case 1: Target is an index impl table
+        // Need to sync parent index version and publish: impl -> parent index -> main table
         if (context.SS->Indexes.contains(versionCtx.ParentPathId)) {
             auto index = context.SS->Indexes.at(versionCtx.ParentPathId);
-            // Use impl table's new version to keep parent index in sync
             ui64 targetVersion = table->AlterVersion;
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "VERSION_TRACK CDC index sync check"
+                "VERSION_TRACK CDC index sync check (impl table case)"
                 << " implTablePathId# " << pathId
                 << " parentIndexPathId# " << versionCtx.ParentPathId
                 << " indexAlterVersion# " << index->AlterVersion
@@ -246,36 +249,78 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
             if (index->AlterVersion < targetVersion) {
                 index->AlterVersion = targetVersion;
                 context.SS->PersistTableIndexAlterVersion(db, versionCtx.ParentPathId, index);
-                shouldPublishParentIndex = true;
+                indexesToPublish.push_back(versionCtx.ParentPathId);
 
-                // Also need to publish the main table (grandparent) because its
-                // TIndexDescription.SchemaVersion is populated from index->AlterVersion
                 if (context.SS->PathsById.contains(versionCtx.ParentPathId)) {
                     auto indexPath = context.SS->PathsById.at(versionCtx.ParentPathId);
+                    context.SS->ClearDescribePathCaches(indexPath);
+
+                    // Main table needs to be published AFTER its indexes
                     if (indexPath->ParentPathId && context.SS->PathsById.contains(indexPath->ParentPathId)) {
                         auto mainTablePath = context.SS->PathsById.at(indexPath->ParentPathId);
                         if (mainTablePath->IsTable()) {
-                            mainTablePathId = indexPath->ParentPathId;
+                            mainTableToPublish = indexPath->ParentPathId;
                             context.SS->ClearDescribePathCaches(mainTablePath);
                         }
                     }
                 }
             }
         }
+    } else {
+        // Case 2: Target is a main table (not an impl table)
+        // Need to sync all child index versions BEFORE publishing this table
+        // so the table's TIndexDescription.SchemaVersion values are current
+        ui64 targetVersion = table->AlterVersion;
+        for (const auto& [childName, childPathId] : path->GetChildren()) {
+            if (!context.SS->PathsById.contains(childPathId)) {
+                continue;
+            }
+            auto childPath = context.SS->PathsById.at(childPathId);
+            if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                continue;
+            }
+            if (!context.SS->Indexes.contains(childPathId)) {
+                continue;
+            }
+            auto index = context.SS->Indexes.at(childPathId);
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "VERSION_TRACK CDC index sync check (main table case)"
+                << " mainTablePathId# " << pathId
+                << " childIndexPathId# " << childPathId
+                << " childIndexName# " << childName
+                << " indexAlterVersion# " << index->AlterVersion
+                << " targetVersion# " << targetVersion
+                << " willSync# " << (index->AlterVersion < targetVersion ? "true" : "false"));
+            if (index->AlterVersion < targetVersion) {
+                index->AlterVersion = targetVersion;
+                context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                context.SS->ClearDescribePathCaches(childPath);
+                indexesToPublish.push_back(childPathId);
+            }
+        }
+        // Main table will be published after indexes
+        mainTableToPublish = pathId;
     }
 
     context.SS->PersistTableAlterVersion(db, pathId, table);
     context.SS->ClearDescribePathCaches(path);
-    // Publish impl table FIRST, then parent index, then main table
-    // This prevents race window where queries see updated index version but old impl table version
-    context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-    if (shouldPublishParentIndex) {
-        context.OnComplete.PublishToSchemeBoard(OperationId, versionCtx.ParentPathId);
-        // Publish main table so its TIndexDescription.SchemaVersion is updated in scheme cache
-        if (mainTablePathId) {
-            context.OnComplete.PublishToSchemeBoard(OperationId, mainTablePathId);
-        }
+
+    // Publication order is critical:
+    // 1. First publish all child indexes (so scheme cache has current index versions)
+    // 2. Then publish impl table (if this is an impl table case)
+    // 3. Finally publish main table (so its TIndexDescription.SchemaVersion reflects current index versions)
+    for (const auto& indexPathId : indexesToPublish) {
+        context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
     }
+    // For impl table case, publish the impl table itself
+    if (versionCtx.IsIndexImplTable) {
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+    }
+    // Publish main table LAST so it includes updated index versions
+    if (mainTableToPublish) {
+        context.OnComplete.PublishToSchemeBoard(OperationId, mainTableToPublish);
+    }
+    // For main table case where we're the target, we already set mainTableToPublish = pathId above
 
     context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
     return true;

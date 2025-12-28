@@ -17,13 +17,15 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
+#define FS_LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 #define FS_LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
+#define FS_LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 #define FS_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 #define FS_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
 
 namespace {
 
-class TFsOperationActor : public NActors::TActorBootstrapped<TFsOperationActor> {
+class TFsOperationActor : public TActorBootstrapped<TFsOperationActor> {
 private:
     const TString BasePath;
 
@@ -68,7 +70,7 @@ private:
         } else {
             response = std::make_unique<TEvResponse>(std::move(outcome));
         }
-        TlsActivationContext->AsActorContext().Send(sender, response.release());
+        this->Send(sender, response.release());
     }
 
     template<typename TEvResponse>
@@ -89,7 +91,7 @@ private:
         } else {
             response = std::make_unique<TEvResponse>(std::move(outcome));
         }
-        TlsActivationContext->AsActorContext().Send(sender, response.release());
+        this->Send(sender, response.release());
     }
 
 public:
@@ -103,7 +105,7 @@ public:
     }
 
     void Bootstrap() {
-        FS_LOG_I("TFsOperationActor Bootstrap called");
+        FS_LOG_T("TFsOperationActor Bootstrap called");
         Become(&TThis::StateWork);
     }
 
@@ -114,15 +116,15 @@ public:
 
 private:
     void CleanupActiveSessions() {
-        FS_LOG_I("TFsOperationActor: cleaning up"
+        FS_LOG_T("TFsOperationActor: cleaning up"
             << ": active MPU sessions# " << ActiveUploads.size());
         for (auto& [uploadId, session] : ActiveUploads) {
             try {
-                TString filePath = session->Key;
+                const TString filePath = session->Key;
                 session->File.Close();
                 NFs::Remove(filePath);
 
-                FS_LOG_I("TFsOperationActor: closed and deleted incomplete file"
+                FS_LOG_T("TFsOperationActor: closed and deleted incomplete file"
                     << ": uploadId# " << uploadId
                     << ", file# " << filePath);
             } catch (const std::exception& ex) {
@@ -137,7 +139,7 @@ private:
 public:
 
     STATEFN(StateWork) {
-        FS_LOG_I("TFsOperationActor StateWork received event type"
+        FS_LOG_D("TFsOperationActor StateWork received event type"
             << ": type# " << ev->GetTypeRewrite());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPutObjectRequest, Handle);
@@ -168,7 +170,7 @@ public:
         const auto& body = ev->Get()->Body;
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_I("PutObject"
+        FS_LOG_D("PutObject"
             << ": key# " << key
             << ", size# " << body.size());
 
@@ -239,8 +241,11 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = GetIncompletePath(TString(request.GetKey().data(), request.GetKey().size()));
 
+        FS_LOG_D("CreateMultipartUpload"
+            << ": key# " << key);
+
         try {
-            TString uploadId = TStringBuilder() << key << "_" << CreateGuidAsString();
+            const TString uploadId = TStringBuilder() << key << "_" << CreateGuidAsString();
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
 
@@ -258,7 +263,7 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::CreateMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCreateMultipartUploadResponse>(key, std::move(outcome));
-            TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
+            this->Send(ev->Sender, response.release());
         } catch (const std::exception& ex) {
             FS_LOG_E("CreateMultipartUpload failed"
                 << ": key# " << key
@@ -274,7 +279,7 @@ public:
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         const int partNumber = request.GetPartNumber();
 
-        FS_LOG_I("UploadPart"
+        FS_LOG_D("UploadPart"
             << ": key# " << key
             << ", uploadId# " << uploadId
             << ", part# " << partNumber
@@ -286,6 +291,11 @@ public:
                 // If the UploadId is not found in ActiveUploads,
                 // it means that a restart has occurred and all parts have started being written again
                 // so we can simply create a new session.
+                if (partNumber != 1) {
+                    throw yexception() << TStringBuilder()
+                        << "Cannot create new upload session for part " << partNumber
+                        << " (uploadId: " << uploadId << "). Session must start with part 1.";
+                }
                 it = ActiveUploads.emplace(uploadId, std::make_unique<TMultipartUploadSession>(key)).first;
             }
 
@@ -299,14 +309,14 @@ public:
                 << ", part# " << partNumber
                 << ", total size# " << session->TotalSize);
 
-            TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
+            const TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
 
             Aws::S3::Model::UploadPartResult awsResult;
             awsResult.SetETag(etag.c_str());
 
             Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
-            TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
+            this->Send(ev->Sender, response.release());
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"
                 << ": key# " << key
@@ -322,7 +332,7 @@ public:
         const TString incompleteKey = GetIncompletePath(key);
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
-        FS_LOG_I("CompleteMultipartUpload"
+        FS_LOG_D("CompleteMultipartUpload"
             << ": key# " << key
             << ", uploadId# " << uploadId);
 
@@ -340,7 +350,7 @@ public:
                 Aws::S3::S3Error error(std::move(awsError));
                 Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(error));
                 auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
-                TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
+                this->Send(ev->Sender, response.release());
                 return;
             }
 
@@ -350,7 +360,7 @@ public:
 
             NFs::Rename(incompleteKey, key);
 
-            FS_LOG_I("CompleteMultipartUpload"
+            FS_LOG_T("CompleteMultipartUpload"
                 << ": uploadId# " << uploadId
                 << ", total size# " << session->TotalSize
                 << ", file mv from# " << incompleteKey << " to# " << key);
@@ -359,12 +369,12 @@ public:
 
             Aws::S3::Model::CompleteMultipartUploadResult awsResult;
             awsResult.SetKey(request.GetKey());
-            TString etag = "\"completed\"";
+            const TString etag = "\"completed\"";
             awsResult.SetETag(etag.c_str());
 
             Aws::Utils::Outcome<Aws::S3::Model::CompleteMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCompleteMultipartUploadResponse>(key, std::move(outcome));
-            TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
+            this->Send(ev->Sender, response.release());
         } catch (const std::exception& ex) {
             FS_LOG_E("CompleteMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
             ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender, key, ex.what());
@@ -376,19 +386,19 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
-        FS_LOG_I("AbortMultipartUpload"
+        FS_LOG_D("AbortMultipartUpload"
             << ": key# " << key
             << ", uploadId# " << uploadId);
 
         try {
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
-                FS_LOG_I("AbortMultipartUpload"
-                    << ": session not found (already closed?)"
+                FS_LOG_W("AbortMultipartUpload"
+                    << ": session not found"
                     << ": uploadId# " << uploadId);
             } else {
                 auto& session = it->second;
-                TString filePath = session->Key;
+                const TString filePath = session->Key;
                 session->File.Close();
                 ActiveUploads.erase(it);
                 NFs::Remove(filePath);
@@ -434,7 +444,7 @@ void TFsExternalStorage::EnsureActor() const {
     }
 
     auto actor = new TFsOperationActor(BasePath);
-    OperationActorId = TlsActivationContext->AsActorContext().Register(
+    OperationActorId = this->Register(
         actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     ActorCreated = true;
 
@@ -446,7 +456,7 @@ void TFsExternalStorage::Shutdown() {
     if (ActorCreated && TlsActivationContext) {
         FS_LOG_I("TFsExternalStorage: Shutting down actor"
             << ": OperationActorId# " << OperationActorId);
-        TlsActivationContext->AsActorContext().Send(OperationActorId, new NActors::TEvents::TEvPoison());
+        this->Send(OperationActorId, new NActors::TEvents::TEvPoison());
         ActorCreated = false;
     }
 }
@@ -454,7 +464,7 @@ void TFsExternalStorage::Shutdown() {
 template <typename TEvPtr>
 void TFsExternalStorage::ExecuteImpl(TEvPtr& ev) const {
     EnsureActor();
-    TlsActivationContext->AsActorContext().Send(ev->Forward(OperationActorId));
+    this->Send(ev->Forward(OperationActorId));
 }
 
 void TFsExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev) const {

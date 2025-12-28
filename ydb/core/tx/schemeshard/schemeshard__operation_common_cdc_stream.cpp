@@ -210,6 +210,7 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 
     NIceDb::TNiceDb db(context.GetDB());
 
+    ui64 oldVersion = table->AlterVersion;
     // Use coordinated version if available (from backup operations)
     // Otherwise, increment by 1 for backward compatibility
     if (txState->CoordinatedSchemaVersion.Defined()) {
@@ -217,6 +218,13 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
     } else {
         table->AlterVersion += 1;
     }
+
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "VERSION_TRACK CDC TProposeAtTable::HandleReply"
+        << " pathId# " << pathId
+        << " oldVersion# " << oldVersion
+        << " newVersion# " << table->AlterVersion
+        << " coordinatedVersion# " << (txState->CoordinatedSchemaVersion.Defined() ? ToString(*txState->CoordinatedSchemaVersion) : "none"));
 
     // Update parent index entity version if this is an index impl table
     // This ensures index version stays in sync with impl table version
@@ -228,6 +236,13 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
             auto index = context.SS->Indexes.at(versionCtx.ParentPathId);
             // Use impl table's new version to keep parent index in sync
             ui64 targetVersion = table->AlterVersion;
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "VERSION_TRACK CDC index sync check"
+                << " implTablePathId# " << pathId
+                << " parentIndexPathId# " << versionCtx.ParentPathId
+                << " indexAlterVersion# " << index->AlterVersion
+                << " targetVersion# " << targetVersion
+                << " willSync# " << (index->AlterVersion < targetVersion ? "true" : "false"));
             if (index->AlterVersion < targetVersion) {
                 index->AlterVersion = targetVersion;
                 context.SS->PersistTableIndexAlterVersion(db, versionCtx.ParentPathId, index);

@@ -52,6 +52,12 @@ public:
         context.SS->PersistTableIndex(db, path->PathId);
         context.SS->Indexes[path->PathId] = indexData->AlterData;
 
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "VERSION_TRACK TCreateTableIndex TPropose::HandleReply"
+            << " indexPathId# " << path->PathId
+            << " indexAlterVersion# " << indexData->AlterData->AlterVersion
+            << " parentPathId# " << path->ParentPathId);
+
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
 

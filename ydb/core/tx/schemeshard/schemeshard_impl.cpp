@@ -1961,6 +1961,10 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
 }
 
 void TSchemeShard::PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableIndexInfo::TPtr indexInfo) {
+    LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "VERSION_TRACK PersistTableIndexAlterVersion"
+        << " indexPathId# " << pathId
+        << " newVersion# " << indexInfo->AlterVersion);
     db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(indexInfo->AlterVersion)
     );
@@ -2930,6 +2934,10 @@ void TSchemeShard::PersistPersQueueGroupStats(NIceDb::TNiceDb &db, const TPathId
 }
 
 void TSchemeShard::PersistTableAlterVersion(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
+    LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "VERSION_TRACK PersistTableAlterVersion"
+        << " tablePathId# " << pathId
+        << " newVersion# " << tableInfo->AlterVersion);
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::Tables::AlterVersion>(tableInfo->AlterVersion));
@@ -7547,6 +7555,12 @@ void TSchemeShard::FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64
 {
     Y_VERIFY_S(Tables.contains(tableId), "Unknown table id " << tableId);
     const TTableInfo::TPtr tinfo = Tables.at(tableId);
+
+    LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "VERSION_TRACK FillTableDescription (sent to datashard)"
+        << " tablePathId# " << tableId
+        << " partitionIdx# " << partitionIdx
+        << " schemaVersion# " << schemaVersion);
 
     TString rangeBegin = (partitionIdx != 0)
         ? tinfo->GetPartitions()[partitionIdx-1].EndOfRange

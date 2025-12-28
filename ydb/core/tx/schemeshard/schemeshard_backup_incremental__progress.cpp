@@ -52,7 +52,10 @@ public:
         TMaybe<ui64> coordinatedVersion;
         TPathId tablePathId = streamPath->ParentPathId;
         if (Self->Tables.contains(tablePathId)) {
-            ui64 maxVersion = Self->Tables.at(tablePathId)->AlterVersion;
+            ui64 tableVersion = Self->Tables.at(tablePathId)->AlterVersion;
+            ui64 maxVersion = tableVersion;
+            ui64 indexVersion = 0;
+            TPathId parentIndexPathId;
 
             // Check if this is an index impl table and include parent index version
             if (Self->PathsById.contains(tablePathId)) {
@@ -60,13 +63,24 @@ public:
                 if (tablePathInfo->ParentPathId && Self->PathsById.contains(tablePathInfo->ParentPathId)) {
                     auto parentPath = Self->PathsById.at(tablePathInfo->ParentPathId);
                     if (parentPath->IsTableIndex() && Self->Indexes.contains(tablePathInfo->ParentPathId)) {
+                        parentIndexPathId = tablePathInfo->ParentPathId;
                         auto index = Self->Indexes.at(tablePathInfo->ParentPathId);
-                        maxVersion = Max(maxVersion, index->AlterVersion);
+                        indexVersion = index->AlterVersion;
+                        maxVersion = Max(maxVersion, indexVersion);
                     }
                 }
             }
 
             coordinatedVersion = maxVersion + 1;
+
+            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "VERSION_TRACK TryStartCleaner calculating coordinatedVersion"
+                << " tablePathId# " << tablePathId
+                << " tableVersion# " << tableVersion
+                << " parentIndexPathId# " << parentIndexPathId
+                << " indexVersion# " << indexVersion
+                << " maxVersion# " << maxVersion
+                << " coordinatedVersion# " << *coordinatedVersion);
         }
 
         NewCleaners.emplace_back(

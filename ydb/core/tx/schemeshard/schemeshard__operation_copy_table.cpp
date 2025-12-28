@@ -297,6 +297,7 @@ public:
             // Update version BEFORE publishing if there are CDC changes
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
                 auto srcTable = context.SS->Tables.at(srcPathId);
+                ui64 oldVersion = srcTable->AlterVersion;
 
                 // Use coordinated version if available (from backup operations)
                 if (txState->CoordinatedSchemaVersion) {
@@ -304,6 +305,14 @@ public:
                 } else {
                     srcTable->AlterVersion += 1;
                 }
+
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "VERSION_TRACK TCopyTable TPropose version update"
+                    << " srcPathId# " << srcPathId
+                    << " oldVersion# " << oldVersion
+                    << " newVersion# " << srcTable->AlterVersion
+                    << " coordinatedVersion# " << (txState->CoordinatedSchemaVersion ? ToString(*txState->CoordinatedSchemaVersion) : "none"));
+
                 context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
 
                 // Update parent index entity version if srcPath is an index impl table

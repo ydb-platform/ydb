@@ -1,6 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -38,7 +39,8 @@ public:
 
     void CreateTableBackup(const TString& tablePath, const TString& tableName,
                           const TVector<std::pair<TString, Ydb::Type::PrimitiveTypeId>>& columns,
-                          const TVector<TString>& keyColumns) {
+                          const TVector<TString>& keyColumns,
+                          const TVector<TVector<TString>>& splitPoints = {}) {
         const TString fullPath = TempDir.Name() + "/" + tablePath;
         MakePathIfNotExist(fullPath.c_str());
 
@@ -46,7 +48,7 @@ public:
         CreateMetadataFile(fullPath);
 
         // Create scheme.pb
-        CreateTableSchemeFile(fullPath, tableName, columns, keyColumns);
+        CreateTableSchemeFile(fullPath, tableName, columns, keyColumns, splitPoints);
 
         // Create permissions.pb
         CreatePermissionsFile(fullPath);
@@ -96,7 +98,8 @@ private:
 
     static void CreateTableSchemeFile(const TString& dirPath, const TString& tableName,
                                       const TVector<std::pair<TString, Ydb::Type::PrimitiveTypeId>>& columns,
-                                      const TVector<TString>& keyColumns) {
+                                      const TVector<TString>& keyColumns,
+                                      const TVector<TVector<TString>>& splitPoints = {}) {
         Ydb::Table::CreateTableRequest table;
         table.set_path(tableName);
 
@@ -108,6 +111,24 @@ private:
 
         for (const auto& keyCol : keyColumns) {
             table.add_primary_key(keyCol);
+        }
+
+        // Add partition split points if specified
+        if (!splitPoints.empty()) {
+            auto* partitionAtKeys = table.mutable_partition_at_keys();
+            for (const auto& point : splitPoints) {
+                auto* splitPoint = partitionAtKeys->add_split_points();
+                // Create tuple type for the split point
+                auto* tupleType = splitPoint->mutable_type()->mutable_tuple_type();
+                for (size_t i = 0; i < point.size(); ++i) {
+                    // For UTF8 key columns
+                    tupleType->add_elements()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
+                }
+                // Set the split point value
+                for (const auto& value : point) {
+                    splitPoint->mutable_value()->add_items()->set_text_value(value);
+                }
+            }
         }
 
         TString serialized;
@@ -462,49 +483,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
-        // runtime.GetAppData().FeatureFlags.SetEnableChecksumsExport(false);
-
-        TTempBackupFiles backup;
-        backup.CreateTableBackup("backup/Table", "Table");
-
-        // Enable verbose logging for debugging
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
-
-        TString csvData = R"("key1","value1"
-"key2","value2"
-"key3","value3"
-)";
-        backup.AddDataFile("backup/Table", csvData);
-
-        TString importSettings = Sprintf(R"(
-            ImportFromFsSettings {
-              base_path: "%s"
-              items {
-                source_path: "backup/Table"
-                destination_path: "/MyRoot/RestoredTable"
-              }
-            }
-        )", backup.GetBasePath().c_str());
-
-        TestImport(runtime, ++txId, "/MyRoot", importSettings);
-        env.TestWaitNotification(runtime, txId);
-
-        auto response = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/RestoredTable"), {
-            NLs::PathExist,
-            NLs::IsTable
-        });
-    }
-
-    Y_UNIT_TEST(ShouldRestoreTableWithMultipleDataPartitions) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
@@ -512,14 +490,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         TTempBackupFiles backup;
         backup.CreateTableBackup("backup/LargeTable", "LargeTable");
 
-        TString csvData1 = R"("key1","value1"
+        TString csvData = R"("key1","value1"
 "key2","value2"
-)";
-        TString csvData2 = R"("key3","value3"
+"key3","value3"
 "key4","value4"
 )";
-        backup.AddDataFile("backup/LargeTable", csvData1, 0);
-        backup.AddDataFile("backup/LargeTable", csvData2, 1);
+        backup.AddDataFile("backup/LargeTable", csvData);
 
         TString importSettings = Sprintf(R"(
             ImportFromFsSettings {
@@ -541,6 +517,65 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
             NLs::PathExist,
             NLs::IsTable
         });
+
+        ui32 totalRows = CountRows(runtime, "/MyRoot/LargeTable");
+        UNIT_ASSERT_VALUES_EQUAL(totalRows, 4);
+    }
+
+    Y_UNIT_TEST(ShouldRestorePartitionedTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
+
+        TTempBackupFiles backup;
+
+        backup.CreateTableBackup(
+            "backup/PartitionedTable",
+            "PartitionedTable",
+            {
+                {"key", Ydb::Type::UTF8},
+                {"value", Ydb::Type::UTF8}
+            },
+            {"key"},
+            {{"key3"}}
+        );
+
+        TString csvData1 = R"("key1","value1"
+"key2","value2"
+)";
+        TString csvData2 = R"("key3","value3"
+"key4","value4"
+)";
+        backup.AddDataFile("backup/PartitionedTable", csvData1, 0);
+        backup.AddDataFile("backup/PartitionedTable", csvData2, 1);
+
+        TString importSettings = Sprintf(R"(
+            ImportFromFsSettings {
+              base_path: "%s"
+              items {
+                source_path: "backup/PartitionedTable"
+                destination_path: "/MyRoot/PartitionedTable"
+              }
+            }
+        )", backup.GetBasePath().c_str());
+
+        TestImport(runtime, ++txId, "/MyRoot", importSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        auto response = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/PartitionedTable"), {
+            NLs::PathExist,
+            NLs::IsTable
+        });
+
+        ui32 totalRows = CountRows(runtime, "/MyRoot/PartitionedTable");
+        UNIT_ASSERT_VALUES_EQUAL(totalRows, 4);
     }
 
     Y_UNIT_TEST(ShouldRestoreTableWithDifferentDataTypes) {
@@ -593,11 +628,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
             NLs::IsTable
         });
 
-        // Verify schema
         const auto& table = describe.GetPathDescription().GetTable();
         UNIT_ASSERT_VALUES_EQUAL(table.ColumnsSize(), 4);
         UNIT_ASSERT_VALUES_EQUAL(table.KeyColumnNamesSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(table.GetKeyColumnNames(0), "id");
+
+        ui32 totalRows = CountRows(runtime, "/MyRoot/TypedTable");
+        UNIT_ASSERT_VALUES_EQUAL(totalRows, 3);
     }
 
     Y_UNIT_TEST(ShouldRestoreEmptyTable) {
@@ -689,5 +726,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
             NLs::PathExist,
             NLs::IsTable
         });
+
+        ui32 usersRows = CountRows(runtime, "/MyRoot/Users");
+        UNIT_ASSERT_VALUES_EQUAL(usersRows, 2);
+
+        ui32 ordersRows = CountRows(runtime, "/MyRoot/Orders");
+        UNIT_ASSERT_VALUES_EQUAL(ordersRows, 2);
     }
 }

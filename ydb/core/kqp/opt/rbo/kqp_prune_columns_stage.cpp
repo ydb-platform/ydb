@@ -26,7 +26,7 @@ void TPruneColumnsStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     THashSet<TInfoUnit, TInfoUnit::THashFunction> usedSet;
     for (auto it : root) {
 
-        auto usedIUs = it.Current->GetUsedIUs();
+        auto usedIUs = it.Current->GetUsedIUs(root.PlanProps);
         for (auto iu : usedIUs) {
             usedSet.insert(iu);
         }

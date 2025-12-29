@@ -2216,7 +2216,13 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     tokenResolvers.push_back(BuildDefaultTokenResolver(typeAnnotationContext->Credentials));
-    typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
+    auto tokenResolver = BuildCompositeTokenResolver(std::move(tokenResolvers));
+
+    typeAnnotationContext->UserDataStorage->SetTokenResolver(tokenResolver);
+
+    if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {
+        urlListerManager->SetTokenResolver(std::move(tokenResolver));
+    }
 
     return typeAnnotationContext;
 }

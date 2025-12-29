@@ -922,7 +922,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
 
     RunOptions_.PrintInfo("Compile program...");
-    if (!program->Compile(RunOptions_.User)) {
+    if (!program->Compile(RunOptions_.User,
+                          /*skipLibraries=*/ERunMode::Compile == RunOptions_.Mode && RunOptions_.TestPartialTypecheck)) {
         program->PrintErrorsTo(*RunOptions_.ErrStream);
         fail = true;
     }

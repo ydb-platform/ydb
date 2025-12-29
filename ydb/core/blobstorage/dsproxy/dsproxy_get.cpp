@@ -408,7 +408,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
 
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(handleClass)) {
-            STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",         
+            STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",
                     (LongRequestThreshold, LongRequestThreshold),
                     (GroupId, Info->GroupID),
                     (SubrequestsCount, evResult->ResponseSz),

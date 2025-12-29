@@ -205,12 +205,14 @@ public:
                 outputTableInfo.Spec = inputInfo.Spec;
                 outputTableInfo.AttrSpec = NYT::TNode::CreateMap();
 
-                TString columnGroupSpec = GetColumnGroupSpec(TFmrTableId(inputInfo.Cluster, inputInfo.Name), sessionId);
+                TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(inputInfo.Cluster, inputInfo.Name), sessionId);
+
+                TString columnGroupSpec = GetColumnGroupSpec(fmrTableId, sessionId);
                 if (!columnGroupSpec.empty()) {
                     outputTableInfo.ColumnGroups = NYT::NodeFromYsonString(columnGroupSpec);
                 }
 
-                auto status = GetTablePresenceStatus(TFmrTableId(inputInfo.Cluster, inputInfo.Name), sessionId);
+                auto status = GetTablePresenceStatus(fmrTableId, sessionId);
                 if (status == ETablePresenceStatus::OnlyInFmr) {
                     outputTablesByCluster[outputCluster].emplace_back(outputTableInfo);
                 }
@@ -397,7 +399,7 @@ public:
                 curInputInfo.Temp = true;
                 inputTablesInfo.emplace_back(curInputInfo);
             }
-            TFmrTableRef outputTable{.FmrTableId = fmrOutputTableId};
+            TFmrTableRef outputTable = GetFmrTableRef(fmrOutputTableId, sessionId);
 
             auto future = ExecMerge(inputTablesInfo, outputTable, cluster, sessionId, config);
             return future.Apply([this, sessionId, fmrOutputTableId] (const auto& f) {
@@ -421,7 +423,8 @@ public:
             TOutputInfo outputTableInfo;
             auto& table = inputTables[i];
             TString outputCluster = table.GetCluster(), outputPath = table.GetPath();
-            auto status = GetTablePresenceStatus(TFmrTableId(outputCluster, outputPath), sessionId);
+            TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(outputCluster, outputPath), sessionId);
+            auto status = GetTablePresenceStatus(fmrTableId, sessionId);
             if (status != ETablePresenceStatus::OnlyInFmr) {
                 continue;
             }
@@ -531,19 +534,19 @@ public:
                 auto anonTableRichPath = GetWriteTable(options.SessionId(), cluster, path, GetTablesTmpFolder(*options.Config(), cluster)).Cluster(cluster);
                 fmrTableId = TFmrTableId(anonTableRichPath);
             }
+            fmrTableId = GetAliasOrFmrId(fmrTableId, options.SessionId());
             YQL_CLOG(DEBUG, FastMapReduce) << " Getting table info for table with id " << fmrTableId;
 
             if (GetTablePresenceStatus(fmrTableId, options.SessionId()) != ETablePresenceStatus::OnlyInFmr) {
                 ytPresentTables.emplace_back(table);
             } else {
                 IYtGateway::TTableInfoResult::TTableData fmrTableInfo;
-                auto curFmrId = GetAliasOrFmrId(fmrTableId, options.SessionId());
 
-                auto meta = GetFmrTableMeta(curFmrId, options.SessionId());
+                auto meta = GetFmrTableMeta(fmrTableId, options.SessionId());
                 YQL_ENSURE(meta.DoesExist);
 
                 fmrTableInfo.Meta = MakeIntrusive<TYtTableMetaInfo>(meta);
-                fmrTableInfo.Stat = MakeIntrusive<TYtTableStatInfo>(GetFmrTableStats(curFmrId, options.SessionId()));
+                fmrTableInfo.Stat = MakeIntrusive<TYtTableStatInfo>(GetFmrTableStats(fmrTableId, options.SessionId()));
                 fmrTableInfo.Stat->Id = table.Table();
                 fmrTableInfo.WriteLock = false;
                 fmrTablesInfo.emplace_back(fmrTableInfo);
@@ -603,7 +606,8 @@ public:
                     auto config = options.Config();
                     TString tmpFolder = GetTablesTmpFolder(*config, tableInfo->Cluster);
                     TString tablePath = GetTransformedPath(options.SessionId(), tableInfo->Name, tmpFolder);
-                    auto status = GetTablePresenceStatus(TFmrTableId(tableInfo->Cluster, tablePath), options.SessionId());
+                    TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(tableInfo->Cluster, tablePath), options.SessionId());
+                    auto status = GetTablePresenceStatus(fmrTableId, options.SessionId());
                     if (status != ETablePresenceStatus::OnlyInFmr) {
                         continue;
                     }
@@ -720,7 +724,20 @@ private:
         // In case of anonymous table input, return alias of fmr table corresponding to it.
         auto& fmrTableInfo = Sessions_[sessionId]->FmrTables;
         auto alias = fmrTableInfo[fmrTableId].AnonymousTableFmrIdAlias;
-        return alias ? *alias: fmrTableId;
+        return alias ? *alias : fmrTableId;
+    }
+
+    TFmrTableRef GetFmrTableRef(TFmrTableId fmrTableId, const TString& sessionId, const std::vector<TString>& columns = {}, const TMaybe<TString>& serializedColumnGroups = Nothing()) {
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
+        auto alias = GetAliasOrFmrId(fmrTableId, sessionId);
+        TFmrTableRef fmrTableRef{alias};
+        if (!columns.empty()) {
+            fmrTableRef.Columns = columns;
+        }
+        if (serializedColumnGroups.Defined()) {
+            fmrTableRef.SerializedColumnGroups = *serializedColumnGroups;
+        }
+        return fmrTableRef;
     }
 
     void SetColumnGroupSpec(const TFmrTableId& fmrTableId, const TString& columnGroupSpec, const TString& sessionId) {
@@ -811,7 +828,7 @@ private:
 
             if (tablePresenceStatus == ETablePresenceStatus::OnlyInFmr || tablePresenceStatus == ETablePresenceStatus::Both) {
                 // table is in fmr, do not download
-                TFmrTableRef fmrTableRef{.FmrTableId = fmrTableId};
+                TFmrTableRef fmrTableRef = GetFmrTableRef(fmrTableId, sessionId);
                 fmrTableRef.SerializedColumnGroups = GetColumnGroupSpec(fmrTableRef.FmrTableId, sessionId);
                 if (!richPath.Columns_.Empty()) {
                     std::vector<TString> neededColumns(richPath.Columns_->Parts_.begin(), richPath.Columns_->Parts_.end());
@@ -822,7 +839,8 @@ private:
                 TYtTableRef ytTableRef(richPath);
                 ytTableRef.FilePath = GetTableFilePath(TGetTableFilePathOptions(sessionId).Cluster(inputCluster).Path(ytTable.Name).IsTemp(ytTable.Temp));
                 operationInputTables.emplace_back(ytTableRef);
-                clusterConnections.emplace(fmrTableId, GetTableClusterConnection(ytTable.Cluster, sessionId, config));
+                auto connection = GetTableClusterConnection(ytTable.Cluster, sessionId, config);
+                clusterConnections.emplace(fmrTableId, connection);
             }
         }
         return {operationInputTables, clusterConnections};
@@ -861,7 +879,7 @@ private:
         TString outputPath = fmrTable.Path;
         TString outputCluster = execCtx->Cluster_;
 
-        TFmrTableRef fmrTableRef{TFmrTableId(outputCluster, outputPath)};
+        TFmrTableRef fmrTableRef = GetFmrTableRef(TFmrTableId(outputCluster, outputPath), sessionId);
         auto tablePresenceStatus = GetTablePresenceStatus(fmrTableRef.FmrTableId, sessionId);
 
         if (tablePresenceStatus != ETablePresenceStatus::OnlyInFmr) {
@@ -1004,6 +1022,7 @@ private:
         TString sessionId = execCtx->GetSessionId();
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        const bool ordered = NYql::HasSetting(map.Settings().Ref(), EYtSettingType::Ordered);
 
         std::vector<TFmrTableRef> fmrOutputTables;
         auto outputTableColumnGroups = GetOutputTablesColumnGroups(execCtx);
@@ -1039,6 +1058,8 @@ private:
         bool useSkiff = false;
         bool forceYsonInputFormat = true;
         mapJobBuilder.SetMapJobParams(mapJob.get(), execCtx,remapperMap, remapperAllFiles, useSkiff, forceYsonInputFormat, false);
+        mapJob->SetIsOrdered(ordered);
+        mapJob->SetSettings(TFmrUserJobSettings());
 
         TFuture<void> uploadFilesToDistributedCacheIfNeededFuture;
         std::vector<TFileInfo> filesToUpload; // Udfs and local files to upload to dist cache.

@@ -235,6 +235,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
 
 void TLocalBuffer::EarlyFinish() {
     EarlyFinished.store(true);
+    NotifyOutput(true);
 }
 
 void TLocalBuffer::StorageWakeupHandler() {
@@ -693,13 +694,14 @@ TLocalBufferRegistry::~TLocalBufferRegistry() {
     }
 }
 
-std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info) {
+std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info, bool& created) {
     std::lock_guard lock(Mutex);
 
     auto it = LocalBuffers.find(info);
     if (it != LocalBuffers.end()) {
         auto result = it->second.lock();
         if (result) {
+            created = false;
             return result;
         } else {
             LocalBuffers.erase(it);
@@ -709,6 +711,7 @@ std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const
     LocalBuffers.emplace(info, result);
     (*LocalBufferCount)++;
 
+    created = true;
     return result;
 }
 
@@ -1711,9 +1714,18 @@ std::shared_ptr<TInputBuffer> TDqChannelService::GetRemoteInputBuffer(const TCha
 std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannelFullInfo& info, bool bindInput, IDqChannelStorage::TPtr storage) {
     Y_ENSURE(info.OutputActorId.NodeId() == NodeId);
     Y_ENSURE(info.InputActorId.NodeId() == NodeId);
-    auto buffer = LocalBufferRegistry->GetOrCreateLocalBuffer(LocalBufferRegistry, info);
+    bool created = false;
+    auto buffer = LocalBufferRegistry->GetOrCreateLocalBuffer(LocalBufferRegistry, info, created);
     if (bindInput) {
         buffer->BindInput();
+        if (created) {
+            std::lock_guard lock(Mutex);
+            LocalBufferHolders.emplace(info, buffer);
+            UnbindedInputs.emplace(info, TInstant::Now() + UnbindedWaitPeriod);
+        }
+    } else {
+        std::lock_guard lock(Mutex);
+        LocalBufferHolders.erase(info);
     }
     if (storage) {
         buffer->BindStorage(buffer, storage);
@@ -1739,6 +1751,17 @@ IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSetting
 
 void TDqChannelService::CleanupUnbindedInputs() {
     std::lock_guard lock(Mutex);
+
+    auto now = TInstant::Now();
+    while (!UnbindedInputs.empty()) {
+        auto& front = UnbindedInputs.front();
+        if (front.second > now) {
+            break;
+        }
+        LocalBufferHolders.erase(front.first);
+        UnbindedInputs.pop();
+    }
+
     for (auto& [_, nodeState] : NodeStates) {
         nodeState->CleanupUnbindedInputs();
     }
@@ -1821,7 +1844,13 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
     auto buffer = service->GetInputBuffer(Buffer->Info);
     buffer->PushStats.Level = Buffer->PushStats.Level;
     buffer->PopStats.Level = Buffer->PopStats.Level;
+
+    auto earlyFinished = Buffer->IsEarlyFinished();
     Buffer = buffer;
+    if (earlyFinished) {
+        Buffer->EarlyFinish();
+    }
+
     Service.reset();
 }
 
@@ -1837,13 +1866,14 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
             TABLE_SORTABLE_CLASS("table table-condensed") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "ChannelId";}
+                        TABLEH_ATTRS({{"title", "ChannelId"}}) {str << "Id";}
                         TABLEH() {str << "OutputActorId";}
                         TABLEH() {str << "InputActorId";}
-                        TABLEH() {str << "Src";}
-                        TABLEH() {str << "Dst";}
+                        TABLEH_ATTRS({{"title", "SrcStageId"}}) {str << "Src";}
+                        TABLEH_ATTRS({{"title", "DstStageId"}}) {str << "Dst";}
                         TABLEH() {str << "Fill (Agg)";}
-                        TABLEH() {str << "Finished";}
+                        TABLEH_ATTRS({{"title", "IsFinished"}}) {str << "F";}
+                        TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
                         TABLEH() {str << "PushBytes";}
                         TABLEH() {str << "PopBytes";}
                         TABLEH() {str << "InflightBytes";}
@@ -1881,6 +1911,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                     }
                                 }
                                 TABLED() {str << sharedBuffer->Finished.load();}
+                                TABLED() {str << sharedBuffer->EarlyFinished.load();}
                                 TABLED() {str << sharedBuffer->PushStats.Bytes;}
                                 TABLED() {str << sharedBuffer->PopStats.Bytes;}
                                 TABLED() {str << sharedBuffer->InflightBytes.load();}
@@ -1940,10 +1971,10 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
             TABLE_SORTABLE_CLASS ("table table-condensed") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "ChannelId";}
+                        TABLEH_ATTRS({{"title", "ChannelId"}}) {str << "Id";}
                         TABLEH() {str << "PeerNodeId";}
-                        TABLEH() {str << "Src";}
-                        TABLEH() {str << "Dst";}
+                        TABLEH_ATTRS({{"title", "SrcStageId"}}) {str << "Src";}
+                        TABLEH_ATTRS({{"title", "DstStageId"}}) {str << "Dst";}
                         TABLEH() {str << "Fill (Agg)";}
                         TABLEH() {str << "PushBytes";}
                         TABLEH() {str << "PopBytes";}
@@ -2006,13 +2037,13 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
             TABLE_SORTABLE_CLASS ("table table-condensed") {
                 TABLEHEAD() {
                     TABLER() {
-                        TABLEH() {str << "ChannelId";}
+                        TABLEH_ATTRS({{"title", "ChannelId"}}) {str << "Id";}
                         TABLEH() {str << "PeerNodeId";}
-                        TABLEH() {str << "Src";}
-                        TABLEH() {str << "Dst";}
+                        TABLEH_ATTRS({{"title", "SrcStageId"}}) {str << "Src";}
+                        TABLEH_ATTRS({{"title", "DstStageId"}}) {str << "Dst";}
                         TABLEH() {str << "QueueSize";}
                         TABLEH() {str << "PopBytes";}
-                        TABLEH() {str << "Finished";}
+                        TABLEH_ATTRS({{"title", "IsFinished"}}) {str << "F";}
                         TABLEH() {str << "OutputActorId";}
                         TABLEH() {str << "InputActorId";}
                     }

@@ -44,7 +44,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
     using TDeadlineMask = std::bitset<MaxBatchedPutRequests>;
     std::map<TInstant, TDeadlineMask> PutDeadlineMasks;
-    TDeadlineMask DeadlineMask; 
+    TDeadlineMask DeadlineMask;
 
     TStackVec<ui64, TypicalDisksInGroup> WaitingVDiskResponseCount;
     ui64 WaitingVDiskCount = 0;

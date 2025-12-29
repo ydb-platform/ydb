@@ -2889,7 +2889,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    Y_UNIT_TEST_TWIN(RestoreReplicationWithoutSecret, IsOlap) {
+    Y_UNIT_TEST_QUAD(RestoreReplicationWithoutSecret, IsOlap, UseSchemeSecret) {
         if (IsOlap) {
             return; // TODO: fix me issue@26498
         }
@@ -2913,15 +2913,24 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        if (UseSchemeSecret) {
+            ExecuteQuery(session, "CREATE SECRET `secret` WITH (value = 'root@builtin');", true);
+        } else {
+            ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        }
         ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k)) WITH (STORE = {store});", "store"_a = IsOlap ? "COLUMN" : "ROW"), true);
-        ExecuteQuery(session, Sprintf(R"(
-            CREATE ASYNC REPLICATION `/Root/replication` FOR
-                `/Root/table` AS `/Root/replica`
-            WITH (
-                CONNECTION_STRING = 'grpc://%s/?database=/Root',
-                TOKEN_SECRET_NAME = 'secret'
-            );)", endpoint.c_str()), true
+        ExecuteQuery(session,
+            Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = 'grpc://%s/?database=/Root',
+                    %s = 'secret'
+                );)",
+                endpoint.c_str(),
+                UseSchemeSecret ? "TOKEN_SECRET_PATH" : "TOKEN_SECRET_NAME"
+            ),
+            true
         );
         WaitReplicationInit(replicationClient, "/Root/replication");
 
@@ -2930,7 +2939,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        ExecuteQuery(session, "DROP OBJECT `secret` (TYPE SECRET);", true);
+        if (UseSchemeSecret) {
+            ExecuteQuery(session, "DROP SECRET `secret`;", true);
+        } else {
+            ExecuteQuery(session, "DROP OBJECT `secret` (TYPE SECRET);", true);
+        }
         ExecuteQuery(session, "DROP ASYNC REPLICATION `/Root/replication` CASCADE;", true);
         {
             const auto result = backupClient.Restore(pathToBackup, "/Root");
@@ -3066,7 +3079,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestSystemViewBackupRestore() {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableShowCreate(true);
-        config.MutableFeatureFlags()->SetEnableRealSystemViewPaths(true);
         TKikimrWithGrpcAndRootSchema server(config);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TSchemeClient schemeClient(driver);
@@ -3194,7 +3206,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             return; // TODO: fix me issue@26498
         }
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableRealSystemViewPaths(true);
         config.MutableFeatureFlags()->SetEnableShowCreate(true);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
@@ -3601,7 +3612,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         });
     }
 
-    Y_UNIT_TEST_TWIN(ReplicasAreNotBackedUp, IsOlap) {
+    Y_UNIT_TEST_QUAD(ReplicasAreNotBackedUp, IsOlap, UseSchemeSecret) {
         if (IsOlap) {
             return; // TODO: fix me issue@26498
         }
@@ -3614,19 +3625,35 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TReplicationClient replicationClient(driver);
+        TSchemeClient schemeClient(driver);
+
+        TPermissions permissions("root@builtin", {"ydb.generic.full"});
+        const auto result = schemeClient.ModifyPermissions("/Root",
+            TModifyPermissionsSettings().AddGrantPermissions(permissions)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        if (UseSchemeSecret) {
+            ExecuteQuery(session, "CREATE SECRET `secret` WITH (value = 'root@builtin');", true);
+        } else {
+            ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        }
         ExecuteQuery(session, fmt::format("CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k)) WITH (STORE = {store});", "store"_a = IsOlap ? "COLUMN" : "ROW"), true);
-        ExecuteQuery(session, Sprintf(R"(
-            CREATE ASYNC REPLICATION `/Root/replication` FOR
-                `/Root/table` AS `/Root/replica`
-            WITH (
-                CONNECTION_STRING = 'grpc://%s/?database=/Root',
-                TOKEN_SECRET_NAME = 'secret'
-            );)", endpoint.c_str()), true
+        ExecuteQuery(session,
+            Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = 'grpc://%s/?database=/Root',
+                    %s = 'secret'
+                );)",
+                endpoint.c_str(),
+                UseSchemeSecret ? "TOKEN_SECRET_PATH" : "TOKEN_SECRET_NAME"
+            ),
+            true
         );
         WaitReplicationInit(replicationClient, "/Root/replication");
 

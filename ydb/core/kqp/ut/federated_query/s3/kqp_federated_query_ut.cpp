@@ -2370,7 +2370,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    Y_UNIT_TEST(TestSecretsExistingValidation) {
+    Y_UNIT_TEST_TWIN(TestSecretsExistingValidation, UseSchemaSecrets) {
         const TString bucket = "test_bucket14";
 
         CreateBucket(bucket);
@@ -2381,17 +2381,28 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
+        { // provide grants
+            const auto result = session.ExecuteSchemeQuery("GRANT ALL ON `/Root` TO `test@builtin`").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // create secret
+            const auto result = session.ExecuteSchemeQuery(
+                UseSchemaSecrets ?
+                    "CREATE SECRET TestSecret WITH (value = 'test_value')" :
+                    "CREATE OBJECT TestSecret (TYPE SECRET) WITH value = `test_value`"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
         const TString query = fmt::format(R"(
-            GRANT ALL ON `/Root` TO `test@builtin`;
-            CREATE OBJECT TestSecret (TYPE SECRET) WITH value = `test_value`;
             CREATE EXTERNAL DATA SOURCE `/Root/external_data_source` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="{location}",
                 AUTH_METHOD="SERVICE_ACCOUNT",
                 SERVICE_ACCOUNT_ID="TestSa",
-                SERVICE_ACCOUNT_SECRET_NAME="TestSecret"
+                {secret_param_name}="TestSecret"
             );)",
-            "location"_a = GetBucketLocation(bucket)
+            "location"_a = GetBucketLocation(bucket),
+            "secret_param_name"_a = UseSchemaSecrets ? "SERVICE_ACCOUNT_SECRET_PATH" : "SERVICE_ACCOUNT_SECRET_NAME"
         );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2409,7 +2420,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
         UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "secret with name 'TestSecret' not found");
+        UNIT_ASSERT_STRING_CONTAINS(
+            readyOp.Status().GetIssues().ToString(),
+            UseSchemaSecrets ?
+                "secret `/Root/TestSecret` not found" :
+                "secret with name 'TestSecret' not found"
+        );
     }
 
     Y_UNIT_TEST(TestOlapToS3Insert) {
@@ -2771,19 +2787,38 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
 
         auto db = kikimr->GetQueryClient();
-        const TString query = R"(
-            INSERT INTO test_bucket.`/result/` WITH (
-                FORMAT = "csv_with_names",
-                PARTITIONED_BY = (data)
-            )
-                (data)
-            VALUES
-                ("some_string")
-        )";
-        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-        const auto& issues = result.GetIssues().ToString();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
-        UNIT_ASSERT_STRING_CONTAINS(issues, "Write schema contains no columns except partitioning columns.");
+        {
+            const TString query = R"(
+                INSERT INTO test_bucket.`/result/` WITH (
+                    FORMAT = "csv_with_names",
+                    PARTITIONED_BY = (data)
+                )
+                    (data)
+                VALUES
+                    ("some_string")
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Write schema contains no columns except partitioning columns.");
+        }
+
+        {
+            const TString query = R"(
+                INSERT INTO test_bucket.`/result/` WITH (
+                    FORMAT = "csv_with_names",
+                    PARTITIONED_BY = (data)
+                )
+                    (data)
+                VALUES
+                    (CurrentUtcTimestamp() + Interval("PT2H"))
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "At partition key: 'data'");
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Expected data type, but got: Optional<Timestamp>");
+        }
     }
 
     Y_UNIT_TEST(TestVariantTypeValidation) {

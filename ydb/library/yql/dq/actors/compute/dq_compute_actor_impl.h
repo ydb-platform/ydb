@@ -143,7 +143,7 @@ public:
             InitializeLogPrefix(); // re-initialize with SelfId
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
-            if (!Task.GetFastChannels()) {
+            if (Task.GetDqChannelVersion() <= 1u) {
                 Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
                     RuntimeSettings.StatsMode, MemoryLimits.ChannelBufferSize, this, this->GetActivityType());
                 this->RegisterWithSameMailbox(Channels);
@@ -532,6 +532,9 @@ protected:
                     }
                 } else {
                     for (auto& [channelId, info] : InputChannelsMap) {
+                        if (!info.HasPeer) {
+                            return;
+                        }
                         if (!info.Channel->IsFinished()) {
                             info.Channel->Finish();
                             // TBD: wait for confirmation?
@@ -1115,7 +1118,7 @@ protected:
 
                 inputChannel->HasPeer = true;
                 inputChannel->PeerId = peer;
-                if (Task.GetFastChannels()) {
+                if (Task.GetDqChannelVersion() >= 2u) {
                     Y_ENSURE(inputChannel->Channel);
                     inputChannel->Channel->Bind(peer, this->SelfId());
                 } else {
@@ -1137,7 +1140,7 @@ protected:
 
                 outputChannel->HasPeer = true;
                 outputChannel->PeerId = peer;
-                if (Task.GetFastChannels()) {
+                if (Task.GetDqChannelVersion() >= 2u) {
                     Y_ENSURE(outputChannel->Channel);
                     outputChannel->Channel->Bind(this->SelfId(), peer);
                 } else {
@@ -1594,6 +1597,7 @@ protected:
                     str << "Run";
                 }
                 str << Endl;
+                str << "  TaskId: " << Task.GetId() << Endl;
                 str << "  State: " << (unsigned int)State << Endl;
 
                 TaskRunnerMonitoringInfo(str);

@@ -171,8 +171,8 @@ std::shared_ptr<TOpCBOTree> AddJoinToCBOTree(std::shared_ptr<TOpCBOTree> & cboTr
     } 
     else {
         join->SetRightInput(cboTree->TreeRoot);
-        treeNodes.push_back(join);
         treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
+        treeNodes.push_back(join);
     }
 
     return std::make_shared<TOpCBOTree>(join, treeNodes, join->Pos);
@@ -220,7 +220,7 @@ namespace NKqp {
 // Identity map that projects maybe a projection operator and can be removed if it doesn't do any extra
 // projections
 
-std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(ctx);
     Y_UNUSED(props);
@@ -254,7 +254,7 @@ std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndAppy(const std::
 
 // Currently we only extract simple expressions where there is only one variable on either side
 
-bool TExtractJoinExpressionsRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     if (input->Kind != EOperator::Filter) {
         return false;
@@ -289,8 +289,8 @@ bool TExtractJoinExpressionsRule::MatchAndAppy(std::shared_ptr<IOperator> &input
 
                 TVector<TInfoUnit> leftIUs;
                 TVector<TInfoUnit> rightIUs;
-                GetAllMembers(leftSide, leftIUs, props);
-                GetAllMembers(rightSide, rightIUs, props);
+                GetAllMembers(leftSide, leftIUs, props, false, true);
+                GetAllMembers(rightSide, rightIUs, props, false, true);
 
                 if (leftIUs.size() == 1 && rightIUs.size() == 1) {
                     matchedConjuncts.push_back(std::make_pair(idx, f.FilterBody));
@@ -375,14 +375,23 @@ bool TExtractJoinExpressionsRule::MatchAndAppy(std::shared_ptr<IOperator> &input
 
 // Rewrite a single scalar subplan into a cross-join
 
-bool TInlineScalarSubplanRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    auto scalarIUs = input->GetScalarSubplanIUs(props);
+bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    auto subplanIUs = input->GetSubplanIUs(props);
+    TVector<TInfoUnit> scalarIUs;
+    for (auto iu : subplanIUs) {
+        auto subplanEntry = props.Subplans.PlanMap.at(iu);
+        if (subplanEntry.Type == ESubplanType::EXPR) {
+            scalarIUs.push_back(iu);
+            break;
+        }
+    }
+
     if (scalarIUs.empty()) {
         return false;
     }
 
     auto scalarIU = scalarIUs[0];
-    auto subplan = props.ScalarSubplans.PlanMap.at(scalarIU);
+    auto subplan = props.Subplans.PlanMap.at(scalarIU).Plan;
     auto subplanResIU = subplan->GetOutputIUs()[0];
     auto subplanResType = subplan->GetIUType(subplanResIU);
 
@@ -420,16 +429,180 @@ bool TInlineScalarSubplanRule::MatchAndAppy(std::shared_ptr<IOperator> &input, T
     auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
     unaryOp->SetInput(cross);
 
-    props.ScalarSubplans.Remove(scalarIU);
+    props.Subplans.Remove(scalarIU);
 
     return true;
+}
+
+std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+    if (input->Kind != EOperator::Filter || props.PgSyntax) {
+        return input;
+    }
+
+    // Check that the filter lambda is a conjunction of one or more elements
+    auto filter = CastOperator<TOpFilter>(input);
+    auto lambdaBody = filter->FilterLambda->ChildPtr(1);
+
+    if (!TCoAnd::Match(lambdaBody.Get()) && !TCoNot::Match(lambdaBody.Get()) && !TCoMember::Match(lambdaBody.Get())) {
+        return input;
+    }
+
+    // Decompose the conjunction into individual conjuncts
+    TVector<TExprNode::TPtr> conjuncts;
+    if (TCoAnd::Match(lambdaBody.Get())) {
+        for (const auto& child : lambdaBody->Children()) {
+            conjuncts.push_back(child);
+        }
+    } else {
+        conjuncts.push_back(lambdaBody);
+    }
+
+    // Find the first conjunct that is a simple in or exists subplan
+    bool negated = false;
+    TInfoUnit iu;
+    TSubplanEntry subplan;
+    size_t conjunctIdx;
+
+    for (conjunctIdx = 0; conjunctIdx < conjuncts.size(); conjunctIdx++) {
+        auto maybeSubplan = conjuncts[conjunctIdx];
+
+        if (TCoNot::Match(maybeSubplan.Get())) {
+            maybeSubplan = maybeSubplan->ChildPtr(0);
+            negated = true;
+        }
+        if (TCoMember::Match(maybeSubplan.Get())) {
+            auto name = TString(maybeSubplan->Child(1)->Content());
+            iu = TInfoUnit(name);
+            if (props.Subplans.PlanMap.contains(iu)) {
+                subplan = props.Subplans.PlanMap.at(iu);
+                if (subplan.Type == ESubplanType::IN || subplan.Type == ESubplanType::EXISTS) {
+                    break;
+                }
+            }
+        }
+    }
+
+    if (conjunctIdx == conjuncts.size()) {
+        return input;
+    }
+
+    std::shared_ptr<IOperator> join;
+
+    // We build a semi-join or a left-only join when processing IN subplan
+    if (subplan.Type == ESubplanType::IN) {
+        auto leftJoinInput = filter->GetInput();
+        auto joinKind = negated ? "LeftOnly" : "LeftSemi";
+
+        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+
+        auto planIUs = subplan.Plan->GetOutputIUs();
+        YQL_CLOG(TRACE, CoreDq) << "In tuple size: " << subplan.Tuple.size() << ", subplan tuple size: " << planIUs.size();
+
+        Y_ENSURE(subplan.Tuple.size() == planIUs.size());
+
+        for (size_t i = 0; i < planIUs.size(); i++) {
+            joinKeys.push_back(std::make_pair(subplan.Tuple[i], planIUs[i]));
+        }
+
+        join = std::make_shared<TOpJoin>(leftJoinInput, subplan.Plan, input->Pos, joinKind, joinKeys);
+        conjuncts.erase(conjuncts.begin() + conjunctIdx);
+    }
+    // EXISTS and NOT EXISTS
+    else {
+
+        auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
+
+        TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> countMapElements;
+
+        auto zero = ctx.ExprCtx.NewCallable(filter->Pos, "Uint64", {ctx.ExprCtx.NewAtom(filter->Pos, "0")});
+
+        // clang-format off
+        auto zeroLambda = Build<TCoLambda>(ctx.ExprCtx, filter->Pos)
+            .Args({"arg"})
+            .Body(zero)
+            .Done().Ptr();
+        // clang-format on
+
+        countMapElements.push_back(std::make_pair(countResult, zeroLambda));
+        auto countMap = std::make_shared<TOpMap>(subplan.Plan, filter->Pos, countMapElements, true);
+
+
+        TOpAggregationTraits aggFunction(countResult, "count", false);
+        TVector<TOpAggregationTraits> aggs = {aggFunction};
+        TVector<TInfoUnit> keyColumns;
+
+        auto agg = std::make_shared<TOpAggregate>(countMap, aggs, keyColumns, EAggregationPhase::Final, false, filter->Pos);
+
+        TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
+        auto arg = Build<TCoArgument>(ctx.ExprCtx, filter->Pos).Name("lambda_arg").Done();
+
+        // FIXME: Apparently count(*) on empty result return null
+        TString compareCallable = negated ? "==" : "!=";
+
+        // clang-format off
+        auto member = Build<TCoMember>(ctx.ExprCtx, filter->Pos)
+            .Struct(arg)
+            .Name().Value(countResult.GetFullName()).Build()
+            .Done().Ptr();
+        // clang-format on
+        
+        auto body = ctx.ExprCtx.NewCallable(filter->Pos, compareCallable, {member, zero});
+
+        // clang-format off
+        auto lambda = Build<TCoLambda>(ctx.ExprCtx, filter->Pos)
+            .Args({arg})
+            .Body(body)
+            .Done().Ptr();
+        // clang-format on
+
+        auto compareResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
+        mapElements.push_back(std::make_pair(compareResult, lambda));
+        auto map = std::make_shared<TOpMap>(agg, filter->Pos, mapElements, true);
+
+        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        join = std::make_shared<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys);
+
+        // clang-format off
+        auto resultMember = Build<TCoMember>(ctx.ExprCtx, filter->Pos)
+            .Struct(arg)
+            .Name().Value(compareResult.GetFullName()).Build()
+            .Done().Ptr();
+        // clang-format on
+
+        conjuncts[conjunctIdx] = resultMember;
+    }
+
+    props.Subplans.Remove(iu);
+    // If there was a single conjunct, we can get rid of the filter completely
+    if (conjuncts.empty()) {
+        return join;
+    }
+
+    // Otherwise, we need to pack the remaining conjuncts back into the filter
+    auto arg = Build<TCoArgument>(ctx.ExprCtx, input->Pos).Name("lambda_arg").Done().Ptr();
+    TExprNode::TPtr newLambdaBody;
+    if (conjuncts.size() == 1) {
+        newLambdaBody = conjuncts[0];
+    } else {
+        newLambdaBody = Build<TCoAnd>(ctx.ExprCtx, input->Pos).Add(conjuncts).Done().Ptr();
+    }
+    newLambdaBody = ReplaceArg(newLambdaBody, arg, ctx.ExprCtx);
+
+    // clang-format off
+    auto newLambda = Build<TCoLambda>(ctx.ExprCtx, input->Pos)
+        .Args({arg})
+        .Body(newLambdaBody)
+    .Done().Ptr();
+    // clang-format on
+
+    return std::make_shared<TOpFilter>(join, filter->Pos, newLambda);
 }
 
 // We push the map operator only below join right now
 // We only push a non-projecting map operator, and there are some limitations to where we can push:
 //  - we cannot push the right side of left join for example or left side of right join
 
-std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -472,7 +645,7 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndAppy(const std::shared_pt
         auto mapElement = map->MapElements[i];
 
         TVector<TInfoUnit> mapElIUs;
-        GetAllMembers(std::get<TExprNode::TPtr>(mapElement.second), mapElIUs, props);
+        GetAllMembers(std::get<TExprNode::TPtr>(mapElement.second), mapElIUs, props, false, true);
 
         if (!IUSetDiff(mapElIUs, join->GetLeftInput()->GetOutputIUs()).size() && canPushLeft) {
             leftMapElements.push_back(mapElement);
@@ -507,7 +680,7 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndAppy(const std::shared_pt
     return output;
 }
 
-std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -530,7 +703,7 @@ std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndAppy(const std:
 }
 
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
-std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(props);
 
@@ -671,7 +844,7 @@ bool IsSuitableToApplyPeephole(const std::shared_ptr<IOperator>& input) {
     return !!FindNode(lambda.Body().Ptr(), peepholeIsNeeded);
 }
 
-std::shared_ptr<IOperator> TPeepholePredicate::SimpleMatchAndAppy(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+std::shared_ptr<IOperator> TPeepholePredicate::SimpleMatchAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
     if (!IsSuitableToApplyPeephole(input)) {
         return input;
@@ -732,7 +905,7 @@ bool IsSuitableToPushPredicateToColumnTables(const std::shared_ptr<IOperator>& i
             filter->GetTypeAnn());
 }
 
-std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const std::shared_ptr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
     if (!ctx.KqpCtx.Config->HasOptEnableOlapPushdown()) {
         return input;
@@ -813,7 +986,7 @@ std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleMatchAndAppy(const std::sh
  * Initially we build CBO only for joins that don't have other joins or CBO trees as arguments
  * There could be an intermediate filter in between, we also check that
  */
-std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -843,7 +1016,7 @@ std::shared_ptr<IOperator> TBuildInitialCBOTreeRule::SimpleMatchAndAppy(const st
  * FIXME: Add maybes to make matching look simpler
  * FIXME: Support other joins for filter push-out, refactor into a lambda to apply to both sides
  */
-std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -884,7 +1057,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndAppy(const std::sha
             if (!findCBOTree(rightInput, cboTree, maybeFilter)) {
                 return input;
             } else {
-                leftSideCBOTree = true;
+                leftSideCBOTree = false;
             }
         }
 
@@ -930,7 +1103,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndAppy(const std::sha
 /**
  * Convert unoptimized CBOTrees back into normal operators
  */
-std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -945,7 +1118,7 @@ std::shared_ptr<IOperator> TInlineCBOTreeRule::SimpleMatchAndAppy(const std::sha
 /**
  * Assign stages and build stage graph in the process
  */
-bool TAssignStagesRule::MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
     auto nodeName = input->ToString(ctx.ExprCtx);

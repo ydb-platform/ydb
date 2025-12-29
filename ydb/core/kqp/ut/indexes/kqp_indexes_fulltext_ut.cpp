@@ -2230,22 +2230,22 @@ Y_UNIT_TEST(Utf8) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContains) {
+Y_UNIT_TEST_TWIN(SelectWithFulltextContains, UTF8) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
     { // Create table with fulltext index
-        TString query = R"sql(
+        TString query = Sprintf(R"sql(
             CREATE TABLE `/Root/Texts` (
                 Key Uint64,
-                Text String,
+                Text %s,
                 PRIMARY KEY (Key),
                 INDEX fulltext_idx
                     GLOBAL USING fulltext
                     ON (Text)
                     WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true)
             );
-        )sql";
+        )sql", UTF8 ? "Utf8" : "String");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -2281,9 +2281,9 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
     for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
         TString query = Sprintf(R"sql(
             SELECT Key, Text FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::Contains(Text, "%s")
+            WHERE FullText::Contains%s(Text, "%s")
             ORDER BY Key
-        )sql", term.c_str());
+        )sql", UTF8 ? "Utf8" : "", term.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -2293,7 +2293,7 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
         // Verify that all returned rows actually contain the search term
         NYdb::TResultSetParser parser(resultSet);
         while (parser.TryNextRow()) {
-            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
+            auto bodyValue = UTF8 ? parser.ColumnParser("Text").GetOptionalUtf8() : parser.ColumnParser("Text").GetOptionalString();
             ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
             UNIT_ASSERT_C(bodyValue, "Text should not be null");
             Cerr << "Key: " << key << Endl;
@@ -2307,9 +2307,9 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
     for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
         TString query = Sprintf(R"sql(
             SELECT Key FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::Contains(Text, "%s")
+            WHERE FullText::Contains%s(Text, "%s")
             ORDER BY Key
-        )sql", term.c_str());
+        )sql", UTF8 ? "Utf8" : "", term.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -2329,35 +2329,39 @@ Y_UNIT_TEST(SelectWithFulltextContains) {
     }
 
     {
-        TString query = R"sql(
+        TString query = Sprintf(R"sql(
             SELECT Key, Text FROM `/Root/Texts`
-            WHERE FullText::Contains(Text, "машинное обучение")
-        )sql";
+            WHERE FullText::Contains%s(Text, "машинное обучение")
+        )sql", UTF8 ? "Utf8" : "");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextRelevance) {
+Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
+    // If UTF8 is true, the column order produced by full text source
+    // is the "Text", "_yql_fulltext_relevance"
+    // If UTF8 is false, the column order produced by full text source
+    // is the "_yql_fulltext_relevance", "text"
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
     { // Create table with fulltext index
-        TString query = R"sql(
+        TString query = Sprintf(R"sql(
             CREATE TABLE `/Root/Texts` (
                 Key Uint64,
-                Text String,
+                %s %s,
                 PRIMARY KEY (Key)
             );
-        )sql";
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "Utf8" : "String");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     { // Insert data with Russian text about machine learning
-        TString query = R"sql(
-            UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+        TString query = Sprintf(R"sql(
+            UPSERT INTO `/Root/Texts` (Key, %s) VALUES
                 (1, "Машинное обучение - это важная область искусственного интеллекта"),
                 (2, "Глубокое обучение является подмножеством машинного обучения"),
                 (3, "Нейронные сети используются в машинном обучении"),
@@ -2370,7 +2374,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevance) {
                 (10, "Практическое применение машинного обучения растет"),
                 (11, "Коты любят играть"),
                 (12, "Собаки любят бегать")
-        )sql";
+        )sql", UTF8 ? "text" : "Text");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -2382,14 +2386,23 @@ Y_UNIT_TEST(SelectWithFulltextRelevance) {
         {"коты любят", {11}}
     };
 
-    AddIndex(db, "flat_relevance");
+    {
+        TString query = Sprintf(R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext
+                ON (%s)
+                WITH (layout=%s, tokenizer=standard, use_filter_lowercase=true)
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "flat" : "flat_relevance");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 
     for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
         TString query = Sprintf(R"sql(
-            SELECT Key, Text FROM `/Root/Texts` VIEW `fulltext_idx`
-            ORDER BY FullText::Relevance(Text, "%s") DESC
+            SELECT Key, %s FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY FullText::Relevance%s(%s, "%s") DESC
             LIMIT 10
-        )sql", term.c_str());
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "Utf8" : "", UTF8 ? "text" : "Text", term.c_str());
 
         Cerr << "Query: " << query << Endl;
 
@@ -2402,7 +2415,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevance) {
         // Verify that all returned rows actually contain the search term
         NYdb::TResultSetParser parser(resultSet);
         while (parser.TryNextRow()) {
-            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
+            auto bodyValue = UTF8 ? parser.ColumnParser("text").GetOptionalUtf8() : parser.ColumnParser("Text").GetOptionalString();
             ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
             UNIT_ASSERT_C(bodyValue, "Body should not be null");
             Cerr << "Key: " << key << Endl;
@@ -2415,10 +2428,10 @@ Y_UNIT_TEST(SelectWithFulltextRelevance) {
 
     for(const auto& [term, expectedKeys] : searchingTerms) { // Query with WHERE clause using FulltextContains UDF
         TString query = Sprintf(R"sql(
-            SELECT Key, Text, FullText::Relevance(Text, "%s") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            SELECT Key, %s, FullText::Relevance%s(%s, "%s") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
             LIMIT 10
-        )sql", term.c_str());
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "Utf8" : "", UTF8 ? "text" : "Text", term.c_str());
 
         Cerr << "Query: " << query << Endl;
 
@@ -2431,7 +2444,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevance) {
         // Verify that all returned rows actually contain the search term
         NYdb::TResultSetParser parser(resultSet);
         while (parser.TryNextRow()) {
-            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
+            auto bodyValue = UTF8 ? parser.ColumnParser("text").GetOptionalUtf8() : parser.ColumnParser("Text").GetOptionalString();
             ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
             double relevance = parser.ColumnParser("Relevance").GetDouble();
             UNIT_ASSERT_C(bodyValue, "Body should not be null");
@@ -2444,10 +2457,10 @@ Y_UNIT_TEST(SelectWithFulltextRelevance) {
     }
 
     {
-        TString query = R"sql(
-            SELECT Key, Text FROM `/Root/Texts`
-            ORDER BY FullText::Relevance(Text, "машинное обучение") DESC
-        )sql";
+        TString query = Sprintf(R"sql(
+            SELECT Key, %s FROM `/Root/Texts`
+            ORDER BY FullText::Relevance%s(%s, "машинное обучение") DESC
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "Utf8" : "", UTF8 ? "text" : "Text");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         Cerr << "Result: " << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());

@@ -2161,8 +2161,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(CreateTableWithFamiliesRegular, UseQueryService) {
-        TKikimrRunner kikimr;
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(true);
+        TKikimrRunner kikimr; // EnableTableCacheModes should be enabled by default
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -2289,7 +2288,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(CreateFamilyWithCacheModeFeatureDisabled, UseQueryService) {
-        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -2313,7 +2313,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(AlterCacheModeInColumnFamilyFeatureDisabled, UseQueryService) {
-        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -2342,7 +2343,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(AddColumnFamilyWithCacheModeFeatureDisabled, UseQueryService) {
-        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -2375,8 +2377,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(CreateTableWithDefaultFamily, UseQueryService) {
-        TKikimrRunner kikimr;
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(true);
+        TKikimrRunner kikimr; // EnableTableCacheModes should be enabled by default
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
@@ -7711,26 +7712,36 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateExternalDataSourceWithSa) {
+    Y_UNIT_TEST_TWIN(CreateExternalDataSourceWithSa, UseSchemaSecrets) {
         NKqp::TKikimrSettings settings;
         settings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         settings.AppConfig.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
         TKikimrRunner kikimr{ settings };
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
-        auto query = TStringBuilder() << R"(
-            CREATE OBJECT mysasignature (TYPE SECRET) WITH (value = "mysasignaturevalue");
-
-            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
-                SOURCE_TYPE="ObjectStorage",
-                LOCATION="my-bucket",
-                AUTH_METHOD="SERVICE_ACCOUNT",
-                SERVICE_ACCOUNT_ID="mysa",
-                SERVICE_ACCOUNT_SECRET_NAME="mysasignature"
-            );)";
+        const TString secretId = "mysasignature";
+        const TString secretValue = "mysasignaturevalue";
+        CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
+        auto query = TStringBuilder() << Sprintf(
+            R"(
+                CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="SERVICE_ACCOUNT",
+                    SERVICE_ACCOUNT_ID="mysa",
+                    %s="%s"
+                );
+            )",
+            externalDataSourceName.c_str(),
+            UseSchemaSecrets ? "SERVICE_ACCOUNT_SECRET_PATH" : "SERVICE_ACCOUNT_SECRET_NAME",
+            secretId.c_str()
+        );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -7745,7 +7756,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetName(), SplitPath(externalDataSourceName).back());
         UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().HasServiceAccount());
         UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().GetServiceAccount().GetId(), "mysa");
-        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().GetServiceAccount().GetSecretName(), "mysasignature");
+        UNIT_ASSERT_VALUES_EQUAL(
+            externalDataSource.ExternalDataSourceInfo->Description.GetAuth().GetServiceAccount().GetSecretName(),
+            UseSchemaSecrets ? "/Root/" + secretId : secretId
+        );
     }
 
     Y_UNIT_TEST(DisableCreateExternalDataSource) {
@@ -12173,6 +12187,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         config.MutableFeatureFlags()->SetEnableStreamingQueries(enableStreamingQueries);
         config.MutableFeatureFlags()->SetEnableExternalDataSources(true);
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
+        config.MutableTableServiceConfig()->SetDqChannelVersion(1u);
 
         auto kikimr = std::make_unique<TKikimrRunner>(NKqp::TKikimrSettings(config)
             .SetEnableStreamingQueries(enableStreamingQueries)
@@ -15875,7 +15890,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(CreateTableWithCacheModeError) {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.FeatureFlags.SetEnableTableCacheModes(true);
         TTestHelper testHelper(settings);
 
         TString tableName = "/Root/ColumnTableTest";
@@ -15900,7 +15914,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(AlterTableWithCacheModeError) {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.FeatureFlags.SetEnableTableCacheModes(true);
         TTestHelper testHelper(settings);
 
         TString tableName = "/Root/ColumnTableTest";
@@ -15935,7 +15948,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
     Y_UNIT_TEST(AddColumnFamilyWithCacheModeError) {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.FeatureFlags.SetEnableTableCacheModes(true);
         TTestHelper testHelper(settings);
 
         TString tableName = "/Root/ColumnTableTest";

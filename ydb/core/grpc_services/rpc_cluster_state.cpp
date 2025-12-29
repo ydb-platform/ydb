@@ -15,7 +15,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/digest/old_crc/crc.h>
-#include <library/cpp/streams/bzip2/bzip2.h>
+#include <library/cpp/streams/zstd/zstd.h>
 
 #include <util/random/shuffle.h>
 
@@ -465,7 +465,7 @@ public:
     TString Pack(const TString& data) {
         TString dataPack;
         TStringOutput output(dataPack);
-        TBZipCompress compress(&output);
+        TZstdCompress compress(&output);
         compress.Write(data);
         compress.Finish();
         return dataPack;

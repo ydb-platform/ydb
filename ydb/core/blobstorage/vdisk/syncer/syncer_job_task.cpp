@@ -345,7 +345,7 @@ namespace NKikimr {
             FullRecoverInfo->LogoBlobFrom = LogoBlobIDFromLogoBlobID(record.GetLogoBlobFrom());
             FullRecoverInfo->BlockTabletFrom = record.GetBlockTabletFrom();
             FullRecoverInfo->BarrierFrom = TKeyBarrier(record.GetBarrierFrom());
-            
+
             if (record.HasProtocol()) {
                 FullRecoverInfo->Protocol = record.GetProtocol();
             } else {

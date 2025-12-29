@@ -291,7 +291,7 @@ protected:
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
             channel.Channel = TaskRunner->GetOutputChannel(channelId);
-            if (this->Task.GetFastChannels() && channel.HasPeer) {
+            if (this->Task.GetDqChannelVersion() >= 2u && channel.HasPeer) {
                 channel.Channel->Bind(this->SelfId(), channel.PeerId);
             }
         }

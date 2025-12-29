@@ -1167,7 +1167,7 @@ private:
 
         txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
         txProto.SetHasEffects(hasEffectStage);
-        txProto.SetEnableFastChannels(Config->UseFastChannels.Get().GetOrElse(Config->DefaultUseFastChannels));
+        txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->DefaultDqChannelVersion));
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
             const auto& binding = paramBinding.Binding();
@@ -1348,7 +1348,18 @@ private:
             FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
             FillTableId(settings.Table().Cast(), *fullTextProto.MutableTable());
             fullTextProto.SetIndex(settings.Index().Cast().StringValue());
-            FillColumns(settings.ResultColumns().Cast(), *tableMeta, fullTextProto, false);
+
+            THashMap<TString, const TExprNode*> columnsMap;
+            for (auto item : settings.ResultColumns().Cast()) {
+                columnsMap[item.StringValue()] = item.Raw();
+            }
+            TVector<TCoAtom> columns;
+            auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
+            for (auto item : type->GetItems()) {
+                columns.push_back(TCoAtom(columnsMap.at(item->GetName())));
+            }
+
+            FillColumns(columns, *tableMeta, fullTextProto, false);
             fullTextProto.MutableQuerySettings()->SetQuery(TString(settings.Query().Cast<TCoString>().Literal().Value()));
             FillColumns(settings.Columns().Cast(), *tableMeta, *fullTextProto.MutableQuerySettings(), false);
         } else {

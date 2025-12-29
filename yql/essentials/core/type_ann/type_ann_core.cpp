@@ -1352,6 +1352,11 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         const TStructExprType* structType = nullptr;
         bool isStructOptional = false;
         if (!EnsureStructOrOptionalStructType(input->Head(), isStructOptional, structType, ctx.Expr)) {
@@ -1433,6 +1438,11 @@ namespace NTypeAnnImpl {
             auto structObj = child->Child(1);
             if (structObj->GetTypeAnn() && structObj->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
                 input->SetTypeAnn(structObj->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
+            if (structObj->GetTypeAnn() && structObj->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
                 return IGraphTransformer::TStatus::Ok;
             }
 
@@ -1654,6 +1664,16 @@ namespace NTypeAnnImpl {
         }
 
         auto structObj = *iter;
+        if (structObj->GetTypeAnn() && structObj->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(structObj->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (structObj->GetTypeAnn() && structObj->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         bool isOptionalStruct = false;
         const TStructExprType* structExprType = nullptr;
         if (!EnsureStructOrOptionalStructType(*structObj, isOptionalStruct, structExprType, ctx.Expr)) {
@@ -1881,6 +1901,13 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Head().GetTypeAnn() &&
+            (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct ||
+            input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal)) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureStructType(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1910,6 +1937,11 @@ namespace NTypeAnnImpl {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureStructType(input->Head(), ctx.Expr)) {
@@ -5341,9 +5373,12 @@ namespace NTypeAnnImpl {
                 depOn = input->HeadPtr();
             }
 
-            if (ctx.Types.StrictTableProps && !EnsureStructType(*depOn, ctx.Expr)) {
+            if (ctx.Types.StrictTableProps &&
+                (!depOn->GetTypeAnn() || depOn->GetTypeAnn()->GetKind() != ETypeAnnotationKind::UniversalStruct) &&
+                !EnsureStructType(*depOn, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
+
             if (depOn->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
                 auto structType = depOn->GetTypeAnn()->Cast<TStructExprType>();
                 if (auto pos = structType->FindItem("_yql_sys_tablepath")) {
@@ -8066,10 +8101,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 });
 
                 for (const auto& x : ctx.Types.DataSources) {
-                    auto tokens = x->GetClusterTokens();
-                    if (tokens) {
-                        for (const auto& t : *tokens) {
-                            description.SecureParams.insert(std::make_pair(TString("cluster:default_") + t.first, t.second));
+                    for (const auto& clusterName : x->GetValidClusters()) {
+                        if (auto token = x->ResolveClusterToken(clusterName)) {
+                            description.SecureParams.emplace(TString("cluster:default_") + TString(clusterName), *token);
                         }
                     }
                 }
@@ -9319,6 +9353,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureStructType(input->Head(), ctx.Expr)) {
@@ -10704,6 +10743,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
 
             if (item->IsCallable("SqlProjectStarItem")) {
+                if (item->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+                    input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
                 auto& structItems = item->GetTypeAnn()->Cast<TStructExprType>()->GetItems();
                 for (const auto& item : structItems) {
                     allItems.emplace_back(item);
@@ -10951,7 +10995,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (isStar && !EnsureStructType(lambda->Pos(), *lambdaResult, ctx.Expr)) {
+        if (isStar && lambdaResult->GetKind() != ETypeAnnotationKind::UniversalStruct &&
+            !EnsureStructType(lambda->Pos(), *lambdaResult, ctx.Expr)) {
             // lambda should return struct
             return IGraphTransformer::TStatus::Error;
         }
@@ -11965,18 +12010,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     TStringBuf clusterName = p1;
                     if (clusterName.SkipPrefix("default_")) {
                         for (auto& x : ctx.Types.DataSources) {
-                            auto tokens = x->GetClusterTokens();
-                            auto token = tokens ? tokens->FindPtr(clusterName) : nullptr;
-                            if (token) {
+                            if (auto token = x->ResolveClusterToken(TString(clusterName))) {
                                 clusterCred.ConstructInPlace(TString(x->GetName()), "", *token);
                                 cred = clusterCred.Get();
                                 break;
                             }
                         }
                         for (auto& x : ctx.Types.DataSinks) {
-                            auto tokens = x->GetClusterTokens();
-                            auto token = tokens ? tokens->FindPtr(clusterName) : nullptr;
-                            if (token) {
+                            if (auto token = x->ResolveClusterToken(TString(clusterName))) {
                                 clusterCred.ConstructInPlace(TString(x->GetName()), "", *token);
                                 cred = clusterCred.Get();
                                 break;
@@ -12025,6 +12066,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         << "Expected " << resultKind << ", but got " << *tupleType->GetItems()[i]));
                     return IGraphTransformer::TStatus::Error;
                 }
+
+                if (tupleType->GetItems()[i]->GetKind() == ETypeAnnotationKind::Universal) {
+                    input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
                 const TTypeAnnotationNode* itemType = nullptr;
                 if (!EnsureNewSeqType<false>(input->Head().Pos(), *tupleType->GetItems()[i], ctx.Expr, &itemType)) {
                     return IGraphTransformer::TStatus::Error;
@@ -13588,7 +13635,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["DictRemove"] = &DictBlindOpWrapper<false>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
-        Functions["List"] = &ListWrapper;
+        ExtFunctions["List"] = &ListWrapper;
         ExtFunctions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>;
         Functions["Dict"] = &DictWrapper;
         ExtFunctions["Variant"] = &VariantWrapper;
@@ -14249,7 +14296,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return Nothing();
             }
 
-            if (status == IGraphTransformer::TStatus::Ok && Types_.DeriveColumnOrder && !Types_.LookupColumnOrder(*input)) {
+            if (status == IGraphTransformer::TStatus::Ok && Types_.DeriveColumnOrder && !Types_.LookupColumnOrder(*input)
+                && input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Universal) {
                 if (auto func = columnOrderFunctions.FindPtr(name)) {
                     TExtContext funcCtx(ctx, Types_);
                     status = (*func)(input, output, funcCtx);

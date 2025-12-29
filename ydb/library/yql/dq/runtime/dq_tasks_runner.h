@@ -430,8 +430,8 @@ public:
         return Task_->GetValuePackerVersion();
     }
 
-    bool GetFastChannels() const {
-        return Task_->GetFastChannels();
+    ui32 GetDqChannelVersion() const {
+        return Task_->GetDqChannelVersion();
     }
 
 private:

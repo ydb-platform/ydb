@@ -176,7 +176,7 @@ namespace NKqp {
  * are transformed into Pg types, we remap the synthenic variables back into original ones
  * to run the CBO, and then map them back
  */
-std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
     if (input->Kind != EOperator::CBOTree) {

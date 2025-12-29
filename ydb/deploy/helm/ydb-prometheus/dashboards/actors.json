@@ -24,9 +24,8 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "iteration": 1665499911570,
+  "id": 12,
   "links": [],
-  "liveNow": false,
   "panels": [
     {
       "datasource": {
@@ -39,9 +38,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 100,
             "gradientMode": "none",
@@ -50,6 +53,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 1,
@@ -57,6 +61,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -72,14 +77,15 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "Core"
         },
         "overrides": []
       },
@@ -96,9 +102,11 @@
             "last"
           ],
           "displayMode": "table",
-          "placement": "right"
+          "placement": "right",
+          "showLegend": false
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "none"
         }
@@ -109,14 +117,16 @@
             "type": "prometheus",
             "uid": "$ds"
           },
+          "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by (execpool) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
+          "expr": "sum by (execpool) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval])) / 1000000",
           "interval": "",
           "legendFormat": "{{execpool}}",
+          "range": true,
           "refId": "A"
         }
       ],
-      "title": "CPU by execpool (us)",
+      "title": "CPU by execpool",
       "type": "timeseries"
     },
     {
@@ -130,9 +140,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 100,
             "gradientMode": "none",
@@ -141,6 +155,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 1,
@@ -148,6 +163,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -163,14 +179,15 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "sishort"
         },
         "overrides": []
       },
@@ -187,9 +204,11 @@
             "last"
           ],
           "displayMode": "table",
-          "placement": "right"
+          "placement": "right",
+          "showLegend": false
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "single",
           "sort": "none"
         }
@@ -211,11 +230,7 @@
       "type": "timeseries"
     },
     {
-      "collapsed": true,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "$ds"
-      },
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -223,562 +238,629 @@
         "y": 10
       },
       "id": 8,
-      "panels": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$ds"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 0,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 1,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 5,
-            "w": 24,
-            "x": 0,
-            "y": 11
-          },
-          "id": 19,
-          "options": {
-            "legend": {
-              "calcs": [
-                "last"
-              ],
-              "displayMode": "table",
-              "placement": "right"
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "$ds"
-              },
-              "exemplar": false,
-              "expr": "sum by (host, pod) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[$__rate_interval]))",
-              "interval": "",
-              "legendFormat": "{{host}}{{pod}}",
-              "refId": "A"
-            }
-          ],
-          "title": "User pool - CPU by host (us)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$ds"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 100,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 1,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 5,
-            "w": 24,
-            "x": 0,
-            "y": 16
-          },
-          "id": 20,
-          "options": {
-            "legend": {
-              "calcs": [
-                "last"
-              ],
-              "displayMode": "table",
-              "placement": "right"
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "$ds"
-              },
-              "exemplar": false,
-              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[$__rate_interval]))",
-              "interval": "",
-              "legendFormat": "{{activity}}",
-              "refId": "A"
-            }
-          ],
-          "title": "User pool - CPU by actors (us)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$ds"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 100,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 1,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 5,
-            "w": 24,
-            "x": 0,
-            "y": 21
-          },
-          "id": 3,
-          "options": {
-            "legend": {
-              "calcs": [
-                "last"
-              ],
-              "displayMode": "table",
-              "placement": "right"
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "$ds"
-              },
-              "exemplar": false,
-              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"System\"}[$__rate_interval]))",
-              "interval": "",
-              "legendFormat": "{{activity}}",
-              "refId": "A"
-            }
-          ],
-          "title": "System pool - CPU by actors (us)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$ds"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 100,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 1,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 5,
-            "w": 24,
-            "x": 0,
-            "y": 26
-          },
-          "id": 4,
-          "options": {
-            "legend": {
-              "calcs": [
-                "last"
-              ],
-              "displayMode": "table",
-              "placement": "right"
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "$ds"
-              },
-              "exemplar": false,
-              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"IO\"}[$__rate_interval]))",
-              "interval": "",
-              "legendFormat": "{{activity}}",
-              "refId": "A"
-            }
-          ],
-          "title": "IO pool - CPU by actors (us)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$ds"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 100,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 1,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 5,
-            "w": 24,
-            "x": 0,
-            "y": 31
-          },
-          "id": 5,
-          "options": {
-            "legend": {
-              "calcs": [
-                "last"
-              ],
-              "displayMode": "table",
-              "placement": "right"
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "$ds"
-              },
-              "exemplar": false,
-              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"IC\"}[$__rate_interval]))",
-              "interval": "",
-              "legendFormat": "{{activity}}",
-              "refId": "A"
-            }
-          ],
-          "title": "IC pool - CPU by actors (us)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "$ds"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 100,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 1,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 5,
-            "w": 24,
-            "x": 0,
-            "y": 36
-          },
-          "id": 6,
-          "options": {
-            "legend": {
-              "calcs": [
-                "last"
-              ],
-              "displayMode": "table",
-              "placement": "right"
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "$ds"
-              },
-              "exemplar": false,
-              "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"Batch\"}[$__rate_interval]))",
-              "interval": "",
-              "legendFormat": "{{activity}}",
-              "refId": "A"
-            }
-          ],
-          "title": "Batch pool - CPU by actors (us)",
-          "type": "timeseries"
-        }
-      ],
+      "panels": [],
       "title": "CPU",
       "type": "row"
     },
     {
-      "collapsed": true,
       "datasource": {
         "type": "prometheus",
         "uid": "$ds"
       },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Cores"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by (host, pod) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[$__rate_interval])) / 1000000",
+          "interval": "",
+          "legendFormat": "{{host}}{{pod}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "User pool - CPU by host",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Cores"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[$__rate_interval])) / 1000000",
+          "interval": "",
+          "legendFormat": "{{activity}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "User pool - CPU by actors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Cores"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"System\"}[$__rate_interval])) / 1000000",
+          "interval": "",
+          "legendFormat": "{{activity}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "System pool - CPU by actors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Cores"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"IO\"}[$__rate_interval])) / 1000000",
+          "interval": "",
+          "legendFormat": "{{activity}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "IO pool - CPU by actors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Cores"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"IC\"}[$__rate_interval])) / 1000000",
+          "interval": "",
+          "legendFormat": "{{activity}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "IC pool - CPU by actors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$ds"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Cores"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": false
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "$ds"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"Batch\"}[$__rate_interval])) / 1000000",
+          "interval": "",
+          "legendFormat": "{{activity}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Batch pool - CPU by actors",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 11
+        "y": 41
       },
       "id": 17,
       "panels": [
@@ -793,9 +875,13 @@
                 "mode": "palette-classic"
               },
               "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
                 "axisLabel": "",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
+                "barWidthFactor": 0.6,
                 "drawStyle": "line",
                 "fillOpacity": 100,
                 "gradientMode": "none",
@@ -804,6 +890,7 @@
                   "tooltip": false,
                   "viz": false
                 },
+                "insertNulls": false,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
                 "pointSize": 1,
@@ -811,6 +898,7 @@
                   "type": "linear"
                 },
                 "showPoints": "auto",
+                "showValues": false,
                 "spanNulls": false,
                 "stacking": {
                   "group": "A",
@@ -825,14 +913,16 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": 0
                   },
                   {
                     "color": "red",
                     "value": 80
                   }
                 ]
-              }
+              },
+              "unit": "sishort"
             },
             "overrides": []
           },
@@ -840,7 +930,7 @@
             "h": 5,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 42
           },
           "id": 14,
           "options": {
@@ -849,14 +939,16 @@
                 "last"
               ],
               "displayMode": "table",
-              "placement": "right"
+              "placement": "right",
+              "showLegend": false
             },
             "tooltip": {
+              "hideZeros": false,
               "mode": "multi",
               "sort": "desc"
             }
           },
-          "targets": [
+              "targets": [
             {
               "datasource": {
                 "type": "prometheus",
@@ -884,9 +976,13 @@
                 "mode": "palette-classic"
               },
               "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
                 "axisLabel": "",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
+                "barWidthFactor": 0.6,
                 "drawStyle": "line",
                 "fillOpacity": 100,
                 "gradientMode": "none",
@@ -895,6 +991,7 @@
                   "tooltip": false,
                   "viz": false
                 },
+                "insertNulls": false,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
                 "pointSize": 1,
@@ -902,6 +999,7 @@
                   "type": "linear"
                 },
                 "showPoints": "auto",
+                "showValues": false,
                 "spanNulls": false,
                 "stacking": {
                   "group": "A",
@@ -916,14 +1014,16 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": 0
                   },
                   {
                     "color": "red",
                     "value": 80
                   }
                 ]
-              }
+              },
+              "unit": "sishort"
             },
             "overrides": []
           },
@@ -931,7 +1031,7 @@
             "h": 5,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 42
           },
           "id": 13,
           "options": {
@@ -940,14 +1040,16 @@
                 "last"
               ],
               "displayMode": "table",
-              "placement": "right"
+              "placement": "right",
+              "showLegend": false
             },
             "tooltip": {
+              "hideZeros": false,
               "mode": "multi",
               "sort": "desc"
             }
           },
-          "targets": [
+              "targets": [
             {
               "datasource": {
                 "type": "prometheus",
@@ -961,7 +1063,7 @@
               "refId": "A"
             }
           ],
-          "title": "Event processing time (us)",
+          "title": "Event processing time (ticks)",
           "type": "timeseries"
         },
         {
@@ -975,9 +1077,13 @@
                 "mode": "palette-classic"
               },
               "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
                 "axisLabel": "",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
+                "barWidthFactor": 0.6,
                 "drawStyle": "line",
                 "fillOpacity": 100,
                 "gradientMode": "none",
@@ -986,6 +1092,7 @@
                   "tooltip": false,
                   "viz": false
                 },
+                "insertNulls": false,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
                 "pointSize": 1,
@@ -993,6 +1100,7 @@
                   "type": "linear"
                 },
                 "showPoints": "auto",
+                "showValues": false,
                 "spanNulls": false,
                 "stacking": {
                   "group": "A",
@@ -1007,14 +1115,16 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": 0
                   },
                   {
                     "color": "red",
                     "value": 80
                   }
                 ]
-              }
+              },
+              "unit": "sishort"
             },
             "overrides": []
           },
@@ -1022,7 +1132,7 @@
             "h": 5,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 47
           },
           "id": 12,
           "options": {
@@ -1031,28 +1141,32 @@
                 "last"
               ],
               "displayMode": "table",
-              "placement": "right"
+              "placement": "right",
+              "showLegend": false
             },
             "tooltip": {
+              "hideZeros": false,
               "mode": "multi",
               "sort": "desc"
             }
           },
-          "targets": [
+              "targets": [
             {
               "datasource": {
                 "type": "prometheus",
                 "uid": "$ds"
               },
+              "editorMode": "code",
               "exemplar": false,
               "expr": "sum by (le) (rate(utils_ActivationTimeUs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[$__rate_interval]))",
               "format": "heatmap",
               "interval": "",
               "legendFormat": "{{le}}",
+              "range": true,
               "refId": "A"
             }
           ],
-          "title": "Activation time (us)",
+          "title": "Activation time",
           "type": "timeseries"
         },
         {
@@ -1066,9 +1180,13 @@
                 "mode": "palette-classic"
               },
               "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
                 "axisLabel": "",
                 "axisPlacement": "auto",
                 "barAlignment": 0,
+                "barWidthFactor": 0.6,
                 "drawStyle": "line",
                 "fillOpacity": 100,
                 "gradientMode": "none",
@@ -1077,6 +1195,7 @@
                   "tooltip": false,
                   "viz": false
                 },
+                "insertNulls": false,
                 "lineInterpolation": "linear",
                 "lineWidth": 1,
                 "pointSize": 1,
@@ -1084,6 +1203,7 @@
                   "type": "linear"
                 },
                 "showPoints": "auto",
+                "showValues": false,
                 "spanNulls": false,
                 "stacking": {
                   "group": "A",
@@ -1098,14 +1218,16 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": 0
                   },
                   {
                     "color": "red",
                     "value": 80
                   }
                 ]
-              }
+              },
+              "unit": "sishort"
             },
             "overrides": []
           },
@@ -1113,7 +1235,7 @@
             "h": 5,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 47
           },
           "id": 15,
           "options": {
@@ -1122,14 +1244,16 @@
                 "last"
               ],
               "displayMode": "table",
-              "placement": "right"
+              "placement": "right",
+              "showLegend": false
             },
             "tooltip": {
+              "hideZeros": false,
               "mode": "multi",
               "sort": "desc"
             }
           },
-          "targets": [
+              "targets": [
             {
               "datasource": {
                 "type": "prometheus",
@@ -1143,7 +1267,7 @@
               "refId": "A"
             }
           ],
-          "title": "Event delivery time (us)",
+          "title": "Event delivery time",
           "type": "timeseries"
         }
       ],
@@ -1151,9 +1275,12 @@
       "type": "row"
     }
   ],
-  "schemaVersion": 36,
-  "style": "dark",
-  "tags": [],
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 42,
+  "tags": [
+    "ydb"
+  ],
   "templating": {
     "list": [
       {
@@ -1163,9 +1290,7 @@
           "uid": "$ds"
         },
         "definition": "label_values(database)",
-        "hide": 0,
         "includeAll": false,
-        "multi": false,
         "name": "database",
         "options": [],
         "query": {
@@ -1174,21 +1299,16 @@
         },
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
         "type": "query"
       },
       {
         "current": {},
-        "hide": 0,
         "includeAll": false,
-        "multi": false,
         "name": "ds",
         "options": [],
         "query": "prometheus",
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "type": "datasource"
       }
     ]
@@ -1200,7 +1320,6 @@
   "timepicker": {},
   "timezone": "",
   "title": "Actors",
-  "uid": "actors",
-  "version": 1,
-  "weekStart": ""
+  "uid": "ydb-actors",
+  "version": 1
 }

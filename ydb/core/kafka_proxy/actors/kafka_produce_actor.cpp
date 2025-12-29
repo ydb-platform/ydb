@@ -230,9 +230,16 @@ void TKafkaProduceActor::ProcessRequests(const TActorContext& ctx) {
         return;
     }
 
+    if (ProcessingRequests) {
+        return;
+    }
+
     if (Requests.empty()) {
         return;
     }
+
+    ProcessingRequests = true;
+    Y_DEFER { ProcessingRequests = false; };
 
     auto canProcess = EnqueueInitialization();
     while (canProcess--) {

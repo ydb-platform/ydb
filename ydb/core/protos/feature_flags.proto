@@ -214,7 +214,7 @@ message TFeatureFlags {
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
     optional bool RequireDbPrefixInSecretName = 189 [default = false];
     optional bool EnableSystemNamesProtection = 190 [default = false];
-    optional bool EnableRealSystemViewPaths = 191 [default = false, (RequireRestart) = true];
+    optional bool EnableRealSystemViewPaths = 191 [default = true];
     optional bool EnableCSSchemasCollapsing = 192 [default = false];
     optional bool EnableMoveColumnTable = 193 [default = true];
     optional bool EnableArrowResultSetFormat = 194 [default = false];
@@ -223,11 +223,11 @@ message TFeatureFlags {
     optional bool EnableCompactionOverloadDetection = 197 [default = true];
     reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns
     optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
-    optional bool EnableMirroredTopicSplitMerge = 200 [default = false];
+    optional bool EnableMirroredTopicSplitMerge = 200 [default = true];
     optional bool EnableFulltextIndex = 201 [default = false];
     optional bool EnableSetColumnConstraint = 202 [default = false];
     optional bool EnableSchemaSecrets = 203 [default = true];
-    optional bool EnableTableCacheModes = 204 [default = false];
+    optional bool EnableTableCacheModes = 204 [default = true];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
     optional bool EnableStreamingQueries = 206 [default = false];
     optional bool EnableTinyDisks = 207 [default = false];

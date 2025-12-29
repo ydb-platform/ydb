@@ -734,6 +734,58 @@ namespace {
 
         }
 
+        void TestTransfer(const TString& scheme, const TString& expected) {
+            auto options = TTestEnvOptions()
+                .InitYdbDriver(true);
+            TTestEnv env(Runtime(), options);
+            ui64 txId = 100;
+
+            TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+            env.TestWaitNotification(Runtime(), txId);
+
+            auto topic = NDescUT::TSimpleTopic(0, 0);
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
+            env.TestWaitNotification(Runtime(), txId);
+
+            TestCreateTransfer(Runtime(), ++txId, "/MyRoot", scheme);
+            env.TestWaitNotification(Runtime(), txId);
+
+            TString request = Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_path: "/MyRoot/Transfer"
+                        destination_prefix: "Transfer"
+                    }
+                }
+            )", S3Port());
+
+            TestExport(Runtime(), ++txId, "/MyRoot", request);
+            env.TestWaitNotification(Runtime(), txId);
+
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            UNIT_ASSERT(HasS3File("/Transfer/create_transfer.sql"));
+            const auto content = GetS3FileContent("/Transfer/create_transfer.sql");
+            UNIT_ASSERT_EQUAL_C(
+                content, expected,
+                TStringBuilder() << "\nExpected:\n\n" << expected << "\n\nActual:\n\n" << content);
+
+            UNIT_ASSERT(HasS3File("/Transfer/permissions.pb"));
+            const auto permissions = GetS3FileContent("/Transfer/permissions.pb");
+            const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
+            UNIT_ASSERT_EQUAL_C(
+                permissions, permissions_expected,
+                TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
+
+        }
+
     protected:
         TS3Mock::TSettings& S3Settings() {
             if (!S3ServerSettings) {
@@ -2482,7 +2534,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "7f26737c8c9e7abe6541c08c5e41681bd3574b305075aeffd243d57a0e169780 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a5a7ca9bce00ac9d7e5b48a30a46f139592845cad0664b3fda92af32583b7d52 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -2549,7 +2601,7 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "7f26737c8c9e7abe6541c08c5e41681bd3574b305075aeffd243d57a0e169780 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a5a7ca9bce00ac9d7e5b48a30a46f139592845cad0664b3fda92af32583b7d52 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -3264,6 +3316,47 @@ attributes {
         )");
     }
 
+    Y_UNIT_TEST(IndexMaterializationTwoTables) {
+        EnvOptions().EnableIndexMaterialization(true);
+        auto& env = Env();
+        auto& runtime = Runtime();
+        ui64 txId = 100;
+
+        for (const auto tableName : {"Table1", "Table2"}) {
+            TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableDescription {
+                  Name: "%s"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "index"
+                  KeyColumnNames: ["value"]
+                }
+            )", tableName));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_prefix: "table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_prefix: "table2"
+              }
+            }
+        )", S3Port()));
+
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(ReplicationExportWithStaticCredentials) {
         TString scheme = R"(
             Name: "Replication"
@@ -3439,6 +3532,101 @@ WITH (
 
         TestExport(Runtime(), ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::BAD_REQUEST);
         TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(TransferExportNoConnString) {
+        auto lambda = "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;";
+
+        TString scheme = Sprintf(R"(
+            Name: "Transfer"
+            Config {
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic_0"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "%s"
+                    }
+                }
+            }
+        )", lambda);
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
+
+CREATE TRANSFER `Transfer`
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
+WITH (
+  CONNECTION_STRING = 'grpc:///?database=',
+  CONSUMER = '',
+  BATCH_SIZE_BYTES = 8388608,
+  FLUSH_INTERVAL = Interval('PT60S')
+);)";
+        TestTransfer(scheme, expected);
+    }
+
+    Y_UNIT_TEST(TransferExportWithConnString) {
+        auto lambda = "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;";
+
+        TString scheme = Sprintf(R"(
+            Name: "Transfer"
+            Config {
+                SrcConnectionParams {
+                    Endpoint: "localhost:2135"
+                    Database: "/MyRoot"
+                }
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic_0"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "%s"
+                    }
+                }
+            }
+        )", lambda);
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
+
+CREATE TRANSFER `Transfer`
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
+WITH (
+  CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+  CONSUMER = '',
+  BATCH_SIZE_BYTES = 8388608,
+  FLUSH_INTERVAL = Interval('PT60S')
+);)";
+        TestTransfer(scheme, expected);
+    }
+
+    Y_UNIT_TEST(TransferExportWithConsumer) {
+        auto lambda = "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;";
+
+        TString scheme = Sprintf(R"(
+            Name: "Transfer"
+            Config {
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic_0"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "%s"
+                        ConsumerName: "consumerName"
+                    }
+                }
+            }
+        )", lambda);
+        TString expected = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
+
+CREATE TRANSFER `Transfer`
+FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
+WITH (
+  CONNECTION_STRING = 'grpc:///?database=',
+  CONSUMER = 'consumerName',
+  BATCH_SIZE_BYTES = 8388608,
+  FLUSH_INTERVAL = Interval('PT60S')
+);)";
+        TestTransfer(scheme, expected);
     }
 
 }

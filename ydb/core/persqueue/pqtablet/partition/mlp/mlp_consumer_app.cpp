@@ -57,7 +57,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                 }
             }
 
-            NAVIGATION_TAB_CONTENT("mesages") {
+            NAVIGATION_TAB_CONTENT("messages") {
                 LAYOUT_ROW() {
                     LAYOUT_COLUMN() {
                         TABLE_CLASS("table") {

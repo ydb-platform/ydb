@@ -2404,14 +2404,25 @@ TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ct
     return TStatus::Ok;
 }
 
-TStatus AnnotateExprSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
-    auto expr = node->Child(TKqpExprSublink::idx_Expr);
-    auto itemType = expr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    auto valueType = itemType->GetItems()[0]->GetItemType();
-    if (!valueType->IsOptionalOrNull()) {
-        valueType = ctx.MakeType<TOptionalExprType>(valueType);
+TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto subquery = node->Child(TKqpSublinkBase::idx_Subquery);
+    auto itemType = subquery->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    if (TKqpExprSublink::Match(node.Get())) {
+        auto valueType = itemType->GetItems()[0]->GetItemType();
+        if (!valueType->IsOptionalOrNull()) {
+            valueType = ctx.MakeType<TOptionalExprType>(valueType);
+        }
+        node->SetTypeAnn(valueType);
+    } else /* (TKqpExistsSublink::Match(node.Get()) || TKqpInSublink::Match(node.Get())) */ {
+        YQL_CLOG(TRACE, CoreDq) << "Checking boolean sublink";
+
+        auto pgSyntax = node->Child(TKqpBooleanSublink::idx_ReturnPgBool);
+        if (std::stoi(TString(pgSyntax->Content()))) {
+            node->SetTypeAnn(ctx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId));
+        } else {
+            node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
+        }
     }
-    node->SetTypeAnn(valueType);
     return TStatus::Ok;
 }
 
@@ -2938,8 +2949,8 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateTableSinkSettings(input, ctx);
             }
 
-            if (TKqpExprSublink::Match(input.Get())) {
-                return AnnotateExprSublink(input, ctx);
+            if (TKqpSublinkBase::Match(input.Get())) {
+                return AnnotateSublinkBase(input, ctx);
             }
 
             if (TKqpOpRead::Match(input.Get())) {

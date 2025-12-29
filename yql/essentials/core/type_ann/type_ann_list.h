@@ -14,7 +14,8 @@ namespace NTypeAnnImpl {
         const TExprNode::TListType& children,
         const TStructExprType*& resultStructType,
         TContext& ctx,
-        bool areHashesChecked);
+        bool areHashesChecked,
+        bool& isUniversal);
 
     IGraphTransformer::TStatus InferPositionalUnionType(TPositionHandle pos, const TExprNode::TListType& children,
         TColumnOrder& resultColumnOrder, const TStructExprType*& resultStructType, TExtContext& ctx);
@@ -102,7 +103,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus ZipWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ZipAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus EnumerateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
-    IGraphTransformer::TStatus ListWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus ListWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
     IGraphTransformer::TStatus CombineByKeyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ExtractWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ExtractMembersWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

@@ -42,7 +42,7 @@ public:
 
     void SetLogPrefix(const TString& logPrefix);
 
-    void RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout, TInstant systemTime);
+    void RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout = TDuration::Max(), TInstant systemTime = TInstant::Now());
     void UnregisterInput(ui64 inputId, bool isChannel, bool silent = false);
     bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime = TInstant::Now());
 

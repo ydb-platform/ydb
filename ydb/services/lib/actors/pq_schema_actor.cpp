@@ -496,8 +496,19 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     Ydb::StatusIds::StatusCode CheckConfig(const NKikimrPQ::TPQTabletConfig& config,
                               const TClientServiceTypes& supportedClientServiceTypes,
-                              TString& error, const NKikimrPQ::TPQConfig& pqConfig, const Ydb::StatusIds::StatusCode dubsStatus)
+                              TString& error, const NKikimrPQ::TPQConfig& pqConfig,
+                              const Ydb::StatusIds::StatusCode dubsStatus)
     {
+        if (config.GetPartitionConfig().HasStorageLimitBytes() && config.GetPartitionConfig().GetStorageLimitBytes() > 0) {
+            auto hasMLP = AnyOf(config.GetConsumers(), [](const auto& consumer) {
+                return consumer.GetType() == ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
+            });
+            if (hasMLP) {
+                error = TStringBuilder() << "Retention by storage size is not supported for shared consumers";
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+        }
+
         ui32 speed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
         ui32 burst = config.GetPartitionConfig().GetBurstSize();
 
@@ -524,7 +535,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         ui32 lifeTimeSeconds = config.GetPartitionConfig().GetLifetimeSeconds();
         ui64 storageBytes = config.GetPartitionConfig().GetStorageLimitBytes();
-
 
 
         auto retentionLimits = AppData()->PQConfig.GetValidRetentionLimits();

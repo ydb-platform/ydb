@@ -11,8 +11,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 TPrettyTable::TRow::TRow(size_t nColumns)
     : Columns(nColumns)
@@ -254,5 +253,4 @@ TVector<size_t> TPrettyTable::CalcWidths() const {
     return widths;
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

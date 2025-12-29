@@ -632,7 +632,7 @@ message TKqpPhyTx {
     TKqpSchemeOperation SchemeOperation = 8;
     repeated string SecretNames = 9;
     bool EnableShuffleElimination = 10;
-    bool EnableFastChannels = 11;
+    uint32 DqChannelVersion = 11;
 }
 
 message TKqpTableInfo {

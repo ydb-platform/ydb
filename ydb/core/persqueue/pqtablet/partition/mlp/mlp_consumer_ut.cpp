@@ -370,76 +370,6 @@ Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
     }
 }
 
-
-Y_UNIT_TEST(RetentionStorage) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-
-    auto driver = TDriver(setup->MakeDriverConfig());
-    auto client = TTopicClient(driver);
-
-    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
-            .RetentionStorageMb(8)
-            .BeginAddSharedConsumer("mlp-consumer")
-                .KeepMessagesOrder(false)
-            .EndAddConsumer()).GetValueSync();
-
-    Sleep(TDuration::Seconds(1));
-
-    WriteMany(setup, "/Root/topic1", 0, 1_MB, 25);
-
-    Sleep(TDuration::Seconds(1));
-
-    {
-        // check that message with offset 0 wasn`t removed by retention
-        CreateReaderActor(runtime, TReaderSettings{
-            .DatabasePath = "/Root",
-            .TopicName = "/Root/topic1",
-            .Consumer = "mlp-consumer",
-        });
-        auto response = GetReadResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
-    }
-}
-
-Y_UNIT_TEST(RetentionStorageAfterReload) {
-    auto setup = CreateSetup();
-    auto& runtime = setup->GetRuntime();
-
-    auto driver = TDriver(setup->MakeDriverConfig());
-    auto client = TTopicClient(driver);
-
-    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
-            .RetentionStorageMb(8)
-            .BeginAddSharedConsumer("mlp-consumer")
-                .KeepMessagesOrder(false)
-            .EndAddConsumer()).GetValueSync();
-
-    WriteMany(setup, "/Root/topic1", 0, 1_MB, 25);
-
-    Cerr << ">>>>> BEGIN REBOOT " << Endl;
-    ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
-
-    Sleep(TDuration::Seconds(2));
-
-    {
-        // check that message with offset 0 wasn`t removed by retention
-        CreateReaderActor(runtime, TReaderSettings{
-            .DatabasePath = "/Root",
-            .TopicName = "/Root/topic1",
-            .Consumer = "mlp-consumer",
-        });
-        auto response = GetReadResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
-    }
-}
-
 void HtmlApp(std::string_view consumer, size_t partitionId, std::string_view expected) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
@@ -448,7 +378,6 @@ void HtmlApp(std::string_view consumer, size_t partitionId, std::string_view exp
     auto client = TTopicClient(driver);
 
     client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
-            .RetentionStorageMb(8)
             .BeginAddSharedConsumer("mlp-consumer")
                 .KeepMessagesOrder(false)
             .EndAddConsumer()).GetValueSync();

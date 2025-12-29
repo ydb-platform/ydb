@@ -9,7 +9,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
-#include <library/cpp/streams/bzip2/bzip2.h>
+#include <library/cpp/streams/zstd/zstd.h>
 
 namespace NKikimr::NCountersInfo {
 
@@ -37,7 +37,7 @@ public:
         auto& record = response->Record;
         TString dataPack;
         TStringOutput output(dataPack);
-        TBZipCompress compress(&output);
+        TZstdCompress compress(&output);
         compress.Write(out);
         compress.Finish();
         record.SetResponse(dataPack);

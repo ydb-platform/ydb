@@ -45,6 +45,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    contrib/restricted/patched/replxx
     library/cpp/histogram/hdr
     library/cpp/protobuf/json
     library/cpp/regex/pcre
@@ -54,6 +55,7 @@ PEERDIR(
     ydb/library/formats/arrow/csv/table
     ydb/library/workload
     ydb/library/yaml_config/public
+    ydb/library/yverify_stream
     ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/commands/command_base
     ydb/public/lib/ydb_cli/commands/interactive
@@ -86,6 +88,7 @@ PEERDIR(
 
 IF (NOT OS_WINDOWS)
 PEERDIR(
+    ydb/core/base
     ydb/public/lib/ydb_cli/commands/sqs_workload
 )
 ENDIF()

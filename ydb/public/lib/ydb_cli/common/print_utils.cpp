@@ -6,8 +6,7 @@
 #include <util/string/printf.h>
 #include <util/stream/format.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NColorizer::TColors colors) {
     switch (entry.Type) {
@@ -124,7 +123,7 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
     }
 }
 
-int PrintProtoJsonBase64(const google::protobuf::Message& msg) {
+int PrintProtoJsonBase64(const google::protobuf::Message& msg, IOutputStream& out) {
     using namespace google::protobuf::util;
 
     TString json;
@@ -141,7 +140,7 @@ int PrintProtoJsonBase64(const google::protobuf::Message& msg) {
         return EXIT_FAILURE;
     }
 
-    Cout << json << Endl;
+    out << json << Endl;
     return EXIT_SUCCESS;
 }
 
@@ -153,5 +152,42 @@ FHANDLE GetStdinFileno() {
 #endif
 }
 
+TString BlurSecret(const TString& in) {
+    TString out(in);
+    size_t clearSymbolsCount = Min(size_t(10), out.length() / 4);
+    for (size_t i = clearSymbolsCount; i < out.length() - clearSymbolsCount; ++i) {
+        out[i] = '*';
+    }
+    return out;
 }
+
+void PrintPermissions(const std::vector<NScheme::TPermissions>& permissions, IOutputStream& out) {
+    if (permissions.size()) {
+        for (const NScheme::TPermissions& permission : permissions) {
+            out << permission.Subject << ":";
+            for (const std::string& name : permission.PermissionNames) {
+                if (name != *permission.PermissionNames.begin()) {
+                    out << ",";
+                }
+                out << name;
+            }
+            out << Endl;
+        }
+    } else {
+        out << "none" << Endl;
+    }
 }
+
+void PrintAllPermissions(
+    const std::string& owner,
+    const std::vector<NScheme::TPermissions>& permissions,
+    const std::vector<NScheme::TPermissions>& effectivePermissions,
+    IOutputStream& out
+) {
+    out << "Owner: " << owner << Endl << Endl << "Permissions: " << Endl;
+    PrintPermissions(permissions, out);
+    out << Endl << "Effective permissions: " << Endl;
+    PrintPermissions(effectivePermissions, out);
+}
+
+} // namespace NYdb::NConsoleClient

@@ -10,6 +10,7 @@ SRCS(
     mlp_counters_ut.cpp
     mlp_dlq_mover_ut.cpp
     mlp_storage_ut.cpp
+    mlp_ut.cpp
 )
 
 PEERDIR(

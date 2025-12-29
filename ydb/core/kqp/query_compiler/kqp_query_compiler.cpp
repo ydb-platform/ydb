@@ -1508,7 +1508,14 @@ private:
 
             google::protobuf::Any& settings = *externalSource.MutableSettings();
             TString& sourceType = *externalSource.MutableType();
-            dqIntegration->FillSourceSettings(*source, settings, sourceType, maxTasksPerStage, ctx);
+            IDqIntegration::TSourceWatermarksSettings watermarksSettings;
+            dqIntegration->FillSourceSettings(*source, settings, sourceType, maxTasksPerStage, ctx, watermarksSettings);
+            if (watermarksSettings.Enabled) {
+                auto& protoWatermarksSettings = *externalSource.MutableWatermarksSettings();
+                if (watermarksSettings.IdleTimeoutUs) {
+                    protoWatermarksSettings.SetIdleTimeoutUs(*watermarksSettings.IdleTimeoutUs);
+                }
+            }
             YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings for its dq source node");
             YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings type for its dq source node");
         } else {

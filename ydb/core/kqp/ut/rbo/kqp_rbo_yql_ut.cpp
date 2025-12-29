@@ -283,6 +283,23 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         db = kikimr.GetTableClient();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
+        std::vector<std::string> queriesOnEmptyColumns = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(*) from `/Root/t1` as t1;
+            )",
+        };
+        std::vector<std::string> resultsEmptyColumns = {R"([[0u]])"};
+
+        for (ui32 i = 0; i < queriesOnEmptyColumns.size(); ++i) {
+            const auto& query = queriesOnEmptyColumns[i];
+            // Cout << query << Endl;
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), resultsEmptyColumns[i]);
+        }
+
         NYdb::TValueBuilder rowsTableT1;
         rowsTableT1.BeginList();
         for (size_t i = 0; i < 5; ++i) {

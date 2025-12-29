@@ -264,11 +264,12 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
         if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
             const auto& colName = it->first;
             const auto& aggFunction = it->second.first;
-            const bool forceOptional = it->second.second;
+            bool forceOptional = it->second.second;
             Y_ENSURE(SupportedAggregationFunctions.count(aggFunction), "Unsupported aggregation function " + aggFunction);
             TPositionHandle dummyPos;
 
             const TTypeAnnotationNode* aggFieldType = itemType->GetItemType();
+            forceOptional = aggFieldType->IsOptionalOrNull() ? true : forceOptional;
             if (aggFunction == "count") {
                 aggFieldType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
             } else if (aggFunction == "sum") {
@@ -279,7 +280,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
                          "Unsupported type for avg aggregation function");
             }
 
-            if (!aggFieldType->IsOptionalOrNull() && forceOptional) {
+            if (forceOptional && !aggFieldType->IsOptionalOrNull()) {
                 aggFieldType = ctx.ExprCtx.MakeType<TOptionalExprType>(aggFieldType);
             }
 

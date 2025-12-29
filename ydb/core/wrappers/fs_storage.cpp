@@ -38,7 +38,7 @@ private:
             : Key(key)
             , File(key, CreateAlways | WrOnly | ForAppend)
         {
-            File.Flock(LOCK_EX);
+            File.Flock(LOCK_EX | LOCK_NB);
         }
     };
 
@@ -74,12 +74,13 @@ private:
     }
 
     template<typename TEvResponse>
-    void ReplyError(const NActors::TActorId& sender, const std::optional<TString>& key, const TString& errorMessage) {
+    void ReplyError(const NActors::TActorId& sender, const std::optional<TString>& key, const TString& errorMessage,
+                    Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE, bool retryable = false) {
         Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
-            Aws::S3::S3Errors::INTERNAL_FAILURE,
+            errorType,
             "FsStorageError",
             errorMessage,
-            false // not retryable for FS errors
+            retryable
         );
         Aws::S3::S3Error error(std::move(awsError));
         Aws::Utils::Outcome<typename TEvResponse::TAwsResult, Aws::S3::S3Error> outcome(std::move(error));
@@ -179,11 +180,18 @@ public:
             fsPath.Parent().MkDirs();
 
             TFile file(fsPath.GetPath(), CreateAlways | WrOnly);
-            file.Flock(LOCK_EX);
+            file.Flock(LOCK_EX | LOCK_NB);
             file.Write(body.data(), body.size());
             file.Flush();
             file.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
+        } catch (const TSystemError& ex) {
+            if (ex.Status() == EWOULDBLOCK) {
+                FS_LOG_W("PutObject: failed to acquire lock (file is busy)"
+                    << ": key# " << key);
+                ReplyError<TEvPutObjectResponse>(ev->Sender, key, "File is locked by another process",
+                    Aws::S3::S3Errors::SLOW_DOWN, true /* retryable */);
+            }
         } catch (const std::exception& ex) {
             FS_LOG_E("PutObject failed"
                 << ": key# " << key
@@ -264,6 +272,13 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::CreateMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCreateMultipartUploadResponse>(key, std::move(outcome));
             this->Send(ev->Sender, response.release());
+        } catch (const TSystemError& ex) {
+            if (ex.Status() == EWOULDBLOCK) {
+                FS_LOG_W("CreateMultipartUpload: failed to acquire lock (file is busy)"
+                    << ": key# " << key);
+                ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, key, "File is locked by another process",
+                    Aws::S3::S3Errors::SLOW_DOWN, true /* retryable */);
+            }
         } catch (const std::exception& ex) {
             FS_LOG_E("CreateMultipartUpload failed"
                 << ": key# " << key
@@ -316,6 +331,13 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
             this->Send(ev->Sender, response.release());
+        } catch (const TSystemError& ex) {
+            if (ex.Status() == EWOULDBLOCK) {
+                FS_LOG_W("UploadPart: failed to acquire lock (file is busy)"
+                    << ": key# " << key);
+                ReplyError<TEvUploadPartResponse>(ev->Sender, key, "File is locked by another process",
+                    Aws::S3::S3Errors::SLOW_DOWN, true /* retryable */);
+            }
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"
                 << ": key# " << key

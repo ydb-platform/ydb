@@ -750,10 +750,12 @@ message TEvKqpScanCursor {
     message TColumnShardScanSimple {
         optional uint64 SourceIdx = 1;
         optional uint32 StartRecordIndex = 2;
+        optional uint64 OptionalPortionId = 3;
     }
     message TColumnShardScanNotSortedSimple {
         optional uint64 SourceIdx = 1;
         optional uint32 StartRecordIndex = 2;
+        optional uint64 OptionalPortionId = 3;
     }
     oneof Implementation {
         TColumnShardScanPlain ColumnShardPlain = 10;

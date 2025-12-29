@@ -644,6 +644,8 @@ class TExecutor
     void RenderHtmlCounters(TStringStream& str) const;
     void RenderJsonCounters(TStringStream& str) const;
 
+    float CalcRejectProbability() const;
+
 public:
     void Describe(IOutputStream &out) const override
     {

@@ -1,9 +1,9 @@
 #include "kqp_rbo.h"
 
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NYql::NNodes;
@@ -1155,15 +1155,27 @@ TExprNode::TPtr BuildNarrowMapForWideOlapRead(TExprNode::TPtr input, const TVect
 }
 
 TExprNode::TPtr BuildNarrowMapForWideCombinerOutput(TExprNode::TPtr input, const TVector<TString>& keyFields,
-                                                    const TVector<TPhysicalAggregationTraits>& aggTraitsList,
-                                                    const THashMap<TString, TString>& projectionMap, bool distinctAll, TExprContext& ctx,
-                                                    const TPositionHandle pos) {
+                                                    const TVector<TPhysicalAggregationTraits>& aggTraitsList, const THashMap<TString, TString>& projectionMap,
+                                                    bool distinctAll, TExprContext& ctx, const TPositionHandle pos) {
     TVector<TString> outputFields;
     if (!distinctAll) {
         outputFields = keyFields;
     }
     for (const auto& aggTraits : aggTraitsList) {
         outputFields.push_back(aggTraits.StateFieldName);
+    }
+
+    if (keyFields.empty()) {
+        // clang-format off
+        input = Build<TCoTake>(ctx, pos)
+            .Input(input)
+            .Count<TCoUint64>()
+                .Literal<TCoAtom>()
+                    .Value("1")
+                .Build()
+            .Build()
+        .Done().Ptr();
+        // clang-format on
     }
 
     // clang-format off
@@ -1261,6 +1273,107 @@ TVector<TString> GetKeyFields(const TVector<TInfoUnit>& keyColumns) {
     }
     return keyFields;
 }
+
+TExprNode::TPtr CreateNothingForEmptyInput(const TTypeAnnotationNode* aggType, TExprContext& ctx, TPositionHandle pos) {
+    Y_ENSURE(aggType);
+    const auto* aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    // clang-format off
+    return Build<TCoNothing>(ctx, pos)
+        .OptionalType<TCoOptionalType>()
+            .ItemType(ExpandType(pos, *aggStructType, ctx))
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+bool IsSuitableToWrapWithCondense(const TTypeAnnotationNode* aggType, const TVector<TString>& keyFields) {
+    if (!keyFields.empty()) {
+        return false;
+    }
+
+    Y_ENSURE(aggType);
+    const auto* aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    for (const auto* itemType : aggStructType->GetItems()) {
+        // FIXME: Need to update RBO TypeAnnotation to proper handle this case.
+        if (itemType->IsOptionalOrNull()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TExprNode::TPtr MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits, const THashMap<TString, TString>& projectionMap,
+                                  TExprContext& ctx, TPositionHandle pos) {
+    // clang-format off
+     return ctx.Builder(pos)
+        .Callable("Map")
+            .Add(0, input)
+            .Lambda(1)
+                .Param("arg")
+                .Callable(0, "AsStruct")
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    for (ui32 i = 0; i < traits.size(); ++i) {
+                        // Apply rename.
+                        auto fieldName = traits[i].StateFieldName;
+                        auto it = projectionMap.find(fieldName);
+                        if (it != projectionMap.end()) {
+                            fieldName = it->second;
+                        }
+                        const auto &aggFunc = traits[i].AggFunc;
+                        if (aggFunc == "count") {
+                            parent.List(i)
+                                .Atom(0, fieldName)
+                                .Callable(1, "Coalesce")
+                                    .Callable(0, "Member")
+                                        .Arg(0, "arg")
+                                        .Atom(1, fieldName)
+                                    .Seal()
+                                    .Callable(1, "Uint64")
+                                        .Atom(0, "0")
+                                    .Seal()
+                                .Seal()
+                            .Seal();
+                        } else {
+                            parent.List(i)
+                                .Atom(0, fieldName)
+                                .Callable(1, "Member")
+                                    .Arg(0, "arg")
+                                    .Atom(1, fieldName)
+                                .Seal()
+                            .Seal();
+                        }
+                    }
+                    return parent;
+                })
+                .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildCondenseForAggregationOutputWithEmptyKeys(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
+                                                               const THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode* type,
+                                                               TExprContext& ctx, TPositionHandle pos) {
+    // clang-format off
+    input = Build<TCoCondense>(ctx, pos)
+        .Input(input)
+        .State(CreateNothingForEmptyInput(type, ctx, pos))
+        .SwitchHandler()
+            .Args({"item", "state"})
+            .Body(MakeBool<false>(pos, ctx))
+        .Build()
+        .UpdateHandler()
+            .Args({"item", "state"})
+            .Body<TCoJust>()
+                .Input("item")
+            .Build()
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+
+    return MapCondenseOutput(input, traits, projectionMap, ctx, pos);
+}
+
 
 } // namespace
 
@@ -1656,14 +1769,21 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                 .Seal().Build();
             // clang-format on
 
-            // TODO: We could eliminate narrow map with wide channels enabled in dq stage settings.
-            auto narrowMap = BuildNarrowMapForWideCombinerOutput(wideCombiner, keyFields, phyAggregationTraitsList, projectionMap, distinctAll, ctx, op->Pos);
-            //YQL_CLOG(TRACE, CoreDq) << "[KQP RBO Aggregate convert to physical] " << KqpExprToPrettyString(TExprBase(narrowMap), ctx);
+            auto physicalAggregation =
+                BuildNarrowMapForWideCombinerOutput(wideCombiner, keyFields, phyAggregationTraitsList, projectionMap, distinctAll, ctx, op->Pos);
 
+            if (IsSuitableToWrapWithCondense(aggregate->Type, keyFields)) {
+                physicalAggregation =
+                    BuildCondenseForAggregationOutputWithEmptyKeys(physicalAggregation, phyAggregationTraitsList, projectionMap, aggregate->Type, ctx, op->Pos);
+            }
+
+            YQL_CLOG(TRACE, CoreDq) << "[KQP RBO Aggregate convert to physical] " << KqpExprToPrettyString(TExprBase(physicalAggregation), ctx);
+            // clang-format off
             currentStageBody = ctx.Builder(op->Pos)
                 .Callable("FromFlow")
-                    .Add(0, narrowMap)
+                    .Add(0, physicalAggregation)
                 .Seal().Build();
+            // clang-format on
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;

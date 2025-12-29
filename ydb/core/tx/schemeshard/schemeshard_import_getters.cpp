@@ -2,6 +2,7 @@
 
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
@@ -330,6 +331,15 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTopic().FileName);
     }
 
+    static bool IsReplication(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateAsyncReplication().FileName);
+    }
+
+    static bool IsCreatedByQuery(TStringBuf schemeKey) {
+        return IsView(schemeKey)
+            || IsReplication(schemeKey);
+    }
+
     static bool NoObjectFound(Aws::S3::S3Errors errorType) {
         return errorType == S3Errors::RESOURCE_NOT_FOUND || errorType == S3Errors::NO_SUCH_KEY;
     }
@@ -348,6 +358,16 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         GetObject(MetadataKey, result.GetResult().GetContentLength());
     }
 
+    void HeadNextScheme() {
+        if (++SchemePropertiesIdx >= GetXxportProperties().size()) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
+        }
+
+        SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, GetXxportProperties()[SchemePropertiesIdx].FileName);
+        SchemeFileType = GetXxportProperties()[SchemePropertiesIdx].FileType;
+        HeadObject(SchemeKey);
+    }
+
     void HandleScheme(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
@@ -356,19 +376,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", result# " << result);
 
         if (NoObjectFound(result.GetError().GetErrorType())) {
-            if (IsTable(SchemeKey)) {
-                // try search for a view
-                SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
-                SchemeFileType = NBackup::EBackupFileType::ViewCreate;
-                HeadObject(SchemeKey);
-            } else if (IsView(SchemeKey)) {
-                // try search for a topic
-                SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
-                SchemeFileType = NBackup::EBackupFileType::TopicCreate;
-                HeadObject(SchemeKey);
-            } else {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
-            }
+            HeadNextScheme();
             return;
         }
 
@@ -527,7 +535,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", schemeKey# " << SchemeKey
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
-        if (IsView(SchemeKey)) {
+        if (IsCreatedByQuery(SchemeKey)) {
             item.CreationQuery = content;
         } else if (IsTopic(SchemeKey)) {
             Ydb::Topic::CreateTopicRequest request;
@@ -1017,6 +1025,7 @@ private:
     TString SchemeKey;
     NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
+    ui32 SchemePropertiesIdx = 0;
 
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;

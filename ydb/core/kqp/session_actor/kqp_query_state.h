@@ -345,8 +345,8 @@ public:
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     addTable(settings.GetTable());
-                    for (const auto& indexSettings : settings.GetIndexes()) {
-                        addTable(indexSettings.GetTable());
+                    for (const auto& index : settings.GetIndexes()) {
+                        addTable(index.GetTable());
                     }
                 }
             }

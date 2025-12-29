@@ -459,9 +459,10 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     }
 }
 
-std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
-    TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions) const {
-    std::vector<std::shared_ptr<TPortionInfo>> out;
+std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Select(TInternalPathId pathId, TSnapshot snapshot,
+    const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
+    const std::optional<THashSet<TInsertWriteId>>& ownPortions) const {
+    std::vector<TSelectedPortionInfo> out;
     auto spg = GranulesStorage->GetGranuleOptional(pathId);
     if (!spg) {
         return out;
@@ -482,7 +483,8 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
         const bool takePortion = pkRangesFilter.IsUsed(*portion);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
         if (takePortion) {
-            out.emplace_back(portion);
+            AFL_VERIFY(nonconflicting != conflicting)("nonconflicting", nonconflicting);
+            out.emplace_back(portion, nonconflicting);
         }
     }
     for (const auto& [_, portion] : spg->GetPortions()) {
@@ -505,7 +507,8 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
         const bool takePortion = pkRangesFilter.IsUsed(*portion);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
         if (takePortion) {
-            out.emplace_back(portion);
+            AFL_VERIFY(nonconflicting != conflicting)("nonconflicting", nonconflicting);
+            out.emplace_back(portion, nonconflicting);
         }
     }
 

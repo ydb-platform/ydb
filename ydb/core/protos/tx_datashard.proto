@@ -527,6 +527,7 @@ message TCreateIncrementalBackupSrc {
 
 message TTruncateTable {
     optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 TableSchemaVersion = 2;
 }
 
 message TFlatSchemeTransaction {

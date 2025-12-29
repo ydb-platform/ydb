@@ -80,6 +80,8 @@ public:
                 NKikimrTxDataShard::TFlatSchemeTransaction tx;
                 context.SS->FillSeqNo(tx, seqNo);
                 auto truncateTable = tx.MutableTruncateTable();
+                auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+                truncateTable->SetTableSchemaVersion(table->AlterVersion + 1);
                 targetPathId.ToProto(truncateTable->MutablePathId());
                 Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
             }
@@ -141,6 +143,10 @@ public:
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
         const auto path = TPath::Init(txState->TargetPathId, context.SS);
+
+        auto table = context.SS->Tables.at(path.Base()->PathId);
+        table->AlterVersion += 1;
+        context.SS->PersistTableAlterVersion(db, path.Base()->PathId, table);
 
         if (path.Parent()->IsTableIndex()) {
             IncParentDirAlterVersionWithRepublish(OperationId, path, context);
@@ -223,8 +229,8 @@ public:
             return result;
         }
 
-        const auto& op = Transaction.GetTruncateTable();
-        const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), op.GetTableName()});
+        const auto& truncateTableOp = Transaction.GetTruncateTable();
+        const auto stringTablePath = NKikimr::JoinPath({Transaction.GetWorkingDir(), truncateTableOp.GetTableName()});
         TPath tablePath = TPath::Resolve(stringTablePath, context.SS);
         {
             TPath::TChecker checks = tablePath.Check();
@@ -317,8 +323,10 @@ public:
 
             context.SS->PersistTxState(db, OperationId);
 
-            if (tablePath.Parent()->IsTableIndex()) {
-                IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, tablePath, context.SS, context.OnComplete);
+            {
+                if (tablePath.Parent()->IsTableIndex()) {
+                    IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, tablePath, context.SS, context.OnComplete);
+                }
             }
 
             for (auto splitTx : table->GetSplitOpsInFlight()) {

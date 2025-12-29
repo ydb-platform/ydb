@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
     }
 
     Y_UNIT_TEST(TruncateTableDuringSelect) {
-        auto serverHelper = TServerHelper();
+        auto serverHelper = TServerHelper(true);
         auto [server, runtime, edgeSender] = serverHelper.GetObjects();
 
         auto opts = TShardedTableOptions()

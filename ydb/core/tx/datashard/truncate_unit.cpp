@@ -50,13 +50,20 @@ EExecutionStatus TTruncateUnit::Execute(
     }
 
     const auto& truncate = schemeTx.GetTruncateTable();
-    const auto& pathId = truncate.GetPathId();
-    Y_ENSURE(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
-    auto tableId = pathId.GetLocalId();
-    Y_ENSURE(DataShard.GetUserTables().contains(tableId));
+    const auto& pathId = TPathId::FromProto(truncate.GetPathId());
+    Y_ENSURE(DataShard.GetPathOwnerId() == pathId.OwnerId);
 
-    const auto& userTable = DataShard.GetUserTables().at(tableId);
-    auto localTid = userTable->LocalTid;
+    const auto version = truncate.GetTableSchemaVersion();
+    Y_ENSURE(version);
+
+    LOG_TRACE_S(actorCtx, NKikimrServices::TX_DATASHARD,
+            "TTruncateUnit::Execute. Changing SchemaVersion. TableId = " << pathId.LocalPathId << "; "
+           << " New SchemaVersion = " << version << "; "
+           << " TxId = " << op->GetTxId() << ".");
+
+    auto tableId = pathId.LocalPathId;
+    Y_ENSURE(DataShard.GetUserTables().contains(tableId));
+    auto localTid = DataShard.GetUserTables().at(tableId)->LocalTid;
 
     LOG_DEBUG_S(actorCtx, NKikimrServices::TX_DATASHARD,
                "TTruncateUnit::Execute - About to TRUNCATE TABLE at " << DataShard.TabletID()
@@ -64,12 +71,20 @@ EExecutionStatus TTruncateUnit::Execute(
 
     // break locks
     TDataShardLocksDb locksDb(DataShard, txc);
+
     TSetupSysLocks guardLocks(op, DataShard, &locksDb);
-    const TTableId fullTableId(pathId.GetOwnerId(), tableId);
+    const TTableId fullTableId(pathId.OwnerId, tableId);
     DataShard.SysLocksTable().BreakAllLocks(fullTableId);
     DataShard.GetConflictsCache().GetTableCache(localTid).RemoveAllUncommittedWrites(txc.DB);
 
     txc.DB.Truncate(localTid);
+
+    auto userTable = DataShard.AlterTableSchemaVersion(actorCtx, txc, pathId, version);
+    DataShard.AddUserTable(pathId, userTable, &locksDb);
+    if (userTable->NeedSchemaSnapshots()) {
+        DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, actorCtx);
+    }
+
     txc.DB.NoMoreReadsForTx();
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

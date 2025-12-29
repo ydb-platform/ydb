@@ -35,7 +35,6 @@ namespace {
             NScheme::ESchemeEntryType::Topic,
             NScheme::ESchemeEntryType::Replication,
             NScheme::ESchemeEntryType::Transfer,
-            NScheme::ESchemeEntryType::ExternalDataSource,
         }, entry.Type);
     }
 

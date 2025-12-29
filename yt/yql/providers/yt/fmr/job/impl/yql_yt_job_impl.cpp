@@ -93,6 +93,49 @@ public:
         }
     }
 
+    virtual std::variant<TError, TStatistics> SortedUpload(
+        const TSortedUploadTaskParams& params,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
+        std::shared_ptr<std::atomic<bool>> cancelFlag
+    ) override {
+        try {
+            const auto tableId = params.Input.TableId;
+            const auto tableRanges = params.Input.TableRanges;
+            const auto neededColumns = params.Input.Columns;
+            const auto columnGroups = params.Input.SerializedColumnGroups;
+            const auto order = params.Order;
+
+            auto tableDataServiceReader = MakeIntrusive<TFmrTableDataServiceReader>(
+                tableId, tableRanges, TableDataService_, neededColumns, columnGroups, Settings_.FmrReaderSettings);
+            YQL_ENSURE(clusterConnections.size() == 1);
+            const auto& clusterConnection = clusterConnections.begin()->second;
+
+            auto writer = YtJobService_->GetDistributedWriter(
+                params.CookieYson,
+                clusterConnection
+            );
+            ParseRecordsToYtDistributed(
+                tableDataServiceReader,
+                *writer,
+                Settings_.ParseRecordSettings.UploadReadBlockCount,
+                Settings_.ParseRecordSettings.UploadReadBlockSize,
+                cancelFlag);
+            writer->Finish();
+
+             auto fragmentResult = writer->GetResponse();
+            TString fragmentResultYson = NYT::NodeToYsonString(fragmentResult);
+            TStatistics stats;
+            stats.TaskResult = TTaskSortedUploadResult{
+                .FragmentResultYson = fragmentResultYson,
+                .FragmentOrder = order
+            };
+            return stats;
+        } catch (...) {
+            YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside distributed upload: " << CurrentExceptionMessage();
+            return TError(CurrentExceptionMessage());
+        }
+    }
+
     virtual std::variant<TError, TStatistics> Merge(
         const TMergeTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
@@ -187,18 +230,20 @@ TJobResult RunJob(
             return job->Merge(taskParams, task->ClusterConnections, cancelFlag);
         } else if constexpr (std::is_same_v<T, TMapTaskParams>) {
             return job->Map(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
+        } else if constexpr (std::is_same_v<T, TSortedUploadTaskParams>) {
+            return job->SortedUpload(taskParams, task->ClusterConnections, cancelFlag);
         } else {
             ythrow yexception() << "Unsupported task type";
         }
     };
 
-    std::variant<TError, TStatistics> taskResult = std::visit(processTask, task->TaskParams);
-    auto err = std::get_if<TError>(&taskResult);
+    std::variant<TError, TStatistics> taskOutput = std::visit(processTask, task->TaskParams);
+    auto err = std::get_if<TError>(&taskOutput);
     if (err) {
         ythrow yexception() << "Job failed with error: " << err->ErrorMessage;
     }
 
-    auto statistics = std::get_if<TStatistics>(&taskResult);
+    auto statistics = std::get_if<TStatistics>(&taskOutput);
     return {ETaskStatus::Completed, *statistics};
 };
 

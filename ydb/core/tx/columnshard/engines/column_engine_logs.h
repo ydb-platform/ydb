@@ -169,7 +169,7 @@ public:
     void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) override;
     void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) override;
 
-    std::vector<std::shared_ptr<TPortionInfo>> Select(
+    std::vector<TSelectedPortionInfo> Select(
         TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& withUncommittedOnlyForTheseWrites) const override;
 
     bool IsPortionExists(const TInternalPathId pathId, const ui64 portionId) const {

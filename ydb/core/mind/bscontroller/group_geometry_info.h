@@ -189,6 +189,11 @@ namespace NKikimr::NBsController {
         TBlobStorageGroupType::EErasureSpecies GetErasure() const {
             return Type.GetErasure();
         }
+
+        std::shared_ptr<TBlobStorageGroupInfo::TTopology> CreateTopology() const {
+            return std::make_shared<TBlobStorageGroupInfo::TTopology>(GetType(), GetNumFailRealms(),
+                GetNumFailDomainsPerFailRealm(), GetNumVDisksPerFailDomain());
+        }
     };
 
 } // NKikimr::NBsController

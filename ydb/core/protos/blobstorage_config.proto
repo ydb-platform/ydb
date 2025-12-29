@@ -608,6 +608,10 @@ message TReconfigureVirtualGroup {
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
 }
 
+message TRecommissionGroups {
+    repeated uint32 GroupIds = 1;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -659,6 +663,7 @@ message TConfigRequest {
             TMovePDisk MovePDisk = 53;
             TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 54;
             TReconfigureVirtualGroup ReconfigureVirtualGroup = 55;
+            TRecommissionGroups RecommissionGroups = 56;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

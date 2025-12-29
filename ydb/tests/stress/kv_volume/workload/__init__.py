@@ -110,7 +110,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         client = KeyValueClient(self.fqdn, self.port)
         self._drop_volume(client)
         return True
-    
+
     def get_status(self, response):
         if response is None:
             return None

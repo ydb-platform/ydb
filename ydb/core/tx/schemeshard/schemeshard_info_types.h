@@ -45,6 +45,8 @@
 
 #include <ydb/services/lib/sharding/sharding.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
+
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/guid.h>
@@ -3012,6 +3014,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    TMaybe<std::vector<TRegExMatch>> ExcludeRegexps;
+
     TString GetItemSrcPrefix(size_t i) const {
         if (i < Items.size() && Items[i].SrcPrefix) {
             return Items[i].SrcPrefix;
@@ -3025,6 +3029,10 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         return {};
     }
+
+    bool CompileExcludeRegexps(TString& errorDescription);
+
+    bool IsExcludedFromImport(const TString& path) const;
 
     explicit TImportInfo(
             const ui64 id,

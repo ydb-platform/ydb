@@ -472,6 +472,7 @@ public:
                 for (auto& input : task.Inputs) {
                     input.WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
                     input.WatermarksIdleTimeoutUs.Clear();
+                    /* note: GetChannel().WatermarksMode default-initialized to DISABLED */
                 }
             }
 

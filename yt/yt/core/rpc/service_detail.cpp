@@ -1970,7 +1970,7 @@ void TServiceBase::OnRequestAuthenticated(
 
 bool TServiceBase::IsAuthenticationNeeded(const TIncomingRequest& incomingRequest)
 {
-    // incomingRequest.RuntimeInfo is null if unknown method is called,
+    // incomingRequest.RuntimeInfo is null if unknown method is called.
     return
         Authenticator_.operator bool() &&
         !(incomingRequest.RuntimeInfo && incomingRequest.RuntimeInfo->Descriptor.System);

@@ -74,8 +74,13 @@ private:
     }
 
     template<typename TEvResponse>
-    void ReplyError(const NActors::TActorId& sender, const std::optional<TString>& key, const TString& errorMessage,
-                    Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE, bool retryable = false) {
+    void ReplyError(
+            const NActors::TActorId& sender,
+            const std::optional<TString>& key,
+            const TString& errorMessage,
+            Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+            bool retryable = false)
+    {
         Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
             errorType,
             "FsStorageError",

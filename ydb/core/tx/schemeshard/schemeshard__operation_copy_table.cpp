@@ -240,8 +240,8 @@ public:
                 if (dstIndex->AlterVersion < table->AlterVersion) {
                     dstIndex->AlterVersion = table->AlterVersion;
                     // If there's ongoing alter operation, also bump alterData version to maintain invariant
-                    if (dstIndex->AlterData && dstIndex->AlterData->AlterVersion <= table->AlterVersion) {
-                        dstIndex->AlterData->AlterVersion = table->AlterVersion + 1;
+                    if (dstIndex->AlterData && dstIndex->AlterData->AlterVersion < table->AlterVersion) {
+                        dstIndex->AlterData->AlterVersion = table->AlterVersion;
                         context.SS->PersistTableIndexAlterData(db, path->ParentPathId);
                     }
                     context.SS->PersistTableIndexAlterVersion(db, path->ParentPathId, dstIndex);
@@ -330,8 +330,8 @@ public:
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
                             // If there's ongoing alter operation, also bump alterData version to maintain invariant
-                            if (index->AlterData && index->AlterData->AlterVersion <= srcTable->AlterVersion) {
-                                index->AlterData->AlterVersion = srcTable->AlterVersion + 1;
+                            if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
+                                index->AlterData->AlterVersion = srcTable->AlterVersion;
                                 context.SS->PersistTableIndexAlterData(db, parentPathId);
                             }
                             context.SS->PersistTableIndexAlterVersion(db, parentPathId, index);
@@ -352,8 +352,8 @@ public:
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
                             // If there's ongoing alter operation, also bump alterData version to maintain invariant
-                            if (index->AlterData && index->AlterData->AlterVersion <= srcTable->AlterVersion) {
-                                index->AlterData->AlterVersion = srcTable->AlterVersion + 1;
+                            if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
+                                index->AlterData->AlterVersion = srcTable->AlterVersion;
                                 context.SS->PersistTableIndexAlterData(db, childPathId);
                             }
                             context.SS->PersistTableIndexAlterVersion(db, childPathId, index);

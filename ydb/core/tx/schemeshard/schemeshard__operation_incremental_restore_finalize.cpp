@@ -175,8 +175,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                         if (index->AlterVersion < targetVersion) {
                             index->AlterVersion = targetVersion;
                             // If there's ongoing alter operation, also bump alterData version to maintain invariant
-                            if (index->AlterData && index->AlterData->AlterVersion <= targetVersion) {
-                                index->AlterData->AlterVersion = targetVersion + 1;
+                            if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
+                                index->AlterData->AlterVersion = targetVersion;
                                 context.SS->PersistTableIndexAlterData(db, indexPathId);
                             }
                             context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
@@ -430,8 +430,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             auto index = context.SS->Indexes[indexPathId];
                             index->AlterVersion = targetVersion;
                             // If there's ongoing alter operation, also bump alterData version to maintain invariant
-                            if (index->AlterData && index->AlterData->AlterVersion <= targetVersion) {
-                                index->AlterData->AlterVersion = targetVersion + 1;
+                            if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
+                                index->AlterData->AlterVersion = targetVersion;
                                 context.SS->PersistTableIndexAlterData(db, indexPathId);
                             }
                             context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);

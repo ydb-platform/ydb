@@ -307,9 +307,9 @@ public:
                         auto index = context.SS->Indexes.at(childPathId);
                         if (index->AlterVersion < table->AlterVersion) {
                             index->AlterVersion = table->AlterVersion;
-                            // If there's ongoing alter operation, also bump alterData version to maintain invariant
-                            if (index->AlterData && index->AlterData->AlterVersion <= table->AlterVersion) {
-                                index->AlterData->AlterVersion = table->AlterVersion + 1;
+                            // If there's ongoing alter operation, also update alterData version to converge
+                            if (index->AlterData && index->AlterData->AlterVersion < table->AlterVersion) {
+                                index->AlterData->AlterVersion = table->AlterVersion;
                                 context.SS->PersistTableIndexAlterData(db, childPathId);
                             }
                             context.SS->PersistTableIndexAlterVersion(db, childPathId, index);

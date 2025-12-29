@@ -75,8 +75,10 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
 
             // Filter out everything => empty list
             ValidateListObjectInS3Export({}, listSettings);
+        }
 
-            listSettings.ExcludeRegexp_.clear();
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
             listSettings
                 .AppendExcludeRegexp("Table1");
 
@@ -84,8 +86,10 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
                 {"Table0", "Table0"},
                 {"dir1/dir2/Table2", "dir1/dir2/Table2"},
             }, listSettings);
+        }
 
-            listSettings.ExcludeRegexp_.clear();
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
             listSettings
                 .AppendItem(NImport::TListObjectsInS3ExportSettings::TItem{.Path = "dir1"})
                 .AppendExcludeRegexp("Table1");
@@ -129,8 +133,10 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
 
             // Filter out everything => empty list
             ValidateListObjectInS3Export({}, listSettings);
+        }
 
-            listSettings.ExcludeRegexp_.clear();
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
             listSettings
                 .AppendExcludeRegexp("t1");
 
@@ -138,8 +144,10 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
                 {"t0", "t0"},
                 {"d1/d2/t2", "d1/d2/t2"},
             }, listSettings);
+        }
 
-            listSettings.ExcludeRegexp_.clear();
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
             listSettings
                 .AppendItem(NImport::TListObjectsInS3ExportSettings::TItem{.Path = "d1"})
                 .AppendExcludeRegexp("t1");
@@ -184,8 +192,10 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
 
             // Filter out everything => empty list
             ValidateListObjectInS3Export({}, listSettings);
+        }
 
-            listSettings.ExcludeRegexp_.clear();
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
             listSettings
                 .AppendExcludeRegexp("Table1");
 
@@ -193,8 +203,10 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
                 "Table0",
                 "dir1/dir2/Table2",
             }, listSettings);
+        }
 
-            listSettings.ExcludeRegexp_.clear();
+        {
+            NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
             listSettings
                 .AppendItem(NImport::TListObjectsInS3ExportSettings::TItem{.Path = "dir1"})
                 .AppendExcludeRegexp("Table1");

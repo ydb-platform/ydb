@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             if (event.has_value()) {
                 auto closeEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event);
                 if (closeEvent) {
-                    UNIT_ASSERT_C(closeEvent->GetIssues().ToOneLineString().contains("The size of the message is too big"), closeEvent->GetIssues().ToOneLineString());
+                    UNIT_ASSERT_C(closeEvent->GetIssues().ToOneLineString().contains("Too big message"), closeEvent->GetIssues().ToOneLineString());
                     return;
                 }
             }
@@ -290,5 +290,4 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         UNIT_ASSERT_C(false, "Session closed event not received");
     }
 }
-
 } // namespace NKikimr

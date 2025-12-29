@@ -591,7 +591,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         auto& pqConfig = AppData(ActorContext())->PQConfig;
         for (const auto& write : record.GetPartitionRequest().GetCmdWrite()) {
             if (write.GetData().size() > pqConfig.GetMaxMessageSizeBytes()) {
-                auto errorMsg = TStringBuilder() << "The size of the message is too big. Max message size is " << pqConfig.GetMaxMessageSizeBytes()
+                auto errorMsg = TStringBuilder() << "Too big message. Max message size is " << pqConfig.GetMaxMessageSizeBytes()
                     << " bytes, but got " << write.GetData().size() << " bytes";
 
                 BecomeZombie(EErrorCode::InternalError, errorMsg);

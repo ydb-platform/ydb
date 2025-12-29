@@ -316,8 +316,8 @@ class TestSysViewsRegistry(BaseSystemViews):
                 continue
 
             current_sysview = current_sysviews[sysview_name]
-            canonical_columns = { col['name']: col for col in canonical_sysview['columns'] }
-            current_columns = { col['name']: col for col in current_sysview['columns'] }
+            canonical_columns = {col['name']: col for col in canonical_sysview['columns']}
+            current_columns = {col['name']: col for col in current_sysview['columns']}
             canonical_pk = canonical_sysview['primary_key']
             current_pk = current_sysview['primary_key']
 

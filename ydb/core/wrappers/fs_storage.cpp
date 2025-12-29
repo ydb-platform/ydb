@@ -42,7 +42,7 @@ private:
         }
     };
 
-    THashMap<TString, std::unique_ptr<TMultipartUploadSession>> ActiveUploads;
+    THashMap<TString, TMultipartUploadSession> ActiveUploads;
 
     template<typename TEvResponse>
     struct RequiresKey : std::true_type {};
@@ -121,9 +121,9 @@ private:
             << ": active MPU sessions# " << ActiveUploads.size());
         for (auto& [uploadId, session] : ActiveUploads) {
             try {
-                const TString filePath = session->Key;
-                session->File.Close();
+                const TString filePath = session.Key;
                 NFs::Remove(filePath);
+                session.File.Close();
 
                 FS_LOG_T("TFsOperationActor: closed and deleted incomplete file"
                     << ": uploadId# " << uploadId
@@ -334,8 +334,7 @@ public:
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
 
-            auto session = std::make_unique<TMultipartUploadSession>(key);
-            ActiveUploads[uploadId] = std::move(session);
+            ActiveUploads.emplace(uploadId, key);
 
             FS_LOG_I("CreateMultipartUpload"
                 << ": key# " << key
@@ -381,18 +380,18 @@ public:
                         << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
                 }
-                it = ActiveUploads.emplace(uploadId, std::make_unique<TMultipartUploadSession>(key)).first;
+                it = ActiveUploads.emplace(uploadId, key).first;
             }
 
             auto& session = it->second;
 
-            session->File.Write(body.data(), body.size());
-            session->TotalSize += body.size();
+            session.File.Write(body.data(), body.size());
+            session.TotalSize += body.size();
 
             FS_LOG_I("UploadPart: written under lock"
                 << ": uploadId# " << uploadId
                 << ", part# " << partNumber
-                << ", total size# " << session->TotalSize);
+                << ", total size# " << session.TotalSize);
 
             const TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
 
@@ -440,14 +439,14 @@ public:
             }
 
             auto& session = it->second;
-            session->File.Flush();
-            session->File.Close();
+            session.File.Flush();
 
             NFs::Rename(incompleteKey, key);
+            session.File.Close();
 
             FS_LOG_T("CompleteMultipartUpload"
                 << ": uploadId# " << uploadId
-                << ", total size# " << session->TotalSize
+                << ", total size# " << session.TotalSize
                 << ", file mv from# " << incompleteKey << " to# " << key);
 
             ActiveUploads.erase(it);
@@ -483,10 +482,11 @@ public:
                     << ": uploadId# " << uploadId);
             } else {
                 auto& session = it->second;
-                const TString filePath = session->Key;
-                session->File.Close();
-                ActiveUploads.erase(it);
+                const TString filePath = session.Key;
+
                 NFs::Remove(filePath);
+                session.File.Close();
+                ActiveUploads.erase(it);
 
                 FS_LOG_I("AbortMultipartUpload"
                     << ": uploadId# " << uploadId

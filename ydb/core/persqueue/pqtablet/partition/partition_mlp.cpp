@@ -126,7 +126,8 @@ void TPartition::InitializeMLPConsumers() {
         if (auto cit = consumers.find(name); cit != consumers.end()) {
             LOG_I("Updateing MLP consumer '" << name << "' config");
             auto& config = cit->second;
-            Send(consumerInfo.ActorId, new TEvPQ::TEvMLPConsumerUpdateConfig(config, retentionPeriod(config)));
+            Send(consumerInfo.ActorId, new TEvPQ::TEvMLPConsumerUpdateConfig(Config, config,
+                retentionPeriod(config), GetPerPartitionCounterSubgroup()));
 
             ++it;
             continue;
@@ -150,9 +151,11 @@ void TPartition::InitializeMLPConsumers() {
             TabletActorId,
             Partition.OriginalPartitionId,
             SelfId(),
+            Config,
             consumer,
             retentionPeriod(consumer),
-            GetEndOffset()
+            GetEndOffset(),
+            GetPerPartitionCounterSubgroup()
         ));
         MLPConsumers.emplace(consumer.GetName(), actorId);
     }

@@ -87,16 +87,18 @@ void AddReadWAL(std::unique_ptr<TEvKeyValue::TEvRequest>& request, ui32 partitio
 }
 
 TConsumerActor::TConsumerActor(const TString& database,ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
-    const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config,
-    std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset)
+    const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig& topicConfig, const NKikimrPQ::TPQTabletConfig_TConsumer& config,
+    std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset, NMonitoring::TDynamicCounterPtr& detailedMetricsRoot)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
     , Database(database)
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
+    , TopicConfig(topicConfig)
     , Config(config)
     , RetentionPeriod(retentionPeriod)
     , PartitionEndOffset(partitionEndOffset)
-    , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider())) {
+    , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider()))
+    , DetailedMetricsRoot(detailedMetricsRoot) {
 }
 
 void TConsumerActor::Bootstrap() {
@@ -104,6 +106,7 @@ void TConsumerActor::Bootstrap() {
     Become(&TConsumerActor::StateInit);
 
     UpdateStorageConfig();
+    InitializeDetailedMetrics();
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(static_cast<ui64>(EKvCookie::InitialRead));
@@ -363,16 +366,27 @@ void TConsumerActor::UpdateStorageConfig() {
     }
 }
 
+void TConsumerActor::InitializeDetailedMetrics() {
+    if (DetailedMetricsAreEnabled(TopicConfig)) {
+        DetailedMetrics = std::make_unique<TDetailedMetrics>(Config, DetailedMetricsRoot);
+    } else {
+        DetailedMetrics = nullptr;
+    }
+}
+
 void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
     AFL_ENSURE(Config.GetGeneration() == ev->Get()->Config.GetGeneration())
         ("c", Config.GetName())
         ("l", Config.GetGeneration())
         ("r", ev->Get()->Config.GetGeneration());
 
+    TopicConfig = std::move(ev->Get()->TopicConfig);
     Config = std::move(ev->Get()->Config);
-    RetentionPeriod = ev->Get()->RetentionPeriod;
+    RetentionPeriod = std::move(ev->Get()->RetentionPeriod);
+    DetailedMetricsRoot = std::move(ev->Get()->DetailedMetricsRoot);
 
-   UpdateStorageConfig();
+    UpdateStorageConfig();
+    InitializeDetailedMetrics();
 }
 
 void TConsumerActor::HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
@@ -843,10 +857,12 @@ NActors::IActor* CreateConsumerActor(
     const NActors::TActorId& tabletActorId,
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
+    const NKikimrPQ::TPQTabletConfig& topicConfig,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
     const std::optional<TDuration> retention,
-    ui64 partitionEndOffset) {
-    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, config, retention, partitionEndOffset);
+    ui64 partitionEndOffset,
+    NMonitoring::TDynamicCounterPtr detailedMetricsRoot) {
+    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, topicConfig, config, retention, partitionEndOffset, detailedMetricsRoot);
 }
 
 }

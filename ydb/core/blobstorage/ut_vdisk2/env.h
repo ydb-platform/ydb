@@ -100,7 +100,7 @@ namespace NKikimr {
 
         void Compact(bool freshOnly = false) {
             const TActorId& edge = Runtime->AllocateEdgeActor(NodeId);
-            TEvCompactVDisk* ev = TEvCompactVDisk::Create(EHullDbType::LogoBlobs, freshOnly ? TEvCompactVDisk::EMode::FRESH_ONLY : TEvCompactVDisk::EMode::FULL, true);
+            TEvCompactVDisk* ev = TEvCompactVDisk::Create(EHullDbType::LogoBlobs, freshOnly ? TEvCompactVDisk::EMode::FRESH_ONLY : TEvCompactVDisk::EMode::FULL);
             Runtime->Send(new IEventHandle(VDiskServiceId, edge, ev), NodeId);
             auto res = Runtime->WaitForEdgeActorEvent({edge});
             Runtime->DestroyActor(edge);

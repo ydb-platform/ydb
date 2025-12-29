@@ -198,7 +198,6 @@ public:
 
 template<bool fast>
 std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer, bool local) {
-
     if (settings.RowType->IsMulti()) {
         ui32 blockLengthIndex;
         TVector<const NKikimr::NMiniKQL::TBlockType*> items;
@@ -217,10 +216,10 @@ std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelSettings& se
                 return std::make_unique<TChunkedSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.BufferPageAllocSize, settings.ArrayBufferMinFillPercentage, *settings.HolderFactory, splitter);
             }
         } else {
-            return std::make_unique<TWideSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.MaxChunkBytes, settings.BufferPageAllocSize);
+            return std::make_unique<TWideSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, std::min(settings.MaxStoredBytes, settings.MaxChunkBytes), settings.BufferPageAllocSize);
         }
     } else {
-        return std::make_unique<TNarrowSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.MaxChunkBytes, settings.BufferPageAllocSize);
+        return std::make_unique<TNarrowSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, std::min(settings.MaxStoredBytes, settings.MaxChunkBytes), settings.BufferPageAllocSize);
     }
 }
 

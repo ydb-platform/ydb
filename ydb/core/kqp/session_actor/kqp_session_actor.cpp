@@ -1998,7 +1998,7 @@ public:
             .WriteBufferMemoryLimit = writeBufferMemoryLimit,
         };
 
-        auto executerActor = CreateKqpPartitionedExecuter(std::move(settings));
+        auto executerActor = CreateKqpPartitionedExecuter(std::move(settings), ChannelService);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
         STLOG_D("Created new KQP partitioned executer", 

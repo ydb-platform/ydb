@@ -13,6 +13,7 @@ logger = logging.getLogger("YdbKvWorkload")
 
 DEFAULT_YDB_KV_PORT = 2135
 
+
 def parse_int_with_default(s, default=None):
     try:
         return int(s)
@@ -68,7 +69,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
 
     def _get_init_pair_key(self, pair_id):
         return f'init_{pair_id}'
-    
+
     def _fill_init_data_template(self, client, pairs, channel):
         t = type(self)
         pattern = t.INIT_DATA_PATTERN

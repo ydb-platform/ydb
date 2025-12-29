@@ -392,6 +392,10 @@ public:
         Counters->WriteActorsCount->Inc();
     }
 
+    ~TKqpTableWriteActor() {
+        ClearMkqlData();
+    }
+
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         try {
@@ -1428,11 +1432,8 @@ public:
     }
 
     void PassAway() override {
-        {
-            Y_ABORT_UNLESS(Alloc);
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
-            ShardedWriteController.Reset();
-        }
+        Y_ABORT_UNLESS(Alloc);
+        ClearMkqlData();
         Counters->WriteActorsCount->Dec();
         Unlink();
         TActorBootstrapped<TKqpTableWriteActor>::PassAway();
@@ -1455,6 +1456,13 @@ public:
     }
 
 private:
+    void ClearMkqlData() {
+        if (Alloc && ShardedWriteController) {
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ShardedWriteController.Reset();
+        }
+    }
+
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
     bool LinkedPipeCache = false;
 

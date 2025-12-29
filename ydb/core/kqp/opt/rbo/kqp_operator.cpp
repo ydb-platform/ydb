@@ -1140,6 +1140,10 @@ TString TOpRoot::ToString(TExprContext& ctx) {
 
 TString TOpRoot::PlanToString(TExprContext& ctx, ui32 printOptions) {
     auto builder = TStringBuilder();
+    for (auto & [iu, subplan] : PlanProps.Subplans.PlanMap) {
+        builder << "Subplan binding to " << iu.GetFullName() << ":\n";
+        PlanToStringRec(subplan.Plan, ctx, builder, 0, printOptions);
+    }
     PlanToStringRec(GetInput(), ctx, builder, 0, printOptions);
     return builder;
 }

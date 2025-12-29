@@ -171,8 +171,8 @@ std::shared_ptr<TOpCBOTree> AddJoinToCBOTree(std::shared_ptr<TOpCBOTree> & cboTr
     } 
     else {
         join->SetRightInput(cboTree->TreeRoot);
-        treeNodes.push_back(join);
         treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
+        treeNodes.push_back(join);
     }
 
     return std::make_shared<TOpCBOTree>(join, treeNodes, join->Pos);
@@ -487,19 +487,17 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
 
     std::shared_ptr<IOperator> join;
+
     // We build a semi-join or a left-only join when processing IN subplan
     if (subplan.Type == ESubplanType::IN) {
         auto leftJoinInput = filter->GetInput();
-        TString joinKind;
-        if (subplan.Type == ESubplanType::IN) {
-            joinKind = negated ? "LeftOnly" : "LeftSemi";
-        } else {
-            joinKind = "Cross";
-        }
+        auto joinKind = negated ? "LeftOnly" : "LeftSemi";
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
         auto planIUs = subplan.Plan->GetOutputIUs();
+        YQL_CLOG(TRACE, CoreDq) << "In tuple size: " << subplan.Tuple.size() << ", subplan tuple size: " << planIUs.size();
+
         Y_ENSURE(subplan.Tuple.size() == planIUs.size());
 
         for (size_t i = 0; i < planIUs.size(); i++) {
@@ -510,11 +508,8 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         conjuncts.erase(conjuncts.begin() + conjunctIdx);
     }
     // EXISTS and NOT EXISTS
-    // FIXME: Need to reimplement this part, maybe in another rule
     else {
-        return input;
 
-        /*
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
 
         TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> countMapElements;
@@ -532,7 +527,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         auto countMap = std::make_shared<TOpMap>(subplan.Plan, filter->Pos, countMapElements, true);
 
 
-        TOpAggregationTraits aggFunction(countResult, "count");
+        TOpAggregationTraits aggFunction(countResult, "count", false);
         TVector<TOpAggregationTraits> aggs = {aggFunction};
         TVector<TInfoUnit> keyColumns;
 
@@ -575,7 +570,6 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         // clang-format on
 
         conjuncts[conjunctIdx] = resultMember;
-        */
     }
 
     props.Subplans.Remove(iu);
@@ -1063,7 +1057,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const std::sh
             if (!findCBOTree(rightInput, cboTree, maybeFilter)) {
                 return input;
             } else {
-                leftSideCBOTree = true;
+                leftSideCBOTree = false;
             }
         }
 

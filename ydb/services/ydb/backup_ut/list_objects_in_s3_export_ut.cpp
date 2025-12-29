@@ -197,6 +197,7 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
         {
             NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
             listSettings
+                .SymmetricKey("Cool random key!")
                 .AppendExcludeRegexp("Table1");
 
             ValidateListObjectPathsInS3Export({
@@ -208,6 +209,7 @@ Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
         {
             NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings("Prefix");
             listSettings
+                .SymmetricKey("Cool random key!")
                 .AppendItem(NImport::TListObjectsInS3ExportSettings::TItem{.Path = "dir1"})
                 .AppendExcludeRegexp("Table1");
 

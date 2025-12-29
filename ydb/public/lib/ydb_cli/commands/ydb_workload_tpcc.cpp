@@ -241,6 +241,17 @@ void TCommandTPCCRun::Config(TConfig& config) {
         "no-delays", TStringBuilder() << "Disable TPC-C keying/thinking delays")
             .Optional().StoreTrue(&RunConfig->NoDelays);
 
+    auto txModeOpt = config.Opts->AddLongOption(
+        "tx-mode", TStringBuilder() << "Transaction mode: serializable or snapshot")
+            .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [](const TString& value) {
+                if (value == "serializable") {
+                    return NTPCC::TRunConfig::ETxMode::SerializableRW;
+                } else if (value == "snapshot") {
+                    return NTPCC::TRunConfig::ETxMode::SnapshotRW;
+                }
+                throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable, snapshot";
+            }).DefaultValue("serializable");
+
     auto simulateOpt = config.Opts->AddLongOption(
         "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")
             .OptionalArgument("INT").StoreResult(&RunConfig->SimulateTransactionMs).DefaultValue(0);

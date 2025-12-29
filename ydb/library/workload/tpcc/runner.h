@@ -30,6 +30,11 @@ struct TRunConfig {
         Json,
     };
 
+    enum class ETxMode {
+        SerializableRW,
+        SnapshotRW
+    };
+
     TRunConfig() = default;
     void SetFullPath(const NConsoleClient::TClientCommand::TConfig& connectionConfig) {
         if (Path.empty()) {
@@ -55,6 +60,7 @@ struct TRunConfig {
     TString Path;
 
     EFormat Format = EFormat::Pretty;
+    ETxMode TxMode = ETxMode::SerializableRW;
 
     TString JsonResultPath;
 

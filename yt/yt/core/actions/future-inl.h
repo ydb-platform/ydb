@@ -2484,7 +2484,7 @@ TFuture<typename TFutureCombinerTraits<T>::TCombinedVector> AllSucceeded(
     auto size = futures.size();
     if constexpr (std::is_same_v<T, void>) {
         if (size == 0) {
-            return VoidFuture;
+            return OKFuture;
         }
         if (size == 1) {
             return std::move(futures[0]);
@@ -2592,7 +2592,7 @@ public:
         bool failOnError = false)
         : Callbacks_(std::move(callbacks))
         , ConcurrencyLimit_(concurrencyLimit)
-        , Futures_(Callbacks_.size(), VoidFuture)
+        , Futures_(Callbacks_.size(), OKFuture)
         , Results_(Callbacks_.size())
         , CurrentIndex_(std::min<int>(ConcurrencyLimit_, std::ssize(Callbacks_)))
         , FailOnFirstError_(failOnError)

@@ -508,7 +508,7 @@ public:
         if (auto server = Server_.Exchange(nullptr)) {
             return server->Stop();
         } else {
-            return VoidFuture;
+            return OKFuture;
         }
     }
 

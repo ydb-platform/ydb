@@ -1312,7 +1312,7 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
             SafeCoreDumped = true;
             return TCoreDump{
                 .Path = "",
-                .WrittenEvent = VoidFuture,
+                .WrittenEvent = OKFuture,
             };
         }
         const NYTree::IYPathServicePtr& CreateOrchidService() const override

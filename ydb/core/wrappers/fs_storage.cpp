@@ -116,7 +116,7 @@ public:
 
 private:
     void CleanupActiveSessions() {
-        FS_LOG_T("TFsOperationActor: cleaning up"
+        FS_LOG_D("TFsOperationActor: cleaning up"
             << ": active MPU sessions# " << ActiveUploads.size());
         for (auto& [uploadId, session] : ActiveUploads) {
             try {
@@ -139,7 +139,7 @@ private:
 public:
 
     STATEFN(StateWork) {
-        FS_LOG_D("TFsOperationActor StateWork received event type"
+        FS_LOG_T("TFsOperationActor StateWork received event type"
             << ": type# " << ev->GetTypeRewrite());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPutObjectRequest, Handle);
@@ -161,7 +161,7 @@ public:
         }
     }
 
-    TString GetIncompletePath(const TString& key) {
+    TString GetIncompletePath(const char* key) {
         return TStringBuilder() << key << ".incomplete";
     }
 
@@ -239,7 +239,7 @@ public:
 
     void Handle(TEvCreateMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        const TString key = GetIncompletePath(TString(request.GetKey().data(), request.GetKey().size()));
+        const TString key = GetIncompletePath(request.GetKey().c_str());
 
         FS_LOG_D("CreateMultipartUpload"
             << ": key# " << key);
@@ -275,7 +275,7 @@ public:
     void Handle(TEvUploadPartRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const auto& body = ev->Get()->Body;
-        const TString key = GetIncompletePath(TString(request.GetKey().data(), request.GetKey().size()));
+        const TString key = GetIncompletePath(request.GetKey().c_str());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         const int partNumber = request.GetPartNumber();
 
@@ -292,8 +292,7 @@ public:
                 // it means that a restart has occurred and all parts have started being written again
                 // so we can simply create a new session.
                 if (partNumber != 1) {
-                    throw yexception() << TStringBuilder()
-                        << "Cannot create new upload session for part " << partNumber
+                    throw yexception() << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
                 }
                 it = ActiveUploads.emplace(uploadId, std::make_unique<TMultipartUploadSession>(key)).first;
@@ -329,7 +328,7 @@ public:
     void Handle(TEvCompleteMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        const TString incompleteKey = GetIncompletePath(key);
+        const TString incompleteKey = GetIncompletePath(key.c_str());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
         FS_LOG_D("CompleteMultipartUpload"

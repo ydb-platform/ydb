@@ -588,6 +588,16 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             return false;
         }
 
+        auto& pqConfig = AppData(ActorContext())->PQConfig;
+        for (const auto& write : record.GetPartitionRequest().GetCmdWrite()) {
+            if (write.GetData().size() > pqConfig.GetMaxMessageSizeBytes()) {
+                ERROR("The size of the message is too big. Max message size is " << pqConfig.GetMaxMessageSizeBytes()
+                    << " bytes, but got " << write.GetData().size() << " bytes");
+                Disconnected(EErrorCode::InternalError);
+                return false;
+            }
+        }
+
         SetWriteId(*record.MutablePartitionRequest());
 
         Pending.emplace(cookie, TRequestHolder(TUserWriteRequest(std::move(record)), false, std::move(ev->TraceId), {}, {}));

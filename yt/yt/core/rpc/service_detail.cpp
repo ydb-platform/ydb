@@ -1445,7 +1445,7 @@ int TRequestQueue::GetQueueSize() const
 std::optional<int> TRequestQueue::GetQueueSizeLimit() const
 {
     auto queueSizeLimit = QueueSizeLimit_.load(std::memory_order::relaxed);
-    return queueSizeLimit != -1 ? std::optional(queueSizeLimit) : std::nullopt;
+    return queueSizeLimit >= 0 ? std::optional(queueSizeLimit) : std::nullopt;
 }
 
 i64 TRequestQueue::GetQueueByteSize() const

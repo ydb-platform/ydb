@@ -591,9 +591,16 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         auto& pqConfig = AppData(ActorContext())->PQConfig;
         for (const auto& write : record.GetPartitionRequest().GetCmdWrite()) {
             if (write.GetData().size() > pqConfig.GetMaxMessageSizeBytes()) {
-                ERROR("The size of the message is too big. Max message size is " << pqConfig.GetMaxMessageSizeBytes()
-                    << " bytes, but got " << write.GetData().size() << " bytes");
-                Disconnected(EErrorCode::InternalError);
+                auto errorMsg = TStringBuilder() << "The size of the message is too big. Max message size is " << pqConfig.GetMaxMessageSizeBytes()
+                    << " bytes, but got " << write.GetData().size() << " bytes";
+
+                BecomeZombie(EErrorCode::InternalError, errorMsg);
+
+                auto response = MakeResponse(cookie);
+                response.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
+                response.SetErrorReason(errorMsg);
+                SendWriteResult(EErrorCode::InternalError, errorMsg, std::move(response));
+
                 return false;
             }
         }

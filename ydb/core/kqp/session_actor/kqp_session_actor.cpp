@@ -535,19 +535,27 @@ public:
         }
 
         const TString& poolId = ev->Get()->PoolId;
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && !ev->Get()->IsDiskFull()) {
             google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
             NYql::IssuesToMessage(std::move(ev->Get()->Issues), &issues);
             ReplyQueryError(ev->Get()->Status, TStringBuilder() << "Query failed during adding/waiting in workload pool " << poolId, issues);
             return;
         }
 
+        if (ev->Get()->IsDiskFull()) {
+            STLOG_W("Database disks are without free space",
+                (pool_id, poolId),(trace_id, TraceId()));
+            FillQueryIssues(ev->Get()->Issues);
+        }
+
         STLOG_D("Continue request", 
             (pool_id, poolId),
             (trace_id, TraceId()));
+
         QueryState->PoolHandlerActor = ev->Sender;
         QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
+
         CompileQuery();
     }
 
@@ -2134,6 +2142,20 @@ public:
         }
     }
 
+    void FillQueryIssues(const NYql::TIssues& issues) {
+        if (!QueryState) {
+            STLOG_W("Try to put issues into empty QueryState", (trace_id, TraceId()));
+            return;
+        }
+
+        if (!QueryState->Issues) {
+            QueryState->Issues = issues;
+            return;
+        }
+
+        QueryState->Issues.AddIssues(issues);
+    }
+
     void ProcessExecuterResult(TEvKqpExecuter::TEvTxResponse* ev) {
         QueryState->Orbit = std::move(ev->Orbit);
 
@@ -2239,7 +2261,9 @@ public:
         }
 
         if (!response->GetIssues().empty()){
-            NYql::IssuesFromMessage(response->GetIssues(), QueryState->Issues);
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(response->GetIssues(), issues);
+            FillQueryIssues(issues);
         }
 
         ExecuteOrDefer();

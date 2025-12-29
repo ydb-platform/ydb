@@ -1505,11 +1505,11 @@ bool ParseCompressionSettings(
         if (key == "algorithm" && settingVal.IsCallable("String")) {
             const auto algoVal = settingVal.Child(0)->Content();
             if (algoVal == "lz4") {
-                compression->set_algorithm(::Ydb::Table::ColumnCompression_Algorithm::ColumnCompression_Algorithm_ALGORITHM_LZ4);
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_LZ4);
             } else if (algoVal == "zstd") {
-                compression->set_algorithm(::Ydb::Table::ColumnCompression_Algorithm::ColumnCompression_Algorithm_ALGORITHM_ZSTD);
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_ZSTD);
             } else if (algoVal == "off") {
-                compression->set_algorithm(::Ydb::Table::ColumnCompression_Algorithm::ColumnCompression_Algorithm_ALGORITHM_OFF);
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_OFF);
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(settingVal.Pos()), TStringBuilder()
                     << "Unknown compression algorithm: " << algoVal));
@@ -1528,7 +1528,6 @@ bool ParseCompressionSettings(
 
     return true;
 }
-
 
 class TKiSinkCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSinkCallableExecutionTransformer> {
 public:

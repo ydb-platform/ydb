@@ -377,7 +377,6 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
         columnFamilies = Build<TExprList>(ctx, node.Pos()).Done();
     }
 
-    // TODO: change?
     if (!columnCompression.IsValid()) {
         columnCompression = Build<TExprList>(ctx, node.Pos()).Done();
     }

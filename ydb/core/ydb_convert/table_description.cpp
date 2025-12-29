@@ -837,13 +837,13 @@ bool FillColumnCompression(
             toSerializer->SetClassName("ARROW_SERIALIZER");
             auto arrowCompression = toSerializer->MutableArrowCompression();
             switch (fromCompression.Getalgorithm()) {
-                case Ydb::Table::ColumnCompression_Algorithm::ColumnCompression_Algorithm_ALGORITHM_OFF:
+                case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
                     arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
                     break;
-                case Ydb::Table::ColumnCompression_Algorithm::ColumnCompression_Algorithm_ALGORITHM_LZ4:
+                case Ydb::Table::ColumnCompression::ALGORITHM_LZ4:
                     arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
                     break;
-                case Ydb::Table::ColumnCompression_Algorithm::ColumnCompression_Algorithm_ALGORITHM_ZSTD:
+                case Ydb::Table::ColumnCompression::ALGORITHM_ZSTD:
                     arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
                     break;
                     

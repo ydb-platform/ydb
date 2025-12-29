@@ -428,6 +428,7 @@ private:
                 return nullptr;
             }
 
+            bool hasErrors = false;
             for (auto i = 0U; i < keysCount; ++i) {
                 const auto key = keys[i];
                 TIssueScopeGuard issueScopePartitionKey(ctx.IssueManager, [&]() {
@@ -435,17 +436,19 @@ private:
                 });
 
                 if (const auto keyType = structType->FindItemType(key->Content())) {
-                    if (!EnsureDataType(key->Pos(), *keyType, ctx)) {
-                        return nullptr;
-                    }
+                    hasErrors = !EnsureDataType(key->Pos(), *keyType, ctx) || hasErrors;
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder() << "Missing key column for partitioning. Please ensure the column is included in the schema."));
-                    return nullptr;
+                    hasErrors = true;
                 }
             }
 
             if (structType->GetSize() <= keysCount) {
                 ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), TStringBuilder() << "Write schema contains no columns except partitioning columns."));
+                hasErrors = true;
+            }
+
+            if (hasErrors) {
                 return nullptr;
             }
 

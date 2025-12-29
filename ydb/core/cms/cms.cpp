@@ -1547,9 +1547,9 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             TErrorInfo error;
             TDuration duration = TDuration::MicroSeconds(action.GetDuration());
             duration += TDuration::MicroSeconds(copy->Request.GetDuration());
-            item->DeactivateLocks(Min<i32>());
+            item->SetPriorityToCheck(Min<i32>());
             bool isLocked = item->IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration);
-            item->ReactivateLocks();
+            item->ResetPriorityToCheck();
             if (isLocked) {
                 return ReplyWithError<TEvCms::TEvManageRequestResponse>(
                     ev, TStatus::WRONG_REQUEST, "Request has already locked items: " + error.Reason.GetMessage(), ctx);

@@ -1114,19 +1114,11 @@ echo $?
 1. Пропускается ненужный в незащищенном режиме шаг по получению токена аутентификации перед выполнением инициализации кластера и созданием базы данных.
 1. Команда инициализации кластера выполняется в следующей форме:
 
-<<<<<<< HEAD
-    ```bash
-    export LD_LIBRARY_PATH=/opt/ydb/lib
-    ydb admin blobstorage bootstrap --uuid <строка>
-    echo $?
-    ```
-=======
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
 /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
 echo $?
 ```
->>>>>>> 8758f542203 (Update initial-deployment.md (#31264))
 
 1. Команда создания базы данных выполняется в следующей форме:
 

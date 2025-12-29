@@ -318,7 +318,7 @@ private:
     bool FillItems(TImportInfo& importInfo, const Ydb::Import::ImportFromS3Settings& settings, TString& explain) {
         THashSet<TString> dstPaths;
 
-        if (explain = importInfo.CompileExcludeRegexps()) {
+        if (!importInfo.CompileExcludeRegexps(explain)) {
             return false;
         }
 

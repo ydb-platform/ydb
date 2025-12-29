@@ -3268,9 +3268,7 @@ public:
         });
     }
 
-    // Tries to compile exclude regexps.
-    // Returns nonempty string with error description in case of error
-    TString CompileExcludeRegexps();
+    bool CompileExcludeRegexps(TString& errorDescription);
 
     bool IsExcludedFromImport(const TString& path) const;
 

@@ -2434,17 +2434,18 @@ void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
     Subscribers.insert(actorId);
 }
 
-TString TImportInfo::CompileExcludeRegexps() {
+bool TImportInfo::CompileExcludeRegexps(TString& errorDescription) {
     if (!ExcludeRegexps) {
         try {
             Visit([this](const auto& settings) {
                 ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
             });
         } catch (const std::exception& ex) {
-            return TStringBuilder() << "Invalid regexp: " << ex.what();
+            errorDescription = TStringBuilder() << "Invalid regexp: " << ex.what();
+            return false;
         }
     }
-    return {};
+    return true;
 }
 
 bool TImportInfo::IsExcludedFromImport(const TString& path) const {
@@ -2770,7 +2771,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
     Y_ABORT_UNLESS(Kind == EKind::S3);
     auto settings = GetS3Settings();
 
-    if (TString err = CompileExcludeRegexps()) {
+    if (TString err; !CompileExcludeRegexps(err)) {
         result.AddError(err);
         return result;
     }

@@ -16,6 +16,7 @@
 #include <yql/essentials/utils/retry.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/string/cast.h>
 #include <util/generic/hash.h>
@@ -25,6 +26,9 @@
 #include <vector>
 
 namespace NYql {
+
+const TString ActivationComponent = "Activation";
+const TString ActivationLabel = "YqlCore";
 
 namespace {
 using namespace NNodes;
@@ -163,17 +167,21 @@ public:
         };
         if (CoreConfig_) {
             TPosition pos;
-            for (auto& flag : CoreConfig_->GetFlags()) {
-                if (filter(flag)) {
-                    TVector<TStringBuf> args;
-                    for (auto& arg : flag.GetArgs()) {
-                        args.push_back(arg);
-                    }
-                    if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
-                        return false;
-                    }
+            TVector<TCoreAttr> flags;
+            if (auto loadedFlags = LoadFlags()) {
+                flags = std::move(*loadedFlags);
+            } else {
+                const auto& configFlags = CoreConfig_->GetFlags();
+                CopyIf(configFlags.begin(), configFlags.end(), std::back_inserter(flags), filter);
+            }
+            for (const auto& flag : flags) {
+                const auto& flagArgs = flag.GetArgs();
+                TVector<TStringBuf> args(flagArgs.begin(), flagArgs.end());
+                if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
+                    return false;
                 }
             }
+            SaveFlags(flags);
         }
         return true;
     }
@@ -1413,6 +1421,40 @@ private:
         }
 
         return parseResult == TWarningRule::EParseResult::PARSE_OK;
+    }
+
+    TMaybe<TVector<TCoreAttr>> LoadFlags() {
+        TMaybe<TVector<TCoreAttr>> loadedFlags;
+        if (!Types_.QContext.CanRead()) {
+            return loadedFlags;
+        }
+        if (auto loaded = Types_.QContext.GetReader()->Get({ActivationComponent, ActivationLabel}).GetValueSync()) {
+            auto flagsNode = NYT::NodeFromYsonString(loaded->Value);
+            TVector<TCoreAttr> flags;
+            for (const auto& [flagName, flagValue] : flagsNode.AsMap()) {
+                TCoreAttr flag;
+                YQL_ENSURE(flag.ParseFromString(flagValue.AsString()));
+                flags.emplace_back(std::move(flag));
+            }
+            loadedFlags = std::move(flags);
+            YQL_CLOG(INFO, ProviderConfig) << "YqlCore flags are loaded at replay mode";
+        }
+        return loadedFlags;
+    }
+
+    void SaveFlags(const TVector<TCoreAttr>& flags) {
+        if (!Types_.QContext.CanWrite()) {
+            return;
+        }
+        auto flagsNode = NYT::TNode::CreateMap();
+        for (const auto& flag : flags) {
+            TString data;
+            YQL_ENSURE(flag.SerializeToString(&data));
+            flagsNode[flag.GetName()] = std::move(data);
+        }
+        auto flagsYson = NYT::NodeToYsonString(flagsNode, NYT::NYson::EYsonFormat::Binary);
+        Types_.QContext.GetWriter()->Put({ActivationComponent, ActivationLabel}, flagsYson).GetValueSync();
+        YQL_CLOG(INFO, ProviderConfig) << "YqlCore flags are saved to QStorage";
     }
 
 private:

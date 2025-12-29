@@ -199,7 +199,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
                 restoreSettings.SetRegion(region);
             }
 
-            if (!item.Metadata.HasVersion() || item.Metadata.GetVersion() > 0) {
+            const auto* metadata = &item.Metadata;
+            if (item.ParentIdx != Max<ui32>()) {
+                Y_ABORT_UNLESS(item.ParentIdx < importInfo.Items.size());
+                metadata = &importInfo.Items[item.ParentIdx].Metadata;
+            }
+
+            if (!metadata->HasVersion() || metadata->GetVersion() > 0) {
                 task.SetValidateChecksums(!importInfo.Settings.skip_checksum_validation());
             }
         }

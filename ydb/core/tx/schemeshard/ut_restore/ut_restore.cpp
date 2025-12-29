@@ -5465,7 +5465,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
-    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode) {
+    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, const TString& metadata = R"({"version": 1})") {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
 
@@ -5484,7 +5484,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               index_columns: "value"
               global_index {}
             }
-        )", {{"a", 1}});
+        )", {{"a", 1}}, "", metadata);
 
         const auto b = GenerateTestData(R"(
             columns {
@@ -5497,7 +5497,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
             primary_key: "value"
             primary_key: "key"
-        )", {{"b", 1}});
+        )", {{"b", 1}}, "", metadata);
 
         Run(runtime, env, ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), Sprintf(R"(
             ImportFromS3Settings {
@@ -5508,7 +5508,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 source_prefix: "a"
                 destination_path: "/MyRoot/Table"
               }
-              skip_checksum_validation: true
             }
         )", Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(mode).c_str()));
 
@@ -5528,6 +5527,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(MaterializedIndexAuto) {
         MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO);
+    }
+
+    Y_UNIT_TEST(MaterializedIndexOldMetadata) {
+        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, R"({"version": 0})");
     }
 
     void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail) {
@@ -5561,7 +5564,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 source_prefix: "a"
                 destination_path: "/MyRoot/Table"
               }
-              skip_checksum_validation: true
             }
         )", Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(mode).c_str()), expectedStatus);
 
@@ -6162,7 +6164,6 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     source_prefix: "a"
                     destination_path: "/MyRoot/Table"
                   }
-                  skip_checksum_validation: true
                 }
             )", port));
             t.TestEnv->TestWaitNotification(runtime, importId);

@@ -196,9 +196,13 @@ public:
                 if (childPath->IsTableIndex() && !childPath->Dropped()) {
                     if (context.SS->Indexes.contains(childPathId)) {
                         auto index = context.SS->Indexes.at(childPathId);
-                        // Skip if there's an ongoing alter operation - it will handle version update
-                        if (index->AlterVersion < tableInfo->AlterVersion && !index->AlterData) {
+                        if (index->AlterVersion < tableInfo->AlterVersion) {
                             index->AlterVersion = tableInfo->AlterVersion;
+                            // If there's ongoing alter operation, also bump alterData version to maintain invariant
+                            if (index->AlterData && index->AlterData->AlterVersion <= tableInfo->AlterVersion) {
+                                index->AlterData->AlterVersion = tableInfo->AlterVersion + 1;
+                                context.SS->PersistTableIndexAlterData(db, childPathId);
+                            }
                             context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
                             context.SS->ClearDescribePathCaches(childPath);
                             context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);

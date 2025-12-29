@@ -113,18 +113,15 @@ private:
             table.add_primary_key(keyCol);
         }
 
-        // Add partition split points if specified
         if (!splitPoints.empty()) {
             auto* partitionAtKeys = table.mutable_partition_at_keys();
             for (const auto& point : splitPoints) {
                 auto* splitPoint = partitionAtKeys->add_split_points();
-                // Create tuple type for the split point
                 auto* tupleType = splitPoint->mutable_type()->mutable_tuple_type();
                 for (size_t i = 0; i < point.size(); ++i) {
                     // For UTF8 key columns
                     tupleType->add_elements()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
                 }
-                // Set the split point value
                 for (const auto& value : point) {
                     splitPoint->mutable_value()->add_items()->set_text_value(value);
                 }
@@ -132,7 +129,7 @@ private:
         }
 
         TString serialized;
-        Y_ABORT_UNLESS(table.SerializeToString(&serialized));
+        Y_ABORT_UNLESS(google::protobuf::TextFormat::PrintToString(table, &serialized));
 
         TFileOutput file(dirPath + "/" + NYdb::NDump::NFiles::TableScheme().FileName);
         file.Write(serialized);
@@ -142,7 +139,7 @@ private:
         Ydb::Scheme::ModifyPermissionsRequest permissions;
 
         TString serialized;
-        Y_ABORT_UNLESS(permissions.SerializeToString(&serialized));
+        Y_ABORT_UNLESS(google::protobuf::TextFormat::PrintToString(permissions, &serialized));
 
         TFileOutput file(dirPath + "/permissions.pb");
         file.Write(serialized);

@@ -106,6 +106,11 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             return Finish(result->Status, createExternalDataSource);
         }
 
+        if (transactions[0].GetSchemeOperation().HasCreateExternalTable()) {
+            const auto& createExternalTable = transactions[0].GetSchemeOperation().GetCreateExternalTable();
+            return Finish(result->Status, createExternalTable);
+        }
+
         return Finish(Ydb::StatusIds::GENERIC_ERROR, "no supported create operation");
     }
 

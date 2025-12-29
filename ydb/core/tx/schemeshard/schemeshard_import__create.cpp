@@ -14,6 +14,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
@@ -81,6 +82,10 @@ bool IsCreateExternalDataSourceQuery(const TString& query) {
     return query.Contains("CREATE EXTERNAL DATA SOURCE");
 }
 
+bool IsCreateExternalTableQuery(const TString& query) {
+    return query.Contains("CREATE EXTERNAL TABLE");
+}
+
 bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
@@ -96,6 +101,9 @@ bool RewriteCreateQuery(
     } else if (IsCreateExternalDataSourceQuery(query)) {
         return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
     }
+    if (IsCreateExternalTableQuery(query)) {
+        return NYdb::NDump::RewriteCreateExternalTableQuery(query, dbPath, issues);
+    }
 
     issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
     return false;
@@ -103,6 +111,15 @@ bool RewriteCreateQuery(
 
 TString GetDatabase(TSchemeShard& ss) {
     return CanonizePath(ss.RootPathElements);
+}
+
+bool IsRetryableQueryExecutionError(NKikimrScheme::EStatus status) {
+    return IsIn({
+        NKikimrScheme::StatusPathDoesNotExist,
+        NKikimrScheme::StatusSchemeError,
+        NKikimrScheme::StatusMultipleModifications,
+        NKikimrScheme::StatusNotAvailable,
+    }, status);
 }
 
 }
@@ -1463,7 +1480,8 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
-        if (record.GetStatus() == NKikimrScheme::StatusNotAvailable) {
+        if (IsCreatedByQuery(item)
+            && IsRetryableQueryExecutionError(record.GetStatus())) {
             // Query compiled, but execution was unsuccessful
             return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
         }

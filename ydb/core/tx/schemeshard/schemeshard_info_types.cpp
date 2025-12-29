@@ -4,6 +4,7 @@
 #include "schemeshard_path.h"
 #include "schemeshard_utils.h"  // for IsValidColumnName, ValidateImportDstPath
 
+#include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/channel_profiles.h>
@@ -2466,6 +2467,28 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
     Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
 }
 
+bool TImportInfo::CompileExcludeRegexps(TString& errorDescription) {
+    if (!ExcludeRegexps) {
+        try {
+            ExcludeRegexps = NBackup::CombineRegexps(Settings.exclude_regexps());
+        } catch (const std::exception& ex) {
+            errorDescription = TStringBuilder() << "Invalid regexp: " << ex.what();
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TImportInfo::IsExcludedFromImport(const TString& path) const {
+    Y_ENSURE(ExcludeRegexps.Defined());
+    for (const TRegExMatch& regexp : *ExcludeRegexps) {
+        if (regexp.Match(path.c_str())) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
     : Container(container)
     , DeduplicationById(TPartitionConfigMerger::DeduplicateColumnFamiliesById(Container))
@@ -2764,6 +2787,11 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
 TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
     TFillItemsFromSchemaMappingResult result;
 
+    if (TString err; !CompileExcludeRegexps(err)) {
+        result.AddError(err);
+        return result;
+    }
+
     TString dstRoot;
     if (Settings.destination_path().empty()) {
         dstRoot = CanonizePath(ss->RootPathElements);
@@ -2794,6 +2822,10 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
     TVector<TImportInfo::TItem> items;
     if (Items.empty()) { // Fill the whole list from schema mapping
         for (const auto& schemaMappingItem : SchemaMapping->Items) {
+            if (IsExcludedFromImport(schemaMappingItem.ObjectPath)) {
+                continue;
+            }
+
             TString dstPath = combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
             TString explain;
             if (!ValidateImportDstPath(dstPath, ss, explain)) {
@@ -2823,6 +2855,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
             }
         }
 
+        bool notAllItemsFound = false;
         for (auto& item : Items) {
             TMapping::iterator mappingIt;
             if (item.SrcPrefix) {
@@ -2841,6 +2874,10 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
                 const bool isDstPathAbsolute = item.DstPathName && item.DstPathName.front() == '/';
                 for (const auto& [index, suffix] : mappingIt->second) {
                     const auto& schemaMappingItem = SchemaMapping->Items[index];
+                    if (IsExcludedFromImport(schemaMappingItem.ObjectPath)) {
+                        continue;
+                    }
+
                     TStringBuilder dstPath;
                     if (item.DstPathName) {
                         if (isDstPathAbsolute) {
@@ -2867,14 +2904,17 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
                     auto& item = items.emplace_back(dstPath);
                     init(schemaMappingItem, item);
                 }
+            } else {
+                notAllItemsFound = true;
             }
+        }
+
+        if (notAllItemsFound) {
+            // Just in case: we already validate it, but double check
+            result.AddError("error: not all import items were found in schema mapping");
         }
     }
 
-    if (items.size() < Items.size()) {
-        // Just in case: we already validate it, but double check
-        result.AddError("error: not all import items were found in schema mapping");
-    }
 
     if (items.empty()) {
         // Schema mapping should not be empty

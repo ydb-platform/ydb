@@ -267,6 +267,10 @@ private:
     bool FillItems(TImportInfo& importInfo, const TSettings& settings, TString& explain) {
         THashSet<TString> dstPaths;
 
+        if (!importInfo.CompileExcludeRegexps(explain)) {
+            return false;
+        }
+
         importInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const TString& dstPath = settings.items(itemIdx).destination_path();
@@ -284,9 +288,16 @@ private:
                 return false;
             }
 
-            auto& item = importInfo.Items.emplace_back(dstPath);
-            item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
-            item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
+            if (!importInfo.IsExcludedFromImport(dstPath)) {
+                auto& item = importInfo.Items.emplace_back(dstPath);
+                item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
+                item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
+            }
+        }
+
+        if (settings.items().size() && importInfo.Items.empty()) {
+            explain = TStringBuilder() << "no items to import";
+            return false;
         }
 
         return true;

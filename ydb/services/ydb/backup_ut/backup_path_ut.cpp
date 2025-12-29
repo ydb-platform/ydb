@@ -199,6 +199,73 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
         }
     }
 
+    Y_UNIT_TEST(ImportWithExcludeRegexps) {
+        {
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
+            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json",
+                "/test_bucket/Prefix/Table0/metadata.json",
+                "/test_bucket/Prefix/Table0/scheme.pb",
+                "/test_bucket/Prefix/Table0/data_00.csv",
+                "/test_bucket/Prefix/dir1/Table1/metadata.json",
+                "/test_bucket/Prefix/dir1/Table1/scheme.pb",
+                "/test_bucket/Prefix/dir1/Table1/data_00.csv",
+                "/test_bucket/Prefix/dir1/dir2/Table2/metadata.json",
+                "/test_bucket/Prefix/dir1/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/dir1/dir2/Table2/data_00.csv",
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
+            importSettings
+                .AppendExcludeRegexp(".*");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpStatus(res, EStatus::CANCELLED); // Nothing to import
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
+            importSettings
+                .AppendExcludeRegexp("invalid regexp)");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpStatus(res, EStatus::BAD_REQUEST); // Nothing to import
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
+            importSettings
+                .AppendExcludeRegexp("^Table$") // No matching
+                .AppendExcludeRegexp("^dir1$") // Partial match does not prevent from importing children - only full path match
+                .AppendExcludeRegexp("^dir1/Table"); // Matches table in directory
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateHasYdbTables({
+                "/Root/RestorePrefix/Table0",
+                "/Root/RestorePrefix/dir1/dir2/Table2",
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix2");
+            importSettings
+                .AppendItem(NImport::TImportFromS3Settings::TItem{.SrcPath = "dir1"})
+                .AppendExcludeRegexp("Table1");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateHasYdbTables({
+                "/Root/RestorePrefix2/dir1/dir2/Table2",
+            });
+        }
+    }
+
     Y_UNIT_TEST(ExportWithCommonSourcePathAndExplicitTableInside) {
         // Export with directory path == dir1 + explicit table from this subdir (must remove duplicate)
         {

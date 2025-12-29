@@ -4071,6 +4071,12 @@ void TExecutor::ForceSendCounters() {
 }
 
 float TExecutor::GetRejectProbability() const {
+    float rejectProbability = CalcRejectProbability();
+    Counters->Simple()[TExecutorCounters::REJECT_PROBABILITY] = rejectProbability * 100;
+    return rejectProbability;
+}
+
+float TExecutor::CalcRejectProbability() const {
     // Limit number of in-flight TXs
     // TODO: make configurable
     if (Stats->TxInFly > MaxTxInFly) {

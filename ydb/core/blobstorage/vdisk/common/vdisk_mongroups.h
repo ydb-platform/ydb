@@ -541,7 +541,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(PutTotalBytes, true);
                 COUNTER_INIT_IF_EXTENDED(GetTotalBytes, true);
             }
-                
+
             void MinHugeBlobInBytes(ui32 size) {
                 auto getCounter = [&](ui32 size) {
                     return GroupCounters->GetSubgroup("MinHugeBlobInBytes", ToString(size))->GetCounter("count", 1);
@@ -720,7 +720,7 @@ public:                                                                         
             COUNTER_DEF(PutTabletLog);
             COUNTER_DEF(PutUserData);
             COUNTER_DEF(PutAsyncBlob);
-            
+
             ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
                 if (!handleClass) {
                     return Undefined();

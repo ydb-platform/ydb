@@ -293,7 +293,7 @@ namespace NKikimr::NBsController {
                         return freeSlotsPretender > freeSlotsKing;
                     }
                 }
-                
+
                 if (Self.WithAttentionToReplication) {
                     auto pretenderNode = pretender.PDiskId.NodeId;
                     auto kingNode = king.PDiskId.NodeId;
@@ -318,7 +318,7 @@ namespace NKikimr::NBsController {
                         return pretenderPDiskRepls < kingPDiskRepls;
                     }
                 }
-                
+
                 if (pretender.FreeSlots() != king.FreeSlots()) {
                     return pretender.FreeSlots() > king.FreeSlots();
                 }
@@ -985,7 +985,7 @@ namespace NKikimr::NBsController {
             ui32 failRealmsNeeded = Geom.GetNumFailRealms();
             ui32 failDomainsPerRealmNeeded = Geom.GetNumFailDomainsPerFailRealm();
             ui32 disksPerDomainNeeded = Geom.GetNumVDisksPerFailDomain();
-            
+
             auto keyName = [](TNodeLocation::TKeys::E k) -> TString {
                 switch (k) {
                     case TNodeLocation::TKeys::BridgePileName: return "BridgePileName";
@@ -1178,7 +1178,7 @@ namespace NKikimr::NBsController {
             }
 
             err.ErrorMessage = s.Str();
-            
+
             err.MissingFailRealmsCount = missingFailRealmsCount;
             err.FailRealmsWithMissingDomainsCount = failRealmsWithMissingDomainsCount;
             err.DomainsWithMissingDisksCount = domainsWithMissingDisksCount;

@@ -1543,7 +1543,7 @@ private:
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     TSelfHealSettings SelfHealSettings;
-    
+
     TClusterBalancingSettings ClusterBalancingSettings;
 
     TActorId SystemViewsCollectorId;

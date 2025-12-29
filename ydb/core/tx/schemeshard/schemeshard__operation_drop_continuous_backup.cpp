@@ -39,9 +39,21 @@ TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId opId, const
     }
 
     TVector<ISubOperation::TPtr> result;
-    for (auto& [child, _] : tablePath.Base()->GetChildren()) {
-        if (child.EndsWith("_continuousBackupImpl")) {
-            const auto checksResult = NCdc::DoDropStreamPathChecks(opId, workingDirPath, tableName, child);
+    for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+        if (childName.EndsWith("_continuousBackupImpl")) {
+            TPath childPath = tablePath.Child(childName);
+            if (!childPath.IsDeleted() && childPath.IsCdcStream()) {
+                if (!context.SS->CdcStreams.contains(childPathId)) {
+                    continue;
+                }
+                const auto& streamInfo = context.SS->CdcStreams.at(childPathId);
+                // Only drop backup streams (Proto format), not user streams (Json format)
+                if (streamInfo->Format != NKikimrSchemeOp::ECdcStreamFormatProto) {
+                    continue;
+                }
+            }
+
+            const auto checksResult = NCdc::DoDropStreamPathChecks(opId, workingDirPath, tableName, childName);
             if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
                 return {std::get<ISubOperation::TPtr>(checksResult)};
             }
@@ -59,7 +71,7 @@ TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId opId, const
 
             NKikimrSchemeOp::TDropCdcStream dropCdcStreamOp;
             dropCdcStreamOp.SetTableName(tableName);
-            dropCdcStreamOp.AddStreamName(child);
+            dropCdcStreamOp.AddStreamName(childName);
 
             TVector<TPath> streamPaths = {streamPath};
             NCdc::DoDropStream(result, dropCdcStreamOp, opId, workingDirPath, tablePath, streamPaths, InvalidTxId, context);

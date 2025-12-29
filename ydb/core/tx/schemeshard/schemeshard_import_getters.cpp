@@ -1625,7 +1625,7 @@ class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
         auto& item = ImportInfo->Items[ItemIdx];
 
         Ydb::Table::CreateTableRequest table;
-        if (table.ParseFromString(content)) {
+        if (google::protobuf::TextFormat::ParseFromString(content, &table)) {
             item.Table = table;
             return true;
         }
@@ -1637,7 +1637,7 @@ class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
     void ProcessPermissions(const TString& content) {
         auto& item = ImportInfo->Items[ItemIdx];
         Ydb::Scheme::ModifyPermissionsRequest permissions;
-        if (permissions.ParseFromString(content)) {
+        if (google::protobuf::TextFormat::ParseFromString(content, &permissions)) {
             item.Permissions = permissions;
         }
     }
@@ -1666,10 +1666,10 @@ public:
     void Bootstrap() {
         const auto settings = ImportInfo->GetFsSettings();
         const TString basePath = settings.base_path();
-        
+
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items[ItemIdx];
-        
+
         TString sourcePath = item.SrcPath;
         if (sourcePath.empty()) {
             Reply(false, "Source path is empty for import item");
@@ -1681,7 +1681,7 @@ public:
 
         const TString metadataPath = itemPath / "metadata.json";
         TString metadataContent;
-        
+
         if (!TFSHelper::ReadFile(metadataPath, metadataContent, error)) {
             Reply(false, error);
             return;
@@ -1695,7 +1695,7 @@ public:
         const TString schemeFileName = NYdb::NDump::NFiles::TableScheme().FileName;
         const TString schemePath = itemPath / schemeFileName;
         TString schemeContent;
-        
+
         if (!TFSHelper::ReadFile(schemePath, schemeContent, error)) {
             Reply(false, error);
             return;
@@ -1709,7 +1709,7 @@ public:
         if (!ImportInfo->GetNoAcl()) {
             const TString permissionsPath = itemPath / "permissions.pb";
             TString permissionsContent;
-            
+
             if (TFSHelper::ReadFile(permissionsPath, permissionsContent, error)) {
                 ProcessPermissions(permissionsContent);
             }

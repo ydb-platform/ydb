@@ -733,4 +733,102 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         ui32 ordersRows = CountRows(runtime, "/MyRoot/Orders");
         UNIT_ASSERT_VALUES_EQUAL(ordersRows, 2);
     }
+
+    Y_UNIT_TEST(ShouldExportThenImportWithDataValidation) {
+        TTempDir tempDir;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
+
+        // Step 1: Create table with schema
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OriginalTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            Columns { Name: "amount" Type: "Int64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Step 2: Insert test data
+        WriteRow(runtime, ++txId, "/MyRoot/OriginalTable", 0, 1, "apple");
+        WriteRow(runtime, ++txId, "/MyRoot/OriginalTable", 0, 2, "banana");
+        WriteRow(runtime, ++txId, "/MyRoot/OriginalTable", 0, 3, "cherry");
+        WriteRow(runtime, ++txId, "/MyRoot/OriginalTable", 0, 4, "date");
+        WriteRow(runtime, ++txId, "/MyRoot/OriginalTable", 0, 5, "elderberry");
+
+        // Verify original data count
+        ui32 originalRows = CountRows(runtime, "/MyRoot/OriginalTable");
+        UNIT_ASSERT_VALUES_EQUAL(originalRows, 5);
+
+        // Step 3: Export to FS
+        TString basePath = tempDir.Path();
+        TString exportSettings = Sprintf(R"(
+            ExportToFsSettings {
+              base_path: "%s"
+              items {
+                source_path: "/MyRoot/OriginalTable"
+                destination_path: "backup/OriginalTable"
+              }
+            }
+        )", basePath.c_str());
+
+        TestExport(runtime, ++txId, "/MyRoot", exportSettings);
+        const ui64 exportId = txId;
+        env.TestWaitNotification(runtime, exportId);
+
+        // Verify export completed successfully
+        auto exportResponse = TestGetExport(runtime, exportId, "/MyRoot");
+        const auto& exportEntry = exportResponse.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(exportEntry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_DONE);
+        UNIT_ASSERT(exportEntry.HasStartTime());
+        UNIT_ASSERT(exportEntry.HasEndTime());
+
+        // Step 4: Import from FS to a new table
+        TString importSettings = Sprintf(R"(
+            ImportFromFsSettings {
+              base_path: "%s"
+              items {
+                source_path: "backup/OriginalTable"
+                destination_path: "/MyRoot/RestoredTable"
+              }
+            }
+        )", basePath.c_str());
+
+        TestImport(runtime, ++txId, "/MyRoot", importSettings);
+        const ui64 importId = txId;
+        env.TestWaitNotification(runtime, importId);
+
+        // Verify import completed successfully
+        auto importResponse = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        const auto& importEntry = importResponse.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(importEntry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+
+        // Step 5: Verify restored table exists
+        auto describe = DescribePath(runtime, "/MyRoot/RestoredTable");
+        TestDescribeResult(describe, {
+            NLs::PathExist,
+            NLs::IsTable
+        });
+
+        // Step 6: Verify schema matches
+        const auto& table = describe.GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(table.ColumnsSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(0).GetName(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(1).GetName(), "value");
+        UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(2).GetName(), "amount");
+        UNIT_ASSERT_VALUES_EQUAL(table.KeyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetKeyColumnNames(0), "key");
+
+        // Step 7: Verify data count matches
+        ui32 restoredRows = CountRows(runtime, "/MyRoot/RestoredTable");
+        UNIT_ASSERT_VALUES_EQUAL(restoredRows, 5);
+        UNIT_ASSERT_VALUES_EQUAL(restoredRows, originalRows);
+    }
 }

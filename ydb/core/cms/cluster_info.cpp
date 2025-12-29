@@ -39,6 +39,7 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
     }
 
     if (HasSameOrHigherPriorityLock(Locks, PriorityToCheck)) {
+        Y_ABORT_UNLESS(!Locks.empty());
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s has planned shutdown (permission %s owned by %s)",
                                PrettyItemName().data(), Locks.begin()->PermissionId.data(), Locks.begin()->Owner.data());

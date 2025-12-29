@@ -126,6 +126,21 @@ public:
     }
 };
 
+struct TKqpReadTableFullTextIndexSettings: public TSortingOperator<ERequestSorting::NONE> {
+public:
+    static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
+    static constexpr TStringBuf SkipLimitSettingName = "SkipLimit";
+
+    TExprNode::TPtr ItemsLimit;
+    TExprNode::TPtr SkipLimit;
+
+    void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
+    void SetSkipLimit(const TExprNode::TPtr& expr) { SkipLimit = expr; }
+
+    static TKqpReadTableFullTextIndexSettings Parse(const NNodes::TCoNameValueTupleList& node);
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
+};
+
 struct TKqpReadTableSettings: public TSortingOperator<ERequestSorting::NONE> {
 public:
     static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";

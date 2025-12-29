@@ -929,6 +929,21 @@ private:
     absl::flat_hash_map<TDocumentId, TIntrusivePtr<TDocumentInfo>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> DocumentInfos;
 
     i32 RelevanceColumnIdx = -1;
+    i64 Limit = -1;
+
+    struct TTopKDocumentInfo {
+        double Score;
+        TIntrusivePtr<TDocumentInfo> DocumentInfo;
+
+        bool operator<(const TTopKDocumentInfo& other) const {
+            return Score > other.Score;
+        }
+    };
+
+    std::priority_queue<
+        TTopKDocumentInfo,
+        TVector<TTopKDocumentInfo>
+    > TopKQueue;
 
     bool ResolveInProgress = true;
     bool NavigateIndexInProgress = false;
@@ -1235,6 +1250,10 @@ public:
 
         IngressStats.Level = statsLevel;
 
+        if (Settings->HasLimit() && Settings->GetLimit() > 0) {
+            Limit = Settings->GetLimit();
+        }
+
         TableId = TTableId(
             (ui64)Settings->GetTable().GetOwnerId(),
             (ui64)Settings->GetTable().GetTableId(),
@@ -1432,6 +1451,14 @@ public:
         NotifyCA();
     }
 
+    void ProcessTopKQueue() {
+        while (!TopKQueue.empty()) {
+            auto [score, documentInfo] = TopKQueue.top();
+            TopKQueue.pop();
+            FetchDocumentDetails(documentInfo);
+        }
+    }
+
     void DocumentStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 docNumId) {
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
@@ -1441,7 +1468,20 @@ public:
             }
             CA_LOG_E("Setting document length for document: " << it->second->DocumentNumId << ", length: " << DocsTableReader->GetDocumentLength(row));
             it->second->SetDocumentLength(DocsTableReader->GetDocumentLength(row));
-            FetchDocumentDetails(it->second);
+
+            if (Limit > 0) {
+                TopKQueue.push({it->second->GetBM25Score(DocCount, SumDocLength), it->second});
+                if (TopKQueue.size() > (size_t)Limit) {
+                    TopKQueue.pop();
+                }
+
+                if (Reads.empty()) {
+                    ProcessTopKQueue();
+                }
+
+            } else {
+                FetchDocumentDetails(it->second);
+            }
         }
     }
 

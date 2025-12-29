@@ -2458,6 +2458,23 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
 
     {
         TString query = Sprintf(R"sql(
+            DECLARE $query as String;
+            SELECT Key, %s, FullText::Relevance%s(%s, $query) as relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY relevance DESC
+        )sql", UTF8 ? "text" : "Text", UTF8 ? "Utf8" : "", UTF8 ? "text" : "Text");
+
+        auto params = NYdb::TParamsBuilder();
+        params
+            .AddParam("$query")
+                .String("машинное обучение")
+                .Build();
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params.Build()).ExtractValueSync();
+        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = Sprintf(R"sql(
             SELECT Key, %s FROM `/Root/Texts`
             ORDER BY FullText::Relevance%s(%s, "машинное обучение") DESC
         )sql", UTF8 ? "text" : "Text", UTF8 ? "Utf8" : "", UTF8 ? "text" : "Text");

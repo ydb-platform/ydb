@@ -1,9 +1,11 @@
 #pragma once
 
 #include "defs.h"
+
 #include "config.h"
 #include "downtime.h"
 #include "node_checkers.h"
+#include "priority_lock.h"
 #include "services.h"
 
 #include <ydb/core/base/blobstorage.h>
@@ -12,11 +14,11 @@
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
-#include <ydb/core/protos/blobstorage_config.pb.h>
-#include <ydb/core/protos/bootstrap.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -256,11 +258,7 @@ public:
     }
 
     void AddLock(const TPermissionInfo &permission) {
-        TLock lock(permission);
-        auto pos = LowerBound(Locks.begin(), Locks.end(), lock, [](auto &l, auto &r) {
-            return l.Priority < r.Priority;
-        });
-        Locks.insert(pos, std::move(lock));
+        AddPriorityLock(Locks, TLock(permission));
     }
 
     void AddExternalLock(const TNotificationInfo &notification,
@@ -283,12 +281,10 @@ public:
     bool IsLocked(TErrorInfo &error, TDuration defaultRetryTime, TInstant no, TDuration durationw) const;
     bool IsDown(TErrorInfo &error, TInstant defaultDeadline) const;
 
-    bool IsLockedByPriorityLock() const;
-
     void RollbackLocks(ui64 point);
 
-    void DeactivateLocks(i32 priority);
-    void ReactivateLocks();
+    void SetPriorityToCheck(i32 priority);
+    void ResetPriorityToCheck();
 
     void RemoveScheduledLocks(const TString &requestId);
 
@@ -306,7 +302,8 @@ public:
     std::list<TExternalLock> ExternalLocks;
     std::list<TScheduledLock> ScheduledLocks;
     TVector<TTemporaryLock> TempLocks;
-    i32 DeactivatedLocksPriority = Max<i32>();
+    // Used to check locks against priority of currently processed request
+    i32 PriorityToCheck = Max<i32>();
     THashSet<NKikimrCms::EMarker> Markers;
 };
 
@@ -930,8 +927,8 @@ public:
     ui64 ScheduleActions(const TRequestInfo &request, const TActorContext *ctx);
     void UnscheduleActions(const TString &requestId);
 
-    void DeactivateLocks(i32 priority);
-    void ReactivateLocks();
+    void SetPriorityToCheck(i32 priority);
+    void ResetPriorityToCheck();
 
     void RollbackLocks(ui64 point);
     ui64 PushRollbackPoint() {

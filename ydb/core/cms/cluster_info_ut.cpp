@@ -443,13 +443,13 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
                             "request-3", "user-3", 3,
                             "request-4", "user-4", 4);
 
-        cluster->DeactivateLocks(request2.Priority);
+        cluster->SetPriorityToCheck(request2.Priority);
 
         TErrorInfo error;
         UNIT_ASSERT(cluster->Node(1).IsLocked(error, TDuration(), Now(), TDuration()));
         UNIT_ASSERT(!cluster->Node(3).IsLocked(error, TDuration(), Now(), TDuration()));
 
-        cluster->ReactivateLocks();
+        cluster->ResetPriorityToCheck();
 
         UNIT_ASSERT(cluster->Node(1).IsLocked(error, TDuration(), Now(), TDuration()));
         UNIT_ASSERT(cluster->Node(3).IsLocked(error, TDuration(), Now(), TDuration()));

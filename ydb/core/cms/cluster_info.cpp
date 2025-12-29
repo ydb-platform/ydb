@@ -26,22 +26,11 @@ namespace NKikimr::NCms {
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
 
-bool TLockableItem::IsLockedByPriorityLock() const {
-    if (Locks.empty()) {
-        return false;
-    }
-
-    if (HasAppData() && AppData()->FeatureFlags.GetEnableCmsLocksPriority()) {
-        return Locks.begin()->Priority <= DeactivatedLocksPriority;
-    } else {
-        return true; // only one lock is allowed despite of its priority
-    }
-};
-
 bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
                              TInstant now, TDuration duration) const
 {
-    if (State == RESTART && IsLockedByPriorityLock()) {
+    if (State == RESTART && HasSameOrHigherPriorityLock(Locks, PriorityToCheck)) {
+        Y_ABORT_UNLESS(!Locks.empty());
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s is restarting (permission %s owned by %s)",
                                PrettyItemName().data(), Locks.begin()->PermissionId.data(), Locks.begin()->Owner.data());
@@ -49,7 +38,7 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
         return true;
     }
 
-    if (IsLockedByPriorityLock()) {
+    if (HasSameOrHigherPriorityLock(Locks, PriorityToCheck)) {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s has planned shutdown (permission %s owned by %s)",
                                PrettyItemName().data(), Locks.begin()->PermissionId.data(), Locks.begin()->Owner.data());
@@ -72,7 +61,7 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
         return true;
     }
 
-    if (!ScheduledLocks.empty() && ScheduledLocks.begin()->Priority < DeactivatedLocksPriority) {
+    if (!ScheduledLocks.empty() && ScheduledLocks.begin()->Priority < PriorityToCheck) {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s has scheduled action %s owned by %s",
                                PrettyItemName().data(), ScheduledLocks.begin()->RequestId.data(),
@@ -94,7 +83,8 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
 
 bool TLockableItem::IsDown(TErrorInfo &error, TInstant defaultDeadline) const
 {
-    if (State == RESTART && IsLockedByPriorityLock()) {
+    if (State == RESTART && HasSameOrHigherPriorityLock(Locks, PriorityToCheck)) {
+        Y_ABORT_UNLESS(!Locks.empty());
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s is restarting (permission %s owned by %s)",
                                PrettyItemName().data(), Locks.begin()->PermissionId.data(), Locks.begin()->Owner.data());
@@ -121,14 +111,14 @@ void TLockableItem::RollbackLocks(ui64 point)
         }
 }
 
-void TLockableItem::ReactivateLocks()
+void TLockableItem::ResetPriorityToCheck()
 {
-    DeactivatedLocksPriority = Max<i32>();
+    PriorityToCheck = Max<i32>();
 }
 
-void TLockableItem::DeactivateLocks(i32 priority)
+void TLockableItem::SetPriorityToCheck(i32 priority)
 {
-    DeactivatedLocksPriority = priority;
+    PriorityToCheck = priority;
 }
 
 void TLockableItem::RemoveScheduledLocks(const TString &requestId)
@@ -893,16 +883,16 @@ void TClusterInfo::UnscheduleActions(const TString &requestId)
         entry.second->RemoveScheduledLocks(requestId);
 }
 
-void TClusterInfo::DeactivateLocks(i32 priority)
+void TClusterInfo::SetPriorityToCheck(i32 priority)
 {
     for (auto &entry : LockableItems)
-        entry.second->DeactivateLocks(priority);
+        entry.second->SetPriorityToCheck(priority);
 }
 
-void TClusterInfo::ReactivateLocks()
+void TClusterInfo::ResetPriorityToCheck()
 {
     for (auto &entry : LockableItems)
-        entry.second->ReactivateLocks();
+        entry.second->ResetPriorityToCheck();
 }
 
 void TClusterInfo::RollbackLocks(ui64 point)

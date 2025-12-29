@@ -2104,9 +2104,9 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
             }
         }
     }
-    ClusterInfo->DeactivateLocks(priority);
+    ClusterInfo->SetPriorityToCheck(priority);
     bool ok = CheckPermissionRequest(rec, resp->Record, scheduled.Request, ctx);
-    ClusterInfo->ReactivateLocks();
+    ClusterInfo->ResetPriorityToCheck();
     ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
@@ -2182,10 +2182,10 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         }
     }
 
-    ClusterInfo->DeactivateLocks(request.Priority);
+    ClusterInfo->SetPriorityToCheck(request.Priority);
     request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
     bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, ctx);
-    ClusterInfo->ReactivateLocks();
+    ClusterInfo->ResetPriorityToCheck();
     ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.

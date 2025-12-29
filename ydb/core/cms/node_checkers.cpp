@@ -1,7 +1,5 @@
 #include "node_checkers.h"
-
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/feature_flags.h>
+#include "priority_lock.h"
 
 #include <ydb/library/actors/core/log.h>
 
@@ -64,16 +62,7 @@ void TNodesCounterBase::UpdateNode(ui32 nodeId, NKikimrCms::EState state) {
 bool TNodesCounterBase::IsNodeLocked(ui32 nodeId, i32 priority) const {
     Y_ABORT_UNLESS(Nodes.contains(nodeId));
     const auto& node = Nodes.at(nodeId);
-
-    if (node.Locks.empty()) {
-        return false;
-    }
-
-    if (HasAppData() && AppData()->FeatureFlags.GetEnableCmsLocksPriority()) {
-        return node.Locks.begin()->Priority <= priority;
-    } else {
-        return true; // only one lock is allowed despite of its priority
-    }
+    return HasSameOrHigherPriorityLock(node.Locks, priority);
 }
 
 void TNodesCounterBase::LockNode(ui32 nodeId, i32 priority) {
@@ -91,21 +80,13 @@ void TNodesCounterBase::LockNode(ui32 nodeId, i32 priority) {
         }
     }
 
-    TLock lock(priority);
-    auto pos = LowerBound(node.Locks.begin(), node.Locks.end(), lock, [](auto &l, auto &r) {
-        return l.Priority < r.Priority;
-    });
-    node.Locks.insert(pos, std::move(lock));
+    AddPriorityLock(node.Locks, TLock(priority));
 }
 
 void TNodesCounterBase::UnlockNode(ui32 nodeId, i32 priority) {
     auto& node = Nodes[nodeId];
 
-    auto pos = LowerBoundBy(node.Locks.begin(), node.Locks.end(), priority, [](auto &l) {
-        return l.Priority;
-    });
-    Y_ABORT_UNLESS(pos != node.Locks.end());
-    node.Locks.erase(pos);
+    RemovePriorityLocks(node.Locks, priority);
 
     if (node.Locks.empty()) {
         --LockedNodesCount;

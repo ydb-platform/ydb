@@ -1149,7 +1149,10 @@ TMaybeNode<TCoApply> FindMatchingApply(const TExprBase& node) {
                 return false;
             }
 
-            if (!apply.Args().Get(2).Maybe<TCoString>() && !apply.Args().Get(2).Maybe<TCoAtom>()) {
+            if (!apply.Args().Get(2).Maybe<TCoString>() &&
+                !apply.Args().Get(2).Maybe<TCoAtom>() &&
+                !apply.Args().Get(2).Maybe<TCoParameter>())
+            {
                 return false;
             }
 
@@ -1221,12 +1224,21 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
         .Add(resultColumnsVector)
         .Done();
 
+    TVector<TCoNameValueTuple> settings;
+    settings.push_back(Build<TCoNameValueTuple>(ctx, node.Pos())
+        .Name<TCoAtom>()
+            .Value("ItemsLimit")
+            .Build()
+        .Value(topSort.Count())
+        .Done());
+
     auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
         .Table(read.Table())
         .Index(read.Index())
         .Columns(searchColumns.Ptr())
         .Query(searchQuery.Ptr())
         .ResultColumns(resultColumns.Ptr())
+        .Settings<TCoNameValueTupleList>().Add(settings).Build()
         .Done();
 
     TNodeOnNodeOwnedMap replaces;
@@ -1318,6 +1330,7 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
         .Columns(searchColumns.Ptr())
         .Query(searchQuery.Ptr())
         .ResultColumns(resultColumns.Ptr())
+        .Settings<TCoNameValueTupleList>().Build()
         .Done();
 
     TNodeOnNodeOwnedMap replaces;

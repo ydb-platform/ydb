@@ -417,6 +417,7 @@ message TKqpFullTextSource {
     message TKqpQuerySettings {
         repeated TKqpPhyColumnId Columns = 4;
         optional string Query = 1;
+        TKqpPhyValue QueryValue = 5;
     }
 
     optional TKqpPhyTableId Table = 1;
@@ -425,6 +426,10 @@ message TKqpFullTextSource {
     repeated TKqpPhyColumnId Columns = 3;
 
     optional TKqpQuerySettings QuerySettings = 4;
+
+    TKqpPhyValue SkipLimit = 5;
+    TKqpPhyValue TakeLimit = 6;
+
 }
 
 message TKqpReadRangesSource {

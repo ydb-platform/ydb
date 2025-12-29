@@ -204,6 +204,50 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
 
 } // anonymous namespace end
 
+TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
+
+    TKqpReadTableFullTextIndexSettings settings;
+
+    for (const auto& tuple : node) {
+        TStringBuf name = tuple.Name().Value();
+
+        if (name == TKqpReadTableFullTextIndexSettings::ItemsLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.ItemsLimit = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::SkipLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.SkipLimit = tuple.Value().Cast().Ptr();
+        } else {
+            YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
+NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+    settings.reserve(2);
+
+    if (ItemsLimit) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(ItemsLimitSettingName)
+            .Value(ItemsLimit)
+            .Done());
+    }
+
+    if (SkipLimit) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(SkipLimitSettingName)
+            .Value(SkipLimit)
+            .Done());
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
 TKqpReadTableSettings TKqpReadTableSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
     return ParseInternal(node);
 }

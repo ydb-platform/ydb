@@ -1360,7 +1360,38 @@ private:
             }
 
             FillColumns(columns, *tableMeta, fullTextProto, false);
-            fullTextProto.MutableQuerySettings()->SetQuery(TString(settings.Query().Cast<TCoString>().Literal().Value()));
+            {
+                TExprBase expr(settings.Query().Raw());
+                if (expr.Maybe<TCoString>()) {
+                    auto* literal = fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableLiteralValue();
+                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
+                    literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+                } else if (expr.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected VectorTopKTarget callable '" << expr.Ref().Content()
+                        << "'. Expected TCoString or TCoParameter.");
+                }
+            }
+
+            TKqpReadTableFullTextIndexSettings settingsObj = TKqpReadTableFullTextIndexSettings::Parse(settings.Settings().Cast());
+            if (settingsObj.ItemsLimit) {
+
+                auto itemsLimit = TExprBase(settingsObj.ItemsLimit);
+                if (itemsLimit.Maybe<TCoUint64>()) {
+                    auto* literal = fullTextProto.MutableTakeLimit()->MutableLiteralValue();
+
+                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+
+                    literal->MutableValue()->SetUint64(FromString<ui64>(itemsLimit.Cast<TCoUint64>().Literal().Value()));
+                } else if (itemsLimit.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableTakeLimit()->MutableParamValue()->SetParamName(itemsLimit.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected ItemsLimit callable " << itemsLimit.Ref().Content());
+                }
+            }
             FillColumns(settings.Columns().Cast(), *tableMeta, *fullTextProto.MutableQuerySettings(), false);
         } else {
             YQL_ENSURE(false, "Unsupported source type");

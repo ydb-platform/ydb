@@ -78,6 +78,14 @@ TScheme::TPtr BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& na
 namespace {
 
 NYT::TNode CreateTypeNode(const TString& fieldType) {
+    if (fieldType.Contains("Decimal")) {
+        return NYT::TNode::CreateList()
+            .Add("DataType")
+            .Add("Decimal")
+            .Add(10)
+            .Add(2);
+    }
+
     return NYT::TNode::CreateList()
         .Add("DataType")
         .Add(fieldType);

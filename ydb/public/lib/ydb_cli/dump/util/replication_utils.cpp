@@ -230,7 +230,7 @@ bool RewriteCreateTransferQuery(
     const TString& dbPath,
     NYql::TIssues& issues) {
 
-    if (!RewriteSecretsNoCheck(query, dbRestoreRoot, issues)) {
+    if (!RewriteQuerySecretsNoCheck(query, dbRestoreRoot, issues)) {
         return false;
     }
     return RewriteCreateTransferQueryNoSecrets(query, dbRestoreRoot, dbPath, issues);

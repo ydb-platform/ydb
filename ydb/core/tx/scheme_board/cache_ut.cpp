@@ -226,7 +226,10 @@ void TCacheTestBase::CreateAndMigrateWithoutDecision(ui64& txId) {
 class TCacheTest: public TCacheTestBase {
 public:
     void SetUp() override {
-        TTestWithSchemeshard::SetUp();
+        TTestWithSchemeshard::PrepareContext();
+        Context->GetAppData().FeatureFlags.SetEnableRealSystemViewPaths(true);
+
+        TTestWithSchemeshard::BootActors();
         TCacheTestBase::BootSchemeCache();
         TCacheTestBase::AlterSubDomain();
     }
@@ -464,44 +467,45 @@ void TCacheTest::CheckAccess() {
     TestNavigateByTableId(entry.TableId, TNavigate::EStatus::Ok, "/Root/DirA", "user0@builtin");
 }
 
+void TCacheTest::SystemViews() {
+    auto entry = TestNavigate("/Root/.sys", TNavigate::EStatus::Ok, TString(), TNavigate::OpList);
+    auto tableId = entry.TableId;
+    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "");
+    UNIT_ASSERT(entry.Kind == TNavigate::KindPath);
+
+    TestNavigateByTableId(tableId, TNavigate::EStatus::Ok, "/Root/.sys", TString(), TNavigate::OpPath);
+
+    entry = TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable);
+    tableId = entry.TableId;
+    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "");
+    UNIT_ASSERT(entry.Kind == TNavigate::KindSysView);
+
+    UNIT_ASSERT(entry.SysViewInfo);
+    const auto sysViewType = entry.SysViewInfo->Description.GetType();
+    UNIT_ASSERT(sysViewType == NKikimrSysView::EPartitionStats);
+
+    TestNavigateByTableId(tableId, TNavigate::EStatus::Ok, "/Root/.sys/partition_stats", TString(), TNavigate::OpTable);
+}
+
 void TCacheTest::CheckSystemViewAccess() {
     ui64 txId = 100;
-    TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomainA\"");
+    TestModifyACL(*Context, ++txId, "/Root/.sys", "partition_stats", TString(), "user0@builtin");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
-    TestModifyACL(*Context, ++txId, "/Root", "SubDomainA", TString(), "user0@builtin");
 
     // anonymous user as cluster admin has exclusive rights
-    auto entry = TestNavigate("/Root/SubDomainA/.sys/partition_stats",
+    auto entry = TestNavigate("/Root/.sys/partition_stats",
         TNavigate::EStatus::Ok, TString(), TNavigate::OpTable);
 
     auto tableId = entry.TableId;
-    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats");
+    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "");
+    UNIT_ASSERT(entry.Kind == TNavigate::KindSysView);
 
-    TestNavigate("/Root/SubDomainA/.sys/partition_stats",
-        TNavigate::EStatus::Ok, "user0@builtin", TNavigate::OpTable);
-
-    TestNavigate("/Root/SubDomainA/.sys/partition_stats",
-        TNavigate::EStatus::PathErrorUnknown, "user1@builtin", TNavigate::OpTable);
+    TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::Ok, "user0@builtin", TNavigate::OpTable);
+    TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::PathErrorUnknown, "user1@builtin", TNavigate::OpTable);
 
     TestResolve(tableId, TResolve::EStatus::OkData); // anonymous user as cluster admin has exclusive rights
     TestResolve(tableId, TResolve::EStatus::OkData, "user0@builtin");
     TestResolve(tableId, TResolve::EStatus::PathErrorNotExist, "user1@builtin");
-}
-
-void TCacheTest::SystemViews() {
-    auto entry = TestNavigate("/Root/.sys", TNavigate::EStatus::Ok, TString(), TNavigate::OpList);
-    auto tableId = entry.TableId;
-    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, ".sys");
-    UNIT_ASSERT_VALUES_EQUAL(tableId.PathId.LocalPathId, InvalidLocalPathId);
-    UNIT_ASSERT(entry.Kind == TNavigate::KindPath);
-
-
-    entry = TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable);
-    tableId = entry.TableId;
-    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats");
-    UNIT_ASSERT(entry.Kind == TNavigate::KindTable);
-
-    TestNavigateByTableId(tableId, TNavigate::EStatus::Ok, "/Root/.sys/partition_stats", TString(), TNavigate::OpTable);
 }
 
 void TCacheTest::SysLocks() {
@@ -1201,18 +1205,18 @@ void TCacheTestWithDrops::LookupErrorUponEviction() {
     TestNavigate("/Root/without_sync", TNavigate::EStatus::LookupError, "", TNavigate::EOp::OpPath, false, true, false);
 }
 
-class TCacheTestWithRealSystemViewPaths: public TCacheTestBase {
+class TCacheTestWithoutRealSystemViewPaths: public TCacheTestBase {
 public:
     void SetUp() override {
         TTestWithSchemeshard::PrepareContext();
-        Context->GetAppData().FeatureFlags.SetEnableRealSystemViewPaths(true);
+        Context->GetAppData().FeatureFlags.SetEnableRealSystemViewPaths(false);
 
         TTestWithSchemeshard::BootActors();
         TCacheTestBase::BootSchemeCache();
         TCacheTestBase::AlterSubDomain();
     }
 
-    UNIT_TEST_SUITE(TCacheTestWithRealSystemViewPaths);
+    UNIT_TEST_SUITE(TCacheTestWithoutRealSystemViewPaths);
     UNIT_TEST(SystemViews);
     UNIT_TEST(CheckSystemViewAccess);
     UNIT_TEST_SUITE_END();
@@ -1222,45 +1226,41 @@ public:
 
 }; // TCacheTestWithRealSystemViewPaths
 
-UNIT_TEST_SUITE_REGISTRATION(TCacheTestWithRealSystemViewPaths);
+UNIT_TEST_SUITE_REGISTRATION(TCacheTestWithoutRealSystemViewPaths);
 
-void TCacheTestWithRealSystemViewPaths::SystemViews() {
+void TCacheTestWithoutRealSystemViewPaths::SystemViews() {
     auto entry = TestNavigate("/Root/.sys", TNavigate::EStatus::Ok, TString(), TNavigate::OpList);
     auto tableId = entry.TableId;
-    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "");
+    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, ".sys");
+    UNIT_ASSERT_VALUES_EQUAL(tableId.PathId.LocalPathId, InvalidLocalPathId);
     UNIT_ASSERT(entry.Kind == TNavigate::KindPath);
-
-    TestNavigateByTableId(tableId, TNavigate::EStatus::Ok, "/Root/.sys", TString(), TNavigate::OpPath);
-
 
     entry = TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::Ok, TString(), TNavigate::OpTable);
     tableId = entry.TableId;
-    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "");
-    UNIT_ASSERT(entry.Kind == TNavigate::KindSysView);
-
-    UNIT_ASSERT(entry.SysViewInfo);
-    const auto sysViewType = entry.SysViewInfo->Description.GetType();
-    UNIT_ASSERT(sysViewType == NKikimrSysView::EPartitionStats);
+    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats");
+    UNIT_ASSERT(entry.Kind == TNavigate::KindTable);
 
     TestNavigateByTableId(tableId, TNavigate::EStatus::Ok, "/Root/.sys/partition_stats", TString(), TNavigate::OpTable);
 }
 
-void TCacheTestWithRealSystemViewPaths::CheckSystemViewAccess() {
+void TCacheTestWithoutRealSystemViewPaths::CheckSystemViewAccess() {
     ui64 txId = 100;
-    TestModifyACL(*Context, ++txId, "/Root/.sys", "partition_stats", TString(), "user0@builtin");
+    TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomainA\"");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
+    TestModifyACL(*Context, ++txId, "/Root", "SubDomainA", TString(), "user0@builtin");
 
     // anonymous user as cluster admin has exclusive rights
-    auto entry = TestNavigate("/Root/.sys/partition_stats",
+    auto entry = TestNavigate("/Root/SubDomainA/.sys/partition_stats",
         TNavigate::EStatus::Ok, TString(), TNavigate::OpTable);
 
     auto tableId = entry.TableId;
-    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "");
-    UNIT_ASSERT(entry.Kind == TNavigate::KindSysView);
+    UNIT_ASSERT_VALUES_EQUAL(tableId.SysViewInfo, "partition_stats");
 
-    TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::Ok, "user0@builtin", TNavigate::OpTable);
-    TestNavigate("/Root/.sys/partition_stats", TNavigate::EStatus::PathErrorUnknown, "user1@builtin", TNavigate::OpTable);
+    TestNavigate("/Root/SubDomainA/.sys/partition_stats",
+        TNavigate::EStatus::Ok, "user0@builtin", TNavigate::OpTable);
 
+    TestNavigate("/Root/SubDomainA/.sys/partition_stats",
+        TNavigate::EStatus::PathErrorUnknown, "user1@builtin", TNavigate::OpTable);
 
     TestResolve(tableId, TResolve::EStatus::OkData); // anonymous user as cluster admin has exclusive rights
     TestResolve(tableId, TResolve::EStatus::OkData, "user0@builtin");

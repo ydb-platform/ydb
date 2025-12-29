@@ -15,7 +15,11 @@ class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
         if self.versions[0] >= self.versions[1]:
             pytest.skip("Only check forward compatibility")
 
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(
+            extra_feature_flags={
+                'enable_real_system_view_paths': False,  # Remove after support sysview type in python SDK
+            }
+        )
 
     def collect_sysviews(self):
         sysviews = dict()

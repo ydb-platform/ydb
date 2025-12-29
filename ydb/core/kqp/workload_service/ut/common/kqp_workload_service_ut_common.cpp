@@ -693,8 +693,6 @@ private:
 
     std::unique_ptr<NYdb::NTable::TTableClient> TableClient_;
     std::unique_ptr<NYdb::NTable::TSession> TableClientSession_;
-
-    TActorId FailureInjectorActorId_;
 };
 
 }  // anonymous namespace

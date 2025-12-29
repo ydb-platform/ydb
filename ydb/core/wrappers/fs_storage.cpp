@@ -267,7 +267,7 @@ public:
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
 
-            ActiveUploads.emplace(uploadId, key);
+            ActiveUploads.emplace(uploadId, TMultipartUploadSession(key));
 
             FS_LOG_I("CreateMultipartUpload"
                 << ": key# " << key
@@ -316,7 +316,7 @@ public:
                     throw yexception() << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
                 }
-                it = ActiveUploads.emplace(uploadId, key).first;
+                it = ActiveUploads.emplace(uploadId, TMultipartUploadSession(key)).first;
             }
 
             auto& session = it->second;

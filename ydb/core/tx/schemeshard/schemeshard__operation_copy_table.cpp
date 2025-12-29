@@ -239,6 +239,11 @@ public:
                 auto dstIndex = context.SS->Indexes.at(path->ParentPathId);
                 if (dstIndex->AlterVersion < table->AlterVersion) {
                     dstIndex->AlterVersion = table->AlterVersion;
+                    // If there's ongoing alter operation, also bump alterData version to maintain invariant
+                    if (dstIndex->AlterData && dstIndex->AlterData->AlterVersion <= table->AlterVersion) {
+                        dstIndex->AlterData->AlterVersion = table->AlterVersion + 1;
+                        context.SS->PersistTableIndexAlterData(db, path->ParentPathId);
+                    }
                     context.SS->PersistTableIndexAlterVersion(db, path->ParentPathId, dstIndex);
                     context.SS->ClearDescribePathCaches(dstParentPath);
                     context.OnComplete.PublishToSchemeBoard(OperationId, path->ParentPathId);
@@ -324,6 +329,11 @@ public:
                         auto index = context.SS->Indexes.at(parentPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
+                            // If there's ongoing alter operation, also bump alterData version to maintain invariant
+                            if (index->AlterData && index->AlterData->AlterVersion <= srcTable->AlterVersion) {
+                                index->AlterData->AlterVersion = srcTable->AlterVersion + 1;
+                                context.SS->PersistTableIndexAlterData(db, parentPathId);
+                            }
                             context.SS->PersistTableIndexAlterVersion(db, parentPathId, index);
                             context.SS->ClearDescribePathCaches(parentPath);
                             context.OnComplete.PublishToSchemeBoard(OperationId, parentPathId);
@@ -341,6 +351,11 @@ public:
                         auto index = context.SS->Indexes.at(childPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
+                            // If there's ongoing alter operation, also bump alterData version to maintain invariant
+                            if (index->AlterData && index->AlterData->AlterVersion <= srcTable->AlterVersion) {
+                                index->AlterData->AlterVersion = srcTable->AlterVersion + 1;
+                                context.SS->PersistTableIndexAlterData(db, childPathId);
+                            }
                             context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
                             context.SS->ClearDescribePathCaches(childPath);
                             context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);

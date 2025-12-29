@@ -193,6 +193,11 @@ public:
                         auto index = context.SS->Indexes.at(childPathId);
                         if (index->AlterVersion < table->AlterVersion) {
                             index->AlterVersion = table->AlterVersion;
+                            // If there's ongoing alter operation, also bump alterData version to maintain invariant
+                            if (index->AlterData && index->AlterData->AlterVersion <= table->AlterVersion) {
+                                index->AlterData->AlterVersion = table->AlterVersion + 1;
+                                context.SS->PersistTableIndexAlterData(db, childPathId);
+                            }
                             context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
                             context.SS->ClearDescribePathCaches(childPath);
                             context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);

@@ -174,6 +174,11 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                         auto index = context.SS->Indexes.at(indexPathId);
                         if (index->AlterVersion < targetVersion) {
                             index->AlterVersion = targetVersion;
+                            // If there's ongoing alter operation, also bump alterData version to maintain invariant
+                            if (index->AlterData && index->AlterData->AlterVersion <= targetVersion) {
+                                index->AlterData->AlterVersion = targetVersion + 1;
+                                context.SS->PersistTableIndexAlterData(db, indexPathId);
+                            }
                             context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
                             LOG_I(DebugHint() << " Updated parent index " << indexPathId
                                   << " version to " << targetVersion);
@@ -422,8 +427,14 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                         ui64 targetVersion = (coordinatedVersion > 0) ? coordinatedVersion : table->AlterVersion + 1;
 
                         if (context.SS->Indexes[indexPathId]->AlterVersion < targetVersion) {
-                            context.SS->Indexes[indexPathId]->AlterVersion = targetVersion;
-                            context.SS->PersistTableIndexAlterVersion(db, indexPathId, context.SS->Indexes[indexPathId]);
+                            auto index = context.SS->Indexes[indexPathId];
+                            index->AlterVersion = targetVersion;
+                            // If there's ongoing alter operation, also bump alterData version to maintain invariant
+                            if (index->AlterData && index->AlterData->AlterVersion <= targetVersion) {
+                                index->AlterData->AlterVersion = targetVersion + 1;
+                                context.SS->PersistTableIndexAlterData(db, indexPathId);
+                            }
+                            context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
 
                             LOG_I("SyncIndexSchemaVersions: Index AlterVersion updated from "
                                   << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);

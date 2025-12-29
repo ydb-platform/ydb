@@ -110,6 +110,7 @@ void TPqIoTestFixture::InitSource(
             nullptr,
             actor.SelfId(),
             actor.GetHolderFactory(),
+            std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>(&actor.Alloc, [](NKikimr::NMiniKQL::TScopedAlloc*) {}),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(std::move(pqServices)),
             freeSpace);

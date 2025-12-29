@@ -46,6 +46,8 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
+
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/ptr.h>
@@ -2951,6 +2953,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    TMaybe<std::vector<TRegExMatch>> ExcludeRegexps;
+
     TString GetItemSrcPrefix(size_t i) const {
         if (i < Items.size() && Items[i].SrcPrefix) {
             return Items[i].SrcPrefix;
@@ -2964,6 +2968,10 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         return {};
     }
+
+    bool CompileExcludeRegexps(TString& errorDescription);
+
+    bool IsExcludedFromImport(const TString& path) const;
 
     explicit TImportInfo(
             const ui64 id,
@@ -3238,7 +3246,7 @@ public:
             return result;
         }
     };
-    
+
     TMap<TShardIdx, TShardStatus> Shards;
     TDeque<TShardIdx> ToUploadShards;
     THashSet<TShardIdx> InProgressShards;
@@ -3276,7 +3284,7 @@ public:
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ " 
+                << "{ "
                 << "State = " << State
                 << ", Rows = " << Rows.size()
                 << ", MaxProbability = " << MaxProbability
@@ -3402,7 +3410,7 @@ public:
     template<class TRow>
     static void FillFromRow(const TRow& row, TIndexBuildInfo* indexInfo) {
         Y_ENSURE(indexInfo); // TODO: pass by ref
-        
+
         TIndexBuildId id = row.template GetValue<Schema::IndexBuild::Id>();
         TString uid = row.template GetValue<Schema::IndexBuild::Uid>();
 
@@ -3567,7 +3575,7 @@ public:
 
         TSerializedTableRange bound{range};
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx); 
+            "AddShardStatus id# " << Id << " shard " << shardIdx);
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex) {
             AddParent(bound, shardIdx);
         }

@@ -96,8 +96,12 @@ private:
     }
 
     template<typename TEvResponse>
-    bool HandleFileLockError(const TSystemError& ex, const NActors::TActorId& sender,
-                             const TString& key, const TString& operation) {
+    bool HandleFileLockError(
+            const TSystemError& ex,
+            const NActors::TActorId& sender,
+            const TString& key,
+            const TString& operation)
+    {
         if (ex.Status() == EWOULDBLOCK) {
             FS_LOG_W(operation << ": failed to acquire lock (file is busy)"
                 << ": key# " << key);

@@ -288,6 +288,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select count(*) from `/Root/t1` as t1;
             )",
+            // non optional, optional coumn
+            /*
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(t1.a), count(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(t1.a), sum(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select min(t1.a), min(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select avg(t1.a), avg(t1.b) from `/Root/t1` as t1;
+            )",
+            */
         };
         std::vector<std::string> resultsEmptyColumns = {R"([[0u]])"};
 

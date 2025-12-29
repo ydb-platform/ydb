@@ -12,7 +12,7 @@ Data loss can occur not just physically, but also logically. For example, in the
 || **Backup method** | **Storage type** | **Backup type** | **Survives cluster failure** | **Use cases** ||
 || [{{ ydb-short-name }} CLI Dump/Restore](#files) | File system | Full backups | Yes | Local development, testing, smaller production environments ||
 || [{{ ydb-short-name }} CLI Import/Export S3](#s3) | S3-compatible storage | Full backups | Yes | Large data migration, archival, production data transfers ||
-|| [Backup collections](#backup-collections) | Cluster storage | Full and incremental backups | No | Production environments with regular backup schedules, large datasets ||
+|| [Backup collections](#backup-collections) | Cluster storage | Full and incremental backups | No | Production environments with regular backup schedules, large datasets. Available only in [Yandex Enterprise Database](../../downloads/yandex-enterprise-database.md) ||
 |#
 
 {% note info %}
@@ -64,42 +64,3 @@ Backup collections allow the use of the `BACKUP` and `RESTORE` [YQL](../../conce
 Backup collections are best suited for production environments that require scheduled backups, large datasets where incremental backups minimize data transfer, and point-in-time recovery needs.
 
 For simpler scenarios, such as one-time migrations, development environments, or small databases, consider using [export/import](#s3) or [dump/restore](#files) commands instead.
-
-{% cut "is it needed?" %}
-
-### Retention and Cleanup
-
-{% note warning %}
-
-Before deleting backups, understand chain dependencies:
-
-- **Full backups** are required for all subsequent incrementals
-- **Incremental backups** depend on the full backup and all preceding incrementals
-- Deleting any backup in a chain makes subsequent incrementals unrestorable
-
-YDB does not provide built-in chain integrity verification. Manually track which backups belong to which chain.
-
-{% endnote %}
-
-#### Safe cleanup approach {#safe-cleanup}
-
-1. Create a new full backup
-2. Verify the new backup is complete
-3. Export old backup chains to external storage if needed
-4. Delete old backup chains (full backup + all its incrementals together)
-
-```bash
-# Remove old backup chain
-ydb scheme rmdir -r .backups/collections/production_backups/20250208141425Z_full/
-ydb scheme rmdir -r .backups/collections/production_backups/20250209141519Z_incremental/
-```
-
-### Best Practices
-
-For detailed guidance on backup collection best practices, see the [Backup collection recipes](../../recipes/backup-collections/index):
-
-- [Exporting to external storage](../../recipes/backup-collections/exporting-to-external-storage) — disaster recovery with S3 or filesystem
-- [Maintenance and cleanup](../../recipes/backup-collections/maintenance-and-cleanup) — managing storage and backup chains
-- [Validation and testing](../../recipes/backup-collections/validation-and-testing) — verifying backup integrity
-
-{% endcut %}

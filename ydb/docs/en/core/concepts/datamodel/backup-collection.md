@@ -26,7 +26,7 @@ These terms are essential to understanding backup collections. For detailed defi
 - **[Incremental backup](../glossary.md#backup)**: Captures only changes (inserts, updates, deletes) since the previous backup. Requires the entire backup chain for restoration.
 - **[Backup chain](../glossary.md#backup-chain)**: An ordered sequence starting with a full backup followed by zero or more incremental backups.
 
-## Limitations
+## Limitations {#limitations}
 
 Before using backup collections, understand these constraints:
 
@@ -35,6 +35,7 @@ Before using backup collections, understand these constraints:
 - **Immutable membership**: Once created, the table list in a collection cannot be modified. To add new tables, create a new collection that includes all desired tables.
 - **No partial restore**: You cannot restore individual tables from a collection; the entire collection is restored together.
 - **External scheduling required**: {{ ydb-short-name }} does not provide built-in backup scheduling. Use external tools like cron for automated backups.
+- **Functionality is not yet supported in backup and is under development**: table movements, new tables created after collection creation, table permission changes, [vector indexes](../../concepts/glossary.md#vector-index) , [CDC](../../concepts/glossary.md#cdc), [TTL policies](../../concepts/glossary.md#ttl), auto-increment columns, [asynchronous secondary indexes](../../concepts/secondary_indexes.md#async), sequences, and entities metadata.
 
 ## Architecture
 
@@ -77,7 +78,7 @@ block-beta
 **Incremental backup** captures all changes since the previous backup:
 
 - Uses a **distributed transaction** to read changefeeds from all tables at a consistent point, ensuring referential integrity across the collection.
-- Reads accumulated changes from the changefeeds created during the full backup.
+- Reads accumulated changes from the changefeeds created since the full backup.
 - Records all modifications: inserts, updates, and deletes (as tombstone records).
 - Compacts changefeed data into incremental backup tables.
 
@@ -95,7 +96,7 @@ Changefeeds created during full backup are automatically removed when the backup
 
 ### Storage
 
-Backup collections are stored within the {{ ydb-short-name }} cluster in a dedicated directory structure:
+Backup collections are stored as tables within the {{ ydb-short-name }} cluster in a dedicated directory structure:
 
 ```text
 /Root/database/.backups/collections/
@@ -110,7 +111,7 @@ Backup collections are stored within the {{ ydb-short-name }} cluster in a dedic
 
 {% note info %}
 
-The `.backups` directory is created automatically when the first backup collection is created. Do not create this directory manually. Once it exists, you can manage backup tables within it (for example, when exporting or importing backups).
+The `.backups` directory is created automatically when the first backup collection is created. Do not create this directory manually. Once it exists, you can manage backup tables within it (for example, [when exporting or importing backups](../../devops/backup-and-recovery/full-and-incremental-backups.md#s3export)).
 
 {% endnote %}
 

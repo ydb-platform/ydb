@@ -1,5 +1,13 @@
 # Full and Incremental Backups
 
+{% include [feature_enterprise.md](../../_includes/feature_enterprise.md) %}
+
+{% note warning %}
+
+This functionality is under active development. Please be aware of existing [limitations](../../concepts/datamodel/backup-collection.md#limitations) and consult the documentation for the most up-to-date information.
+
+{% endnote %}
+
 A typical production backup setup involves:
 
 1. **Plan your backup strategy**: Determine backup frequency (daily full, hourly incremental), retention period, and external storage requirements.
@@ -14,7 +22,7 @@ A typical production backup setup involves:
 
 ## Creating Backup Collections
 
-Create a collection using SQL:
+Create a collection using YQL:
 
 ```sql
 CREATE BACKUP COLLECTION `production_backups`
@@ -42,7 +50,7 @@ A full backup creates a complete snapshot of all data in your backup collection 
 BACKUP `production_backups`;
 ```
 
-This command creates a full backup of all tables in the specified collection. The backup operation runs asynchronously and does not block normal database operations.
+This command creates a full backup of all tables in the specified collection. You can track the progress of the full backup by monitoring the progress of the corresponding SQL operation. Once the SQL operation completes, the backup is finished.
 
 ### Restoring From Backup
 
@@ -54,7 +62,7 @@ To restore data from a backup collection, use the [`RESTORE`](../../yql/referenc
 RESTORE `production_backups`;
 ```
 
-By default, this restores the most recent backup in the collection.
+By default, this restores the most recent backup in the collection. The restore operation restores the data to exactly the same locations (paths and table names) from which the backup was originally created.
 
 #### Restoring a specific backup point
 
@@ -147,7 +155,7 @@ Example output:
 RESTORE `production_backups/20250209141519Z_incremental`;
 ```
 
-## Exporting Backups to External Storage
+## Exporting Backups to External Storage {#s3export}
 
 {% note warning %}
 
@@ -159,16 +167,28 @@ By default, backups created with backup collections are stored in the cluster's 
 
 To export a backup from a collection to S3, use the `ydb export s3` command. Refer to the [Export to S3 documentation](../../reference/ydb-cli/export-import/export-s3.md) for syntax and options.
 
-Exporting all backups in a chain independently and preserving their order is important for a successful restore in the future. See the [Backup Collection Architecture Guide](../../concepts/datamodel/backup-collection.md#external-storage) for additional details and best practices on disaster recovery through external storage exports.
+Exporting all backups in a chain independently and preserving their order is important for a successful restore in the future.
 
-## Monitoring Operations
+## Monitoring Operations {#incbackup-monitoring}
 
-Backup operations run asynchronously. Monitor progress using:
+Incremental backup operations run asynchronously. Monitor progress using:
+
+### List backup operations
 
 ```bash
-# List backup operations
 ydb operation list incbackup
+┌───────────────────────────────────────┬───────┬─────────┬──────────┐
+│ id                                    │ ready │ status  │ progress │
+├───────────────────────────────────────┼───────┼─────────┼──────────┤
+│ ydb://incbackup/11?id=562949953466346 │ true  │ SUCCESS │ Done     │
+├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴╴┤
+│ Created by: root                                                   │
+│ Create time: 2025-12-26T13:05:24Z                                  │
+│ End time: 2025-12-26T13:05:25Z                                     │
+└────────────────────────────────────────────────────────────────────┘
+```
 
+```
 # Check specific operation status
 ydb operation get <operation-id>
 ```
@@ -188,3 +208,30 @@ ydb scheme ls .backups/collections/production_backups/
 Canceling backup operations is not yet supported. The `ydb operation cancel` command will return an error for backup operations.
 
 {% endnote %}
+
+## Retention and Cleanup
+
+{% note warning %}
+
+Before deleting backups, understand chain dependencies:
+
+- **Full backups** are required for all subsequent incrementals
+- **Incremental backups** depend on the full backup and all preceding incrementals
+- Deleting any backup in a chain makes subsequent incrementals unrestorable
+
+{{ ydb-short-name }} does not provide built-in chain integrity verification. Manually track which backups belong to which chain.
+
+{% endnote %}
+
+#### Safe cleanup approach {#safe-cleanup}
+
+1. Create a new full backup
+2. Verify the new backup is complete
+3. Export old backup chains to external storage if needed
+4. Delete old backup chains (full backup + all its incrementals together)
+
+```bash
+# Remove old backup chain
+ydb scheme rmdir -r .backups/collections/production_backups/20250208141425Z_full/
+ydb scheme rmdir -r .backups/collections/production_backups/20250209141519Z_incremental/
+```

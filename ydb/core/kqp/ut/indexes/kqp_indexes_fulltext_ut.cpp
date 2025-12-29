@@ -2700,11 +2700,15 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcard) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::Contains(`Text`, "are*")
+            WHERE FullText::Contains(`Text`, "aren*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "wer*ner *berg")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "edaeda*")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -2716,14 +2720,16 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcard) {
 
         CompareYson(R"([
             [[0u];["Arena Allocation"]];
-            [[1u];["Area Renaissance"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([
             [[2u];["Werner Heisenberg"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
         CompareYson(R"([
-            [[6u];["машинное обучение"]]
+            [[5u];["edaedalus"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([
+            [[6u];["машинное обучение"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
     }
 }
 

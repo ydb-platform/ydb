@@ -360,17 +360,17 @@ void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
 
         const auto& maybeCompression = columnIt->second.Compression;
         if (maybeCompression) {
-            auto compression = columnDesc.MutableCompression();
+            auto& compression = *columnDesc.MutableCompression();
             if (const auto maybeAlgorithm = maybeCompression->Algorithm) {
-                compression->SetAlgorithm(maybeAlgorithm->c_str());
+                compression.SetAlgorithm(maybeAlgorithm->c_str());
             }
             if (const auto maybeLevel = maybeCompression->Level) {
-                compression->SetLevel(*maybeLevel);
+                compression.SetLevel(*maybeLevel);
             }
         }
     }
 
-    for (TString& keyColumn : metadata->KeyColumnNames) {
+    for (const TString& keyColumn : metadata->KeyColumnNames) {
         tableDesc.AddKeyColumnNames(keyColumn);
     }
 }
@@ -407,8 +407,9 @@ bool FillSerializer(
     NKikimrSchemeOp::TOlapColumnDescription& to,
     TString& error, Ydb::StatusIds::StatusCode& code) {
 
-    if (!from)
+    if (!from) {
         return true;
+    }
 
     TString algoName;
 

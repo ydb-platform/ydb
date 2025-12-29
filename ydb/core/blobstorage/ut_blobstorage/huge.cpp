@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(HugeBlobOnlineSizeChange) {
 
     Y_UNIT_TEST(SendHugeViaDSProxy) {
         // https://github.com/ydb-platform/ydb/issues/30753
-        THugeBlobTest test = THugeBlobTest::CreateHugeBlobTest();
+        THugeBlobTest test;
         // On VDisk over MockPDisk HugeBlobSize=32513 will be 28673 because of different chunk and append block size
         // this makes target part size 28672 (since with header it is 28680 which is > 28673 on VDisk, but DSProxy didn't account for the header)
         test.SetHugeBlobSizeOnAllVDisks(32513);

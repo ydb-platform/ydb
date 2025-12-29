@@ -95,6 +95,19 @@ private:
         this->Send(sender, response.release());
     }
 
+    template<typename TEvResponse>
+    bool HandleFileLockError(const TSystemError& ex, const NActors::TActorId& sender,
+                             const TString& key, const TString& operation) {
+        if (ex.Status() == EWOULDBLOCK) {
+            FS_LOG_W(operation << ": failed to acquire lock (file is busy)"
+                << ": key# " << key);
+            ReplyError<TEvResponse>(sender, key, "File is locked by another process",
+                Aws::S3::S3Errors::SLOW_DOWN, true /* retryable */);
+            return true;
+        }
+        return false;
+    }
+
 public:
     TFsOperationActor(const TString& basePath)
         : BasePath(basePath)
@@ -186,11 +199,8 @@ public:
             file.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
-            if (ex.Status() == EWOULDBLOCK) {
-                FS_LOG_W("PutObject: failed to acquire lock (file is busy)"
-                    << ": key# " << key);
-                ReplyError<TEvPutObjectResponse>(ev->Sender, key, "File is locked by another process",
-                    Aws::S3::S3Errors::SLOW_DOWN, true /* retryable */);
+            if (!HandleFileLockError<TEvPutObjectResponse>(ex, ev->Sender, key, "PutObject")) {
+                throw;
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("PutObject failed"
@@ -273,11 +283,8 @@ public:
             auto response = std::make_unique<TEvCreateMultipartUploadResponse>(key, std::move(outcome));
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
-            if (ex.Status() == EWOULDBLOCK) {
-                FS_LOG_W("CreateMultipartUpload: failed to acquire lock (file is busy)"
-                    << ": key# " << key);
-                ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, key, "File is locked by another process",
-                    Aws::S3::S3Errors::SLOW_DOWN, true /* retryable */);
+            if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, key, "CreateMultipartUpload")) {
+                throw;
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("CreateMultipartUpload failed"
@@ -332,11 +339,8 @@ public:
             auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
-            if (ex.Status() == EWOULDBLOCK) {
-                FS_LOG_W("UploadPart: failed to acquire lock (file is busy)"
-                    << ": key# " << key);
-                ReplyError<TEvUploadPartResponse>(ev->Sender, key, "File is locked by another process",
-                    Aws::S3::S3Errors::SLOW_DOWN, true /* retryable */);
+            if (!HandleFileLockError<TEvUploadPartResponse>(ex, ev->Sender, key, "UploadPart")) {
+                throw;
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"

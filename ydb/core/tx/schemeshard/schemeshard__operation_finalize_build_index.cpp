@@ -183,23 +183,26 @@ public:
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
 
         // Sync child index versions with main table after build finalization
+        // This is only needed for backup operations where CoordinatedSchemaVersion is used
         auto tablePath = context.SS->PathsById.at(tableId);
-        for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
-            if (context.SS->PathsById.contains(childPathId)) {
-                auto childPath = context.SS->PathsById.at(childPathId);
-                if (childPath->IsTableIndex() && !childPath->Dropped()) {
-                    if (context.SS->Indexes.contains(childPathId)) {
-                        auto index = context.SS->Indexes.at(childPathId);
-                        if (index->AlterVersion < tableInfo->AlterVersion) {
-                            index->AlterVersion = tableInfo->AlterVersion;
-                            // If there's ongoing alter operation, also update alterData version to converge
-                            if (index->AlterData && index->AlterData->AlterVersion < tableInfo->AlterVersion) {
-                                index->AlterData->AlterVersion = tableInfo->AlterVersion;
-                                context.SS->PersistTableIndexAlterData(db, childPathId);
+        if (txState->CoordinatedSchemaVersion.Defined()) {
+            for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
+                if (context.SS->PathsById.contains(childPathId)) {
+                    auto childPath = context.SS->PathsById.at(childPathId);
+                    if (childPath->IsTableIndex() && !childPath->Dropped()) {
+                        if (context.SS->Indexes.contains(childPathId)) {
+                            auto index = context.SS->Indexes.at(childPathId);
+                            if (index->AlterVersion < tableInfo->AlterVersion) {
+                                index->AlterVersion = tableInfo->AlterVersion;
+                                // If there's ongoing alter operation, also update alterData version to converge
+                                if (index->AlterData && index->AlterData->AlterVersion < tableInfo->AlterVersion) {
+                                    index->AlterData->AlterVersion = tableInfo->AlterVersion;
+                                    context.SS->PersistTableIndexAlterData(db, childPathId);
+                                }
+                                context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                                context.SS->ClearDescribePathCaches(childPath);
+                                context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
                             }
-                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
-                            context.SS->ClearDescribePathCaches(childPath);
-                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
                         }
                     }
                 }

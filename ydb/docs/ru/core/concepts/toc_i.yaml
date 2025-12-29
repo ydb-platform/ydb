@@ -38,8 +38,6 @@ items:
 - name: Асинхронная репликация
   href: async-replication.md
   when: feature_async_replication
-- name: Режим bridge
-  href: bridge.md
 - name: Трансфер данных
   href: transfer.md
   when: feature_transfer

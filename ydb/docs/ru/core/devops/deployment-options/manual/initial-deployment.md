@@ -386,7 +386,7 @@ client_certificate_authorization:
   hosts:
     - host: static-node-1.ydb-cluster.com #FQDN ВМ
       host_config_id: 1
-      location:
+      walle_location:
         body: 1
         data_center: 'zone-a'
         rack: '1'

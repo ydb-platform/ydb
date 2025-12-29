@@ -5,8 +5,6 @@ items:
   href: auth_config.md
 - name: blob_storage_config
   href: blob_storage_config.md
-- name: bridge_config
-  href: bridge_config.md
 - name: client_certificate_authorization
   href: client_certificate_authorization.md
 - name: domains_config

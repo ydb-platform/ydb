@@ -18,6 +18,7 @@ from ydb.apps.dstool.lib import table
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import wait_for_and_assert
 from ydb.tests.library.harness.kikimr_cluster import KiKiMR
+from ydb.tests.library.harness.util import LogLevels
 
 logger = logging.getLogger(__name__)
 C_4GB = 4 * 2**30
@@ -28,6 +29,10 @@ CLUSTER_CONFIG = dict(
     nodes=8,
     dynamic_pdisks=[{'user_kind': 0}],
     dynamic_pdisk_size=C_4GB,
+    infer_pdisk_slot_count_settings={
+        'rot': {'unit_size': C_4GB, 'max_slots': 12}
+    },
+    additional_log_configs={'BS_NODE': LogLevels.DEBUG},
 )
 
 
@@ -41,7 +46,7 @@ def ydb_cluster(ydb_configurator, request):
         configurator=ydb_configurator,
     )
     cluster.is_local_test = True
-    cluster.start()
+    cluster.start(timeout_seconds=20)
 
     yield cluster
 
@@ -82,8 +87,9 @@ class TestBase:
     def _wait_pdisk_metrics_collected(self):
         def all_pdisk_metrics_collected():
             base_config = self.cluster.client.query_base_config().BaseConfig
+            logger.info(f"base_config=")
             return all(pdisk.PDiskMetrics.HasField('UpdateTimestamp') for pdisk in base_config.PDisk)
-        wait_for_and_assert(all_pdisk_metrics_collected, is_(True), message='All pdisk metrics collected')
+        wait_for_and_assert(all_pdisk_metrics_collected, is_(True), timeout_seconds=10, message='All pdisk metrics collected')
 
     def _trace(self, *args, with_grpc_calls=False, with_response=False):
         common.cache.clear()

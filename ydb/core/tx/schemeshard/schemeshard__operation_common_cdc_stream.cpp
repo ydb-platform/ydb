@@ -245,8 +245,10 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
                 << " parentIndexPathId# " << versionCtx.ParentPathId
                 << " indexAlterVersion# " << index->AlterVersion
                 << " targetVersion# " << targetVersion
-                << " willSync# " << (index->AlterVersion < targetVersion ? "true" : "false"));
-            if (index->AlterVersion < targetVersion) {
+                << " hasAlterData# " << (index->AlterData ? "true" : "false")
+                << " willSync# " << (index->AlterVersion < targetVersion && !index->AlterData ? "true" : "false"));
+            // Skip if there's an ongoing alter operation - it will handle version update
+            if (index->AlterVersion < targetVersion && !index->AlterData) {
                 index->AlterVersion = targetVersion;
                 context.SS->PersistTableIndexAlterVersion(db, versionCtx.ParentPathId, index);
                 indexesToPublish.push_back(versionCtx.ParentPathId);
@@ -290,8 +292,10 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
                 << " childIndexName# " << childName
                 << " indexAlterVersion# " << index->AlterVersion
                 << " targetVersion# " << targetVersion
-                << " willSync# " << (index->AlterVersion < targetVersion ? "true" : "false"));
-            if (index->AlterVersion < targetVersion) {
+                << " hasAlterData# " << (index->AlterData ? "true" : "false")
+                << " willSync# " << (index->AlterVersion < targetVersion && !index->AlterData ? "true" : "false"));
+            // Skip if there's an ongoing alter operation - it will handle version update
+            if (index->AlterVersion < targetVersion && !index->AlterData) {
                 index->AlterVersion = targetVersion;
                 context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
                 context.SS->ClearDescribePathCaches(childPath);

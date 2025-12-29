@@ -48,6 +48,7 @@ namespace NYql::NDq {
             Generic::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+            std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             TVector<Generic::TPartition>&& partitions)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
@@ -55,9 +56,17 @@ namespace NYql::NDq {
             , TokenProvider_(std::move(tokenProvider))
             , Partitions_(std::move(partitions))
             , HolderFactory_(holderFactory)
+            , Alloc_(std::move(alloc))
             , Source_(std::move(source))
         {
             IngressStats_.Level = statsLevel;
+        }
+
+        ~TGenericReadActor() {
+            if (Alloc_) {
+                TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc_);
+                ClearMkqlData();
+            }
         }
 
         void Bootstrap() {
@@ -331,10 +340,6 @@ namespace NYql::NDq {
             // freeSpace -= size;
             LastReadSplitsResponse_ = std::nullopt;
 
-            // TODO: check it, because in S3 the generic cache clearing happens only when LastFileWasProcessed:
-            // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp?rev=r11543410#L2497
-            ArrowRowContainerCache_.Clear();
-
             // Request server for the next data block
             AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator,
                                 TEvReadSplitsPart,
@@ -352,6 +357,7 @@ namespace NYql::NDq {
                                             << ": bytes " << IngressStats_.Bytes
                                             << ", rows " << IngressStats_.Rows
                                             << ", chunks " << IngressStats_.Chunks;
+            ClearMkqlData();
             TActorBootstrapped<TGenericReadActor>::PassAway();
         }
 
@@ -372,6 +378,11 @@ namespace NYql::NDq {
             return IngressStats_;
         }
 
+        // Should be called with bound MKQL alloc
+        void ClearMkqlData() {
+            ArrowRowContainerCache_.Clear();
+        }
+
     private:
         const ui64 InputIndex_;
         TDqAsyncStats IngressStats_;
@@ -388,6 +399,7 @@ namespace NYql::NDq {
 
         NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
+        const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc_;
         Generic::TSource Source_;
     };
 
@@ -432,7 +444,8 @@ namespace NYql::NDq {
                            const TVector<TString>& readRanges,
                            const NActors::TActorId& computeActorId,
                            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-                           const NKikimr::NMiniKQL::THolderFactory& holderFactory)
+                           const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+                           std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
     {
         TVector<Generic::TPartition> partitions;
         ExtractPartitionsFromParams(partitions, taskParams, readRanges);
@@ -459,6 +472,7 @@ namespace NYql::NDq {
             std::move(source),
             computeActorId,
             holderFactory,
+            std::move(alloc),
             std::move(partitions));
 
         return {actor, actor};

@@ -1565,17 +1565,15 @@ TRestoreResult TRestoreClient::CheckSecretsAndRewriteTheirPathsIfNeeded(TString&
     const TFsPath& fsPath, const TLog* log, NQuery::TQueryClient& queryClient)
 {
     auto secretSettings = GetSecretSettings(query);
-    for (auto& secretSetting : secretSettings) {
-        if (IsSchemaSecret(secretSetting.Value)) {
-            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, GetDatabase(query), dbRestoreRoot);
-        }
+    RewriteSecretSettings(secretSettings, GetDatabase(query), dbRestoreRoot);
+    for (const auto& secretSetting : secretSettings) {
         if (auto result = CheckSecretExistence(secretSetting.Value, log, queryClient); !result.IsSuccess()) {
             return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
         }
-        NYql::TIssues issues;
-        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
-           return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
-        }
+    }
+    NYql::TIssues issues;
+    if (!RewriteQuerySecrets(query, secretSettings, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 
     return Result<TRestoreResult>();

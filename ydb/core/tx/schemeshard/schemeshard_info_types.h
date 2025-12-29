@@ -3207,7 +3207,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
-    int WaitingViews = 0;
+    int WaitingSchemeObjects = 0;
 
     TSet<TActorId> Subscribers;
 

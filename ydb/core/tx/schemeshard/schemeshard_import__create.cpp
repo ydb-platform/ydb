@@ -13,6 +13,7 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -59,6 +60,31 @@ bool AllDoneOrWaiting(const THashMap<EState, int>& stateCounts) {
 // the item is to be created by query, i.e. it is not a table
 bool IsCreatedByQuery(const TItem& item) {
     return !item.CreationQuery.empty();
+}
+
+bool IsCreateViewQuery(const TString& query) {
+    return query.Contains("CREATE VIEW");
+}
+
+bool IsCreateReplicationQuery(const TString& query) {
+    return query.Contains("CREATE ASYNC REPLICATION");
+}
+
+bool RewriteCreateQuery(
+    TString& query,
+    const TString& dbRestoreRoot,
+    const TString& dbPath,
+    NYql::TIssues& issues)
+{
+    if (IsCreateViewQuery(query)) {
+        return NYdb::NDump::RewriteCreateViewQuery(query, dbRestoreRoot, true, dbPath, issues);
+    }
+    if (IsCreateReplicationQuery(query)) {
+        return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
+    }
+
+    issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
+    return false;
 }
 
 TString GetDatabase(TSchemeShard& ss) {
@@ -573,7 +599,7 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    void RetryViewsCreation(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    void RetrySchemeObjectsQueryExecution(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const auto database = GetDatabase(*Self);
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo.Items.size())) {
@@ -591,8 +617,8 @@ private:
             }
         }
         if (!retriedItems.empty()) {
-            importInfo.WaitingViews = std::ssize(retriedItems);
-            LOG_D("TImport::TTxProgress: retry view creation"
+            importInfo.WaitingSchemeObjects = std::ssize(retriedItems);
+            LOG_D("TImport::TTxProgress: retry scheme object query execution"
                 << ": id# " << importInfo.Id
                 << ", retried items# " << JoinSeq(", ", retriedItems)
             );
@@ -1098,14 +1124,14 @@ private:
         if (IsCreatedByQuery(item)) {
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
-            const TString source = TStringBuilder()
-                << importInfo->GetItemSrcPrefix(msg.ItemIdx) << NYdb::NDump::NFiles::CreateView().FileName;
+            const TString source = TStringBuilder() << item.SrcPath;
 
             NYql::TIssues issues;
-            if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
+            if (!RewriteCreateQuery(item.CreationQuery, database, item.DstPathName, issues)) {
                 issues.AddIssue(TStringBuilder() << "path: " << source);
-                return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid view creation query");
+                return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid creation query");
             }
+
             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                 Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
             ));
@@ -1244,11 +1270,11 @@ private:
                 // Cancel the import, or we will end up waiting indefinitely.
                 return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
             } else if (AllDoneOrWaiting(stateCounts)) {
-                if (stateCounts.at(EState::Waiting) == importInfo->WaitingViews) {
-                    // No progress has been made since the last view creation retry.
+                if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
+                    // No progress has been made since the last query execution retry.
                     return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
                 }
-                RetryViewsCreation(*importInfo, db, ctx);
+                RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
             }
             return;
         }
@@ -1655,7 +1681,7 @@ private:
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         } else if (AllDoneOrWaiting(stateCounts)) {
-            RetryViewsCreation(*importInfo, db, ctx);
+            RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
         }
 
         Self->PersistImportItemState(db, *importInfo, itemIdx);

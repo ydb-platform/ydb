@@ -391,4 +391,44 @@ bool IsSchemaSecret(TStringBuf secretName) {
     return secretName.StartsWith('/');
 }
 
+void RewriteSecretSettings(
+    TVector<TSecretSetting>& secretSettings,
+    const TString& database,
+    const TString& dbRestoreRoot)
+{
+    for (auto& secretSetting : secretSettings) {
+        if (IsSchemaSecret(secretSetting.Value)) {
+            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, database, dbRestoreRoot);
+        }
+    }
+}
+
+bool RewriteQuerySecrets(
+    TString& query,
+    TVector<TSecretSetting>& secretSettings,
+    NYql::TIssues issues)
+{
+    for (auto& secretSetting : secretSettings) {
+        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
+           return false;
+        }
+    }
+
+    return true;
+}
+
+bool RewriteQuerySecretsNoCheck(
+    TString& query,
+    const TString& dbRestoreRoot,
+    NYql::TIssues& issues)
+{
+    auto secretSettings = GetSecretSettings(query);
+    RewriteSecretSettings(secretSettings, GetDatabase(query), dbRestoreRoot);
+    if (!RewriteQuerySecrets(query, secretSettings, issues)) {
+        return false;
+    }
+
+    return true;
+}
+
 } // NYdb::NDump

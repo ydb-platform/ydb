@@ -8,6 +8,7 @@
 #include <library/cpp/digest/md5/md5.h>
 
 #include <util/system/hostname.h>
+#include <util/system/unaligned_mem.h>
 
 #include <format>
 
@@ -134,8 +135,6 @@ namespace NKikimr::NSqsTopic {
         if (sizeof(ui64) <= requestId.size()) [[likely]] {
             return ReadUnaligned<ui64>(requestId.data());
         }
-        ui64 result = 0;
-        memcpy(&result, requestId.data(), Min(sizeof(result), requestId.size()));
-        return result;
+        return 0;
     }
 } // namespace NKikimr::NSqsTopic

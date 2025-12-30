@@ -640,7 +640,7 @@ public:
                     inputUsesWatermarks = true;
                     if (transform && WatermarksTracker) {
                         transform->WatermarksTracker.emplace(/*logPrefix=*/"");
-                        transform->WatermarksTracker->RegisterAsyncInput(i/*TODO: , idleTimeout */);
+                        transform->WatermarksTracker->TransferInput(*WatermarksTracker, i, false);
                     }
                 }
             } else {
@@ -674,17 +674,16 @@ public:
                     if (inputChannelDesc.GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
                         inputUsesWatermarks = true;
                         if (transform && WatermarksTracker) {
-                            WatermarksTracker->UnregisterInputChannel(channelId);
                             if (!transform->WatermarksTracker) {
                                 transform->WatermarksTracker.emplace(/*logPrefix=*/"");
                             }
-                            transform->WatermarksTracker->RegisterInputChannel(channelId/*TODO: , idleTimeout */);
+                            transform->WatermarksTracker->TransferInput(*WatermarksTracker, channelId, true);
                         }
                     }
                 }
-                if (inputUsesWatermarks && transform && WatermarksTracker) {
-                    WatermarksTracker->RegisterAsyncInput(i/*TODO: , idleTimeout */);
-                }
+            }
+            if (inputUsesWatermarks && transform && WatermarksTracker) {
+                WatermarksTracker->RegisterAsyncInput(i, transform->WatermarksTracker->GetMaxIdleTimeout());
             }
 
             auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, false);

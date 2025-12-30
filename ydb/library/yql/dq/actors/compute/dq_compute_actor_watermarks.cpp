@@ -147,6 +147,13 @@ void TDqComputeActorWatermarks::Out(IOutputStream& str) const {
     Impl.Out(str);
 }
 
+void TDqComputeActorWatermarks::TransferInput(TDqComputeActorWatermarks& otherTracker, ui64 inputId, bool isChannel) {
+    Impl.TransferInput(otherTracker.Impl, TInputKey { inputId, isChannel });
+}
+
+TDuration TDqComputeActorWatermarks::GetMaxIdleTimeout() const {
+    return Impl.GetMaxIdleTimeout();
+}
 } // namespace NYql::NDq
 
 template<>

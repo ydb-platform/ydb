@@ -983,14 +983,8 @@ private:
         // Prevent dropping patterns by length
         modifiedAnalyzers.set_use_filter_length(false);
 
-        // TODO: remove logs
-        TStringBuilder log;
-        Y_DEFER { Cerr << log << Endl; };
-        log << "building matchers" << Endl;
-
         for (const TString& queryToken : NFulltext::Analyze(ToString(query), modifiedAnalyzers, '*')) {
             const TString pattern = WildcardToRegex(queryToken);
-            log << "\tpattern=" << pattern << Endl;
             TVector<wchar32> ucs4Pattern;
             NPire::NEncodings::Utf8().FromLocal(
                 pattern.data(),
@@ -1491,11 +1485,6 @@ public:
     }
 
     bool Postfilter(const TDocumentInfo& documentInfo) const {
-        // TODO: remove logs
-        TStringBuilder log;
-        Y_DEFER { Cerr << log << Endl; };
-        log << "PostFilter!" << Endl;
-
         auto analyzers = IndexDescription.GetSettings().columns(0).analyzers();
         // Prevent splitting tokens into ngrams
         analyzers.set_use_filter_ngram(false);
@@ -1506,15 +1495,11 @@ public:
 
             bool found = false;
             for (const auto& valueToken : NFulltext::Analyze(searchColumnValue, analyzers)) {
-                log << "\t\t\tvalueToken=" << valueToken << Endl;
                 if (matcher(valueToken)) {
-                    log << "\t\t\tfound!" << Endl;
                     found = true;
                     break;
                 }
-                log << "\t\t\tnot_found(" << Endl;
             }
-            log << "\t\tfound?=" << found << Endl;
 
             if (!found) {
                 return false;

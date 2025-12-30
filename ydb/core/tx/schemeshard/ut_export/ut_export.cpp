@@ -2974,4 +2974,52 @@ attributes {
             }
         )");
     }
+
+    Y_UNIT_TEST(IndexMaterializationTwoTables) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableIndexMaterialization(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        ui64 txId = 100;
+
+        for (const auto tableName : {"Table1", "Table2"}) {
+            TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableDescription {
+                  Name: "%s"
+                  Columns { Name: "key" Type: "Uint32" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+                }
+                IndexDescription {
+                  Name: "index"
+                  KeyColumnNames: ["value"]
+                }
+            )", tableName));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_prefix: "table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_prefix: "table2"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, txId);
+    }
 }

@@ -1337,6 +1337,9 @@ protected:
 
         html << "<h3>Watermarks</h3>";
         DUMP(WatermarksTracker, GetPendingWatermark, ());
+        html << "<pre>";
+        DUMP((*this), WatermarksTracker);
+        html << "</pre>";
 
         auto dumpAsyncStats = [&](auto prefix, auto& asyncStats) {
             html << prefix << "Level: " << static_cast<int>(asyncStats.Level) << "<br />";
@@ -1453,6 +1456,9 @@ protected:
                 html << "AsyncInput.InputIndex: " << input.GetInputIndex() << "<br />";
                 const auto& ingressStats = input.GetIngressStats();
                 dumpAsyncStats("AsyncInput.IngressStats."sv, ingressStats);
+            }
+            if (auto* watermarkTracker = GetInputTransformWatermarksTracker(id)) {
+                html << "<h4>WatermarksTracker</h4><pre>" << *watermarkTracker << "</pre>";
             }
         }
 

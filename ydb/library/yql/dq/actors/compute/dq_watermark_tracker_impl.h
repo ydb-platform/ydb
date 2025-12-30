@@ -4,6 +4,7 @@
 #include <util/generic/maybe.h>
 #include <util/system/types.h>
 #include <util/string/builder.h>
+#include <util/string/join.h>
 #include <util/generic/set.h>
 #include <algorithm>
 #include <deque>
@@ -169,6 +170,24 @@ public:
         return true;
     }
 
+    void Out(IOutputStream& str) const {
+        str << "Watermarks: {";
+        for (auto it = Data_.cbegin(); it != Data_.cend(); ++it) {
+            const auto& [key, data] = *it;
+            str << "\n    " << key << ": {" << " watermark: " << data.Watermark;
+            if (data.IdleTimeout != TDuration::Max()) {
+                str << ", expires: " << data.ExpiresAt << ", timeout: " << data.IdleTimeout;
+                if (!WatermarksQueue_.contains(TWatermarksQueueItem { data.Watermark, it })) {
+                    str << ", expired";
+                }
+            }
+            str << " },";
+        }
+        str << "};\n";
+        str << "LastWatermark: " << Watermark_ << ";\n";
+        str << "IdleChecks: [ " << JoinSeq(", ", InflyIdlenessChecks_) << " ];\n";
+    }
+
 private:
     TMaybe<TInstant> RecalcWatermark() {
         if (WatermarksQueue_.empty()) {
@@ -197,7 +216,7 @@ private:
 
     template <typename TTimeType, typename TMapType>
     struct TTimeState {
-        using TDataIterator = typename TMapType::iterator;
+        using TDataIterator = typename TMapType::const_iterator;
         TTimeType Time;
         TDataIterator Iterator;
         bool operator< (const TTimeState& other) const noexcept {

@@ -65,12 +65,12 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                             TABLEHEAD() {
                                 TABLER() {
                                     TABLEH() {str << "Zone";}
+                                    TABLEH() {str << "Offset";}
                                     TABLEH() {str << "Status";}
                                     TABLEH() {str << "Write Timestamp";}
                                     TABLEH() {str << "Processing Count";}
                                     TABLEH() {str << "Processing Deadline";}
                                     TABLEH() {str << "Locking Timestamp";}
-                                    TABLEH() {str << "Offset";}
                                 }
                             }
                             TABLEBODY() {
@@ -78,12 +78,12 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                                     auto message = *it;
                                     TABLER() {
                                         TABLED() { str << (message.SlowZone ? "S" : "F"); }
+                                        TABLED() { str << message.Offset; }
                                         TABLED() { str << message.Status; }
                                         TABLED() { str << message.WriteTimestamp; }
                                         TABLED() { str << message.ProcessingCount; }
                                         TABLED() { str << (TInstant::Zero() == message.ProcessingDeadline ? "" : message.ProcessingDeadline.ToString()); }
                                         TABLED() { str << (TInstant::Zero() == message.LockingTimestamp ? "" : message.LockingTimestamp.ToString()); }
-                                        TABLED() { str << message.Offset; }
                                     }
                                 }
                             }

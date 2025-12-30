@@ -250,44 +250,94 @@ public:
     }
 };
 
+class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
+    const ui64 DocCount = 0;
+    const double AvgDL = 1.0;
+    std::vector<double> IDFValues;
+    const i32 RelevanceColumnIdx = -1;
+
+public:
+    TQueryCtx(size_t wordCount, ui64 totalDocLength, ui64 docCount, i32 relevanceColumnIdx)
+        : DocCount(docCount)
+        , AvgDL(docCount > 0 ? static_cast<double>(totalDocLength) / docCount : 1.0)
+        , IDFValues(wordCount, 0.0)
+        , RelevanceColumnIdx(relevanceColumnIdx)
+    {
+    }
+
+    void AddIDFValue(size_t wordIndex, ui64 docFreq) {
+        YQL_ENSURE(wordIndex < IDFValues.size());
+        IDFValues[wordIndex] = std::log((static_cast<double>(DocCount) - static_cast<double>(docFreq) + 0.5) / (static_cast<double>(docFreq) + 0.5) + 1);
+    }
+
+    double GetK1Factor() const {
+        return K1_FACTOR;
+    }
+
+    bool NeedRelevanceColumn() const {
+        return RelevanceColumnIdx != -1;
+    }
+
+    i32 GetRelevanceColumnIdx() const {
+        return RelevanceColumnIdx;
+    }
+
+    size_t GetWordCount() const {
+        return IDFValues.size();
+    }
+
+    double GetIDFValue(ui64 wordIndex) const {
+        YQL_ENSURE(wordIndex < IDFValues.size());
+        return IDFValues[wordIndex];
+    }
+
+    double GetBFactor() const {
+        return B_FACTOR;
+    }
+
+    double GetAvgDL() const {
+        return AvgDL;
+    }
+};
+
 
 class TDocumentInfo : public TAtomicRefCount<TDocumentInfo> {
     friend class TDocumentIdPointer;
 
+    TIntrusivePtr<TQueryCtx> QueryCtx;
     TOwnedCellVec KeyCells;
     TOwnedCellVec RowCells;
     const TConstArrayRef<NScheme::TTypeInfo> DocumentKeyColumnTypes;
     TIntrusivePtr<TTableReader> MainTableReader;
     TIntrusivePtr<TTableReader> DocsTableReader;
     TDocumentId DocumentId;
-    std::vector<std::pair<ui64, ui64>> ContainingWords;
+    std::vector<ui64> ContainingWords;
     size_t NumContainingWords = 0;
     ui64 DocumentLength = 0;
 
-    i32 RelevanceColumnIdx = -1;
 
 public:
     ui64 DocumentNumId = 0;
 
-    TDocumentInfo(TOwnedCellVec&& keyCells,
+    TDocumentInfo(TIntrusivePtr<TQueryCtx> queryCtx, TOwnedCellVec&& keyCells,
         const TConstArrayRef<NScheme::TTypeInfo> documentKeyColumnTypes, TIntrusivePtr<TTableReader> mainTableReader,
-        TIntrusivePtr<TTableReader> docsTableReader, i32 relevanceColumnIdx, size_t numWords)
-        : KeyCells(std::move(keyCells))
+        TIntrusivePtr<TTableReader> docsTableReader)
+        : QueryCtx(queryCtx)
+        , KeyCells(std::move(keyCells))
         , DocumentKeyColumnTypes(documentKeyColumnTypes)
         , MainTableReader(mainTableReader)
         , DocsTableReader(docsTableReader)
         , DocumentId(KeyCells)
-        , ContainingWords(numWords)
-        , RelevanceColumnIdx(relevanceColumnIdx)
+        , ContainingWords(QueryCtx->GetWordCount())
     {}
 
     bool AllWordsContained() const {
         return NumContainingWords == ContainingWords.size();
     }
 
-    void AddContainingWord(size_t wordIndex, ui64 docFreq, ui64 termFreq) {
-        if (!ContainingWords[wordIndex].first) {
-            ContainingWords[wordIndex] = std::make_pair(docFreq, termFreq);
+    void AddContainingWord(size_t wordIndex, ui64 docFreq) {
+        if (!ContainingWords[wordIndex]) {
+            ContainingWords[wordIndex] = docFreq;
             NumContainingWords++;
         }
     }
@@ -300,21 +350,14 @@ public:
         return DocumentKeyColumnTypes;
     }
 
-    double GetBM25Score(ui64 totalDocLength, ui64 docCount) const {
+    double GetBM25Score() const {
         double score = 0;
-        double avgDocLength = 0;
-        if (docCount > 0) {
-            avgDocLength = static_cast<double>(totalDocLength) / docCount;
-        }
-
+        const double avgDocLength = QueryCtx->GetAvgDL();
+        const double documentFactor = K1_FACTOR * (1 - B_FACTOR + B_FACTOR * static_cast<double>(DocumentLength) / avgDocLength);
         for(size_t i = 0; i < ContainingWords.size(); ++i) {
-            auto [docFreq, termFreq] = ContainingWords[i];
-            double idf = std::log((docCount - termFreq + 0.5) / (termFreq + 0.5) + 1);
-            double tf = 0;
-            if (docFreq > 0) {
-                tf = (docFreq * (K1_FACTOR + 1)) / (docFreq + K1_FACTOR * (1 - B_FACTOR + B_FACTOR * DocumentLength / avgDocLength));
-            }
-
+            double docFreq = static_cast<double>(ContainingWords[i]);
+            double idf = QueryCtx->GetIDFValue(i);
+            double tf = tf = (docFreq * (K1_FACTOR + 1)) / (docFreq + documentFactor);
             score += idf * tf;
         }
         return score;
@@ -346,16 +389,16 @@ public:
         return std::make_pair(shardId, MainTableReader->GetReadRequest(readId, shardId, range));
     }
 
-    NUdf::TUnboxedValue GetRow(const NKikimr::NMiniKQL::THolderFactory& holderFactory, ui64 totalDocLength, ui64 docCount, i64& computeBytes) const {
+    NUdf::TUnboxedValue GetRow(const NKikimr::NMiniKQL::THolderFactory& holderFactory, i64& computeBytes) const {
         NUdf::TUnboxedValue* rowItems = nullptr;
         const auto& resultRowTypes = MainTableReader->GetResultColumnTypes();
-        i32 needRelevance = RelevanceColumnIdx != -1;
+        i32 needRelevance = QueryCtx->NeedRelevanceColumn() ? 1 : 0;
         auto row = holderFactory.CreateDirectArrayHolder(
             resultRowTypes.size() + needRelevance, rowItems);
 
         for(i32 i = 0, cellIndex = 0; i < static_cast<i32>(RowCells.size()) + needRelevance; ++i) {
-            if (i == RelevanceColumnIdx) {
-                double score = GetBM25Score(totalDocLength, docCount);
+            if (i == QueryCtx->GetRelevanceColumnIdx()) {
+                double score = GetBM25Score();
                 rowItems[i] = NUdf::TUnboxedValuePod(score);
                 computeBytes += 8;
                 continue;
@@ -586,7 +629,7 @@ public:
         }
     }
 
-    std::pair<ui32, TIntrusivePtr<TDocumentInfo>> BuildDocumentInfo(TIntrusivePtr<TTableReader> mainTableReader, TIntrusivePtr<TTableReader> docsTableReader, i32 relevanceColumnIdx, size_t wordCount, const TConstArrayRef<TCell>& row) {
+    std::pair<ui32, TIntrusivePtr<TDocumentInfo>> BuildDocumentInfo(TIntrusivePtr<TQueryCtx> queryCtx, TIntrusivePtr<TTableReader> mainTableReader, TIntrusivePtr<TTableReader> docsTableReader, const TConstArrayRef<TCell>& row) {
         if (Layout == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
             YQL_ENSURE(row.size() == GetResultColumnTypes().size());
             // at least it contains document id (which is at least 1 column) and frequency (which is at least 1 column)
@@ -597,7 +640,7 @@ public:
         ui32 freq = GetFrequency(row);
         TConstArrayRef<NScheme::TTypeInfo> documentKeyColumnTypes = GetDocumentKeyColumnTypes();
         auto docInfo = MakeIntrusive<TDocumentInfo>(
-            TOwnedCellVec(docId), documentKeyColumnTypes, mainTableReader, docsTableReader, relevanceColumnIdx, wordCount);
+            std::move(queryCtx), TOwnedCellVec(docId), documentKeyColumnTypes, mainTableReader, docsTableReader);
 
         return std::make_pair(freq, std::move(docInfo));
     }
@@ -962,6 +1005,8 @@ private:
             return Score > other.Score;
         }
     };
+
+    TIntrusivePtr<TQueryCtx> QueryCtx;
 
     std::priority_queue<
         TTopKDocumentInfo,
@@ -1364,7 +1409,7 @@ public:
             TIntrusivePtr<TDocumentInfo> documentInfo = ResultQueue.front();
             ResultQueue.pop_front();
 
-            auto row = documentInfo->GetRow(HolderFactory, DocCount, SumDocLength, computeBytes);
+            auto row = documentInfo->GetRow(HolderFactory, computeBytes);
             resultBatch.emplace_back(std::move(row));
             ReadBytes += documentInfo->GetRowStorageSize();
             ReadRows++;
@@ -1564,7 +1609,7 @@ public:
             it->second->SetDocumentLength(DocsTableReader->GetDocumentLength(row));
 
             if (Limit > 0) {
-                TopKQueue.push({it->second->GetBM25Score(DocCount, SumDocLength), it->second});
+                TopKQueue.push({it->second->GetBM25Score(), it->second});
                 if (TopKQueue.size() > (size_t)Limit) {
                     TopKQueue.pop();
                 }
@@ -1587,6 +1632,9 @@ public:
             CA_LOG_E("Total stats: doc count: " << DocCount << ", sum doc length: " << SumDocLength);
         }
 
+        QueryCtx = MakeIntrusive<TQueryCtx>(
+            Words.size(), SumDocLength, DocCount, RelevanceColumnIdx);
+
         StartWordReads();
     }
 
@@ -1595,6 +1643,7 @@ public:
             const auto& row = msg.GetCells(i);
             auto& word = Words[wordIndex];
             word.Frequency = DictTableReader->GetWordFrequency(row);
+            QueryCtx->AddIDFValue(wordIndex, word.Frequency);
             CA_LOG_E("Setting word frequency for word: " << wordIndex << ", frequency: " << word.Frequency);
             ContinueWordRead(word);
         }
@@ -1607,7 +1656,7 @@ public:
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
             YQL_ENSURE(IndexTableReader);
-            auto [freq, docInfo] = IndexTableReader->BuildDocumentInfo(MainTableReader, DocsTableReader, RelevanceColumnIdx, Words.size(), row);
+            auto [freq, docInfo] = IndexTableReader->BuildDocumentInfo(QueryCtx, MainTableReader, DocsTableReader, row);
             const auto docId = docInfo->GetDocumentId();
             auto [it, success] = DocumentInfos.emplace(docId, std::move(docInfo));
             if (success) {
@@ -1616,7 +1665,7 @@ public:
             }
 
             CA_LOG_E("Adding containing word: " << wordIndex << ", freq: " << freq);
-            it->second->AddContainingWord(wordIndex, freq, wordInfo.Frequency);
+            it->second->AddContainingWord(wordIndex, freq);
             wordInfo.PendingDocuments.push_back(it->second);
             if (wordInfo.HasDocumentIdPointer() && wordInfo.PendingDocuments.size() == 1) {
                 MergeQueue.push(wordInfo.GetDocumentIdPointer());

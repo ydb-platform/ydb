@@ -101,14 +101,22 @@ namespace {
         }
     }
 
-    TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer) {
+    TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer, const std::optional<wchar32> ignoredDelimiter) {
         TVector<TString> tokens;
         switch (tokenizer) {
             case Ydb::Table::FulltextIndexSettings::WHITESPACE:
-                Tokenize(text, tokens, IsWhitespace);
+                Tokenize(text, tokens, [ignoredDelimiter](const wchar32 c) {
+                    return ignoredDelimiter.has_value() && ignoredDelimiter.value() == c
+                        ? false
+                        : IsWhitespace(c);
+                });
                 break;
             case Ydb::Table::FulltextIndexSettings::STANDARD:
-                Tokenize(text, tokens, IsNonStandard);
+                Tokenize(text, tokens, [ignoredDelimiter](const wchar32 c) {
+                    return ignoredDelimiter.has_value() && ignoredDelimiter.value() == c
+                        ? false
+                        : IsNonStandard(c);
+                });
                 break;
             case Ydb::Table::FulltextIndexSettings::KEYWORD:
                 if (UTF8Detect(text) != NotUTF8) {
@@ -275,8 +283,8 @@ namespace {
     }
 }
 
-TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {
-    TVector<TString> tokens = Tokenize(text, settings.tokenizer());
+TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, const std::optional<wchar32> ignoredDelimiter) {
+    TVector<TString> tokens = Tokenize(text, settings.tokenizer(), ignoredDelimiter);
 
     if (settings.use_filter_lowercase()) {
         for (auto i : xrange(tokens.size())) {

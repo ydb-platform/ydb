@@ -19,6 +19,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
+#include <library/cpp/regex/pire/pire.h>
 #include <library/cpp/threading/hot_swap/hot_swap.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -32,6 +33,7 @@
 #include <util/string/escape.h>
 
 #include <cmath>
+#include <regex>
 
 namespace NKikimr {
 namespace NKqp {
@@ -51,6 +53,22 @@ constexpr double K1_FACTOR = 1.2;
 constexpr double B_FACTOR = 0.75;
 
 class TDocumentIdPointer;
+
+namespace {
+
+TString WildcardToRegex(const std::string& pattern) {
+    // First, escape all regex special characters except *
+    static const std::regex escapeRegex(R"re([\^\$\.\\\+\?\(\)\|\{\}\[\]])re");
+    std::string escaped = std::regex_replace(pattern, escapeRegex, "\\$&");
+
+    // Then replace * with .*
+    static const std::regex starRegex("\\*");
+    std::string result = std::regex_replace(escaped, starRegex, ".*");
+
+    return result;
+}
+
+}
 
 class TTableReader : public TAtomicRefCount<TTableReader> {
     TIntrusivePtr<TKqpCounters> Counters;
@@ -934,6 +952,8 @@ private:
     bool NavigateIndexInProgress = false;
     bool PendingNotify = false;
 
+    TVector<std::function<bool(TStringBuf)>> PostfilterMatchers;
+
     std::priority_queue<TDocumentIdPointer, TVector<TDocumentIdPointer>> MergeQueue;
     std::deque<TIntrusivePtr<TDocumentInfo>> ResultQueue;
     TActorId PipeCacheId;
@@ -944,6 +964,42 @@ private:
     // Helper to bind allocator
     TGuard<NMiniKQL::TScopedAlloc> BindAllocator() {
         return TGuard<NMiniKQL::TScopedAlloc>(*Alloc);
+    }
+
+    void GeneratePostfilterMatchers(const Ydb::Table::FulltextIndexSettings::Analyzers& analyzers, const TStringBuf query) {
+        if (!analyzers.use_filter_ngram() && !analyzers.use_filter_edge_ngram()) { // TODO: Replace with specific member
+            return;
+        }
+
+        auto modifiedAnalyzers = analyzers;
+        // Prevent splitting tokens into ngrams
+        modifiedAnalyzers.set_use_filter_ngram(false);
+        modifiedAnalyzers.set_use_filter_edge_ngram(false);
+        // Prevent dropping patterns by length
+        modifiedAnalyzers.set_use_filter_length(false);
+
+        // TODO: remove logs
+        TStringBuilder log;
+        Y_DEFER { Cerr << log << Endl; };
+        log << "building matchers" << Endl;
+
+        for (const TString& queryToken : NFulltext::Analyze(ToString(query), modifiedAnalyzers, '*')) {
+            const TString pattern = WildcardToRegex(queryToken);
+            log << "\tpattern=" << pattern << Endl;
+            TVector<wchar32> ucs4Pattern;
+            NPire::NEncodings::Utf8().FromLocal(
+                pattern.data(),
+                pattern.data() + pattern.size(),
+                std::back_inserter(ucs4Pattern));
+
+            auto regex = NPire::TLexer(ucs4Pattern.begin(), ucs4Pattern.end())
+                .SetEncoding(NPire::NEncodings::Utf8())
+                .Parse().Compile<NPire::TScanner>();
+
+            PostfilterMatchers.push_back([regex=std::move(regex)](const TStringBuf str) {
+                return Pire::Matches(regex, str);
+            });
+        }
     }
 
     void ExtractAndTokenizeExpression() {
@@ -963,6 +1019,8 @@ private:
                         YQL_ENSURE(IndexTableReader);
                         Words.emplace_back(TWordReadState(wordIndex++, query, IndexTableReader));
                     }
+
+                    GeneratePostfilterMatchers(analyzer.analyzers(), expr);
                 }
             }
         }

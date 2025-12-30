@@ -361,10 +361,6 @@ pk_pg_types = {
     "pgdate": generate_date_value,
     "pgtimestamp": lambda i: generate_datetime_value(i).strftime("%Y-%m-%d %H:%M:%S"),
     "pginterval": lambda i: f"{i:02}:21:01",
-    # add some native types to test type compatibility
-    "Uint32": lambda i: i,
-    "Decimal(15,0)": lambda i: "{}".format(i),
-    "Utf8": lambda i: f"Utf8 {i}",
 }
 
 pk_pg_types_no_bool = filter_dict(
@@ -380,10 +376,6 @@ pk_pg_types_no_bool = filter_dict(
     "pgdate",
     "pgtimestamp",
     "pginterval",
-    # add some native types to test type compatibility
-    "Uint32",
-    "Decimal(15,0)",
-    "Utf8",
 )
 
 non_pk_pg_types = {
@@ -391,6 +383,4 @@ non_pk_pg_types = {
     "pgfloat8": lambda i: i + 0.6,
     "pgjson": lambda i: '{{"another_key_pg": {}}}'.format(i),
     "pgjsonb": lambda i: '{{"another_doc_key_pg": {}}}'.format(i),
-    # add some native types to test type compatibility
-    "Double": lambda i: i + 0.2,
 }

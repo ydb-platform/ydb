@@ -47,6 +47,25 @@ def numeric_sort_key(s, type):
     return s
 
 
+def assert_bool_types(type, rows):
+    errors = []
+    if len(rows) != 2:
+        errors.append(f"Expected 2 rows, got {len(rows)} for type {type}")
+    if type == "Bool":
+        if rows[0][0] is not False:
+            errors.append(f"Expected False at first row, got {rows[0][0]} for type {type}")
+        if rows[1][0] is not True:
+            errors.append(f"Expected True at second row, got {rows[1][0]} for type {type}")
+    elif type == "pgbool":
+        if rows[0][0] != 'f':
+            errors.append(f"Expected 'f' (False) at first row, got {rows[0][0]} for type {type}")
+        if rows[1][0] != 't':
+            errors.append(f"Expected 't' (True) at second row, got {rows[1][0]} for type {type}")
+    else:
+        errors.append(f"Unknown bool type: {type}")
+    assert not errors, "errors occured:\n{}".format("\n".join(errors))
+
+
 class TestSelectBase(TestBase):
     def do_test_select(
         self,
@@ -161,14 +180,8 @@ class TestSelectBase(TestBase):
             ):
                 rows_distinct = self.query(f"SELECT DISTINCT col_{cleanup_type_name(type)} from {table_name}")
                 rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
-                if type == "Bool":
-                    assert len(rows_distinct) == 2
-                    assert rows_distinct[0][0] is False
-                    assert rows_distinct[1][0] is True
-                elif type == "pgbool":
-                    assert len(rows_distinct) == 2
-                    assert rows_distinct[0][0] == 'f'
-                    assert rows_distinct[1][0] == 't'
+                if type in ("Bool", "pgbool"):
+                    assert_bool_types(type, rows_distinct)
                 else:
                     for i in range(len(rows_distinct)):
                         dml.assert_type(all_types, type, i + 1, rows_distinct[i][0])
@@ -176,14 +189,8 @@ class TestSelectBase(TestBase):
             if type not in unsupported_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT pk_{cleanup_type_name(type)} from {table_name}")
                 rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
-                if type == "Bool":
-                    assert len(rows_distinct) == 2
-                    assert rows_distinct[0][0] is False
-                    assert rows_distinct[1][0] is True
-                elif type == "pgbool":
-                    assert len(rows_distinct) == 2
-                    assert rows_distinct[0][0] == 'f'
-                    assert rows_distinct[1][0] == 't'
+                if type in ("Bool", "pgbool"):
+                    assert_bool_types(type, rows_distinct)
                 else:
                     for i in range(len(rows_distinct)):
                         dml.assert_type(pk_types, type, i + 1, rows_distinct[i][0])
@@ -191,14 +198,8 @@ class TestSelectBase(TestBase):
             if type not in unsupported_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT col_index_{cleanup_type_name(type)} from {table_name}")
                 rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
-                if type == "Bool":
-                    assert len(rows_distinct) == 2
-                    assert rows_distinct[0][0] is False
-                    assert rows_distinct[1][0] is True
-                elif type == "pgbool":
-                    assert len(rows_distinct) == 2
-                    assert rows_distinct[0][0] == 'f'
-                    assert rows_distinct[1][0] == 't'
+                if type in ("Bool", "pgbool"):
+                    assert_bool_types(type, rows_distinct)
                 else:
                     for i in range(len(rows_distinct)):
                         dml.assert_type(index, type, i + 1, rows_distinct[i][0])

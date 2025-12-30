@@ -2403,9 +2403,9 @@ private:
     }
 
     i64 GetMemory() const {
-        return (WriteTableActor && WriteTableActor->IsReady())
+        return DataBufferMemory + ((WriteTableActor && WriteTableActor->IsReady())
             ? WriteTableActor->GetMemory()
-            : 0;
+            : 0);
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
@@ -2434,7 +2434,9 @@ private:
         try {
             if (!data.empty()) {
                 Batcher->AddData(data);
-                DataBuffer.emplace(Batcher->Build());
+                auto batch = Batcher->Build();
+                DataBufferMemory += batch->GetMemory();
+                DataBuffer.emplace(std::move(batch));
             }
 
             if (checkpoint) {
@@ -2472,7 +2474,9 @@ private:
                 DataBuffer.pop();
 
                 if (std::holds_alternative<IDataBatchPtr>(variant)) {
-                    WriteTableActor->Write(WriteToken, std::get<IDataBatchPtr>(std::move(variant)));
+                    auto data = std::get<IDataBatchPtr>(std::move(variant));
+                    DataBufferMemory -= data->GetMemory();
+                    WriteTableActor->Write(WriteToken, std::move(data));
                 } else if (std::holds_alternative<NYql::NDqProto::TCheckpoint>(variant)) {
                     CheckpointInProgress = std::get<NYql::NDqProto::TCheckpoint>(std::move(variant));
                     WriteTableActor->FlushBuffers();
@@ -2629,6 +2633,7 @@ private:
     TKqpTableWriteActor::TWriteToken WriteToken = 0;
     std::queue<std::variant<IDataBatchPtr, NYql::NDqProto::TCheckpoint>> DataBuffer;
     std::optional<NYql::NDqProto::TCheckpoint> CheckpointInProgress;
+    i64 DataBufferMemory = 0;
 
     bool Closed = false;
     bool WaitingForTableActor = false;

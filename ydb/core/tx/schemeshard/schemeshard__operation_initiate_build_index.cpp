@@ -174,46 +174,11 @@ public:
         context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
 
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
-        // Use coordinated version if available (from backup operations)
-        // Otherwise, increment by 1 for backward compatibility
-        if (txState->CoordinatedSchemaVersion.Defined()) {
-            tableInfo->AlterVersion = *txState->CoordinatedSchemaVersion;
-        } else {
-            tableInfo->AlterVersion += 1;
-        }
+        tableInfo->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
 
         auto tablePath = context.SS->PathsById.at(txState->TargetPathId);
         context.SS->ClearDescribePathCaches(tablePath);
-
-        // Sync child index versions with main table to prevent version mismatch
-        // This is only needed for backup operations where CoordinatedSchemaVersion is used
-        // to keep all related entities at the same version
-        if (txState->CoordinatedSchemaVersion.Defined()) {
-            for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
-                if (context.SS->PathsById.contains(childPathId)) {
-                    auto childPath = context.SS->PathsById.at(childPathId);
-                    if (childPath->IsTableIndex() && !childPath->Dropped()) {
-                        if (context.SS->Indexes.contains(childPathId)) {
-                            auto index = context.SS->Indexes.at(childPathId);
-                            if (index->AlterVersion < tableInfo->AlterVersion) {
-                                index->AlterVersion = tableInfo->AlterVersion;
-                                // If there's ongoing alter operation, also update alterData version to converge
-                                if (index->AlterData && index->AlterData->AlterVersion < tableInfo->AlterVersion) {
-                                    index->AlterData->AlterVersion = tableInfo->AlterVersion;
-                                    context.SS->PersistTableIndexAlterData(db, childPathId);
-                                }
-                                context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
-                                context.SS->ClearDescribePathCaches(childPath);
-                                context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Publish main table LAST so its TIndexDescription.SchemaVersion values are current
         context.OnComplete.PublishToSchemeBoard(OperationId, tablePath->PathId);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);

@@ -18,9 +18,9 @@ class Workload():
         self.prefix = prefix
         self.input_topic = f'{prefix}/input_topic'
         self.output_topic = f'{prefix}/output_topic'
-        self.query_name = f'{prefix}/query_name'
+        self.query_name = f'{prefix}/query_name'for i in range(100):
         self.consumer_name = 'consumer_name'
-        self.partitions_count = 1 #partitions_count
+        self.partitions_count = partitions_count
         self.receive_message_timeout_sec = 1
         logger.info("Workload::init")
 
@@ -104,7 +104,7 @@ class Workload():
         for writer in writers:
             while time.time() < finished_at:
                 messages = []
-                for i in range(1):
+                for i in range(100):
                     level = "error" if random.choice([True, False]) else "warn"
                     messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
                 try:

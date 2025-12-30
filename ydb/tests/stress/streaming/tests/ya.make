@@ -25,7 +25,6 @@ PEERDIR(
     ydb/tests/stress/streaming/workload
 )
 
-TIMEOUT(120)
 END()
 
 ENDIF()

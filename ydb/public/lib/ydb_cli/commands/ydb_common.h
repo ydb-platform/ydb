@@ -59,4 +59,12 @@ inline TDuration ParseDurationMilliseconds(TStringBuf str) {
     });
 }
 
+// Parse duration in seconds with support for new format (e.g., "5s", "100ms", "2m")
+// If input is a plain number, it's interpreted as seconds (for backward compatibility)
+inline TDuration ParseDurationSeconds(TStringBuf str) {
+    return ParseDurationWithDefaultUnit(str, [](double sec) {
+        return TDuration::Seconds(static_cast<ui64>(sec));
+    });
+}
+
 } // namespace NYdb::NConsoleClient

@@ -1168,10 +1168,10 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .RequiredArgument("INDEX")
             .StoreResult(&PartitionId_);
-        config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno")
+        config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno. Supports time units (e.g., '5s', '1m'). Plain number interpreted as seconds.")
             .Optional()
             .Hidden()
-            .Handler([this](const TString& arg) { MessagesWaitTimeout_ = TDuration::Seconds(FromString<ui8>(arg)); });
+            .StoreMappedResult(&MessagesWaitTimeout_, &ParseDurationSeconds);
 
         AddTransform(config);
     }

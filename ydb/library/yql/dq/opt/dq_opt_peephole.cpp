@@ -1050,12 +1050,9 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, b
         return ctx.DeepCopyLambda(prev.Ref());
     };
 
-    //auto inputFromFlow = NNodes::TExprBase(ctx.Builder(node.Pos()).Callable("FromFlow").Add(0, wideCombiner.Input().Ptr()).Seal().Build());
-
     // TODO: Use a separate Callable for aggregations (TDqPhyHashAggregate)
     auto dqPhyCombine = Build<TDqPhyHashCombine>(ctx, node.Pos())
         .Input(wideCombiner.Input().Ptr())
-        //.Input(inputFromFlow)
         .MemLimit(wideCombiner.MemLimit())
         .KeyExtractor(copyLambda(wideCombiner.KeyExtractor()))
         .InitHandler(copyLambda(wideCombiner.InitHandler()))
@@ -1064,15 +1061,6 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, b
     .Done();
 
     return NNodes::TExprBase(dqPhyCombine);
-    /*
-    return NNodes::TExprBase(
-        ctx.Builder(node.Pos())
-            .Callable("ToFlow")
-                .Add(0, dqPhyCombine.Ptr())
-            .Seal()
-            .Build()
-    );
-    */
 }
 
 NNodes::TExprBase DqPeepholeRewriteWideCombinerToDqHashAggregator(const NNodes::TExprBase& node, TExprContext& ctx) {

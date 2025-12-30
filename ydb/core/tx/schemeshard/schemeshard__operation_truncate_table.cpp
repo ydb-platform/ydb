@@ -302,26 +302,23 @@ public:
             tablePath.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
             tablePath.Base()->LastTxId = OperationId.GetTxId();
 
-            NIceDb::TNiceDb db(context.GetDB());
+            context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
+            context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+            context.DbChanges.PersistPath(tablePath.Base()->PathId);
+            context.DbChanges.PersistTxState(OperationId);
 
             TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxTruncateTable, tablePath.Base()->PathId);
-            context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
+            txState.State = TTxState::ConfigureParts;
 
-            context.SS->PersistPath(db, tablePath.Base()->PathId);
-
-            auto persistShard = [&](const TTableShardInfo& shard) {
+            for (const auto& shard : table->GetPartitions()) {
                 auto shardIdx = shard.ShardIdx;
                 TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
                 txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
                 shardInfo.CurrentTxId = OperationId.GetTxId();
-                context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
-            };
-
-            for (const auto& shard : table->GetPartitions()) {
-                persistShard(shard);
+                context.MemChanges.GrabShard(context.SS, shardIdx);
+                context.DbChanges.PersistShard(shardIdx);
             }
-
-            context.SS->PersistTxState(db, OperationId);
 
             {
                 if (tablePath.Parent()->IsTableIndex()) {

@@ -11,6 +11,7 @@ Provides classes and functions for:
 import os
 import subprocess
 import logging
+import traceback
 import yatest.common
 import shutil
 import allure
@@ -18,6 +19,17 @@ from time import time
 from typing import Union, Optional, Tuple, List, Dict, Any, NamedTuple
 
 LOGGER = logging.getLogger(__name__)
+
+
+def patch_max_suffix(max_ssh_count: int = 1000000):
+    target_func = yatest.common.path.get_unique_file_path
+
+    if target_func.__defaults__:
+        defaults = list(target_func.__defaults__)
+
+        defaults[-1] = max_ssh_count
+
+        target_func.__defaults__ = tuple(defaults)
 
 
 class ExecutionResult(NamedTuple):
@@ -374,7 +386,7 @@ class RemoteExecutor:
             except Exception as e:
                 if raise_on_error:
                     raise
-                LOGGER.error(f"Unexpected error executing SSH command on {host}: {e}")
+                LOGGER.error(f"Unexpected error executing SSH command on {host}: {traceback.format_exc()}")
                 return ExecutionResult(
                     stdout="",
                     stderr="",

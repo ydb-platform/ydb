@@ -218,7 +218,8 @@ class StressRunExecutor:
                                 )
                             else:
                                 logging.warning(
-                                    f"Run {current_iteration} on {node_host} failed")
+                                    f"Run {current_iteration} on {node_host} failed. Continuing after 120s delay")
+                                time_module.sleep(120)
                             current_iteration += 1
                             run_duration = planned_end_time - time_module.time()
                     node_result.end_time = time_module.time()

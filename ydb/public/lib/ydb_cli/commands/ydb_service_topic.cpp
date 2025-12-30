@@ -940,7 +940,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
-        config.Opts->AddLongOption("idle-timeout", "Max wait duration for the first message. Topic is considered empty if no new messages arrive within this period.")
+        config.Opts->AddLongOption("idle-timeout", "Max wait duration for the first message. Topic is considered empty if no new messages arrive within this period. Supports time units (e.g., '5s', '1m').")
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
             .StoreResult(&IdleTimeout_);

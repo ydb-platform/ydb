@@ -90,10 +90,10 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 
     config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
 
-    config.Opts->AddLongOption("global-timeout", "Global timeout for all requests")
+    config.Opts->AddLongOption("global-timeout", "Global timeout for all requests. Supports time units (e.g., '5s', '1m').")
         .StoreResult(&GlobalTimeout);
 
-    config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request")
+    config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request. Supports time units (e.g., '5s', '1m').")
         .StoreResult(&RequestTimeout);
 
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads in workload")

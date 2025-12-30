@@ -59,3 +59,8 @@ class Driver(pool.ConnectionPool):
         self.scheme_client = scheme.SchemeClient(self)
         self.table_client = table.TableClient(self, config.table_client_settings)
         self.topic_client = topic.TopicClientAsyncIO(self, config.topic_client_settings)
+
+    async def stop(self, timeout=10):
+        await self.table_client._stop_pool_if_needed(timeout=timeout)
+        self.topic_client.close()
+        await super().stop(timeout=timeout)

@@ -281,6 +281,67 @@ def parameters_to_pb(parameters_types, parameters_values):
     return param_values_pb
 
 
+def query_parameters_to_pb(parameters):
+    if parameters is None or not parameters:
+        return {}
+
+    parameters_types = {}
+    parameters_values = {}
+    for name, value in parameters.items():
+        if isinstance(value, types.TypedValue):
+            if value.value_type is None:
+                value.value_type = _type_from_python_native(value.value)
+        elif isinstance(value, tuple):
+            value = types.TypedValue(*value)
+        else:
+            value = types.TypedValue(value, _type_from_python_native(value))
+
+        parameters_values[name] = value.value
+        parameters_types[name] = value.value_type
+
+    return parameters_to_pb(parameters_types, parameters_values)
+
+
+_from_python_type_map = {
+    int: types.PrimitiveType.Int64,
+    float: types.PrimitiveType.Double,
+    bool: types.PrimitiveType.Bool,
+    str: types.PrimitiveType.Utf8,
+    bytes: types.PrimitiveType.String,
+}
+
+
+def _type_from_python_native(value):
+    t = type(value)
+
+    if t in _from_python_type_map:
+        return _from_python_type_map[t]
+
+    if t == list:
+        if len(value) == 0:
+            raise ValueError(
+                "Could not map empty list to any type, please specify "
+                "it manually by tuple(value, type) or ydb.TypedValue"
+            )
+        entry_type = _type_from_python_native(value[0])
+        return types.ListType(entry_type)
+
+    if t == dict:
+        if len(value) == 0:
+            raise ValueError(
+                "Could not map empty dict to any type, please specify "
+                "it manually by tuple(value, type) or ydb.TypedValue"
+            )
+        entry = list(value.items())[0]
+        key_type = _type_from_python_native(entry[0])
+        value_type = _type_from_python_native(entry[1])
+        return types.DictType(key_type, value_type)
+
+    raise ValueError(
+        "Could not map value to any type, please specify it manually by tuple(value, type) or ydb.TypedValue"
+    )
+
+
 def _unwrap_optionality(column):
     c_type = column.type
     current_type = c_type.WhichOneof("type")
@@ -291,16 +352,17 @@ def _unwrap_optionality(column):
 
 
 class _ResultSet(object):
-    __slots__ = ("columns", "rows", "truncated", "snapshot")
+    __slots__ = ("columns", "rows", "truncated", "snapshot", "index")
 
-    def __init__(self, columns, rows, truncated, snapshot=None):
+    def __init__(self, columns, rows, truncated, snapshot=None, index=None):
         self.columns = columns
         self.rows = rows
         self.truncated = truncated
         self.snapshot = snapshot
+        self.index = index
 
     @classmethod
-    def from_message(cls, message, table_client_settings=None, snapshot=None):
+    def from_message(cls, message, table_client_settings=None, snapshot=None, index=None):
         rows = []
         # prepare column parsers before actuall parsing
         column_parsers = []
@@ -323,7 +385,7 @@ class _ResultSet(object):
                 column_parser, unwrapped_type = column_info
                 row[column.name] = column_parser(unwrapped_type, value, table_client_settings)
             rows.append(row)
-        return cls(message.columns, rows, message.truncated, snapshot)
+        return cls(message.columns, rows, message.truncated, snapshot, index)
 
     @classmethod
     def lazy_from_message(cls, message, table_client_settings=None, snapshot=None):

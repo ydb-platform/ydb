@@ -268,6 +268,7 @@ def alter_table_request_factory(
     alter_partitioning_settings,
     set_key_bloom_filter,
     set_read_replicas_settings,
+    rename_indexes,
 ):
     request = session_state.attach_request(_apis.ydb_table.AlterTableRequest(path=path))
     if add_columns is not None:
@@ -315,6 +316,10 @@ def alter_table_request_factory(
 
     if set_read_replicas_settings is not None:
         request.set_read_replicas_settings.MergeFrom(set_read_replicas_settings.to_pb())
+
+    if rename_indexes is not None:
+        for rename_index in rename_indexes:
+            request.rename_indexes.add().MergeFrom(rename_index.to_pb())
 
     return request
 

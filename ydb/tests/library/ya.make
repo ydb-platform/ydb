@@ -116,4 +116,7 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    test_meta
+)
 RECURSE_FOR_TESTS(ut)

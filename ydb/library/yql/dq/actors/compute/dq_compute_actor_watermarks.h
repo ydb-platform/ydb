@@ -33,6 +33,8 @@ public:
     void UnregisterAsyncInput(ui64 inputId, bool silent = false);
     void UnregisterInputChannel(ui64 inputId, bool silent = false);
 
+    void TransferInput(TDqComputeActorWatermarks &otherTracker, ui64 inputId, bool isChannel);
+
     // Will return true, if local watermark inside this async input was moved forward.
     bool NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime = TInstant::Now());
 
@@ -63,6 +65,7 @@ public:
     void RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout = TDuration::Max(), TInstant systemTime = TInstant::Now());
     void UnregisterInput(ui64 inputId, bool isChannel, bool silent = false);
     bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime = TInstant::Now());
+    TDuration GetMaxIdleTimeout() const;
 
 private:
     TString LogPrefix;

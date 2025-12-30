@@ -2744,6 +2744,97 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
     }
 }
 
+Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSpecialCharacters) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    NYdb::NQuery::TExecuteQuerySettings querySettings;
+    querySettings.ClientTimeout(TDuration::Minutes(1));
+
+    CreateTexts(db);
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+                (0, "simple li[a-zne"),
+                (1, "l[i]ne"),
+                (2, "{}n$321 ^...&-"),
+                (3, "[a-z]+ f[i]ne (foo)?ba[rz] ([^2-5]+|.{3})$")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext
+                ON (Text)
+                WITH (
+                    layout=flat,
+                    tokenizer=whitespace,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=3,
+                    filter_ngram_max_length=3
+                );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "*[a-*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "*[^2-5]*})$")
+            ORDER BY `Key`;
+            
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "*[i]*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "{}n$3*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "([^2-5]+|.{3})$")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "^...*")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[0u];["simple li[a-zne"]];
+            [[3u];["[a-z]+ f[i]ne (foo)?ba[rz] ([^2-5]+|.{3})$"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[3u];["[a-z]+ f[i]ne (foo)?ba[rz] ([^2-5]+|.{3})$"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([
+            [[1u];["l[i]ne"]];
+            [[3u];["[a-z]+ f[i]ne (foo)?ba[rz] ([^2-5]+|.{3})$"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([
+            [[2u];["{}n$321 ^...&-"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
+        CompareYson(R"([
+            [[3u];["[a-z]+ f[i]ne (foo)?ba[rz] ([^2-5]+|.{3})$"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
+        CompareYson(R"([
+            [[2u];["{}n$321 ^...&-"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
+    }
+}
+
 }
 
 }

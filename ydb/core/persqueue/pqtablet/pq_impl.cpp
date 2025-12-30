@@ -3598,7 +3598,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
         CanProcessProposeTransactionQueue() ||
         CanProcessWriteTxs() ||
         CanProcessTxWrites() ||
-        TxWritesChanged
+        TxWritesChanged ||
+        DeleteTxsContainsKafkaTxs
         ;
     if (!canProcess) {
         return;
@@ -3669,7 +3670,7 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx,
 {
     PQ_ENSURE(!WriteTxsInProgress);
 
-    if (CanProcessProposeTransactionQueue()) {
+    if (CanProcessProposeTransactionQueue() || DeleteTxsContainsKafkaTxs) {
         ProcessDeleteTxs(ctx, request);
     }
 
@@ -3893,6 +3894,7 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
     }
 
     DeleteTxs.clear();
+    DeleteTxsContainsKafkaTxs = false;
 }
 
 void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
@@ -4673,6 +4675,7 @@ void TPersQueue::DeleteTx(TDistributedTransaction& tx)
     PQ_LOG_TX_D("add an TxId " << tx.TxId << " to the list for deletion");
 
     DeleteTxs.insert(tx.TxId);
+    DeleteTxsContainsKafkaTxs |= (tx.WriteId.Defined() && tx.WriteId->IsKafkaApiTransaction());
 
     if (auto traceId = tx.GetExecuteSpanTraceId(); traceId) {
         HasTxDeleteSpan = true;

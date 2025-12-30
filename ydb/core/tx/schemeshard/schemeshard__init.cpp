@@ -3695,7 +3695,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             txState.CoordinatedSchemaVersion = proto.GetTxCdcStreamExtraData().GetCoordinatedSchemaVersion();
                         }
                     }
-                } else if (txState.TxType == TTxState::TxMoveIndex ||
+                } else if (txState.TxType == TTxState::TxMoveTableIndex ||
                            txState.TxType == TTxState::TxDropTableIndex ||
                            txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
                     if (!extraData.empty()) {

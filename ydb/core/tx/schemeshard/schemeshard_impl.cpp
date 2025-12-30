@@ -2670,7 +2670,7 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
-    } else if (txState.TxType == TTxState::TxMoveIndex ||
+    } else if (txState.TxType == TTxState::TxMoveTableIndex ||
                txState.TxType == TTxState::TxDropTableIndex ||
                txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
         if (txState.CoordinatedSchemaVersion.Defined()) {

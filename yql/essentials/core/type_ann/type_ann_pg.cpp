@@ -182,8 +182,12 @@ IGraphTransformer::TStatus InferPgCommonType(TPositionHandle pos, const TExprNod
                 const auto* type = structType->GetItems()[*itemIdx]->GetItemType();
                 ui32 pgType;
                 bool convertToPg;
-                if (!ExtractPgType(type, pgType, convertToPg, child->Pos(), ctx.Expr)) {
+                if (!ExtractPgType(type, pgType, convertToPg, child->Pos(), ctx.Expr, isUniversal)) {
                     return IGraphTransformer::TStatus::Error;
+                }
+
+                if (isUniversal) {
+                    return IGraphTransformer::TStatus::Ok;
                 }
 
                 pgTypes[j].push_back(pgType);
@@ -295,8 +299,14 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -535,8 +545,14 @@ IGraphTransformer::TStatus PgCloneWrapper(const TExprNode::TPtr& input, TExprNod
     auto type = input->Head().GetTypeAnn();
     ui32 argType;
     bool convertToPg;
-    if (!ExtractPgType(type, argType, convertToPg, input->Head().Pos(), ctx.Expr)) {
+    bool isUniversal;
+    if (!ExtractPgType(type, argType, convertToPg, input->Head().Pos(), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (convertToPg) {
@@ -576,8 +592,14 @@ IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -665,8 +687,14 @@ IGraphTransformer::TStatus PgArrayOpWrapper(const TExprNode::TPtr& input, TExprN
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -927,8 +955,14 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -998,9 +1032,15 @@ IGraphTransformer::TStatus PgNullIfWrapper(const TExprNode::TPtr& input, TExprNo
         auto type = item->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
+        bool isUniversal;
         const auto pos = item->Pos();
-        if (!ExtractPgType(type, argType, convertToPg, pos, ctx.Expr)) {
+        if (!ExtractPgType(type, argType, convertToPg, pos, ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -1478,8 +1518,14 @@ IGraphTransformer::TStatus PgConstWrapper(const TExprNode::TPtr& input, TExprNod
         auto type = input->Child(2)->GetTypeAnn();
         ui32 typeModType;
         bool convertToPg;
-        if (!ExtractPgType(type, typeModType, convertToPg, input->Child(2)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, typeModType, convertToPg, input->Child(2)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -1523,8 +1569,14 @@ IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode
     auto type = input->Head().GetTypeAnn();
     ui32 inputTypeId = 0;
     bool convertToPg;
-    if (!ExtractPgType(type, inputTypeId, convertToPg, input->Pos(), ctx.Expr)) {
+    bool isUniversal;
+    if (!ExtractPgType(type, inputTypeId, convertToPg, input->Pos(), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (convertToPg) {
@@ -1579,8 +1631,14 @@ IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode
         auto type = input->Child(2)->GetTypeAnn();
         ui32 typeModType;
         bool convertToPg;
-        if (!ExtractPgType(type, typeModType, convertToPg, input->Child(2)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, typeModType, convertToPg, input->Child(2)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -1646,9 +1704,15 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
 
     TVector<ui32> argTypes;
     bool needRetype = false;
-    if (auto status = ExtractPgTypesFromMultiLambda(lambda, argTypes, needRetype, ctx.Expr);
+    bool isUniversal;
+    if (auto status = ExtractPgTypesFromMultiLambda(lambda, argTypes, needRetype, ctx.Expr, isUniversal);
         status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     const NPg::TAggregateDesc* aggDescPtr;
@@ -5223,9 +5287,14 @@ IGraphTransformer::TStatus PgValuesListWrapper(const TExprNode::TPtr& input, TEx
             auto type = item->GetTypeAnn();
             ui32 argType;
             bool convertToPg;
+            bool isUniversal;
             const auto pos = item->Pos();
-            if (!ExtractPgType(type, argType, convertToPg, pos, ctx.Expr)) {
+            if (!ExtractPgType(type, argType, convertToPg, pos, ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
+            }
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
             if (convertToPg) {
                 value->ChildRef(j) = ctx.Expr.NewCallable(pos, "ToPg", { value->ChildPtr(j) });
@@ -5624,8 +5693,14 @@ IGraphTransformer::TStatus PgBoolOpWrapper(const TExprNode::TPtr& input, TExprNo
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -5666,8 +5741,14 @@ IGraphTransformer::TStatus PgArrayWrapper(const TExprNode::TPtr& input, TExprNod
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -5799,8 +5880,14 @@ IGraphTransformer::TStatus PgLikeWrapper(const TExprNode::TPtr& input, TExprNode
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -5872,9 +5959,16 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
         bool hasConvertions = false;
         for (size_t i = 0; i < input->ChildrenSize(); ++i) {
             const auto child = input->Child(i);
-            if (!ExtractPgType(child->GetTypeAnn(), pgTypes[i], convertionRequired, child->Pos(), ctx.Expr)) {
+            bool isUniversal;
+            if (!ExtractPgType(child->GetTypeAnn(), pgTypes[i], convertionRequired, child->Pos(), ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
             }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (convertionRequired) {
                 hasConvertions = true;
 
@@ -5980,8 +6074,14 @@ IGraphTransformer::TStatus PgBetweenWrapper(const TExprNode::TPtr& input, TExprN
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -6178,8 +6278,14 @@ IGraphTransformer::TStatus PgSubLinkWrapper(const TExprNode::TPtr& input, TExprN
 
             ui32 testExprType;
             bool convertToPg;
-            if (!ExtractPgType(lambda->GetTypeAnn(), testExprType, convertToPg, lambda->Pos(), ctx.Expr)) {
+            bool isUniversal;
+            if (!ExtractPgType(lambda->GetTypeAnn(), testExprType, convertToPg, lambda->Pos(), ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
 
             if (testExprType && testExprType != NPg::LookupType("bool").TypeId) {
@@ -6265,8 +6371,14 @@ IGraphTransformer::TStatus PgGroupingWrapper(const TExprNode::TPtr& input, TExpr
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+        bool isUniversal;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -6333,8 +6445,14 @@ IGraphTransformer::TStatus PgToRecordWrapper(const TExprNode::TPtr& input, TExpr
         for (ui32 i = 0; i < structType->GetSize(); ++i) {
             ui32 pgType;
             bool convertToPg;
-            if (!ExtractPgType(structType->GetItems()[i]->GetItemType(), pgType, convertToPg, input->Head().Pos(), ctx.Expr)) {
+            bool isUniversal;
+            if (!ExtractPgType(structType->GetItems()[i]->GetItemType(), pgType, convertToPg, input->Head().Pos(), ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
 
             hasConversions = hasConversions || convertToPg;

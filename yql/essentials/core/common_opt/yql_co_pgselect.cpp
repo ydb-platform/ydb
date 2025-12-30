@@ -2074,7 +2074,9 @@ TExprNode::TPtr BuildProjectionLambda(
 
                     ui32 actualPgTypeId;
                     bool convertToPg;
-                    Y_ENSURE(ExtractPgType(actualTypeNode, actualPgTypeId, convertToPg, pos, ctx));
+                    bool isUniversal;
+                    Y_ENSURE(ExtractPgType(actualTypeNode, actualPgTypeId, convertToPg, pos, ctx, isUniversal));
+                    Y_ENSURE(!isUniversal);
 
                     auto needPgCast = (expectedType->GetId() != actualPgTypeId);
 

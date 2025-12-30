@@ -6245,6 +6245,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto itemType = input->Head().GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
             if (itemType->GetKind() == ETypeAnnotationKind::EmptyDict) {
                 dictType = nullptr;
+            } else if (itemType->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(itemType);
+                return IGraphTransformer::TStatus::Ok;
             } else {
                 if (!EnsureDictType(input->Head().Pos(), *itemType, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
@@ -6258,6 +6261,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         else {
             if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyDict) {
                 dictType = nullptr;
+            } else if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(input->Head().GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
             } else {
                 if (!EnsureDictType(input->Head(), ctx.Expr)) {
                    return IGraphTransformer::TStatus::Error;
@@ -6698,6 +6704,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (HasError(right->GetTypeAnn(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (left->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct ||
+            right->GetTypeAnn()->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureStructType(*left, ctx.Expr)) {
@@ -7371,6 +7383,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         auto targetType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         if (Strict) {
             if (!IsSameAnnotation(*valueType, *targetType)) {
+                if (valueType->HasUniversal() || targetType->HasUniversal()) {
+                    input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Mismatch types: "
                     << *valueType << " != " << *targetType << message));
                 return IGraphTransformer::TStatus::Error;

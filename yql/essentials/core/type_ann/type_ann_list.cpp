@@ -1056,6 +1056,11 @@ namespace {
         auto updatedListType = tupleExprType->GetItems()[0];
         auto stateType = tupleExprType->GetItems()[1];
         if (!IsSameAnnotation(*initState.GetTypeAnn(), *stateType)) {
+            if (initState.GetTypeAnn()->HasUniversal() || stateType->HasUniversal()) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() <<
                 "Mismatch of update lambda state and init state type: " <<
                 *stateType << " != " << *initState.GetTypeAnn()));
@@ -1118,6 +1123,11 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
         if (!IsSameAnnotation(*lambdaType, *updateLambdaType)) {
+            if (lambdaType->HasUniversal() || updateLambdaType->HasUniversal()) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(updateLambda->Pos()), TStringBuilder() <<
                 "Mismatch of update and init lambda types: " <<
                 *updateLambdaType << " != " << *lambdaType));
@@ -1180,6 +1190,11 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
         if (!IsSameAnnotation(*lambdaType, *updateLambdaType)) {
+            if (lambdaType->HasUniversal() || updateLambdaType->HasUniversal()) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(updateLambda->Pos()), TStringBuilder() <<
                 "Mismatch of update and init lambda types: " <<
                 *updateLambdaType << " != " << *lambdaType));
@@ -1352,6 +1367,11 @@ namespace {
         const auto lambdaItemType = lambda->Tail().GetTypeAnn();
         for (ui32 i = 1U; i < lambda->ChildrenSize() - 1U; ++i) {
             if (!IsSameAnnotation(*lambdaItemType, *lambda->Child(i)->GetTypeAnn())) {
+                if (lambdaItemType->HasUniversal() || lambda->Child(i)->GetTypeAnn()->HasUniversal()) {
+                    input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder()
                     << input->Content() << " lambda returns types is not same."));
                 return IGraphTransformer::TStatus::Error;
@@ -1645,6 +1665,11 @@ namespace {
         if (input->Head().GetTypeAnn() && IsEmptyList(*RemoveOptionalType(input->Head().GetTypeAnn()))) {
             output = ctx.Expr.NewCallable(input->Pos(), "Null", {});
             return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (input->Head().GetTypeAnn() && RemoveOptionalType(input->Head().GetTypeAnn())->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!EnsureListOrOptionalListType(input->Head(), ctx.Expr)) {
@@ -2753,6 +2778,11 @@ namespace {
             }
 
             if (i && !IsSameAnnotation(*listType, *input->Child(i)->GetTypeAnn())) {
+                if (listType->HasUniversal() || input->Child(i)->GetTypeAnn()->HasUniversal()) {
+                    input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
                     << "Mismatch type of sequences being extended: "
                     << GetTypeDiff(*listType, *input->Child(i)->GetTypeAnn())));
@@ -5839,9 +5869,15 @@ namespace {
             func.SkipPrefix("pg_");
             TVector<ui32> argTypes;
             bool needRetype = false;
-            if (auto status = ExtractPgTypesFromMultiLambda(lambda, argTypes, needRetype, ctx.Expr);
+            bool isUniversal;
+            if (auto status = ExtractPgTypesFromMultiLambda(lambda, argTypes, needRetype, ctx.Expr, isUniversal);
                 status != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
 
             if (overState && !hasOriginalType) {

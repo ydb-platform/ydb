@@ -845,6 +845,11 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     case ETypeAnnotationKind::Null:
                         valueTransforms.push_back(ctx.NewCallable(node->Pos(), "Null", {}));
                         continue;
+                    case ETypeAnnotationKind::Universal:
+                        valueTransforms.push_back(ctx.NewCallable(node->Pos(), "InstanceOf", {
+                            ctx.NewCallable(node->Pos(), "UniversalType", {})
+                        }));
+                        continue;
                     default:
                         return IGraphTransformer::TStatus::Error;
                 }
@@ -886,6 +891,11 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         continue;
                     case ETypeAnnotationKind::Null:
                         valueTransforms.push_back(ctx.NewCallable(node->Pos(), "Null", {}));
+                        continue;
+                    case ETypeAnnotationKind::Universal:
+                        valueTransforms.push_back(ctx.NewCallable(node->Pos(), "InstanceOf", {
+                            ctx.NewCallable(node->Pos(), "UniversalType", {})
+                        }));
                         continue;
                     default:
                         return IGraphTransformer::TStatus::Error;
@@ -1760,6 +1770,10 @@ ECompareOptions CanCompare(const TTypeAnnotationNode* left, const TTypeAnnotatio
     }
 
     if (rKind == ETypeAnnotationKind::UniversalStruct && lKind == ETypeAnnotationKind::Struct) {
+        return Equality ? ECompareOptions::Optional : ECompareOptions::Uncomparable;
+    }
+
+    if (rKind == ETypeAnnotationKind::UniversalStruct && lKind == ETypeAnnotationKind::UniversalStruct) {
         return Equality ? ECompareOptions::Optional : ECompareOptions::Uncomparable;
     }
 
@@ -6570,8 +6584,14 @@ std::optional<ui32> GetWideBlockFieldPosition(const TMultiExprType& multiType, c
 }
 
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx) {
+    bool isUniversal;
+    return ExtractPgType(type, pgType, convertToPg, pos, ctx, isUniversal);
+}
+
+bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx, bool& isUniversal) {
     pgType = 0;
     convertToPg = false;
+    isUniversal = false;
     if (!type) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), "Expected PG type, but got lambda"));
         return false;
@@ -6581,9 +6601,19 @@ bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertT
         return true;
     }
 
+    if (type->GetKind() == ETypeAnnotationKind::Universal) {
+        isUniversal = true;
+        return true;
+    }
+
     if (type->GetKind() == ETypeAnnotationKind::Data || type->GetKind() == ETypeAnnotationKind::Optional) {
         const TTypeAnnotationNode* unpacked = RemoveOptionalType(type);
         if (unpacked->GetKind() != ETypeAnnotationKind::Data) {
+            if (unpacked->GetKind() == ETypeAnnotationKind::Universal) {
+                isUniversal = true;
+                return true;
+            }
+
             ctx.AddError(TIssue(ctx.GetPosition(pos),
                 "Nested optional type is not compatible to PG"));
             return false;
@@ -6826,8 +6856,10 @@ const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& in
             }
         } else {
             bool needRetype = false;
-            auto status = ExtractPgTypesFromMultiLambda(input->ChildRef(2), argTypes, needRetype, ctx);
+            bool isUniversal;
+            auto status = ExtractPgTypesFromMultiLambda(input->ChildRef(2), argTypes, needRetype, ctx, isUniversal);
             YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
+            YQL_ENSURE(!isUniversal);
         }
 
         const NPg::TAggregateDesc& aggDesc = NPg::LookupAggregation(TString(func), argTypes);
@@ -6964,13 +6996,18 @@ bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& 
 }
 
 IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda, TVector<ui32>& argTypes,
-    bool& needRetype, TExprContext& ctx) {
+    bool& needRetype, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
     for (ui32 i = 1; i < lambda->ChildrenSize(); ++i) {
         auto type = lambda->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
-        if (!ExtractPgType(type, argType, convertToPg, lambda->Child(i)->Pos(), ctx)) {
+        if (!ExtractPgType(type, argType, convertToPg, lambda->Child(i)->Pos(), ctx, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (convertToPg) {
@@ -6986,8 +7023,12 @@ IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda
             auto type = lambda->Child(i)->GetTypeAnn();
             ui32 argType;
             bool convertToPg;
-            if (!ExtractPgType(type, argType, convertToPg, lambda->Child(i)->Pos(), ctx)) {
+            if (!ExtractPgType(type, argType, convertToPg, lambda->Child(i)->Pos(), ctx, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
+            }
+
+            if (isUniversal) {
+                return IGraphTransformer::TStatus::Ok;
             }
 
             if (convertToPg) {

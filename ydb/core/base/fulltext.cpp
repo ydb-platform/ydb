@@ -358,7 +358,7 @@ TVector<TString> BuildSearchTerms(const TString& query, Ydb::Table::FulltextInde
                 continue;
             }
 
-            const size_t upper = MIN(settings.filter_ngram_max_length(), static_cast<i32>(token.size()));
+            const size_t upper = MIN(settings.filter_ngram_max_length(), static_cast<i32>(GetLengthUTF8(token)));
             BuildNgrams(token, upper, upper, edge, searchTerms);
         }
     }

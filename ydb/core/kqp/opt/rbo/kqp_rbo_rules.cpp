@@ -475,7 +475,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
             iu = TInfoUnit(name);
             if (props.Subplans.PlanMap.contains(iu)) {
                 subplan = props.Subplans.PlanMap.at(iu);
-                if (subplan.Type == ESubplanType::IN || subplan.Type == ESubplanType::EXISTS) {
+                if (subplan.Type == ESubplanType::IN_SUBPLAN || subplan.Type == ESubplanType::EXISTS) {
                     break;
                 }
             }
@@ -489,7 +489,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     std::shared_ptr<IOperator> join;
 
     // We build a semi-join or a left-only join when processing IN subplan
-    if (subplan.Type == ESubplanType::IN) {
+    if (subplan.Type == ESubplanType::IN_SUBPLAN) {
         auto leftJoinInput = filter->GetInput();
         auto joinKind = negated ? "LeftOnly" : "LeftSemi";
 

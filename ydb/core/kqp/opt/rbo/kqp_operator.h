@@ -298,7 +298,7 @@ private:
 
 class IOperator;
 
-enum ESubplanType : ui32 { EXPR, IN, EXISTS };
+enum ESubplanType : ui32 { EXPR, IN_SUBPLAN, EXISTS };
 
 struct TSubplanEntry {
     std::shared_ptr<IOperator> Plan;

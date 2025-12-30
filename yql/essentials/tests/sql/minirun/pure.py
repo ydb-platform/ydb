@@ -28,6 +28,7 @@ def mode_expander(lst):
         res.append((suite, case, cfg, 'Debug'))
         res.append((suite, case, cfg, 'RunOnOpt'))
         res.append((suite, case, cfg, 'LLVM'))
+        res.append((suite, case, cfg, 'PartialTypeCheck'))
         # TODO(YQL-20436): Enable when it is working well
         # res.append((suite, case, cfg, 'AutoYqlSelect'))
         if suite == 'blocks':
@@ -98,11 +99,12 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if what == 'Debug':
         to_canonize = [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]
 
-    if what == 'RunOnOpt' or what == 'LLVM' or what == 'Blocks' or what == 'AutoYqlSelect':
+    if what == 'RunOnOpt' or what == 'LLVM' or what == 'Blocks' or what == 'AutoYqlSelect' or what == 'PartialTypeCheck':
         is_on_opt = (what == 'RunOnOpt')
         is_llvm = (what == 'LLVM')
         is_blocks = (what == 'Blocks')
         is_yql_select = (what == 'AutoYqlSelect')
+        is_typecheck = (what == 'PartialTypeCheck')
         files = get_files(suite, config, DATA_PATH)
         http_files = get_http_files(suite, config, DATA_PATH)
         http_files_urls = yql_http_file_server.register_files({}, http_files)
@@ -121,7 +123,8 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             ),
             udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
             binary=MINIRUN_PATH,
-            langver=langver
+            langver=langver,
+            extra_args=["--compile-only","--test-partial-typecheck"] if is_typecheck else []
         )
 
         opt_res, opt_tables_res = execute(
@@ -133,6 +136,9 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             check_error=True,
             verbose=True,
             parameters=parameters)
+
+        if is_typecheck:
+            return None
 
         assert os.path.exists(opt_res.results_file)
         assert not opt_tables_res

@@ -93,6 +93,8 @@ enum ECumulativeCounters {
     COUNTER_CONFIGCMD_CHANGE_GROUP_SIZE_IN_UNITS_USEC = 48 [(CounterOpts) = {Name: "ChangeGroupSizeInUnits"}];
 
     COUNTER_CONFIGCMD_RECONFIGURE_VIRTUAL_GROUP_USEC = 49 [(CounterOpts) = {Name: "ReconfigureVirtualGroup"}];
+
+    COUNTER_CONFIGCMD_RECOMMISSION_GROUPS_USEC = 50 [(CounterOpts) = {Name: "RecommissionGroups"}];
 }
 
 enum EPercentileCounters {

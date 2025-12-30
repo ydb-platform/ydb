@@ -345,6 +345,9 @@ public:
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     addTable(settings.GetTable());
+                    for (const auto& index : settings.GetIndexes()) {
+                        addTable(index.GetTable());
+                    }
                 }
             }
         }
@@ -411,12 +414,6 @@ public:
         if (TxCtx->HasOlapTable) {
             // Olap sink results can't be committed with changes
             return false;
-        }
-
-        if (TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW) {
-            // ReadWrite snapshot isolation transaction with can only use uncommitted data.
-            // WriteOnly snapshot isolation transaction is executed like serializable transaction.
-            return !TxCtx->HasTableRead;
         }
 
         if (TxCtx->NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {

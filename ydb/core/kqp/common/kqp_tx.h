@@ -281,11 +281,8 @@ public:
         };
     }
 
-    bool ShouldExecuteDeferredEffects(const TKqpPhyTxHolder::TConstPtr& tx) const {
+    bool ShouldExecuteDeferredEffects() const {
         if (NeedUncommittedChangesFlush || HasOlapTable) {
-            return !DeferredEffects.Empty();
-        }
-        if (EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW && !tx && HasTableRead) {
             return !DeferredEffects.Empty();
         }
 

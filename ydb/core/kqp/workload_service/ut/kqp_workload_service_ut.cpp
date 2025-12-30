@@ -84,9 +84,9 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
         TSampleQueries::CheckNotFound(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings), poolId);
 
-        const TString& tabmleName = "sub_path";
+        const TString& tableName = "sub_path";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            CREATE TABLE )" << tabmleName << R"( (
+            CREATE TABLE )" << tableName << R"( (
                 Key Int32,
                 PRIMARY KEY (Key)
             );
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(
             TSampleQueries::TSelect42::Query,
-            settings.Database(TStringBuilder() << CanonizePath(ydb->GetSettings().DomainName_) << "/" << tabmleName)
+            settings.Database(TStringBuilder() << CanonizePath(ydb->GetSettings().DomainName_) << "/" << tableName)
         ));
     }
 
@@ -107,8 +107,8 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         if (secondRequest.HasValue()) {
             std::swap(firstRequest, secondRequest);
         }
-        UNIT_ASSERT_C(firstRequest.HasValue(), "One of two requests shoud be rejected");
-        UNIT_ASSERT_C(!secondRequest.HasValue(), "One of two requests shoud be placed in pool");
+        UNIT_ASSERT_C(firstRequest.HasValue(), "One of two requests should be rejected");
+        UNIT_ASSERT_C(!secondRequest.HasValue(), "One of two requests should be placed in pool");
 
         auto result = firstRequest.GetResult();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::OVERLOADED, result.GetIssues().ToOneLineString());
@@ -318,6 +318,69 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         )");
 
         ydb->WaitPoolHandlersCount(0, std::nullopt, TDuration::Seconds(95));
+    }
+
+    void TestWhenDiskSpaceIsExhausted(i32 queryLimit, const TString& table) {
+        auto ydb = TYdbSetupSettings()
+            .NodeCount(1)
+            .CreateSampleTenants(true)
+            .ConcurrentQueryLimit(queryLimit)
+            .DedicatedDiskQuota(10000)
+            .Create();
+
+        const auto& dedicatedTenant = ydb->GetSettings().GetDedicatedTenantName();
+        ydb->CreateSamplePoolOn(dedicatedTenant);
+
+        auto settings = TQueryRunnerSettings()
+            .PoolId(ydb->GetSettings().PoolId_)
+            .NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx)
+            .Database(dedicatedTenant);
+
+        auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
+            CREATE TABLE big_table (
+                Key Int32,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", settings);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+        uint i = 1;
+        auto data = TString(1000,'X');
+
+        do {
+            auto insertQuery = TStringBuilder()
+                << "insert into big_table(Key, Value) values("
+                << i++ << ",'" << data << "');";
+            result = ydb->ExecuteQuery(insertQuery, settings);
+        } while (result.GetStatus() == NYdb::EStatus::SUCCESS);
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.GetIssues().ToString(),
+            "database is out of disk space"
+        );
+
+        result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.GetIssues().ToString(),
+            TStringBuilder() << "Error: Disk space exhausted. Table `/Root/test-dedicated/.metadata/workload_manager/" << table
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            result.GetIssues().begin()->GetCode(),
+            (ui32)NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED
+        );
+    }
+
+    Y_UNIT_TEST(TestDiskIsFullRunBelowQueryLimit) {
+        TestWhenDiskSpaceIsExhausted(10, "running_requests");
+    }
+
+    Y_UNIT_TEST(TestDiskIsFullRunOverQueryLimit) {
+        TestWhenDiskSpaceIsExhausted(1, "delayed_requests");
     }
 }
 

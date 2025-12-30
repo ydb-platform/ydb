@@ -210,8 +210,26 @@ public:
 
     static void Register(TRegistrar registrar);
 
+protected:
+    std::string FlowCommand;
+
+    void DoExecute(ICommandContextPtr context) override;
+    NYson::TYsonString DoFlowExecute(ICommandContextPtr context, const NYson::TYsonString& argument);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFlowExecutePlaintextCommand
+    : public TFlowExecuteCommand
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TFlowExecutePlaintextCommand);
+
+    static void Register(TRegistrar registrar);
+
 private:
-    TString Command;
+    std::string FlowArgument;
+    std::string Field;
 
     void DoExecute(ICommandContextPtr context) override;
 };

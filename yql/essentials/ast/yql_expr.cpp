@@ -661,6 +661,14 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
             return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Unit"), pool);
         }
 
+        case ETypeAnnotationKind::Universal: {
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Universal"), pool);
+        }
+
+        case ETypeAnnotationKind::UniversalStruct: {
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("UniversalStruct"), pool);
+        }
+
         case ETypeAnnotationKind::Tuple: {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tuple"), pool);
             TSmallVec<TAstNode*> children;
@@ -1092,7 +1100,10 @@ TExprNode::TPtr CompileBind(const TAstNode& node, TContext& ctx) {
 
         return ctx.Expr.DeepCopy(*ex->second, exportsPtr->ExprCtx(), ctx.DeepClones, true, false);
     } else {
-        const auto stub = ctx.Expr.NewAtom(node.GetPosition(), "stub");
+        /* clang-format off */
+        const auto stub = ctx.Expr.NewCallable(node.GetPosition(), "InstanceOf",
+            {ctx.Expr.NewCallable(node.GetPosition(), "UniversalType", {})});
+        /* clang-format on */
         ctx.Frames.back().Bindings[name->GetContent()] = {stub};
         ctx.Cohesion.Imports[stub.Get()] = std::make_pair(import, TString(aliasValue));
         return stub;
@@ -3567,6 +3578,14 @@ const TUnitExprType* TMakeTypeImpl<TUnitExprType>::Make(TExprContext& ctx) {
     return MakeSinglethonType<TUnitExprType>(ctx);
 }
 
+const TUniversalExprType* TMakeTypeImpl<TUniversalExprType>::Make(TExprContext& ctx) {
+    return MakeSinglethonType<TUniversalExprType>(ctx);
+}
+
+const TUniversalStructExprType* TMakeTypeImpl<TUniversalStructExprType>::Make(TExprContext& ctx) {
+    return MakeSinglethonType<TUniversalStructExprType>(ctx);
+}
+
 const TWorldExprType* TMakeTypeImpl<TWorldExprType>::Make(TExprContext& ctx) {
     return MakeSinglethonType<TWorldExprType>(ctx);
 }
@@ -3998,6 +4017,14 @@ const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type) {
 }
 
 void TDefaultTypeAnnotationVisitor::Visit(const TUnitExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TUniversalExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TUniversalStructExprType& type) {
     Y_UNUSED(type);
 }
 

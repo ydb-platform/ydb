@@ -1199,6 +1199,10 @@ private:
         return Inner_->DownloadTable(std::move(options));
     }
 
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        return Inner_->GetYtTokenResolver();
+    }
+
 private:
     const IYtGateway::TPtr Inner_;
     const TQContext QContext_;

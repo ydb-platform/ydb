@@ -28,6 +28,12 @@ struct TSkiffTypeLoader {
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Unit";
     }
+    TMaybe<TType> LoadUniversalType(ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: Universal";
+    }
+    TMaybe<TType> LoadUniversalStructType(ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: UniversalStruct";
+    }
     TMaybe<TType> LoadGenericType(ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Generic";
     }

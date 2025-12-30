@@ -18,6 +18,7 @@ class TStorage {
     static constexpr size_t MAX_MESSAGES = 48000;
     static constexpr size_t MIN_MESSAGES = 100;
     static constexpr size_t MAX_PROCESSING_COUNT = 1023;
+    static constexpr TDuration VACUUM_INTERVAL = TDuration::Seconds(1);
 
 public:
     // The maximum number of messages per flight. If a larger number is required, then you need
@@ -160,6 +161,7 @@ public:
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
     std::deque<TDLQMessage> GetDLQMessages();
     const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
+    void InitMetrics();
 
 
     struct TPosition {
@@ -218,6 +220,7 @@ private:
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 
     void RemoveMessage(ui64 offset, const TMessage& message);
+    void UpdateMessageMetrics(const TMessage& message);
 
     std::optional<ui32> GetRetentionDeadlineDelta() const;
 
@@ -237,6 +240,7 @@ private:
 
     TInstant BaseDeadline;
     TInstant BaseWriteTimestamp;
+    TInstant NextVacuumRun;
 
     std::deque<TMessage> Messages;
     std::map<ui64, TMessage> SlowMessages;

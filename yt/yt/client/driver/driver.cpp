@@ -319,6 +319,7 @@ public:
         REGISTER_ALL(TListJobsCommand,                     "list_jobs",                       Null,       Structured, false, false);
         REGISTER_ALL(TGetJobCommand,                       "get_job",                         Null,       Structured, false, false);
         REGISTER_ALL(TPollJobShellCommand,                 "poll_job_shell",                  Null,       Structured, true,  false);
+        REGISTER_ALL(TRunJobShellCommandCommand,           "run_job_shell_command",           Null,       Binary,     true,  true );
         REGISTER_ALL(TGetOperationCommand,                 "get_operation",                   Null,       Structured, false, false);
 
         REGISTER    (TDumpJobContextCommand,               "dump_job_context",                Null,       Null,       true,  false, ApiVersion3);
@@ -409,6 +410,7 @@ public:
         REGISTER    (TGetPipelineStateCommand,             "get_pipeline_state",              Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TFlowExecuteCommand,                  "flow_execute",                    Structured, Structured, true,  true,  ApiVersion4);
+        REGISTER    (TFlowExecutePlaintextCommand,         "flow_execute_plaintext",          Null,       Binary,     true,  true,  ApiVersion4);
 
         REGISTER    (TStartShuffleCommand,                 "start_shuffle",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TReadShuffleDataCommand,              "read_shuffle_data",               Null,       Tabular,    false,  true, ApiVersion4);

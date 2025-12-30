@@ -4,6 +4,7 @@
 
 namespace NKikimrPQ {
 
+class TPQConfig;
 class TPQTabletConfig;
 class TPQTabletConfig_TConsumer;
 class TMirrorPartitionConfig;
@@ -17,5 +18,11 @@ class TStatusResponse_TPartResult;
 namespace NKikimr {
 
 bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool shouldHavePartitionsList = true, TString *error = nullptr);
+
+namespace NPQ {
+
+bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig, bool isLocalDC);
+
+}
 
 } // NKikimr

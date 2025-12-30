@@ -22,7 +22,7 @@ FROM (
     ,
         `/Root/supplier` as supplier
     ,
-        `/Root/lineitem` as supplier
+        `/Root/lineitem` as lineitem
     ,
         `/Root/orders` as orders
     ,

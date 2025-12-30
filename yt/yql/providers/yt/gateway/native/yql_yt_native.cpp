@@ -5919,6 +5919,13 @@ private:
                 if (!auth || auth->empty()) {
                     auth = Clusters_->GetAuth(options.Cluster());
                 }
+
+                if (!auth && Services_.YtTokenResolver) {
+                    if (auto token = Services_.YtTokenResolver->ResolveClusterToken(options.Cluster())) {
+                        auth = *token;
+                    }
+                }
+
                 clusterConnectionResult.Token = auth;
             }
             clusterConnectionResult.SetSuccess();
@@ -6166,6 +6173,10 @@ private:
                 return MakeFuture(ResultFromCurrentException<TDownloadTableResult>());
             }
         });
+    }
+
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        return Services_.YtTokenResolver;
     }
 
 private:

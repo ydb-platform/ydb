@@ -739,6 +739,13 @@ public:
         const TPollJobShellOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, RunJobShellCommand, (
+        NJobTrackerClient::TJobId jobId,
+        const std::optional<std::string>& shellName,
+        const std::string& command,
+        const TRunJobShellCommandOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, AbortJob, (
         NJobTrackerClient::TJobId jobId,
         const TAbortJobOptions& options),
@@ -912,7 +919,7 @@ public:
 
     MOCK_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
         const NYPath::TYPath& pipelinePath,
-        const TString& command,
+        const std::string& command,
         const NYson::TYsonString& argument,
         const TFlowExecuteOptions& options),
         (override));

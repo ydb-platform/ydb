@@ -64,7 +64,7 @@ namespace NPQ {
 
         TRequestedBlob() = delete;
         TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value, const TKey& key, ui64 creationUnixTime);
-        
+
         bool Empty() const;
         void Clear();
         std::shared_ptr<TVector<TBatch>> GetBatches() const;
@@ -221,6 +221,8 @@ struct TEvPQ {
         EvMLPDLQMoverResponse,
         EvEndOffsetChanged,
         EvMLPConsumerState,
+        EvTxDone,
+        EvMLPConsumerMonRequest,
         EvEnd
     };
 
@@ -256,6 +258,8 @@ struct TEvPQ {
             // For Kafka deduplication:
             bool EnableKafkaDeduplication = false;
             TMaybe<i16> ProducerEpoch;
+
+            std::optional<TString> MessageDeduplicationId;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
@@ -266,7 +270,8 @@ struct TEvPQ {
         , Msgs(std::move(msgs))
         , IsDirectWrite(isDirectWrite)
         , InitialSeqNo(initialSeqNo)
-        {}
+        {
+        }
 
         ui64 Cookie;
         ui64 MessageNo;
@@ -964,21 +969,6 @@ struct TEvPQ {
         NWilson::TSpan Span;
     };
 
-    struct TEvTxCommitDone : public TEventLocal<TEvTxCommitDone, EvTxCommitDone> {
-        TEvTxCommitDone(ui64 step, ui64 txId, const NPQ::TPartitionId& partition) :
-            Step(step),
-            TxId(txId),
-            Partition(partition)
-        {
-        }
-
-        ui64 Step;
-        ui64 TxId;
-        NPQ::TPartitionId Partition;
-
-        NWilson::TSpan Span;
-    };
-
     struct TEvTxRollback : public TEventLocal<TEvTxRollback, EvTxRollback> {
         TEvTxRollback(ui64 step, ui64 txId) :
             Step(step),
@@ -989,6 +979,21 @@ struct TEvPQ {
         ui64 Step;
         ui64 TxId;
         TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+
+        NWilson::TSpan Span;
+    };
+
+    struct TEvTxDone : public TEventLocal<TEvTxDone, EvTxDone> {
+        TEvTxDone(ui64 step, ui64 txId, const NPQ::TPartitionId& partition) :
+            Step(step),
+            TxId(txId),
+            Partition(partition)
+        {
+        }
+
+        ui64 Step;
+        ui64 TxId;
+        NPQ::TPartitionId Partition;
 
         NWilson::TSpan Span;
     };
@@ -1045,10 +1050,11 @@ struct TEvPQ {
     };
 
     struct TEvConsumed : public TEventLocal<TEvConsumed, EvConsumed> {
-        TEvConsumed(ui64 consumedBytes, ui64 requestCookie, const TString& consumer)
-            : ConsumedBytes(consumedBytes),
-              RequestCookie(requestCookie),
-              Consumer(consumer)
+        TEvConsumed(ui64 consumedBytes, ui64 consumedDeduplicationIds, ui64 requestCookie, const TString& consumer)
+            : ConsumedBytes(consumedBytes)
+            , ConsumedDeduplicationIds(consumedDeduplicationIds)
+            , RequestCookie(requestCookie)
+            , Consumer(consumer)
         {}
 
         TEvConsumed(ui64 consumedBytes)
@@ -1057,6 +1063,7 @@ struct TEvPQ {
         {}
 
         ui64 ConsumedBytes;
+        ui64 ConsumedDeduplicationIds;
         ui64 RequestCookie;
         TString Consumer;
         bool IsOverhead = false;
@@ -1639,6 +1646,19 @@ struct TEvPQ {
         }
 
         NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
+    };
+
+    struct TEvMLPConsumerMonRequest : TEventLocal<TEvMLPConsumerMonRequest, EvMLPConsumerMonRequest> {
+        TEvMLPConsumerMonRequest(TActorId replyTo, ui32 partitionId, const TString& consumer)
+            : ReplyTo(replyTo)
+            , PartitionId(partitionId)
+            , Consumer(consumer)
+        {
+        }
+
+        TActorId ReplyTo;
+        ui32 PartitionId;
+        TString Consumer;
     };
 };
 

@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/security/ticket_parser.h>
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>

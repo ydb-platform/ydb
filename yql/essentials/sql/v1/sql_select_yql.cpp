@@ -569,22 +569,32 @@ private:
             }
         }
 
-        if (rule.HasBlock2()) {
-            Token(rule.GetBlock2().GetToken1());
-            return Unsupported("COMMAT");
-        }
+        const bool isAnonymous = rule.HasBlock2();
 
         if (rule.HasBlock4()) {
             return Unsupported("table_hints");
         }
 
-        return Build(rule.GetBlock3(), std::move(service), std::move(cluster));
+        return Build(
+            rule.GetBlock3(),
+            std::move(service),
+            std::move(cluster),
+            isAnonymous);
     }
 
-    TNodeResult Build(const TRule_table_ref::TBlock3& block, TString service, TDeferredAtom cluster) {
+    TNodeResult Build(
+        const TRule_table_ref::TBlock3& block,
+        TString service,
+        TDeferredAtom cluster,
+        bool isAnonymous)
+    {
         switch (block.GetAltCase()) {
             case TRule_table_ref_TBlock3::kAlt1:
-                return Build(block.GetAlt1().GetRule_table_key1(), std::move(service), std::move(cluster));
+                return Build(
+                    block.GetAlt1().GetRule_table_key1(),
+                    std::move(service),
+                    std::move(cluster),
+                    isAnonymous);
             case TRule_table_ref_TBlock3::kAlt2:
                 return Unsupported("an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
             case TRule_table_ref_TBlock3::kAlt3:
@@ -594,7 +604,11 @@ private:
         }
     }
 
-    TNodeResult Build(const TRule_table_key& rule, TString service, TDeferredAtom cluster) {
+    TNodeResult Build(
+        const TRule_table_key& rule,
+        TString service,
+        TDeferredAtom cluster,
+        bool isAnonymous) {
         if (cluster.Empty()) {
             Ctx_.Error() << "No cluster name given and no default cluster is selected";
             return std::unexpected(ESQLError::Basic);
@@ -614,6 +628,7 @@ private:
             .Service = std::move(service),
             .Cluster = *cluster.GetLiteral(),
             .Key = std::move(key),
+            .IsAnonymous = isAnonymous,
         };
 
         return TNonNull(BuildYqlTableRef(Ctx_.Pos(), std::move(args)));

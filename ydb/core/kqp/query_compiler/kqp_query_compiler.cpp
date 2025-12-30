@@ -181,6 +181,8 @@ NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(EStreamLookupStrategyTy
             break;
         case EStreamLookupStrategyType::LookupRows:
             return NKqpProto::EStreamLookupStrategy::LOOKUP;
+        case EStreamLookupStrategyType::LookupUniqueRows:
+            return NKqpProto::EStreamLookupStrategy::UNIQUE;
         case EStreamLookupStrategyType::LookupJoinRows:
             return NKqpProto::EStreamLookupStrategy::JOIN;
         case EStreamLookupStrategyType::LookupSemiJoinRows:
@@ -341,6 +343,14 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
             auto systemColumn = GetSystemColumns().find(columnName);
             YQL_ENSURE(systemColumn != GetSystemColumns().end());
             columnId = systemColumn->second.ColumnId;
+        }
+
+
+        if (columnName == "_yql_full_text_relevance") {
+            auto& columnProto = *opProto.AddColumns();
+            // columnProto.SetId(columnId);
+            columnProto.SetName(columnName);
+            continue;
         }
 
         YQL_ENSURE(columnId, "Unknown column: " << columnName);
@@ -1157,7 +1167,7 @@ private:
 
         txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
         txProto.SetHasEffects(hasEffectStage);
-        txProto.SetEnableFastChannels(Config->UseFastChannels.Get().GetOrElse(Config->DefaultUseFastChannels));
+        txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->DefaultDqChannelVersion));
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
             const auto& binding = paramBinding.Binding();
@@ -1338,8 +1348,50 @@ private:
             FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
             FillTableId(settings.Table().Cast(), *fullTextProto.MutableTable());
             fullTextProto.SetIndex(settings.Index().Cast().StringValue());
-            FillColumns(settings.ResultColumns().Cast(), *tableMeta, fullTextProto, false);
-            fullTextProto.MutableQuerySettings()->SetQuery(TString(settings.Query().Cast().Ptr()->Content()));
+
+            THashMap<TString, const TExprNode*> columnsMap;
+            for (auto item : settings.ResultColumns().Cast()) {
+                columnsMap[item.StringValue()] = item.Raw();
+            }
+            TVector<TCoAtom> columns;
+            auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
+            for (auto item : type->GetItems()) {
+                columns.push_back(TCoAtom(columnsMap.at(item->GetName())));
+            }
+
+            FillColumns(columns, *tableMeta, fullTextProto, false);
+            {
+                TExprBase expr(settings.Query().Raw());
+                if (expr.Maybe<TCoString>()) {
+                    auto* literal = fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableLiteralValue();
+                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
+                    literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+                } else if (expr.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected VectorTopKTarget callable '" << expr.Ref().Content()
+                        << "'. Expected TCoString or TCoParameter.");
+                }
+            }
+
+            TKqpReadTableFullTextIndexSettings settingsObj = TKqpReadTableFullTextIndexSettings::Parse(settings.Settings().Cast());
+            if (settingsObj.ItemsLimit) {
+
+                auto itemsLimit = TExprBase(settingsObj.ItemsLimit);
+                if (itemsLimit.Maybe<TCoUint64>()) {
+                    auto* literal = fullTextProto.MutableTakeLimit()->MutableLiteralValue();
+
+                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+
+                    literal->MutableValue()->SetUint64(FromString<ui64>(itemsLimit.Cast<TCoUint64>().Literal().Value()));
+                } else if (itemsLimit.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableTakeLimit()->MutableParamValue()->SetParamName(itemsLimit.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected ItemsLimit callable " << itemsLimit.Ref().Content());
+                }
+            }
             FillColumns(settings.Columns().Cast(), *tableMeta, *fullTextProto.MutableQuerySettings(), false);
         } else {
             YQL_ENSURE(false, "Unsupported source type");
@@ -1990,7 +2042,8 @@ private:
             }
 
             switch (streamLookupProto.GetLookupStrategy()) {
-                case NKqpProto::EStreamLookupStrategy::LOOKUP: {
+                case NKqpProto::EStreamLookupStrategy::LOOKUP:
+                case NKqpProto::EStreamLookupStrategy::UNIQUE: {
                     YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Struct);
                     const auto& lookupKeyColumns = inputItemType->Cast<TStructExprType>()->GetItems();
                     for (const auto keyColumn : lookupKeyColumns) {
@@ -2215,6 +2268,10 @@ private:
 
             if (const auto maybeMultiget = streamLookup.IsMultiget()) {
                 dqSourceLookupCn.SetIsMultiGet(FromString<bool>(maybeMultiget.Cast()));
+            }
+
+            if (const auto maybeIsMultiMatches = streamLookup.IsMultiMatches()) {
+                dqSourceLookupCn.SetIsMultiMatches(FromString<bool>(maybeIsMultiMatches.Cast()));
             }
 
             for (const auto& key : streamLookup.LeftJoinKeyNames()) {

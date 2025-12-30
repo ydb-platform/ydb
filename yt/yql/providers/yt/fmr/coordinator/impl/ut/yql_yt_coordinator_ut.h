@@ -1,18 +1,31 @@
 #pragma once
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/threading/future/async.h>
 #include <library/cpp/time_provider/time_provider.h>
 
+#include <util/system/tempfile.h>
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
+#include <yt/yql/providers/yt/fmr/job_preparer/impl/yql_yt_job_preparer_impl.h>
+#include <yt/yql/providers/yt/fmr/test_tools/table_data_service/yql_yt_table_data_service_helpers.h>
+#include <yt/yql/providers/yt/fmr/test_tools/mock_time_provider/yql_yt_mock_time_provider.h>
 #include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
 #include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/file/yql_yt_file_coordinator_service.h>
-#include <yt/yql/providers/yt/fmr/test_tools/mock_time_provider/yql_yt_mock_time_provider.h>
+
+#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
 
 namespace NYql::NFmr {
 
 struct TFmrTestSetup {
+
+    TFmrTestSetup(ui64 fileStorageNumThreads = 3) {
+        TFileStorageConfig fsConfig;
+        fsConfig.SetThreads(fileStorageNumThreads);
+        FileStorage = WithAsync(CreateFileStorage(fsConfig, {}));
+        PortManager = MakeHolder<TPortManager>();
+    }
 
     TStartOperationRequest CreateOperationRequest(
         ETaskType taskType = ETaskType::Download,
@@ -72,9 +85,12 @@ struct TFmrTestSetup {
         const TFmrWorkerSettings& workerSettings = TFmrTestSetup::WorkerSettings,
         bool startWorker = true)
     {
+
         TFmrJobFactorySettings settings{.NumThreads = numThreads, .Function = taskFunction};
         auto factory = MakeFmrJobFactory(settings);
-        auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
+        SetupTableDataServiceDiscovery(TableDataServiceDiscoveryFile, PortManager->GetPort());
+        auto jobPreparer = NFmr::MakeFmrJobPreparer(FileStorage, TableDataServiceDiscoveryFile.GetName());
+        auto worker = MakeFmrWorker(coordinator, factory, jobPreparer, workerSettings);
         if (startWorker) {
             worker->Start();
         }
@@ -102,6 +118,10 @@ public:
         }
         return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
     };
+
+    TFileStoragePtr FileStorage;
+    THolder<TPortManager> PortManager;
+    TTempFileHandle TableDataServiceDiscoveryFile;
 };
 
 } // namespace NYql::NFmr

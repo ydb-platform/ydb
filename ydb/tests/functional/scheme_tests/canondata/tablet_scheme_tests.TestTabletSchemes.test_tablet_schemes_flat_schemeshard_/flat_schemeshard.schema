@@ -3271,7 +3271,7 @@
             },
             {
                 "ColumnId": 21,
-                "ColumnName": "MaterializeIndexes",
+                "ColumnName": "IncludeIndexData",
                 "ColumnType": "Bool"
             }
         ],
@@ -6991,6 +6991,11 @@
                 "ColumnId": 8,
                 "ColumnName": "IsEnabled",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "PasswordHashes",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -7004,7 +7009,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,

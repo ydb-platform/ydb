@@ -572,11 +572,14 @@ void ToUnversionedValue(
 
 void FromUnversionedValue(TYsonString* value, TUnversionedValue unversionedValue)
 {
-    if (!IsAnyOrComposite(unversionedValue.Type)) {
+    if (unversionedValue.Type == EValueType::Null) {
+        *value = TYsonString();
+    } else if (!IsAnyOrComposite(unversionedValue.Type)) {
         THROW_ERROR_EXCEPTION("Cannot parse YSON string from %Qlv",
             unversionedValue.Type);
+    } else {
+        *value = TYsonString(unversionedValue.AsString());
     }
-    *value = TYsonString(unversionedValue.AsString());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -594,11 +597,14 @@ void ToUnversionedValue(
 
 void FromUnversionedValue(NYson::TYsonStringBuf* value, TUnversionedValue unversionedValue)
 {
-    if (!IsAnyOrComposite(unversionedValue.Type)) {
+    if (unversionedValue.Type == EValueType::Null) {
+        *value = TYsonStringBuf();
+    } else if (!IsAnyOrComposite(unversionedValue.Type)) {
         THROW_ERROR_EXCEPTION("Cannot parse YSON string from %Qlv",
             unversionedValue.Type);
+    } else {
+        *value = TYsonStringBuf(unversionedValue.AsStringBuf());
     }
-    *value = TYsonStringBuf(unversionedValue.AsStringBuf());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

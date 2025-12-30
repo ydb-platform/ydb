@@ -312,6 +312,7 @@ enum EStreamLookupStrategy {
     LOOKUP = 1;
     JOIN = 2;
     SEMI_JOIN = 3;
+    UNIQUE = 4;
 };
 
 message TKqpPhyVectorTopK {
@@ -387,6 +388,7 @@ message TKqpPhyCnDqSourceStreamLookup {
     uint64 CacheTtlSeconds = 13;
     uint64 MaxDelayedRows = 14;
     bool IsMultiGet = 15;
+    bool IsMultiMatches = 16;
 }
 
 message TKqpPhyConnection {
@@ -416,6 +418,7 @@ message TKqpFullTextSource {
     message TKqpQuerySettings {
         repeated TKqpPhyColumnId Columns = 4;
         optional string Query = 1;
+        TKqpPhyValue QueryValue = 5;
     }
 
     optional TKqpPhyTableId Table = 1;
@@ -424,6 +427,10 @@ message TKqpFullTextSource {
     repeated TKqpPhyColumnId Columns = 3;
 
     optional TKqpQuerySettings QuerySettings = 4;
+
+    TKqpPhyValue SkipLimit = 5;
+    TKqpPhyValue TakeLimit = 6;
+
 }
 
 message TKqpReadRangesSource {
@@ -631,7 +638,7 @@ message TKqpPhyTx {
     TKqpSchemeOperation SchemeOperation = 8;
     repeated string SecretNames = 9;
     bool EnableShuffleElimination = 10;
-    bool EnableFastChannels = 11;
+    uint32 DqChannelVersion = 11;
 }
 
 message TKqpTableInfo {

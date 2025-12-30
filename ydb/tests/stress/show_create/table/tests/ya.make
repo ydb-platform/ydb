@@ -20,6 +20,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    ydb/tests/stress/common
     ydb/tests/library
     ydb/tests/library/stress
     ydb/tests/stress/show_create/table/workload

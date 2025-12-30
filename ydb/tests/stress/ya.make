@@ -5,12 +5,14 @@ RECURSE(
     ctas
     kafka
     kv
+    kv_volume
     log
     mixedpy
     node_broker
     olap_workload
     oltp_workload
     reconfig_state_storage_workload
+    result_set_format
     s3_backups
     scheme_board
     show_create/view

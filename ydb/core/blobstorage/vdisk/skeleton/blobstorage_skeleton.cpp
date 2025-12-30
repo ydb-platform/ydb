@@ -134,6 +134,9 @@ namespace NKikimr {
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
                     return true;
 
+                case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
+                    return true; // TODO(alexvru): accept writes only from BlobDepot agent-processed requests
+
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_ABORT();

@@ -659,13 +659,13 @@ Y_UNIT_TEST_SUITE(Channels20) {
     Y_UNIT_TEST(CaIntegrationTrivial) {
 
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableFastChannels(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetDqChannelVersion(1);
         TKikimrRunner kikimr(settings);
 
         auto client = kikimr.GetQueryClient();
 
         auto result = client.ExecuteQuery(R"(
-            PRAGMA ydb.UseFastChannels = "true";
+            PRAGMA ydb.DqChannelVersion = "2";
             SELECT 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 
@@ -677,7 +677,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
         TKikimrSettings settings;
         settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableFastChannels(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetDqChannelVersion(1);
         TKikimrRunner kikimr(settings);
 
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         }
         {
             TString query = R"(
-                PRAGMA ydb.UseFastChannels = "true";
+                PRAGMA ydb.DqChannelVersion = "2";
                 SELECT SUM(k1) FROM `/Root/Table1`
             )";
 
@@ -719,7 +719,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         TKikimrSettings settings;
         settings.SetNodeCount(4);
         settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableFastChannels(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetDqChannelVersion(1);
 
         TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -756,7 +756,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto client = kikimr.GetQueryClient();
 
         auto future = client.ExecuteQuery(R"(
-            PRAGMA ydb.UseFastChannels = "true";
+            PRAGMA ydb.DqChannelVersion = "2";
             SELECT SUM(k1) FROM `/Root/Table1`;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx());
 

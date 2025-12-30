@@ -11,16 +11,15 @@ void CheckCancelled(std::shared_ptr<std::atomic<bool>> cancelFlag) {
     }
 }
 
-void ParseRecords(
+
+void ParseRecordsImpl(
     NYT::TRawTableReaderPtr reader,
-    NYT::TRawTableWriterPtr writer,
     ui64 blockCount,
     ui64 blockSize,
     std::shared_ptr<std::atomic<bool>> cancelFlag,
-    const TMaybe<TMutex>& writeMutex
+    std::function<void(const TVector<char>&)> writeFunc
 ) {
     YQL_ENSURE(reader);
-    YQL_ENSURE(writer);
     auto blockReader = MakeBlockReader(*reader, blockCount, blockSize);
     NCommon::TInputBuf inputBuf(*blockReader, nullptr);
     TVector<char> curYsonRow;
@@ -40,6 +39,23 @@ void ParseRecords(
             curYsonRow.emplace_back(cmd);
         }
         CheckCancelled(cancelFlag);
+        writeFunc(curYsonRow);
+        if (needBreak) {
+            break;
+        }
+    }
+}
+
+void ParseRecords(
+    NYT::TRawTableReaderPtr reader,
+    NYT::TRawTableWriterPtr writer,
+    ui64 blockCount,
+    ui64 blockSize,
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const TMaybe<TMutex>& writeMutex
+) {
+    YQL_ENSURE(writer);
+    ParseRecordsImpl(reader, blockCount, blockSize, cancelFlag, [&writer, &writeMutex](const TVector<char>& curYsonRow) {
         if (writeMutex) {
             with_lock(*writeMutex) {
                 writer->Write(curYsonRow.data(), curYsonRow.size());
@@ -49,10 +65,7 @@ void ParseRecords(
             writer->Write(curYsonRow.data(), curYsonRow.size());
             writer->NotifyRowEnd();
         }
-        if (needBreak) {
-            break;
-        }
-    }
+    });
 }
 
 } // namespace NYql::NFmr

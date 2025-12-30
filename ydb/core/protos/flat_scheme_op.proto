@@ -229,7 +229,7 @@ message TTTLSettings {
         optional uint32 BatchMaxBytes = 3 [default = 512000];
         optional uint32 BatchMinKeys = 4 [default = 1];
         optional uint32 BatchMaxKeys = 5 [default = 256];
-        optional uint32 MaxShardsInFlight = 6 [default = 1000]; // zero means no limit
+        optional uint32 MaxShardsInFlight = 6 [default = 0]; // zero means no limit
     }
 
     message TEvictionToExternalStorageSettings {
@@ -1295,6 +1295,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     map<string, TCreateCdcStream> IndexImplTableCdcStreams = 9;
     // additionally dropes cdc stream on src table consistently with taking snapshot
     optional TDropCdcStream DropSrcCdcStream = 10;
+    map<string, TDropCdcStream> IndexImplTableDropCdcStreams = 11;
 }
 
 message TConsistentTableCopyingConfig {

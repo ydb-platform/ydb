@@ -8,6 +8,7 @@
 #include <yt/yql/providers/yt/fmr/job_launcher/yql_yt_job_launcher.h>
 #include <yt/yql/providers/yt/fmr/file/metadata/interface/yql_yt_file_metadata_interface.h>
 #include <yt/yql/providers/yt/fmr/file/upload/interface/yql_yt_file_upload_interface.h>
+#include <yt/yql/providers/yt/fmr/job_preparer/interface/yql_yt_job_preparer_interface.h>
 
 namespace NYql::NFmr {
 
@@ -30,6 +31,7 @@ struct TFmrServices: public TYtBaseServices {
     TString FmrOperationSpecFilePath;
     IFileMetadataService::TPtr FileMetadataService;
     IFileUploadService::TPtr FileUploadService;
+    IFmrJobPreparer::TPtr JobPreparer;
 };
 
 struct TFmrYtGatewaySettings {

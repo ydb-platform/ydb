@@ -220,6 +220,7 @@ message TPQConfig {
     }
 
     optional TCompactionConfig CompactionConfig = 58;
+    optional uint64 MaxMessageSizeBytes = 59 [default = 125829120]; // 120MB
 }
 
 message TChannelProfile {
@@ -270,6 +271,7 @@ message TPartitionConfig {
 
     optional uint64 WriteSpeedInBytesPerSecond = 7 [default = 50000000];
     optional uint64 BurstSize = 8 [default = 50000000];
+    optional uint64 WriteMessageDeduplicationIdPerSecond = 17 [default = 1000];
 
     message TReadQuota {
         optional string ClientId = 1;
@@ -790,6 +792,8 @@ message TAggregatedCounters {
         optional uint64 DeletedByRetentionPolicy = 5;
         optional uint64 DeletedByDeadlinePolicy = 6;
         optional uint64 DeletedByMovedToDLQ = 7;
+
+        optional uint64 CPUUsage = 8;
     }
 }
 

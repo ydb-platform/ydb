@@ -476,7 +476,7 @@ private:
         if (notFlowDynamic) {
             if (!enableDynamicTablesWrite) {
                 ctx.AddError(TIssue(pos, TStringBuilder() <<
-                    "Modification of dynamic table " << outTableInfo.Name.Quote() << " is not supported"));
+                    "Modification of dynamic tables is disabled on cluster " << cluster << ". Table " << outTableInfo.Name.Quote()));
                 return TStatus::Error;
             }
 

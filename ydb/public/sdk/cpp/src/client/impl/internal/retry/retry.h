@@ -4,6 +4,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
+
 #include <library/cpp/threading/future/core/fwd.h>
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
@@ -108,6 +110,14 @@ protected:
 
     TDuration GetRemainingTimeout() {
         return Settings_.MaxTimeout_ - (TInstant::Now() - RetryStartTime_);
+    }
+};
+
+template<typename TClient>
+class TRetryDeadlineHelper {
+public:
+    static void SetDeadline(TClient::TSession& session, const TDeadline& deadline) {
+        session.SetPropagatedDeadline(deadline);
     }
 };
 

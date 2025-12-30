@@ -438,7 +438,7 @@ namespace NKikimr {
                         }
                         break;
                     }
-                    
+
 
                     case EState::WaitForPendingRequests:
                         // wait until all writes succeed

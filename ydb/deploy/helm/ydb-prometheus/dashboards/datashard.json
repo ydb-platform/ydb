@@ -4365,7 +4365,9 @@
   ],
   "schemaVersion": 36,
   "style": "dark",
-  "tags": [],
+  "tags": [
+    "ydb"
+  ],
   "templating": {
     "list": [
       {
@@ -4412,7 +4414,7 @@
   "timepicker": {},
   "timezone": "",
   "title": "DataShard",
-  "uid": "datashard",
+  "uid": "ydb-datashard",
   "version": 1,
   "weekStart": ""
 }

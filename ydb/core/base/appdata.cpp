@@ -84,6 +84,7 @@ struct TAppData::TImpl {
     TMetricsConfig MetricsConfig;
     NKikimrConfig::TSystemTabletBackupConfig SystemTabletBackupConfig;
     NKikimrConfig::TRecoveryShardConfig RecoveryShardConfig;
+    NKikimrConfig::TClusterDiagnosticsConfig ClusterDiagnosticsConfig;
 };
 
 TAppData::TAppData(
@@ -152,6 +153,7 @@ TAppData::TAppData(
     , MetricsConfig(Impl->MetricsConfig)
     , SystemTabletBackupConfig(Impl->SystemTabletBackupConfig)
     , RecoveryShardConfig(Impl->RecoveryShardConfig)
+    , ClusterDiagnosticsConfig(Impl->ClusterDiagnosticsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

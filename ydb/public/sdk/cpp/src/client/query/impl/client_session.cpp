@@ -105,17 +105,14 @@ TSession::TImpl::TImpl(TStreamProcessorPtr ptr, const std::string& sessionId, co
     }
 }
 
-TSession::TImpl::~TImpl()
-{
+TSession::TImpl::~TImpl() {
     if (StreamProcessor_) {
         StreamProcessor_->Cancel();
     }
     SessionHolder->WaitAndLock();
 }
 
-void TSession::TImpl::MakeImplAsync(TStreamProcessorPtr ptr,
-    std::shared_ptr<TAttachSessionArgs> args)
-{
+void TSession::TImpl::MakeImplAsync(TStreamProcessorPtr ptr, std::shared_ptr<TAttachSessionArgs> args) {
     auto resp = std::make_shared<Ydb::Query::SessionState>();
     ptr->Read(resp.get(), [args, resp, ptr](NYdbGrpc::TGrpcStatus grpcStatus) mutable {
         if (grpcStatus.GRpcStatusCode != grpc::StatusCode::OK) {
@@ -137,9 +134,7 @@ void TSession::TImpl::MakeImplAsync(TStreamProcessorPtr ptr,
     });
 }
 
-void TSession::TImpl::NewSmartShared(TStreamProcessorPtr ptr,
-    std::shared_ptr<TAttachSessionArgs> args, NYdb::TStatus st)
-{
+void TSession::TImpl::NewSmartShared(TStreamProcessorPtr ptr, std::shared_ptr<TAttachSessionArgs> args, NYdb::TStatus st) {
     args->Promise.SetValue(
         TCreateSessionResult(
             std::move(st),

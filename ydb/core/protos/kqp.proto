@@ -750,10 +750,12 @@ message TEvKqpScanCursor {
     message TColumnShardScanSimple {
         optional uint64 SourceIdx = 1;
         optional uint32 StartRecordIndex = 2;
+        optional uint64 OptionalPortionId = 3;
     }
     message TColumnShardScanNotSortedSimple {
         optional uint64 SourceIdx = 1;
         optional uint32 StartRecordIndex = 2;
+        optional uint64 OptionalPortionId = 3;
     }
     oneof Implementation {
         TColumnShardScanPlain ColumnShardPlain = 10;
@@ -899,10 +901,22 @@ message TKqpFullTextSourceSettings {
         optional string Query = 1;
     }
 
+    message TIndexTable {
+        optional NKqpProto.TKqpPhyTableId Table = 1;
+        repeated TKqpColumnMetadataProto KeyColumns = 7;
+        repeated TKqpColumnMetadataProto Columns = 3;
+    }
+
     optional NKqpProto.TKqpPhyTableId Table = 1;
     optional string Index = 2;
 
+    repeated TKqpColumnMetadataProto KeyColumns = 7;
     repeated TKqpColumnMetadataProto Columns = 3;
+
+    repeated TIndexTable IndexTables = 8;
+
+    optional uint64 SkipLimit = 9;
+    optional uint64 Limit = 10;
 
     optional TKqpQuerySettings QuerySettings = 4;
 

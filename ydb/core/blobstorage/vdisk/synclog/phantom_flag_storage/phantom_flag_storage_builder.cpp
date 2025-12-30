@@ -54,7 +54,7 @@ private:
             auto [chunkIdx, idxRec] = DiskIt.Get();
             const NPDisk::TEvChunkReadResult* msg = ev->Get();
             const TBufferWithGaps& readData = ev->Get()->Data;
-    
+
             Y_VERIFY_S(chunkIdx == msg->ChunkIdx &&
                     idxRec->OffsetInPages * SyncLogSnapshot->AppendBlockSize == msg->Offset &&
                     idxRec->PagesNum * SyncLogSnapshot->AppendBlockSize == readData.Size(),
@@ -63,14 +63,14 @@ private:
                 << " msgChunkIdx# " << msg->ChunkIdx << " OffsetInPages# " << idxRec->OffsetInPages
                 << " appendBlockSize# " << SyncLogSnapshot->AppendBlockSize << " msgOffset# " << msg->Offset
                 << " PagesNum# " << idxRec->PagesNum << " readDataSize# " << ui32(readData.Size()));
-    
+
             // process all pages
             for (ui32 pageIdx = 0; pageIdx < idxRec->PagesNum; pageIdx++) {
                 ui32 offset = pageIdx * SyncLogSnapshot->AppendBlockSize;
                 ui32 len = SyncLogSnapshot->AppendBlockSize;
                 if (readData.IsReadable(offset, len)) {
                     const TSyncLogPage *page = readData.DataPtr<const TSyncLogPage>(offset, len);
-        
+
                     // process one page
                     TSyncLogPageROIterator it(page);
                     for (it.SeekToFirst(); it.Valid(); it.Next()) {

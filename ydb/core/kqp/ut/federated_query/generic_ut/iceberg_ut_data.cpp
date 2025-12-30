@@ -89,7 +89,7 @@ TString TIcebergTestData::CreateAuthSection() {
             return fmt::format(R"(
                 AUTH_METHOD="BASIC",
                 LOGIN="{login}",
-                PASSWORD_SECRET_NAME="{data_source_name}_p"
+                PASSWORD_SECRET_PATH="{data_source_name}_p"
             )",
                 "data_source_name"_a = DataSourceName_,
                 "login"_a            = Auth_.Id,
@@ -98,7 +98,7 @@ TString TIcebergTestData::CreateAuthSection() {
         case TIcebergTestData::AuthToken:
             return fmt::format(R"(
                 AUTH_METHOD="TOKEN",
-                TOKEN_SECRET_NAME="{data_source_name}_p"
+                TOKEN_SECRET_PATH="{data_source_name}_p"
             )",
                 "data_source_name"_a = DataSourceName_
             );
@@ -106,7 +106,7 @@ TString TIcebergTestData::CreateAuthSection() {
             return fmt::format(R"(
                 AUTH_METHOD="SERVICE_ACCOUNT",
                 SERVICE_ACCOUNT_ID="my_sa",
-                SERVICE_ACCOUNT_SECRET_NAME="{data_source_name}_p"
+                SERVICE_ACCOUNT_SECRET_PATH="{data_source_name}_p"
             )",
                 "data_source_name"_a = DataSourceName_
             );
@@ -118,7 +118,7 @@ TString TIcebergTestData::CreateQuery(const TString& catalogSection) {
 
     return fmt::format(
         R"(
-        CREATE OBJECT {data_source_name}_p (TYPE SECRET) WITH (value={secret});
+        CREATE SECRET {data_source_name}_p WITH (value="{secret}");
 
         CREATE EXTERNAL DATA SOURCE {data_source_name} WITH (
             SOURCE_TYPE="{source_type}",

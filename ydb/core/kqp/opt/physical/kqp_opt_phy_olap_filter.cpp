@@ -1024,7 +1024,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         for (const auto &predicateExprHolder : remaining) {
             // Closure an original predicate, we cannot call `Peephole` for free args.
             TVector<const TTypeAnnotationNode *> argTypes{lambda.Args().Arg(0).Ptr()->GetTypeAnn()};
-            auto olapPredicateClosure = Build<TKqpOlapPredicateClosure>(ctx, node.Pos())
+            auto olapPredicateClosure = Build<TKqpPredicateClosure>(ctx, node.Pos())
                 .Lambda<TCoLambda>()
                     .Args({"arg"})
                     .Body<TCoOptionalIf>()
@@ -1054,7 +1054,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
             YQL_CLOG(TRACE, ProviderKqp) << "[KQP_PUSH_OLAP_FILTER] After peephole: " << KqpExprToPrettyString(TExprBase(afterPeephole), ctx);
 
-            auto lambda = TExprBase(afterPeephole).Cast<TKqpOlapPredicateClosure>().Lambda();
+            auto lambda = TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda();
             auto &lArg = lambda.Args().Arg(0).Ref();
 
             const auto maybeIf = lambda.Body().Maybe<TCoIf>();

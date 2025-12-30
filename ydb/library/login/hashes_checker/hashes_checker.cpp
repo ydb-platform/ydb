@@ -54,6 +54,13 @@ TMaybe<TString> ArgonHashToNewFormat(const TStringBuf oldArgonHash) {
     return json["salt"].GetString() + "$" + json["hash"].GetString();
 }
 
+TString HashedPasswordFromNewArgonHashFormat(const TString& argonHash) {
+    NJson::TJsonValue hashes;
+    hashes["argon2id"] = argonHash;
+    hashes["version"] = HASHES_JSON_SCHEMA_VERSION;
+    return Base64Encode(NJson::WriteJson(hashes, false));
+}
+
 TMaybe<TString> ArgonHashToOldFormat(const TStringBuf newArgonHash) {
     auto argonSecret = ParseArgonHash(newArgonHash);
     if (argonSecret.Salt.empty() || argonSecret.Hash.empty()) {
@@ -85,10 +92,7 @@ TMaybe<THashes> ConvertHashes(const TString& hash) {
         return Nothing();
     } else { // old format
         if (auto argonHash = ArgonHashToNewFormat(hash)) {
-            NJson::TJsonValue hashes;
-            hashes["argon2id"] = *argonHash;
-            hashes["version"] = HASHES_JSON_SCHEMA_VERSION;
-            return THashes(hash, Base64Encode(NJson::WriteJson(hashes, false)));
+            return THashes(hash, HashedPasswordFromNewArgonHashFormat(*argonHash));
         }
 
         return Nothing();
@@ -132,7 +136,7 @@ NLogin::TScramSecret ParseScramHash(const TStringBuf hash) {
     return { TString(iterationsCount), TString(salt), TString(storedKey), TString(serverKey) };
 }
 
-THashesChecker::TResult THashesChecker::OldFormatCheck(const TString& hash) const {
+THashesChecker::TResult THashesChecker::OldFormatCheck(const TString& hash) {
     NJson::TJsonValue json;
     if (!NJson::ReadJsonTree(hash, &json)) {
         return {.Success = false, .Error = "Cannot parse hash value; it should be in JSON-format"};
@@ -186,7 +190,7 @@ THashesChecker::TResult THashesChecker::OldFormatCheck(const TString& hash) cons
     return {.Success = true};
 };
 
-THashesChecker::TResult THashesChecker::NewFormatCheck(const TString& hashes) const {
+THashesChecker::TResult THashesChecker::NewFormatCheck(const TString& hashes) {
     if (!IsBase64(hashes)) {
         return {.Success = false, .Error = "Cannot parse hashes value; it should be JSON in base64 encoding"};
     }

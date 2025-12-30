@@ -6292,6 +6292,148 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
+    Y_UNIT_TEST(TopicExportImportWithAllFields) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+
+        // Create topic with all possible fields
+        // Note: Testing without PartitionStrategy to allow StorageLimitBytes
+        TString topicProto = R"(
+            Name: "topic_full_test"
+            TotalGroupCount: 3
+            PartitionPerTablet: 3
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 12
+                    StorageLimitBytes: 104857600
+                    WriteSpeedInBytesPerSecond: 1024
+                    BurstSize: 2048
+                }
+                Codecs {
+                    Ids: 0
+                    Ids: 1
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+                Consumers {
+                    Name: "consumer_1"
+                    Important: true
+                    Codec {
+                        Ids: 0
+                    }
+                }
+                Consumers {
+                    Name: "consumer_2"
+                    Important: false
+                    Codec {
+                        Ids: 1
+                    }
+                }
+            }
+        )";
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", topicProto);
+        env.TestWaitNotification(runtime, txId);
+
+        // Export topic
+        TString exportRequest = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/topic_full_test"
+                destination_prefix: "topic_export"
+              }
+            }
+        )", port);
+
+        TestExport(runtime, ++txId, "/MyRoot", exportRequest);
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        // Import topic
+        TString importRequest = Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "topic_export"
+                destination_path: "/MyRoot/RestoredTopic"
+              }
+            }
+        )", port);
+
+        TestImport(runtime, ++txId, "/MyRoot", importRequest);
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        // Verify topic was restored
+        auto describePath = DescribePath(runtime, "/MyRoot/RestoredTopic");
+        TestDescribeResult(describePath, {
+            NLs::PathExist,
+        });
+
+        // Verify topic configuration
+        const auto& pathDesc = describePath.GetPathDescription();
+        UNIT_ASSERT(pathDesc.HasPersQueueGroup());
+        const auto& pqGroup = pathDesc.GetPersQueueGroup();
+        UNIT_ASSERT(pqGroup.HasPQTabletConfig());
+        const auto& config = pqGroup.GetPQTabletConfig();
+
+        // Check partition config
+        UNIT_ASSERT(config.HasPartitionConfig());
+        const auto& partConfig = config.GetPartitionConfig();
+        UNIT_ASSERT_VALUES_EQUAL(partConfig.GetLifetimeSeconds(), 12);
+        UNIT_ASSERT_VALUES_EQUAL(partConfig.GetStorageLimitBytes(), 104857600);
+        UNIT_ASSERT_VALUES_EQUAL(partConfig.GetWriteSpeedInBytesPerSecond(), 1024);
+        UNIT_ASSERT_VALUES_EQUAL(partConfig.GetBurstSize(), 2048);
+
+        // Check codecs
+        UNIT_ASSERT(config.HasCodecs());
+        const auto& codecs = config.GetCodecs();
+        UNIT_ASSERT_VALUES_EQUAL(codecs.IdsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(codecs.GetIds(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(codecs.GetIds(1), 1);
+
+        // Check metering mode
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(config.GetMeteringMode()),
+            static_cast<int>(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY)
+        );
+
+        // Check consumers
+        UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 2);
+
+        const auto& consumer1 = config.GetConsumers(0);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.GetName(), "consumer_1");
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.GetImportant(), true);
+        UNIT_ASSERT(consumer1.HasCodec());
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.GetCodec().IdsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.GetCodec().GetIds(0), 0);
+
+        const auto& consumer2 = config.GetConsumers(1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.GetName(), "consumer_2");
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.GetImportant(), false);
+        UNIT_ASSERT(consumer2.HasCodec());
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().IdsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().GetIds(0), 1);
+
+        // Check partition count
+        UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetTotalGroupCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetPartitionPerTablet(), 3);
+    }
+
     Y_UNIT_TEST(UnknownSchemeObjectImport) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

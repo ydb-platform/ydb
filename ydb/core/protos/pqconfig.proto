@@ -218,6 +218,7 @@ message TPQConfig {
     }
 
     optional TCompactionConfig CompactionConfig = 58;
+    optional uint64 MaxMessageSizeBytes = 59 [default = 125829120]; // 120MB
 }
 
 message TChannelProfile {

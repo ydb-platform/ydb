@@ -2629,12 +2629,12 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgram, Edge) {
 
     {
         TString query = R"sql(
-            -- {are, ren, ena} can be found seperately in "Area Renaissance" but it's not correct result
+            -- {are, ren, ena} can be found separately in "Area Renaissance" but it's not correct result
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "arena")
             ORDER BY `Key`;
 
-            -- {ber, ern} can be found seperately in "Werner Heisenberg" but it's not correct result
+            -- {ber, ern} can be found separately in "Werner Heisenberg" but it's not correct result
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "bern")
             ORDER BY `Key`;

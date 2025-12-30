@@ -11,6 +11,38 @@
 
 namespace NKikimr::NSchemeShard {
 
+namespace {
+
+// Helper to find the main table path ID for a given path.
+// For index implementation tables, returns the parent main table's PathId.
+// For regular tables, returns the path's own PathId.
+TPathId FindMainTablePathId(const TPath& path) {
+    TPath parentPath = path.Parent();
+    if (parentPath.IsResolved() && parentPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
+        TPath mainTablePath = parentPath.Parent();
+        if (mainTablePath.IsResolved() && mainTablePath.Base()->IsTable()) {
+            return mainTablePath.Base()->PathId;
+        }
+    }
+    return path.Base()->PathId;
+}
+
+// Helper to get the coordinated version for a path from the finalize operation.
+// Returns 0 if no coordinated version is found.
+ui64 GetCoordinatedVersionForPath(const TPath& path,
+                                  const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
+    TPathId mainTablePathId = FindMainTablePathId(path);
+
+    const auto& versionMap = finalize.GetTableCoordinatedVersions();
+    auto it = versionMap.find(mainTablePathId.LocalPathId);
+    if (it != versionMap.end()) {
+        return it->second;
+    }
+    return 0;
+}
+
+} // anonymous namespace
+
 class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch(state) {
@@ -48,29 +80,6 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             return TStringBuilder()
                 << "TIncrementalRestoreFinalize TConfigureParts"
                 << " operationId: " << OperationId;
-        }
-
-        static TPathId FindMainTablePathId(const TPath& path) {
-            TPath parentPath = path.Parent();
-            if (parentPath.IsResolved() && parentPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
-                TPath mainTablePath = parentPath.Parent();
-                if (mainTablePath.IsResolved() && mainTablePath.Base()->IsTable()) {
-                    return mainTablePath.Base()->PathId;
-                }
-            }
-            return path.Base()->PathId;
-        }
-
-        static ui64 GetCoordinatedVersionForPath(const TPath& path,
-                                                 const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
-            TPathId mainTablePathId = FindMainTablePathId(path);
-
-            const auto& versionMap = finalize.GetTableCoordinatedVersions();
-            auto it = versionMap.find(mainTablePathId.LocalPathId);
-            if (it != versionMap.end()) {
-                return it->second;
-            }
-            return 0;
         }
 
     public:
@@ -145,30 +154,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 LOG_I(DebugHint() << " Preparing ALTER for table " << tablePathId
                       << " version: " << table->AlterVersion << " -> " << table->AlterData->AlterVersion);
 
-                TPath indexPath = tablePath.Parent();
-                if (!indexPath.IsResolved()) {
-                    LOG_W(DebugHint() << " Parent index path not resolved for impl table " << tablePathId);
-                } else if (indexPath.Base()->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
-                    LOG_W(DebugHint() << " Parent path is not a TableIndex for impl table " << tablePathId
-                          << " (type: " << indexPath.Base()->PathType << ")");
-                } else {
-                    TPathId indexPathId = indexPath.Base()->PathId;
-                    if (!context.SS->Indexes.contains(indexPathId)) {
-                        LOG_W(DebugHint() << " Index not found in Indexes map: " << indexPathId);
-                    } else {
-                        auto index = context.SS->Indexes.at(indexPathId);
-                        if (index->AlterVersion < targetVersion) {
-                            index->AlterVersion = targetVersion;
-                            if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
-                                index->AlterData->AlterVersion = targetVersion;
-                                context.SS->PersistTableIndexAlterData(db, indexPathId);
-                            }
-                            context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
-                            LOG_I(DebugHint() << " Updated parent index " << indexPathId
-                                  << " version to " << targetVersion);
-                        }
-                    }
-                }
+                // Note: Parent index version update is deferred to TFinalizationPropose::SyncIndexSchemaVersions()
+                // which runs after coordinator confirmation, ensuring consistency if datashard proposals fail.
 
                 // Add all shards of this table to txState
                 for (const auto& shard : table->GetPartitions()) {
@@ -262,29 +249,6 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             return TStringBuilder()
                 << "TIncrementalRestoreFinalize TPropose"
                 << " operationId: " << OperationId;
-        }
-
-        static TPathId FindMainTablePathId(const TPath& path) {
-            TPath parentPath = path.Parent();
-            if (parentPath.IsResolved() && parentPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
-                TPath mainTablePath = parentPath.Parent();
-                if (mainTablePath.IsResolved() && mainTablePath.Base()->IsTable()) {
-                    return mainTablePath.Base()->PathId;
-                }
-            }
-            return path.Base()->PathId;
-        }
-
-        static ui64 GetCoordinatedVersionForPath(const TPath& path,
-                                                 const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
-            TPathId mainTablePathId = FindMainTablePathId(path);
-
-            const auto& versionMap = finalize.GetTableCoordinatedVersions();
-            auto it = versionMap.find(mainTablePathId.LocalPathId);
-            if (it != versionMap.end()) {
-                return it->second;
-            }
-            return 0;
         }
 
     public:

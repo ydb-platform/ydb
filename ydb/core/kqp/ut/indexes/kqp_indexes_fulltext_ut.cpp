@@ -2689,7 +2689,9 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcard) {
                 (4, "aedaedalus"),
                 (5, "edaedalus"),
                 (6, "машинное обучение"),
-                (7, "машинное масло")
+                (7, "машинное масло"),
+                (8, "котомор"),
+                (9, "морекот")
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2714,6 +2716,10 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcard) {
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "маш* обу*ние")
             ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "мор*кот")
+            ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2730,6 +2736,9 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcard) {
         CompareYson(R"([
             [[6u];["машинное обучение"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
+        CompareYson(R"([
+            [[9u];["морекот"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
     }
 }
 

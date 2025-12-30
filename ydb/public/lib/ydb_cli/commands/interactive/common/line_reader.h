@@ -2,6 +2,8 @@
 
 #include "interactive_log.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
+
 #include <memory>
 #include <optional>
 
@@ -21,6 +23,15 @@ public:
     virtual std::optional<std::variant<TLine, TSwitch>> ReadLine(const TString& defaultValue = "") = 0;
 
     virtual void Finish(bool clear = false) = 0;
+
+    // Runtime configuration
+    virtual void SetHintsEnabled(bool enabled) = 0;
+    virtual bool IsHintsEnabled() const = 0;
+
+    virtual void SetColorSchema(const TColorSchema& schema) = 0;
+    virtual TColorSchema GetColorSchema() const = 0;
+
+    virtual void SetPrompt(const TString& prompt) = 0;
 
     virtual ~ILineReader() = default;
 };

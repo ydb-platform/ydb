@@ -2,6 +2,7 @@
 #include "session_runner_common.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/config_ui.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
@@ -92,6 +93,14 @@ public:
             return;
         }
 
+        if (to_lower(line) == "/config") {
+            TConfigUI::TContext ctx{
+                .LineReader = LineReader,
+            };
+            TConfigUI::Run(ctx);
+            return;
+        }
+
         const auto& tokens = TLexer::Tokenize(line);
         if (tokens.empty()) {
             return;
@@ -175,6 +184,9 @@ private:
 
         elements.emplace_back(text(""));
         elements.emplace_back(CreateEntityName("Interactive Commands:"));
+        elements.emplace_back(CreateListItem(hbox({
+            CreateEntityName("/config"), text(": change interactive mode settings (hints, color theme, colors mode).")
+        })));
         PrintCommonInteractiveCommands(elements);
 
         return vbox(elements);
@@ -192,7 +204,7 @@ private:
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
             .HistoryFilePath = TFsPath(HomeDir) / ".ydb_history",
-            .AdditionalCommands = {"/help"},
+            .AdditionalCommands = {"/help", "/config"},
             .Placeholder = placeholder,
             .EnableSwitchMode = settings.EnableAiInteractive,
         };

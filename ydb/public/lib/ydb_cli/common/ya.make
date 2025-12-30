@@ -8,6 +8,7 @@ SRCS(
     command.cpp
     command_utils.cpp
     common.cpp
+    config.cpp
     csv_parser.cpp
     describe.cpp
     examples.cpp

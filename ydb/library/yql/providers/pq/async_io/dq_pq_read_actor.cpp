@@ -207,6 +207,7 @@ public:
         const TTxId& txId,
         ui64 taskId,
         const THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
         NYdb::TDriver driver,
@@ -222,6 +223,7 @@ public:
         , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
+        , Alloc(std::move(alloc))
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , PqGateway(pqGateway)
@@ -237,6 +239,13 @@ public:
 
         InitWatermarkTracker(); // non-virtual!
         IngressStats.Level = statsLevel;
+    }
+
+    ~TDqPqReadActor() {
+        if (Alloc) {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ClearMkqlData();
+        }
     }
 
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const {
@@ -400,8 +409,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-        std::queue<TReadyBatch> empty;
-        ReadyBuffer.swap(empty);
+        ClearMkqlData();
 
         for (auto& clusterState : Clusters) {
             if (clusterState.ReadSession) {
@@ -750,6 +758,12 @@ private:
         ReadyBuffer.back().Watermark = watermark;
     }
 
+    // must be called with bound allocator
+    void ClearMkqlData() {
+        std::queue<TReadyBatch> empty;
+        ReadyBuffer.swap(empty);
+    }
+
     // must be called (visited) with bound allocator
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
@@ -884,6 +898,7 @@ private:
     TMetrics Metrics;
     const i64 BufferSize;
     const THolderFactory& HolderFactory;
+    const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     IFederatedTopicClient::TPtr FederatedTopicClient;
@@ -938,6 +953,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqGateway::TPtr pqGateway,
     ui32 topicPartitionsCount,
@@ -955,6 +971,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         txId,
         taskId,
         holderFactory,
+        std::move(alloc),
         std::move(settings),
         std::move(readTaskParamsMsg),
         std::move(driver),
@@ -1003,6 +1020,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 credentialsFactory,
                 args.ComputeActorId,
                 args.HolderFactory,
+                std::move(args.Alloc),
                 counters ? counters : args.TaskCounters,
                 pqGateway,
                 topicPartitionsCount,

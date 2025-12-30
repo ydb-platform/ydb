@@ -9,4 +9,12 @@ bool IsBucketSpilled(const TSides<TBucket>& bucket) {
     return answers.Build;
 }
 
+const char* AsString(ESide side) {
+    if (side == ESide::Build) {
+        return "Build";
+    } else {
+        return "Probe"; 
+    }
+}
+
 } // namespace NKikimr::NMiniKQL

@@ -66,8 +66,6 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
     const bool scalar = !IsBlockJoin(algo);
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
     TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
-
-    ;
     TGraceJoinRenames renames;
     if (descr.CustomRenames) {
         renames = TGraceJoinRenames::FromDq(*descr.CustomRenames);
@@ -241,6 +239,12 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
     }();
     auto graph = graphFrom(wideStream);
     graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+    static/* todo(becalm): better way */ NYql::NUdf::TUniquePtr<NYql::NUdf::ILogProvider> provider =
+        NYql::NUdf::MakeLogProvider([&](std::string_view component, NYql::NUdf::ELogLevel level, std::string_view message) {
+            Cout << std::format("LOG: component: {}, level: {}, message: {}\n", component, static_cast<std::string_view>(LevelToString(level)),  message);
+        });
+
+    graph->GetContext().LogProvider = provider.Get();
     return graph;
 }
 

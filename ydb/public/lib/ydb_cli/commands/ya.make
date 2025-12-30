@@ -107,6 +107,10 @@ RECURSE(
     ydb_discovery
 )
 
+RECURSE_FOR_TESTS(
+    ut
+)
+
 IF (NOT OS_WINDOWS)
 RECURSE(
     sqs_workload

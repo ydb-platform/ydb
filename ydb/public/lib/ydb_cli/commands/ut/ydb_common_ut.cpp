@@ -1,4 +1,4 @@
-#include "ydb_common.h"
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

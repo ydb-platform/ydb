@@ -408,10 +408,6 @@ public:
                         continue;
                     }
                 }
-                if (WatermarkMode && (hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount)) {
-                    ++EarlyEventsThrown;
-                    continue;
-                }
 
                 // Overflow is not possible, because hopIndex is a product of a division
                 if (!WatermarkMode) {

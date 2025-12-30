@@ -283,6 +283,16 @@ namespace {
     }
 }
 
+Ydb::Table::FulltextIndexSettings::Analyzers GetAnalyzersForQuery(Ydb::Table::FulltextIndexSettings::Analyzers analyzers) {
+    // Prevent splitting tokens into ngrams
+    analyzers.set_use_filter_ngram(false);
+    analyzers.set_use_filter_edge_ngram(false);
+    // Prevent dropping patterns by length
+    analyzers.set_use_filter_length(false);
+
+    return analyzers;
+}
+
 TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, const std::optional<wchar32> ignoredDelimiter) {
     TVector<TString> tokens = Tokenize(text, settings.tokenizer(), ignoredDelimiter);
 
@@ -338,7 +348,7 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
     return tokens;
 }
 
-TVector<TString> BuildSearchTerms(const TString& query, Ydb::Table::FulltextIndexSettings::Analyzers settings) {
+TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {
     const bool expectWildcard = settings.use_filter_ngram() || settings.use_filter_edge_ngram();
     const bool edge = settings.use_filter_edge_ngram();
 
@@ -346,20 +356,18 @@ TVector<TString> BuildSearchTerms(const TString& query, Ydb::Table::FulltextInde
         return Analyze(query, settings);
     }
 
-    // Prevent splitting tokens into ngrams
-    settings.set_use_filter_ngram(false);
-    settings.set_use_filter_edge_ngram(false);
+    const Ydb::Table::FulltextIndexSettings::Analyzers analyzersForQuery = GetAnalyzersForQuery(settings);
 
     TVector<TString> searchTerms;
-    for (const TString& pattern : Analyze(query, settings, '*')) {
+    for (const TString& pattern : Analyze(query, analyzersForQuery, '*')) {
         for (const auto& term : StringSplitter(pattern).Split('*')) {
             const TString token(term.Token());
             const i64 tokenLength = GetLengthUTF8(token);
-            if (tokenLength == 0 || settings.filter_ngram_min_length() > tokenLength) {
+            if (tokenLength == 0 || analyzersForQuery.filter_ngram_min_length() > tokenLength) {
                 continue;
             }
 
-            const size_t upper = MIN(settings.filter_ngram_max_length(), tokenLength);
+            const size_t upper = MIN(analyzersForQuery.filter_ngram_max_length(), tokenLength);
             BuildNgrams(token, upper, upper, edge, searchTerms);
 
             if (edge) {

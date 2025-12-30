@@ -976,14 +976,9 @@ private:
             return;
         }
 
-        auto modifiedAnalyzers = analyzers;
-        // Prevent splitting tokens into ngrams
-        modifiedAnalyzers.set_use_filter_ngram(false);
-        modifiedAnalyzers.set_use_filter_edge_ngram(false);
-        // Prevent dropping patterns by length
-        modifiedAnalyzers.set_use_filter_length(false);
+        const auto analyzersForQuery = NFulltext::GetAnalyzersForQuery(analyzers);
 
-        for (const TString& queryToken : NFulltext::Analyze(ToString(query), modifiedAnalyzers, '*')) {
+        for (const TString& queryToken : NFulltext::Analyze(TString(query), analyzersForQuery, '*')) {
             const TString pattern = WildcardToRegex(queryToken);
             TVector<wchar32> ucs4Pattern;
             NPire::NEncodings::Utf8().FromLocal(

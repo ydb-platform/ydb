@@ -21,39 +21,6 @@ namespace NYdb::NConsoleClient {
 
 namespace {
 
-struct TPrettyDurationFormatParameters {
-    double EntitiesPerSecond;
-    TStringBuf EntityName;
-    TStringBuf ZeroString;
-    TStringBuf MaxString;
-    int MaxPrecision;
-};
-
-constexpr TPrettyDurationFormatParameters PRETTY_HOURS_DEFAULT{
-    .EntitiesPerSecond = 3600,
-    .EntityName = "hours",
-    .ZeroString = "0 hours",
-    .MaxString = "+infinity",
-    .MaxPrecision = 3,
-};
-
-constexpr TPrettyDurationFormatParameters PRETTY_HOURS_NON_ZERO{
-    .EntitiesPerSecond = 3600,
-    .EntityName = "hours",
-    .ZeroString = "",
-    .MaxString = "+infinity",
-    .MaxPrecision = 3,
-};
-
-TString PrettyDurationString(TDuration duration, const TPrettyDurationFormatParameters& paramerters) {
-    if (duration == TDuration::Zero()) {
-        return ToString(paramerters.ZeroString);
-    } else if (duration == TDuration::Max()) {
-        return ToString(paramerters.MaxString);
-    }
-    return TStringBuilder() << Prec(duration.MillisecondsFloat() / (paramerters.EntitiesPerSecond * 1000.0), PREC_POINT_DIGITS_STRIP_ZEROES, paramerters.MaxPrecision) << " " << paramerters.EntityName;
-}
-
 // Helper function to format duration in human-readable format
 // Returns empty string for zero duration, otherwise returns duration in format like "2h", "5m 30s", etc.
 TString HumanReadableDurationOrEmpty(TDuration duration) {

@@ -167,12 +167,6 @@ namespace NYdb::NConsoleClient {
 
             return exists->second;
         }
-
-        TDuration ParseDurationHours(const TStringBuf str) {
-            return ParseDurationWithDefaultUnit(str, [](double hours) {
-                return TDuration::Seconds(hours * 3600);
-            });
-        }
     }
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {

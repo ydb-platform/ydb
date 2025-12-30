@@ -34,6 +34,7 @@ SRCS(
     scheme_printers.cpp
     sys.cpp
     tabbed_table.cpp
+    time.cpp
     waiting_bar.cpp
     ydb_path.cpp
     ydb_updater.cpp

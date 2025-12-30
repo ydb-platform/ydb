@@ -323,6 +323,10 @@ public:
         RowCells = TOwnedCellVec(row);
     }
 
+    TCell GetResultCell(const size_t idx) const {
+        return RowCells.at(idx);
+    }
+
     std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> GetReadDocumentStatsRequest(ui64 readId) {
         auto point = TOwnedTableRange(DocumentId);
         YQL_ENSURE(point.Point);
@@ -952,6 +956,7 @@ private:
     bool NavigateIndexInProgress = false;
     bool PendingNotify = false;
 
+    i32 SearchColumnIdx = -1;
     TVector<std::function<bool(TStringBuf)>> PostfilterMatchers;
 
     std::priority_queue<TDocumentIdPointer, TVector<TDocumentIdPointer>> MergeQueue;
@@ -1138,7 +1143,11 @@ private:
             }
         }
 
+        YQL_ENSURE(Settings->GetQuerySettings().ColumnsSize() == 1);
+        const TStringBuf searchColumnName = Settings->GetQuerySettings().GetColumns(0).GetName();
+
         i32 relevanceIndex = 0;
+        i32 searchColumnIndex = 0;
         for(const auto& column : Settings->GetColumns()) {
             const auto it = columnNameToIndex.find(column.GetName());
 
@@ -1147,13 +1156,19 @@ private:
                 continue;
             }
 
+            if (column.GetName() == searchColumnName) {
+                SearchColumnIdx = searchColumnIndex;
+            }
+
             YQL_ENSURE(it != columnNameToIndex.end(), "Column " << column.GetName() << " not found in table " << tablePath);
             const auto columnInfo = entry.Columns.FindPtr(it->second);
             YQL_ENSURE(columnInfo);
             resultKeyColumnTypes.push_back(columnInfo->PType);
             resultKeyColumnIds.push_back(columnInfo->Id);
             relevanceIndex++;
+            searchColumnIndex++;
         }
+        YQL_ENSURE(SearchColumnIdx != -1);
 
         for (const auto& [_, index] : keyPositionToIndex) {
             const auto columnInfo = entry.Columns.FindPtr(index);
@@ -1475,6 +1490,40 @@ public:
         SendEvRead(shardId, request);
     }
 
+    bool Postfilter(const TDocumentInfo& documentInfo) const {
+        // TODO: remove logs
+        TStringBuilder log;
+        Y_DEFER { Cerr << log << Endl; };
+        log << "PostFilter!" << Endl;
+
+        auto analyzers = IndexDescription.GetSettings().columns(0).analyzers();
+        // Prevent splitting tokens into ngrams
+        analyzers.set_use_filter_ngram(false);
+        analyzers.set_use_filter_edge_ngram(false);
+
+        for (const auto& matcher : PostfilterMatchers) {
+            const TString searchColumnValue(documentInfo.GetResultCell(SearchColumnIdx).AsBuf()); // TODO: don't copy, TODO: choose correct column
+
+            bool found = false;
+            for (const auto& valueToken : NFulltext::Analyze(searchColumnValue, analyzers)) {
+                log << "\t\t\tvalueToken=" << valueToken << Endl;
+                if (matcher(valueToken)) {
+                    log << "\t\t\tfound!" << Endl;
+                    found = true;
+                    break;
+                }
+                log << "\t\t\tnot_found(" << Endl;
+            }
+            log << "\t\tfound?=" << found << Endl;
+
+            if (!found) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     void DocumentDetailsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 docNumId) {
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
@@ -1482,9 +1531,13 @@ public:
             if (it == DocumentById.end()) {
                 continue;
             }
-            CA_LOG_E("Adding row info about docnumid: " << it->second->DocumentNumId);
-            it->second->AddRow(row);
-            ResultQueue.push_back(it->second);
+
+            const TIntrusivePtr<NKikimr::NKqp::TDocumentInfo> documentInfoPtr = it->second;
+            CA_LOG_E("Adding row info about docnumid: " << documentInfoPtr->DocumentNumId);
+            documentInfoPtr->AddRow(row);
+            if (Postfilter(*documentInfoPtr)) {
+                ResultQueue.push_back(documentInfoPtr);
+            }
         }
 
         NotifyCA();

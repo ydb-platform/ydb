@@ -2403,9 +2403,9 @@ private:
     }
 
     i64 GetMemory() const {
-        return DataBufferMemory + (WriteTableActor && WriteTableActor->IsReady())
+        return DataBufferMemory + ((WriteTableActor && WriteTableActor->IsReady())
             ? WriteTableActor->GetMemory()
-            : 0;
+            : 0);
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {

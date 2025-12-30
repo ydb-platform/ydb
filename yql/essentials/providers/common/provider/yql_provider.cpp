@@ -234,7 +234,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TVector<TCoNameValueTuple> alterActions;
     TMaybeNode<TCoAtom> tableType;
     TMaybeNode<TCallable> pgFilter;
-    TMaybeNode<TExprList> columnCompression;
+
     for (auto child : node) {
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
             auto tuple = maybeTuple.Cast();
@@ -344,9 +344,6 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                 returningList = tuple.Value().Cast<TExprList>();
             } else if (name == "is_batch") {
                 isBatch = Build<TCoAtom>(ctx, node.Pos()).Value("true").Done();
-            } else if (name == "columnCompression") {
-                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
-                columnCompression = tuple.Value().Cast<TExprList>();
             } else {
                 other.push_back(tuple);
             }
@@ -377,10 +374,6 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
         columnFamilies = Build<TExprList>(ctx, node.Pos()).Done();
     }
 
-    if (!columnCompression.IsValid()) {
-        columnCompression = Build<TExprList>(ctx, node.Pos()).Done();
-    }
-
     TWriteTableSettings ret(otherSettings);
     ret.Mode = mode;
     ret.Temporary = temporary;
@@ -399,7 +392,6 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.AlterActions = alterTableActions;
     ret.TableType = tableType;
     ret.PgFilter = pgFilter;
-    ret.ColumnCompression = columnCompression;
     return ret;
 }
 

@@ -54,7 +54,6 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> AlterActions;
     NNodes::TMaybeNode<NNodes::TCoAtom> TableType;
     NNodes::TMaybeNode<NNodes::TCallable> PgFilter;
-    NNodes::TMaybeNode<NNodes::TExprList> ColumnCompression;
 
     TWriteTableSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)

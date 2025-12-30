@@ -29,9 +29,27 @@ TString DatabaseIdToDatabase(TStringBuf databaseId) {
 
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message) {
     NYql::TIssue rootIssue(message);
+
+    if (issues.Empty()) {
+        return {rootIssue};
+    }
+
+    if (issues.Size() == 1) {
+        const auto& issue = *issues.begin();
+        rootIssue.SetCode(issue.GetCode(), issue.GetSeverity());
+        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+        return {rootIssue};
+    }
+
+    rootIssue.SetCode(0, NYql::ESeverity::TSeverityIds_ESeverityId_S_INFO);
+
     for (const NYql::TIssue& issue : issues) {
+        if (issue.GetCode() != 0 && issue.GetSeverity() < rootIssue.GetSeverity()) {
+            rootIssue.SetCode(issue.GetCode(), issue.GetSeverity());
+        }
         rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
     }
+
     return {rootIssue};
 }
 

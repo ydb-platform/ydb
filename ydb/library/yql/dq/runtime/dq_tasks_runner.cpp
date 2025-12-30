@@ -263,7 +263,6 @@ public:
         , Settings(settings)
         , LogFunc(logFunc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>())
-        , WatermarksTracker(Settings.WatermarksTracker)
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
         Stats->CreateTs = TInstant::Now();
@@ -562,8 +561,10 @@ public:
     }
 
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx) override
+        const IDqTaskRunnerExecutionContext& execCtx,
+        TDqComputeActorWatermarks* watermarksTracker) override
     {
+        WatermarksTracker = watermarksTracker;
         TaskId = task.GetId();
         StageId = task.GetStageId();
         auto entry = BuildTask(task);
@@ -582,6 +583,7 @@ public:
         }
         AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
 
+        bool taskUsesWatermarks = false;
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             auto& inputDesc = task.GetInputs(i);
             TDqMeteringStats::TInputStats* inputStats = nullptr;
@@ -590,6 +592,7 @@ public:
             }
 
             TVector<IDqInput::TPtr> inputs{Reserve(std::max<ui64>(inputDesc.ChannelsSize(), 1))}; // 1 is for "source" type of input.
+            bool inputUsesWatermarks = false;
             TInputTransformInfo* transform = nullptr;
             TType** inputType = &entry->InputItemTypes[i];
             if (inputDesc.HasTransform()) {
@@ -631,6 +634,9 @@ public:
                 auto [_, inserted] = AllocatedHolder->Sources.emplace(i, source);
                 Y_ABORT_UNLESS(inserted);
                 inputs.emplace_back(source);
+                if (inputDesc.GetSource().GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
+                    inputUsesWatermarks = true;
+                }
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
@@ -640,6 +646,9 @@ public:
                     auto ret = AllocatedHolder->InputChannels.emplace(channelId, inputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated input channelId: " << channelId);
                     inputs.emplace_back(inputChannel);
+                    if (inputChannelDesc.GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
+                        inputUsesWatermarks = true;
+                    }
                 }
             }
 
@@ -656,7 +665,7 @@ public:
                         InputConsumed,
                         PgBuilder_.get(),
                         &Watermark,
-                        WatermarksTracker
+                        inputUsesWatermarks ? WatermarksTracker : nullptr
                     );
                     inputs.clear();
                     inputs.emplace_back(transform->TransformOutput);
@@ -670,7 +679,7 @@ public:
                             Stats->StartTs,
                             InputConsumed,
                             &Watermark,
-                            WatermarksTracker
+                            inputUsesWatermarks ? WatermarksTracker : nullptr
                         )
                     );
                 } else {
@@ -686,13 +695,21 @@ public:
                             InputConsumed,
                             PgBuilder_.get(),
                             &Watermark,
-                            WatermarksTracker
+                            inputUsesWatermarks ? WatermarksTracker : nullptr
                         )
                     );
                 }
             } else {
                 // In some cases we don't need input. For example, for joining EmptyIterator with table.
             }
+
+            if (inputUsesWatermarks) {
+                taskUsesWatermarks = true;
+            }
+        }
+
+        if (!taskUsesWatermarks) {
+            WatermarksTracker = nullptr;
         }
 
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
@@ -1125,7 +1142,7 @@ private:
 
     std::optional<TAllocatedHolder> AllocatedHolder;
     NKikimr::NMiniKQL::TWatermark Watermark;
-    TDqComputeActorWatermarks* WatermarksTracker;
+    TDqComputeActorWatermarks* WatermarksTracker = nullptr;
 
     bool TaskHasEffects = false;
 

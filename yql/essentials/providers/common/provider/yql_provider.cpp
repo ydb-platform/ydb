@@ -234,7 +234,6 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TVector<TCoNameValueTuple> alterActions;
     TMaybeNode<TCoAtom> tableType;
     TMaybeNode<TCallable> pgFilter;
-
     for (auto child : node) {
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
             auto tuple = maybeTuple.Cast();

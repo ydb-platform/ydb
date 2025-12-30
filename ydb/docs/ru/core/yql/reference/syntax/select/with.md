@@ -67,15 +67,17 @@ SELECT key, value FROM EACH($my_tables) WITH SCHEMA Struct<key:String, value:Lis
 ```
 
 ```yql
-SELECT *
-FROM my_topic
+SELECT
+    *
+FROM
+    my_topic
 WITH (
     FORMAT = json_each_row,
-    SCHEMA (
+    SCHEMA = (
         ts String
     ),
     WATERMARK_ADJUST_LATE_EVENTS,
-    WATERMARK_GRANULARITY="PT1S",
-    WATERMARK_IDLE_TIMEOUT="PT5S"
+    WATERMARK_GRANULARITY = "PT1S",
+    WATERMARK_IDLE_TIMEOUT = "PT5S"
 );
 ```

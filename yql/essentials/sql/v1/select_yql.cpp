@@ -717,6 +717,23 @@ TNodePtr GetYqlSource(const TNodePtr& node) {
     return nullptr;
 }
 
+TNodePtr ToTableExpression(TNodePtr source) {
+    TPosition position = source->GetPos();
+
+    TYqlSelectArgs args = {
+        .Projection = TPlainAsterisk{},
+        .Source = TYqlJoin{
+            .Sources = {
+                TYqlSource{
+                    .Node = std::move(source),
+                },
+            },
+        },
+    };
+
+    return BuildYqlSelect(std::move(position), std::move(args));
+}
+
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args) {
     return new TYqlTableRefNode(std::move(position), std::move(args));
 }

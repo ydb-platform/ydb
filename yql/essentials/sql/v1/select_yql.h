@@ -69,6 +69,8 @@ struct TYqlSelectArgs {
 
 TNodePtr GetYqlSource(const TNodePtr& node);
 
+TNodePtr ToTableExpression(TNodePtr source);
+
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
 
 TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);

@@ -1,6 +1,6 @@
+/* custom error: :6:9: Error: Column reference can't be used without FROM */
 PRAGMA YqlSelect = 'force';
 
--- FIXME(YQL-20436): bad test.
 $x = (
     SELECT
         a

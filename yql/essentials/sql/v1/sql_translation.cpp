@@ -3936,7 +3936,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
                     }
 
                     if (TNodePtr source = GetYqlSource(*node)) {
-                        node = TNonNull(source);
+                        node = TNonNull(ToTableExpression(std::move(source)));
                     }
 
                     return node;
@@ -3963,7 +3963,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
                         return std::unexpected(node.error());
                     }
 
-                    return TNonNull(GetYqlSource(std::move(*node)));
+                    return TNonNull(ToTableExpression(GetYqlSource(std::move(*node))));
                 },
                 [&]() -> TNodePtr {
                     TSqlSelect select(Ctx_, Mode_);

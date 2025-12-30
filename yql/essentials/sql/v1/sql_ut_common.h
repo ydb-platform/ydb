@@ -12293,7 +12293,7 @@ Y_UNIT_TEST(NamedNodeSubqueryScalar) {
 
     TWordCountHive stat = {"YqlSelect", "YqlSubLink"};
     VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 2);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 2);
 }
 
@@ -12311,7 +12311,7 @@ Y_UNIT_TEST(NamedNodeSubqueryIn) {
 
     TWordCountHive stat = {"YqlSelect", "YqlSubLink"};
     VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 2);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 2);
 }
 
@@ -12345,7 +12345,7 @@ Y_UNIT_TEST(NamedNodeSubquerySource) {
 
     TWordCountHive stat = {"YqlSelect", "YqlSubLink"};
     VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 2);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 0);
 }
 
@@ -12364,7 +12364,7 @@ Y_UNIT_TEST(NamedNodeSubqueryReuse) {
 
     TWordCountHive stat = {"YqlSelect"};
     VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 1);
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

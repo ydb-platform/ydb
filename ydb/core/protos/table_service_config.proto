@@ -470,4 +470,6 @@ message TTableServiceConfig {
     }
 
     optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
+
+    optional bool EnableDqHashAggregateByDefault = 117 [default = false, (InvalidateCompileCache) = true];
 };

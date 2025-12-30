@@ -6,6 +6,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapDqHashAggregate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

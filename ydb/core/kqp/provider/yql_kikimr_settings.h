@@ -66,6 +66,7 @@ public:
     NCommon::TConfSetting<ui32, Static> DqChannelVersion;
 
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
+    NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
@@ -230,6 +231,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
     bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
     bool EnableDqHashCombineByDefault = true;
+    bool EnableDqHashAggregateByDefault = false;
     bool EnableWatermarks = false;
     ui32 DefaultDqChannelVersion = 1u;
     bool EnableDiscardSelect = false;
@@ -250,6 +252,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
     bool GetUseDqHashCombine() const;
+    bool GetUseDqHashAggregate() const;
 };
 
 }

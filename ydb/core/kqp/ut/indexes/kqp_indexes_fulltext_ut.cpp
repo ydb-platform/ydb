@@ -2597,16 +2597,16 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgram, Edge) {
                 (1, "Area Renaissance"),
                 (2, "Werner Heisenberg"),
                 (3, "Bern city"),
-                (4, "aedaedalus"),
-                (5, "edaedalus")
+                (4, "lusedaedae"),
+                (5, "lusedaeda")
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 3, 5, Edge);
+    AddIndexNGram(db, 3, 3, Edge);
 
-    { // basic cases
+    {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "renaissance")
@@ -2627,12 +2627,14 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgram, Edge) {
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    { // overlapping
+    {
         TString query = R"sql(
+            -- {are, ren, ena} can be found seperately in "Area Renaissance" but it's not correct result
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "arena")
             ORDER BY `Key`;
 
+            -- {ber, ern} can be found seperately in "Werner Heisenberg" but it's not correct result
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "bern")
             ORDER BY `Key`;
@@ -2648,24 +2650,24 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgram, Edge) {
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    { // substring
+    { // N-gram sets are the same: {lus, use, sed, eda, dae, aed}. Wont work without postfilter
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::Contains(`Text`, "aedaedalus")
+            WHERE FullText::Contains(`Text`, "lusedaedae")
             ORDER BY `Key`;
 
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::Contains(`Text`, "edaedalus")
+            WHERE FullText::Contains(`Text`, "lusedaeda")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
-            [[4u];["aedaedalus"]]
+            [[4u];["lusedaedae"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([
-            [[5u];["edaedalus"]]
+            [[5u];["lusedaeda"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
 }

@@ -297,6 +297,7 @@ TVector<TPathId> SyncChildIndexVersions(
     NIceDb::TNiceDb& db,
     bool skipPlannedToDrop)
 {
+    Y_UNUSED(table);
     TVector<TPathId> publishedIndexes;
 
     for (const auto& [childName, childPathId] : path->GetChildren()) {

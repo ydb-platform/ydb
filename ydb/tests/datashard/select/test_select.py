@@ -23,7 +23,7 @@ from ydb.tests.datashard.lib.types_of_variables import (
     non_pk_pg_types,
 )
 
-unsuppored_distinct_types = [
+unsupported_distinct_types = [
     "DyNumber",
     "UUID",  # https://github.com/ydb-platform/ydb/issues/17484
 ]
@@ -156,7 +156,7 @@ class TestSelectBase(TestBase):
     ):
         for type in all_types.keys():
             if (
-                type not in unsuppored_distinct_types
+                type not in unsupported_distinct_types
                 and type not in uncomparable_types
             ):
                 rows_distinct = self.query(f"SELECT DISTINCT col_{cleanup_type_name(type)} from {table_name}")
@@ -173,7 +173,7 @@ class TestSelectBase(TestBase):
                     for i in range(len(rows_distinct)):
                         dml.assert_type(all_types, type, i + 1, rows_distinct[i][0])
         for type in pk_types.keys():
-            if type not in unsuppored_distinct_types:
+            if type not in unsupported_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT pk_{cleanup_type_name(type)} from {table_name}")
                 rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
                 if type == "Bool":
@@ -188,7 +188,7 @@ class TestSelectBase(TestBase):
                     for i in range(len(rows_distinct)):
                         dml.assert_type(pk_types, type, i + 1, rows_distinct[i][0])
         for type in index.keys():
-            if type not in unsuppored_distinct_types:
+            if type not in unsupported_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT col_index_{cleanup_type_name(type)} from {table_name}")
                 rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
                 if type == "Bool":
@@ -220,15 +220,15 @@ class TestSelectBase(TestBase):
         selected_columns = []
         for type in all_types.keys():
             if (
-                type not in unsuppored_distinct_types
+                type not in unsupported_distinct_types
                 and type not in uncomparable_types
             ):
                 selected_columns.append(f"col_{cleanup_type_name(type)}")
         for type in pk_types.keys():
-            if type not in unsuppored_distinct_types:
+            if type not in unsupported_distinct_types:
                 selected_columns.append(f"pk_{cleanup_type_name(type)}")
         for type in index.keys():
-            if type not in unsuppored_distinct_types:
+            if type not in unsupported_distinct_types:
                 selected_columns.append(f"col_index_{cleanup_type_name(type)}")
         if ttl != "" and ttl != "DyNumber":
             selected_columns.append(f"ttl_{cleanup_type_name(ttl)}")
@@ -241,19 +241,19 @@ class TestSelectBase(TestBase):
         )
         for type in all_types.keys():
             if (
-                type not in unsuppored_distinct_types
+                type not in unsupported_distinct_types
                 and type not in uncomparable_types
             ):
                 sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"col_{cleanup_type_name(type)}"], type))
                 for line in range(len(sorted_rows)):
                     dml.assert_type(all_types, type, line + 1, sorted_rows[line][f"col_{cleanup_type_name(type)}"])
         for type in pk_types.keys():
-            if type not in unsuppored_distinct_types:
+            if type not in unsupported_distinct_types:
                 sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"pk_{cleanup_type_name(type)}"], type))
                 for line in range(len(sorted_rows)):
                     dml.assert_type(pk_types, type, line + 1, sorted_rows[line][f"pk_{cleanup_type_name(type)}"])
         for type in index.keys():
-            if type not in unsuppored_distinct_types:
+            if type not in unsupported_distinct_types:
                 sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"col_index_{cleanup_type_name(type)}"], type))
                 for line in range(len(sorted_rows)):
                     dml.assert_type(index, type, line + 1, sorted_rows[line][f"col_index_{cleanup_type_name(type)}"])
@@ -350,17 +350,11 @@ class TestSelectBase(TestBase):
             count_rows += 1
 
         text_ordering = dict()
-        bool_ordering = dict()
         for type_name, gen_value in pk_types.items():
             if type_name in text_types and type_name not in text_ordering:
                 text_ordering[type_name] = (
                     sorted(range(1, count_rows + 1), key=gen_value),
                     sorted(range(1, count_rows + 1), key=gen_value, reverse=True),
-                )
-            elif type_name in ("Bool", "pgbool") and type_name not in bool_ordering:
-                bool_ordering[type_name] = (
-                    sorted(range(1, count_rows + 1), key=lambda i: (gen_value(i), i)),
-                    sorted(range(1, count_rows + 1), key=lambda i: (gen_value(i), i), reverse=True),
                 )
 
         selected_columns = self.create_types_for_all_select_with_types(all_types, pk_types, index, ttl)
@@ -493,3 +487,6 @@ class TestPgSelect(TestPgBase, TestSelectBase):
         sync: str,
     ):
         self.do_test_select(table_name, pk_types, all_types, index, ttl, unique, sync)
+
+    def test_as_table(self):
+        self.do_test_as_table({**pk_pg_types, **non_pk_pg_types})

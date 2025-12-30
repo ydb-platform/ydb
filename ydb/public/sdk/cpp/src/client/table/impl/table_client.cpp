@@ -357,13 +357,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
     auto ctx = std::make_unique<TTableClientGetSessionCtx>(shared_from_this(), settings);
     auto future = ctx->GetFuture();
     SessionPool_.GetSession(std::move(ctx));
-    return future.Apply([settingsCopy = settings](TAsyncCreateSessionResult future) mutable {
-        auto result = future.ExtractValue();
-        if (result.Session_.SessionImpl_) {
-            result.Session_.SessionImpl_->PropagatedDeadline_ = settingsCopy.PropagatedDeadline_;
-        }
-        return std::move(result);
-    });
+    return future;
 }
 
 i64 TTableClient::TImpl::GetActiveSessionCount() const {
@@ -420,7 +414,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
 
 TAsyncKeepAliveResult TTableClient::TImpl::KeepAlive(const TSession::TImpl* session, const TKeepAliveSettings& settings) {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session->GetEndpointKey())
-        .PropagateDeadline(session->PropagatedDeadline_);
+        .TryUpdateDeadline(session->PropagatedDeadline_);
 
     auto request = MakeOperationRequest<Ydb::Table::KeepAliveRequest>(settings);
     request.set_session_id(TStringType{session->GetId()});
@@ -492,7 +486,7 @@ TAsyncOperation TTableClient::TImpl::AlterTableLong(Ydb::Table::AlterTableReques
 TFuture<TStatus> TTableClient::TImpl::CopyTable(const TSession& session, const std::string& src, const std::string& dst, const TCopyTableSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::CopyTableRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -508,7 +502,7 @@ TFuture<TStatus> TTableClient::TImpl::CopyTable(const TSession& session, const s
 TFuture<TStatus> TTableClient::TImpl::CopyTables(const TSession& session, const std::vector<TCopyItem>& copyItems, const TCopyTablesSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::CopyTablesRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -529,7 +523,7 @@ TFuture<TStatus> TTableClient::TImpl::CopyTables(const TSession& session, const 
 TFuture<TStatus> TTableClient::TImpl::RenameTables(const TSession& session, const std::vector<TRenameItem>& renameItems, const TRenameTablesSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::RenameTablesRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -549,7 +543,7 @@ TFuture<TStatus> TTableClient::TImpl::RenameTables(const TSession& session, cons
 
 TFuture<TStatus> TTableClient::TImpl::DropTable(const TSession& session, const std::string& path, const TDropTableSettings& settings) {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::DropTableRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -563,7 +557,7 @@ TFuture<TStatus> TTableClient::TImpl::DropTable(const TSession& session, const s
 
 TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const TSession& session, const std::string& path, const TDescribeTableSettings& settings) {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::DescribeTableRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -616,7 +610,7 @@ TAsyncDescribeExternalDataSourceResult TTableClient::TImpl::DescribeExternalData
     const std::string& path, const TDescribeExternalDataSourceSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::DescribeExternalDataSourceRequest>(settings);
     request.set_path(path);
@@ -649,7 +643,7 @@ TAsyncDescribeExternalTableResult TTableClient::TImpl::DescribeExternalTable(con
     const std::string& path, const TDescribeExternalTableSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::DescribeExternalTableRequest>(settings);
     request.set_path(path);
@@ -680,7 +674,7 @@ TAsyncDescribeExternalTableResult TTableClient::TImpl::DescribeExternalTable(con
 
 TAsyncDescribeSystemViewResult TTableClient::TImpl::DescribeSystemView(const TSession& session, const std::string& path, const TDescribeSystemViewSettings& settings) {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::DescribeSystemViewRequest>(settings);
     request.set_path(path);
@@ -713,7 +707,7 @@ TAsyncPrepareQueryResult TTableClient::TImpl::PrepareDataQuery(const TSession& s
     const TPrepareDataQuerySettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::PrepareDataQueryRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -761,7 +755,7 @@ TAsyncStatus TTableClient::TImpl::ExecuteSchemeQuery(const TSession& session, co
     const TExecSchemeQuerySettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::ExecuteSchemeQueryRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -778,7 +772,7 @@ TAsyncBeginTransactionResult TTableClient::TImpl::BeginTransaction(const TSessio
     const TBeginTxSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::BeginTransactionRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -816,7 +810,7 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
     const TCommitTxSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::CommitTransactionRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -857,7 +851,7 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
     const TRollbackTxSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::RollbackTransactionRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -874,7 +868,7 @@ TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSessio
     const TExplainDataQuerySettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::ExplainDataQueryRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -923,7 +917,7 @@ NThreading::TFuture<std::pair<TPlainStatus, TTableClient::TImpl::TReadTableStrea
     const TReadTableSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
-        .PropagateDeadline(session.GetPropagatedDeadline());
+        .TryUpdateDeadline(session.GetPropagatedDeadline());
 
     auto request = MakeRequest<Ydb::Table::ReadTableRequest>();
     request.set_session_id(TStringType{session.GetId()});
@@ -1032,7 +1026,7 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const std::string& path, TVal
 TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, const TCloseSessionSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings, sessionImpl->GetEndpointKey())
-        .PropagateDeadline(sessionImpl->PropagatedDeadline_);
+        .TryUpdateDeadline(sessionImpl->PropagatedDeadline_);
 
     auto request = MakeOperationRequest<Ydb::Table::DeleteSessionRequest>(settings);
     request.set_session_id(TStringType{sessionImpl->GetId()});

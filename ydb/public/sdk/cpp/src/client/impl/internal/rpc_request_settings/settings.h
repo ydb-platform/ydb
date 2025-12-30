@@ -37,7 +37,7 @@ struct TRpcRequestSettings {
         return rpcSettings;
     }
 
-    TRpcRequestSettings& PropagateDeadline(const std::optional<TDeadline>& deadline) {
+    TRpcRequestSettings& TryUpdateDeadline(const std::optional<TDeadline>& deadline) {
         if (deadline) {
             Deadline = std::min(Deadline, *deadline);
         }

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
-
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 
 #include <util/generic/function.h>
@@ -114,7 +112,7 @@ protected:
 };
 
 template <typename TClient, typename TOperation, typename TAsyncStatusType = TFunctionResult<TOperation>>
-class TRetryWithSession : public TRetryContext<TClient, TAsyncStatusType> {
+class TRetryWithSession : public TRetryContext<TClient, TAsyncStatusType>, public TRetryDeadlineHelper<TClient> {
     using TRetryContextAsync = TRetryContext<TClient, TAsyncStatusType>;
     using TStatusType = typename TRetryContextAsync::TStatusType;
     using TSession = typename TClient::TSession;
@@ -139,8 +137,7 @@ public:
         if (!Session_) {
             auto settings = TCreateSessionSettings()
                 .ClientTimeout(this->Settings_.GetSessionClientTimeout_)
-                .Deadline(Deadline_)
-                .PropagatedDeadline(Deadline_);
+                .Deadline(Deadline_);
 
             this->Client_.GetSession(settings).Subscribe(
                 [self](const TAsyncCreateSessionResult& resultFuture) {
@@ -151,6 +148,7 @@ public:
                         }
 
                         self->Session_ = result.GetSession();
+                        TRetryDeadlineHelper<TClient>::SetDeadline(*self->Session_, self->Deadline_);
                         self->DoRunOperation(self);
                     } catch (...) {
                         return TRetryContextAsync::HandleExceptionAsync(self, std::current_exception());

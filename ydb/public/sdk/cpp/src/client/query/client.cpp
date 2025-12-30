@@ -154,7 +154,7 @@ public:
                                      const TSession& session)
     {
         auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
-            .PropagateDeadline(session.GetPropagatedDeadline());
+            .TryUpdateDeadline(session.GetPropagatedDeadline());
 
         auto request = MakeRequest<Ydb::Query::RollbackTransactionRequest>();
         request.set_session_id(TStringType{session.GetId()});
@@ -195,7 +195,7 @@ public:
                                                     const TSession& session)
     {
         auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
-            .PropagateDeadline(session.GetPropagatedDeadline());
+            .TryUpdateDeadline(session.GetPropagatedDeadline());
 
         auto request = MakeRequest<Ydb::Query::CommitTransactionRequest>();
         request.set_session_id(TStringType{session.GetId()});
@@ -237,7 +237,7 @@ public:
                                                   const TSession& session)
     {
         auto rpcSettings = TRpcRequestSettings::Make(settings, session.SessionImpl_->GetEndpointKey())
-            .PropagateDeadline(session.GetPropagatedDeadline());
+            .TryUpdateDeadline(session.GetPropagatedDeadline());
 
         auto request = MakeRequest<Ydb::Query::BeginTransactionRequest>();
         request.set_session_id(TStringType{session.GetId()});
@@ -488,13 +488,7 @@ public:
         auto future = ctx->GetFuture();
         SessionPool_.GetSession(std::move(ctx));
 
-        return future.Apply([settingsCopy = settings](TAsyncCreateSessionResult future) mutable {
-            auto result = future.ExtractValue();
-            if (result.Session_.SessionImpl_) {
-                result.Session_.SessionImpl_->PropagatedDeadline_ = settingsCopy.PropagatedDeadline_;
-            }
-            return std::move(result);
-        });
+        return future;
     }
 
     int64_t GetActiveSessionCount() const {
@@ -701,6 +695,10 @@ TSession::TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl*
 
 const std::optional<TDeadline>& TSession::GetPropagatedDeadline() const {
     return SessionImpl_->PropagatedDeadline_;
+}
+
+void TSession::SetPropagatedDeadline(const TDeadline& deadline) {
+    SessionImpl_->PropagatedDeadline_ = deadline;
 }
 
 const std::string& TSession::GetId() const {

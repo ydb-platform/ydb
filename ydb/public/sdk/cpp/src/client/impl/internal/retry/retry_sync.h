@@ -2,7 +2,6 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
 
 #include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
 
@@ -83,7 +82,7 @@ protected:
 };
 
 template<typename TClient, typename TOperation, typename TStatusType = TFunctionResult<TOperation>>
-class TRetryWithSession : public TRetryContext<TClient, TStatusType> {
+class TRetryWithSession : public TRetryContext<TClient, TStatusType>, public TRetryDeadlineHelper<TClient> {
     using TSession = typename TClient::TSession;
     using TCreateSessionSettings = typename TClient::TCreateSessionSettings;
 
@@ -106,12 +105,12 @@ protected:
         if (!Session_) {
             auto settings = TCreateSessionSettings()
                 .ClientTimeout(this->Settings_.GetSessionClientTimeout_)
-                .Deadline(Deadline_)
-                .PropagatedDeadline(Deadline_);
+                .Deadline(Deadline_);
 
             auto sessionResult = this->Client_.GetSession(settings).GetValueSync();
             if (sessionResult.IsSuccess()) {
                 Session_ = sessionResult.GetSession();
+                TRetryDeadlineHelper<TClient>::SetDeadline(*Session_, Deadline_);
             }
             status = TStatusType(TStatus(sessionResult));
         }

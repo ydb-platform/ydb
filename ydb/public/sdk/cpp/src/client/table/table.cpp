@@ -1678,7 +1678,7 @@ TFuture<TStatus> TSession::CreateTable(const std::string& path, TTableDescriptio
         const TCreateTableSettings& settings)
 {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(GetPropagatedDeadline());
+        .TryUpdateDeadline(GetPropagatedDeadline());
 
     auto request = MakeOperationRequest<Ydb::Table::CreateTableRequest>(settings);
     request.set_session_id(TStringType{SessionImpl_->GetId()});
@@ -1797,7 +1797,7 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
 
 TAsyncStatus TSession::AlterTable(const std::string& path, const TAlterTableSettings& settings) {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(GetPropagatedDeadline());
+        .TryUpdateDeadline(GetPropagatedDeadline());
 
     auto request = MakeAlterTableProtoRequest(path, settings, SessionImpl_->GetId());
 
@@ -1810,7 +1810,7 @@ TAsyncStatus TSession::AlterTable(const std::string& path, const TAlterTableSett
 
 TAsyncOperation TSession::AlterTableLong(const std::string& path, const TAlterTableSettings& settings) {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
-        .PropagateDeadline(GetPropagatedDeadline());
+        .TryUpdateDeadline(GetPropagatedDeadline());
 
     auto request = MakeAlterTableProtoRequest(path, settings, SessionImpl_->GetId());
 
@@ -1997,6 +1997,10 @@ const std::string& TSession::GetId() const {
 
 const std::optional<TDeadline>& TSession::GetPropagatedDeadline() const {
     return SessionImpl_->PropagatedDeadline_;
+}
+
+void TSession::SetPropagatedDeadline(const TDeadline& deadline) {
+    SessionImpl_->PropagatedDeadline_ = deadline;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

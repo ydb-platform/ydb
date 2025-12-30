@@ -22,13 +22,15 @@ namespace NYdb::inline Dev {
         template <typename TClient, typename TStatusType>
         class TRetryContext;
     } // namespace NRetry::Sync
+    namespace NRetry {
+        template <typename TClient>
+        class TRetryDeadlineHelper;
+    } // namespace NRetry
 }
 
 namespace NYdb::inline Dev::NQuery {
 
 struct TCreateSessionSettings : public TSimpleRequestSettings<TCreateSessionSettings> {
-    FLUENT_SETTING_OPTIONAL(TDeadline, PropagatedDeadline);
-
     TCreateSessionSettings() {
         ClientTimeout(TDuration::Seconds(5));
     }
@@ -131,6 +133,7 @@ class TSession {
     friend class TQueryClient;
     friend class TTransaction;
     friend class TExecuteQueryIterator;
+    friend class NRetry::TRetryDeadlineHelper<TQueryClient>;
 public:
     const std::string& GetId() const;
 
@@ -157,13 +160,14 @@ private:
     TSession(std::shared_ptr<TQueryClient::TImpl> client); // Create broken session
     TSession(std::shared_ptr<TQueryClient::TImpl> client, TSession::TImpl* sessionImpl);
 
+    void SetPropagatedDeadline(const TDeadline& deadline);
+
     std::shared_ptr<TQueryClient::TImpl> Client_;
     std::shared_ptr<TSession::TImpl> SessionImpl_;
 };
 
 class TCreateSessionResult: public TStatus {
     friend class TSession::TImpl;
-    friend class TQueryClient;
 public:
     TCreateSessionResult(TStatus&& status, TSession&& session);
     TSession GetSession() const;

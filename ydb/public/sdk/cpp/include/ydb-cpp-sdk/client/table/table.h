@@ -57,6 +57,11 @@ template <typename TClient, typename TStatusType>
 class TRetryContext;
 } // namespace NRetry::Sync
 
+namespace NRetry {
+template <typename TClient>
+class TRetryDeadlineHelper;
+} // namespace NRetry
+
 namespace NScheme {
 struct TPermissions;
 } // namespace NScheme
@@ -1171,9 +1176,7 @@ using TAsyncScanQueryPartIterator = NThreading::TFuture<TScanQueryPartIterator>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TCreateSessionSettings : public TOperationRequestSettings<TCreateSessionSettings> {
-    FLUENT_SETTING_OPTIONAL(TDeadline, PropagatedDeadline);
-};
+struct TCreateSessionSettings : public TOperationRequestSettings<TCreateSessionSettings> {};
 
 using TBackoffSettings = NYdb::NRetry::TBackoffSettings;
 using TRetryOperationSettings = NYdb::NRetry::TRetryOperationSettings;
@@ -1265,7 +1268,6 @@ class TTableClient {
     friend class TSessionPool;
     friend class NRetry::Sync::TRetryContext<TTableClient, TStatus>;
     friend class NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
-    friend class TCreateSessionResult;
 
 public:
     using TOperationFunc = std::function<TAsyncStatus(TSession session)>;
@@ -1860,6 +1862,7 @@ class TSession {
     friend class TDataQuery;
     friend class TTransaction;
     friend class TSessionPool;
+    friend class NRetry::TRetryDeadlineHelper<TTableClient>;
 
 public:
     //! The following methods perform corresponding calls.
@@ -1940,6 +1943,8 @@ public:
 private:
     TSession(std::shared_ptr<TTableClient::TImpl> client, const std::string& sessionId, const std::string& endpointId, bool isOwnedBySessionPool);
     TSession(std::shared_ptr<TTableClient::TImpl> client, std::shared_ptr<TSession::TImpl> SessionImpl_);
+
+    void SetPropagatedDeadline(const TDeadline& deadline);
 
     std::shared_ptr<TTableClient::TImpl> Client_;
     std::shared_ptr<TSession::TImpl> SessionImpl_;
@@ -2288,7 +2293,6 @@ private:
 
 class TCreateSessionResult: public TStatus {
     friend class TSession::TImpl;
-    friend class TTableClient::TImpl;
 public:
     TCreateSessionResult(TStatus&& status, TSession&& session);
     TSession GetSession() const;
